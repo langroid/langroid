@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import os
@@ -32,6 +31,7 @@ from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.exceptions import LangroidImportError
 from langroid.language_models.base import (
     LanguageModel,
+    LLMCallConfig,
     LLMConfig,
     LLMFunctionCall,
     LLMFunctionSpec,
@@ -41,9 +41,12 @@ from langroid.language_models.base import (
     OpenAIJsonSchemaSpec,
     OpenAIToolCall,
     OpenAIToolSpec,
+    PromptVariants,
     Role,
     StreamEventType,
     ToolChoiceTypes,
+    ToolVariantSelector,
+    filter_default_model,
 )
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
@@ -70,7 +73,8 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
 
-logging.getLogger("openai").setLevel(logging.ERROR)
+logger = logging.getLogger("openai")
+logger.setLevel(logging.ERROR)
 
 if "OLLAMA_HOST" in os.environ:
     OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
@@ -108,7 +112,7 @@ if "OPENAI_API_KEY" in os.environ:
         available_models = set(map(lambda m: m.id, OpenAI().models.list()))
     except openai.AuthenticationError as e:
         if settings.debug:
-            logging.warning(
+            logger.warning(
                 f"""
             OpenAI Authentication Error: {e}.
             ---
@@ -119,7 +123,7 @@ if "OPENAI_API_KEY" in os.environ:
         available_models = set()
     except Exception as e:
         if settings.debug:
-            logging.warning(
+            logger.warning(
                 f"""
             Error while fetching available OpenAI models: {e}.
             Proceeding with an empty set of available models.
@@ -129,23 +133,11 @@ if "OPENAI_API_KEY" in os.environ:
 else:
     available_models = set()
 
-default_openai_chat_model = next(
-    chain(
-        filter(
-            lambda m: m.value in available_models,
-            openai_chat_model_pref_list,
-        ),
-        [OpenAIChatModel.GPT4o],
-    )
+default_openai_chat_model = filter_default_model(
+    openai_chat_model_pref_list, available_models, [OpenAIChatModel.GPT4o]
 )
-default_openai_completion_model = next(
-    chain(
-        filter(
-            lambda m: m.value in available_models,
-            openai_completion_model_pref_list,
-        ),
-        [OpenAICompletionModel.DAVINCI],
-    )
+default_openai_completion_model = filter_default_model(
+    openai_completion_model_pref_list, available_models, [OpenAICompletionModel.DAVINCI]
 )
 
 
@@ -168,7 +160,7 @@ def gpt_3_5_warning() -> None:
 
 @cache
 def parallel_strict_warning() -> None:
-    logging.warning(
+    logger.warning(
         "OpenAI tool calling in strict mode is not supported when "
         "parallel tool calls are made. Disable parallel tool calling "
         "to ensure correct behavior."
@@ -198,7 +190,7 @@ class LangDBParams(BaseSettings):
         env_prefix = "LANGDB_"
 
 
-class OpenAICallParams(BaseModel):
+class OpenAICallParams(LLMCallConfig):
     """
     Various params that can be sent to an OpenAI API chat-completion call.
     When specified, any param here overrides the one with same name in the
@@ -207,14 +199,11 @@ class OpenAICallParams(BaseModel):
     https://platform.openai.com/docs/api-reference/chat
     """
 
-    max_tokens: int = 1024
-    temperature: float = 0.2
     frequency_penalty: float | None = None  # between -2 and 2
     presence_penalty: float | None = None  # between -2 and 2
     response_format: Dict[str, str] | None = None
     logit_bias: Dict[int, float] | None = None  # token_id -> bias
     logprobs: bool | None = None
-    top_p: float | None = None
     reasoning_effort: str | None = None  # or "low" or "high" or "medium"
     top_logprobs: int | None = None  # if int, requires logprobs=True
     n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
@@ -433,7 +422,7 @@ class OpenAIGPT(LanguageModel):
                 if formatter != "":
                     # e.g. "mistral"
                     self.config.formatter = formatter
-                    logging.warning(
+                    logger.warning(
                         f"""
                         Using completions (not chat) endpoint with HuggingFace 
                         chat_template for {formatter} for 
@@ -848,7 +837,7 @@ class OpenAIGPT(LanguageModel):
                 + ", ".join(filter_names)
                 + "]"
             )
-            logging.warning("LLM API returned content filter error: " + event_text)
+            logger.warning("LLM API returned content filter error: " + event_text)
 
         if event_text:
             completion += event_text
@@ -1043,7 +1032,7 @@ class OpenAIGPT(LanguageModel):
             usage,
         )
 
-    @retry_with_exponential_backoff
+    @retry_with_exponential_backoff()
     def _stream_response(  # type: ignore
         self, response, chat: bool = False
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
@@ -1117,7 +1106,7 @@ class OpenAIGPT(LanguageModel):
             usage=token_usage,
         )
 
-    @async_retry_with_exponential_backoff
+    @async_retry_with_exponential_backoff()
     async def _stream_response_async(  # type: ignore
         self, response, chat: bool = False
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
@@ -1307,7 +1296,7 @@ class OpenAIGPT(LanguageModel):
                 )
             args_dict = dict_or_list
         except (SyntaxError, ValueError) as e:
-            logging.warning(
+            logger.warning(
                 f"""
                     Parsing OpenAI function args failed: {args};
                     treating args as normal message. Error detail:
@@ -1417,36 +1406,6 @@ class OpenAIGPT(LanguageModel):
             openai_response.dict(),
         )
 
-    def _cache_store(self, k: str, v: Any) -> None:
-        if self.cache is None:
-            return
-        try:
-            self.cache.store(k, v)
-        except Exception as e:
-            logging.error(f"Error in OpenAIGPT._cache_store: {e}")
-            pass
-
-    def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]:
-        if self.cache is None:
-            return "", None  # no cache, return empty key and None result
-        # Use the kwargs as the cache key
-        sorted_kwargs_str = str(sorted(kwargs.items()))
-        raw_key = f"{fn_name}:{sorted_kwargs_str}"
-
-        # Hash the key to a fixed length using SHA256
-        hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
-
-        if not settings.cache:
-            # when caching disabled, return the hashed_key and none result
-            return hashed_key, None
-        # Try to get the result from the cache
-        try:
-            cached_val = self.cache.retrieve(hashed_key)
-        except Exception as e:
-            logging.error(f"Error in OpenAIGPT._cache_lookup: {e}")
-            return hashed_key, None
-        return hashed_key, cached_val
-
     def _cost_chat_model(self, prompt: int, completion: int) -> float:
         price = self.chat_cost()
         return (price[0] * prompt + price[1] * completion) / 1000
@@ -1477,14 +1436,19 @@ class OpenAIGPT(LanguageModel):
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
         )
 
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    def generate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variants: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         self.run_on_first_use()
 
         try:
             return self._generate(prompt, max_tokens)
         except Exception as e:
             # log and re-raise exception
-            logging.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
+            logger.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
             raise e
 
     def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
@@ -1497,10 +1461,10 @@ class OpenAIGPT(LanguageModel):
         if settings.debug:
             print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
 
-        @retry_with_exponential_backoff
+        @retry_with_exponential_backoff()
         def completions_with_backoff(**kwargs):  # type: ignore
             cached = False
-            hashed_key, result = self._cache_lookup("Completion", **kwargs)
+            hashed_key, result = self.cache_lookup("Completion", logger, **kwargs)
             if result is not None:
                 cached = True
                 if settings.debug:
@@ -1526,10 +1490,10 @@ class OpenAIGPT(LanguageModel):
                         result,
                         chat=self.config.litellm,
                     )
-                    self._cache_store(hashed_key, openai_response)
+                    self.cache_store(hashed_key, openai_response, logger)
                     return cached, hashed_key, openai_response
                 else:
-                    self._cache_store(hashed_key, result.model_dump())
+                    self.cache_store(hashed_key, result.model_dump(), logger)
             return cached, hashed_key, result
 
         kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
@@ -1555,14 +1519,19 @@ class OpenAIGPT(LanguageModel):
             msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    async def agenerate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         self.run_on_first_use()
 
         try:
             return await self._agenerate(prompt, max_tokens)
         except Exception as e:
             # log and re-raise exception
-            logging.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
+            logger.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
             raise e
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
@@ -1582,10 +1551,10 @@ class OpenAIGPT(LanguageModel):
         # WARNING: .Completion.* endpoints are deprecated,
         # and as of Sep 2023 only legacy models will work here,
         # e.g. text-davinci-003, text-ada-001.
-        @async_retry_with_exponential_backoff
+        @async_retry_with_exponential_backoff()
         async def completions_with_backoff(**kwargs):  # type: ignore
             cached = False
-            hashed_key, result = self._cache_lookup("AsyncCompletion", **kwargs)
+            hashed_key, result = self.cache_lookup("AsyncCompletion", logger, **kwargs)
             if result is not None:
                 cached = True
                 if settings.debug:
@@ -1605,7 +1574,7 @@ class OpenAIGPT(LanguageModel):
                     kwargs["logger_fn"] = litellm_logging_fn
                 # If it's not in the cache, call the API
                 result = await acompletion_call(**kwargs)
-                self._cache_store(hashed_key, result.model_dump())
+                self.cache_store(hashed_key, result.model_dump(), logger)
             return cached, hashed_key, result
 
         kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
@@ -1638,6 +1607,9 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1670,7 +1642,7 @@ class OpenAIGPT(LanguageModel):
             )
         except Exception as e:
             # log and re-raise exception
-            logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
+            logger.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
             raise e
 
     async def achat(
@@ -1682,6 +1654,9 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1724,13 +1699,13 @@ class OpenAIGPT(LanguageModel):
             return result
         except Exception as e:
             # log and re-raise exception
-            logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
+            logger.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
             raise e
 
-    @retry_with_exponential_backoff
+    @retry_with_exponential_backoff()
     def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
         cached = False
-        hashed_key, result = self._cache_lookup("Completion", **kwargs)
+        hashed_key, result = self.cache_lookup("Completion", logger, **kwargs)
         if result is not None:
             cached = True
             if settings.debug:
@@ -1754,7 +1729,6 @@ class OpenAIGPT(LanguageModel):
                 # since it is a generator. Instead,
                 # we hold on to the hashed_key and
                 # cache the result later
-
                 # Test if this is a stream with an exception by
                 # trying to get first chunk: Some providers like LiteLLM
                 # produce a valid stream object `result` instead of throwing a
@@ -1774,13 +1748,13 @@ class OpenAIGPT(LanguageModel):
                     # Propagate any errors in the stream
                     raise e
             else:
-                self._cache_store(hashed_key, result.model_dump())
+                self.cache_store(hashed_key, result.model_dump(), logger)
         return cached, hashed_key, result
 
-    @async_retry_with_exponential_backoff
+    @async_retry_with_exponential_backoff()
     async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
         cached = False
-        hashed_key, result = self._cache_lookup("Completion", **kwargs)
+        hashed_key, result = self.cache_lookup("Completion", logger, **kwargs)
         if result is not None:
             cached = True
             if settings.debug:
@@ -1829,7 +1803,7 @@ class OpenAIGPT(LanguageModel):
                     # Any exception here should be raised to trigger the retry mechanism
                     raise e
             else:
-                self._cache_store(hashed_key, result.model_dump())
+                self.cache_store(hashed_key, result.model_dump(), logger)
         return cached, hashed_key, result
 
     def _prep_chat_completion(
@@ -1999,7 +1973,7 @@ class OpenAIGPT(LanguageModel):
             try:
                 fun_call = LLMFunctionCall.from_dict(message["function_call"])
             except (ValueError, SyntaxError):
-                logging.warning(
+                logger.warning(
                     "Could not parse function arguments: "
                     f"{message['function_call']['arguments']} "
                     f"for function {message['function_call']['name']} "
@@ -2017,7 +1991,7 @@ class OpenAIGPT(LanguageModel):
                     tool_call = OpenAIToolCall.from_dict(tool_call_dict)
                     oai_tool_calls.append(tool_call)
                 except (ValueError, SyntaxError):
-                    logging.warning(
+                    logger.warning(
                         "Could not parse tool call: "
                         f"{json.dumps(tool_call_dict)} "
                         "treating as normal non-tool message"
@@ -2072,7 +2046,7 @@ class OpenAIGPT(LanguageModel):
         cached, hashed_key, response = self._chat_completions_with_backoff(**args)
         if self.get_stream() and not cached:
             llm_response, openai_response = self._stream_response(response, chat=True)
-            self._cache_store(hashed_key, openai_response)
+            self.cache_store(hashed_key, openai_response, logger)
             return llm_response  # type: ignore
         if isinstance(response, dict):
             response_dict = response
@@ -2109,7 +2083,7 @@ class OpenAIGPT(LanguageModel):
             llm_response, openai_response = await self._stream_response_async(
                 response, chat=True
             )
-            self._cache_store(hashed_key, openai_response)
+            self.cache_store(hashed_key, openai_response, logger)
             return llm_response  # type: ignore
         if isinstance(response, dict):
             response_dict = response

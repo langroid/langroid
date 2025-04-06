@@ -1,8 +1,11 @@
+import hashlib
 import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
+from itertools import chain
+from logging import Logger
 from typing import (
     Any,
     Awaitable,
@@ -17,9 +20,16 @@ from typing import (
     cast,
 )
 
-from langroid.cachedb.base import CacheDBConfig
+from langroid.cachedb.base import CacheDB, CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.model_info import ModelInfo, get_model_info
+from langroid.language_models.model_info import (
+    AnthropicModel,
+    ModelInfo,
+    ModelName,
+    OpenAIChatModel,
+    OpenAICompletionModel,
+    get_model_info,
+)
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
@@ -38,9 +48,30 @@ async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
 
 
+def filter_default_model(
+    preferred_models: (
+        List[ModelName]
+        | List[OpenAIChatModel]
+        | List[OpenAICompletionModel]
+        | List[AnthropicModel]
+    ),
+    available_models: set[str],
+    default: (
+        List[ModelName]
+        | List[OpenAIChatModel]
+        | List[OpenAICompletionModel]
+        | List[AnthropicModel]
+    ),
+) -> str:
+    return next(
+        chain(filter(lambda m: m.value in available_models, preferred_models), default)
+    )
+
+
 FunctionCallTypes = Literal["none", "auto"]
 ToolChoiceTypes = Literal["none", "auto", "required"]
 ToolTypes = Literal["function"]
+ToolVariants = Literal["OpenAI", "Anthropic"]
 
 DEFAULT_CONTEXT_LENGTH = 16_000
 
@@ -51,6 +82,20 @@ class StreamEventType(Enum):
     FUNC_ARGS = 3
     TOOL_NAME = 4
     TOOL_ARGS = 5
+
+
+class LLMCallConfig(BaseModel):
+    """
+    Class commodifying common model API call parameters
+    to reduce duplication.
+    """
+
+    max_tokens: int = 1024
+    temperature: float = 0.2
+    top_p: float | None = None
+
+    def to_dict_exclude_none(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.dict().items() if v is not None}
 
 
 class LLMConfig(BaseSettings):
@@ -82,6 +127,8 @@ class LLMConfig(BaseSettings):
     # reasoning output from reasoning models
     cache_config: None | CacheDBConfig = RedisCacheConfig()
     thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
+    litellm: bool = True
+    ollama: bool = True
 
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
@@ -183,6 +230,81 @@ class OpenAIToolCall(BaseModel):
         return "OAI-TOOL: " + json.dumps(self.function.dict(), indent=2)
 
 
+class AnthropicSystemCacheControl(BaseModel):
+    type: str = "ephemeral"
+
+
+class AnthropicToolSpec(BaseModel):
+    """
+    Class defining an available tool
+    that Anthropic can potentially leverage.
+    https://docs.anthropic.com/en/api/messages#body-tools
+    """
+
+    name: str
+    # json object
+    input_schema: Dict[str, Any]
+    # Strongly recommended to fill
+    description: str | None = ""
+    cache_control: AnthropicSystemCacheControl | None = None
+    type: str | None = "custom"
+
+
+class AnthropicToolCall(BaseModel):
+    id: str
+    name: str
+    function: LLMFunctionCall | None = None
+
+
+class AnthropicCitationBase(BaseModel):
+    cited_text: str
+    document_index: int
+    document_title: str
+
+
+class AnthropicCitationRequestCharLocation(AnthropicCitationBase):
+    end_char_index: int
+    start_char_index: int
+    type: str = "char_location"
+
+
+class AnthropicRequestPageLocation(AnthropicCitationBase):
+    end_page_number: int
+    start_page_number: int
+    type: str = "page_location"
+
+
+class AnthropicRequestContentBlockLocation(AnthropicCitationBase):
+    end_block_index: int
+    start_block_index: int
+    type: str = "content_block_location"
+
+
+class AnthropicSystemMessage(BaseModel):
+    type: str = "text"
+    text: str = "You are a helpful assistant."
+    cache_control: Optional[AnthropicSystemCacheControl] = None
+    citation: Optional[AnthropicCitationBase] = None
+
+
+class AnthropicSystemConfig(BaseModel):
+    system_prompts: str | List[AnthropicSystemMessage] = "You are a helpful assistant."
+
+    def prepare_system_prompt(self) -> Union[str, list[Dict[str, Any]]]:
+        if isinstance(self.system_prompts, list):
+            return [prompt.dict() for prompt in self.system_prompts]
+        return self.system_prompts
+
+
+class ToolVariantSelector(BaseModel):
+    open_ai: Optional[List[OpenAIToolCall]] = None
+    anthropic: Optional[List[AnthropicToolSpec]] = None
+
+
+class PromptVariants(BaseModel):
+    anthropic: List[Dict[Any, Any]] = Field(default_factory=list)
+
+
 class OpenAIToolSpec(BaseModel):
     type: ToolTypes
     strict: Optional[bool] = None
@@ -264,7 +386,9 @@ class LLMMessage(BaseModel):
     tool_id: str = ""  # used by OpenAIAssistant
     content: str
     function_call: Optional[LLMFunctionCall] = None
-    tool_calls: Optional[List[OpenAIToolCall]] = None
+    tool_calls: Union[
+        Optional[List[OpenAIToolCall]], Optional[List[AnthropicToolCall]]
+    ] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     # link to corresponding chat document, for provenance/rewind purposes
     chat_document_id: str = ""
@@ -333,6 +457,7 @@ class LLMResponse(BaseModel):
     # TODO tool_id needs to generalize to multi-tool calls
     tool_id: str = ""  # used by OpenAIAssistant
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+    ant_tool_calls: Optional[List[AnthropicToolCall]] = None
     function_call: Optional[LLMFunctionCall] = None
     usage: Optional[LLMTokenUsage] = None
     cached: bool = False
@@ -424,6 +549,7 @@ class LanguageModel(ABC):
 
     # usage cost by model, accumulates here
     usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+    cache: CacheDB | None
 
     def __init__(self, config: LLMConfig = LLMConfig()):
         self.config = config
@@ -447,6 +573,7 @@ class LanguageModel(ABC):
                 as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
                 """
             )
+        from langroid.language_models.anthropic import AnthropicLLM
         from langroid.language_models.azure_openai import AzureGPT
         from langroid.language_models.mock_lm import MockLM, MockLMConfig
         from langroid.language_models.openai_gpt import OpenAIGPT
@@ -457,15 +584,17 @@ class LanguageModel(ABC):
         if config.type == "mock":
             return MockLM(cast(MockLMConfig, config))
 
-        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+        model: Union[Type[AzureGPT], Type[OpenAIGPT], Type[AnthropicLLM]]
 
         if config.type == "azure":
-            openai = AzureGPT
+            model = AzureGPT
+        elif config.type == "anthropic":
+            model = AnthropicLLM
         else:
-            openai = OpenAIGPT
+            model = OpenAIGPT
         cls = dict(
-            openai=openai,
-        ).get(config.type, openai)
+            model=model,
+        ).get(config.type, model)
         return cls(config)  # type: ignore
 
     @staticmethod
@@ -547,11 +676,21 @@ class LanguageModel(ABC):
         pass
 
     @abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    def generate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         pass
 
     @abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    async def agenerate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         pass
 
     @abstractmethod
@@ -564,6 +703,9 @@ class LanguageModel(ABC):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         """
         Get chat-completion response from LLM.
@@ -591,12 +733,15 @@ class LanguageModel(ABC):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         """Async version of `chat`. See `chat` for details."""
         pass
 
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
-        return self.generate(prompt, max_tokens)
+        return self.generate(prompt, max_tokens, PromptVariants())
 
     def info(self) -> ModelInfo:
         """Info of relevant chat model"""
@@ -745,6 +890,39 @@ class LanguageModel(ABC):
         standalone = self.generate(prompt=prompt, max_tokens=1024).message.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone
+
+    def cache_store(self, k: str, v: Any, llm_logger: Logger) -> None:
+        if self.cache is None:
+            return
+        try:
+            self.cache.store(k, v)
+        except Exception as e:
+            llm_logger.error(f"Error in {self.__class__.__name__}::cache_store: {e}")
+            pass
+
+    def cache_lookup(
+        self, fn_name: str, llm_logger: Logger, **kwargs: Dict[str, Any]
+    ) -> Tuple[str, Any]:
+        if self.cache is None:
+            # no cache, return empty key and None result
+            return "", None
+        sorted_kwargs_str = str(sorted(kwargs.items()))
+        raw_key = f"{fn_name}:{sorted_kwargs_str}"
+        hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+        if not settings.cache:
+            # when caching disabled, return the hashed_key and none result
+            return hashed_key, None
+
+        try:
+            cached_val = self.cache.retrieve(hashed_key)
+        except Exception as e:
+            llm_logger.error(f"Error in {self.__class__.__name__}::cache_lookup: {e}")
+            return hashed_key, None
+        return hashed_key, cached_val
+
+    @abstractmethod
+    def is_openai_chat_model(self) -> bool:
+        pass
 
 
 class StreamingIfAllowed:

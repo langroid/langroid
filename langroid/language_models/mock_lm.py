@@ -9,7 +9,9 @@ from langroid.language_models.base import (
     LLMConfig,
     OpenAIJsonSchemaSpec,
     OpenAIToolSpec,
+    PromptVariants,
     ToolChoiceTypes,
+    ToolVariantSelector,
 )
 from langroid.utils.types import to_string
 
@@ -82,6 +84,9 @@ class MockLM(LanguageModel):
         functions: Optional[List[lm.LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> lm.LLMResponse:
         """
         Mock chat function for testing
@@ -98,6 +103,9 @@ class MockLM(LanguageModel):
         functions: Optional[List[lm.LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> lm.LLMResponse:
         """
         Mock chat function for testing
@@ -105,13 +113,23 @@ class MockLM(LanguageModel):
         last_msg = messages[-1].content if isinstance(messages, list) else messages
         return await self._response_async(last_msg)
 
-    def generate(self, prompt: str, max_tokens: int = 200) -> lm.LLMResponse:
+    def generate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
+    ) -> lm.LLMResponse:
         """
         Mock generate function for testing
         """
         return self._response(prompt)
 
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    async def agenerate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variants: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         """
         Mock generate function for testing
         """
@@ -122,3 +140,6 @@ class MockLM(LanguageModel):
 
     def set_stream(self, stream: bool) -> bool:
         return False
+
+    def is_openai_chat_model(self) -> bool:
+        return True

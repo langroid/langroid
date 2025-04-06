@@ -274,6 +274,10 @@ firecrawl = [
     "firecrawl-py>=1.13.5",
 ]
 
+anthropic = [
+    "anthropic>=0.46.0,<0.47.0"
+]
+
 
 [dependency-groups]
 dev = [

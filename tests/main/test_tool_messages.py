@@ -1,7 +1,7 @@
 import itertools
 import json
 import random
-from typing import Any, List, Literal, Optional
+from typing import Any, Callable, List, Literal, Optional
 
 import pytest
 
@@ -17,7 +17,10 @@ from langroid.agent.tools.orchestration import (
 )
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models import AnthropicLLMConfig, AnthropicModel
 from langroid.language_models.base import (
+    AnthropicSystemConfig,
+    AnthropicToolCall,
     LLMFunctionCall,
     LLMFunctionSpec,
     LLMMessage,
@@ -36,6 +39,7 @@ from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
 from langroid.utils.types import is_callable
+from tests.conftest import ModelVariant
 
 
 class CountryCapitalMessage(ToolMessage):
@@ -104,6 +108,12 @@ class MessageHandlingAgent(ChatAgent):
         )
 
 
+SYSTEM_PROMPT_MESSAGE = """
+VERY IMPORTANT: IF you see a possibility of using a tool/function,
+you MUST use it, and MUST NOT ASK IN NATURAL LANGUAGE.
+"""
+
+
 cfg = ChatAgentConfig(
     name="test-langroid",
     vecdb=None,
@@ -115,12 +125,22 @@ cfg = ChatAgentConfig(
     prompts=PromptsConfig(),
     use_functions_api=False,
     use_tools=True,
-    system_message="""
-    VERY IMPORTANT: IF you see a possibility of using a tool/function,
-    you MUST use it, and MUST NOT ASK IN NATURAL LANGUAGE.
-    """,
+    system_message=SYSTEM_PROMPT_MESSAGE,
 )
 agent = MessageHandlingAgent(cfg)
+
+anthropic_cfg = ChatAgentConfig(
+    name="test-langroid-anthropic",
+    vecdb=None,
+    llm=AnthropicLLMConfig(
+        type="anthropic",
+        cache_config=RedisCacheConfig(fake=False),
+    ),
+    parsing=ParsingConfig(),
+    prompts=PromptsConfig(),
+    system_message=SYSTEM_PROMPT_MESSAGE,
+)
+anthropic_agent = MessageHandlingAgent(anthropic_cfg)
 
 # Define the range of values each variable can have
 use_vals = [True, False]
@@ -264,7 +284,12 @@ Hope you can tell me!
 
 
 @pytest.mark.parametrize("as_string", [False, True])
-def test_handle_bad_tool_message(as_string: bool):
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+def test_handle_bad_tool_message(
+    test_settings: Settings, as_string: bool, model_variant: ModelVariant
+):
     """
     Test that a correct tool name with bad/missing args is
             handled correctly, i.e. the agent returns a clear
@@ -272,18 +297,24 @@ def test_handle_bad_tool_message(as_string: bool):
 
     as_string: whether to pass the bad tool message as a string or as an LLM msg
     """
-    agent.enable_message(FileExistsMessage)
-    assert agent.handle_message(NONE_MSG) is None
+    if model_variant == ModelVariant.ANTHROPIC:
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+    set_global(test_settings)
+
+    agent_to_test = agent if model_variant == ModelVariant.OPEN_AI else anthropic_agent
+
+    agent_to_test.enable_message(FileExistsMessage)
+    assert agent_to_test.handle_message(NONE_MSG) is None
     if as_string:
         # set up a prior LLM-originated msg, to mock a scenario
         # where the last msg was from LLM, prior to calling
         # handle_message with the bad tool message -- we are trying to
         # test that the error is raised correctly in this case
-        agent.llm_response("3+4=")
-        result = agent.handle_message(BAD_FILE_EXISTS_MSG)
+        agent_to_test.llm_response("3+4=")
+        result = agent_to_test.handle_message(BAD_FILE_EXISTS_MSG)
     else:
-        bad_tool_from_llm = agent.create_llm_response(BAD_FILE_EXISTS_MSG)
-        result = agent.handle_message(bad_tool_from_llm)
+        bad_tool_from_llm = agent_to_test.create_llm_response(BAD_FILE_EXISTS_MSG)
+        result = agent_to_test.handle_message(bad_tool_from_llm)
     assert "file_exists" in result and "filename" in result and "required" in result
 
 
@@ -319,6 +350,9 @@ def test_handle_bad_tool_message(as_string: bool):
         ),
     ],
 )
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_llm_tool_message(
     test_settings: Settings,
     use_functions_api: bool,
@@ -327,6 +361,7 @@ def test_llm_tool_message(
     prompt: str,
     result: str,
     stream: bool,
+    model_variant: ModelVariant,
 ):
     """
     Test whether LLM is able to GENERATE message (tool) in required format, and the
@@ -339,12 +374,26 @@ def test_llm_tool_message(
         prompt: the prompt to use to induce the LLM to use the tool
         result: the expected result from agent handling the tool-message
     """
+    if model_variant == ModelVariant.ANTHROPIC:
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
     set_global(test_settings)
-    cfg.llm.stream = stream
-    agent = MessageHandlingAgent(cfg)
-    agent.config.use_functions_api = use_functions_api
-    agent.config.use_tools = not use_functions_api
-    agent.config.use_tools_api = use_tools_api
+
+    if model_variant == ModelVariant.ANTHROPIC:
+        anthropic_cfg.llm.stream = stream
+        agent = MessageHandlingAgent(anthropic_cfg)
+    else:
+        cfg.llm.stream = stream
+        agent = MessageHandlingAgent(cfg)
+        agent.config.use_functions_api = use_functions_api
+        agent.config.use_tools = not use_functions_api
+        agent.config.use_tools_api = use_tools_api
+
+    if not agent.llm.is_openai_chat_model() and use_functions_api:
+        pytest.skip(
+            f"""
+            Function Calling not available for {agent.config.llm.chat_model}: skipping
+            """
+        )
 
     agent.enable_message(
         [
@@ -371,13 +420,23 @@ def test_llm_tool_message(
     assert result.lower() in agent_result.lower()
 
 
-def test_llm_non_tool(test_settings: Settings):
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+def test_llm_non_tool(test_settings: Settings, model_variant: ModelVariant):
     """Having no tools enabled should result in a None handle_message result"""
-    agent = MessageHandlingAgent(cfg)
-    llm_msg = agent.llm_response_forget(
+    if model_variant == ModelVariant.ANTHROPIC:
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+    set_global(test_settings)
+    agent_to_test = (
+        MessageHandlingAgent(cfg)
+        if model_variant == ModelVariant.OPEN_AI
+        else MessageHandlingAgent(anthropic_cfg)
+    )
+    llm_msg = agent_to_test.llm_response_forget(
         "Ask me to check what is the population of France."
     ).content
-    agent_result = agent.handle_message(llm_msg)
+    agent_result = agent_to_test.handle_message(llm_msg)
     assert agent_result is None
 
 
@@ -510,11 +569,22 @@ class CoinFlipTool(ToolMessage):
 
 @pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_agent_infer_tool(
     test_settings: Settings,
     use_functions_api: bool,
     use_tools_api: bool,
+    model_variant: ModelVariant,
 ):
+    if model_variant == ModelVariant.ANTHROPIC:
+        if use_functions_api:
+            pytest.skip(
+                "Function usage not supported with Claude, skipping to Tool test..."
+            )
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+
     set_global(test_settings)
     gauss_request = """{"xval": 1, "yval": 3}"""
     boiler_or_euler_request = """{"fruit_pair": {"pears": 1, "apples": 3}}"""
@@ -530,6 +600,11 @@ def test_agent_infer_tool(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
         use_tools_api=use_tools_api,
+        llm=(
+            AnthropicLLMConfig()
+            if model_variant == ModelVariant.ANTHROPIC
+            else OpenAIGPTConfig()
+        ),
     )
     agent = ChatAgent(cfg)
     agent.enable_message(
@@ -571,20 +646,36 @@ def test_agent_infer_tool(
 
 @pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_tool_no_llm_response(
     test_settings: Settings,
     use_functions_api: bool,
     use_tools_api: bool,
+    model_variant: ModelVariant,
 ):
     """Test that agent.llm_response does not respond to tool messages."""
+    if model_variant == ModelVariant.ANTHROPIC:
+        if use_functions_api:
+            pytest.skip(
+                "Function usage not supported with Claude, skipping to Tool test..."
+            )
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
 
     set_global(test_settings)
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
         use_tools_api=use_tools_api,
+        llm=(
+            AnthropicLLMConfig()
+            if model_variant == ModelVariant.ANTHROPIC
+            else OpenAIGPTConfig()
+        ),
     )
     agent = ChatAgent(cfg)
+
     agent.enable_message(NabroskiTool)
     nabroski_tool = NabroskiTool(num_pair=NumPair(xval=1, yval=2)).to_json()
     response = agent.llm_response(nabroski_tool)
@@ -593,18 +684,34 @@ def test_tool_no_llm_response(
 
 @pytest.mark.parametrize("stream", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_tool_no_task(
     test_settings: Settings,
     use_functions_api: bool,
     stream: bool,
+    model_variant: ModelVariant,
 ):
     """Test tool handling without running task, i.e. directly using
     agent.llm_response and agent.agent_response methods."""
+
+    if model_variant == ModelVariant.ANTHROPIC:
+        if use_functions_api:
+            pytest.skip(
+                "Function usage not supported with Claude, skipping to Tool test..."
+            )
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
 
     set_global(test_settings)
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        llm=(
+            AnthropicLLMConfig()
+            if model_variant == ModelVariant.ANTHROPIC
+            else OpenAIGPTConfig()
+        ),
     )
     cfg.llm.stream = stream
     agent = ChatAgent(cfg)
@@ -618,19 +725,35 @@ def test_tool_no_task(
 
 @pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_tool_optional_args(
     test_settings: Settings,
     use_functions_api: bool,
     use_tools_api: bool,
+    model_variant: ModelVariant,
 ):
     """Test that ToolMessage where some args are optional (i.e. have default values)
     works well, i.e. LLM is able to generate all args if needed, including optionals."""
+
+    if model_variant == ModelVariant.ANTHROPIC:
+        if use_functions_api:
+            pytest.skip(
+                "Function usage not supported with Claude, skipping to Tool test..."
+            )
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
 
     set_global(test_settings)
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
         use_tools_api=use_tools_api,
+        llm=(
+            AnthropicLLMConfig()
+            if model_variant == ModelVariant.ANTHROPIC
+            else OpenAIGPTConfig()
+        ),
     )
     agent = ChatAgent(cfg)
 
@@ -645,12 +768,16 @@ def test_tool_optional_args(
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_llm_tool_task(
     test_settings: Settings,
     use_functions_api: bool,
     use_tools_api: bool,
     stream: bool,
     tool: ToolMessage,
+    model_variant: ModelVariant,
 ):
     """
     Test "full life cycle" of tool, when using Task.run().
@@ -661,8 +788,19 @@ def test_llm_tool_task(
     5. invoke LLM api with tool result
     """
 
+    if model_variant == ModelVariant.ANTHROPIC:
+        if use_functions_api:
+            pytest.skip(
+                "Function usage not supported with Claude, skipping to Tool test..."
+            )
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+
     set_global(test_settings)
-    llm_config = OpenAIGPTConfig(max_output_tokens=3_000, timeout=120)
+    llm_config = (
+        AnthropicLLMConfig()
+        if model_variant == ModelVariant.ANTHROPIC
+        else OpenAIGPTConfig(max_output_tokens=3_000, timeout=120)
+    )
     cfg = ChatAgentConfig(
         llm=llm_config,
         use_tools=not use_functions_api,
@@ -687,11 +825,15 @@ def test_llm_tool_task(
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_multi_tool(
     test_settings: Settings,
     use_functions_api: bool,
     use_tools_api: bool,
     stream: bool,
+    model_variant: ModelVariant,
 ):
     """
     Test "full life cycle" of tool, when using Task.run().
@@ -701,6 +843,13 @@ def test_multi_tool(
     3. ChatAgent.agent_response handles tool, result added to ChatAgent msg history
     5. invoke LLM api with tool result
     """
+
+    if model_variant == ModelVariant.ANTHROPIC:
+        if use_functions_api:
+            pytest.skip(
+                "Function usage not supported with Claude, skipping to Tool test..."
+            )
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
 
     set_global(test_settings)
     cfg = ChatAgentConfig(
@@ -713,7 +862,14 @@ def test_multi_tool(
         When you are asked for MULTIPLE transforms, you MUST
         use MULTIPLE tools/functions.
         When you receive the answers from the tools, say {DONE} and show the answers.
+        When asking for the results of multiple tools, ask for the results of a tool
+        one response at a time.
         """,
+        llm=(
+            AnthropicLLMConfig()
+            if model_variant == ModelVariant.ANTHROPIC
+            else OpenAIGPTConfig()
+        ),
     )
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
@@ -1031,11 +1187,16 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
 @pytest.mark.parametrize("handler_result_type", ["agent_done", "final_tool"])
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_llm_end_with_tool(
+    test_settings: Settings,
     handler_result_type: str,
     llm_tool: str,
     use_fn_api: bool,
     use_tools_api: bool,
+    model_variant: ModelVariant,
 ):
     """
     Test that an LLM can directly or indirectly trigger task-end, and return a Tool as
@@ -1108,6 +1269,15 @@ def test_llm_end_with_tool(
             final result using the TOOL: `{final_result_pair_tool_name}`.
         """
 
+    if model_variant == ModelVariant.ANTHROPIC:
+        if use_fn_api:
+            pytest.skip(
+                "Function usage not supported with Claude, skipping to Tool test..."
+            )
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+
+    set_global(test_settings)
+
     agent = MyAgent(
         ChatAgentConfig(
             name="MyAgent",
@@ -1115,6 +1285,11 @@ def test_llm_end_with_tool(
             use_functions_api=use_fn_api,
             use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
+            llm=(
+                AnthropicLLMConfig()
+                if model_variant == ModelVariant.ANTHROPIC
+                else OpenAIGPTConfig()
+            ),
         )
     )
     if llm_tool == "pair":
@@ -1278,6 +1453,94 @@ def test_agent_respond_only_tools(tool: str):
             assert bob_task.n_stalled_steps == 0
 
 
+def call_common_recovery_assertions(
+    simulate_failed_call: Callable[[str | ChatDocument], str],
+    to_attempt: Callable[[LLMFunctionCall], str | ChatDocument],
+):
+    # The name of the function is incorrect:
+    # The LLM should correct the request to "nabroski" in recovery
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="__nabroski__",
+                    arguments={
+                        "xval": 1,
+                        "yval": 3,
+                    },
+                )
+            )
+        )
+        == "6"
+    )
+    # The LLM should correct the request to "nabroski" in recovery
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="Nabroski-function",
+                    arguments={
+                        "xval": 2,
+                        "yval": 3,
+                    },
+                )
+            )
+        )
+        == "9"
+    )
+    # Strict fallback disables the default arguments, but the LLM
+    # should infer from context. In addition, the name of the
+    # function is incorrect (the LLM should infer "coriolis" in
+    # recovery) and the JSON output is malformed
+
+    # Note here we intentionally use "catss" as the arg to ensure that
+    # the tool-name inference doesn't work (see `maybe_parse` agent/base.py,
+    # there's a mechanism that infers the intended tool if the arguments are
+    # unambiguously for a specific tool) -- here since we use `catss` that
+    # mechanism fails, and we can do this test properly to focus on structured
+    # recovery. But `catss' is sufficiently similar to 'cats' that the
+    # intent-based recovery should work.
+    assert (
+        simulate_failed_call(
+            """
+        request ":coriolis"
+        arguments {"catss": 1} 
+        """
+        )
+        == "8"
+    )
+    # The LLM should correct the request to "coriolis" in recovery
+    # The LLM should infer the default argument from context
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="Coriolis",
+                    arguments={
+                        "cats": 1,
+                    },
+                )
+            )
+        )
+        == "8"
+    )
+    # The LLM should infer "euler" in recovery
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="EulerTool",
+                    arguments={
+                        "pears": 6,
+                        "apples": 4,
+                    },
+                )
+            )
+        )
+        == "8"
+    )
+
+
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True])
 def test_structured_recovery(
@@ -1391,88 +1654,91 @@ def test_structured_recovery(
             function_call=attempt,
         )
 
-    # The name of the function is incorrect:
-    # The LLM should correct the request to "nabroski" in recovery
-    assert (
-        simulate_failed_call(
-            to_attempt(
-                LLMFunctionCall(
-                    name="__nabroski__",
-                    arguments={
-                        "xval": 1,
-                        "yval": 3,
-                    },
-                )
-            )
-        )
-        == "6"
-    )
-    # The LLM should correct the request to "nabroski" in recovery
-    assert (
-        simulate_failed_call(
-            to_attempt(
-                LLMFunctionCall(
-                    name="Nabroski-function",
-                    arguments={
-                        "xval": 2,
-                        "yval": 3,
-                    },
-                )
-            )
-        )
-        == "9"
-    )
-    # Strict fallback disables the default arguments, but the LLM
-    # should infer from context. In addition, the name of the
-    # function is incorrect (the LLM should infer "coriolis" in
-    # recovery) and the JSON output is malformed
+    call_common_recovery_assertions(simulate_failed_call, to_attempt)
 
-    # Note here we intentionally use "catss" as the arg to ensure that
-    # the tool-name inference doesn't work (see `maybe_parse` agent/base.py,
-    # there's a mechanism that infers the intended tool if the arguments are
-    # unambiguously for a specific tool) -- here since we use `catss` that
-    # mechanism fails, and we can do this test properly to focus on structured
-    # recovery. But `catss' is sufficiently similar to 'cats' that the
-    # intent-based recovery should work.
-    assert (
-        simulate_failed_call(
+
+@pytest.mark.parametrize("use_tools_api", [True, False])
+def test_structured_recovery_anthropic(test_settings: Settings, use_tools_api: bool):
+    test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+
+    def simulate_failed_call(attempt: str | ChatDocument) -> str:
+        agent = ChatAgent(
+            ChatAgentConfig(
+                use_tools_api=use_tools_api,
+                use_tools=True,
+                strict_recovery=True,
+                llm=AnthropicLLMConfig(
+                    system_config=AnthropicSystemConfig(
+                        system_prompts="You are a helpful assistant."
+                    ),
+                ),
+            )
+        )
+        agent.enable_message(
+            [
+                NabroskiTool,
+                CoriolisTool,
+                EulerTool,
+            ]
+        )
+        agent.message_history = [
+            # set agent response configuration
+            agent._update_anthropic_configuration(),
+            LLMMessage(
+                role=Role.USER,
+                content="""
+                Please give me an example of a Nabroski, Coriolis, or Euler call.
+                """,
+            ),
+            LLMMessage(
+                role=Role.ASSISTANT,
+                content=attempt if isinstance(attempt, str) else attempt.content,
+                tool_calls=None if isinstance(attempt, str) else attempt.ant_tool_calls,
+                function_call=(
+                    None if isinstance(attempt, str) else attempt.function_call
+                ),
+            ),
+        ]
+
+        agent.handle_message(attempt)
+        assert agent.tool_error
+        response = agent.llm_response(
             """
-        request ":coriolis"
-        arguments {"catss": 1} 
-        """
+            There was an error in your attempted tool call. Please correct it.
+            You must re-use the values from your attempted tool call.
+            """
         )
-        == "8"
-    )
-    # The LLM should correct the request to "coriolis" in recovery
-    # The LLM should infer the default argument from context
-    assert (
-        simulate_failed_call(
-            to_attempt(
-                LLMFunctionCall(
-                    name="Coriolis",
-                    arguments={
-                        "cats": 1,
-                    },
-                )
+        assert response
+        result = agent.handle_message(response)
+        assert result
+        if isinstance(result, ChatDocument):
+            return result.content
+        return result
+
+    def to_attempt(attempt: LLMFunctionCall) -> str | ChatDocument:
+        if use_tools_api:
+            return ChatDocument(
+                content=f"""
+                {attempt.name}:
+                {json.dumps(attempt.arguments)}
+                """,
+                metadata=ChatDocMetaData(sender=Entity.LLM),
+                ant_tool_calls=[
+                    AnthropicToolCall(
+                        id="call-1234567", name=attempt.name, function=attempt
+                    )
+                ],
             )
+        return ChatDocument(
+            content=f"""
+            {attempt.name}:
+            {json.dumps(attempt.arguments)}
+            """,
+            metadata=ChatDocMetaData(sender=Entity.LLM),
+            function_call=attempt,
         )
-        == "8"
-    )
-    # The LLM should infer "euler" in recovery
-    assert (
-        simulate_failed_call(
-            to_attempt(
-                LLMFunctionCall(
-                    name="EulerTool",
-                    arguments={
-                        "pears": 6,
-                        "apples": 4,
-                    },
-                )
-            )
-        )
-        == "8"
-    )
+
+    call_common_recovery_assertions(simulate_failed_call, to_attempt)
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
@@ -1783,7 +2049,12 @@ def test_reduce_raw_tool_result():
     assert "my_tool" in tool_result and str(MyTool._max_retained_tokens) in tool_result
 
 
-def test_valid_structured_recovery():
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+def test_valid_structured_recovery(
+    test_settings: Settings, model_variant: ModelVariant
+):
     """
     Test that structured recovery is not triggered inappropriately
     when agent response contains a JSON-like string.
@@ -1793,9 +2064,18 @@ def test_valid_structured_recovery():
         def agent_response(self, msg: str | ChatDocument) -> Any:
             return "{'x': 1, 'y': 2}"
 
+    if model_variant == ModelVariant.ANTHROPIC:
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+
+    set_global(test_settings)
+
     agent = MyAgent(
         ChatAgentConfig(
-            llm=OpenAIGPTConfig(),
+            llm=(
+                OpenAIGPTConfig()
+                if model_variant == ModelVariant.OPEN_AI
+                else AnthropicLLMConfig()
+            ),
             system_message="""Simply respond No for any input""",
         )
     )
@@ -1894,9 +2174,14 @@ class GetTimeTool(ToolMessage):
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_strict_recovery_only_from_LLM(
+    test_settings: Settings,
     use_fn_api: bool,
     use_tools_api: bool,
+    model_variant: ModelVariant,
 ):
     """
     Test that structured fallback only occurs on messages
@@ -1921,18 +2206,30 @@ def test_strict_recovery_only_from_LLM(
                 was_tool_error = True
             return await super().llm_response_async(message)
 
+    if model_variant == ModelVariant.ANTHROPIC:
+        if use_fn_api:
+            pytest.skip(
+                "Function usage not supported with Claude; utilizing tools instead"
+            )
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+
+    set_global(test_settings)
+
+    llm_config = (
+        OpenAIGPTConfig(supports_json_schema=True, supports_strict_tools=True)
+        if model_variant == ModelVariant.OPEN_AI
+        else AnthropicLLMConfig()
+    )
+
     agent = TrackToolError(
         ChatAgentConfig(
             use_functions_api=use_fn_api,
             use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
             strict_recovery=True,
-            llm=OpenAIGPTConfig(
-                supports_json_schema=True,
-                supports_strict_tools=True,
-            ),
+            llm=llm_config,
             system_message="""
-            You are a helpful assistant.  Start by calling the
+            You are a helpful assistant. Start by calling the
             get_time tool. Then greet the user according to the time
             of the day.
             """,

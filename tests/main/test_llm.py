@@ -8,7 +8,15 @@ import pytest
 import langroid as lr
 import langroid.language_models as lm
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.base import LLMMessage, Role
+from langroid.language_models.anthropic import (
+    AnthropicLLM,
+    AnthropicLLMConfig,
+)
+from langroid.language_models.base import (
+    LLMMessage,
+    PromptVariants,
+    Role,
+)
 from langroid.language_models.openai_gpt import (
     AccessWarning,
     OpenAIChatModel,
@@ -93,6 +101,82 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
 
 
 @pytest.mark.parametrize(
+    "streaming, year, recipient, use_cache",
+    [
+        (False, "2015", "Eddie Murphy", False),
+        (True, "2017", "David Letterman", True),
+        (False, "2015", "Eddie Murphy", False),
+        (True, "2017", "David Letterman", True),
+    ],
+)
+def test_anthropic(
+    test_settings, anthropic_system_config, streaming, year, recipient, use_cache
+):
+    test_settings.cache = False
+    set_global(test_settings)
+
+    cfg = AnthropicLLMConfig(
+        stream=streaming,
+        max_output_tokens=100,
+        min_output_tokens=10,
+        cache_config=RedisCacheConfig(fake=True) if use_cache else None,
+        system_config=anthropic_system_config,
+    )
+    anthropic = AnthropicLLM(config=cfg)
+
+    user_question = (
+        f"What year did {recipient} win the Mark Twain Prize for American Humor?"
+    )
+
+    # Attempting to pre-fill a bit of Claude's response...
+    prompt_variants = PromptVariants(
+        anthropic=[
+            {"role": Role.USER, "content": user_question},
+            {
+                "role": Role.ASSISTANT,
+                "content": f"{recipient} won the Mark Twain Award in",
+            },
+        ]
+    )
+
+    generate_token_limit, chat_token_limit = 800, 500
+
+    # testing chat as completion code path
+    response = anthropic.generate(
+        prompt="", max_tokens=generate_token_limit, prompt_variants=prompt_variants
+    )
+    assert year in response.message
+    assert not response.cached
+
+    # testing chat code path
+    chat_messages = [LLMMessage(role=Role.USER, content=user_question)]
+    response = anthropic.chat(messages=chat_messages, max_tokens=chat_token_limit)
+    assert year in response.message
+    assert not response.cached
+
+    # test caching
+    test_settings.cache = True
+    set_global(test_settings)
+    response = anthropic.chat(messages=chat_messages, max_tokens=chat_token_limit)
+    assert year in response.message
+    assert response.cached == use_cache
+
+    bad_messages = [
+        LLMMessage(
+            role=Role.USER,
+            content="Time to use a function!",
+        )
+    ]
+
+    with pytest.raises(Exception):
+        _ = anthropic.chat(
+            messages=bad_messages,
+            max_tokens=chat_token_limit,
+            function_call="Unsupported Function Usage",
+        )
+
+
+@pytest.mark.parametrize(
     "mode, max_tokens",
     [("completion", 100), ("chat", 100), ("completion", 1000), ("chat", 1000)],
 )
@@ -154,6 +238,23 @@ def test_llm_config_context_length(mdl: str, ctx: int | None):
     )
     mdl = lm.OpenAIGPT(config=llm_config)
     assert mdl.chat_context_length() == ctx or mdl.info().context_length
+
+
+@pytest.mark.parametrize(
+    "chat_model",
+    [
+        lm.AnthropicModel.CLAUDE_3_5_HAIKU,
+        lm.AnthropicModel.CLAUDE_3_5_SONNET,
+        lm.AnthropicModel.CLAUDE_3_7_SONNET,
+    ],
+)
+@pytest.mark.parametrize("context_length", [16_000, None])
+def test_anthropic_config_context_length(chat_model: str, context_length: int | None):
+    llm_config = lm.AnthropicLLMConfig(
+        chat_model=chat_model, chat_context_length=context_length
+    )
+    model = lm.AnthropicLLM(config=llm_config)
+    assert model.chat_context_length() == context_length or model.info().context_length
 
 
 def test_model_selection(test_settings: Settings):

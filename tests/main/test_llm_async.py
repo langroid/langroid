@@ -4,7 +4,8 @@ import pytest
 
 import langroid.language_models as lm
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.base import LLMMessage, Role
+from langroid.language_models import AnthropicLLM, AnthropicLLMConfig, AnthropicModel
+from langroid.language_models.base import LLMMessage, PromptVariants, Role
 from langroid.language_models.openai_gpt import (
     OpenAICompletionModel,
     OpenAIGPT,
@@ -85,18 +86,111 @@ async def test_openai_gpt_async(
 
 
 @pytest.mark.asyncio
-async def test_llm_async_concurrent(test_settings: Settings):
+@pytest.mark.parametrize(
+    "streaming, year, recipient",
+    [
+        (False, "2015", "Eddie Murphy"),
+        (True, "2017", "David Letterman"),
+    ],
+)
+@pytest.mark.parametrize("stream_quiet", [True, False])
+async def test_anthropic_async(
+    test_settings, anthropic_system_config, streaming, year, recipient, stream_quiet
+):
     set_global(test_settings)
-    cfg = OpenAIGPTConfig(
-        stream=False,  # use streaming output if enabled globally
-        type="openai",
+
+    anthropic_cfg = AnthropicLLMConfig(
+        stream=streaming,
         max_output_tokens=100,
         min_output_tokens=10,
-        completion_model=OpenAICompletionModel.DAVINCI,
         cache_config=RedisCacheConfig(fake=False),
+        async_stream_quiet=stream_quiet,
+        system_config=anthropic_system_config,
     )
 
-    mdl = OpenAIGPT(config=cfg)
+    anthropic = AnthropicLLM(config=anthropic_cfg)
+
+    user_question = (
+        f"What year did {recipient} win the Mark Twain Prize for American Humor?"
+    )
+
+    set_global(Settings(chat_model=AnthropicModel.CLAUDE_3_5_HAIKU, cache=False))
+
+    prompt_variants = PromptVariants(
+        anthropic=[
+            {"role": Role.USER, "content": user_question},
+            {
+                "role": Role.ASSISTANT,
+                "content": f"{recipient} won the Mark Twain Award in",
+            },
+        ]
+    )
+
+    generate_response = await anthropic.agenerate(
+        prompt="", max_tokens=50, prompt_variants=prompt_variants
+    )
+    assert year in generate_response.message
+    assert not generate_response.cached
+
+    messages = [LLMMessage(role=Role.USER, content=user_question)]
+
+    chat_response = await anthropic.achat(messages=messages, max_tokens=50)
+    assert year in chat_response.message
+    assert not chat_response.cached
+
+    set_global(Settings(chat_model=AnthropicModel.CLAUDE_3_5_HAIKU, cache=True))
+    cached_chat_response = await anthropic.achat(messages=messages, max_tokens=50)
+    assert year in cached_chat_response.message
+    assert cached_chat_response.cached
+
+    bad_messages = [
+        LLMMessage(
+            role=Role.USER,
+            content="Time to use a function!",
+        )
+    ]
+
+    with pytest.raises(Exception):
+        await anthropic.achat(
+            messages=bad_messages,
+            max_tokens=50,
+            function_call="Unsupported Function Usage",
+        )
+
+
+@pytest.mark.parametrize("model_class", [OpenAIGPT, AnthropicLLM])
+@pytest.mark.asyncio
+async def test_llm_async_concurrent(
+    test_settings: Settings, anthropic_system_config, model_class
+):
+    if isinstance(model_class, OpenAIGPT):
+        set_global(test_settings)
+    else:
+        set_global(Settings(chat_model=AnthropicModel.CLAUDE_3_5_HAIKU))
+
+    if isinstance(model_class, OpenAIGPT):
+        cfg = OpenAIGPTConfig(
+            stream=False,  # use streaming output if enabled globally
+            type="openai",
+            max_output_tokens=100,
+            min_output_tokens=10,
+            completion_model=OpenAICompletionModel.DAVINCI,
+            cache_config=RedisCacheConfig(fake=False),
+        )
+    else:
+        cfg = AnthropicLLMConfig(
+            stream=False,
+            max_output_tokens=100,
+            min_output_tokens=10,
+            cache_config=RedisCacheConfig(fake=False),
+            system_config=anthropic_system_config,
+        )
+
+    if isinstance(model_class, OpenAIGPT):
+        mdl = OpenAIGPT(config=cfg)
+    else:
+        mdl = AnthropicLLM(config=cfg)
+
     N = 5
     questions = ["1+" + str(i) for i in range(N)]
     expected_answers = [str(i + 1) for i in range(N)]

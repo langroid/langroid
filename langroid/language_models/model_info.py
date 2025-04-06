@@ -33,7 +33,7 @@ class OpenAIChatModel(ModelName):
     O3_MINI = "o3-mini"
 
 
-class OpenAICompletionModel(str, Enum):
+class OpenAICompletionModel(ModelName):
     """Enum for OpenAI Completion models"""
 
     DAVINCI = "davinci-002"
@@ -47,6 +47,8 @@ class AnthropicModel(ModelName):
     CLAUDE_3_OPUS = "claude-3-opus-latest"
     CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
     CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
+    CLAUDE_3_5_HAIKU = "claude-3-5-haiku-20241022"
+    CLAUDE_3_7_SONNET = "claude-3-7-sonnet-20250219"
 
 
 class DeepSeekModel(ModelName):
