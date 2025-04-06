@@ -682,9 +682,6 @@ class OpenAIGPT(LanguageModel):
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
 
-    def supports_functions_or_tools(self) -> bool:
-        return self.is_openai_chat_model() and self.info().has_tools
-
     def is_openai_completion_model(self) -> bool:
         openai_completion_models = [e.value for e in OpenAICompletionModel]
         return self.config.completion_model in openai_completion_models
@@ -1644,17 +1641,6 @@ class OpenAIGPT(LanguageModel):
     ) -> LLMResponse:
         self.run_on_first_use()
 
-        if [functions, tools] != [None, None] and not self.is_openai_chat_model():
-            raise ValueError(
-                f"""
-                `functions` and `tools` can only be specified for OpenAI chat LLMs, 
-                or LLMs served via an OpenAI-compatible API.
-                {self.config.chat_model} does not support function-calling or tools.
-                Instead, please use Langroid's ToolMessages, which are equivalent.
-                In the ChatAgentConfig, set `use_functions_api=False` 
-                and `use_tools=True`, this will enable ToolMessages.
-                """
-            )
         if self.config.use_completion_for_chat and not self.is_openai_chat_model():
             # only makes sense for non-OpenAI models
             if self.config.formatter is None or self.config.hf_formatter is None:
@@ -1699,16 +1685,6 @@ class OpenAIGPT(LanguageModel):
     ) -> LLMResponse:
         self.run_on_first_use()
 
-        if [functions, tools] != [None, None] and not self.is_openai_chat_model():
-            raise ValueError(
-                f"""
-                `functions` and `tools` can only be specified for OpenAI chat models;
-                {self.config.chat_model} does not support function-calling or tools.
-                Instead, please use Langroid's ToolMessages, which are equivalent.
-                In the ChatAgentConfig, set `use_functions_api=False` 
-                and `use_tools=True`, this will enable ToolMessages.
-                """
-            )
         # turn off streaming for async calls
         if (
             self.config.use_completion_for_chat

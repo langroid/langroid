@@ -294,7 +294,7 @@ def test_handle_bad_tool_message(as_string: bool):
 )
 @pytest.mark.parametrize(
     "use_tools_api",
-    [True, False],
+    [True],  # ONLY test tools-api since OpenAI has deprecated functions-api
 )
 @pytest.mark.parametrize(
     "message_class, prompt, result",
@@ -345,12 +345,12 @@ def test_llm_tool_message(
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
     agent.config.use_tools_api = use_tools_api
-    if not agent.llm.is_openai_chat_model() and use_functions_api:
-        pytest.skip(
-            f"""
-            Function Calling not available for {agent.config.llm.chat_model}: skipping
-            """
-        )
+    # if not agent.llm.is_openai_chat_model() and use_functions_api:
+    #     pytest.skip(
+    #         f"""
+    #         Function Calling not available for {agent.config.llm.chat_model}: skipping
+    #         """
+    #     )
 
     agent.enable_message(
         [
@@ -649,7 +649,7 @@ def test_tool_optional_args(
 
 @pytest.mark.parametrize("tool", [NabroskiTool, CoriolisTool])
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_tool_task(
     test_settings: Settings,

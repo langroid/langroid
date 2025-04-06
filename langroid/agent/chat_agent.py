@@ -94,7 +94,7 @@ class ChatAgentConfig(AgentConfig):
     handle_llm_no_tool: Any = None
     use_tools: bool = False
     use_functions_api: bool = True
-    use_tools_api: bool = False
+    use_tools_api: bool = True
     strict_recovery: bool = True
     enable_orchestration_tool_handling: bool = True
     output_format: Optional[type] = None
@@ -308,12 +308,7 @@ class ChatAgent(Agent):
 
     def _fn_call_available(self) -> bool:
         """Does this agent's LLM support function calling?"""
-        return (
-            self.llm is not None
-            and isinstance(self.llm, OpenAIGPT)
-            and self.llm.is_openai_chat_model()
-            and self.llm.supports_functions_or_tools()
-        )
+        return self.llm is not None and self.llm.supports_functions_or_tools()
 
     def _strict_tools_available(self) -> bool:
         """Does this agent's LLM support strict tools?"""
