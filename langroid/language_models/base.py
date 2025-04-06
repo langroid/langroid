@@ -626,6 +626,20 @@ class LanguageModel(ABC):
         )
         return get_model_info(orig_model, model)
 
+    def supports_functions_or_tools(self) -> bool:
+        """
+        Does this Model's API support "native" tool-calling, i.e.
+        can we call the API with arguments that contain a list of available tools,
+        and their schemas?
+        Note that, given the plethora of LLM provider APIs this determination is
+        imperfect at best, and leans towards returning True.
+        When the API calls fails with an error indicating tools are not supported,
+        then users are encouraged to use the Langroid-based prompt-based
+        ToolMessage mechanism, which works with ANY LLM. To enable this,
+        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
+        """
+        return self.info().has_tools
+
     def chat_context_length(self) -> int:
         return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
 

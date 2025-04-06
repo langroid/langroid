@@ -869,7 +869,10 @@ def test_task_output_format_sequence():
             agent,
             system_message="""
             You will be provided with a number `x` and will compute (3 * x + 1) ** 4,
-            using these ops sequentially: multiplication, increment, and power.
+            using these ops sequentially: 
+            - multiplication, to compute 3*x to get result M, using the `multiply` tool
+            - increment, to compute M + 1 to get result N, using the `increment` tool
+            - power, to compute N ** 4 to get result P, using the `power` tool
             """,
             interactive=False,
             default_return_type=int,
@@ -956,7 +959,10 @@ async def test_task_output_format_sequence_async():
             agent,
             system_message="""
             You will be provided with a number `x` and will compute (3 * x + 1) ** 4,
-            using these ops sequentially: multiplication, increment, and power.
+            using these ops sequentially: 
+            - multiplication, to compute 3*x to get result M, using the `multiply` tool
+            - increment, to compute M + 1 to get result N, using the `increment` tool
+            - power, to compute N ** 4 to get result P, using the `power` tool
             """,
             interactive=False,
             default_return_type=int,
