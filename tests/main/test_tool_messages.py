@@ -1973,3 +1973,40 @@ def test_strict_recovery_only_from_LLM(
     agent.message_history.extend(ChatDocument.to_LLMMessage(user_message))
     agent.get_tool_messages(content)
     assert not agent.tool_error
+
+
+@pytest.mark.parametrize("use_fn_api", [False, True])
+def test_tool_handler_invoking_llm(use_fn_api: bool):
+    """
+    Check that if a tool handler directly invokes llm_response,
+    it works as expected, especially with OpenAI Tools API
+    """
+
+    class MyAgent(ChatAgent):
+        def nabroski(self, msg: NabroskiTool):
+            ans = self.llm_response("What is 3+4?")
+            return AgentDoneTool(content=ans.content)
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            use_functions_api=use_fn_api,
+            use_tools_api=use_fn_api,
+            use_tools=not use_fn_api,
+            handle_llm_no_tool=f"you FORGOT to use the tool `{NabroskiTool.name()}`",
+            system_message=f"""
+            When user asks you to compute the Nabroski transform of two numbers,
+            you MUST use the TOOL `{NabroskiTool.name()}` to do so, since you do NOT
+            know how to do it yourself.
+            """,
+        )
+    )
+    agent.enable_message(NabroskiTool)
+    task = Task(agent, interactive=False, single_round=False)
+    result = task.run(
+        f"""
+        Use the TOOL `{NabroskiTool.name()}` to compute the 
+        Nabroski transform of 2 and 5.
+        """
+    )
+
+    assert "7" in result.content
