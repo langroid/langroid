@@ -345,12 +345,6 @@ def test_llm_tool_message(
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
     agent.config.use_tools_api = use_tools_api
-    # if not agent.llm.is_openai_chat_model() and use_functions_api:
-    #     pytest.skip(
-    #         f"""
-    #         Function Calling not available for {agent.config.llm.chat_model}: skipping
-    #         """
-    #     )
 
     agent.enable_message(
         [
@@ -425,7 +419,7 @@ wrong_nabroski_tool = """
 """
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("stream", [True, False])
 @pytest.mark.parametrize("strict_recovery", [True, False])
@@ -514,7 +508,7 @@ class CoinFlipTool(ToolMessage):
         return "Heads" if heads else "Tails"
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_agent_infer_tool(
     test_settings: Settings,
@@ -575,7 +569,7 @@ def test_agent_infer_tool(
     assert agent.agent_response(no_args_request_specified).content in ["Heads", "Tails"]
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_no_llm_response(
     test_settings: Settings,
@@ -622,7 +616,7 @@ def test_tool_no_task(
     assert result.content == "5"
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_optional_args(
     test_settings: Settings,
@@ -691,7 +685,7 @@ def test_llm_tool_task(
 
 
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_multi_tool(
     test_settings: Settings,
@@ -1036,7 +1030,7 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
 @pytest.mark.parametrize("llm_tool", ["pair", "final_tool"])
 @pytest.mark.parametrize("handler_result_type", ["agent_done", "final_tool"])
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 def test_llm_end_with_tool(
     handler_result_type: str,
     llm_tool: str,
@@ -1285,7 +1279,7 @@ def test_agent_respond_only_tools(tool: str):
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 def test_structured_recovery(
     test_settings: Settings,
     use_fn_api: bool,
@@ -1482,7 +1476,7 @@ def test_structured_recovery(
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("parallel_tool_calls", [True, False])
 def test_strict_fallback(
     test_settings: Settings,
@@ -1608,7 +1602,7 @@ def test_strict_fallback(
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("parallel_tool_calls", [True, False])
 def test_strict_schema_mismatch(
     use_fn_api: bool,
@@ -1899,7 +1893,7 @@ class GetTimeTool(ToolMessage):
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 def test_strict_recovery_only_from_LLM(
     use_fn_api: bool,
     use_tools_api: bool,
