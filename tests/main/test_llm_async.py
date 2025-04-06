@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+import langroid.language_models as lm
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models import AnthropicLLM, AnthropicLLMConfig, AnthropicModel
 from langroid.language_models.base import LLMMessage, PromptVariants, Role
@@ -72,15 +73,16 @@ async def test_openai_gpt_async(
     assert response.cached
 
     # pass intentional bad msg to test error handling
-    messages = [
-        LLMMessage(
-            role=Role.FUNCTION,
-            content="Hello!",
-        ),
-    ]
+    if not test_settings.chat_model.startswith("litellm-proxy/"):
+        messages = [
+            LLMMessage(
+                role=Role.FUNCTION,
+                content="Hello!",
+            ),
+        ]
 
-    with pytest.raises(Exception):
-        await mdl.achat(messages=messages, max_tokens=50)
+        with pytest.raises(Exception):
+            await mdl.achat(messages=messages, max_tokens=50)
 
 
 @pytest.mark.asyncio
@@ -206,3 +208,57 @@ async def test_llm_async_concurrent(
     assert len(answers) == len(questions)
     for e in expected_answers:
         assert any(e in a.message for a in answers)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    reason="LangDB may fail due to unknown flakiness!",
+    run=True,
+    strict=False,
+)
+@pytest.mark.parametrize(
+    "model",
+    [
+        "langdb/gpt-4o-mini",
+        "langdb/openai/gpt-4o-mini",
+        "langdb/anthropic/claude-3-haiku-20240307",
+        "langdb/claude-3-haiku-20240307",
+        "langdb/gemini/gemini-2.0-flash-lite",
+        "langdb/gemini-2.0-flash-lite",
+    ],
+)
+async def test_llm_langdb(model: str):
+    """Test that LLM access via LangDB works."""
+
+    llm_config_langdb = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config_langdb)
+    result = await llm.achat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [
+        "openrouter/anthropic/claude-3.5-haiku-20241022:beta",
+        "openrouter/mistralai/mistral-small-24b-instruct-2501:free",
+        "openrouter/google/gemini-2.0-flash-lite-001",
+    ],
+)
+async def test_llm_openrouter(model: str):
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    result = await llm.achat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0

@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+import markdownify as md
 from dotenv import load_dotenv
 
 from langroid.exceptions import LangroidImportError
@@ -31,6 +32,7 @@ class TrafilaturaConfig(BaseCrawlerConfig):
     """Configuration for Trafilatura crawler."""
 
     threads: int = 4
+    format: str = "markdown"  # or "xml" or "txt"
 
 
 class FirecrawlConfig(BaseCrawlerConfig):
@@ -46,6 +48,15 @@ class FirecrawlConfig(BaseCrawlerConfig):
         # allow setting of fields via env vars,
         # e.g. FIRECRAWL_MODE=scrape and FIRECRAWL_API_KEY=...
         env_prefix = "FIRECRAWL_"
+
+
+class ExaCrawlerConfig(BaseCrawlerConfig):
+    api_key: str = ""
+
+    class Config:
+        # Allow setting of fields via env vars with prefix EXA_
+        # e.g., EXA_API_KEY=your_api_key
+        env_prefix = "EXA_"
 
 
 class BaseCrawler(ABC):
@@ -150,6 +161,8 @@ class CrawlerFactory:
             return TrafilaturaCrawler(config)
         elif isinstance(config, FirecrawlConfig):
             return FirecrawlCrawler(config)
+        elif isinstance(config, ExaCrawlerConfig):
+            return ExaCrawler(config)
         else:
             raise ValueError(f"Unsupported crawler configuration type: {type(config)}")
 
@@ -189,8 +202,16 @@ class TrafilaturaCrawler(BaseCrawler):
                     docs.extend(parsed_doc)
                 else:
                     text = trafilatura.extract(
-                        result, no_fallback=False, favor_recall=True
+                        result,
+                        no_fallback=False,
+                        favor_recall=True,
+                        include_formatting=True,
+                        output_format=self.config.format,
+                        with_metadata=True,  # Title, date, author... at start of text
                     )
+                    if self.config.format in ["xml", "html"]:
+                        # heading_style="ATX" for markdown headings, i.e. #, ##, etc.
+                        text = md.markdownify(text, heading_style="ATX")
                     if text is None and result is not None and isinstance(result, str):
                         text = result
                     if text:
@@ -247,7 +268,13 @@ class FirecrawlCrawler(BaseCrawler):
                     with open(filename, "w") as f:
                         f.write(content)
                     docs.append(
-                        Document(content=content, metadata=DocMetaData(source=url))
+                        Document(
+                            content=content,
+                            metadata=DocMetaData(
+                                source=url,
+                                title=page["metadata"].get("title", "Unknown Title"),
+                            ),
+                        )
                     )
                     processed_urls.add(url)
                     new_pages += 1
@@ -289,7 +316,10 @@ class FirecrawlCrawler(BaseCrawler):
                         docs.append(
                             Document(
                                 content=result["markdown"],
-                                metadata=DocMetaData(source=url),
+                                metadata=DocMetaData(
+                                    source=url,
+                                    title=metadata.get("title", "Unknown Title"),
+                                ),
                             )
                         )
                 except Exception as e:
@@ -308,6 +338,84 @@ class FirecrawlCrawler(BaseCrawler):
 
             # Save results incrementally
             docs = self._return_save_incremental_results(app, crawl_status["id"])
+        return docs
+
+
+class ExaCrawler(BaseCrawler):
+    """Crawler implementation using Exa API."""
+
+    def __init__(self, config: ExaCrawlerConfig) -> None:
+        """Initialize the Exa crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+        super().__init__(config)
+        self.config: ExaCrawlerConfig = config
+
+    @property
+    def needs_parser(self) -> bool:
+        return True
+
+    def crawl(self, urls: List[str]) -> List[Document]:
+        """Crawl the given URLs using Exa SDK.
+
+        Args:
+            urls: List of URLs to crawl
+
+        Returns:
+            List of Documents with content extracted from the URLs
+
+        Raises:
+            LangroidImportError: If the exa package is not installed
+            ValueError: If the Exa API key is not set
+        """
+        try:
+            from exa_py import Exa
+        except ImportError:
+            raise LangroidImportError("exa", "exa")
+
+        if not self.config.api_key:
+            raise ValueError("EXA_API_KEY key is required in your env or .env")
+
+        exa = Exa(self.config.api_key)
+        docs = []
+
+        try:
+            for url in urls:
+                parsed_doc_chunks = self._process_document(url)
+                if parsed_doc_chunks:
+                    docs.extend(parsed_doc_chunks)
+                    continue
+                else:
+                    results = exa.get_contents(
+                        [url],
+                        livecrawl="always",
+                        text={
+                            "include_html_tags": True,
+                        },
+                    )
+                    result = results.results[0]
+                    if result.text:
+                        md_text = md.markdownify(result.text, heading_style="ATX")
+                        # append a NON-chunked document
+                        # (metadata.is_chunk = False, so will be chunked downstream)
+                        docs.append(
+                            Document(
+                                content=md_text,
+                                metadata=DocMetaData(
+                                    source=url,
+                                    title=getattr(result, "title", "Unknown Title"),
+                                    published_date=getattr(
+                                        result, "published_date", "Unknown Date"
+                                    ),
+                                ),
+                            )
+                        )
+
+        except Exception as e:
+            logging.error(f"Error retrieving content from Exa API: {e}")
+
         return docs
 
 
@@ -334,6 +442,8 @@ class URLLoader:
             crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
 
         self.crawler = CrawlerFactory.create_crawler(crawler_config)
+        if self.crawler.needs_parser:
+            self.crawler.parser = Parser(parsing_config)
 
     def load(self) -> List[Document]:
         """Load the URLs using the specified crawler."""

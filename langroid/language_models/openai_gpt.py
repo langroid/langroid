@@ -5,6 +5,7 @@ import sys
 import warnings
 from collections import defaultdict
 from functools import cache
+from itertools import chain
 from typing import (
     Any,
     Callable,
@@ -215,6 +216,16 @@ class OpenAICallParams(LLMCallConfig):
         return {k: v for k, v in self.dict().items() if v is not None}
 
 
+class LiteLLMProxyConfig(BaseSettings):
+    """Configuration for LiteLLM proxy connection."""
+
+    api_key: str = ""  # read from env var LITELLM_API_KEY if set
+    api_base: str = ""  # read from env var LITELLM_API_BASE if set
+
+    class Config:
+        env_prefix = "LITELLM_"
+
+
 class OpenAIGPTConfig(LLMConfig):
     """
     Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
@@ -238,6 +249,7 @@ class OpenAIGPTConfig(LLMConfig):
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
+    litellm_proxy: LiteLLMProxyConfig = LiteLLMProxyConfig()
     ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
     min_output_tokens: int = 1
     use_chat_for_completion = True  # do not change this, for OpenAI models!
@@ -508,6 +520,7 @@ class OpenAIGPT(LanguageModel):
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
         self.is_langdb = self.config.chat_model.startswith("langdb/")
+        self.is_litellm_proxy = self.config.chat_model.startswith("litellm-proxy/")
 
         if self.is_groq:
             # use groq-specific client
@@ -534,7 +547,14 @@ class OpenAIGPT(LanguageModel):
             )
         else:
             # in these cases, there's no specific client: OpenAI python client suffices
-            if self.is_gemini:
+            if self.is_litellm_proxy:
+                self.config.chat_model = self.config.chat_model.replace(
+                    "litellm-proxy/", ""
+                )
+                if self.api_key == OPENAI_API_KEY:
+                    self.api_key = self.config.litellm_proxy.api_key or self.api_key
+                self.api_base = self.config.litellm_proxy.api_base or self.api_base
+            elif self.is_gemini:
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
@@ -651,9 +671,6 @@ class OpenAIGPT(LanguageModel):
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
 
-    def supports_functions_or_tools(self) -> bool:
-        return self.is_openai_chat_model() and self.info().has_tools
-
     def is_openai_completion_model(self) -> bool:
         openai_completion_models = [e.value for e in OpenAICompletionModel]
         return self.config.completion_model in openai_completion_models
@@ -749,22 +766,39 @@ class OpenAIGPT(LanguageModel):
         reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
-    ) -> Tuple[bool, bool, str, str]:
+    ) -> Tuple[bool, bool, str, str, Dict[str, int]]:
         """Process state vars while processing a streaming API response.
             Returns a tuple consisting of:
         - is_break: whether to break out of the loop
         - has_function: whether the response contains a function_call
         - function_name: name of the function
         - function_args: args of the function
+        - completion: completion text
+        - reasoning: reasoning text
+        - usage: usage dict
         """
         # convert event obj (of type ChatCompletionChunk) to dict so rest of code,
         # which expects dicts, works as it did before switching to openai v1.x
         if not isinstance(event, dict):
             event = event.model_dump()
 
+        usage = event.get("usage", {}) or {}
         choices = event.get("choices", [{}])
-        if len(choices) == 0:
+        if choices is None or len(choices) == 0:
             choices = [{}]
+        if len(usage) > 0 and len(choices[0]) == 0:
+            # we have a "usage" chunk, and empty choices, so we're done
+            # ASSUMPTION: a usage chunk ONLY arrives AFTER all normal completion text!
+            # If any API does not follow this, we need to change this code.
+            return (
+                True,
+                has_function,
+                function_name,
+                function_args,
+                completion,
+                reasoning,
+                usage,
+            )
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
@@ -845,23 +879,23 @@ class OpenAIGPT(LanguageModel):
                     self.config.streamer(tool_fn_args, StreamEventType.TOOL_ARGS)
 
         # show this delta in the stream
-        if finish_reason in [
+        is_break = finish_reason in [
             "stop",
             "function_call",
             "tool_calls",
-        ]:
-            # for function_call, finish_reason does not necessarily
-            # contain "function_call" as mentioned in the docs.
-            # So we check for "stop" or "function_call" here.
-            return (
-                True,
-                has_function,
-                function_name,
-                function_args,
-                completion,
-                reasoning,
-            )
-        return False, has_function, function_name, function_args, completion, reasoning
+        ]
+        # for function_call, finish_reason does not necessarily
+        # contain "function_call" as mentioned in the docs.
+        # So we check for "stop" or "function_call" here.
+        return (
+            is_break,
+            has_function,
+            function_name,
+            function_args,
+            completion,
+            reasoning,
+            usage,
+        )
 
     @no_type_check
     async def _process_stream_event_async(
@@ -881,15 +915,30 @@ class OpenAIGPT(LanguageModel):
         - has_function: whether the response contains a function_call
         - function_name: name of the function
         - function_args: args of the function
+        - completion: completion text
+        - reasoning: reasoning text
+        - usage: usage dict
         """
         # convert event obj (of type ChatCompletionChunk) to dict so rest of code,
         # which expects dicts, works as it did before switching to openai v1.x
         if not isinstance(event, dict):
             event = event.model_dump()
 
+        usage = event.get("usage", {}) or {}
         choices = event.get("choices", [{}])
         if len(choices) == 0:
             choices = [{}]
+        if len(usage) > 0 and len(choices[0]) == 0:
+            # we got usage chunk, and empty choices, so we're done
+            return (
+                True,
+                has_function,
+                function_name,
+                function_args,
+                completion,
+                reasoning,
+                usage,
+            )
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
@@ -965,23 +1014,23 @@ class OpenAIGPT(LanguageModel):
                     )
 
         # show this delta in the stream
-        if choices[0].get("finish_reason", "") in [
+        is_break = choices[0].get("finish_reason", "") in [
             "stop",
             "function_call",
             "tool_calls",
-        ]:
-            # for function_call, finish_reason does not necessarily
-            # contain "function_call" as mentioned in the docs.
-            # So we check for "stop" or "function_call" here.
-            return (
-                True,
-                has_function,
-                function_name,
-                function_args,
-                completion,
-                reasoning,
-            )
-        return False, has_function, function_name, function_args, completion, reasoning
+        ]
+        # for function_call, finish_reason does not necessarily
+        # contain "function_call" as mentioned in the docs.
+        # So we check for "stop" or "function_call" here.
+        return (
+            is_break,
+            has_function,
+            function_name,
+            function_args,
+            completion,
+            reasoning,
+            usage,
+        )
 
     @retry_with_exponential_backoff()
     def _stream_response(  # type: ignore
@@ -1007,6 +1056,8 @@ class OpenAIGPT(LanguageModel):
         sys.stdout.flush()
         has_function = False
         tool_deltas: List[Dict[str, Any]] = []
+        token_usage: Dict[str, int] = {}
+        done: bool = False
         try:
             for event in response:
                 (
@@ -1016,6 +1067,7 @@ class OpenAIGPT(LanguageModel):
                     function_args,
                     completion,
                     reasoning,
+                    usage,
                 ) = self._process_stream_event(
                     event,
                     chat=chat,
@@ -1026,10 +1078,19 @@ class OpenAIGPT(LanguageModel):
                     function_args=function_args,
                     function_name=function_name,
                 )
+                if len(usage) > 0:
+                    # capture the token usage when non-empty
+                    token_usage = usage
                 if is_break:
-                    break
-        except Exception:
-            pass
+                    if not self.get_stream() or done:
+                        # if not streaming, then we don't wait for last "usage" chunk
+                        break
+                    else:
+                        # mark done, so we quit after the last "usage" chunk
+                        done = True
+
+        except Exception as e:
+            logging.warning("Error while processing stream response: %s", str(e))
 
         print("")
         # TODO- get usage info in stream mode (?)
@@ -1042,6 +1103,7 @@ class OpenAIGPT(LanguageModel):
             reasoning=reasoning,
             function_args=function_args,
             function_name=function_name,
+            usage=token_usage,
         )
 
     @async_retry_with_exponential_backoff()
@@ -1069,6 +1131,8 @@ class OpenAIGPT(LanguageModel):
         sys.stdout.flush()
         has_function = False
         tool_deltas: List[Dict[str, Any]] = []
+        token_usage: Dict[str, int] = {}
+        done: bool = False
         try:
             async for event in response:
                 (
@@ -1078,6 +1142,7 @@ class OpenAIGPT(LanguageModel):
                     function_args,
                     completion,
                     reasoning,
+                    usage,
                 ) = await self._process_stream_event_async(
                     event,
                     chat=chat,
@@ -1088,10 +1153,19 @@ class OpenAIGPT(LanguageModel):
                     function_args=function_args,
                     function_name=function_name,
                 )
+                if len(usage) > 0:
+                    # capture the token usage when non-empty
+                    token_usage = usage
                 if is_break:
-                    break
-        except Exception:
-            pass
+                    if not self.get_stream() or done:
+                        # if not streaming, then we don't wait for last "usage" chunk
+                        break
+                    else:
+                        # mark done, so we quit after the next "usage" chunk
+                        done = True
+
+        except Exception as e:
+            logging.warning("Error while processing stream response: %s", str(e))
 
         print("")
         # TODO- get usage info in stream mode (?)
@@ -1104,6 +1178,7 @@ class OpenAIGPT(LanguageModel):
             reasoning=reasoning,
             function_args=function_args,
             function_name=function_name,
+            usage=token_usage,
         )
 
     @staticmethod
@@ -1241,6 +1316,7 @@ class OpenAIGPT(LanguageModel):
         reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
+        usage: Dict[str, int] = {},
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
         """
         Create an LLMResponse object from the streaming API response.
@@ -1250,8 +1326,10 @@ class OpenAIGPT(LanguageModel):
             tool_deltas: list of tool deltas received from streaming API
             has_function: whether the response contains a function_call
             completion: completion text
+            reasoning: reasoning text
             function_args: string representing function args
             function_name: name of the function
+            usage: token usage dict
         Returns:
             Tuple consisting of:
                 LLMResponse object (with message, usage),
@@ -1316,6 +1394,14 @@ class OpenAIGPT(LanguageModel):
                 # don't allow empty list [] here
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
                 function_call=function_call if has_function else None,
+                usage=LLMTokenUsage(
+                    prompt_tokens=usage.get("prompt_tokens", 0),
+                    completion_tokens=usage.get("completion_tokens", 0),
+                    cost=self._cost_chat_model(
+                        usage.get("prompt_tokens", 0),
+                        usage.get("completion_tokens", 0),
+                    ),
+                ),
             ),
             openai_response.dict(),
         )
@@ -1527,17 +1613,6 @@ class OpenAIGPT(LanguageModel):
     ) -> LLMResponse:
         self.run_on_first_use()
 
-        if [functions, tools] != [None, None] and not self.is_openai_chat_model():
-            raise ValueError(
-                f"""
-                `functions` and `tools` can only be specified for OpenAI chat LLMs, 
-                or LLMs served via an OpenAI-compatible API.
-                {self.config.chat_model} does not support function-calling or tools.
-                Instead, please use Langroid's ToolMessages, which are equivalent.
-                In the ChatAgentConfig, set `use_functions_api=False` 
-                and `use_tools=True`, this will enable ToolMessages.
-                """
-            )
         if self.config.use_completion_for_chat and not self.is_openai_chat_model():
             # only makes sense for non-OpenAI models
             if self.config.formatter is None or self.config.hf_formatter is None:
@@ -1585,16 +1660,6 @@ class OpenAIGPT(LanguageModel):
     ) -> LLMResponse:
         self.run_on_first_use()
 
-        if [functions, tools] != [None, None] and not self.is_openai_chat_model():
-            raise ValueError(
-                f"""
-                `functions` and `tools` can only be specified for OpenAI chat models;
-                {self.config.chat_model} does not support function-calling or tools.
-                Instead, please use Langroid's ToolMessages, which are equivalent.
-                In the ChatAgentConfig, set `use_functions_api=False` 
-                and `use_tools=True`, this will enable ToolMessages.
-                """
-            )
         # turn off streaming for async calls
         if (
             self.config.use_completion_for_chat
@@ -1658,11 +1723,31 @@ class OpenAIGPT(LanguageModel):
             if self.config.litellm and settings.debug:
                 kwargs["logger_fn"] = litellm_logging_fn
             result = completion_call(**kwargs)
-            if not self.get_stream():
-                # if streaming, cannot cache result
+
+            if self.get_stream():
+                # If streaming, cannot cache result
                 # since it is a generator. Instead,
                 # we hold on to the hashed_key and
                 # cache the result later
+                # Test if this is a stream with an exception by
+                # trying to get first chunk: Some providers like LiteLLM
+                # produce a valid stream object `result` instead of throwing a
+                # rate-limit error, and if we don't catch it here,
+                # we end up returning an empty response and not
+                # using the retry mechanism in the decorator.
+                try:
+                    # try to get the first chunk to check for errors
+                    test_iter = iter(result)
+                    first_chunk = next(test_iter)
+                    # If we get here without error, recreate the stream
+                    result = chain([first_chunk], test_iter)
+                except StopIteration:
+                    # Empty stream is fine
+                    pass
+                except Exception as e:
+                    # Propagate any errors in the stream
+                    raise e
+            else:
                 self.cache_store(hashed_key, result.model_dump(), logger)
         return cached, hashed_key, result
 
@@ -1689,7 +1774,35 @@ class OpenAIGPT(LanguageModel):
                 kwargs["logger_fn"] = litellm_logging_fn
             # If it's not in the cache, call the API
             result = await acompletion_call(**kwargs)
-            if not self.get_stream():
+            if self.get_stream():
+                try:
+                    # Try to peek at the first chunk to immediately catch any errors
+                    # Store the original result (the stream)
+                    original_stream = result
+
+                    # Manually create and advance the iterator to check for errors
+                    stream_iter = original_stream.__aiter__()
+                    try:
+                        # This will raise an exception if the stream is invalid
+                        first_chunk = await anext(stream_iter)
+
+                        # If we reach here, the stream started successfully
+                        # Now recreate a fresh stream from the original API result
+                        # Otherwise, return a new stream that yields the first chunk
+                        # and remaining items
+                        async def combined_stream():  # type: ignore
+                            yield first_chunk
+                            async for chunk in stream_iter:
+                                yield chunk
+
+                        result = combined_stream()  # type: ignore
+                    except StopAsyncIteration:
+                        # Empty stream is normal - nothing to do
+                        pass
+                except Exception as e:
+                    # Any exception here should be raised to trigger the retry mechanism
+                    raise e
+            else:
                 self.cache_store(hashed_key, result.model_dump(), logger)
         return cached, hashed_key, result
 
@@ -1739,6 +1852,14 @@ class OpenAIGPT(LanguageModel):
             max_tokens=max_tokens,
             stream=self.get_stream(),
         )
+        if self.get_stream():
+            args.update(
+                dict(
+                    # get token-usage numbers in stream mode from OpenAI API,
+                    # and possibly other OpenAI-compatible APIs.
+                    stream_options=dict(include_usage=True),
+                )
+            )
         args.update(self._openai_api_call_params(args))
         # only include functions-related args if functions are provided
         # since the OpenAI API will throw an error if `functions` is None or []

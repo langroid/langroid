@@ -29,7 +29,7 @@ from typing import List, Any, Optional
 
 from rich import print
 from rich.prompt import Prompt
-
+import logging
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import ForwardTool
@@ -39,12 +39,18 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.parsing.web_search import metaphor_search
+from langroid.parsing.web_search import exa_search
 from langroid.agent.task import Task
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
 from fire import Fire
-from langroid.parsing.url_loader import TrafilaturaConfig, FirecrawlConfig
+from langroid.parsing.url_loader import (
+    TrafilaturaConfig,
+    FirecrawlConfig,
+    ExaCrawlerConfig,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class RelevantExtractsTool(ToolMessage):
@@ -103,6 +109,8 @@ class SearchDocChatAgent(DocChatAgent):
             self.config.crawler_config = FirecrawlConfig()
         elif crawler == "trafilatura" or crawler is None:
             self.config.crawler_config = TrafilaturaConfig()
+        elif crawler == "exa":
+            self.config.crawler_config = ExaCrawlerConfig()
         else:
             raise ValueError(
                 f"Unsupported crawler {crawler}. Options are: 'trafilatura', 'firecrawl'"
@@ -112,6 +120,7 @@ class SearchDocChatAgent(DocChatAgent):
         self,
         message: None | str | ChatDocument = None,
     ) -> ChatDocument | None:
+        # override llm_response of DocChatAgent to allow use of the tools.
         return ChatAgent.llm_response(self, message)
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
@@ -137,10 +146,13 @@ class SearchDocChatAgent(DocChatAgent):
         self.tried_vecdb = False
         query = msg.query
         num_results = msg.num_results
-        results = metaphor_search(query, num_results)
+        logger.warning("Trying exa search...")
+        results = exa_search(query, num_results)
         links = [r.link for r in results]
+        logger.warning(f"Found {len(links)} links, ingesting into vecdb...")
         self.config.doc_paths = links
         self.ingest()
+        logger.warning(f"Ingested {len(links)} links into vecdb")
         _, extracts = self.get_relevant_extracts(query)
         return "\n".join(str(e) for e in extracts)
 
@@ -247,8 +259,12 @@ def main(
     )
 
     agent = SearchDocChatAgent(config, crawler=crawler)
-    agent.enable_message(RelevantExtractsTool)
-    agent.enable_message(RelevantSearchExtractsTool)
+    agent.enable_message(
+        [
+            RelevantExtractsTool,
+            RelevantSearchExtractsTool,
+        ]
+    )
     collection_name = Prompt.ask(
         "Name a collection to use",
         default="docqa-chat-search",

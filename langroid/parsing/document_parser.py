@@ -161,6 +161,8 @@ class DocumentParser(Parser):
                 return UnstructuredDocxParser(source, config)
             elif config.docx.library == "python-docx":
                 return PythonDocxParser(source, config)
+            elif config.docx.library == "markitdown-docx":
+                return MarkitdownDocxParser(source, config)
             else:
                 raise ValueError(
                     f"Unsupported DOCX library specified: {config.docx.library}"
@@ -377,9 +379,6 @@ class DocumentParser(Parser):
         """
         Get document chunks from a pdf source,
         with page references in the document metadata.
-
-        Adapted from
-        https://github.com/whitead/paper-qa/blob/main/paperqa/readers.py
 
         Returns:
             List[Document]: a list of `Document` objects,
@@ -883,6 +882,44 @@ class PythonDocxParser(DocumentParser):
         paragraph = page[0]
         return Document(
             content=self.fix_text(paragraph.text),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkitdownDocxParser(DocumentParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        try:
+            from markitdown import MarkItDown
+        except ImportError:
+            LangroidImportError("markitdown", ["markitdown", "doc-parsers"])
+        md = MarkItDown()
+        self.doc_bytes.seek(0)  # Reset to start
+
+        # Direct conversion from stream works for DOCX (unlike XLSX)
+        result = md.convert_stream(self.doc_bytes, file_extension=".docx")
+
+        # Split content into logical sections (paragraphs, sections, etc.)
+        # This approach differs from the strict page-based approach used for PDFs
+        sections = re.split(r"(?=# |\n## |\n### )", result.text_content)
+
+        # Filter out empty sections
+        sections = [section for section in sections if section.strip()]
+
+        for i, section in enumerate(sections):
+            yield i, section
+
+    def get_document_from_page(self, md_content: str) -> Document:
+        """
+        Get Document object from a given markdown section.
+
+        Args:
+            md_content (str): The markdown content for the section.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(md_content),
             metadata=DocMetaData(source=self.source),
         )
 

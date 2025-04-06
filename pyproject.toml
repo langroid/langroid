@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.47.2"
+version = "0.50.4"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -30,6 +30,7 @@ dependencies = [
     "jinja2<4.0.0,>=3.1.2",
     "json-repair<1.0.0,>=0.29.9",
     "lxml<5.0.0,>=4.9.3",
+    "markdownify>=0.13.1",
     "nest-asyncio<2.0.0,>=1.6.0",
     "nltk<4.0.0,>=3.8.2",
     "onnxruntime<2.0.0,>=1.16.1",
@@ -147,12 +148,16 @@ pdf-parsers = [
     "pymupdf4llm<0.1.0,>=0.0.17",
     "pdf2image<2.0.0,>=1.17.0",
     "pytesseract<0.4.0,>=0.3.10",
-    "markitdown>=0.0.1a3",
+    "markitdown[docx,xlsx,pptx]>=0.0.1a3",
     "marker-pdf",
 ]
 
 docx = [
     "python-docx<2.0.0,>=1.1.0",
+]
+
+markitdown = [
+    "markitdown[docx,xlsx,pptx]>=0.0.1a3",
 ]
 
 marker-pdf = [
@@ -252,7 +257,7 @@ google-generativeai = [
     "google-genai>=1.0.0",
 ]
 doc-parsers = [
-    "markitdown>=0.0.1a3",
+    "markitdown[docx,xlsx,pptx]>=0.0.1a3",
     "openpyxl>=3.1.5",
     "python-docx>=1.1.2",
     "python-pptx>=1.0.2",
@@ -282,6 +287,7 @@ dev = [
     "ruff<1.0.0,>=0.8.4",
     "pre-commit<4.0.0,>=3.3.2",
     "autopep8<3.0.0,>=2.0.2",
+    "types-python-dateutil>=2.8.0",
     "types-redis<5.0.0.0,>=4.5.5.2",
     "types-requests<3.0.0.0,>=2.31.0.1",
     "types-pyyaml<7.0.0.0,>=6.0.12.20240311",
