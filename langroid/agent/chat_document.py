@@ -215,9 +215,17 @@ class ChatDocument(Document):
         """
         tool_type = ""  # FUNC or TOOL
         tool = ""  # tool name or function name
+        oai_tools = (
+            []
+            if self.oai_tool_calls is None
+            else [t for t in self.oai_tool_calls if t.function is not None]
+        )
         if self.function_call is not None:
             tool_type = "FUNC"
             tool = self.function_call.name
+        elif len(oai_tools) > 0:
+            tool_type = "OAI_TOOL"
+            tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
         else:
             try:
                 json_tools = self.get_tool_names()
