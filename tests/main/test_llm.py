@@ -317,3 +317,17 @@ def test_llm_openrouter(model: str):
         assert result.usage.total_tokens == 0
     else:
         assert result.usage.total_tokens > 0
+
+
+def test_followup_standalone():
+    """Test that followup_to_standalone works."""
+
+    llm = OpenAIGPT(OpenAIGPTConfig())
+    dialog = [
+        ("Is 5 a prime number?", "yes"),
+        ("Is 10 a prime number?", "no"),
+    ]
+    followup = "What about 11?"
+    response = llm.followup_to_standalone(dialog, followup)
+    assert response is not None
+    assert "prime" in response.lower() and "11" in response

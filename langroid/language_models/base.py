@@ -733,16 +733,37 @@ class LanguageModel(ABC):
         history = collate_chat_history(chat_history)
 
         prompt = f"""
-        Given the CHAT HISTORY below, and a follow-up QUESTION or SEARCH PHRASE,
-        rephrase the follow-up question/phrase as a STANDALONE QUESTION that
-        can be understood without the context of the chat history.
+        You are an expert at understanding a CHAT HISTORY between an AI Assistant
+        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP 
+        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood 
+        WITHOUT the context of the chat history.
         
-        Chat history: {history}
+        Below is the CHAT HISTORY. When the User asks you to rephrase a 
+        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the 
+        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional 
+        text or context.
         
-        Follow-up question: {question} 
+        <CHAT_HISTORY>
+        {history}
+        </CHAT_HISTORY>        
         """.strip()
+
+        follow_up_question = f"""
+        Please rephrase this as a stand-alone question or request:
+        <FOLLOW-UP-QUESTION-OR-REQUEST>
+        {question}
+        </FOLLOW-UP-QUESTION-OR-REQUEST>
+        """.strip()
+
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
-        standalone = self.generate(prompt=prompt, max_tokens=1024).message.strip()
+        standalone = self.chat(
+            messages=[
+                LLMMessage(role=Role.SYSTEM, content=prompt),
+                LLMMessage(role=Role.USER, content=follow_up_question),
+            ],
+            max_tokens=1024,
+        ).message.strip()
+
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone
 
