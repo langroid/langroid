@@ -1010,7 +1010,7 @@ class OpenAIGPT(LanguageModel):
                 sys.stdout.flush()
             await self.config.streamer_async(event_args, StreamEventType.FUNC_ARGS)
 
-        if event_tool_deltas is not None and not silent:
+        if event_tool_deltas is not None:
             # print out streaming tool calls, if not async
             for td in event_tool_deltas:
                 if td["function"]["name"] is not None:
