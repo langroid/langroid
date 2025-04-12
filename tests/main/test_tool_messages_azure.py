@@ -132,12 +132,6 @@ def test_llm_tool_message(
     agent = MessageHandlingAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
-    if not agent.llm.is_openai_chat_model() and use_functions_api:
-        pytest.skip(
-            f"""
-            Function Calling not available for {agent.config.llm.chat_model}: skipping
-            """
-        )
 
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
@@ -145,12 +139,10 @@ def test_llm_tool_message(
 
     llm_msg = agent.llm_response_forget(prompt)
     tool_name = message_class.default_value("request")
-    if use_functions_api:
-        assert llm_msg.function_call.name == tool_name
-    else:
-        tools = agent.get_tool_messages(llm_msg)
-        assert len(tools) == 1
-        assert isinstance(tools[0], message_class)
+    tools = agent.get_tool_messages(llm_msg)
+    assert tools[0].name() == tool_name
+    assert len(tools) == 1
+    assert isinstance(tools[0], message_class)
 
     agent_result = agent.handle_message(llm_msg)
     assert result.lower() in agent_result.content.lower()

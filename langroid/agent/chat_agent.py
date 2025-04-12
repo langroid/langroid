@@ -92,9 +92,9 @@ class ChatAgentConfig(AgentConfig):
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
     handle_llm_no_tool: Any = None
-    use_tools: bool = False
-    use_functions_api: bool = True
-    use_tools_api: bool = False
+    use_tools: bool = True
+    use_functions_api: bool = False
+    use_tools_api: bool = True
     strict_recovery: bool = True
     enable_orchestration_tool_handling: bool = True
     output_format: Optional[type] = None
@@ -105,33 +105,22 @@ class ChatAgentConfig(AgentConfig):
     use_tools_on_output_format: bool = True
     full_citations: bool = True  # show source + content for each citation?
 
-    def _set_fn_or_tools(self, fn_available: bool) -> None:
+    def _set_fn_or_tools(self) -> None:
         """
         Enable Langroid Tool or OpenAI-like fn-calling,
-        depending on config settings and availability of fn-calling.
+        depending on config settings.
         """
-        if self.use_functions_api and not fn_available:
-            logger.debug(
-                """
-                You have enabled `use_functions_api` but the LLM does not support it.
-                So we will enable `use_tools` instead, so we can use 
-                Langroid's ToolMessage mechanism.
-                """
-            )
-            self.use_functions_api = False
-            self.use_tools = True
-
         if not self.use_functions_api or not self.use_tools:
             return
         if self.use_functions_api and self.use_tools:
             logger.debug(
                 """
                 You have enabled both `use_tools` and `use_functions_api`.
-                Turning off `use_tools`, since the LLM supports function-calling.
+                Setting `use_functions_api` to False.
                 """
             )
-            self.use_tools = False
-            self.use_functions_api = True
+            self.use_tools = True
+            self.use_functions_api = False
 
 
 class ChatAgent(Agent):
@@ -163,7 +152,7 @@ class ChatAgent(Agent):
         """
         super().__init__(config)
         self.config: ChatAgentConfig = config
-        self.config._set_fn_or_tools(self._fn_call_available())
+        self.config._set_fn_or_tools()
         self.message_history: List[LLMMessage] = []
         self.init_state()
         # An agent's "task" is defined by a system msg and an optional user msg;
@@ -308,12 +297,7 @@ class ChatAgent(Agent):
 
     def _fn_call_available(self) -> bool:
         """Does this agent's LLM support function calling?"""
-        return (
-            self.llm is not None
-            and isinstance(self.llm, OpenAIGPT)
-            and self.llm.is_openai_chat_model()
-            and self.llm.supports_functions_or_tools()
-        )
+        return self.llm is not None and self.llm.supports_functions_or_tools()
 
     def _strict_tools_available(self) -> bool:
         """Does this agent's LLM support strict tools?"""

@@ -55,8 +55,7 @@ class WebSearchResult:
         try:
             # First check headers only to get content length and type
             head_response: Response = requests.head(self.link, timeout=5)
-            if head_response.status_code != 200:
-                return f"Error: HTTP {head_response.status_code} for {self.link}"
+            content_type = head_response.headers.get("content-type", "").lower()
 
             # Skip large files
             content_length = int(head_response.headers.get("content-length", 0))
@@ -64,8 +63,16 @@ class WebSearchResult:
                 return (
                     f"Error: Content too large ({content_length} bytes) for {self.link}"
                 )
+            # Skip non-HTML content types
+            if content_type and not any(
+                html_type in content_type
+                for html_type in ["text/html", "application/xhtml", "text/plain"]
+            ):
+                return f"Skipping Content type '{content_type}' " f"in {self.link}"
 
             response: Response = requests.get(self.link, timeout=10)
+            if response.status_code != 200:
+                return f"Error: HTTP {response.status_code} for {self.link}"
 
             import warnings
 

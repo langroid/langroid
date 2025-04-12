@@ -1929,10 +1929,13 @@ class Agent(ABC):
         print_response_stats: bool = True,
     ) -> None:
         """
-        Updates `response.usage` obj (token usage and cost fields).the usage memebr
-        It updates the cost after checking the cache and updates the
-        tokens (prompts and completion) if the response stream is True, because OpenAI
-        doesn't returns these fields.
+        Updates `response.usage` obj (token usage and cost fields) if needed.
+        An update is needed only if:
+        - stream is True (i.e. streaming was enabled), and
+        - the response was NOT obtained from cached, and
+        - the API did NOT provide the usage/cost fields during streaming
+          (As of Sep 2024, the OpenAI API started providing these; for other APIs
+            this may not necessarily be the case).
 
         Args:
             response (LLMResponse): LLMResponse object
@@ -1945,10 +1948,11 @@ class Agent(ABC):
         if response is None or self.llm is None:
             return
 
+        no_usage_info = response.usage is None or response.usage.prompt_tokens == 0
         # Note: If response was not streamed, then
         # `response.usage` would already have been set by the API,
         # so we only need to update in the stream case.
-        if stream:
+        if stream and no_usage_info:
             # usage, cost = 0 when response is from cache
             prompt_tokens = 0
             completion_tokens = 0
