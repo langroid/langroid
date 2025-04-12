@@ -157,7 +157,7 @@ class AccessWarning(Warning):
 def gpt_3_5_warning() -> None:
     warnings.warn(
         f"""
-        {OpenAIChatModel.GPT4o} is not available, 
+        {OpenAIChatModel.GPT4o} is not available,
         falling back to {OpenAIChatModel.GPT3_5_TURBO}.
         Examples may not work properly and unexpected behavior may occur.
         Adjustments to prompts may be necessary.
@@ -435,8 +435,8 @@ class OpenAIGPT(LanguageModel):
                     self.config.formatter = formatter
                     logging.warning(
                         f"""
-                        Using completions (not chat) endpoint with HuggingFace 
-                        chat_template for {formatter} for 
+                        Using completions (not chat) endpoint with HuggingFace
+                        chat_template for {formatter} for
                         model {self.config.chat_model}
                         """
                     )
@@ -758,12 +758,11 @@ class OpenAIGPT(LanguageModel):
         return tmp
 
     def get_stream(self) -> bool:
-        """Get streaming status. Note we disable streaming in quiet mode."""
+        """Get streaming status."""
         return (
             self.config.stream
             and settings.stream
             and self.info().allows_streaming
-            and not settings.quiet
         )
 
     @no_type_check
@@ -813,6 +812,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
+        silent = self.config.async_stream_quiet or settings.quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
@@ -852,25 +852,29 @@ class OpenAIGPT(LanguageModel):
 
         if event_text:
             completion += event_text
-            sys.stdout.write(Colors().GREEN + event_text)
-            sys.stdout.flush()
+            if not silent:
+                sys.stdout.write(Colors().GREEN + event_text)
+                sys.stdout.flush()
             self.config.streamer(event_text, StreamEventType.TEXT)
         if event_reasoning:
             reasoning += event_reasoning
-            sys.stdout.write(Colors().GREEN_DIM + event_reasoning)
-            sys.stdout.flush()
+            if not silent:
+                sys.stdout.write(Colors().GREEN_DIM + event_reasoning)
+                sys.stdout.flush()
             self.config.streamer(event_reasoning, StreamEventType.TEXT)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
-            sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
-            sys.stdout.flush()
+            if not silent:
+                sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
+                sys.stdout.flush()
             self.config.streamer(event_fn_name, StreamEventType.FUNC_NAME)
 
         if event_args:
             function_args += event_args
-            sys.stdout.write(Colors().GREEN + event_args)
-            sys.stdout.flush()
+            if not silent:
+                sys.stdout.write(Colors().GREEN + event_args)
+                sys.stdout.flush()
             self.config.streamer(event_args, StreamEventType.FUNC_ARGS)
 
         if event_tool_deltas is not None:
@@ -878,15 +882,17 @@ class OpenAIGPT(LanguageModel):
             for td in event_tool_deltas:
                 if td["function"]["name"] is not None:
                     tool_fn_name = td["function"]["name"]
-                    sys.stdout.write(
-                        Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
-                    )
-                    sys.stdout.flush()
+                    if not silent:
+                        sys.stdout.write(
+                            Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
+                        )
+                        sys.stdout.flush()
                     self.config.streamer(tool_fn_name, StreamEventType.TOOL_NAME)
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
-                    sys.stdout.write(Colors().GREEN + tool_fn_args)
-                    sys.stdout.flush()
+                    if not silent:
+                        sys.stdout.write(Colors().GREEN + tool_fn_args)
+                        sys.stdout.flush()
                     self.config.streamer(tool_fn_args, StreamEventType.TOOL_ARGS)
 
         # show this delta in the stream
@@ -953,7 +959,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-        silent = self.config.async_stream_quiet
+        silent = self.config.async_stream_quiet or settings.quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
@@ -980,46 +986,48 @@ class OpenAIGPT(LanguageModel):
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
-                await self.config.streamer_async(event_text, StreamEventType.TEXT)
+            await self.config.streamer_async(event_text, StreamEventType.TEXT)
         if event_reasoning:
             reasoning += event_reasoning
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_reasoning)
                 sys.stdout.flush()
-                await self.config.streamer_async(event_reasoning, StreamEventType.TEXT)
+            await self.config.streamer_async(event_reasoning, StreamEventType.TEXT)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
             if not silent:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
-                await self.config.streamer_async(
-                    event_fn_name, StreamEventType.FUNC_NAME
-                )
+            await self.config.streamer_async(
+                event_fn_name, StreamEventType.FUNC_NAME
+            )
 
         if event_args:
             function_args += event_args
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
-                await self.config.streamer_async(event_args, StreamEventType.FUNC_ARGS)
+            await self.config.streamer_async(event_args, StreamEventType.FUNC_ARGS)
 
-        if event_tool_deltas is not None and not silent:
+        if event_tool_deltas is not None:
             # print out streaming tool calls, if not async
             for td in event_tool_deltas:
                 if td["function"]["name"] is not None:
                     tool_fn_name = td["function"]["name"]
-                    sys.stdout.write(
-                        Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
-                    )
-                    sys.stdout.flush()
+                    if not silent:
+                        sys.stdout.write(
+                            Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
+                        )
+                        sys.stdout.flush()
                     await self.config.streamer_async(
                         tool_fn_name, StreamEventType.TOOL_NAME
                     )
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
-                    sys.stdout.write(Colors().GREEN + tool_fn_args)
-                    sys.stdout.flush()
+                    if not silent:
+                        sys.stdout.write(Colors().GREEN + tool_fn_args)
+                        sys.stdout.flush()
                     await self.config.streamer_async(
                         tool_fn_args, StreamEventType.TOOL_ARGS
                     )
@@ -1103,7 +1111,8 @@ class OpenAIGPT(LanguageModel):
         except Exception as e:
             logging.warning("Error while processing stream response: %s", str(e))
 
-        print("")
+        if not settings.quiet:
+            print("")
         # TODO- get usage info in stream mode (?)
 
         return self._create_stream_response(
@@ -1178,7 +1187,8 @@ class OpenAIGPT(LanguageModel):
         except Exception as e:
             logging.warning("Error while processing stream response: %s", str(e))
 
-        print("")
+        if not settings.quiet:
+            print("")
         # TODO- get usage info in stream mode (?)
 
         return self._create_stream_response(
@@ -1300,7 +1310,7 @@ class OpenAIGPT(LanguageModel):
             if not isinstance(dict_or_list, dict):
                 raise ValueError(
                     f"""
-                        Invalid function args: {stripped_fn_args} 
+                        Invalid function args: {stripped_fn_args}
                         parsed as {dict_or_list},
                         which is not a valid dict.
                         """
