@@ -759,11 +759,7 @@ class OpenAIGPT(LanguageModel):
 
     def get_stream(self) -> bool:
         """Get streaming status."""
-        return (
-            self.config.stream
-            and settings.stream
-            and self.info().allows_streaming
-        )
+        return self.config.stream and settings.stream and self.info().allows_streaming
 
     @no_type_check
     def _process_stream_event(
@@ -999,9 +995,7 @@ class OpenAIGPT(LanguageModel):
             if not silent:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
-            await self.config.streamer_async(
-                event_fn_name, StreamEventType.FUNC_NAME
-            )
+            await self.config.streamer_async(event_fn_name, StreamEventType.FUNC_NAME)
 
         if event_args:
             function_args += event_args
