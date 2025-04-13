@@ -1,4 +1,3 @@
-import copy
 import os
 import threading
 from contextlib import contextmanager
@@ -113,13 +112,16 @@ def temporary_settings(temp_settings: Settings) -> Iterator[None]:
 def quiet_mode(quiet: bool = True) -> Iterator[None]:
     """
     Temporarily override settings.quiet for the current thread.
-
-    Outside the context, the settings revert back to the global default.
+    This implementation builds on the thread‑local temporary_settings context manager.
+    The effective quiet mode is merged:
+    if quiet is already True (from an outer context),
+    then it remains True even if a nested context passes quiet=False.
     """
-    # Create a copy of the current global settings
-    temp = copy.deepcopy(_global_settings)
-    if quiet:
-        temp.quiet = True
+    current_effective = settings.dict()  # get the current thread's effective settings
+    # Create a new settings instance from the current effective state.
+    temp = Settings(**current_effective)
+    # Merge the new flag: once quiet is enabled, it stays enabled.
+    temp.quiet = settings.quiet or quiet
     with temporary_settings(temp):
         yield
 
