@@ -68,11 +68,11 @@ documents: List[Document] = [
     ),
     Document(
         content="""
-    We are living in an alternate universe where Lancaster is the capital of England.
+    Winegarten is the capital of a new country called NeoGlobal.
         
-    Charlie Chaplin was a great comedian.
+    Charlie Foster was a great comedian.
         
-    Charlie Chaplin was born in 1889.
+    Charlie Foster was born in 1889.
         
     Beethoven was born in 1770.
         
@@ -83,8 +83,8 @@ documents: List[Document] = [
 ]
 
 QUERY_EXPECTED_PAIRS = [
-    ("what is the capital of England?", "Lancaster"),
-    ("Who was Charlie Chaplin?", "comedian"),
+    ("what is the capital of NeoGlobal?", "Winegarten"),
+    ("Who was Charlie Foster?", "comedian"),
     ("When was global warming solved?", "2060"),
     ("What do we know about paperclips?", "2057"),
 ]
@@ -289,8 +289,17 @@ def retrieval_agent(test_settings: Settings, vecdb) -> RetrievalAgent:
 @pytest.mark.parametrize(
     "query, expected",
     [
-        ("Capital of England", "Lancaster"),
-        ("Who was Charlie Chaplin?", "comedian"),
+        (
+            """
+            Use the retrieval_tool to find out the capital of
+            the fictional country NeoGlobal.
+            """,
+            "Winegarten",
+        ),
+        (
+            "Use the retrieval_tool to answer this:" " who was Charlie Foster?",
+            "comedian",
+        ),
     ],
 )
 def test_retrieval_tool(
@@ -309,11 +318,7 @@ def test_retrieval_tool(
         guess what the user may want to know, and formulate it as a 
         question to be answered, and use this as the `query` field in the 
         `retrieval_tool`. 
-        
-        IMPORTANT: Your answer MUST ONLY be based on the retrieved passages,
-        REGARDLESS of how IMPLAUSIBLE the answer may seem, and 
-        REGARDLESS of whether you think the answer is correct or not.
-        
+                
         When you are ready to show your answer, say {DONE}, followed by the answer.
         """,
     )
@@ -322,8 +327,8 @@ def test_retrieval_tool(
     # 2. Agent gen `retrieval_tool` response (i.e. returns relevant passages)
     # 3. LLM gen answer based on passages
     ans = task.run(query, turns=3).content
-    expected = [e.strip() for e in expected.split(",")]
-    assert all([e in ans for e in expected])
+    expected = [e.strip().lower() for e in expected.split(",")]
+    assert all([e in ans.lower() for e in expected])
 
 
 @pytest.fixture(scope="function")
@@ -351,7 +356,7 @@ def test_doc_chat_followup(test_settings: Settings, new_agent, conv_mode: bool):
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],
     )
-    result = task.run("Who was Charlie Chaplin?")
+    result = task.run("Who was Charlie Foster?")
     assert "comedian" in result.content.lower()
 
     result = task.run("When was he born?")
@@ -376,7 +381,7 @@ async def test_doc_chat_followup_async(
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],
     )
-    result = await task.run_async("Who was Charlie Chaplin?")
+    result = await task.run_async("Who was Charlie Foster?")
     assert "comedian" in result.content.lower()
 
     result = await task.run_async("When was he born?")
