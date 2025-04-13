@@ -759,11 +759,7 @@ class OpenAIGPT(LanguageModel):
 
     def get_stream(self) -> bool:
         """Get streaming status."""
-        return (
-            self.config.stream
-            and settings.stream
-            and self.info().allows_streaming
-        )
+        return self.config.stream and settings.stream and self.info().allows_streaming
 
     @no_type_check
     def _process_stream_event(
@@ -812,7 +808,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-        silent = self.config.async_stream_quiet or settings.quiet
+        silent = settings.quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
@@ -999,9 +995,7 @@ class OpenAIGPT(LanguageModel):
             if not silent:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
-            await self.config.streamer_async(
-                event_fn_name, StreamEventType.FUNC_NAME
-            )
+            await self.config.streamer_async(event_fn_name, StreamEventType.FUNC_NAME)
 
         if event_args:
             function_args += event_args
