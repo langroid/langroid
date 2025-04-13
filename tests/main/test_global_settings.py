@@ -24,80 +24,79 @@ def test_update_global_settings():
     assert settings.debug is False
 
 
-# Worker function to repeatedly update the global "debug" setting
+# Shared list to collect exceptions
+thread_exceptions = []
+
+
+def safe_worker(target, *args, **kwargs):
+    """Run a worker and capture any exception."""
+    try:
+        target(*args, **kwargs)
+    except Exception as e:
+        thread_exceptions.append(e)
+
+
 def writer_worker(worker_id: int, iterations: int = 100):
     for i in range(iterations):
         new_debug = i % 2 == 0
-        # Create a temporary Settings instance with the new debug value.
         new_cfg = Settings(debug=new_debug)
-        # Update only the "debug" field
         update_global_settings(new_cfg, keys=["debug"])
-        # Short sleep to simulate work and encourage thread interleaving.
         time.sleep(random.uniform(0, 0.001))
 
 
-# Worker function to repeatedly read the global "debug" setting and record it
 def reader_worker(worker_id: int, read_list: list, iterations: int = 100):
     for _ in range(iterations):
-        # Read without locking because normal use should not change
-        # in other parts of the library.
         read_list.append(settings.debug)
         time.sleep(random.uniform(0, 0.001))
 
 
-# Worker function that uses the temporary_settings context manager to toggle "quiet"
 def context_worker(iterations: int = 50):
     for _ in range(iterations):
-        # Save the current state of "quiet"
-        orig_quiet = settings.quiet
-        # Create a temporary settings instance with quiet=True.
+        orig_quiet = settings.quiet  # reads global value
         temp = Settings(quiet=True)
         with temporary_settings(temp):
-            # Inside context, "quiet" must be True.
             assert settings.quiet is True
-            # Sleep a bit to simulate some processing.
             time.sleep(random.uniform(0, 0.001))
-        # Once out of the context, "quiet" should be restored.
+        # After the context, the calling thread’s settings revert to the global default.
+        # Since temporary_settings is thread‑local,
+        # concurrent updates do not affect this thread’s view.
         assert settings.quiet == orig_quiet
-        time.sleep(random.uniform(0, 0.001))
 
 
 @pytest.mark.timeout(5)
 def test_thread_safety():
-    # Lists for reader threads to record observed values.
     reader_results = []
-
-    # Create a number of threads for writers, readers, and temporary contexts.
     threads = []
 
+    # Create threads and wrap targets with safe_worker
     for i in range(5):
-        t = threading.Thread(target=writer_worker, args=(i,))
+        t = threading.Thread(target=safe_worker, args=(writer_worker, i))
         threads.append(t)
 
     for i in range(5):
-        t = threading.Thread(target=reader_worker, args=(i, reader_results))
+        t = threading.Thread(
+            target=safe_worker, args=(reader_worker, i, reader_results)
+        )
         threads.append(t)
 
     for _ in range(2):
-        t = threading.Thread(target=context_worker)
+        t = threading.Thread(target=safe_worker, args=(context_worker,))
         threads.append(t)
 
-    # Start all threads.
     for t in threads:
         t.start()
 
-    # Wait for all threads to finish.
     for t in threads:
         t.join()
 
-    # At this point, no exceptions should have occurred.
-    # We check that global settings remain in a consistent state.
-    # For example, "debug" should be either True or False.
+    # Re-raise any exceptions captured
+    if thread_exceptions:
+        raise thread_exceptions[0]
+
+    # Final consistency checks
     assert isinstance(settings.debug, bool)
-    # And by default "quiet" is False.
     assert settings.quiet is False
 
-    # (Optionally) check that the reader threads captured only valid Boolean values.
     for val in reader_results:
         assert val in (True, False)
 
@@ -149,10 +148,10 @@ def test_temporary_override_race():
 
     # Now, both threads should have seen the original value (False) restored.
     # In the broken implementation the race may cause one of these assertions to fail.
-    assert results[0] is False, (
-        f"Thread 0 restored quiet={results[0]} instead of False."
-    )
+    assert (
+        results[0] is False
+    ), f"Thread 0 restored quiet={results[0]} instead of False."
 
-    assert results[1] is False, (
-        f"Thread 1 restored quiet={results[1]} instead of False."
-    )
+    assert (
+        results[1] is False
+    ), f"Thread 1 restored quiet={results[1]} instead of False."

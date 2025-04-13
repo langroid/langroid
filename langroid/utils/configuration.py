@@ -2,14 +2,14 @@ import copy
 import os
 import threading
 from contextlib import contextmanager
-from typing import Iterator, List, Literal
+from typing import Any, Dict, Iterator, List, Literal, cast
 
 from dotenv import find_dotenv, load_dotenv
 
 from langroid.pydantic_v1 import BaseSettings
 
-# Global reentrant lock to ensure thread-safe updates to "settings"
-_settings_lock = threading.RLock()
+# Global reentrant lock to serialize any modifications to the global settings.
+_global_lock = threading.RLock()
 
 
 class Settings(BaseSettings):
@@ -27,78 +27,109 @@ class Settings(BaseSettings):
         extra = "forbid"
 
 
-load_dotenv(find_dotenv(usecwd=True))  # get settings from .env file
-settings = Settings()
+# Load environment variables from .env file.
+load_dotenv(find_dotenv(usecwd=True))
+
+# The global (default) settings instance.
+# This is updated by update_global_settings() and set_global().
+_global_settings = Settings()
+
+# Thread-local storage for temporary (per-thread) settings overrides.
+_thread_local = threading.local()
+
+
+class SettingsProxy:
+    """
+    A proxy for the settings that returns a thread‐local override if set,
+    or else falls back to the global settings.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        # If the calling thread has set an override, use that.
+        if hasattr(_thread_local, "override"):
+            return getattr(_thread_local.override, name)
+        return getattr(_global_settings, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # All writes go to the global settings.
+        setattr(_global_settings, name, value)
+
+    def update(self, new_settings: Settings) -> None:
+        _global_settings.__dict__.update(new_settings.__dict__)
+
+    def dict(self) -> Dict[str, Any]:
+        # Return a dict view of the settings as seen by the caller.
+        # Note that temporary overrides are not “merged” with global settings.
+        if hasattr(_thread_local, "override"):
+            return cast(Dict[str, Any], cast(Settings, _thread_local.override.dict()))
+        return _global_settings.dict()
+
+
+settings = SettingsProxy()
 
 
 def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
     """
-    Update global settings so modules can access them via (as an example):
+    Update global settings so that modules can later access them via, e.g.,
 
         from langroid.utils.configuration import settings
         if settings.debug: ...
 
-    Caution: We do not want to have too many global settings!
-    Args:
-        cfg: pydantic config, typically from a main script
-        keys: which keys from cfg to use, to update the global settings object
+    This updates the global default.
     """
     config_dict = cfg.dict()
-    # Filter the config_dict based on the keys
     filtered_config = {key: config_dict[key] for key in keys if key in config_dict}
-
-    # Create a new Settings instance so pydantic validates the config
     new_settings = Settings(**filtered_config)
-
-    # Atomically update the unique global settings object
-    with _settings_lock:
-        settings.__dict__.update(new_settings.__dict__)
+    _global_settings.__dict__.update(new_settings.__dict__)
 
 
 def set_global(key_vals: Settings) -> None:
-    """Atomically update the unique global settings object"""
-    with _settings_lock:
-        settings.__dict__.update(key_vals.__dict__)
+    """
+    Update the global settings object.
+    """
+    _global_settings.__dict__.update(key_vals.__dict__)
 
 
 @contextmanager
 def temporary_settings(temp_settings: Settings) -> Iterator[None]:
-    """Temporarily update the global settings and restore them afterward."""
-    with _settings_lock:
-        original_settings = copy.deepcopy(settings)
-        set_global(temp_settings)
+    """
+    Temporarily override the settings for the calling thread.
+
+    Within the context, any access to "settings" will use the provided temporary
+    settings. Once the context is exited, the thread reverts to the global settings.
+    """
+    saved = getattr(_thread_local, "override", None)
+    _thread_local.override = temp_settings
     try:
         yield
     finally:
-        with _settings_lock:
-            settings.__dict__.update(original_settings.__dict__)
+        if saved is not None:
+            _thread_local.override = saved
+        else:
+            del _thread_local.override
 
 
 @contextmanager
 def quiet_mode(quiet: bool = True) -> Iterator[None]:
-    """Temporarily set quiet=True in global settings and restore afterward."""
-    with _settings_lock:
-        original_settings = copy.deepcopy(settings)
-        if quiet:
-            # Use Pydantic's copy/update method to create a modified instance
-            temp_settings = original_settings.copy(update={"quiet": True})
-            set_global(temp_settings)
-    try:
+    """
+    Temporarily override settings.quiet for the current thread.
+
+    Outside the context, the settings revert back to the global default.
+    """
+    # Create a copy of the current global settings
+    temp = copy.deepcopy(_global_settings)
+    if quiet:
+        temp.quiet = True
+    with temporary_settings(temp):
         yield
-    finally:
-        with _settings_lock:
-            settings.__dict__.update(original_settings.__dict__)
 
 
 def set_env(settings_instance: BaseSettings) -> None:
     """
     Set environment variables from a BaseSettings instance.
-    Args:
-        settings_instance (BaseSettings): desired settings.
+
+    Each field in the settings is written to os.environ.
     """
-    # Using the lock ensures a consistent read if the passed settings
-    # happen to be the global one.
-    with _settings_lock:
-        for field_name, field in settings_instance.__class__.__fields__.items():
-            env_var_name = field.field_info.extra.get("env", field_name).upper()
-            os.environ[env_var_name] = str(settings_instance.dict()[field_name])
+    for field_name, field in settings_instance.__class__.__fields__.items():
+        env_var_name = field.field_info.extra.get("env", field_name).upper()
+        os.environ[env_var_name] = str(settings_instance.dict()[field_name])
