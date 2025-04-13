@@ -100,3 +100,59 @@ def test_thread_safety():
     # (Optionally) check that the reader threads captured only valid Boolean values.
     for val in reader_results:
         assert val in (True, False)
+
+
+@pytest.mark.timeout(5)
+def test_temporary_override_race():
+    """
+    This test forces two threads to use temporary_settings concurrently.
+    Each thread:
+      - Captures the original global value of settings.quiet.
+      - Enters a temporary override (setting quiet=True).
+      - Waits on a barrier until both threads are in the temporary context.
+      - Exits the context and then records what settings.quiet evaluates to.
+
+    In a proper thread‑safe implementation the final global value should still
+    be the original (False), but in the old (non–thread‑safe) implementation a race
+    condition between the two threads can result in one thread inadvertently leaving
+    the global value set to True.
+    """
+    # Make sure global quiet is initially False.
+    update_global_settings(Settings(quiet=False), keys=["quiet"])
+    # Barrier for synchronizing two threads.
+    barrier = threading.Barrier(2)
+    # A place to record the final value of quiet after each thread exits its context.
+    results = [None, None]
+
+    def worker(index: int):
+        # Define a temporary override that forces quiet=True.
+        temp = Settings(quiet=True)
+        with temporary_settings(temp):
+            # While inside the context, the settings should be overridden.
+            assert settings.quiet is True
+            # Wait until both threads are here.
+            barrier.wait()
+            # Sleep briefly to let interleaving happen.
+            time.sleep(0.01)
+        # After the context, we expect the global setting to be restored.
+        results[index] = settings.quiet
+        # If a race occurred in the old implementation, the restored value may be wrong.
+
+    threads = []
+    for i in range(2):
+        t = threading.Thread(target=worker, args=(i,))
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    # Now, both threads should have seen the original value (False) restored.
+    # In the broken implementation the race may cause one of these assertions to fail.
+    assert results[0] is False, (
+        f"Thread 0 restored quiet={results[0]} instead of False."
+    )
+
+    assert results[1] is False, (
+        f"Thread 1 restored quiet={results[1]} instead of False."
+    )
