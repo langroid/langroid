@@ -808,7 +808,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-        silent = self.config.async_stream_quiet or settings.quiet
+        silent = settings.quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
