@@ -105,7 +105,7 @@ nav:
       - Async Streaming: notes/async-streaming.md
       - Knowledge Graphs: notes/knowledge-graphs.md
       - Gemini LLMs, Embeddings: notes/gemini.md
-      - Gemini LLMs Pdf Parsing: notes/gemini-pdf-parser.md  
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
       - Large Tool Results: notes/large-tool-results.md
       - GLHF.chat Support: notes/glhf-chat.md
       - Structured Output: notes/structured-output.md

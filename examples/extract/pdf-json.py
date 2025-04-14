@@ -24,7 +24,7 @@ pip install "langroid[marker-pdf]"
 import os
 
 from langroid.parsing.document_parser import DocumentParser
-from langroid.parsing.parser import PdfParsingConfig, ParsingConfig
+from langroid.parsing.parser import PdfParsingConfig, ParsingConfig, LLMPdfParserConfig
 import logging
 from fire import Fire
 from rich.console import Console
@@ -113,7 +113,13 @@ def main(
 ) -> None:
     parsing_config = ParsingConfig(
         pdf=PdfParsingConfig(
-            library="marker",
+            library="llm-pdf-parser",
+            llm_parser_config=LLMPdfParserConfig(
+                model_name="gemini/gemini-2.0-flash",
+                split_on_page=True,
+                max_tokens=7000,
+                requests_per_minute=5,
+            ),
         )
     )
     pdf_parser = DocumentParser.create(filename, config=parsing_config)

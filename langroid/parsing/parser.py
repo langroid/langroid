@@ -36,10 +36,10 @@ class BaseParsingConfig(BaseSettings):
         extra = "ignore"  # Ignore unknown settings
 
 
-class GeminiConfig(BaseSettings):
-    """Configuration for Gemini-based parsing."""
+class LLMPdfParserConfig(BaseSettings):
+    """Configuration for LLM-based parsing."""
 
-    model_name: str = "gemini-2.0-flash"  # Default model
+    model_name: str = "gemini/gemini-2.0-flash"  # Default model
     max_tokens: Optional[int] = None
     split_on_page: Optional[bool] = True
     requests_per_minute: Optional[int] = 5
@@ -60,10 +60,10 @@ class PdfParsingConfig(BaseParsingConfig):
         "unstructured",
         "pdf2image",
         "markitdown",
-        "gemini",
+        "llm-pdf-parser",
         "marker",
     ] = "pymupdf4llm"
-    gemini_config: Optional[GeminiConfig] = None
+    llm_parser_config: Optional[LLMPdfParserConfig] = None
     marker_config: Optional[MarkerConfig] = None
 
     @root_validator(pre=True)
@@ -71,10 +71,10 @@ class PdfParsingConfig(BaseParsingConfig):
         """Ensure correct config is set based on library selection."""
         library = values.get("library")
 
-        if library == "gemini":
-            values.setdefault("gemini_config", GeminiConfig())
+        if library == "llm-pdf-parser":
+            values.setdefault("llm_parser_config", LLMPdfParserConfig())
         else:
-            values["gemini_config"] = None
+            values["llm_parser_config"] = None
 
         if library == "marker":
             values.setdefault("marker_config", MarkerConfig())
