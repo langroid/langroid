@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import itertools
 import logging
 import os
@@ -148,8 +149,8 @@ class DocumentParser(Parser):
                 return UnstructuredPDFParser(source, config)
             elif config.pdf.library == "pdf2image":
                 return ImagePdfParser(source, config)
-            elif config.pdf.library == "gemini":
-                return GeminiPdfParser(source, config)
+            elif config.pdf.library == "llm-pdf-parser":
+                return LLMPdfParser(source, config)
             elif config.pdf.library == "marker":
                 return MarkerPdfParser(source, config)
             else:
@@ -993,13 +994,13 @@ class MarkitdownPPTXParser(DocumentParser):
         )
 
 
-class GeminiPdfParser(DocumentParser):
+class LLMPdfParser(DocumentParser):
     """
-    This class converts PDFs to Markdown using Gemini multimodal LLMs.
+    This class converts PDFs to Markdown using multimodal LLMs.
 
     It extracts pages, converts them with the LLM (replacing images with
     detailed descriptions), and outputs Markdown page by page. The
-    conversion follows `GEMINI_SYSTEM_INSTRUCTION`. It employs
+    conversion follows `LLM_PDF_MD_SYSTEM_INSTRUCTION`. It employs
     multiprocessing for speed, async requests with rate limiting, and
     handles errors.
 
@@ -1008,9 +1009,9 @@ class GeminiPdfParser(DocumentParser):
     """
 
     DEFAULT_MAX_TOKENS = 7000
-    OUTPUT_DIR = Path(".gemini_pdfparser")  # Fixed output directory
+    OUTPUT_DIR = Path(".llm_pdfparser")  # Fixed output directory
 
-    GEMINI_SYSTEM_INSTRUCTION = """
+    LLM_PDF_MD_SYSTEM_INSTRUCTION = """
     ### **Convert PDF to Markdown**
     1. **Text:**
         * Preserve structure, formatting (**bold**, *italic*), lists, and indentation.
@@ -1035,11 +1036,11 @@ class GeminiPdfParser(DocumentParser):
 
     def __init__(self, source: Union[str, bytes], config: ParsingConfig):
         super().__init__(source, config)
-        if not config.pdf.gemini_config:
+        if not config.pdf.llm_parser_config:
             raise ValueError(
-                "GeminiPdfParser requires a Gemini-based config in pdf parsing config"
+                "LLMPdfParser requires a llm-based config in pdf parsing config"
             )
-        self.model_name = config.pdf.gemini_config.model_name
+        self.model_name = config.pdf.llm_parser_config.model_name
 
         # Ensure output directory exists
         self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1058,7 +1059,9 @@ class GeminiPdfParser(DocumentParser):
         temp_file.close()
         self.output_filename = Path(temp_file.name)
 
-        self.max_tokens = config.pdf.gemini_config.max_tokens or self.DEFAULT_MAX_TOKENS
+        self.max_tokens = (
+            config.pdf.llm_parser_config.max_tokens or self.DEFAULT_MAX_TOKENS
+        )
 
         """
         If True, each PDF page is processed as a separate chunk,
@@ -1066,12 +1069,12 @@ class GeminiPdfParser(DocumentParser):
         grouped into chunks based on `max_token_limit` before being sent
         to the LLM.
         """
-        self.split_on_page = config.pdf.gemini_config.split_on_page or False
+        self.split_on_page = config.pdf.llm_parser_config.split_on_page or False
 
         # Rate limiting parameters
         import asyncio
 
-        self.requests_per_minute = config.pdf.gemini_config.requests_per_minute or 5
+        self.requests_per_minute = config.pdf.llm_parser_config.requests_per_minute or 5
 
         """
         A semaphore to control the number of concurrent requests to the LLM,
@@ -1175,7 +1178,7 @@ class GeminiPdfParser(DocumentParser):
             "page_numbers": page_numbers,  # List of page numbers in this chunk
         }
 
-    def _prepare_pdf_chunks_for_gemini(
+    def _prepare_pdf_chunks_for_llm(
         self,
         num_workers: Optional[int] = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
@@ -1198,37 +1201,92 @@ class GeminiPdfParser(DocumentParser):
                 pdf_chunks = pool.map(self._merge_pages_into_pdf_with_metadata, chunks)
             return pdf_chunks
 
-    async def _send_chunk_to_gemini(
-        self, chunk: Dict[str, Any], gemini_api_key: str
-    ) -> str:
+    async def _send_chunk_to_llm(self, chunk: Dict[str, Any]) -> str:
         """
-        Sends a PDF chunk to the Gemini API and returns the response text.
+        Sends a PDF chunk to the LLM API and returns the response text.
         Uses retries with exponential backoff to handle transient failures.
         """
         import asyncio
         import logging
 
-        from google import genai
-        from google.genai import types
+        from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 
         async with self.semaphore:  # Limit concurrent API requests
             for attempt in range(self.max_retries):
                 try:
-                    client = genai.Client(api_key=gemini_api_key)
+                    llm_config = OpenAIGPTConfig(
+                        chat_model=self.model_name,
+                        max_output_tokens=self.max_tokens,
+                    )
+                    llm = OpenAIGPT(config=llm_config)
+                    base64_string = base64.b64encode(chunk["pdf_bytes"]).decode("utf-8")
+                    data_uri = f"data:application/pdf;base64,{base64_string}"
+                    if "gemini" in self.model_name.lower():
+                        file_content = dict(
+                            type="image_url",
+                            image_url=dict(url=data_uri),
+                        )
+                    elif "claude" in self.model_name.lower() and llm.is_litellm_proxy:
+                        file_content = dict(
+                            type="file",
+                            file=dict(
+                                file_data=data_uri,
+                            ),
+                        )
+                    else:
+                        if not llm.is_openai_chat_model():
+                            logger.warning(
+                                f"""
+                                File uploads may not be supported for this model
+                                {self.model_name}. But attempting to 
+                                use OpenAI-like file upload.
+                                """,
+                            )
+                        file_content = dict(
+                            type="file",
+                            file=dict(
+                                filename="dummy.pdf",
+                                file_data=data_uri,
+                            ),
+                        )
 
                     # Send the request with PDF content and system instructions
-                    response = await client.aio.models.generate_content(
-                        model=self.model_name,
-                        contents=[
-                            types.Part.from_bytes(
-                                data=chunk["pdf_bytes"], mime_type="application/pdf"
+                    response = await llm.async_client.chat.completions.create(  # type: ignore
+                        model=self.model_name.split("/")[-1],
+                        messages=[
+                            dict(
+                                role="system",
+                                content="""
+                                You are an expert pdf -> markdown converter.
+                                Do NOT use any triple backquotes when you present the 
+                                markdown content,like ```markdown etc.
+                                FAITHFULLY CONVERT THE PDF TO MARKDOWN, 
+                                retaining ALL content as you find it.
+                                """,
                             ),
-                            self.GEMINI_SYSTEM_INSTRUCTION,
+                            dict(  # type: ignore
+                                role="user",
+                                content=[
+                                    dict(
+                                        type="text",
+                                        text=self.LLM_PDF_MD_SYSTEM_INSTRUCTION,
+                                    ),
+                                    file_content,
+                                ],
+                            ),
                         ],
                     )
 
                     # Return extracted text if available
-                    return str(response.text) if response.text else ""
+                    return (
+                        ""
+                        if (
+                            response is None
+                            or not hasattr(response, "choices")
+                            or not isinstance(response.choices, list)
+                        )
+                        else (response.choices[0].message.content)
+                    )
 
                 except Exception as e:
                     # Log error with page numbers for debugging
@@ -1251,28 +1309,24 @@ class GeminiPdfParser(DocumentParser):
                             chunk.get("page_numbers", "Unknown"),
                         )
                         break
-
         return ""  # Return empty string if all retries fail
 
-    async def process_chunks(
-        self, chunks: List[Dict[str, Any]], api_key: str
-    ) -> List[str]:
+    async def process_chunks(self, chunks: List[Dict[str, Any]]) -> List[str]:
         """
-        Processes PDF chunks by sending them to the Gemini API and
+        Processes PDF chunks by sending them to the LLM API and
         collecting the results.
 
         Args:
             chunks: A list of dictionaries, where each dictionary represents
                 a PDF chunk and contains the PDF data and page numbers.
-            api_key: The Gemini API key.
         """
         # To show nice progress bar
         from tqdm.asyncio import tqdm_asyncio
 
-        # Create a list of asynchronous tasks to send each chunk to Gemini.
+        # Create a list of asynchronous tasks to send each chunk to the LLM.
         # Chunk in this case might be single page or group of pages returned
         # by prepare_pdf_chunks function
-        tasks = [self._send_chunk_to_gemini(chunk, api_key) for chunk in chunks]
+        tasks = [self._send_chunk_to_llm(chunk) for chunk in chunks]
 
         # Gather the results from all tasks, allowing exceptions to be returned.
         # tqdm_asyncio is wrapper around asyncio.gather
@@ -1311,7 +1365,7 @@ class GeminiPdfParser(DocumentParser):
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
         """
         Iterates over the document pages, extracting content using the
-        Gemini API, saves them to a markdown file, and yields page numbers
+        LLM API, saves them to a markdown file, and yields page numbers
         along with their corresponding content.
 
         Yields:
@@ -1319,14 +1373,8 @@ class GeminiPdfParser(DocumentParser):
             (int) and the page content (Any).
         """
         import asyncio
-        import os
 
-        # Load environment variables (e.g., GEMINI_API_KEY) from a .env file.
         load_dotenv()
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_api_key:
-            raise ValueError("GEMINI_API_KEY not found in environment variables.")
-
         try:
             # This involves extracting pages, grouping them according to the
             # `max_tokens` limit (if `split_on_page` is False), and
@@ -1335,18 +1383,16 @@ class GeminiPdfParser(DocumentParser):
             # PDF bytes and the associated page numbers or single page if
             # `split_on_page` is true
 
-            pdf_chunks = self._prepare_pdf_chunks_for_gemini(
+            pdf_chunks = self._prepare_pdf_chunks_for_llm(
                 num_workers=8,
                 max_tokens=self.max_tokens,
                 split_on_page=self.split_on_page,
             )
 
             # We asynchronously processes each chunk, sending it
-            # to Gemini and retrieving the Markdown output. It handles rate
+            # to the LLM and retrieving the Markdown output. It handles rate
             # limiting and retries.
-            markdown_results = asyncio.run(
-                self.process_chunks(pdf_chunks, gemini_api_key)
-            )
+            markdown_results = asyncio.run(self.process_chunks(pdf_chunks))
 
             # This file serves as an intermediate storage location for the
             # complete Markdown output.
