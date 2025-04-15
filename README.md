@@ -644,7 +644,7 @@ import langroid.language_models as lm
 
 mdl = lm.OpenAIGPT(
     lm.OpenAIGPTConfig(
-        chat_model=lm.OpenAIChatModel.GPT4, # or, e.g.  "ollama/qwen2.5"
+        chat_model=lm.OpenAIChatModel.GPT4o, # or, e.g.  "ollama/qwen2.5"
     ),
 )
 

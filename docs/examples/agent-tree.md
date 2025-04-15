@@ -165,7 +165,7 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 
 config = ChatAgentConfig(
   llm=OpenAIGPTConfig(
-    chat_model=OpenAIChatModel.GPT4,
+    chat_model=OpenAIChatModel.GPT4o,
   ),
   vecdb=None, # no need for a vector database
 )
