@@ -377,8 +377,8 @@ class ChatDocument(Document):
             # same reasoning as for function-call above
             content += " " + "\n\n".join(str(tc) for tc in oai_tool_calls)
             oai_tool_calls = None
-        # add space since some LLM APIs (e.g. gemini) don't like empty msg
-        content = content + " "
+        # some LLM APIs (e.g. gemini) don't like empty msg
+        content = content or " "
         sender_name = message.metadata.sender_name
         tool_ids = message.metadata.tool_ids
         tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
@@ -435,7 +435,7 @@ class ChatDocument(Document):
                     LLMMessage(
                         role=Role.TOOL,
                         tool_call_id=tool_id,
-                        content=result + " ",
+                        content=result or " ",
                         chat_document_id=chat_document_id,
                     )
                     for tool_id, result in message.oai_tool_id2result.items()
