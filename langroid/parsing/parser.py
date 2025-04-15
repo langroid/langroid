@@ -44,6 +44,8 @@ class LLMPdfParserConfig(BaseSettings):
     split_on_page: Optional[bool] = True
     requests_per_minute: Optional[int] = 5
     timeout: int = 60
+    prompt: str = ""  # override with a domain-specific prompt
+    system_prompt: str = ""  # override with a domain-specific system prompt
 
 
 class MarkerConfig(BaseSettings):

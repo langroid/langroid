@@ -181,12 +181,12 @@ jobs:
         path: requirements_github.txt
 
 
-    - name: Run ALL tests with coverage (GPT-4.1-mini)
+    - name: Run ALL tests with coverage (GPT-4o-mini)
       id: first_test
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        uv run pytest --m gpt-4.1-nano --cov langroid --cov-config .coveragerc \
+        uv run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
@@ -202,13 +202,13 @@ jobs:
           tests/main
       continue-on-error: true
 
-    - name: Retry FAILED tests ONLY with GPT-4.1 instead of GPT-4.1-nano
+    - name: Retry FAILED tests ONLY with GPT-4o instead of GPT-4o-mini
       id: second_test
       if: steps.first_test.outcome == 'failure'
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        uv run pytest --m gpt-4.1 --cov langroid --cov-append --cov-config .coveragerc \
+        uv run pytest --cov langroid --cov-append --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
@@ -222,13 +222,13 @@ jobs:
           tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
-    - name: Retry FAILED tests ONLY without cache (GPT-4.1)
+    - name: Retry FAILED tests ONLY without cache (GPT-4o)
       id: third_test
       if: steps.second_test.outcome == 'failure'
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        uv run pytest --m gpt-4.1 --nc --cov langroid --cov-append --cov-config .coveragerc \
+        uv run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
           --junitxml=test-results.xml \
           -rf --show-capture=no --timeout=300 -n auto \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \

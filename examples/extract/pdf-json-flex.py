@@ -139,16 +139,16 @@ def main(
     filename: str,
     model: str = "",
 ) -> None:
-    # from langroid.parsing.parser import LLMPdfParserConfig
+    #    from langroid.parsing.parser import LLMPdfParserConfig
     parsing_config = ParsingConfig(
         pdf=PdfParsingConfig(
             library="marker",  # see alternative below
             # library="llm-pdf-parser",
             # llm_parser_config=LLMPdfParserConfig(
-            #     model_name="gpt-4.1-mini", #"gemini/gemini-2.5-pro-exp-03-25",
+            #     model_name="gpt-4.1", #"gemini/gemini-2.5-pro-exp-03-25",
             #     split_on_page=False,
             #     max_tokens=7000,
-            #     timeout=60,
+            #     timeout=300,
             # )
         )
     )

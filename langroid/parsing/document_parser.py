@@ -1259,27 +1259,32 @@ class LLMPdfParser(DocumentParser):
                                 file_data=data_uri,
                             ),
                         )
+                    prompt = (
+                        self.llm_parser_config.prompt
+                        or self.LLM_PDF_MD_SYSTEM_INSTRUCTION
+                    )
+                    system_prompt = (
+                        self.llm_parser_config.system_prompt
+                        or """
+                         You are an expert pdf -> markdown converter.
+                         Do NOT use any triple backquotes when you present the
+                         markdown content,like ```markdown etc.
+                         FAITHFULLY CONVERT THE PDF TO MARKDOWN,
+                         retaining ALL content as you find it.
+                        """
+                    )
 
                     # Send the request with PDF content and system instructions
                     response = await llm.async_client.chat.completions.create(  # type: ignore
                         model=self.model_name.split("/")[-1],
                         messages=[
-                            dict(
-                                role="system",
-                                content="""
-                                You are an expert pdf -> markdown converter.
-                                Do NOT use any triple backquotes when you present the 
-                                markdown content,like ```markdown etc.
-                                FAITHFULLY CONVERT THE PDF TO MARKDOWN, 
-                                retaining ALL content as you find it.
-                                """,
-                            ),
+                            dict(role="system", content=system_prompt),
                             dict(  # type: ignore
                                 role="user",
                                 content=[
                                     dict(
                                         type="text",
-                                        text=self.LLM_PDF_MD_SYSTEM_INSTRUCTION,
+                                        text=prompt,
                                     ),
                                     file_content,
                                 ],
