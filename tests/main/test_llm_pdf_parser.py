@@ -26,6 +26,7 @@ async def test_llm_pdf_parser(pdf_file, split_on_page):
             llm_parser_config=LLMPdfParserConfig(
                 model_name="gemini/gemini-2.0-flash",
                 split_on_page=split_on_page,
+                requests_per_minute=3,
             ),
         ),
     )

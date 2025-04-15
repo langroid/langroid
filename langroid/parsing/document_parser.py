@@ -1201,6 +1201,20 @@ class LLMPdfParser(DocumentParser):
                 pdf_chunks = pool.map(self._merge_pages_into_pdf_with_metadata, chunks)
             return pdf_chunks
 
+    @staticmethod
+    def _page_num_str(page_numbers: Any) -> str:
+        """
+        Converts page numbers to a formatted string.
+        """
+        if isinstance(page_numbers, list):
+            if len(page_numbers) == 0:
+                return ""
+            return str(page_numbers[0]) + "-" + str(page_numbers[-1])
+        elif isinstance(page_numbers, int):
+            return str(page_numbers)
+        else:
+            return str(page_numbers).replace(" ", "-")
+
     async def _send_chunk_to_llm(self, chunk: Dict[str, Any]) -> str:
         """
         Sends a PDF chunk to the LLM API and returns the response text.
@@ -1219,6 +1233,7 @@ class LLMPdfParser(DocumentParser):
                         max_output_tokens=self.max_tokens,
                     )
                     llm = OpenAIGPT(config=llm_config)
+                    page_nums = self._page_num_str(chunk.get("page_numbers", "?"))
                     base64_string = base64.b64encode(chunk["pdf_bytes"]).decode("utf-8")
                     data_uri = f"data:application/pdf;base64,{base64_string}"
                     if "gemini" in self.model_name.lower():
@@ -1226,7 +1241,9 @@ class LLMPdfParser(DocumentParser):
                             type="image_url",
                             image_url=dict(url=data_uri),
                         )
-                    elif "claude" in self.model_name.lower() and llm.is_litellm_proxy:
+                    elif "claude" in self.model_name.lower():
+                        # optimistrally try this: some API proxies like litellm
+                        # support this, and others may not.
                         file_content = dict(
                             type="file",
                             file=dict(
@@ -1234,18 +1251,11 @@ class LLMPdfParser(DocumentParser):
                             ),
                         )
                     else:
-                        if not llm.is_openai_chat_model():
-                            logger.warning(
-                                f"""
-                                File uploads may not be supported for this model
-                                {self.model_name}. But attempting to 
-                                use OpenAI-like file upload.
-                                """,
-                            )
+                        # fallback: assume file upload is similar to OpenAI API
                         file_content = dict(
                             type="file",
                             file=dict(
-                                filename="dummy.pdf",
+                                filename=f"pages-{page_nums}.pdf",
                                 file_data=data_uri,
                             ),
                         )
@@ -1304,9 +1314,14 @@ class LLMPdfParser(DocumentParser):
                         await asyncio.sleep(delay)
                     else:
                         # Log failure after max retries
+                        page_nums = chunk.get("page_numbers", "Unknown")
                         logging.error(
-                            "Max retries reached for pages %s",
-                            chunk.get("page_numbers", "Unknown"),
+                            f"""
+                            Max retries reached for pages {page_nums}.
+                            It is possible your LLM API provider for 
+                            the model {self.model_name} does not support
+                            file uploads via an OpenAI-compatible API.
+                            """,
                         )
                         break
         return ""  # Return empty string if all retries fail
