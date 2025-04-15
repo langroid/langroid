@@ -63,7 +63,8 @@ class LLMConfig(BaseSettings):
     streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
     api_base: str | None = None
     formatter: None | str = None
-    max_output_tokens: int | None = 8192  # specify None to use model_max_output_tokens
+    # specify None if you want to use the full max output tokens of the model
+    max_output_tokens: int | None = 8192
     timeout: int = 20  # timeout for API requests
     chat_model: str = ""
     completion_model: str = ""
@@ -89,8 +90,9 @@ class LLMConfig(BaseSettings):
 
     @property
     def model_max_output_tokens(self) -> int:
-        return (
-            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
+        return min(
+            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens,
+            get_model_info(self.chat_model).max_output_tokens,
         )
 
 

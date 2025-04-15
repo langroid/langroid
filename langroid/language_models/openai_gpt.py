@@ -1882,7 +1882,7 @@ class OpenAIGPT(LanguageModel):
                 m.api_dict(has_system_role=self.info().allows_system_message)
                 for m in (llm_messages)
             ],
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
             stream=self.get_stream(),
         )
         if self.get_stream():
