@@ -17,12 +17,13 @@ You can initialize the LLM PDF parser as follows:
 parsing_config = ParsingConfig(
     n_neighbor_ids=2,
     pdf=PdfParsingConfig(
-        library="llm-parser",
+        library="llm-pdf-parser",
         llm_parser_config=LLMPdfParserConfig(
             model_name="gemini-2.0-flash",
             split_on_page=True,
             max_tokens=7000,
             requests_per_minute=5,
+            timeout=60, # increase this for large documents
         ),
     ),
 )

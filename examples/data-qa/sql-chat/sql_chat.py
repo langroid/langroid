@@ -198,7 +198,7 @@ def main(
         use_schema_tools=schema_tools,
         addressing_prefix=SEND_TO,
         llm=OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
+            chat_model=OpenAIChatModel.GPT4o,
         ),
     )
     agent = SQLChatAgent(agent_config)

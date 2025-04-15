@@ -122,7 +122,7 @@ As before we first create a `ChatAgentConfig` object:
 config = lr.ChatAgentConfig(
     name="Spy",
     llm = lr.language_models.OpenAIGPTConfig(
-        chat_model=lr.language_models.OpenAIChatModel.GPT4,
+        chat_model=lr.language_models.OpenAIChatModel.GPT4o,
     ),
     use_tools=True, #(1)!
     use_functions_api=False, #(2)!

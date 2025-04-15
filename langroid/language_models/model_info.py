@@ -24,13 +24,16 @@ class OpenAIChatModel(ModelName):
     """Enum for OpenAI Chat models"""
 
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
-    GPT4 = "gpt-4"
+    GPT4 = "gpt-4o"  # avoid deprecated gpt-4
     GPT4_TURBO = "gpt-4-turbo"
     GPT4o = "gpt-4o"
     GPT4o_MINI = "gpt-4o-mini"
     O1 = "o1"
     O1_MINI = "o1-mini"
     O3_MINI = "o3-mini"
+    GPT4_1 = "gpt-4.1"
+    GPT4_1_MINI = "gpt-4.1-mini"
+    GPT4_1_NANO = "gpt-4.1-nano"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -44,6 +47,7 @@ class AnthropicModel(ModelName):
     """Enum for Anthropic models"""
 
     CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
+    CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
     CLAUDE_3_OPUS = "claude-3-opus-latest"
     CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
     CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
@@ -63,6 +67,7 @@ class GeminiModel(ModelName):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
     GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
     GEMINI_1_5_PRO = "gemini-1.5-pro"
+    GEMINI_2_5_PRO = "gemini-2.5-pro-exp-02-05"
     GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
     GEMINI_2_FLASH = "gemini-2.0-flash"
     GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite-preview"
@@ -159,6 +164,33 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=10.0,
         output_cost_per_million=30.0,
         description="GPT-4 Turbo",
+    ),
+    OpenAIChatModel.GPT4_1_NANO.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1_NANO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=0.10,
+        output_cost_per_million=0.40,
+        description="GPT-4.1",
+    ),
+    OpenAIChatModel.GPT4_1_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=0.40,
+        output_cost_per_million=1.60,
+        description="GPT-4.1 Mini",
+    ),
+    OpenAIChatModel.GPT4_1.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1.value,
+        provider=ModelProvider.OPENAI,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=2.00,
+        output_cost_per_million=8.00,
+        description="GPT-4.1",
     ),
     OpenAIChatModel.GPT4o.value: ModelInfo(
         name=OpenAIChatModel.GPT4o.value,

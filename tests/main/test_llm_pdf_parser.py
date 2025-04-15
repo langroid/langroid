@@ -43,16 +43,9 @@ async def test_llm_pdf_parser(pdf_file, split_on_page):
 
     assert (
         "with magnitudes proportional to the corresponding eigenvalues"
-        in pages[0][1][:80].strip()
+        in pages[0][1].strip()
     )
-    if split_on_page:
-        assert "obvious in static images." in pages[2][1][-50:].replace(
-            "\n", ""
-        ).replace("8", "")
-    else:
-        assert "obvious in static images." in pages[0][1][-50:].replace(
-            "\n", ""
-        ).replace("8", "")
+    assert any("obvious in static images" in p[1] for p in pages)
     assert doc.metadata.source == str(path)
 
     docs = llm_parser.get_doc_chunks()

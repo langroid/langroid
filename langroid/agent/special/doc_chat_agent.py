@@ -204,8 +204,8 @@ class DocChatAgentConfig(ChatAgentConfig):
 
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT4,
-        completion_model=OpenAIChatModel.GPT4,
+        chat_model=OpenAIChatModel.GPT4o,
+        completion_model=OpenAIChatModel.GPT4o,
         timeout=40,
     )
     prompts: PromptsConfig = PromptsConfig(

@@ -84,7 +84,7 @@ class ExtractorConfig(ChatAgentConfig):
     use_functions_api = True
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT4,
+        chat_model=OpenAIChatModel.GPT4o,
     )
 
 
