@@ -43,7 +43,7 @@ def chat() -> None:
 
     config = ChatAgentConfig(
         llm=OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
+            chat_model=OpenAIChatModel.GPT4o,
         ),
         vecdb=None,
     )
