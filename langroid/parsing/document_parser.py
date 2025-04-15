@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from PIL import Image
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.parsing.parser import LLMPdfParserConfig, Parser, ParsingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -1040,7 +1040,8 @@ class LLMPdfParser(DocumentParser):
             raise ValueError(
                 "LLMPdfParser requires a llm-based config in pdf parsing config"
             )
-        self.model_name = config.pdf.llm_parser_config.model_name
+        self.llm_parser_config: LLMPdfParserConfig = config.pdf.llm_parser_config
+        self.model_name = self.llm_parser_config.model_name
 
         # Ensure output directory exists
         self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1059,9 +1060,7 @@ class LLMPdfParser(DocumentParser):
         temp_file.close()
         self.output_filename = Path(temp_file.name)
 
-        self.max_tokens = (
-            config.pdf.llm_parser_config.max_tokens or self.DEFAULT_MAX_TOKENS
-        )
+        self.max_tokens = self.llm_parser_config.max_tokens or self.DEFAULT_MAX_TOKENS
 
         """
         If True, each PDF page is processed as a separate chunk,
@@ -1069,12 +1068,12 @@ class LLMPdfParser(DocumentParser):
         grouped into chunks based on `max_token_limit` before being sent
         to the LLM.
         """
-        self.split_on_page = config.pdf.llm_parser_config.split_on_page or False
+        self.split_on_page = self.llm_parser_config.split_on_page or False
 
         # Rate limiting parameters
         import asyncio
 
-        self.requests_per_minute = config.pdf.llm_parser_config.requests_per_minute or 5
+        self.requests_per_minute = self.llm_parser_config.requests_per_minute or 5
 
         """
         A semaphore to control the number of concurrent requests to the LLM,
@@ -1231,6 +1230,7 @@ class LLMPdfParser(DocumentParser):
                     llm_config = OpenAIGPTConfig(
                         chat_model=self.model_name,
                         max_output_tokens=self.max_tokens,
+                        timeout=self.llm_parser_config.timeout,
                     )
                     llm = OpenAIGPT(config=llm_config)
                     page_nums = self._page_num_str(chunk.get("page_numbers", "?"))

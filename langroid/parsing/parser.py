@@ -43,6 +43,7 @@ class LLMPdfParserConfig(BaseSettings):
     max_tokens: Optional[int] = None
     split_on_page: Optional[bool] = True
     requests_per_minute: Optional[int] = 5
+    timeout: int = 60
 
 
 class MarkerConfig(BaseSettings):
