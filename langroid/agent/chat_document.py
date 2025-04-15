@@ -356,12 +356,8 @@ class ChatDocument(Document):
         Returns:
             List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
         """
-        sender_name = None
+
         sender_role = Role.USER
-        fun_call = None
-        oai_tool_calls = None
-        tool_id = ""  # for OpenAI Assistant
-        chat_document_id: str = ""
         if isinstance(message, str):
             message = ChatDocument.from_str(message)
         content = message.content or to_string(message.content_any) or ""
@@ -381,6 +377,8 @@ class ChatDocument(Document):
             # same reasoning as for function-call above
             content += " " + "\n\n".join(str(tc) for tc in oai_tool_calls)
             oai_tool_calls = None
+        # add space since some LLM APIs (e.g. gemini) don't like empty msg
+        content = content + " "
         sender_name = message.metadata.sender_name
         tool_ids = message.metadata.tool_ids
         tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
@@ -437,7 +435,7 @@ class ChatDocument(Document):
                     LLMMessage(
                         role=Role.TOOL,
                         tool_call_id=tool_id,
-                        content=result,
+                        content=result + " ",
                         chat_document_id=chat_document_id,
                     )
                     for tool_id, result in message.oai_tool_id2result.items()

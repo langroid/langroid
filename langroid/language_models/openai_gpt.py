@@ -91,10 +91,13 @@ LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
 openai_chat_model_pref_list = [
     OpenAIChatModel.GPT4o,
+    OpenAIChatModel.GPT4_1_NANO,
+    OpenAIChatModel.GPT4_1_MINI,
+    OpenAIChatModel.GPT4_1,
     OpenAIChatModel.GPT4o_MINI,
     OpenAIChatModel.O1_MINI,
+    OpenAIChatModel.O3_MINI,
     OpenAIChatModel.O1,
-    OpenAIChatModel.GPT3_5_TURBO,
 ]
 
 openai_completion_model_pref_list = [
