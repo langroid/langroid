@@ -54,6 +54,13 @@ class StreamEventType(Enum):
     TOOL_ARGS = 5
 
 
+class RetryParams(BaseSettings):
+    max_retries: int = 5
+    initial_delay: float = 1.0
+    exponential_base: float = 1.3
+    jitter: bool = True
+
+
 class LLMConfig(BaseSettings):
     """
     Common configuration for all language models.
@@ -88,6 +95,7 @@ class LLMConfig(BaseSettings):
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
     completion_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
+    retry_params: RetryParams = RetryParams()
 
     @property
     def model_max_output_tokens(self) -> int:

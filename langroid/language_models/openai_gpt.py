@@ -1734,8 +1734,7 @@ class OpenAIGPT(LanguageModel):
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
             raise e
 
-    @retry_with_exponential_backoff
-    def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
+    def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)
         if result is not None:
@@ -1784,8 +1783,17 @@ class OpenAIGPT(LanguageModel):
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
-    @async_retry_with_exponential_backoff
-    async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
+    def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
+        retry_func = retry_with_exponential_backoff(
+            self._chat_completions_with_backoff_body,
+            initial_delay=self.config.retry_params.initial_delay,
+            max_retries=self.config.retry_params.max_retries,
+            exponential_base=self.config.retry_params.exponential_base,
+            jitter=self.config.retry_params.jitter,
+        )
+        return retry_func(**kwargs)
+
+    async def _achat_completions_with_backoff_body(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)
         if result is not None:
@@ -1838,6 +1846,16 @@ class OpenAIGPT(LanguageModel):
             else:
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
+
+    async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
+        retry_func = async_retry_with_exponential_backoff(
+            self._achat_completions_with_backoff_body,
+            initial_delay=self.config.retry_params.initial_delay,
+            max_retries=self.config.retry_params.max_retries,
+            exponential_base=self.config.retry_params.exponential_base,
+            jitter=self.config.retry_params.jitter,
+        )
+        return await retry_func(**kwargs)
 
     def _prep_chat_completion(
         self,
@@ -2079,7 +2097,7 @@ class OpenAIGPT(LanguageModel):
             function_call,
             response_format,
         )
-        cached, hashed_key, response = self._chat_completions_with_backoff(**args)
+        cached, hashed_key, response = self._chat_completions_with_backoff(**args)  # type: ignore
         if self.get_stream() and not cached:
             llm_response, openai_response = self._stream_response(response, chat=True)
             self._cache_store(hashed_key, openai_response)
@@ -2112,7 +2130,7 @@ class OpenAIGPT(LanguageModel):
             function_call,
             response_format,
         )
-        cached, hashed_key, response = await self._achat_completions_with_backoff(
+        cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
             **args
         )
         if self.get_stream() and not cached:
