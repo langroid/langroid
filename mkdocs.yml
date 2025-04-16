@@ -126,6 +126,7 @@ nav:
       - Markitdown Parsers: notes/markitdown.md
       - LiteLLM Proxy: notes/litellm-proxy.md
       - Chunking: notes/chunking.md
+      - PDF File Input: notes/file-input.md
 
   - Examples:
     - Guide: examples/guide.md

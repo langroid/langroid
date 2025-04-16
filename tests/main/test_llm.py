@@ -16,6 +16,7 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPT,
     OpenAIGPTConfig,
 )
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.parsing.utils import generate_random_sentences
 from langroid.utils.configuration import Settings, set_global, settings
@@ -331,3 +332,199 @@ def test_followup_standalone():
     response = llm.followup_to_standalone(dialog, followup)
     assert response is not None
     assert "prime" in response.lower() and "11" in response
+
+
+def test_llm_pdf_attachment():
+    """Test sending a PDF file attachment to the LLM."""
+    from pathlib import Path
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment = FileAttachment.from_path(pdf_path)
+
+    # Verify the attachment properties
+    assert attachment.mime_type == "application/pdf"
+    assert attachment.filename == "dummy.pdf"
+
+    # Create messages with the attachment
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER, content="What's title of the paper?", files=[attachment]
+        ),
+    ]
+
+    # Set up the LLM with a suitable model that supports PDFs
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+
+    # Get response from the LLM
+    response = llm.chat(messages=messages)
+
+    assert response is not None
+    assert response.message is not None
+    assert "Supply Chain" in response.message
+
+    # follow-up question
+    messages += [
+        LLMMessage(role=Role.ASSISTANT, content="Supply Chain"),
+        LLMMessage(role=Role.USER, content="Who is the first author?"),
+    ]
+    response = llm.chat(messages=messages)
+    assert response is not None
+    assert response.message is not None
+    assert "Takio" in response.message
+
+
+@pytest.mark.xfail(
+    reason="Multi-file attachments may not work yet",
+    run=True,
+    strict=False,
+)
+def test_llm_multi_pdf_attachments():
+    from pathlib import Path
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment = FileAttachment.from_path(pdf_path)
+
+    # multiple attachments
+    pdf_path2 = Path("tests/main/data/sample-test.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment2 = FileAttachment.from_path(pdf_path2)
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="How many pages are in the Supply Chain paper?",
+            files=[attachment2, attachment],
+        ),
+    ]
+    # Set up the LLM with a suitable model that supports PDFs
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+
+    response = llm.chat(messages=messages)
+    print(response.message)
+    assert any(x in response.message for x in ["4", "four"])
+
+    # follow-up question
+    messages += [
+        LLMMessage(role=Role.ASSISTANT, content="4 pages"),
+        LLMMessage(
+            role=Role.USER,
+            content="""
+            How many columns are in the table in the 
+            document that is NOT about Supply Chain?
+            """,
+        ),
+    ]
+    response = llm.chat(messages=messages)
+    assert any(x in response.message for x in ["3", "three"])
+
+
+def test_llm_pdf_bytes_and_split():
+    """Test sending PDF files to LLM as bytes and split into pages."""
+    import io
+    from pathlib import Path
+
+    import fitz  # PyMuPDF
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Test creating attachment from bytes
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+
+    attachment_from_bytes = FileAttachment.from_bytes(
+        content=pdf_bytes,
+        filename="supply_chain_paper.pdf",
+    )
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="Who is the first author of this paper?",
+            files=[attachment_from_bytes],
+        ),
+    ]
+
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
+    response = llm.chat(messages=messages)
+
+    assert response is not None
+    assert "Takio" in response.message
+
+    # Test creating attachment from file-like object
+    pdf_io = io.BytesIO(pdf_bytes)
+    attachment_from_io = FileAttachment.from_io(
+        file_obj=pdf_io,
+        filename="paper_from_io.pdf",
+    )
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="What is the title of this paper?",
+            files=[attachment_from_io],
+        ),
+    ]
+
+    response = llm.chat(messages=messages)
+    assert "Supply Chain" in response.message
+
+    # Test splitting PDF into pages and sending individual pages
+    doc = fitz.open(pdf_path)
+    page_attachments = []
+
+    for i, page in enumerate(doc):
+        # Extract page as PDF
+        page_pdf = io.BytesIO()
+        page_doc = fitz.open()
+        page_doc.insert_pdf(doc, from_page=i, to_page=i)
+        page_doc.save(page_pdf)
+        page_pdf.seek(0)
+
+        # Create attachment for this page
+        page_attachment = FileAttachment.from_io(
+            file_obj=page_pdf,
+            filename=f"page_{i+1}.pdf",
+        )
+        page_attachments.append(page_attachment)
+
+    # Send just the first page
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="Based on just this page, what is this document about?",
+            files=[page_attachments[0]],
+        ),
+    ]
+
+    response = llm.chat(messages=messages)
+    assert "supply chain" in response.message.lower()
+
+    # Test with multiple pages as separate attachments
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="I'm sending you pages from a paper. "
+            "How many figures are shown across all pages?",
+            files=page_attachments,
+        ),
+    ]
+
+    response = llm.chat(messages=messages)
+    assert response is not None
+    assert any(
+        x in response.message.lower() for x in ["figure", "diagram", "illustration"]
+    )

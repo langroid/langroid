@@ -1242,7 +1242,7 @@ class LLMPdfParser(DocumentParser):
                             image_url=dict(url=data_uri),
                         )
                     elif "claude" in self.model_name.lower():
-                        # optimistrally try this: some API proxies like litellm
+                        # optimistically try this: some API proxies like litellm
                         # support this, and others may not.
                         file_content = dict(
                             type="file",
