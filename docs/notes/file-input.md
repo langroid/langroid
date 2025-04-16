@@ -155,7 +155,7 @@ input_message = agent.create_user_response(
 result = task.run(input_message)
 ```
 
-See the script [`pdf-json-no-parse.py`]([pdf-json-no-parse.py](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py)
+See the script [`pdf-json-no-parse.py`](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py)
 for a complete example of using file attachments with tasks.
 
 ## Practical Applications
