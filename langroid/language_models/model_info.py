@@ -31,6 +31,8 @@ class OpenAIChatModel(ModelName):
     O1 = "o1"
     O1_MINI = "o1-mini"
     O3_MINI = "o3-mini"
+    O3 = "o3"
+    O4_MINI = "o4-mini"
     GPT4_1 = "gpt-4.1"
     GPT4_1_MINI = "gpt-4.1-mini"
     GPT4_1_NANO = "gpt-4.1-nano"
@@ -226,6 +228,20 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_tools=False,
         description="O1 Reasoning LM",
     ),
+    OpenAIChatModel.O3.value: ModelInfo(
+        name=OpenAIChatModel.O3.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=10.0,
+        output_cost_per_million=40.0,
+        allows_streaming=True,
+        allows_system_message=False,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="O1 Reasoning LM",
+    ),
     OpenAIChatModel.O1_MINI.value: ModelInfo(
         name=OpenAIChatModel.O1_MINI.value,
         provider=ModelProvider.OPENAI,
@@ -247,6 +263,20 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=100_000,
         input_cost_per_million=1.1,
         output_cost_per_million=4.4,
+        allows_streaming=False,
+        allows_system_message=False,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="O3 Mini Reasoning LM",
+    ),
+    OpenAIChatModel.O4_MINI.value: ModelInfo(
+        name=OpenAIChatModel.O4_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=1.10,
+        output_cost_per_million=4.40,
         allows_streaming=False,
         allows_system_message=False,
         unsupported_params=["temperature", "stream"],

@@ -286,7 +286,8 @@ def test_keys():
 )
 def test_llm_langdb(model: str):
     """Test that LLM access via LangDB works."""
-
+    # override any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
     llm_config_langdb = lm.OpenAIGPTConfig(
         chat_model=model,
     )
@@ -308,6 +309,8 @@ def test_llm_langdb(model: str):
     ],
 )
 def test_llm_openrouter(model: str):
+    # override any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model,
     )
