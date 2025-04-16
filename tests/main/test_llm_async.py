@@ -10,6 +10,7 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPT,
     OpenAIGPTConfig,
 )
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.utils.configuration import Settings, set_global
 
 # allow streaming globally, but can be turned off by individual models
@@ -168,3 +169,98 @@ async def test_llm_openrouter(model: str):
         assert result.usage.total_tokens == 0
     else:
         assert result.usage.total_tokens > 0
+
+
+@pytest.mark.asyncio
+async def test_llm_pdf_attachment_async():
+    """Test sending a PDF file attachment to the LLM asynchronously."""
+    from pathlib import Path
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment = FileAttachment.from_path(pdf_path)
+
+    # Verify the attachment properties
+    assert attachment.mime_type == "application/pdf"
+    assert attachment.filename == "dummy.pdf"
+
+    # Create messages with the attachment
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER, content="What's title of the paper?", files=[attachment]
+        ),
+    ]
+
+    # Set up the LLM with a suitable model that supports PDFs
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+
+    # Get response from the LLM asynchronously
+    response = await llm.achat(messages=messages)
+
+    assert response is not None
+    assert response.message is not None
+    assert "Supply Chain" in response.message
+
+    # follow-up question
+    messages += [
+        LLMMessage(role=Role.ASSISTANT, content="Supply Chain"),
+        LLMMessage(role=Role.USER, content="Who is the first author?"),
+    ]
+    response = await llm.achat(messages=messages)
+    assert response is not None
+    assert response.message is not None
+    assert "Takio" in response.message
+
+
+@pytest.mark.xfail(
+    reason="Multi-file attachment may not work yet.",
+    run=True,
+    strict=False,
+)
+@pytest.mark.asyncio
+async def test_llm_multi_pdf_attachment_async():
+    from pathlib import Path
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment = FileAttachment.from_path(pdf_path)
+
+    # multiple attachments
+    pdf_path2 = Path("tests/main/data/sample-test.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment2 = FileAttachment.from_path(pdf_path2)
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="How many pages are in the Supply Chain paper?",
+            files=[attachment2, attachment],
+        ),
+    ]
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+    response = await llm.achat(messages=messages)
+    assert any(x in response.message for x in ["4", "four"])
+
+    # follow-up question
+    messages += [
+        LLMMessage(role=Role.ASSISTANT, content="4 pages"),
+        LLMMessage(
+            role=Role.USER,
+            content="""
+            How many columns are in the table in the 
+            document that is NOT about Supply Chain?
+            """,
+        ),
+    ]
+    response = await llm.achat(messages=messages)
+    try:
+        assert any(x in response.message for x in ["3", "three"])
+    except AssertionError:
+        pytest.xfail("Multi-files don't work yet?", strict=False)

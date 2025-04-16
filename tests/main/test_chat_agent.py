@@ -1,10 +1,11 @@
 from langroid.agent.base import NO_ANSWER
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
-from langroid.prompts.prompts_config import PromptsConfig
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -13,9 +14,7 @@ class _TestChatAgentConfig(ChatAgentConfig):
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         cache_config=RedisCacheConfig(fake=False),
         use_chat_for_completion=True,
-    )
-    prompts: PromptsConfig = PromptsConfig(
-        max_tokens=200,
+        max_output_tokens=200,
     )
 
 
@@ -195,3 +194,39 @@ def test_agent_init_state():
     assert agent.x == 0
     assert agent.total_llm_token_cost == 0
     assert agent.total_llm_token_usage == 0
+
+
+def test_agent_file_chat():
+    from pathlib import Path
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment = FileAttachment.from_path(pdf_path)
+    agent = ChatAgent(_TestChatAgentConfig())
+
+    # test ChatDocument input
+    user_input = ChatDocument(
+        content="Who is the first author of this paper?",
+        files=[attachment],
+        metadata=ChatDocMetaData(
+            sender=Entity.USER,
+        ),
+    )
+    response = agent.llm_response(user_input)
+    assert "Takio" in response.content
+
+    agent.clear_history()
+
+    # use create_user_response to create a ChatDocument
+    user_input = agent.create_user_response(
+        content="Who is the first author of this paper?",
+        files=[attachment],
+    )
+    response = agent.llm_response(user_input)
+    assert "Takio" in response.content
+
+    # follow-up
+    response = agent.llm_response("What's the title?")
+    assert "Supply Chain" in response.content

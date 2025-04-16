@@ -19,6 +19,7 @@ from langroid.language_models.base import (
 )
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.agent_chats import parse_message
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import extract_top_level_json, top_level_json_field
 from langroid.pydantic_v1 import BaseModel, Extra
 from langroid.utils.object_registry import ObjectRegistry
@@ -119,6 +120,7 @@ class ChatDocument(Document):
 
     reasoning: str = ""  # reasoning produced by a reasoning LLM
     content_any: Any = None  # to hold arbitrary data returned by responders
+    files: List[FileAttachment] = []  # list of file attachments
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
     oai_tool_id2result: Optional[OrderedDict[str, str]] = None
     oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
@@ -407,6 +409,7 @@ class ChatDocument(Document):
                         role=Role.TOOL,
                         tool_call_id=oai_tools[0].id,
                         content=content,
+                        files=message.files,
                         chat_document_id=chat_document_id,
                     )
                 ]
@@ -422,6 +425,7 @@ class ChatDocument(Document):
                         role=Role.TOOL,
                         tool_call_id=message.metadata.oai_tool_id,
                         content=content,
+                        files=message.files,
                         chat_document_id=chat_document_id,
                     )
                 ]
@@ -436,6 +440,7 @@ class ChatDocument(Document):
                         role=Role.TOOL,
                         tool_call_id=tool_id,
                         content=result or " ",
+                        files=message.files,
                         chat_document_id=chat_document_id,
                     )
                     for tool_id, result in message.oai_tool_id2result.items()
@@ -448,6 +453,7 @@ class ChatDocument(Document):
                 role=sender_role,
                 tool_id=tool_id,  # for OpenAI Assistant
                 content=content,
+                files=message.files,
                 function_call=fun_call,
                 tool_calls=oai_tool_calls,
                 name=sender_name,

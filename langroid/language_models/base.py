@@ -21,6 +21,7 @@ from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.model_info import ModelInfo, get_model_info
 from langroid.parsing.agent_chats import parse_message
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
 from langroid.pydantic_v1 import BaseModel, BaseSettings, Field
@@ -265,13 +266,14 @@ class LLMMessage(BaseModel):
     tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
     tool_id: str = ""  # used by OpenAIAssistant
     content: str
+    files: List[FileAttachment] = []
     function_call: Optional[LLMFunctionCall] = None
     tool_calls: Optional[List[OpenAIToolCall]] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     # link to corresponding chat document, for provenance/rewind purposes
     chat_document_id: str = ""
 
-    def api_dict(self, has_system_role: bool = True) -> Dict[str, Any]:
+    def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]:
         """
         Convert to dictionary for API request, keeping ONLY
         the fields that are expected in an API call!
@@ -285,6 +287,17 @@ class LLMMessage(BaseModel):
             dict: dictionary representation of LLM message
         """
         d = self.dict()
+        files: List[FileAttachment] = d.pop("files")
+        if len(files) > 0 and self.role == Role.USER:
+            # In there are files, then content is an array of
+            # different content-parts
+            d["content"] = [
+                dict(
+                    type="text",
+                    text=self.content,
+                )
+            ] + [f.to_dict(model) for f in self.files]
+
         # if there is a key k = "role" with value "system", change to "user"
         # in case has_system_role is False
         if not has_system_role and "role" in d and d["role"] == "system":

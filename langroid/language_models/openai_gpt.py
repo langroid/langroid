@@ -1879,7 +1879,10 @@ class OpenAIGPT(LanguageModel):
         args: Dict[str, Any] = dict(
             model=chat_model,
             messages=[
-                m.api_dict(has_system_role=self.info().allows_system_message)
+                m.api_dict(
+                    self.config.chat_model,
+                    has_system_role=self.info().allows_system_message,
+                )
                 for m in (llm_messages)
             ],
             max_completion_tokens=max_tokens,
