@@ -120,6 +120,11 @@ def main(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
     )
     reader_task = make_report_extractor_task(llm_config)
+    # If needed, split the PDF into pages, and do the below extraction page by page:
+    # from langroid.parsing.pdf_utils import pdf_split_pages
+    # pages, tmp_dir = pdf_split_pages(filename)
+    # (pages is a list of temp file names -- use each page individually as
+    # FileAttachment.from_path(page))
     input = reader_task.agent.create_user_response(
         content=f"""Extract the financial data from the attached file,
         and present the results using the TOOL `{FinReportTool.name()}`.        
