@@ -530,9 +530,6 @@ def test_llm_pdf_bytes_and_split():
     )
 
 
-PATH_PREFIX = "tests/main/data/color-shapes"
-
-
 @pytest.mark.parametrize(
     "path",
     [
