@@ -538,6 +538,7 @@ PATH_PREFIX = "tests/main/data/color-shapes"
     [
         "tests/main/data/color-shape-series.jpg",
         "tests/main/data/color-shape-series.png",
+        "tests/main/data/color-shape-series.pdf",
         "https://upload.wikimedia.org/wikipedia/commons/1/18/Seriation_task_w_shapes.jpg",
     ],
 )
@@ -553,7 +554,7 @@ def test_llm_image_input(path: str):
         ),
     ]
     # Set up the LLM with a suitable model that supports PDFs
-    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
 
     response = llm.chat(messages=messages)
     print(response.message)

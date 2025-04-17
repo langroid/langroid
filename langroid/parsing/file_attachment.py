@@ -209,39 +209,38 @@ class FileAttachment(BaseModel):
         Returns:
             Dictionary with file data
         """
-        if "gemini" in model.lower():
-            return dict(type="image_url", image_url=dict(url=self.to_data_uri()))
-        else:
-            # optimistically try this: some API proxies like litellm
-            # support this, and others may not.
-            # For OpenAI models, handle images differently than other files
-            # For OpenAI models, handle images differently than other files
-            if self.mime_type and self.mime_type.startswith("image/"):
-                image_url_dict = {}
+        if (
+            self.mime_type
+            and self.mime_type.startswith("image/")
+            or "gemini" in model.lower()
+        ):
+            # for gemini models, we use `image_url` for both pdf-files and images
 
-                # If we have a URL and it's a full http/https URL, use it directly
-                if self.url and (
-                    self.url.startswith("http://") or self.url.startswith("https://")
-                ):
-                    image_url_dict["url"] = self.url
-                # Otherwise use base64 data URI
-                else:
-                    image_url_dict["url"] = self.to_data_uri()
+            image_url_dict = {}
 
-                # Add detail parameter if specified
-                if self.detail:
-                    image_url_dict["detail"] = self.detail
-
-                return dict(
-                    type="image_url",
-                    image_url=image_url_dict,
-                )
+            # If we have a URL and it's a full http/https URL, use it directly
+            if self.url and (
+                self.url.startswith("http://") or self.url.startswith("https://")
+            ):
+                image_url_dict["url"] = self.url
+            # Otherwise use base64 data URI
             else:
-                # For non-image files
-                return dict(
-                    type="file",
-                    file=dict(
-                        filename=self.filename,
-                        file_data=self.to_data_uri(),
-                    ),
-                )
+                image_url_dict["url"] = self.to_data_uri()
+
+            # Add detail parameter if specified
+            if self.detail:
+                image_url_dict["detail"] = self.detail
+
+            return dict(
+                type="image_url",
+                image_url=image_url_dict,
+            )
+        else:
+            # For non-image files
+            return dict(
+                type="file",
+                file=dict(
+                    filename=self.filename,
+                    file_data=self.to_data_uri(),
+                ),
+            )
