@@ -53,7 +53,10 @@ response = llm.chat(messages=messages)
 
 ## Supported File Formats
 
-Currently the OpenAI-API supports only PDFs (both image-PDFs and "true" PDFs)
+Currently the OpenAI-API supports:
+
+- PDF files (including image-based PDFs)
+- image files and URLs
 
 
 ## Creating Attachments
