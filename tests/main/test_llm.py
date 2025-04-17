@@ -1,7 +1,10 @@
+import io
 import os
 import random
 import warnings
+from pathlib import Path
 
+import fitz  # PyMuPDF
 import openai
 import pytest
 
@@ -339,7 +342,6 @@ def test_followup_standalone():
 
 def test_llm_pdf_attachment():
     """Test sending a PDF file attachment to the LLM."""
-    from pathlib import Path
 
     # Path to the test PDF file
     pdf_path = Path("tests/main/data/dummy.pdf")
@@ -386,7 +388,6 @@ def test_llm_pdf_attachment():
     strict=False,
 )
 def test_llm_multi_pdf_attachments():
-    from pathlib import Path
 
     # Path to the test PDF file
     pdf_path = Path("tests/main/data/dummy.pdf")
@@ -432,10 +433,6 @@ def test_llm_multi_pdf_attachments():
 
 def test_llm_pdf_bytes_and_split():
     """Test sending PDF files to LLM as bytes and split into pages."""
-    import io
-    from pathlib import Path
-
-    import fitz  # PyMuPDF
 
     # Path to the test PDF file
     pdf_path = Path("tests/main/data/dummy.pdf")
@@ -531,3 +528,33 @@ def test_llm_pdf_bytes_and_split():
     assert any(
         x in response.message.lower() for x in ["figure", "diagram", "illustration"]
     )
+
+
+PATH_PREFIX = "tests/main/data/color-shapes"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/main/data/color-shape-series.jpg",
+        "tests/main/data/color-shape-series.png",
+        "https://upload.wikimedia.org/wikipedia/commons/1/18/Seriation_task_w_shapes.jpg",
+    ],
+)
+def test_llm_image_input(path: str):
+    attachment = FileAttachment.from_path(path, detail="low")
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="How many squares are here?",
+            files=[attachment],
+        ),
+    ]
+    # Set up the LLM with a suitable model that supports PDFs
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
+
+    response = llm.chat(messages=messages)
+    print(response.message)
+    assert any(x in response.message for x in ["three", "3"])

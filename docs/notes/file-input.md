@@ -1,6 +1,7 @@
-# PDF File Attachments in Langroid
+# PDF Files and Image inputs to LLMs
 
-Langroid supports sending PDF files directly to Large Language Models with multi-modal 
+Langroid supports sending PDF files and images (either URLs or local files)
+directly to Large Language Models with multi-modal 
 capabilities. This feature allows models to "see" files and other documents,
 and works with most multi-modal models served via an OpenAI-compatible API,
 e.g.:
@@ -19,6 +20,12 @@ To see example usage, see:
   **without having to first parse it to markdown** (which is inherently lossy).
 
 ## Basic Usage directly with LLM `chat` and `achat` methods
+
+First create a `FileAttachment` object using one of the `from_` methods.
+For image (`png`, `jpg/jpeg`) files you can use `FileAttachment.from_path(p)`
+where `p` is either a local file path, or a http/https URL.
+For PDF files, you can use `from_path` with a local file, or `from_bytes` or `from_io`
+(see below). In the examples below we show only `pdf` examples.
 
 ```python
 from langroid.language_models.base import LLMMessage, Role
@@ -80,8 +87,9 @@ response = llm.chat(messages=messages)
 ## Multiple Attachments
 
 Langroid allows multiple files can be sent in a single message,
-but as of 16 Apr 2025, this does not appear to be properly supported in the 
-APIs (they seem to only use the last file attached).
+but as of 16 Apr 2025, sending multiple PDF files does not appear to be properly supported in the 
+APIs (they seem to only use the last file attached), although sending multiple 
+images does work. 
 
 ```python
 messages = [

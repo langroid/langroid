@@ -3,6 +3,7 @@ import mimetypes
 import uuid
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, Optional, Union
+from urllib.parse import urlparse
 
 from langroid.pydantic_v1 import BaseModel
 
@@ -13,6 +14,8 @@ class FileAttachment(BaseModel):
     content: bytes
     filename: Optional[str] = None
     mime_type: str = "application/octet-stream"
+    url: str | None = None
+    detail: str | None = None
 
     def __init__(self, **data: Any) -> None:
         """Initialize with sensible defaults for filename if not provided."""
@@ -23,7 +26,11 @@ class FileAttachment(BaseModel):
         super().__init__(**data)
 
     @classmethod
-    def from_path(cls, file_path: Union[str, Path]) -> "FileAttachment":
+    def _from_path(
+        cls,
+        file_path: Union[str, Path],
+        detail: Optional[str] = None,
+    ) -> "FileAttachment":
         """Create a FileAttachment from a file path.
 
         Args:
@@ -40,7 +47,74 @@ class FileAttachment(BaseModel):
         if mime_type is None:
             mime_type = "application/octet-stream"
 
-        return cls(content=content, filename=path.name, mime_type=mime_type)
+        return cls(
+            content=content,
+            filename=path.name,
+            mime_type=mime_type,
+            detail=detail,
+        )
+
+    @classmethod
+    def _from_url(
+        cls,
+        url: str,
+        content: Optional[bytes] = None,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        detail: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a URL.
+
+        Args:
+            url: URL to the file
+            content: Optional raw bytes content (if already fetched)
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename or url
+
+        Returns:
+            FileAttachment instance
+        """
+        if filename is None and url:
+            # Extract filename from URL if possible
+
+            parsed_url = urlparse(url)
+            path = parsed_url.path
+            filename = path.split("/")[-1] if path else None
+
+        if mime_type is None and filename:
+            mime_type, _ = mimetypes.guess_type(filename)
+
+        return cls(
+            content=content or b"",  # Empty bytes if no content provided
+            filename=filename,
+            mime_type=mime_type or "application/octet-stream",
+            url=url,
+            detail=detail,
+        )
+
+    @classmethod
+    def from_path(
+        cls,
+        path: Union[str, Path],
+        detail: str | None = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from either a local file path or a URL.
+
+        Args:
+            path_or_url: Path to the file or URL to fetch
+
+        Returns:
+            FileAttachment instance
+        """
+        # Convert to string if Path object
+        path_str = str(path)
+
+        # Check if it's a URL
+        if path_str.startswith(("http://", "https://", "ftp://")):
+            return cls._from_url(url=path_str, detail=detail)
+        else:
+            # Assume it's a local file path
+            return cls._from_path(path_str, detail=detail)
 
     @classmethod
     def from_bytes(
@@ -137,21 +211,37 @@ class FileAttachment(BaseModel):
         """
         if "gemini" in model.lower():
             return dict(type="image_url", image_url=dict(url=self.to_data_uri()))
-        elif "claude" in model.lower():
+        else:
             # optimistically try this: some API proxies like litellm
             # support this, and others may not.
-            return dict(
-                type="file",
-                file=dict(
-                    file_data=self.to_data_uri(),
-                ),
-            )
-        else:
-            # fallback: assume file upload is similar to OpenAI API
-            return dict(
-                type="file",
-                file=dict(
-                    filename=self.filename,
-                    file_data=self.to_data_uri(),
-                ),
-            )
+            # For OpenAI models, handle images differently than other files
+            # For OpenAI models, handle images differently than other files
+            if self.mime_type and self.mime_type.startswith("image/"):
+                image_url_dict = {}
+
+                # If we have a URL and it's a full http/https URL, use it directly
+                if self.url and (
+                    self.url.startswith("http://") or self.url.startswith("https://")
+                ):
+                    image_url_dict["url"] = self.url
+                # Otherwise use base64 data URI
+                else:
+                    image_url_dict["url"] = self.to_data_uri()
+
+                # Add detail parameter if specified
+                if self.detail:
+                    image_url_dict["detail"] = self.detail
+
+                return dict(
+                    type="image_url",
+                    image_url=image_url_dict,
+                )
+            else:
+                # For non-image files
+                return dict(
+                    type="file",
+                    file=dict(
+                        filename=self.filename,
+                        file_data=self.to_data_uri(),
+                    ),
+                )
