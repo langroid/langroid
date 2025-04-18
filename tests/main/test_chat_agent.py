@@ -27,6 +27,22 @@ def test_chat_agent(test_settings: Settings):
     assert "Paris" in response.content
 
 
+def test_chat_agent_system_message():
+    """Test whether updating the system message works as expected,
+    depending on whether we update the config or the agent directly.
+    """
+    cfg = _TestChatAgentConfig(system_message="Triple any number given to you")
+    agent = ChatAgent(cfg)
+    agent.config.system_message = "Double any number given to you"
+    response = agent.llm_response("5")
+    assert "15" in response.content
+
+    agent.clear_history()
+    agent.system_message = "Increment any number given to you, by 10"
+    response = agent.llm_response("6")
+    assert "16" in response.content
+
+
 def test_responses(test_settings: Settings):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
