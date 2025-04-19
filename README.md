@@ -415,9 +415,8 @@ section above)
 providers ([local/open](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial](https://langroid.github.io/langroid/tutorials/non-openai-llms/)) via proxy libraries and local model servers
 such as [ollama](https://github.com/ollama), [oobabooga](https://github.com/oobabooga/text-generation-webui), 
   [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. See the [supported LLMs](https://langroid.github.io/langroid/tutorials/supported-models/). 
-- **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) and 
-  [Momento](https://www.gomomento.com/) to cache LLM responses.
-- **Vector-stores**: [LanceDB](https://github.com/lancedb/lancedb), [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/) are currently supported.
+- **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) to cache LLM responses.
+- **Vector-stores**: [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/), LanceDB, Pinecone, PostgresDB (PGVector), Weaviate are currently supported.
   Vector stores allow for Retrieval-Augmented-Generation (RAG).
 - **Grounding and source-citation:** Access to external documents via vector-stores 
    allows for grounding and source-citation.
