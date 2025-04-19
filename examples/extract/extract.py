@@ -127,9 +127,6 @@ def main(
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
 ) -> None:
     config = ExtractorConfig(
         use_functions_api=fn_api,
@@ -140,7 +137,7 @@ def main(
             debug=debug,
             cache=not nocache,
             stream=not no_stream,
-            cache_type=cache_type,
+            cache_type="redis",
         )
     )
     chat(config)

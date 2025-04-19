@@ -242,10 +242,6 @@ meilisearch = [
     "meilisearch-python-sdk<3.0.0,>=2.2.3",
 ]
 
-momento = [
-    "momento<1.21.0,>=1.10.2",
-]
-
 fastembed = [
     "fastembed<0.4.0,>=0.3.1",
 ]
