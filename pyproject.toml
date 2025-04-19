@@ -37,7 +37,6 @@ dependencies = [
     "openai<2.0.0,>=1.61.1",
     "pandas<3.0.0,>=2.0.3",
     "prettytable<4.0.0,>=3.8.0",
-    "protobuf>=5.26.1,<7.0.0",
     "pydantic<3.0.0,>=1",
     "pygithub<2.0.0,>=1.58.1",
     "pygments<3.0.0,>=2.15.1",
