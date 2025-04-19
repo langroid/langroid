@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     progress: bool = False  # show progress spinners/bars?
     stream: bool = True  # stream output?
     cache: bool = True  # use cache?
-    cache_type: Literal["redis", "fakeredis", "momento", "none"] = "redis"  # cache type
+    cache_type: Literal["redis", "fakeredis", "none"] = "redis"  # cache type
     chat_model: str = ""  # language model name, e.g. litellm/ollama/llama2
     quiet: bool = False  # quiet mode (i.e. suppress all output)?
     notebook: bool = False  # running in a notebook?

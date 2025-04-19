@@ -627,20 +627,7 @@ class OpenAIGPT(LanguageModel):
 
         self.cache: CacheDB | None = None
         use_cache = self.config.cache_config is not None
-        if settings.cache_type == "momento" and use_cache:
-            from langroid.cachedb.momento_cachedb import (
-                MomentoCache,
-                MomentoCacheConfig,
-            )
-
-            if config.cache_config is None or not isinstance(
-                config.cache_config,
-                MomentoCacheConfig,
-            ):
-                # switch to fresh momento config if needed
-                config.cache_config = MomentoCacheConfig()
-            self.cache = MomentoCache(config.cache_config)
-        elif "redis" in settings.cache_type and use_cache:
+        if "redis" in settings.cache_type and use_cache:
             if config.cache_config is None or not isinstance(
                 config.cache_config,
                 RedisCacheConfig,
@@ -656,7 +643,7 @@ class OpenAIGPT(LanguageModel):
         elif settings.cache_type != "none" and use_cache:
             raise ValueError(
                 f"Invalid cache type {settings.cache_type}. "
-                "Valid types are momento, redis, fakeredis, none"
+                "Valid types are redis, fakeredis, none"
             )
 
         self.config._validate_litellm()
