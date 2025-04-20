@@ -123,6 +123,9 @@ class DocChatAgentConfig(ChatAgentConfig):
         None  # filter condition for various lexical/semantic search fns
     )
     conversation_mode: bool = True  # accumulate message history?
+    # retain retrieved context? Setting to True increases token consumption, but
+    # helps LLM fix citation errors and improve accuracy of follow-up questions.
+    retain_context: bool = False
     # In assistant mode, DocChatAgent receives questions from another Agent,
     # and those will already be in stand-alone form, so in this mode
     # there is no need to convert them to stand-alone form.
@@ -861,8 +864,11 @@ class DocChatAgent(ChatAgent):
         # one for `final_prompt`, and one for the LLM response
 
         if self.config.conversation_mode:
-            # respond with temporary context
-            answer_doc = super()._llm_response_temp_context(question, final_prompt)
+            if self.config.retain_context:
+                answer_doc = super().llm_response(final_prompt)
+            else:
+                # respond with temporary context
+                answer_doc = super()._llm_response_temp_context(question, final_prompt)
         else:
             answer_doc = super().llm_response_forget(final_prompt)
 
