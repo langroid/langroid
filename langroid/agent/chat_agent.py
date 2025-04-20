@@ -735,7 +735,11 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(t)
                 self.llm_functions_usable.discard(t)
 
-        # Set tool instructions and JSON format instructions
+        self._update_tool_instructions()
+
+    def _update_tool_instructions(self) -> None:
+        # Set tool instructions and JSON format instructions,
+        # in case Tools have been enabled/disabled.
         if self.config.use_tools:
             self.system_tool_format_instructions = self.tool_format_rules()
         self.system_tool_instructions = self.tool_instructions()
@@ -977,6 +981,8 @@ class ChatAgent(Agent):
             self.llm_tools_usable.discard(t)
             self.llm_functions_usable.discard(t)
 
+        self._update_tool_instructions()
+
     def disable_message_use_except(self, message_class: Type[ToolMessage]) -> None:
         """
         Disable this agent from USING ALL messages EXCEPT a message class (Tool)
@@ -988,6 +994,7 @@ class ChatAgent(Agent):
         for r in to_remove:
             self.llm_tools_usable.discard(r)
             self.llm_functions_usable.discard(r)
+        self._update_tool_instructions()
 
     def _load_output_format(self, message: ChatDocument) -> None:
         """

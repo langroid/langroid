@@ -343,11 +343,15 @@ def new_agent(test_settings: Settings, vecdb) -> DocChatAgent:
 
 @pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
 @pytest.mark.parametrize("conv_mode", [True, False])
-def test_doc_chat_followup(test_settings: Settings, new_agent, conv_mode: bool):
+@pytest.mark.parametrize("retain_context", [True, False])
+def test_doc_chat_followup(
+    test_settings: Settings, new_agent, conv_mode: bool, retain_context: bool
+):
     """
     Test whether follow-up question is handled correctly.
     """
     new_agent.config.conversation_mode = conv_mode
+    new_agent.config.retain_context = retain_context
     set_global(test_settings)
     task = Task(
         new_agent,
@@ -362,17 +366,36 @@ def test_doc_chat_followup(test_settings: Settings, new_agent, conv_mode: bool):
     result = task.run("When was he born?")
     assert "1889" in result.content
 
+    # test retain_context when conv_mode is True
+    new_agent.init_state()
+    question = "Who was Charlie Foster?"
+    response = new_agent.llm_response(question)
+    assert "comedian" in response.content.lower()
+    if conv_mode:
+        if retain_context:
+            # context is retained, i.e.,
+            # the user msg has both extracted chunks and the question itself
+            assert len(new_agent.message_history[-2].content) > 2 * len(question)
+        else:
+            # context is not retained, i.e., the user msg has only the question
+            assert len(new_agent.message_history[-2].content) < len(question) + 10
+
 
 @pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
 @pytest.mark.parametrize("conv_mode", [True, False])
+@pytest.mark.parametrize("retain_context", [True, False])
 @pytest.mark.asyncio
 async def test_doc_chat_followup_async(
-    test_settings: Settings, new_agent, conv_mode: bool
+    test_settings: Settings,
+    new_agent,
+    conv_mode: bool,
+    retain_context: bool,
 ):
     """
     Test whether follow-up question is handled correctly (in async mode).
     """
     new_agent.config.conversation_mode = conv_mode
+    new_agent.config.retain_context = retain_context
     set_global(test_settings)
     task = Task(
         new_agent,
@@ -386,6 +409,20 @@ async def test_doc_chat_followup_async(
 
     result = await task.run_async("When was he born?")
     assert "1889" in result.content
+
+    # test retain_context when conv_mode is True
+    new_agent.init_state()
+    question = "Who was Charlie Foster?"
+    response = await new_agent.llm_response_async(question)
+    assert "comedian" in response.content.lower()
+    if conv_mode:
+        if retain_context:
+            # context is retained, i.e.,
+            # the user msg has both extracted chunks and the question itself
+            assert len(new_agent.message_history[-2].content) > 2 * len(question)
+        else:
+            # context is not retained, i.e., the user msg has only the question
+            assert len(new_agent.message_history[-2].content) < len(question) + 10
 
 
 # setup config for retrieval test, with n_neighbor_chunks=2
