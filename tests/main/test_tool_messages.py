@@ -171,7 +171,7 @@ def test_enable_message(
 @pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
 def test_disable_message_handling(msg_class: Optional[ToolMessage]):
     agent.enable_message([FileExistsMessage, PythonVersionMessage])
-    usable_tools = agent.llm_tools_usable
+    usable_tools = agent.llm_tools_usable.copy()
 
     agent.disable_message_handling(msg_class)
     tools = agent._get_tool_list(msg_class)
@@ -186,7 +186,7 @@ def test_disable_message_handling(msg_class: Optional[ToolMessage]):
 def test_disable_message_use(msg_class: Optional[ToolMessage]):
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
-    usable_tools = agent.llm_tools_usable
+    usable_tools = agent.llm_tools_usable.copy()
 
     agent.disable_message_use(msg_class)
     tools = agent._get_tool_list(msg_class)
@@ -195,6 +195,14 @@ def test_disable_message_use(msg_class: Optional[ToolMessage]):
         assert tool not in agent.llm_functions_usable
         assert tool in agent.llm_tools_handled
         assert tool in agent.llm_functions_handled
+
+    # check that disabling tool-use works as expected:
+    # Tools part of sys msg should be updated, and
+    # LLM should not be able to use this tool
+    agent.disable_message_use(FileExistsMessage)
+    agent.disable_message_use(PythonVersionMessage)
+    response = agent.llm_response_forget("Is there a README.md file?")
+    assert agent.get_tool_messages(response) == []
 
 
 @pytest.mark.parametrize("msg_cls", [PythonVersionMessage, FileExistsMessage])
@@ -355,7 +363,7 @@ def test_llm_tool_message(
     )
 
     llm_msg = agent.llm_response_forget(prompt)
-    tool_name = message_class.default_value("request")
+    tool_name = message_class.name()
     if use_functions_api:
         if use_tools_api:
             assert llm_msg.oai_tool_calls[0].function.name == tool_name
