@@ -1,5 +1,4 @@
 import tempfile
-from enum import STRICT
 
 import pytest
 
