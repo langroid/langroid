@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import pytest
 
@@ -11,7 +12,7 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPTConfig,
 )
 from langroid.parsing.file_attachment import FileAttachment
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import Settings, set_global, settings
 
 # allow streaming globally, but can be turned off by individual models
 set_global(Settings(stream=True))
@@ -159,6 +160,8 @@ async def test_llm_langdb(model: str):
     ],
 )
 async def test_llm_openrouter(model: str):
+    # override models set via pytest ... --m <model>
+    settings.chat_model = model
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model,
     )
@@ -264,3 +267,22 @@ async def test_llm_multi_pdf_attachment_async():
         assert any(x in response.message for x in ["3", "three"])
     except AssertionError:
         pytest.xfail("Multi-files don't work yet?", strict=False)
+
+
+@pytest.mark.asyncio
+async def test_litellm_model_key_async():
+    """
+    Test that passing in explicit api_key works with `litellm/*` models
+    """
+    model = "litellm/anthropic/claude-3-5-haiku-latest"
+    # disable any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model, api_key=os.getenv("ANTHROPIC_API_KEY", "")
+    )
+
+    # Create the LLM instance
+    llm = lm.OpenAIGPT(config=llm_config)
+    print(f"\nTesting with model: {llm.chat_model_orig} => {llm.config.chat_model}")
+    response = await llm.achat("What is 3+4?")
+    assert "7" in response.message

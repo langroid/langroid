@@ -872,6 +872,7 @@ class DocChatAgent(ChatAgent):
         else:
             answer_doc = super().llm_response_forget(final_prompt)
 
+        assert answer_doc is not None, "LLM response should not be None here"
         final_answer = answer_doc.content.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
 

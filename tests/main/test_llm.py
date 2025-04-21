@@ -556,3 +556,21 @@ def test_llm_image_input(path: str):
     response = llm.chat(messages=messages)
     print(response.message)
     assert any(x in response.message for x in ["three", "3"])
+
+
+def test_litellm_model_key():
+    """
+    Test that passing in explicit api_key works with `litellm/*` models
+    """
+    model = "litellm/anthropic/claude-3-5-haiku-latest"
+    # disable any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model, api_key=os.getenv("ANTHROPIC_API_KEY", "")
+    )
+
+    # Create the LLM instance
+    llm = lm.OpenAIGPT(config=llm_config)
+    print(f"\nTesting with model: {llm.chat_model_orig} => {llm.config.chat_model}")
+    response = llm.chat("What is 3+4?")
+    assert "7" in response.message

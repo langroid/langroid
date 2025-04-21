@@ -1893,7 +1893,8 @@ class OpenAIGPT(LanguageModel):
             max_completion_tokens=max_tokens,
             stream=self.get_stream(),
         )
-        if self.get_stream():
+        if self.get_stream() and "groq" not in self.chat_model_orig:
+            # groq fails when we include stream_options in the request
             args.update(
                 dict(
                     # get token-usage numbers in stream mode from OpenAI API,
