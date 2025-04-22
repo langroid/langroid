@@ -270,7 +270,7 @@ asyncio = [
 firecrawl = [
     "firecrawl-py>=1.13.5",
 ]
-docker = [
+docker-code = [
     "asyncio-atexit>=1.0.1",
     "docker>=7.1.0",
 ]
