@@ -72,7 +72,7 @@ jobs:
     env:
       CI: true # allows conditional skipping of tests based on this env var
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
-      ANTHROPY_API_KEY: ${{ secrets.ANTHROPY_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GITHUB_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
