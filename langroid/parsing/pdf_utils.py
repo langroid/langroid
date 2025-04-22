@@ -17,12 +17,12 @@ if fitz is None:
 
 
 def pdf_split_pages(
-    input_pdf: Union[BytesIO, BinaryIO],
+    input_pdf: Union[BytesIO, BinaryIO, str],
 ) -> Tuple[List[Path], TemporaryDirectory[Any]]:
     """Splits a PDF into individual pages in a temporary directory.
 
     Args:
-        input_pdf: Input PDF file in bytes or binary mode
+        input_pdf: Input PDF file in bytes, binary mode, or a file path
         max_workers: Maximum number of concurrent workers for parallel processing
 
     Returns:
@@ -36,7 +36,10 @@ def pdf_split_pages(
         tmp_dir.cleanup()  # Clean up temp files when done
     """
     tmp_dir = tempfile.TemporaryDirectory()
-    doc = fitz.open(stream=input_pdf, filetype="pdf")
+    if isinstance(input_pdf, str):
+        doc = fitz.open(input_pdf)
+    else:
+        doc = fitz.open(stream=input_pdf, filetype="pdf")
     paths = []
 
     for page_num in range(len(doc)):

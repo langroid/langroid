@@ -1,27 +1,29 @@
-# Using the Gemini PDF Parser
+# Using the LLM-based PDF Parser
 
 
-- Converts PDF content into Markdown format.
-- Uses Gemini multimodal models to describe images within PDFs.
+- Converts PDF content into Markdown format using Multimodal models.
+- Uses multimodal models to describe images within PDFs.
 - Supports page-wise or chunk-based processing for optimized performance.
 
 
-### Initializing the Gemini PDF Parser
+### Initializing the LLM-based PDF Parser
 
-Make sure you have set up your gemini api key in env as `GEMINI_API_KEY`
+Make sure you have set up your API key for whichever model you 
+specify in `model_name` below.
 
-You can initialize the Gemini PDF parser as follows:
+You can initialize the LLM PDF parser as follows:
 
 ```python
 parsing_config = ParsingConfig(
     n_neighbor_ids=2,
     pdf=PdfParsingConfig(
-        library="gemini",
-        gemini_config=GeminiConfig(
+        library="llm-pdf-parser",
+        llm_parser_config=LLMPdfParserConfig(
             model_name="gemini-2.0-flash",
             split_on_page=True,
             max_tokens=7000,
             requests_per_minute=5,
+            timeout=60, # increase this for large documents
         ),
     ),
 )
@@ -31,7 +33,7 @@ parsing_config = ParsingConfig(
 ## Parameters
 
 ### `model_name`
-Specifies the Gemini model to use for PDF conversion. Default: `gemini-2.0-flash`.
+Specifies the model to use for PDF conversion. Default: `gemini/gemini-2.0-flash`.
 
 ### `max_tokens`
 Limits the number of tokens in the input. The model's output limit is **8192 tokens**.

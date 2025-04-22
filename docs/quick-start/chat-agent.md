@@ -43,7 +43,7 @@ import langroid as lr
 config = lr.ChatAgentConfig( #(1)!
     name="MyAgent", # note there should be no spaces in the name!
     llm = lr.language_models.OpenAIGPTConfig(
-      chat_model=lr.language_models.OpenAIChatModel.GPT4,
+      chat_model=lr.language_models.OpenAIChatModel.GPT4o,
     ),
     system_message="You are a helpful assistant" #(2)! 
 )

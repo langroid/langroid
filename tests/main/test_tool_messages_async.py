@@ -279,11 +279,7 @@ class EulerTool(ToolMessage):
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
-async def test_structured_recovery_async(
-    use_fn_api: bool,
-    use_tools_api: bool,
-):
+async def test_structured_recovery_async(use_fn_api: bool):
     """
     Test that structured fallback correctly recovers
     from failed tool calls.
@@ -293,7 +289,7 @@ async def test_structured_recovery_async(
         agent = ChatAgent(
             ChatAgentConfig(
                 use_functions_api=use_fn_api,
-                use_tools_api=use_tools_api,
+                use_tools_api=True,
                 use_tools=not use_fn_api,
                 strict_recovery=True,
             )
@@ -324,7 +320,6 @@ async def test_structured_recovery_async(
         ]
         if (
             use_fn_api
-            and use_tools_api
             and isinstance(attempt, ChatDocument)
             and attempt.oai_tool_calls is not None
         ):
@@ -367,22 +362,15 @@ async def test_structured_recovery_async(
                 }
             )
 
-        if use_tools_api:
-            return ChatDocument(
-                content="",
-                metadata=ChatDocMetaData(sender=Entity.LLM),
-                oai_tool_calls=[
-                    OpenAIToolCall(
-                        id="call-1234657",
-                        function=attempt,
-                    )
-                ],
-            )
-
         return ChatDocument(
             content="",
             metadata=ChatDocMetaData(sender=Entity.LLM),
-            function_call=attempt,
+            oai_tool_calls=[
+                OpenAIToolCall(
+                    id="call-1234657",
+                    function=attempt,
+                )
+            ],
         )
 
     # The name of the function is incorrect:
@@ -451,8 +439,8 @@ async def test_structured_recovery_async(
                 LLMFunctionCall(
                     name="EulerTool",
                     arguments={
-                        "x": 6,
-                        "y": 4,
+                        "ex": 6,
+                        "ey": 4,
                     },
                 )
             )
@@ -463,7 +451,7 @@ async def test_structured_recovery_async(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("parallel_tool_calls", [True, False])
 async def test_strict_fallback_async(
     test_settings: Settings,

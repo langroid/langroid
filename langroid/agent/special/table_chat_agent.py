@@ -118,8 +118,8 @@ class TableChatAgentConfig(ChatAgentConfig):
     vecdb: None | VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT4,
-        completion_model=OpenAIChatModel.GPT4,
+        chat_model=OpenAIChatModel.GPT4o,
+        completion_model=OpenAIChatModel.GPT4o,
     )
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=1000,

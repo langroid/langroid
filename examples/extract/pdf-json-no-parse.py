@@ -1,21 +1,27 @@
 """
-Extract financial items from a financial report document, in two stages:
+Variant of pdf-json.py, but uses a Multi-modal LM directly to extract info
+without the need for any parsing, i.e. instead of:
+     pdf -> markdown -> structured output,
+we directly use the multi-modal LM to do:
+    pdf -> structured output.
+With a sufficiently good multi-modal LM, this can have many advantages:
+- faster as it avoids parsing to markdown
+- higher-fidelity extraction since markdown rendering is inherently lossy,
+  and may lose important layout and other information on the
+  relationships among elements.
 
-1. use Langroid's PDF Parser with `marker` library to
-   extract content from (pdf) report in markdown format
-2. use Langroid Agent equipped with a structured output tool to extract structured data
+Instead, directly extracting the info using a multi-modal LM is like
+asking the model to directly extract what it "sees".
+
+---
+
+Extract financial items from a financial report document, directly
+using a multi-modal LM without intermediate parsing steps.
 
 Run like this: (drop the -m arg to default to GPT4o)
 
-uv run examples/pdf-json.py -f examples/extract/um-financial-report.pdf \
-    -m gemini/gemini-2.0-pro-exp-02-05
-
-NOTES:
-- this script uses the `marker` library for parsing PDF content,
-and to get that to work with langroid, install langroid with the `marker-pdf` extra,
-e.g.
-uv pip install "langroid[marker-pdf]"
-pip install "langroid[marker-pdf]"
+uv run examples/pdf-json-no-parse.py -f examples/extract/um-financial-report.pdf \
+    -m gemini/gemini-2.0-pro-exp-03-25
 
 - The structured extracted is very simple, consisting of 3 fields: item, year, and value.
   You may need to adapt it to your needs.
@@ -23,8 +29,7 @@ pip install "langroid[marker-pdf]"
 
 import os
 
-from langroid.parsing.document_parser import DocumentParser
-from langroid.parsing.parser import PdfParsingConfig, ParsingConfig, LLMPdfParserConfig
+from langroid.parsing.file_attachment import FileAttachment
 import logging
 from fire import Fire
 from rich.console import Console
@@ -96,7 +101,7 @@ def make_report_extractor_task(
             over multiple years, and especially, extracting the 
             financial item, year and value.
             
-            When you receive a markdown-formatted financial report, your job is to
+            When you receive a financial report, your job is to
             extract the financial data from the report and present it in a structured
             form using the TOOL `{FinReportTool.name()}`.
             """,
@@ -111,24 +116,22 @@ def main(
     filename: str,
     model: str = "",
 ) -> None:
-    parsing_config = ParsingConfig(
-        pdf=PdfParsingConfig(
-            library="llm-pdf-parser",
-            llm_parser_config=LLMPdfParserConfig(
-                model_name="gemini/gemini-2.0-flash",
-                split_on_page=True,
-                max_tokens=7000,
-                requests_per_minute=5,
-            ),
-        )
-    )
-    pdf_parser = DocumentParser.create(filename, config=parsing_config)
-    content = pdf_parser.get_doc().content
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
     )
     reader_task = make_report_extractor_task(llm_config)
-    result: FinalResult = reader_task.run(content)
+    # If needed, split the PDF into pages, and do the below extraction page by page:
+    # from langroid.parsing.pdf_utils import pdf_split_pages
+    # pages, tmp_dir = pdf_split_pages(filename)
+    # (pages is a list of temp file names -- use each page individually as
+    # FileAttachment.from_path(page))
+    input = reader_task.agent.create_user_response(
+        content=f"""Extract the financial data from the attached file,
+        and present the results using the TOOL `{FinReportTool.name()}`.        
+        """,
+        files=[FileAttachment.from_path(filename)],
+    )
+    result: FinalResult = reader_task.run(input)
     if result is None:
         logger.warning("No Financial items found.")
         return

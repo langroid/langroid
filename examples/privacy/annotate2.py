@@ -4,7 +4,7 @@
 
 
 Meant to be used with local LLMs, using the -m option (see below).
-It works fine with GPT4, but may not work with a local LLM.
+It works fine with GPT4o, but may not work with a local LLM.
 
 You type a sentence containing potentially sensitive information, and the agent
 will annotate sensitive portions of the sentence with the appropriate category.

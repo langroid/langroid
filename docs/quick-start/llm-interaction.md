@@ -15,7 +15,7 @@ OpenAI GPT chat models:
 import langroid as lr
 
 cfg = lr.language_models.OpenAIGPTConfig(
-    chat_model=lr.language_models.OpenAIChatModel.GPT4,
+    chat_model=lr.language_models.OpenAIChatModel.GPT4o,
 )
 ```
 !!! info inline end "About Configs"

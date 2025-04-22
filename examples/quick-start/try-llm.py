@@ -26,7 +26,7 @@ def chat() -> None:
     print("[blue]Welcome to langroid!")
 
     cfg = lr.language_models.OpenAIGPTConfig(
-        chat_model=lr.language_models.OpenAIChatModel.GPT4,
+        chat_model=lr.language_models.OpenAIChatModel.GPT4o,
     )
 
     mdl = lr.language_models.OpenAIGPT(cfg)

@@ -36,7 +36,7 @@ lr.utils.logging.setup_colored_logging()
 def chat(tools: bool = False) -> None:
     config = lr.ChatAgentConfig(
         llm=lr.language_models.OpenAIGPTConfig(
-            chat_model=lr.language_models.OpenAIChatModel.GPT4,
+            chat_model=lr.language_models.OpenAIChatModel.GPT4o,
         ),
         use_tools=tools,
         use_functions_api=not tools,

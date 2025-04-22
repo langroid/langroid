@@ -47,6 +47,7 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 from langroid.mytypes import Entity
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
@@ -440,6 +441,7 @@ class Agent(ABC):
     def create_agent_response(
         self,
         content: str | None = None,
+        files: List[FileAttachment] = [],
         content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
@@ -452,6 +454,7 @@ class Agent(ABC):
         return self.response_template(
             Entity.AGENT,
             content=content,
+            files=files,
             content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
@@ -689,6 +692,7 @@ class Agent(ABC):
         self,
         e: Entity,
         content: str | None = None,
+        files: List[FileAttachment] = [],
         content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
@@ -700,6 +704,7 @@ class Agent(ABC):
         """Template for response from entity `e`."""
         return ChatDocument(
             content=content or "",
+            files=files,
             content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
@@ -714,6 +719,7 @@ class Agent(ABC):
     def create_user_response(
         self,
         content: str | None = None,
+        files: List[FileAttachment] = [],
         content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: List[OpenAIToolCall] | None = None,
@@ -726,6 +732,7 @@ class Agent(ABC):
         return self.response_template(
             e=Entity.USER,
             content=content,
+            files=files,
             content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,

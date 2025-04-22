@@ -735,7 +735,11 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(t)
                 self.llm_functions_usable.discard(t)
 
-        # Set tool instructions and JSON format instructions
+        self._update_tool_instructions()
+
+    def _update_tool_instructions(self) -> None:
+        # Set tool instructions and JSON format instructions,
+        # in case Tools have been enabled/disabled.
         if self.config.use_tools:
             self.system_tool_format_instructions = self.tool_format_rules()
         self.system_tool_instructions = self.tool_instructions()
@@ -977,6 +981,8 @@ class ChatAgent(Agent):
             self.llm_tools_usable.discard(t)
             self.llm_functions_usable.discard(t)
 
+        self._update_tool_instructions()
+
     def disable_message_use_except(self, message_class: Type[ToolMessage]) -> None:
         """
         Disable this agent from USING ALL messages EXCEPT a message class (Tool)
@@ -988,6 +994,7 @@ class ChatAgent(Agent):
         for r in to_remove:
             self.llm_tools_usable.discard(r)
             self.llm_functions_usable.discard(r)
+        self._update_tool_instructions()
 
     def _load_output_format(self, message: ChatDocument) -> None:
         """
@@ -1511,12 +1518,14 @@ class ChatAgent(Agent):
         output_len = self.config.llm.model_max_output_tokens
         if (
             truncate
-            and self.chat_num_tokens(hist)
-            > self.llm.chat_context_length() - self.config.llm.model_max_output_tokens
+            and output_len > self.llm.chat_context_length() - self.chat_num_tokens(hist)
         ):
             # chat + output > max context length,
-            # so first try to shorten requested output len to fit.
-            output_len = self.llm.chat_context_length() - self.chat_num_tokens(hist)
+            # so first try to shorten requested output len to fit;
+            # use an extra margin of 300 tokens in case our calcs are off
+            output_len = (
+                self.llm.chat_context_length() - self.chat_num_tokens(hist) - 300
+            )
             if output_len < self.config.llm.min_output_tokens:
                 # unacceptably small output len, so drop early parts of conv history
                 # if output_len is still too long, then drop early parts of conv history
@@ -1534,10 +1543,17 @@ class ChatAgent(Agent):
                         # and last message (user msg).
                         raise ValueError(
                             """
-                        The message history is longer than the max chat context 
-                        length allowed, and we have run out of messages to drop.
-                        HINT: In your `OpenAIGPTConfig` object, try increasing
-                        `chat_context_length` or decreasing `model_max_output_tokens`.
+                        The (message history + max_output_tokens) is longer than the 
+                        max chat context length of this model, and we have tried 
+                        reducing the requested max output tokens, as well as dropping 
+                        early parts of the message history, to accommodate the model 
+                        context length, but we have run out of msgs to drop.
+                         
+                        HINT: In the `llm` field of your `ChatAgentConfig` object, 
+                        which is of type `LLMConfig/OpenAIGPTConfig`, try 
+                        - increasing `chat_context_length` 
+                            (if accurate for the model), or  
+                        - decreasing `max_output_tokens`
                         """
                         )
                     # drop the second message, i.e. first msg after the sys msg

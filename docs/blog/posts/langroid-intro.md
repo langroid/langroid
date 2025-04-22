@@ -68,8 +68,7 @@ Besides Agents, Langroid also provides simple ways to directly interact with LLM
 - **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo,
   GPT-4.
 - **Caching of LLM prompts, responses:** Langroid by default uses [Redis](https://redis.com/try-free/) for caching.
-  Caching with [Momento](https://www.gomomento.com/) is also supported.
-- **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
+- **Vector-stores**: [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/), LanceDB, Pinecone, PostgresDB (PGVector), Weaviate are currently supported.
   Vector stores allow for Retrieval-Augmented-Generaation (RAG).
 - **Grounding and source-citation:** Access to external documents via vector-stores
   allows for grounding and source-citation.

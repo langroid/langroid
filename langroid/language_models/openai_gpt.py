@@ -91,10 +91,13 @@ LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
 openai_chat_model_pref_list = [
     OpenAIChatModel.GPT4o,
+    OpenAIChatModel.GPT4_1_NANO,
+    OpenAIChatModel.GPT4_1_MINI,
+    OpenAIChatModel.GPT4_1,
     OpenAIChatModel.GPT4o_MINI,
     OpenAIChatModel.O1_MINI,
+    OpenAIChatModel.O3_MINI,
     OpenAIChatModel.O1,
-    OpenAIChatModel.GPT3_5_TURBO,
 ]
 
 openai_completion_model_pref_list = [
@@ -624,20 +627,7 @@ class OpenAIGPT(LanguageModel):
 
         self.cache: CacheDB | None = None
         use_cache = self.config.cache_config is not None
-        if settings.cache_type == "momento" and use_cache:
-            from langroid.cachedb.momento_cachedb import (
-                MomentoCache,
-                MomentoCacheConfig,
-            )
-
-            if config.cache_config is None or not isinstance(
-                config.cache_config,
-                MomentoCacheConfig,
-            ):
-                # switch to fresh momento config if needed
-                config.cache_config = MomentoCacheConfig()
-            self.cache = MomentoCache(config.cache_config)
-        elif "redis" in settings.cache_type and use_cache:
+        if "redis" in settings.cache_type and use_cache:
             if config.cache_config is None or not isinstance(
                 config.cache_config,
                 RedisCacheConfig,
@@ -653,7 +643,7 @@ class OpenAIGPT(LanguageModel):
         elif settings.cache_type != "none" and use_cache:
             raise ValueError(
                 f"Invalid cache type {settings.cache_type}. "
-                "Valid types are momento, redis, fakeredis, none"
+                "Valid types are redis, fakeredis, none"
             )
 
         self.config._validate_litellm()
@@ -808,7 +798,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-        silent = self.config.async_stream_quiet or settings.quiet
+        silent = settings.quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
@@ -1731,8 +1721,7 @@ class OpenAIGPT(LanguageModel):
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
             raise e
 
-    @retry_with_exponential_backoff
-    def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
+    def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)
         if result is not None:
@@ -1781,8 +1770,17 @@ class OpenAIGPT(LanguageModel):
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
-    @async_retry_with_exponential_backoff
-    async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
+    def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
+        retry_func = retry_with_exponential_backoff(
+            self._chat_completions_with_backoff_body,
+            initial_delay=self.config.retry_params.initial_delay,
+            max_retries=self.config.retry_params.max_retries,
+            exponential_base=self.config.retry_params.exponential_base,
+            jitter=self.config.retry_params.jitter,
+        )
+        return retry_func(**kwargs)
+
+    async def _achat_completions_with_backoff_body(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)
         if result is not None:
@@ -1836,6 +1834,16 @@ class OpenAIGPT(LanguageModel):
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
+    async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
+        retry_func = async_retry_with_exponential_backoff(
+            self._achat_completions_with_backoff_body,
+            initial_delay=self.config.retry_params.initial_delay,
+            max_retries=self.config.retry_params.max_retries,
+            exponential_base=self.config.retry_params.exponential_base,
+            jitter=self.config.retry_params.jitter,
+        )
+        return await retry_func(**kwargs)
+
     def _prep_chat_completion(
         self,
         messages: Union[str, List[LLMMessage]],
@@ -1876,13 +1884,17 @@ class OpenAIGPT(LanguageModel):
         args: Dict[str, Any] = dict(
             model=chat_model,
             messages=[
-                m.api_dict(has_system_role=self.info().allows_system_message)
+                m.api_dict(
+                    self.config.chat_model,
+                    has_system_role=self.info().allows_system_message,
+                )
                 for m in (llm_messages)
             ],
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
             stream=self.get_stream(),
         )
-        if self.get_stream():
+        if self.get_stream() and "groq" not in self.chat_model_orig:
+            # groq fails when we include stream_options in the request
             args.update(
                 dict(
                     # get token-usage numbers in stream mode from OpenAI API,
@@ -2073,7 +2085,7 @@ class OpenAIGPT(LanguageModel):
             function_call,
             response_format,
         )
-        cached, hashed_key, response = self._chat_completions_with_backoff(**args)
+        cached, hashed_key, response = self._chat_completions_with_backoff(**args)  # type: ignore
         if self.get_stream() and not cached:
             llm_response, openai_response = self._stream_response(response, chat=True)
             self._cache_store(hashed_key, openai_response)
@@ -2106,7 +2118,7 @@ class OpenAIGPT(LanguageModel):
             function_call,
             response_format,
         )
-        cached, hashed_key, response = await self._achat_completions_with_backoff(
+        cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
             **args
         )
         if self.get_stream() and not cached:

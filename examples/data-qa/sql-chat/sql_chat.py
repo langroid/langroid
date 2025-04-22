@@ -133,9 +133,6 @@ def main(
     tools: bool = typer.Option(
         False, "--tools", "-t", help="use langroid tools instead of function-calling"
     ),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
     schema_tools: bool = typer.Option(
         False, "--schema_tools", "-st", help="use schema tools"
     ),
@@ -145,7 +142,7 @@ def main(
             debug=debug,
             cache=not nocache,
             stream=not no_stream,
-            cache_type=cache_type,
+            cache_type="redis",
         )
     )
     print("[blue]Welcome to the SQL database chatbot!\n")
@@ -198,7 +195,7 @@ def main(
         use_schema_tools=schema_tools,
         addressing_prefix=SEND_TO,
         llm=OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
+            chat_model=OpenAIChatModel.GPT4o,
         ),
     )
     agent = SQLChatAgent(agent_config)

@@ -540,7 +540,7 @@ def test_task_2_agent_tool(
     assert "200" in response.content
 
 
-@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_fn_api", [False, True])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_orch_tools", [True, False])
 def test_task_2_agent_2_tool(
@@ -584,11 +584,14 @@ def test_task_2_agent_2_tool(
 
         def polinsky_feedback(self, msg: FeedbackTool) -> str:
             """Transmit feedback received from other agent, to this agent's LLM"""
-            if msg.feedback == "":
-                return """
+            if msg.feedback.strip() == "":
+                return f"""
                 CORRECT, the value you gave IS the Polinsky transform of that number.
                 Please proceed with requesting the Polinsky transform of 
-                a NEW number.
+                the NEXT number on your list, or if you're finished, use the
+                TOOL `{DoneTool.name()}` with `content` set to the summary of the
+                transformations, in this format:
+                '(number1, transform1), (number2, transform2)'
                 """
             else:
                 return f"""
@@ -673,13 +676,18 @@ def test_task_2_agent_2_tool(
             use_functions_api=use_fn_api,
             use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
+            handle_llm_no_tool=f"you forgot to use the TOOL `{FeedbackTool.name()}`",
             system_message="""
             When you receive a query asking whether the Polinsky
             transform of a number x is y, and you must give FEEDBACK
             on this using the `polinsky_feedback` tool/function.
             Here are the rules:
-            - If y = x + 1, feedback should be "WRONG, try another guess",
-            - Otherwise, feedback should be EMPTY STRING: ""
+
+            - If y = x + 1, use the `polinsky_feedback` tool 
+              with `feedback` field = "WRONG, try another guess",
+
+            - Otherwise, use the `polinsky_feedback` tool 
+              with `feedback` field set to an EMPTY STRING: ""
             
             IMPORTANT - YOU CAN ONLY use the `polinsky_feedback` tool/function
             ONCE per message.
