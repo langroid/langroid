@@ -99,9 +99,8 @@ class LLMConfig(BaseSettings):
 
     @property
     def model_max_output_tokens(self) -> int:
-        return min(
-            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens,
-            get_model_info(self.chat_model).max_output_tokens,
+        return (
+            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
         )
 
 
