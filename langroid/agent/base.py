@@ -47,6 +47,7 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 from langroid.mytypes import Entity
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
@@ -440,6 +441,7 @@ class Agent(ABC):
     def create_agent_response(
         self,
         content: str | None = None,
+        files: List[FileAttachment] = [],
         content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
@@ -452,6 +454,7 @@ class Agent(ABC):
         return self.response_template(
             Entity.AGENT,
             content=content,
+            files=files,
             content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
@@ -689,6 +692,7 @@ class Agent(ABC):
         self,
         e: Entity,
         content: str | None = None,
+        files: List[FileAttachment] = [],
         content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
@@ -700,6 +704,7 @@ class Agent(ABC):
         """Template for response from entity `e`."""
         return ChatDocument(
             content=content or "",
+            files=files,
             content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
@@ -714,6 +719,7 @@ class Agent(ABC):
     def create_user_response(
         self,
         content: str | None = None,
+        files: List[FileAttachment] = [],
         content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: List[OpenAIToolCall] | None = None,
@@ -726,6 +732,7 @@ class Agent(ABC):
         return self.response_template(
             e=Entity.USER,
             content=content,
+            files=files,
             content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
@@ -1929,10 +1936,13 @@ class Agent(ABC):
         print_response_stats: bool = True,
     ) -> None:
         """
-        Updates `response.usage` obj (token usage and cost fields).the usage memebr
-        It updates the cost after checking the cache and updates the
-        tokens (prompts and completion) if the response stream is True, because OpenAI
-        doesn't returns these fields.
+        Updates `response.usage` obj (token usage and cost fields) if needed.
+        An update is needed only if:
+        - stream is True (i.e. streaming was enabled), and
+        - the response was NOT obtained from cached, and
+        - the API did NOT provide the usage/cost fields during streaming
+          (As of Sep 2024, the OpenAI API started providing these; for other APIs
+            this may not necessarily be the case).
 
         Args:
             response (LLMResponse): LLMResponse object
@@ -1945,10 +1955,11 @@ class Agent(ABC):
         if response is None or self.llm is None:
             return
 
+        no_usage_info = response.usage is None or response.usage.prompt_tokens == 0
         # Note: If response was not streamed, then
         # `response.usage` would already have been set by the API,
         # so we only need to update in the stream case.
-        if stream:
+        if stream and no_usage_info:
             # usage, cost = 0 when response is from cache
             prompt_tokens = 0
             completion_tokens = 0

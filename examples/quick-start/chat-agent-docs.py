@@ -63,7 +63,7 @@ def chat() -> None:
 
     config = lr.agent.special.DocChatAgentConfig(
         llm=lr.language_models.OpenAIGPTConfig(
-            chat_model=lr.language_models.OpenAIChatModel.GPT4,
+            chat_model=lr.language_models.OpenAIChatModel.GPT4o,
         ),
         vecdb=lr.vector_store.QdrantDBConfig(
             collection_name="quick-start-chat-agent-docs",

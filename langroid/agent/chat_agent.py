@@ -92,9 +92,9 @@ class ChatAgentConfig(AgentConfig):
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
     handle_llm_no_tool: Any = None
-    use_tools: bool = False
-    use_functions_api: bool = True
-    use_tools_api: bool = False
+    use_tools: bool = True
+    use_functions_api: bool = False
+    use_tools_api: bool = True
     strict_recovery: bool = True
     enable_orchestration_tool_handling: bool = True
     output_format: Optional[type] = None
@@ -105,33 +105,22 @@ class ChatAgentConfig(AgentConfig):
     use_tools_on_output_format: bool = True
     full_citations: bool = True  # show source + content for each citation?
 
-    def _set_fn_or_tools(self, fn_available: bool) -> None:
+    def _set_fn_or_tools(self) -> None:
         """
         Enable Langroid Tool or OpenAI-like fn-calling,
-        depending on config settings and availability of fn-calling.
+        depending on config settings.
         """
-        if self.use_functions_api and not fn_available:
-            logger.debug(
-                """
-                You have enabled `use_functions_api` but the LLM does not support it.
-                So we will enable `use_tools` instead, so we can use 
-                Langroid's ToolMessage mechanism.
-                """
-            )
-            self.use_functions_api = False
-            self.use_tools = True
-
         if not self.use_functions_api or not self.use_tools:
             return
         if self.use_functions_api and self.use_tools:
             logger.debug(
                 """
                 You have enabled both `use_tools` and `use_functions_api`.
-                Turning off `use_tools`, since the LLM supports function-calling.
+                Setting `use_functions_api` to False.
                 """
             )
-            self.use_tools = False
-            self.use_functions_api = True
+            self.use_tools = True
+            self.use_functions_api = False
 
 
 class ChatAgent(Agent):
@@ -163,7 +152,7 @@ class ChatAgent(Agent):
         """
         super().__init__(config)
         self.config: ChatAgentConfig = config
-        self.config._set_fn_or_tools(self._fn_call_available())
+        self.config._set_fn_or_tools()
         self.message_history: List[LLMMessage] = []
         self.init_state()
         # An agent's "task" is defined by a system msg and an optional user msg;
@@ -308,12 +297,7 @@ class ChatAgent(Agent):
 
     def _fn_call_available(self) -> bool:
         """Does this agent's LLM support function calling?"""
-        return (
-            self.llm is not None
-            and isinstance(self.llm, OpenAIGPT)
-            and self.llm.is_openai_chat_model()
-            and self.llm.supports_functions_or_tools()
-        )
+        return self.llm is not None and self.llm.supports_functions_or_tools()
 
     def _strict_tools_available(self) -> bool:
         """Does this agent's LLM support strict tools?"""
@@ -751,7 +735,11 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(t)
                 self.llm_functions_usable.discard(t)
 
-        # Set tool instructions and JSON format instructions
+        self._update_tool_instructions()
+
+    def _update_tool_instructions(self) -> None:
+        # Set tool instructions and JSON format instructions,
+        # in case Tools have been enabled/disabled.
         if self.config.use_tools:
             self.system_tool_format_instructions = self.tool_format_rules()
         self.system_tool_instructions = self.tool_instructions()
@@ -993,6 +981,8 @@ class ChatAgent(Agent):
             self.llm_tools_usable.discard(t)
             self.llm_functions_usable.discard(t)
 
+        self._update_tool_instructions()
+
     def disable_message_use_except(self, message_class: Type[ToolMessage]) -> None:
         """
         Disable this agent from USING ALL messages EXCEPT a message class (Tool)
@@ -1004,6 +994,7 @@ class ChatAgent(Agent):
         for r in to_remove:
             self.llm_tools_usable.discard(r)
             self.llm_functions_usable.discard(r)
+        self._update_tool_instructions()
 
     def _load_output_format(self, message: ChatDocument) -> None:
         """
@@ -1527,12 +1518,14 @@ class ChatAgent(Agent):
         output_len = self.config.llm.model_max_output_tokens
         if (
             truncate
-            and self.chat_num_tokens(hist)
-            > self.llm.chat_context_length() - self.config.llm.model_max_output_tokens
+            and output_len > self.llm.chat_context_length() - self.chat_num_tokens(hist)
         ):
             # chat + output > max context length,
-            # so first try to shorten requested output len to fit.
-            output_len = self.llm.chat_context_length() - self.chat_num_tokens(hist)
+            # so first try to shorten requested output len to fit;
+            # use an extra margin of 300 tokens in case our calcs are off
+            output_len = (
+                self.llm.chat_context_length() - self.chat_num_tokens(hist) - 300
+            )
             if output_len < self.config.llm.min_output_tokens:
                 # unacceptably small output len, so drop early parts of conv history
                 # if output_len is still too long, then drop early parts of conv history
@@ -1550,10 +1543,17 @@ class ChatAgent(Agent):
                         # and last message (user msg).
                         raise ValueError(
                             """
-                        The message history is longer than the max chat context 
-                        length allowed, and we have run out of messages to drop.
-                        HINT: In your `OpenAIGPTConfig` object, try increasing
-                        `chat_context_length` or decreasing `model_max_output_tokens`.
+                        The (message history + max_output_tokens) is longer than the 
+                        max chat context length of this model, and we have tried 
+                        reducing the requested max output tokens, as well as dropping 
+                        early parts of the message history, to accommodate the model 
+                        context length, but we have run out of msgs to drop.
+                         
+                        HINT: In the `llm` field of your `ChatAgentConfig` object, 
+                        which is of type `LLMConfig/OpenAIGPTConfig`, try 
+                        - increasing `chat_context_length` 
+                            (if accurate for the model), or  
+                        - decreasing `max_output_tokens`
                         """
                         )
                     # drop the second message, i.e. first msg after the sys msg

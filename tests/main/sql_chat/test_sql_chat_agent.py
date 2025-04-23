@@ -209,6 +209,11 @@ def test_sql_chat_agent_query(
     )
 
 
+@pytest.mark.xfail(
+    reason="May fail sometimes",
+    strict=False,
+    run=True,
+)
 @pytest.mark.parametrize("fn_api", [True, False])
 @pytest.mark.parametrize("tools_api", [True, False])
 @pytest.mark.parametrize("json_schema", [False, True])

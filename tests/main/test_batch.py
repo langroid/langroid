@@ -22,7 +22,7 @@ from langroid.agent.tools.orchestration import DoneTool
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import Settings, set_global, settings
 from langroid.utils.constants import DONE
 from langroid.vector_store.base import VectorStoreConfig
 
@@ -72,6 +72,7 @@ def test_task_batch(
     questions = list(range(N))
     expected_answers = [(i + 1) for i in range(N)]
 
+    orig_quiet = settings.quiet
     # batch run
     answers = run_batch_tasks(
         task,
@@ -82,6 +83,7 @@ def test_task_batch(
         batch_size=batch_size,
         stop_on_first_result=stop_on_first,
     )
+    assert settings.quiet == orig_quiet
 
     if stop_on_first:
         # only the task with input 0 succeeds since it's fastest
@@ -286,12 +288,10 @@ def test_task_gen_batch(
 )
 @pytest.mark.parametrize("sequential", [True, False])
 @pytest.mark.parametrize("fn_api", [False, True])
-@pytest.mark.parametrize("tools_api", [False, True])
 @pytest.mark.parametrize("use_done_tool", [True, False])
 def test_task_gen_batch_exceptions(
     test_settings: Settings,
     fn_api: bool,
-    tools_api: bool,
     use_done_tool: bool,
     sequential: bool,
     handle_exceptions: bool | ExceptionHandling,
@@ -323,7 +323,7 @@ def test_task_gen_batch_exceptions(
             llm=OpenAIGPTConfig(),
             use_functions_api=fn_api,
             use_tools=not fn_api,
-            use_tools_api=tools_api,
+            use_tools_api=True,
         )
         agent = ChatAgent(cfg)
         agent.enable_message(ComputeTool)
@@ -457,11 +457,13 @@ def test_process_batch_async_basic(sequential, handle_exceptions):
     )
     # If handle_exceptions is True, the function should return
     # the results of the successful tasks
+    orig_quiet = settings.quiet
     if _convert_exception_handling(handle_exceptions) == ExceptionHandling.RETURN_NONE:
         results = asyncio.run(coroutine)
         assert results[1] is None
         assert "Processed" in results[0]
         assert "Processed" in results[2]
+        assert settings.quiet == orig_quiet
     # If handle_exceptions is False, the function should raise an error
     elif _convert_exception_handling(handle_exceptions) == ExceptionHandling.RAISE:
         with pytest.raises(ValueError):
@@ -474,6 +476,7 @@ def test_process_batch_async_basic(sequential, handle_exceptions):
             == ExceptionHandling.RETURN_EXCEPTION
         )
         results = asyncio.run(coroutine)
+        assert settings.quiet == orig_quiet
         assert "Processed" in results[0]
         assert "Processed" in results[2]
         assert isinstance(results[1], ValueError)

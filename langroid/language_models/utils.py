@@ -59,6 +59,19 @@ def retry_with_exponential_backoff(
 
             # Retry on specified errors
             except errors as e:
+
+                # For certain types of errors that slip through here
+                # (e.g. when using proxies like LiteLLM, do not retry)
+                if any(
+                    err in str(e)
+                    for err in [
+                        "BadRequestError",
+                        "ConnectionError",
+                        "NotFoundError",
+                    ]
+                ):
+                    logger.error(f"OpenAI API request failed with error: {e}.")
+                    raise e
                 # Increment retries
                 num_retries += 1
 
@@ -125,6 +138,19 @@ def async_retry_with_exponential_backoff(
                 raise e
             # Retry on specified errors
             except errors as e:
+                # For certain types of errors that slip through here
+                # (e.g. when using proxies like LiteLLM, do not retry)
+                if any(
+                    err in str(e)
+                    for err in [
+                        "BadRequestError",
+                        "ConnectionError",
+                        "NotFoundError",
+                    ]
+                ):
+                    logger.error(f"OpenAI API request failed with error: {e}.")
+                    raise e
+
                 # Increment retries
                 num_retries += 1
 

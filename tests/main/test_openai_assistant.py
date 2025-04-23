@@ -143,6 +143,11 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
         assert "25" in result.content
 
 
+@pytest.mark.xfail(
+    reason="Flaky/Soon-To-be-deprecated API, may fail",
+    run=True,
+    strict=False,
+)
 @pytest.mark.parametrize("fn_api", [True, False])
 def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
     """Test 2-level recursive function calling works,

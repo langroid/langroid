@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.50.2"
+version = "0.52.7"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -240,10 +240,6 @@ weaviate = [
 
 meilisearch = [
     "meilisearch-python-sdk<3.0.0,>=2.2.3",
-]
-
-momento = [
-    "momento<1.21.0,>=1.10.2",
 ]
 
 fastembed = [

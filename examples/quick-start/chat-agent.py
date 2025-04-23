@@ -29,7 +29,7 @@ def chat() -> None:
     )
     config = lr.ChatAgentConfig(
         llm=lr.language_models.OpenAIGPTConfig(
-            chat_model=lr.language_models.OpenAIChatModel.GPT4,
+            chat_model=lr.language_models.OpenAIChatModel.GPT4o,
         ),
         vecdb=None,
     )

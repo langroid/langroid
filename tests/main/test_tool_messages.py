@@ -171,7 +171,7 @@ def test_enable_message(
 @pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
 def test_disable_message_handling(msg_class: Optional[ToolMessage]):
     agent.enable_message([FileExistsMessage, PythonVersionMessage])
-    usable_tools = agent.llm_tools_usable
+    usable_tools = agent.llm_tools_usable.copy()
 
     agent.disable_message_handling(msg_class)
     tools = agent._get_tool_list(msg_class)
@@ -186,7 +186,7 @@ def test_disable_message_handling(msg_class: Optional[ToolMessage]):
 def test_disable_message_use(msg_class: Optional[ToolMessage]):
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
-    usable_tools = agent.llm_tools_usable
+    usable_tools = agent.llm_tools_usable.copy()
 
     agent.disable_message_use(msg_class)
     tools = agent._get_tool_list(msg_class)
@@ -195,6 +195,14 @@ def test_disable_message_use(msg_class: Optional[ToolMessage]):
         assert tool not in agent.llm_functions_usable
         assert tool in agent.llm_tools_handled
         assert tool in agent.llm_functions_handled
+
+    # check that disabling tool-use works as expected:
+    # Tools part of sys msg should be updated, and
+    # LLM should not be able to use this tool
+    agent.disable_message_use(FileExistsMessage)
+    agent.disable_message_use(PythonVersionMessage)
+    response = agent.llm_response_forget("Is there a README.md file?")
+    assert agent.get_tool_messages(response) == []
 
 
 @pytest.mark.parametrize("msg_cls", [PythonVersionMessage, FileExistsMessage])
@@ -294,7 +302,7 @@ def test_handle_bad_tool_message(as_string: bool):
 )
 @pytest.mark.parametrize(
     "use_tools_api",
-    [True, False],
+    [True],  # ONLY test tools-api since OpenAI has deprecated functions-api
 )
 @pytest.mark.parametrize(
     "message_class, prompt, result",
@@ -345,12 +353,6 @@ def test_llm_tool_message(
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
     agent.config.use_tools_api = use_tools_api
-    if not agent.llm.is_openai_chat_model() and use_functions_api:
-        pytest.skip(
-            f"""
-            Function Calling not available for {agent.config.llm.chat_model}: skipping
-            """
-        )
 
     agent.enable_message(
         [
@@ -361,7 +363,7 @@ def test_llm_tool_message(
     )
 
     llm_msg = agent.llm_response_forget(prompt)
-    tool_name = message_class.default_value("request")
+    tool_name = message_class.name()
     if use_functions_api:
         if use_tools_api:
             assert llm_msg.oai_tool_calls[0].function.name == tool_name
@@ -425,7 +427,7 @@ wrong_nabroski_tool = """
 """
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("stream", [True, False])
 @pytest.mark.parametrize("strict_recovery", [True, False])
@@ -514,7 +516,7 @@ class CoinFlipTool(ToolMessage):
         return "Heads" if heads else "Tails"
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_agent_infer_tool(
     test_settings: Settings,
@@ -575,7 +577,7 @@ def test_agent_infer_tool(
     assert agent.agent_response(no_args_request_specified).content in ["Heads", "Tails"]
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_no_llm_response(
     test_settings: Settings,
@@ -622,7 +624,7 @@ def test_tool_no_task(
     assert result.content == "5"
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_optional_args(
     test_settings: Settings,
@@ -649,7 +651,7 @@ def test_tool_optional_args(
 
 @pytest.mark.parametrize("tool", [NabroskiTool, CoriolisTool])
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_tool_task(
     test_settings: Settings,
@@ -691,7 +693,7 @@ def test_llm_tool_task(
 
 
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_multi_tool(
     test_settings: Settings,
@@ -1036,7 +1038,7 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
 @pytest.mark.parametrize("llm_tool", ["pair", "final_tool"])
 @pytest.mark.parametrize("handler_result_type", ["agent_done", "final_tool"])
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 def test_llm_end_with_tool(
     handler_result_type: str,
     llm_tool: str,
@@ -1285,7 +1287,7 @@ def test_agent_respond_only_tools(tool: str):
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 def test_structured_recovery(
     test_settings: Settings,
     use_fn_api: bool,
@@ -1482,7 +1484,7 @@ def test_structured_recovery(
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("parallel_tool_calls", [True, False])
 def test_strict_fallback(
     test_settings: Settings,
@@ -1608,7 +1610,7 @@ def test_strict_fallback(
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 @pytest.mark.parametrize("parallel_tool_calls", [True, False])
 def test_strict_schema_mismatch(
     use_fn_api: bool,
@@ -1899,7 +1901,7 @@ class GetTimeTool(ToolMessage):
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True])
 def test_strict_recovery_only_from_LLM(
     use_fn_api: bool,
     use_tools_api: bool,
@@ -1979,3 +1981,40 @@ def test_strict_recovery_only_from_LLM(
     agent.message_history.extend(ChatDocument.to_LLMMessage(user_message))
     agent.get_tool_messages(content)
     assert not agent.tool_error
+
+
+@pytest.mark.parametrize("use_fn_api", [False, True])
+def test_tool_handler_invoking_llm(use_fn_api: bool):
+    """
+    Check that if a tool handler directly invokes llm_response,
+    it works as expected, especially with OpenAI Tools API
+    """
+
+    class MyAgent(ChatAgent):
+        def nabroski(self, msg: NabroskiTool):
+            ans = self.llm_response("What is 3+4?")
+            return AgentDoneTool(content=ans.content)
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            use_functions_api=use_fn_api,
+            use_tools_api=use_fn_api,
+            use_tools=not use_fn_api,
+            handle_llm_no_tool=f"you FORGOT to use the tool `{NabroskiTool.name()}`",
+            system_message=f"""
+            When user asks you to compute the Nabroski transform of two numbers,
+            you MUST use the TOOL `{NabroskiTool.name()}` to do so, since you do NOT
+            know how to do it yourself.
+            """,
+        )
+    )
+    agent.enable_message(NabroskiTool)
+    task = Task(agent, interactive=False, single_round=False)
+    result = task.run(
+        f"""
+        Use the TOOL `{NabroskiTool.name()}` to compute the 
+        Nabroski transform of 2 and 5.
+        """
+    )
+
+    assert "7" in result.content

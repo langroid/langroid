@@ -43,7 +43,7 @@ from langroid.agent.tools.tavily_search_tool import TavilySearchTool
 config = ChatAgentConfig(
     name="search-agent",
     llm=lr.language_models.OpenAIGPTConfig(
-        chat_model=lr.language_models.OpenAIChatModel.GPT4
+        chat_model=lr.language_models.OpenAIChatModel.GPT4o
     ),
     use_tools=True
 )

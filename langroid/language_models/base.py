@@ -21,6 +21,7 @@ from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.model_info import ModelInfo, get_model_info
 from langroid.parsing.agent_chats import parse_message
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
 from langroid.pydantic_v1 import BaseModel, BaseSettings, Field
@@ -53,6 +54,13 @@ class StreamEventType(Enum):
     TOOL_ARGS = 5
 
 
+class RetryParams(BaseSettings):
+    max_retries: int = 5
+    initial_delay: float = 1.0
+    exponential_base: float = 1.3
+    jitter: bool = True
+
+
 class LLMConfig(BaseSettings):
     """
     Common configuration for all language models.
@@ -63,7 +71,8 @@ class LLMConfig(BaseSettings):
     streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
     api_base: str | None = None
     formatter: None | str = None
-    max_output_tokens: int | None = 8192  # specify None to use model_max_output_tokens
+    # specify None if you want to use the full max output tokens of the model
+    max_output_tokens: int | None = 8192
     timeout: int = 20  # timeout for API requests
     chat_model: str = ""
     completion_model: str = ""
@@ -86,11 +95,13 @@ class LLMConfig(BaseSettings):
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
     completion_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
+    retry_params: RetryParams = RetryParams()
 
     @property
     def model_max_output_tokens(self) -> int:
-        return (
-            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
+        return min(
+            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens,
+            get_model_info(self.chat_model).max_output_tokens,
         )
 
 
@@ -216,7 +227,7 @@ class LLMTokenUsage(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost: float = 0.0
-    calls: int = 0  # how many API calls
+    calls: int = 0  # how many API calls - not used as of 2025-04-04
 
     def reset(self) -> None:
         self.prompt_tokens = 0
@@ -263,13 +274,14 @@ class LLMMessage(BaseModel):
     tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
     tool_id: str = ""  # used by OpenAIAssistant
     content: str
+    files: List[FileAttachment] = []
     function_call: Optional[LLMFunctionCall] = None
     tool_calls: Optional[List[OpenAIToolCall]] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     # link to corresponding chat document, for provenance/rewind purposes
     chat_document_id: str = ""
 
-    def api_dict(self, has_system_role: bool = True) -> Dict[str, Any]:
+    def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]:
         """
         Convert to dictionary for API request, keeping ONLY
         the fields that are expected in an API call!
@@ -283,6 +295,17 @@ class LLMMessage(BaseModel):
             dict: dictionary representation of LLM message
         """
         d = self.dict()
+        files: List[FileAttachment] = d.pop("files")
+        if len(files) > 0 and self.role == Role.USER:
+            # In there are files, then content is an array of
+            # different content-parts
+            d["content"] = [
+                dict(
+                    type="text",
+                    text=self.content,
+                )
+            ] + [f.to_dict(model) for f in self.files]
+
         # if there is a key k = "role" with value "system", change to "user"
         # in case has_system_role is False
         if not has_system_role and "role" in d and d["role"] == "system":
@@ -626,6 +649,20 @@ class LanguageModel(ABC):
         )
         return get_model_info(orig_model, model)
 
+    def supports_functions_or_tools(self) -> bool:
+        """
+        Does this Model's API support "native" tool-calling, i.e.
+        can we call the API with arguments that contain a list of available tools,
+        and their schemas?
+        Note that, given the plethora of LLM provider APIs this determination is
+        imperfect at best, and leans towards returning True.
+        When the API calls fails with an error indicating tools are not supported,
+        then users are encouraged to use the Langroid-based prompt-based
+        ToolMessage mechanism, which works with ANY LLM. To enable this,
+        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
+        """
+        return self.info().has_tools
+
     def chat_context_length(self) -> int:
         return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
 
@@ -719,16 +756,37 @@ class LanguageModel(ABC):
         history = collate_chat_history(chat_history)
 
         prompt = f"""
-        Given the CHAT HISTORY below, and a follow-up QUESTION or SEARCH PHRASE,
-        rephrase the follow-up question/phrase as a STANDALONE QUESTION that
-        can be understood without the context of the chat history.
+        You are an expert at understanding a CHAT HISTORY between an AI Assistant
+        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP 
+        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood 
+        WITHOUT the context of the chat history.
         
-        Chat history: {history}
+        Below is the CHAT HISTORY. When the User asks you to rephrase a 
+        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the 
+        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional 
+        text or context.
         
-        Follow-up question: {question} 
+        <CHAT_HISTORY>
+        {history}
+        </CHAT_HISTORY>        
         """.strip()
+
+        follow_up_question = f"""
+        Please rephrase this as a stand-alone question or request:
+        <FOLLOW-UP-QUESTION-OR-REQUEST>
+        {question}
+        </FOLLOW-UP-QUESTION-OR-REQUEST>
+        """.strip()
+
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
-        standalone = self.generate(prompt=prompt, max_tokens=1024).message.strip()
+        standalone = self.chat(
+            messages=[
+                LLMMessage(role=Role.SYSTEM, content=prompt),
+                LLMMessage(role=Role.USER, content=follow_up_question),
+            ],
+            max_tokens=1024,
+        ).message.strip()
+
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone
 
