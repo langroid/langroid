@@ -565,7 +565,15 @@ def test_litellm_model_key():
     model = "litellm/anthropic/claude-3-5-haiku-latest"
     # disable any chat model passed via --m arg to pytest cmd
     settings.chat_model = model
-    llm_config = lm.OpenAIGPTConfig(
+
+    class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig):
+        """OpenAI config that doesn't auto-load from environment variables."""
+
+        class Config:
+            # Set to empty string to disable environment variable loading
+            env_prefix = ""
+
+    llm_config = CustomOpenAIGPTConfig(
         chat_model=model, api_key=os.getenv("ANTHROPIC_API_KEY", "")
     )
 
