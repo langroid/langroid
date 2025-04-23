@@ -7,23 +7,24 @@ import uuid
 from pathlib import Path
 from typing import List, Optional, Union
 
+from langroid.exceptions import LangroidImportError
 from langroid.pydantic_v1 import BaseSettings
 
 try:
     import docker
     from docker.errors import DockerException, ImageNotFound, NotFound
 except ImportError as e:
-    raise RuntimeError(
-        "Missing dependencies for DockerCodeExecutor. "
-        "Please install the 'docker' library: pip install docker"
+    raise LangroidImportError(
+        "docker",
+        extra="docker-code",
     ) from e
 
 try:
     import asyncio_atexit  # For cleanup
 except ImportError as e:
-    raise RuntimeError(
-        "Missing dependencies for DockerCodeExecutor. "
-        "Please install 'asyncio-atexit': pip install asyncio-atexit"
+    raise LangroidImportError(
+        "asyncio_atexit",
+        extra="docker-code",
     ) from e
 
 
