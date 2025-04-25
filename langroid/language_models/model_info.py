@@ -23,7 +23,7 @@ class ModelName(str, Enum):
 class OpenAIChatModel(ModelName):
     """Enum for OpenAI Chat models"""
 
-    GPT3_5_TURBO = "gpt-3.5-turbo-1106"
+    GPT3_5_TURBO = "gpt-3.5-turbo"
     GPT4 = "gpt-4o"  # avoid deprecated gpt-4
     GPT4_TURBO = "gpt-4-turbo"
     GPT4o = "gpt-4o"
