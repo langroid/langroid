@@ -127,6 +127,7 @@ nav:
       - LiteLLM Proxy: notes/litellm-proxy.md
       - Chunking: notes/chunking.md
       - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
 
   - Examples:
     - Guide: examples/guide.md

@@ -20,6 +20,7 @@ dependencies = [
     "exa-py>=1.8.7",
     "faker<19.0.0,>=18.9.0",
     "fakeredis<3.0.0,>=2.12.1",
+    "fastmcp>=2.2.5",
     "fire<1.0.0,>=0.5.0",
     "gitpython<4.0.0,>=3.1.43",
     "google-api-python-client<3.0.0,>=2.95.0",
