@@ -4,7 +4,7 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.mcp.fastmcp_client import make_fastmcp_tool_sync
 
 
-def fastmcp_tool(
+def mcp_tool(
     server: str, tool_name: str
 ) -> Callable[[Type[ToolMessage]], Type[ToolMessage]]:
     """Decorator: declare a ToolMessage class bound to a FastMCP tool.

@@ -6,13 +6,13 @@ from fastmcp import FastMCP
 from fastmcp.client.transports import NpxStdioTransport, UvxStdioTransport
 from mcp.types import Tool
 
+# note we use pydantic v2 to define MCP server
+from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
+
 import langroid as lr
 import langroid.language_models as lm
-from langroid.agent.tools.mcp.decorators import fastmcp_tool
+from langroid.agent.tools.mcp.decorators import mcp_tool
 from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
-
-# note we use pydantic v2 to define MCP server
-from langroid.pydantic_v1 import BaseModel, Field
 
 
 class SubItem(BaseModel):
@@ -38,14 +38,19 @@ def mcp_server():
         return f"Hello, {person}!"
 
     @server.tool()
-    def get_alerts(state: str) -> list[str]:
+    def get_alerts(
+        state: str = Field(..., description="TWO-LETTER state abbrev, e.g. 'MN'"),
+    ) -> list[str]:
+        """Get weather alerts for a state."""
         return [
             f"Weather alert for {state}: Severe thunderstorm warning.",
             f"Weather alert for {state}: Flash flood watch.",
         ]
 
     @server.tool()
-    def get_one_alert(state: str) -> str:
+    def get_one_alert(
+        state: str = Field(..., description="TWO-LETTER state abbrev, e.g. 'MN'"),
+    ) -> str:
         return f"Weather alert for {state}: Severe thunderstorm warning."
 
     @server.tool()
@@ -103,7 +108,7 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
         # test find_tool
         alerts_mcp_tool: Tool = await client.find_mcp_tool("get_alerts")
         assert alerts_mcp_tool is not None
-        alerts_tool = await client.make_tool_message(alerts_mcp_tool.name)
+        alerts_tool = await client.make_tool(alerts_mcp_tool.name)
 
     assert alerts_tool is not None
     assert issubclass(alerts_tool, lr.ToolMessage)
@@ -126,7 +131,7 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     async with FastMCPClient(server) as client:
         alert_mcp_tool_async = await client.find_mcp_tool("get_alerts_async")
         assert alert_mcp_tool_async is not None
-        alert_tool_async = await client.make_tool_message(alert_mcp_tool_async.name)
+        alert_tool_async = await client.make_tool(alert_mcp_tool_async.name)
 
     assert alert_tool_async is not None
     assert issubclass(alert_tool_async, lr.ToolMessage)
@@ -164,7 +169,7 @@ async def test_tools_connect_close(server: str | FastMCP) -> None:
 
     alerts_tool_mcp = await client.find_mcp_tool("get_alerts")
 
-    alerts_tool = await client.make_tool_message(alerts_tool_mcp.name)
+    alerts_tool = await client.make_tool(alerts_tool_mcp.name)
     await client.close()
 
     assert alerts_tool is not None
@@ -180,12 +185,33 @@ async def test_tools_connect_close(server: str | FastMCP) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_tool_schemas() -> None:
+    """
+    Test that descriptions, field-descriptions of MCP tools are preserved
+    when we translate them to Langroid ToolMessage classes. This is important
+    since the LLM is shown these, and helps with tool-call accuracy.
+    """
+    async with FastMCPClient(mcp_server()) as client:
+        # find the alerts tool
+        alerts_tool = await client.make_tool("get_alerts")
+
+    assert issubclass(alerts_tool, lr.ToolMessage)
+    description = "Get weather alerts for a state."
+    assert alerts_tool.default_value("purpose") == description
+    schema: lm.LLMFunctionSpec = alerts_tool.llm_function_schema()
+    assert schema.description == description
+    assert schema.name == "get_alerts"
+    assert schema.parameters["required"] == ["state"]
+    assert "TWO-LETTER" in schema.parameters["properties"]["state"]["description"]
+
+
+@pytest.mark.asyncio
 async def test_single_output() -> None:
     """Test that a tool with a single string output works
     similarly to one that has a list of strings outputs."""
 
     async with FastMCPClient(mcp_server()) as client:
-        one_alert_tool = await client.make_tool_message("get_one_alert")
+        one_alert_tool = await client.make_tool("get_one_alert")
 
     assert one_alert_tool is not None
     msg = one_alert_tool(state="NY")
@@ -218,7 +244,7 @@ async def test_agent_mcp_tools(server: str | FastMCP) -> None:
     )
 
     async with FastMCPClient(server) as client:
-        nabroski_tool: lr.ToolMessage = await client.make_tool_message("nabroski")
+        nabroski_tool: lr.ToolMessage = await client.make_tool("nabroski")
 
     agent.enable_message(nabroski_tool)
 
@@ -243,7 +269,7 @@ async def test_agent_mcp_tools(server: str | FastMCP) -> None:
 
 # Need to define the tools outside async def,
 # since the decorator uses asyncio.run() to wrap around an async fn
-@fastmcp_tool(mcp_server(), "get_alerts")
+@mcp_tool(mcp_server(), "get_alerts")
 class GetAlertsTool(lr.ToolMessage):
     """Tool to get weather alerts."""
 
@@ -252,7 +278,7 @@ class GetAlertsTool(lr.ToolMessage):
         return "ALERT: " + alert
 
 
-@fastmcp_tool(mcp_server(), "nabroski")
+@mcp_tool(mcp_server(), "nabroski")
 class NabroskiTool(lr.ToolMessage):
     """Tool to get Nabroski transform."""
 
@@ -263,7 +289,7 @@ class NabroskiTool(lr.ToolMessage):
 
 @pytest.mark.asyncio
 async def test_fastmcp_decorator() -> None:
-    """Test that the fastmcp_tool decorator works as expected."""
+    """Test that the mcp_tool decorator works as expected."""
 
     msg = GetAlertsTool(state="NY")
     assert isinstance(msg, lr.ToolMessage)
@@ -288,7 +314,7 @@ async def test_fastmcp_decorator() -> None:
     assert "nabroski" in result.content.lower() and "18" in result.content
 
 
-@fastmcp_tool(mcp_server(), "hydra_nest")
+@mcp_tool(mcp_server(), "hydra_nest")
 class HydraNestTool(lr.ToolMessage):
     """Tool for computing HydraNest calculation."""
 
@@ -398,7 +424,7 @@ async def test_npxstdio_transport() -> None:
         tools = await client.get_tools()
         assert isinstance(tools, list)
         assert tools, "Expected at least one tool"
-        web_search_tool = await client.make_tool_message("web_search_exa")
+        web_search_tool = await client.make_tool("web_search_exa")
 
     assert web_search_tool is not None
     agent = lr.ChatAgent(
@@ -407,25 +433,52 @@ async def test_npxstdio_transport() -> None:
                 max_output_tokens=1000,
                 async_stream_quiet=False,
             ),
+            system_message="""
+            When asked a question, use the TOOL `web_search_exa` to
+            perform a web search and find the answer.
+            """,
         )
     )
     agent.enable_message(web_search_tool)
-    response = await agent.llm_response_async(
-        """
-        Search the web using the `web_search_exa` TOOL 
-        to find out who won the Presidential election in Gabon in 2025
-        """
-    )
+    # Note: we shouldn't have to explicitly beg the LLM to use the tool here
+    # but I've found that even GPT-4o sometimes fails to use the tool
+    question = """
+    Use the `web_search_exa` TOOL to find out:
+    Who won the Presidential election in Gabon in 2025?
+    """
+    response = await agent.llm_response_async(question)
+
     tools = agent.get_tool_messages(response)
     assert len(tools) == 1
     assert isinstance(tools[0], web_search_tool)
 
     task = lr.Task(agent, interactive=False)
-    result: lr.ChatDocument = await task.run_async(
-        "Search the web to find out who won the Presidential election in Gabon in 2025",
-        turns=3,
-    )
+    result: lr.ChatDocument = await task.run_async(question, turns=3)
     assert "Nguema" in result.content
+
+
+transport = UvxStdioTransport(
+    # `tool_name` is a misleading name -- it really refers to the
+    # MCP server, which offers several tools
+    tool_name="mcp-server-git",
+)
+
+
+@mcp_tool(transport, "git_status")
+class GitStatusTool(lr.ToolMessage):
+    """Tool to get git status."""
+
+    async def handle_async(self) -> str:
+        """
+        When defining a class explicitly with the @mcp_tool decorator,
+        we have the flexibility to define our own `handle_async` method
+        which calls the call_tool_async method, which in turn calls the
+        MCP server's call_tool method.
+        Returns:
+
+        """
+        status = await self.call_tool_async()
+        return "GIT STATUS: " + status
 
 
 @pytest.mark.asyncio
@@ -435,16 +488,11 @@ async def test_uvxstdio_transport() -> None:
     via uvx stdio transport. We use this example `git` MCP server:
     https://github.com/modelcontextprotocol/servers/tree/main/src/git
     """
-    transport = UvxStdioTransport(
-        # `tool_name` is a misleading name -- it really refers to the
-        # MCP server, which offers several tools
-        tool_name="mcp-server-git",
-    )
     async with FastMCPClient(transport) as client:
         tools = await client.get_tools()
         assert isinstance(tools, list)
         assert tools, "Expected at least one tool"
-        git_status_tool = await client.make_tool_message("git_status")
+        git_status_tool = await client.make_tool("git_status")
 
     assert git_status_tool is not None
     agent = lr.ChatAgent(
@@ -469,6 +517,32 @@ async def test_uvxstdio_transport() -> None:
     task = lr.Task(agent, interactive=False)
     result: lr.ChatDocument = await task.run_async(prompt, turns=3)
     assert "langroid" in result.content
+
+    # test GitStatusTool created via @mcp_tool decorator
+    agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            llm=lm.OpenAIGPTConfig(
+                max_output_tokens=1000,
+                async_stream_quiet=False,
+            ),
+        )
+    )
+    agent.enable_message(GitStatusTool)
+    prompt = """
+        Find out the git status of the git repository at "../langroid"
+        """
+
+    response = await agent.llm_response_async(prompt)
+    tools = agent.get_tool_messages(response)
+    assert len(tools) == 1
+    assert isinstance(tools[0], GitStatusTool)
+
+    task = lr.Task(agent, interactive=False)
+    result: lr.ChatDocument = await task.run_async(prompt, turns=3)
+    # "GIT STATUS" is prepended to the MCP call_tool result,
+    # with our custom `handle_async` method; to verify this
+    # we check the content of the parent of parent of result.
+    assert "GIT STATUS" in result.parent.parent.content
 
 
 @pytest.mark.asyncio

@@ -113,7 +113,7 @@ class FastMCPClient:
         # Default fallback
         return Any, Field(default=default, description=desc)
 
-    async def make_tool_message(self, tool_name: str) -> Type[ToolMessage]:
+    async def make_tool(self, tool_name: str) -> Type[ToolMessage]:
         """Create a Langroid ToolMessage subclass for the given tool name."""
         if not self.client:
             raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
@@ -144,17 +144,26 @@ class FastMCPClient:
         )
         tool_model._server = self.server  # type: ignore[attr-defined]
 
-        # 2) define an arg-free async handle()
-        async def handle_async(self: ToolMessage) -> Any:
+        # 2) define an arg-free call_tool_async()
+        async def call_tool_async(self: ToolMessage) -> Any:
             from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
 
             # pack up the payload
             payload = self.dict(exclude=self.Config.schema_extra["exclude"])
             # open a fresh client, call the tool, then close
             async with FastMCPClient(self.__class__._server) as client:  # type: ignore
-                return await client.call_tool(self.request, payload)
+                return await client.call_mcp_tool(self.request, payload)
 
-        tool_model.handle_async = handle_async  # type: ignore
+        tool_model.call_tool_async = call_tool_async  # type: ignore
+
+        if not hasattr(tool_model, "handle_async"):
+            # 3) define an arg-free handle_async() method
+            # if the tool model doesn't already have one
+            async def handle_async(self: ToolMessage) -> Any:
+                return await self.call_tool_async()  # type: ignore[attr-defined]
+
+            # add the handle_async() method to the tool model
+            tool_model.handle_async = handle_async  # type: ignore
 
         return tool_model
 
@@ -168,7 +177,7 @@ class FastMCPClient:
         resp = await self.client.list_tools()
         tools: List[Type[ToolMessage]] = []
         for t in resp:
-            tools.append(await self.make_tool_message(t.name))
+            tools.append(await self.make_tool(t.name))
         return tools
 
     async def find_mcp_tool(self, name: str) -> Optional[Tool]:
@@ -210,10 +219,10 @@ class FastMCPClient:
             return results[0]
         return results
 
-    async def call_tool(
+    async def call_mcp_tool(
         self, tool_name: str, arguments: Dict[str, Any]
     ) -> str | List[str] | None:
-        """Call a tool with the given arguments.
+        """Call an MCP tool with the given arguments.
 
         Args:
             tool_name: Name of the tool to call.
@@ -233,7 +242,7 @@ class FastMCPClient:
 
 async def make_fastmcp_tool(server: str, tool_name: str) -> Type[ToolMessage]:
     async with FastMCPClient(server) as client:
-        return await client.make_tool_message(tool_name)
+        return await client.make_tool(tool_name)
 
 
 def make_fastmcp_tool_sync(server: str, tool_name: str) -> Type[ToolMessage]:
