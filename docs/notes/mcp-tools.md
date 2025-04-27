@@ -1,7 +1,11 @@
+from langroid.agent.tools.exa_search_tool import ExaSearchTool
+
 # Langroid MCP Integration
 
 Langroid provides seamless integration with Model Context Protocol (MCP) servers via 
-two main approaches:
+two main approaches, both of which involve creating Langroid `ToolMessage` subclasses
+corresponding to the MCP tools. This integration allows _any_ LLM
+(that is good enough to do function-calling via prompts) to use any MCP server.
 
 1. **FastMCPClient** – programmatic creation of `ToolMessage` classes.
 2. **`@mcp_tool` decorator** – declarative creation and optional customization.
@@ -94,7 +98,7 @@ class GreetTool(lr.ToolMessage):
 
 ---
 
-## Customizing `handle_async`
+## 3. Customizing `handle_async`
 
 By overriding `handle_async`, you can format, filter, or enrich the tool output 
 before it’s sent back to the LLM. If you don't override it, the default behavior is to
@@ -113,7 +117,11 @@ class CalcTool(ToolMessage):
 
 ---
 
-## Transport Examples
+## 4. Transport Examples
+
+Langroid supports any transport that can be defined via [FastMCP](https://gofastmcp.com/clients/transports).
+Below are examples of using `NpxStdioTransport` and `UvxStdioTransport` to connect
+to MCP servers and create Langroid `ToolMessage` subclasses.
 
 ### NPX Stdio Transport
 
@@ -161,6 +169,7 @@ class GitStatusTool(ToolMessage):
     status = await self.call_tool_async()
     return "GIT STATUS: " + status
 ```
+
 ---
 
 ## 5. Enabling Tools in Your Agent
@@ -202,6 +211,16 @@ class ExaSearchTool(lr.ToolMessage):
         Use these results to answer the user's original question.
         """
 
+```
+
+If we did not want to override the `handle_async` method, we could simply have
+created the `ExaSearchTool` class programmatically using the `FastMCPClient` class, 
+as shown in the previous section, i.e.:
+```python
+from langroid.agent.tools.mcp import FastMCPClient
+
+async with FastMCPClient(transport) as client:
+    ExaSearchTool = await client.make_tool("web_search_exa")
 ```
 
 We can now define our main function where we create our `ChatAgent`,
