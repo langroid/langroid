@@ -11,8 +11,7 @@ from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
 
 import langroid as lr
 import langroid.language_models as lm
-from langroid.agent.tools.mcp.decorators import mcp_tool
-from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
+from langroid.agent.tools.mcp import FastMCPClient, mcp_tool
 
 
 class SubItem(BaseModel):

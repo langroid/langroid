@@ -240,10 +240,10 @@ class FastMCPClient:
         return self._convert_tool_result(tool_name, result)
 
 
-async def make_fastmcp_tool(server: str, tool_name: str) -> Type[ToolMessage]:
+async def make_mcp_tool(server: str, tool_name: str) -> Type[ToolMessage]:
     async with FastMCPClient(server) as client:
         return await client.make_tool(tool_name)
 
 
-def make_fastmcp_tool_sync(server: str, tool_name: str) -> Type[ToolMessage]:
-    return asyncio.run(make_fastmcp_tool(server, tool_name))
+def make_mcp_tool_sync(server: str, tool_name: str) -> Type[ToolMessage]:
+    return asyncio.run(make_mcp_tool(server, tool_name))
