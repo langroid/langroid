@@ -7,7 +7,9 @@ two main approaches, both of which involve creating Langroid `ToolMessage` subcl
 corresponding to the MCP tools. This integration allows _any_ LLM
 (that is good enough to do function-calling via prompts) to use any MCP server.
 
-1. **FastMCPClient** – programmatic creation of `ToolMessage` classes.
+1. Langroid tool-creation functions `get_langroid_tool_async`, `get_langroid_tools_async` – programmatic creation of 
+   `ToolMessage` 
+   sub-classes from the original MCP Tools defined on the server.
 2. **`@mcp_tool` decorator** – declarative creation and optional customization.
 
 See the following to understand the integration better:
@@ -16,54 +18,32 @@ See the following to understand the integration better:
 
 ---
 
-## 1. FastMCPClient
+## 1. Creating Langroid Tools Programmatically from the MCP Server
 
 ```python
-from langroid.agent.tools.mcp import FastMCPClient
+from langroid.agent.tools.mcp import get_langroid_tool_async
 import asyncio
+
 
 async def main() -> None:
     # server_spec can be:
     #   • Path to a local Python script
     #   • URL to a server
-    #   • fastmcp.server.FastMCP instance
+    #   • fastmcp.server.FastMCP instance (see the above-mentioned test)
     #   • fastmcp.client.transports.ClientTransport (see below) 
     server_spec = "path/to/weather_server.py"
-    async with FastMCPClient(server_spec) as client:
-        # List all available tools
-        tools = await client.get_tools()
-
-        # Create a ToolMessage subclass for "get_alerts"
-        GetAlerts = await client.make_tool("get_alerts")
-
+    
+    GetAlerts = await get_langroid_tool_async(server_spec, "get_alerts")
+    
     msg = GetAlerts(state="NY")
-
+    
     # Call via handle_async()
     alerts = await msg.handle_async()
     print(alerts)
 
+
 asyncio.run(main())
 ```
-
-### Useful Methods
-
-- `FastMCPClient(server_spec)`  
-  Create a client for the given spec.
-
-- `await client.connect()` / `await client.close()`  
-  Manually open/close the session.
-
-- `await client.get_tools() -> list[Type[ToolMessage]]`  
-  Generate all `ToolMessage` subclasses.
-
-- `await client.make_tool(tool_name: str) -> Type[ToolMessage]`  
-  Build a single `ToolMessage` class.
-
-- `await client.find_mcp_tool(name: str) -> Tool | None`  
-  Retrieve raw MCP `Tool` metadata.
-
-- `await client.call_mcp_tool(name: str, args: dict) -> str|list[str]|None`  
-  Low-level call to the MCP tool.
 
 ---
 
@@ -87,7 +67,7 @@ class GreetTool(lr.ToolMessage):
         return f"💬 {raw}"
 ```
 
-- **Arguments**
+- **Arguments to the decorator**
     1. `server_spec`: path/URL/`FastMCP`/`ClientTransport`
     2. `tool_name`: name of the MCP tool
 
@@ -127,44 +107,45 @@ to MCP servers and create Langroid `ToolMessage` subclasses.
 
 ```python
 from fastmcp.client.transports import NpxStdioTransport
-from langroid.agent.tools.mcp import FastMCPClient, mcp_tool
+from langroid.agent.tools.mcp import get_langroid_tool_async
 from langroid import ToolMessage
 
 # 1) Define NPX transport for an external MCP server package
 npx = NpxStdioTransport(
-    package="exa-mcp-server",
-    env_vars={"EXA_API_KEY": "..."}
+  package="exa-mcp-server",
+  env_vars={"EXA_API_KEY": "..."}
 )
 
-# 2) Programmatic creation via FastMCPClient
-async with FastMCPClient(npx) as client:
-    WebSearch = await client.make_tool("web_search_exa")
+# 2) Programmatic creation via utility function
+WebSearch = await get_langroid_tool_async(npx, "web_search_exa")
+
 
 # 3) Declarative creation via decorator
 @mcp_tool(npx, "web_search_exa")
 class WebSearchTool(ToolMessage):
-    """Perform web searches via EXA MCP server."""
-    pass
+  """Perform web searches via EXA MCP server."""
+  pass
 ```
 
 ### UVX Stdio Transport
 
 ```python
 from fastmcp.client.transports import UvxStdioTransport
-from langroid.agent.tools.mcp import FastMCPClient, mcp_tool
+from langroid.agent.tools.mcp import mcp_tool, get_langroid_tool_async
 from langroid import ToolMessage
 
 # 1) Define UVX transport pointing to a git MCP server
 uvx = UvxStdioTransport(tool_name="mcp-server-git")
 
-# 2) Programmatic creation via FastMCPClient
-async with FastMCPClient(uvx) as client:
-  GitStatus = await client.make_tool("git_status")
+# 2) Programmatic creation via utility function
+GitStatus = await client.get_langroid_tool_async(uvx, "git_status")
+
 
 # 3) Declarative creation via decorator and custom handler
 @mcp_tool(uvx, "git_status")
 class GitStatusTool(ToolMessage):
   """Get git repository status via UVX MCP server."""
+
   async def handle_async(self) -> str:
     status = await self.call_tool_async()
     return "GIT STATUS: " + status
@@ -214,13 +195,13 @@ class ExaSearchTool(lr.ToolMessage):
 ```
 
 If we did not want to override the `handle_async` method, we could simply have
-created the `ExaSearchTool` class programmatically using the `FastMCPClient` class, 
-as shown in the previous section, i.e.:
-```python
-from langroid.agent.tools.mcp import FastMCPClient
+created the `ExaSearchTool` class programmatically via the `get_langroid_tool_async` 
+function as shown in the previous section, i.e.:
 
-async with FastMCPClient(transport) as client:
-    ExaSearchTool = await client.make_tool("web_search_exa")
+```python
+from langroid.agent.tools.mcp import get_langroid_tool_async
+
+ExaSearchTool = awwait get_langroid_tool_async(transport, "web_search_exa")
 ```
 
 We can now define our main function where we create our `ChatAgent`,

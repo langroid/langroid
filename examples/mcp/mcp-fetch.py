@@ -16,7 +16,7 @@ https://www.anthropic.com/news/model-context-protocol
 import langroid as lr
 import langroid.language_models as lm
 from langroid.mytypes import NonToolAction
-from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
+from langroid.agent.tools.mcp.fastmcp_client import get_langroid_tool_async
 from fastmcp.client.transports import UvxStdioTransport
 from fire import Fire
 
@@ -25,10 +25,7 @@ async def main(model: str = ""):
     transport = UvxStdioTransport(
         tool_name="mcp-server-fetch",
     )
-    async with FastMCPClient(transport) as client:
-        # get the `fetch` MCP tool as a Langroid ToolMessage sub-class
-        fetch_tool = await client.make_tool("fetch")
-
+    FetchTool = await get_langroid_tool_async(transport, "fetch")
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
             # forward to user when LLM doesn't use a tool
@@ -42,7 +39,7 @@ async def main(model: str = ""):
     )
 
     # enable the agent to use the fetch tool
-    agent.enable_message(fetch_tool)
+    agent.enable_message(FetchTool)
     # make task with interactive=False =>
     # waits for user only when LLM doesn't use a tool
     task = lr.Task(agent, interactive=False)

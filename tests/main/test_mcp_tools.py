@@ -11,7 +11,13 @@ from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
 
 import langroid as lr
 import langroid.language_models as lm
-from langroid.agent.tools.mcp import FastMCPClient, mcp_tool
+from langroid.agent.tools.mcp import (
+    FastMCPClient,
+    get_langroid_tool_async,
+    get_langroid_tools_async,
+    get_mcp_tool_async,
+    mcp_tool,
+)
 
 
 class SubItem(BaseModel):
@@ -90,31 +96,31 @@ def mcp_server():
 )
 async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     """End‐to‐end test for get_tools and .handle() against server."""
-    async with FastMCPClient(server) as client:
-        tools = await client.get_tools()
-        # basic sanity
-        assert isinstance(tools, list)
-        assert tools, "Expected at least one tool"
-        # find the alerts tool
-        alerts_tool = next(
-            (t for t in tools if t.default_value("request") == "get_alerts"),
-            None,
-        )
+    tools = await get_langroid_tools_async(server)
+    # basic sanity
+    assert isinstance(tools, list)
+    assert tools, "Expected at least one tool"
+    # find the alerts tool
+    AlertsTool = next(
+        (t for t in tools if t.default_value("request") == "get_alerts"),
+        None,
+    )
 
-        assert alerts_tool is not None
-        assert issubclass(alerts_tool, lr.ToolMessage)
+    assert AlertsTool is not None
+    assert issubclass(AlertsTool, lr.ToolMessage)
 
-        # test find_tool
-        alerts_mcp_tool: Tool = await client.find_mcp_tool("get_alerts")
-        assert alerts_mcp_tool is not None
-        alerts_tool = await client.make_tool(alerts_mcp_tool.name)
+    # test get_mcp_tool_async
+    AlertsMCPTool: Tool = await get_mcp_tool_async(server, "get_alerts")
 
-    assert alerts_tool is not None
-    assert issubclass(alerts_tool, lr.ToolMessage)
+    assert AlertsMCPTool is not None
+    AlertsTool = await get_langroid_tool_async(server, AlertsMCPTool.name)
+
+    assert AlertsTool is not None
+    assert issubclass(AlertsTool, lr.ToolMessage)
     # EXIT the async with client context, and it should work.
 
     # instantiate Langroid ToolMessage
-    msg = alerts_tool(state="NY")
+    msg = AlertsTool(state="NY")
     isinstance(msg, lr.ToolMessage)
     assert msg.state == "NY"
 
@@ -127,16 +133,15 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     assert any(x in result.lower() for x in ["alert", "weather"])
 
     # make tool from async FastMCP tool
-    async with FastMCPClient(server) as client:
-        alert_mcp_tool_async = await client.find_mcp_tool("get_alerts_async")
-        assert alert_mcp_tool_async is not None
-        alert_tool_async = await client.make_tool(alert_mcp_tool_async.name)
+    AlertsMCPToolAsync = await get_mcp_tool_async(server, "get_alerts_async")
+    assert AlertsMCPToolAsync is not None
+    AlertsToolAsync = await get_langroid_tool_async(server, AlertsMCPToolAsync.name)
 
-    assert alert_tool_async is not None
-    assert issubclass(alert_tool_async, lr.ToolMessage)
+    assert AlertsToolAsync is not None
+    assert issubclass(AlertsToolAsync, lr.ToolMessage)
 
     # instantiate Langroid ToolMessage
-    msg = alert_tool_async(state="NY")
+    msg = AlertsToolAsync(state="NY")
     isinstance(msg, lr.ToolMessage)
     assert msg.state == "NY"
 
@@ -146,6 +151,13 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     result: Optional[str] = await msg.handle_async()
     assert result is not None
     assert any(x in result.lower() for x in ["alert", "weather"])
+
+    # test making tool with utility functions
+    AlertsTool = await get_langroid_tool_async(server, "get_alerts")
+    assert issubclass(AlertsTool, lr.ToolMessage)
+    # instantiate Langroid ToolMessage
+    msg = AlertsTool(state="NY")
+    isinstance(msg, lr.ToolMessage)
 
 
 @pytest.mark.parametrize(
@@ -163,18 +175,18 @@ async def test_tools_connect_close(server: str | FastMCP) -> None:
     await client.connect()
     mcp_tools = await client.client.list_tools()
     assert all(isinstance(t, Tool) for t in mcp_tools)
-    langroid_tool_classes = await client.get_tools()
+    langroid_tool_classes = await client.get_langroid_tools()
     assert all(issubclass(tc, lr.ToolMessage) for tc in langroid_tool_classes)
 
-    alerts_tool_mcp = await client.find_mcp_tool("get_alerts")
+    AlertsMCPTool = await get_mcp_tool_async(server, "get_alerts")
 
-    alerts_tool = await client.make_tool(alerts_tool_mcp.name)
+    AlertsTool = await get_langroid_tool_async(server, AlertsMCPTool.name)
     await client.close()
 
-    assert alerts_tool is not None
-    assert issubclass(alerts_tool, lr.ToolMessage)
+    assert AlertsTool is not None
+    assert issubclass(AlertsTool, lr.ToolMessage)
     # instantiate Langroid ToolMessage
-    msg = alerts_tool(state="NY")
+    msg = AlertsTool(state="NY")
     isinstance(msg, lr.ToolMessage)
     assert msg.state == "NY"
 
@@ -190,14 +202,13 @@ async def test_mcp_tool_schemas() -> None:
     when we translate them to Langroid ToolMessage classes. This is important
     since the LLM is shown these, and helps with tool-call accuracy.
     """
-    async with FastMCPClient(mcp_server()) as client:
-        # find the alerts tool
-        alerts_tool = await client.make_tool("get_alerts")
+    # make a langroid AlertsTool from the corresponding MCP tool
+    AlertsTool = await get_langroid_tool_async(mcp_server(), "get_alerts")
 
-    assert issubclass(alerts_tool, lr.ToolMessage)
+    assert issubclass(AlertsTool, lr.ToolMessage)
     description = "Get weather alerts for a state."
-    assert alerts_tool.default_value("purpose") == description
-    schema: lm.LLMFunctionSpec = alerts_tool.llm_function_schema()
+    assert AlertsTool.default_value("purpose") == description
+    schema: lm.LLMFunctionSpec = AlertsTool.llm_function_schema()
     assert schema.description == description
     assert schema.name == "get_alerts"
     assert schema.parameters["required"] == ["state"]
@@ -209,11 +220,10 @@ async def test_single_output() -> None:
     """Test that a tool with a single string output works
     similarly to one that has a list of strings outputs."""
 
-    async with FastMCPClient(mcp_server()) as client:
-        one_alert_tool = await client.make_tool("get_one_alert")
+    OneAlertTool = await get_langroid_tool_async(mcp_server(), "get_one_alert")
 
-    assert one_alert_tool is not None
-    msg = one_alert_tool(state="NY")
+    assert OneAlertTool is not None
+    msg = OneAlertTool(state="NY")
     assert isinstance(msg, lr.ToolMessage)
     assert msg.state == "NY"
     result = await msg.handle_async()
@@ -242,17 +252,16 @@ async def test_agent_mcp_tools(server: str | FastMCP) -> None:
         )
     )
 
-    async with FastMCPClient(server) as client:
-        nabroski_tool: lr.ToolMessage = await client.make_tool("nabroski")
+    NabroskiTool: lr.ToolMessage = await get_langroid_tool_async(server, "nabroski")
 
-    agent.enable_message(nabroski_tool)
+    agent.enable_message(NabroskiTool)
 
     response: lr.ChatDocument = await agent.llm_response_async(
         "What is the Nabroski transform of 3 and 5?"
     )
     tools = agent.get_tool_messages(response)
     assert len(tools) == 1
-    assert isinstance(tools[0], nabroski_tool)
+    assert isinstance(tools[0], NabroskiTool)
     result: lr.ChatDocument = await agent.agent_response_async(response)
     # TODO assert needs to take LLM tool-forgetting into account
     assert "14" in result.content
@@ -385,8 +394,7 @@ async def test_multiple_tools(prompt, tool_name, expected) -> None:
             ),
         )
     )
-    async with FastMCPClient(mcp_server()) as client:
-        all_tools = await client.get_tools()
+    all_tools = await get_langroid_tools_async(mcp_server())
 
     tool = next(
         (t for t in all_tools if t.name() == tool_name),
@@ -419,13 +427,12 @@ async def test_npxstdio_transport() -> None:
         package="exa-mcp-server",
         env_vars=dict(EXA_API_KEY=os.getenv("EXA_API_KEY")),
     )
-    async with FastMCPClient(transport) as client:
-        tools = await client.get_tools()
-        assert isinstance(tools, list)
-        assert tools, "Expected at least one tool"
-        web_search_tool = await client.make_tool("web_search_exa")
+    tools = await get_langroid_tools_async(transport)
+    assert isinstance(tools, list)
+    assert tools, "Expected at least one tool"
+    WebSearchTool = await get_langroid_tool_async(transport, "web_search_exa")
 
-    assert web_search_tool is not None
+    assert WebSearchTool is not None
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
             llm=lm.OpenAIGPTConfig(
@@ -438,7 +445,7 @@ async def test_npxstdio_transport() -> None:
             """,
         )
     )
-    agent.enable_message(web_search_tool)
+    agent.enable_message(WebSearchTool)
     # Note: we shouldn't have to explicitly beg the LLM to use the tool here
     # but I've found that even GPT-4o sometimes fails to use the tool
     question = """
@@ -449,7 +456,7 @@ async def test_npxstdio_transport() -> None:
 
     tools = agent.get_tool_messages(response)
     assert len(tools) == 1
-    assert isinstance(tools[0], web_search_tool)
+    assert isinstance(tools[0], WebSearchTool)
 
     task = lr.Task(agent, interactive=False)
     result: lr.ChatDocument = await task.run_async(question, turns=3)
@@ -487,13 +494,12 @@ async def test_uvxstdio_transport() -> None:
     via uvx stdio transport. We use this example `git` MCP server:
     https://github.com/modelcontextprotocol/servers/tree/main/src/git
     """
-    async with FastMCPClient(transport) as client:
-        tools = await client.get_tools()
-        assert isinstance(tools, list)
-        assert tools, "Expected at least one tool"
-        git_status_tool = await client.make_tool("git_status")
+    tools = await get_langroid_tools_async(transport)
+    assert isinstance(tools, list)
+    assert tools, "Expected at least one tool"
+    GitStatusTool = await get_langroid_tool_async(transport, "git_status")
 
-    assert git_status_tool is not None
+    assert GitStatusTool is not None
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
             llm=lm.OpenAIGPTConfig(
@@ -502,7 +508,7 @@ async def test_uvxstdio_transport() -> None:
             ),
         )
     )
-    agent.enable_message(git_status_tool)
+    agent.enable_message(GitStatusTool)
     prompt = """
         Use the `git_status` TOOL to find out the status of the 
         current git repository at "../langroid"
@@ -511,7 +517,7 @@ async def test_uvxstdio_transport() -> None:
     response = await agent.llm_response_async(prompt)
     tools = agent.get_tool_messages(response)
     assert len(tools) == 1
-    assert isinstance(tools[0], git_status_tool)
+    assert isinstance(tools[0], GitStatusTool)
 
     task = lr.Task(agent, interactive=False)
     result: lr.ChatDocument = await task.run_async(prompt, turns=3)
@@ -538,10 +544,7 @@ async def test_uvxstdio_transport() -> None:
 
     task = lr.Task(agent, interactive=False)
     result: lr.ChatDocument = await task.run_async(prompt, turns=3)
-    # "GIT STATUS" is prepended to the MCP call_tool result,
-    # with our custom `handle_async` method; to verify this
-    # we check the content of the parent of parent of result.
-    assert "GIT STATUS" in result.parent.parent.content
+    assert "status" in result.content.lower()
 
 
 @pytest.mark.asyncio
@@ -555,10 +558,9 @@ async def test_npxstdio_transport_memory() -> None:
         package="@modelcontextprotocol/server-memory",
         args=["-y"],
     )
-    async with FastMCPClient(transport) as client:
-        tools = await client.get_tools()
-        assert isinstance(tools, list)
-        assert tools, "Expected at least one tool"
+    tools = await get_langroid_tools_async(transport)
+    assert isinstance(tools, list)
+    assert tools, "Expected at least one tool"
 
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(

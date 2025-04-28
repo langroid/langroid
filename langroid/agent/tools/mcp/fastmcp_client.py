@@ -113,11 +113,14 @@ class FastMCPClient:
         # Default fallback
         return Any, Field(default=default, description=desc)
 
-    async def make_tool(self, tool_name: str) -> Type[ToolMessage]:
-        """Create a Langroid ToolMessage subclass for the given tool name."""
+    async def get_langroid_tool(self, tool_name: str) -> Type[ToolMessage]:
+        """
+        Create a Langroid ToolMessage subclass from the MCP Tool
+        with the given `tool_name`.
+        """
         if not self.client:
             raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
-        target = await self.find_mcp_tool(tool_name)
+        target = await self.get_mcp_tool_async(tool_name)
         if target is None:
             raise ValueError(f"No tool named {tool_name}")
         props = target.inputSchema.get("properties", {})
@@ -167,7 +170,7 @@ class FastMCPClient:
 
         return tool_model
 
-    async def get_tools(self) -> List[Type[ToolMessage]]:
+    async def get_langroid_tools(self) -> List[Type[ToolMessage]]:
         """
         Get all available tools as Langroid ToolMessage classes,
         handling nested schemas, with `handle_async` methods
@@ -177,11 +180,12 @@ class FastMCPClient:
         resp = await self.client.list_tools()
         tools: List[Type[ToolMessage]] = []
         for t in resp:
-            tools.append(await self.make_tool(t.name))
+            tools.append(await self.get_langroid_tool(t.name))
         return tools
 
-    async def find_mcp_tool(self, name: str) -> Optional[Tool]:
-        """Find the MCP Tool matching `name`, or None if missing.
+    async def get_mcp_tool_async(self, name: str) -> Optional[Tool]:
+        """Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
+         matching `name`, or None if missing.
 
         Args:
             name: Name of the tool to look up.
@@ -240,10 +244,46 @@ class FastMCPClient:
         return self._convert_tool_result(tool_name, result)
 
 
-async def make_mcp_tool(server: str, tool_name: str) -> Type[ToolMessage]:
+async def get_langroid_tool_async(
+    server: str | ClientTransport,
+    tool_name: str,
+) -> Type[ToolMessage]:
     async with FastMCPClient(server) as client:
-        return await client.make_tool(tool_name)
+        return await client.get_langroid_tool(tool_name)
 
 
-def make_mcp_tool_sync(server: str, tool_name: str) -> Type[ToolMessage]:
-    return asyncio.run(make_mcp_tool(server, tool_name))
+def get_langroid_tool(
+    server: str | ClientTransport,
+    tool_name: str,
+) -> Type[ToolMessage]:
+    return asyncio.run(get_langroid_tool_async(server, tool_name))
+
+
+async def get_langroid_tools_async(
+    server: str | ClientTransport,
+) -> List[Type[ToolMessage]]:
+    async with FastMCPClient(server) as client:
+        return await client.get_langroid_tools()
+
+
+def get_langroid_tools(
+    server: str | ClientTransport,
+) -> List[Type[ToolMessage]]:
+    return asyncio.run(get_langroid_tools_async(server))
+
+
+async def get_mcp_tool_async(
+    server: str | ClientTransport,
+    name: str,
+) -> Optional[Tool]:
+    async with FastMCPClient(server) as client:
+        return await client.get_mcp_tool_async(name)
+
+
+async def get_mcp_tools_async(
+    server: str | ClientTransport,
+) -> List[Tool]:
+    async with FastMCPClient(server) as client:
+        if not client.client:
+            raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
+        return await client.client.list_tools()
