@@ -38,6 +38,26 @@ class ComplexData(BaseModel):
 def mcp_server():
     server = FastMCP("TestServer")
 
+    class Counter:
+        def __init__(self) -> None:
+            self.count: int = 0
+
+        def get_num_beans(self) -> int:
+            """Return current counter."""
+            return self.count
+
+        def add_beans(
+            self,
+            x: int = Field(..., description="Number of beans to add"),
+        ) -> int:
+            """Increment and return new counter."""
+            self.count += x
+            return self.count
+
+    counter = Counter()
+    server.add_tool(counter.get_num_beans)
+    server.add_tool(counter.add_beans)
+
     @server.tool()
     def greet(person: str) -> str:
         return f"Hello, {person}!"
@@ -167,7 +187,6 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     assert isinstance(result, str)
     assert result is not None
 
-
     # test making tool with utility functions
     AlertsTool = await get_langroid_tool_async(server, "get_alerts")
     assert issubclass(AlertsTool, lr.ToolMessage)
@@ -208,6 +227,32 @@ async def test_tools_connect_close(server: str | FastMCP) -> None:
 
     result = await msg.handle_async()
     assert isinstance(result, str)
+
+
+@pytest.mark.asyncio
+async def test_stateful_tool() -> None:
+    # instantiate the server
+    server = mcp_server()
+
+    # get tools from the SAME instance of the server
+    AddBeansTool = await get_langroid_tool_async(server, "add_beans")
+    assert issubclass(AddBeansTool, lr.ToolMessage)
+
+    GetNumBeansTool = await get_langroid_tool_async(server, "get_num_beans")
+    assert issubclass(GetNumBeansTool, lr.ToolMessage)
+
+    add_beans_msg = AddBeansTool(x=5)
+    assert isinstance(add_beans_msg, lr.ToolMessage)
+
+    result = await add_beans_msg.handle_async()
+    assert isinstance(result, str)
+    assert "5" in result
+
+    get_num_beans_msg = GetNumBeansTool()
+    assert isinstance(get_num_beans_msg, lr.ToolMessage)
+    result = await get_num_beans_msg.handle_async()
+    assert isinstance(result, str)
+    assert "5" in result
 
 
 @pytest.mark.asyncio
