@@ -35,13 +35,13 @@ Langroid's MCP integration will work with any of [transports](https://gofastmcp.
 supported by FastMCP.
 Below we go over some common ways to define transports and extract tools from the servers.
 
-1. **Python script on disk**
+1. **Local Python script**
 2. **In-memory FastMCP server** - useful for testing and for simple in-memory servers
    that don't need to be run as a separate process.
 3. **NPX stdio transport**
 4. **UVX stdio transport**
 
-All examples below use the async helpers:
+All examples below use the async helpers to create Langroid tools (`ToolMessage` subclasses):
 ```python
 from langroid.agent.tools.mcp import (
     get_langroid_tools_async,
@@ -129,6 +129,8 @@ async def example_npx() -> None:
     ).handle_async()
     print(results)
 ```
+
+For a fully working example, see the script [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py).
 
 ---
 
