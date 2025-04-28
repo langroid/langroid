@@ -1,5 +1,3 @@
-from langroid.agent.tools.exa_search_tool import ExaSearchTool
-
 # Langroid MCP Integration
 
 Langroid provides seamless integration with Model Context Protocol (MCP) servers via 
