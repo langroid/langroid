@@ -51,7 +51,7 @@ from langroid.agent.tools.mcp import (
 
 ---
 
-### Path to a Python Script
+#### Path to a Python Script
 
 Point at your MCP‐server entrypoint, e.g., to the `weather.py` script in the 
 langroid repo (based on the [Anthropic quick-start guide](https://modelcontextprotocol.io/quickstart/server)):
@@ -72,7 +72,7 @@ async def example_script_path() -> None:
 
 ---
 
-### In-Memory FastMCP Server
+#### In-Memory FastMCP Server
 
 Define your server with `FastMCP(...)` and pass the instance:
 
@@ -107,7 +107,7 @@ script for a working example of this.
 
 ---
 
-### NPX stdio Transport
+#### NPX stdio Transport
 
 Use any npm-installed MCP server via `npx`, e.g., the 
 [Exa web-search MCP server](https://docs.exa.ai/examples/exa-mcp):
@@ -132,7 +132,7 @@ async def example_npx() -> None:
 
 ---
 
-## UVX stdio Transport
+#### UVX stdio Transport
 
 Connect to a UVX-based MCP server, e.g., the [Git MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/git)
 
