@@ -11,6 +11,7 @@ corresponding to the MCP tools. This integration allows _any_ LLM
 2. **`@mcp_tool` decorator** – declarative creation and optional customization.
 
 See the following to understand the integration better:
+
 - example python scripts under [`examples/mcp`](https://github.com/langroid/langroid/tree/main/examples/mcp)
 - [`tests/main/test_mcp_tools.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_mcp_tools.py)
 
