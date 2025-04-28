@@ -137,7 +137,7 @@ from langroid import ToolMessage
 uvx = UvxStdioTransport(tool_name="mcp-server-git")
 
 # 2) Programmatic creation via utility function
-GitStatus = await client.get_langroid_tool_async(uvx, "git_status")
+GitStatus = await get_langroid_tool_async(uvx, "git_status")
 
 
 # 3) Declarative creation via decorator and custom handler
