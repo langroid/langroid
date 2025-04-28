@@ -185,7 +185,8 @@ class FastMCPClient:
 
     async def get_mcp_tool_async(self, name: str) -> Optional[Tool]:
         """Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
-         matching `name`, or None if missing.
+         matching `name`, or None if missing. This contains the metadata for the tool:
+         name, description, inputSchema, etc.
 
         Args:
             name: Name of the tool to look up.
