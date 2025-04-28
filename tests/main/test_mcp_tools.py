@@ -52,6 +52,19 @@ def mcp_server():
             f"Weather alert for {state}: Flash flood watch.",
         ]
 
+    # example of MCP tool whose fields clash with Langroid ToolMessage
+    @server.tool()
+    def info_tool(
+        request: str = Field(..., description="Requested information"),
+        recipient: str = Field(..., description="Recipient of the information"),
+        purpose: str = Field(..., description="Purpose of the information"),
+        date: str = Field(..., description="Date of the request"),
+    ) -> str:
+        """Get information for a recipient."""
+        return f"""
+        Info for {recipient}: {request} (Purpose: {purpose}), date: {date}
+        """
+
     @server.tool()
     def get_one_alert(
         state: str = Field(..., description="TWO-LETTER state abbrev, e.g. 'MN'"),
@@ -214,6 +227,29 @@ async def test_mcp_tool_schemas() -> None:
     assert schema.parameters["required"] == ["state"]
     assert "TWO-LETTER" in schema.parameters["properties"]["state"]["description"]
 
+    InfoTool = await get_langroid_tool_async(mcp_server(), "info_tool")
+    assert issubclass(InfoTool, lr.ToolMessage)
+    description = "Get information for a recipient."
+    assert InfoTool.default_value("purpose") == description
+    assert InfoTool.default_value("request") == "info_tool"
+
+    # instantiate InfoTool
+    msg = InfoTool(
+        request__="address",
+        recipient__="John Doe",
+        purpose__="to know the address",
+        date="2023-10-01",
+    )
+    assert isinstance(msg, lr.ToolMessage)
+    assert msg.request__ == "address"
+    assert msg.recipient__ == "John Doe"
+    assert msg.purpose__ == "to know the address"
+    assert msg.date == "2023-10-01"
+    # call the tool
+    result = await msg.handle_async()
+    assert isinstance(result, str)
+    assert "address" in result.lower()
+
 
 @pytest.mark.asyncio
 async def test_single_output() -> None:
@@ -234,15 +270,10 @@ async def test_single_output() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "server",
-    [
-        mcp_server(),
-    ],
-)
-async def test_agent_mcp_tools(server: str | FastMCP) -> None:
+async def test_agent_mcp_tools() -> None:
     """Test that a Langroid ChatAgent can use and handle MCP tools."""
 
+    server = mcp_server()
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
             llm=lm.OpenAIGPTConfig(
@@ -273,6 +304,19 @@ async def test_agent_mcp_tools(server: str | FastMCP) -> None:
         turns=3,
     )
     assert "14" in result.content
+
+    # test MCP tool with fields that clash with Langroid ToolMessage
+    InfoTool = await get_langroid_tool_async(server, "info_tool")
+    agent.init_state()
+    agent.enable_message(InfoTool)
+    result: lr.ChatDocument = await task.run_async(
+        """
+        Use the TOOL `info_tool` to find the address of the Municipal Building
+        so you can send it to John Doe on 2023-10-01.
+        """,
+        turns=3,
+    )
+    assert "address" in result.content.lower()
 
 
 # Need to define the tools outside async def,

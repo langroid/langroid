@@ -14,7 +14,7 @@ import langroid as lr
 import langroid.language_models as lm
 from fire import Fire
 from fastmcp.server import FastMCP
-from langroid.pydantic_v1 import BaseModel, Field
+from langroid.pydantic_v1 import Field
 from langroid.agent.tools.mcp import mcp_tool, get_langroid_tool_async
 
 

@@ -134,6 +134,24 @@ class FastMCPClient:
         camel_case = "".join(part.capitalize() for part in parts)
         model_name = f"{camel_case}Tool"
 
+        from langroid.agent.tool_message import ToolMessage as _BaseToolMessage
+
+        # IMPORTANT: Avoid clashes with reserved field names in Langroid ToolMessage!
+        # First figure out which field names are reserved
+        reserved = set(_BaseToolMessage.__annotations__.keys())
+        reserved.update(["recipient", "_handler"])
+        renamed: Dict[str, str] = {}
+        new_fields: Dict[str, Tuple[type, Any]] = {}
+        for fname, (ftype, fld) in fields.items():
+            if fname in reserved:
+                new_name = fname + "__"
+                renamed[fname] = new_name
+                new_fields[new_name] = (ftype, fld)
+            else:
+                new_fields[fname] = (ftype, fld)
+        # now replace fields with our renamed‐aware mapping
+        fields = new_fields
+
         # create Langroid ToolMessage subclass, with expected fields.
         tool_model = cast(
             Type[ToolMessage],
@@ -146,6 +164,7 @@ class FastMCPClient:
             ),
         )
         tool_model._server = self.server  # type: ignore[attr-defined]
+        tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
 
         # 2) define an arg-free call_tool_async()
         async def call_tool_async(self: ToolMessage) -> Any:
@@ -153,6 +172,12 @@ class FastMCPClient:
 
             # pack up the payload
             payload = self.dict(exclude=self.Config.schema_extra["exclude"])
+
+            # restore any renamed fields
+            for orig, new in self.__class__._renamed_fields.items():  # type: ignore
+                if new in payload:
+                    payload[orig] = payload.pop(new)
+
             # open a fresh client, call the tool, then close
             async with FastMCPClient(self.__class__._server) as client:  # type: ignore
                 return await client.call_mcp_tool(self.request, payload)
