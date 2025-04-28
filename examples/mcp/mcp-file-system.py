@@ -14,7 +14,7 @@ import langroid as lr
 import langroid.language_models as lm
 from fire import Fire
 from fastmcp.server import FastMCP
-from pydantic import BaseModel, Field
+from langroid.pydantic_v1 import BaseModel, Field
 from langroid.agent.tools.mcp import mcp_tool, get_langroid_tool_async
 
 
@@ -62,6 +62,7 @@ class WriteFileTool(lr.ToolMessage):
         """Invoke `write_file` and report the result."""
         ok = await self.call_tool_async()  # type: ignore
         return f"Wrote {self.path}: {ok}"
+
 
 # use decorator to create a Langroid ToolMessage with a custom handle_async method
 @mcp_tool(create_fs_mcp_server(), "read_file")
@@ -111,6 +112,7 @@ async def main(model: str = "") -> None:
 
 
 if __name__ == "__main__":
+
     def _run(**kwargs: str) -> None:
         """Fire entry point to run the async main function."""
         asyncio.run(main(**kwargs))
