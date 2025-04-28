@@ -15,7 +15,7 @@ import langroid.language_models as lm
 from fire import Fire
 from fastmcp.server import FastMCP
 from pydantic import BaseModel, Field
-from langroid.agent.tools.mcp import mcp_tool
+from langroid.agent.tools.mcp import mcp_tool, get_langroid_tool_async
 
 
 def create_fs_mcp_server() -> FastMCP:
@@ -53,16 +53,7 @@ def create_fs_mcp_server() -> FastMCP:
     return server
 
 
-# Create ToolMessage subclasses via decorator
-@mcp_tool(create_fs_mcp_server(), "list_files")
-class ListFilesTool(lr.ToolMessage):
-    """Tool to list files in a directory."""
-
-    async def handle_async(self) -> list[str]:
-        """Invoke `list_files` and return a list of file names."""
-        return await self.call_tool_async()  # type: ignore
-
-
+# use decorator to create a Langroid ToolMessage with a custom handle_async method
 @mcp_tool(create_fs_mcp_server(), "write_file")
 class WriteFileTool(lr.ToolMessage):
     """Tool to write text to a file."""
@@ -72,7 +63,7 @@ class WriteFileTool(lr.ToolMessage):
         ok = await self.call_tool_async()  # type: ignore
         return f"Wrote {self.path}: {ok}"
 
-
+# use decorator to create a Langroid ToolMessage with a custom handle_async method
 @mcp_tool(create_fs_mcp_server(), "read_file")
 class ReadFileTool(lr.ToolMessage):
     """Tool to read the content of a text file."""
@@ -85,39 +76,43 @@ class ReadFileTool(lr.ToolMessage):
 
 async def main(model: str = "") -> None:
     """
-Launch a ChatAgent that can list, write, and read files.
+    Launch a ChatAgent that can list, write, and read files.
 
-Args:
-model: Optional LLM model name (defaults to gpt-4.1-mini).
-"""
-agent = lr.ChatAgent(
-    lr.ChatAgentConfig(
-        llm=lm.OpenAIGPTConfig(
-            chat_model=model or "gpt-4.1-mini",
-            max_output_tokens=500,
+    Args:
+    model: Optional LLM model name (defaults to gpt-4.1-mini).
+    """
+    agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            llm=lm.OpenAIGPTConfig(
+                chat_model=model or "gpt-4.1-mini",
+                max_output_tokens=500,
+                async_stream_quiet=False,
+            ),
         )
     )
-)
 
-# enable all three tools
-agent.enable_message([ListFilesTool, WriteFileTool, ReadFileTool])
+    # create ListFilesTool using the helper function get_langroid_tool_async
+    ListFilesTool = await get_langroid_tool_async(create_fs_mcp_server(), "list_files")
 
-# create a non-interactive task
-task = lr.Task(agent, interactive=False)
+    # enable all three tools
+    agent.enable_message([ListFilesTool, WriteFileTool, ReadFileTool])
 
-# instruct the agent
-prompt = """
-1. List files in the current directory.
-2. Write a file 'note.txt' containing "Hello, MCP!".
-3. Read back 'note.txt'.
-"""
-result = await task.run_async(prompt, turns=3)
-print(result.content)
+    # create a non-interactive task
+    task = lr.Task(agent, interactive=False)
+
+    # instruct the agent
+    prompt = """
+    1. List files in the current directory.
+    2. Write a file 'note.txt' containing "Hello, MCP!".
+    3. Read back 'note.txt'.
+    """
+    result = await task.run_async(prompt, turns=3)
+    print(result.content)
 
 
 if __name__ == "__main__":
-def _run(**kwargs: str) -> None:
-    """Fire entry point to run the async main function."""
+    def _run(**kwargs: str) -> None:
+        """Fire entry point to run the async main function."""
         asyncio.run(main(**kwargs))
 
     Fire(_run)

@@ -102,6 +102,9 @@ async def example_in_memory() -> None:
     print(result)  # 42
 ```
 
+See the [`mcp-file-system.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/mcp-file-system.py)
+script for a working example of this.
+
 ---
 
 ### NPX stdio Transport
@@ -213,7 +216,7 @@ class CalcTool(ToolMessage):
 
 ---
 
-## 5. Enabling Tools in Your Agent
+## 3. Enabling Tools in Your Agent
 
 Once you’ve created a Langroid `ToolMessage` subclass from an MCP server, 
 you can enable it on a `ChatAgent`, just like you normally would. Below is an example of using 
