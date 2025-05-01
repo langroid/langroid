@@ -3,7 +3,7 @@ Example: Expose local file-system operations via an in-memory FastMCP server.
 
 Run like this:
 
-uv run examples/mcp/fs_file_ops
+uv run examples/mcp/mcp-file-system.py --model gpt-4.1-mini
 
 Then ask your agent to list, write, or read files.
 """
