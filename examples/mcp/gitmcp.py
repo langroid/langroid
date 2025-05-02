@@ -16,7 +16,6 @@ from textwrap import dedent
 from typing import List
 import langroid as lr
 import langroid.language_models as lm
-from langroid.mytypes import NonToolAction
 from langroid.pydantic_v1 import Field
 from langroid.agent.tools.mcp.fastmcp_client import get_langroid_tools_async
 from langroid.agent.tools.orchestration import SendTool
@@ -61,6 +60,7 @@ def get_gitmcp_url() -> str:
     console.print(f"GitMCP URL set to [green]{gitmcp_url}[/]")
     return gitmcp_url
 
+
 class SendUserTool(SendTool):
     request: str = "send_user"
     purpose: str = "Send <content> to user"
@@ -71,8 +71,9 @@ class SendUserTool(SendTool):
         Message to send to user, typically answer to user's request,
         or a clarification question to the user, if user's task/question
         is not completely clear.
-        """
+        """,
     )
+
 
 async def main(model: str = ""):
 
