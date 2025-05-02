@@ -574,8 +574,14 @@ class ChatAgent(Agent):
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         """
-        Fallback method for the "no-tools" scenario.
-        Users the self.config.non_tool_routing to determine the action to take.
+        Fallback method for the "no-tools" scenario, i.e., the current `msg`
+        (presumably emitted by the LLM) does not have any tool that the agent
+        can handle.
+        NOTE: The `msg` may contain tools but either (a) the agent is not
+        enabled to handle them, or (b) there's an explicit `recipient` field
+        in the tool that doesn't match the agent's name.
+
+        Uses the self.config.non_tool_routing to determine the action to take.
 
         This method can be overridden by subclasses, e.g.,
         to create a "reminder" message when a tool is expected but the LLM "forgot"
@@ -586,27 +592,31 @@ class ChatAgent(Agent):
         Returns:
             Any: The result of the handler method
         """
-        if self.config.handle_llm_no_tool is None:
+        if (
+            isinstance(msg, str)
+            or msg.metadata.sender != Entity.LLM
+            or self.config.handle_llm_no_tool is None
+            or self.has_only_unhandled_tools(msg)
+        ):
             return None
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
+        # we ONLY use the `handle_llm_no_tool` config option when
+        # the msg is from LLM and does not contain ANY tools at all.
+        from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
 
-            no_tool_option = self.config.handle_llm_no_tool
-            if no_tool_option in list(NonToolAction):
-                # in case the `no_tool_option` is one of the special NonToolAction vals
-                match self.config.handle_llm_no_tool:
-                    case NonToolAction.FORWARD_USER:
-                        return ForwardTool(agent="User")
-                    case NonToolAction.DONE:
-                        return AgentDoneTool(
-                            content=msg.content, tools=msg.tool_messages
-                        )
-            elif is_callable(no_tool_option):
-                return no_tool_option(msg)
-            # Otherwise just return `no_tool_option` as is:
-            # This can be any string, such as a specific nudge/reminder to the LLM,
-            # or even something like ResultTool etc.
-            return no_tool_option
+        no_tool_option = self.config.handle_llm_no_tool
+        if no_tool_option in list(NonToolAction):
+            # in case the `no_tool_option` is one of the special NonToolAction vals
+            match self.config.handle_llm_no_tool:
+                case NonToolAction.FORWARD_USER:
+                    return ForwardTool(agent="User")
+                case NonToolAction.DONE:
+                    return AgentDoneTool(content=msg.content, tools=msg.tool_messages)
+        elif is_callable(no_tool_option):
+            return no_tool_option(msg)
+        # Otherwise just return `no_tool_option` as is:
+        # This can be any string, such as a specific nudge/reminder to the LLM,
+        # or even something like ResultTool etc.
+        return no_tool_option
 
     def unhandled_tools(self) -> set[str]:
         """The set of tools that are known but not handled.
