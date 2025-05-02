@@ -22,8 +22,7 @@ from fire import Fire
 
 async def main(model: str = ""):
     transport = StdioTransport(
-        command="uv",
-        args=["run", "--with", "biomcp-python", "biomcp", "run"]
+        command="uv", args=["run", "--with", "biomcp-python", "biomcp", "run"]
     )
     all_tools = await get_langroid_tools_async(transport)
 

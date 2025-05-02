@@ -124,13 +124,8 @@ async def async_lambda_noop_fn() -> Callable[..., Coroutine[Any, Any, None]]:
 
 class Agent(ABC):
     """
-    An Agent is an abstraction that encapsulates mainly two components:
-
-    - a language model (LLM)
-    - a vector store (vecdb)
-
-    plus associated components such as a parser, and variables that hold
-    information about any tool/function-calling messages that have been defined.
+    An Agent is an abstraction that typically (but not necessarily)
+    encapsulates an LLM.
     """
 
     id: str = Field(default_factory=lambda: ObjectRegistry.new_id())
@@ -1087,8 +1082,9 @@ class Agent(ABC):
         return False
 
     def _tool_recipient_match(self, tool: ToolMessage) -> bool:
-        """Is tool is handled by this agent
-        and an explicit `recipient` field doesn't preclude this agent from handling it?
+        """Is tool enabled for handling by this agent and intended for this
+        agent to handle (i.e. if there's any explicit `recipient` field exists in
+        tool, then it matches this agent's name)?
         """
         if tool.default_value("request") not in self.llm_tools_handled:
             return False
@@ -1098,8 +1094,8 @@ class Agent(ABC):
 
     def has_only_unhandled_tools(self, msg: str | ChatDocument) -> bool:
         """
-        Does the msg have at least one tool, and ALL tools are
-        disabled for handling by this agent?
+        Does the msg have at least one tool, and none of the tools in the msg are
+        handleable by this agent?
         """
         if msg is None:
             return False
@@ -1535,7 +1531,8 @@ class Agent(ABC):
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         """
-        Fallback method for the "no-tools" scenario.
+        Fallback method for the case where the msg has no tools that
+        can be handled by this agent.
         This method can be overridden by subclasses, e.g.,
         to create a "reminder" message when a tool is expected but the LLM "forgot"
         to generate one.
