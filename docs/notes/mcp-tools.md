@@ -41,6 +41,7 @@ Below we go over some common ways to define transports and extract tools from th
 3. **NPX stdio transport**
 4. **UVX stdio transport**
 5. **Generic stdio transport** – launch any CLI‐based MCP server via stdin/stdout
+6. **Network SSE transport** – connect to HTTP/S MCP servers via `SSETransport`
 
 
 All examples below use the async helpers to create Langroid tools (`ToolMessage` subclasses):
@@ -176,6 +177,28 @@ async def example_stdio() -> None:
 
 See the full example in [`examples/mcp/biomcp.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/biomcp.py).
 
+#### Network SSE Transport
+
+Use `SSETransport` to connect to a FastMCP server over HTTP/S:
+
+```python
+from fastmcp.client.transports import SSETransport
+from langroid.agent.tools.mcp import (
+    get_langroid_tools_async,
+    get_langroid_tool_async,
+)
+
+async def example_sse() -> None:
+    """Example: connect to an HTTP/S MCP server via SSETransport."""
+    url: str = "https://localhost:8000/sse"
+    transport: SSETransport = SSETransport(
+        url=url, headers={"Authorization": "Bearer TOKEN"}
+    )
+    tools: list[type] = await get_langroid_tools_async(transport)
+    ExampleTool = await get_langroid_tool_async(transport, "tool_name")
+    result: str = await ExampleTool(param="value").handle_async()
+    print(result)
+```    
 ---
 
 With these patterns you can list tools, generate Pydantic-backed `ToolMessage` classes,
