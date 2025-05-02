@@ -75,7 +75,7 @@ async def main(model: str = ""):
             handle_llm_no_tool=NonToolAction.FORWARD_USER,
             llm=lm.OpenAIGPTConfig(
                 chat_model=model or "gpt-4.1-mini",
-                max_output_tokens=100_000,
+                max_output_tokens=10_000,
                 async_stream_quiet=False,
             ),
             system_message=dedent(
@@ -89,9 +89,13 @@ async def main(model: str = ""):
 
     # enable the agent to use all tools
     agent.enable_message(all_tools)
+    # configure task to NOT recognize string-based signals like DONE,
+    # since those could occur in the retrieved text!
+    task_cfg = lr.TaskConfig(recognize_string_signals=False)
     # make task with interactive=False =>
     # waits for user only when LLM doesn't use a tool
-    task = lr.Task(agent, interactive=False)
+
+    task = lr.Task(agent, config=task_cfg, interactive=False)
     await task.run_async(
         "Based on the TOOLs available to you, greet the user and"
         "tell them what kinds of help you can provide."
