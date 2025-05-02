@@ -40,6 +40,8 @@ Below we go over some common ways to define transports and extract tools from th
    that don't need to be run as a separate process.
 3. **NPX stdio transport**
 4. **UVX stdio transport**
+5. **Generic stdio transport** – launch any CLI‐based MCP server via stdin/stdout
+
 
 All examples below use the async helpers to create Langroid tools (`ToolMessage` subclasses):
 ```python
@@ -150,6 +152,29 @@ async def example_uvx() -> None:
     status = await GitStatus(path=".").handle_async()
     print(status)
 ```
+
+#### Generic stdio Transport
+
+Use `StdioTransport` to run any MCP server as a subprocess over stdio:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp import get_langroid_tools_async, \
+    get_langroid_tool_async
+
+async def example_stdio() -> None:
+    """Example: any CLI‐based MCP server via StdioTransport."""
+    transport: StdioTransport = StdioTransport(
+        command="uv",
+        args=["run", "--with", "biomcp-python", "biomcp", "run"],
+    )
+    tools: list[type] = await get_langroid_tools_async(transport)
+    BioTool = await get_langroid_tool_async(transport, "tool_name")
+    result: str = await BioTool(param="value").handle_async()
+    print(result)
+```
+
+See the full example in [`examples/mcp/biomcp.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/biomcp.py).
 
 ---
 
