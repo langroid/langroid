@@ -49,11 +49,11 @@ class XMLToolMessage(ToolMessage):
         Raises:
             etree.XMLSyntaxError: If the input string is not valid XML.
         """
-        # SECURITY: Initialize XMLParser with flags to prevent 
-        # XML External Entity (XXE), billion laughs, and external DTD attacks by 
+        # SECURITY: Initialize XMLParser with flags to prevent
+        # XML External Entity (XXE), billion laughs, and external DTD attacks by
         # disabling entity resolution, DTD loading, and network access;
         # `strip_cdata=False` is needed to preserve
-        # content within CDATA sections (e.g., for code).        
+        # content within CDATA sections (e.g., for code).
         parser = etree.XMLParser(
             strip_cdata=False,
             resolve_entities=False,

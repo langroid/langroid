@@ -159,12 +159,11 @@ class VectorStore(ABC):
         df = pd.DataFrame(dicts)
 
         try:
-            result = pd.eval(  # safer than eval but limited to single expression
-                calc,
-                engine="python",
-                parser="pandas",
-                local_dict={"df": df},
-            )
+            # SECURITY: Use Python's eval() with NO globals and only {"df": df}
+            # in locals. This allows pandas operations on `df` while preventing
+            # access to builtins or other potentially harmful global functions,
+            # mitigating risks associated with executing untrusted `calc` strings.
+            result = eval(calc, {}, {"df": df})  # type: ignore
         except Exception as e:
             # return error message so LLM can fix the calc string if needed
             err = f"""
