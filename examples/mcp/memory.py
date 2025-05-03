@@ -17,7 +17,7 @@ Run like this (-m model optional; defaults to gpt-4.1-mini):
 import langroid as lr
 import langroid.language_models as lm
 from langroid.mytypes import NonToolAction
-from langroid.agent.tools.mcp.fastmcp_client import get_langroid_tools_async
+from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
 from fastmcp.client.transports import NpxStdioTransport
 from fire import Fire
 
@@ -43,7 +43,7 @@ async def main(model: str = ""):
         package="@modelcontextprotocol/server-memory",
         args=["-y"],
     )
-    tools = await get_langroid_tools_async(transport)
+    tools = await get_tools_async(transport)
 
     # enable the agent to use all tools
     agent.enable_message(tools)

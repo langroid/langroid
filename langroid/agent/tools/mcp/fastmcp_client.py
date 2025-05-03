@@ -113,7 +113,7 @@ class FastMCPClient:
         # Default fallback
         return Any, Field(default=default, description=desc)
 
-    async def get_langroid_tool(self, tool_name: str) -> Type[ToolMessage]:
+    async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]:
         """
         Create a Langroid ToolMessage subclass from the MCP Tool
         with the given `tool_name`.
@@ -195,7 +195,7 @@ class FastMCPClient:
 
         return tool_model
 
-    async def get_langroid_tools(self) -> List[Type[ToolMessage]]:
+    async def get_tools_async(self) -> List[Type[ToolMessage]]:
         """
         Get all available tools as Langroid ToolMessage classes,
         handling nested schemas, with `handle_async` methods
@@ -205,7 +205,7 @@ class FastMCPClient:
         resp = await self.client.list_tools()
         tools: List[Type[ToolMessage]] = []
         for t in resp:
-            tools.append(await self.get_langroid_tool(t.name))
+            tools.append(await self.get_tool_async(t.name))
         return tools
 
     async def get_mcp_tool_async(self, name: str) -> Optional[Tool]:
@@ -270,32 +270,32 @@ class FastMCPClient:
         return self._convert_tool_result(tool_name, result)
 
 
-async def get_langroid_tool_async(
+async def get_tool_async(
     server: str | ClientTransport,
     tool_name: str,
 ) -> Type[ToolMessage]:
     async with FastMCPClient(server) as client:
-        return await client.get_langroid_tool(tool_name)
+        return await client.get_tool_async(tool_name)
 
 
-def get_langroid_tool(
+def get_tool(
     server: str | ClientTransport,
     tool_name: str,
 ) -> Type[ToolMessage]:
-    return asyncio.run(get_langroid_tool_async(server, tool_name))
+    return asyncio.run(get_tool_async(server, tool_name))
 
 
-async def get_langroid_tools_async(
+async def get_tools_async(
     server: str | ClientTransport,
 ) -> List[Type[ToolMessage]]:
     async with FastMCPClient(server) as client:
-        return await client.get_langroid_tools()
+        return await client.get_tools_async()
 
 
-def get_langroid_tools(
+def get_tools(
     server: str | ClientTransport,
 ) -> List[Type[ToolMessage]]:
-    return asyncio.run(get_langroid_tools_async(server))
+    return asyncio.run(get_tools_async(server))
 
 
 async def get_mcp_tool_async(
