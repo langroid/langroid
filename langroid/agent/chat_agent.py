@@ -1575,7 +1575,6 @@ class ChatAgent(Agent):
                     so they can fit within the model's context length
                     """
                 )
-                return hist, output_len
             else:
                 # unacceptably small output len, so compress early parts of conv
                 # history if output_len is still too long.
