@@ -2,9 +2,14 @@ import os
 from typing import List, Optional
 
 import pytest
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+from fastmcp.client.sampling import (
+    RequestContext,
+    SamplingMessage,
+    SamplingParams,
+)
 from fastmcp.client.transports import NpxStdioTransport, UvxStdioTransport
-from mcp.types import Tool
+from mcp.types import ImageContent, TextContent, Tool
 
 # note we use pydantic v2 to define MCP server
 from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
@@ -13,9 +18,9 @@ import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.mcp import (
     FastMCPClient,
-    get_langroid_tool_async,
-    get_langroid_tools_async,
     get_mcp_tool_async,
+    get_tool_async,
+    get_tools_async,
     mcp_tool,
 )
 
@@ -54,9 +59,25 @@ def mcp_server():
             self.count += x
             return self.count
 
+    # create a stateful tool
     counter = Counter()
+    # we can't directly use the tool decorator on instance methods,
+    # so we use the server.add_tool() method to add the tool
     server.add_tool(counter.get_num_beans)
     server.add_tool(counter.add_beans)
+
+    # example of tool that uses an arg of type Context, and
+    # uses this arg to request client LLM sampling, and send logs
+    @server.tool()
+    async def prime_check(number: int, ctx: Context) -> str:
+        """
+        Determine if the given number is Prime or not.
+        """
+        result: TextContent | ImageContent = await ctx.sample(
+            f"Is the number {number} prime?",
+        )
+        assert isinstance(result, TextContent), "Expected a text response"
+        return result.text
 
     @server.tool()
     def greet(person: str) -> str:
@@ -129,7 +150,7 @@ def mcp_server():
 )
 async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     """End‐to‐end test for get_tools and .handle() against server."""
-    tools = await get_langroid_tools_async(server)
+    tools = await get_tools_async(server)
     # basic sanity
     assert isinstance(tools, list)
     assert tools, "Expected at least one tool"
@@ -146,11 +167,10 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     AlertsMCPTool: Tool = await get_mcp_tool_async(server, "get_alerts")
 
     assert AlertsMCPTool is not None
-    AlertsTool = await get_langroid_tool_async(server, AlertsMCPTool.name)
+    AlertsTool = await get_tool_async(server, AlertsMCPTool.name)
 
     assert AlertsTool is not None
     assert issubclass(AlertsTool, lr.ToolMessage)
-    # EXIT the async with client context, and it should work.
 
     # instantiate Langroid ToolMessage
     msg = AlertsTool(state="NY")
@@ -168,7 +188,7 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     # make tool from async FastMCP tool
     AlertsMCPToolAsync = await get_mcp_tool_async(server, "get_alerts_async")
     assert AlertsMCPToolAsync is not None
-    AlertsToolAsync = await get_langroid_tool_async(server, AlertsMCPToolAsync.name)
+    AlertsToolAsync = await get_tool_async(server, AlertsMCPToolAsync.name)
 
     assert AlertsToolAsync is not None
     assert issubclass(AlertsToolAsync, lr.ToolMessage)
@@ -188,7 +208,7 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
     assert result is not None
 
     # test making tool with utility functions
-    AlertsTool = await get_langroid_tool_async(server, "get_alerts")
+    AlertsTool = await get_tool_async(server, "get_alerts")
     assert issubclass(AlertsTool, lr.ToolMessage)
     # instantiate Langroid ToolMessage
     msg = AlertsTool(state="NY")
@@ -210,12 +230,12 @@ async def test_tools_connect_close(server: str | FastMCP) -> None:
     await client.connect()
     mcp_tools = await client.client.list_tools()
     assert all(isinstance(t, Tool) for t in mcp_tools)
-    langroid_tool_classes = await client.get_langroid_tools()
+    langroid_tool_classes = await client.get_tools_async()
     assert all(issubclass(tc, lr.ToolMessage) for tc in langroid_tool_classes)
 
     AlertsMCPTool = await get_mcp_tool_async(server, "get_alerts")
 
-    AlertsTool = await get_langroid_tool_async(server, AlertsMCPTool.name)
+    AlertsTool = await get_tool_async(server, AlertsMCPTool.name)
     await client.close()
 
     assert AlertsTool is not None
@@ -235,10 +255,10 @@ async def test_stateful_tool() -> None:
     server = mcp_server()
 
     # get tools from the SAME instance of the server
-    AddBeansTool = await get_langroid_tool_async(server, "add_beans")
+    AddBeansTool = await get_tool_async(server, "add_beans")
     assert issubclass(AddBeansTool, lr.ToolMessage)
 
-    GetNumBeansTool = await get_langroid_tool_async(server, "get_num_beans")
+    GetNumBeansTool = await get_tool_async(server, "get_num_beans")
     assert issubclass(GetNumBeansTool, lr.ToolMessage)
 
     add_beans_msg = AddBeansTool(x=5)
@@ -256,6 +276,35 @@ async def test_stateful_tool() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tool_with_context_and_sampling() -> None:
+    async def sampling_handler(
+        messages: list[SamplingMessage],
+        params: SamplingParams,
+        context: RequestContext,
+    ) -> str:
+        """Handle a sampling request from server"""
+        # simulate an LLM call
+        return "Yes"
+
+    PrimeCheckTool = await get_tool_async(
+        mcp_server(),
+        "prime_check",
+        sampling_handler=sampling_handler,
+    )
+    assert issubclass(PrimeCheckTool, lr.ToolMessage)
+    # assert that "ctx" is NOT a field in the tool
+    assert "ctx" not in PrimeCheckTool.llm_function_schema().parameters["properties"]
+
+    # instantiate Langroid ToolMessage
+    prime_check_msg = PrimeCheckTool(number=7)
+    assert isinstance(prime_check_msg, lr.ToolMessage)
+
+    result = await prime_check_msg.handle_async()
+    assert isinstance(result, str)
+    assert "yes" in result.lower()
+
+
+@pytest.mark.asyncio
 async def test_mcp_tool_schemas() -> None:
     """
     Test that descriptions, field-descriptions of MCP tools are preserved
@@ -263,7 +312,7 @@ async def test_mcp_tool_schemas() -> None:
     since the LLM is shown these, and helps with tool-call accuracy.
     """
     # make a langroid AlertsTool from the corresponding MCP tool
-    AlertsTool = await get_langroid_tool_async(mcp_server(), "get_alerts")
+    AlertsTool = await get_tool_async(mcp_server(), "get_alerts")
 
     assert issubclass(AlertsTool, lr.ToolMessage)
     description = "Get weather alerts for a state."
@@ -274,7 +323,7 @@ async def test_mcp_tool_schemas() -> None:
     assert schema.parameters["required"] == ["state"]
     assert "TWO-LETTER" in schema.parameters["properties"]["state"]["description"]
 
-    InfoTool = await get_langroid_tool_async(mcp_server(), "info_tool")
+    InfoTool = await get_tool_async(mcp_server(), "info_tool")
     assert issubclass(InfoTool, lr.ToolMessage)
     description = "Get information for a recipient."
     assert InfoTool.default_value("purpose") == description
@@ -303,7 +352,7 @@ async def test_single_output() -> None:
     """Test that a tool with a single string output works
     similarly to one that has a list of strings outputs."""
 
-    OneAlertTool = await get_langroid_tool_async(mcp_server(), "get_one_alert")
+    OneAlertTool = await get_tool_async(mcp_server(), "get_one_alert")
 
     assert OneAlertTool is not None
     msg = OneAlertTool(state="NY")
@@ -330,7 +379,7 @@ async def test_agent_mcp_tools() -> None:
         )
     )
 
-    NabroskiTool: lr.ToolMessage = await get_langroid_tool_async(server, "nabroski")
+    NabroskiTool: lr.ToolMessage = await get_tool_async(server, "nabroski")
 
     agent.enable_message(NabroskiTool)
 
@@ -353,7 +402,7 @@ async def test_agent_mcp_tools() -> None:
     assert "14" in result.content
 
     # test MCP tool with fields that clash with Langroid ToolMessage
-    InfoTool = await get_langroid_tool_async(server, "info_tool")
+    InfoTool = await get_tool_async(server, "info_tool")
     agent.init_state()
     agent.enable_message(InfoTool)
     result: lr.ChatDocument = await task.run_async(
@@ -485,7 +534,7 @@ async def test_multiple_tools(prompt, tool_name, expected) -> None:
             ),
         )
     )
-    all_tools = await get_langroid_tools_async(mcp_server())
+    all_tools = await get_tools_async(mcp_server())
 
     tool = next(
         (t for t in all_tools if t.name() == tool_name),
@@ -518,10 +567,10 @@ async def test_npxstdio_transport() -> None:
         package="exa-mcp-server",
         env_vars=dict(EXA_API_KEY=os.getenv("EXA_API_KEY")),
     )
-    tools = await get_langroid_tools_async(transport)
+    tools = await get_tools_async(transport)
     assert isinstance(tools, list)
     assert tools, "Expected at least one tool"
-    WebSearchTool = await get_langroid_tool_async(transport, "web_search_exa")
+    WebSearchTool = await get_tool_async(transport, "web_search_exa")
 
     assert WebSearchTool is not None
     agent = lr.ChatAgent(
@@ -585,10 +634,10 @@ async def test_uvxstdio_transport() -> None:
     via uvx stdio transport. We use this example `git` MCP server:
     https://github.com/modelcontextprotocol/servers/tree/main/src/git
     """
-    tools = await get_langroid_tools_async(transport)
+    tools = await get_tools_async(transport)
     assert isinstance(tools, list)
     assert tools, "Expected at least one tool"
-    GitStatusTool = await get_langroid_tool_async(transport, "git_status")
+    GitStatusTool = await get_tool_async(transport, "git_status")
 
     assert GitStatusTool is not None
     agent = lr.ChatAgent(
@@ -649,7 +698,7 @@ async def test_npxstdio_transport_memory() -> None:
         package="@modelcontextprotocol/server-memory",
         args=["-y"],
     )
-    tools = await get_langroid_tools_async(transport)
+    tools = await get_tools_async(transport)
     assert isinstance(tools, list)
     assert tools, "Expected at least one tool"
 

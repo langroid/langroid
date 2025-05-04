@@ -1,17 +1,29 @@
 import asyncio
+import datetime
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Type, cast
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeAlias, cast
 
 from dotenv import load_dotenv
 from fastmcp.client import Client
+from fastmcp.client.roots import (
+    RootsHandler,
+    RootsList,
+)
+from fastmcp.client.sampling import SamplingHandler
 from fastmcp.client.transports import ClientTransport
 from fastmcp.server import FastMCP
+from mcp.client.session import (
+    LoggingFnT,
+    MessageHandlerFnT,
+)
 from mcp.types import CallToolResult, TextContent, Tool
 
 from langroid.agent.tool_message import ToolMessage
-from langroid.pydantic_v1 import BaseModel, Field, create_model
+from langroid.pydantic_v1 import AnyUrl, BaseModel, Field, create_model
 
 load_dotenv()  # load environment variables from .env
+
+FastMCPServerSpec: TypeAlias = str | FastMCP[Any] | ClientTransport | AnyUrl
 
 
 class FastMCPClient:
@@ -24,7 +36,15 @@ class FastMCPClient:
     _cm: Optional[Client] = None
     client: Optional[Client] = None
 
-    def __init__(self, server: str | FastMCP[Any] | ClientTransport) -> None:
+    def __init__(
+        self,
+        server: FastMCPServerSpec,
+        sampling_handler: SamplingHandler | None = None,  # type: ignore
+        roots: RootsList | RootsHandler | None = None,  # type: ignore
+        log_handler: LoggingFnT | None = None,
+        message_handler: MessageHandlerFnT | None = None,
+        read_timeout_seconds: datetime.timedelta | None = None,
+    ) -> None:
         """Initialize the FastMCPClient.
 
         Args:
@@ -33,11 +53,23 @@ class FastMCPClient:
         self.server = server
         self.client = None
         self._cm = None
+        self.sampling_handler = sampling_handler
+        self.roots = roots
+        self.log_handler = log_handler
+        self.message_handler = message_handler
+        self.read_timeout_seconds = read_timeout_seconds
 
     async def __aenter__(self) -> "FastMCPClient":
         """Enter the async context manager and connect inner client."""
         # create inner client context manager
-        self._cm = Client(self.server)
+        self._cm = Client(
+            self.server,
+            sampling_handler=self.sampling_handler,
+            roots=self.roots,
+            log_handler=self.log_handler,
+            message_handler=self.message_handler,
+            read_timeout_seconds=self.read_timeout_seconds,
+        )
         # actually enter it (opens the session)
         self.client = await self._cm.__aenter__()  # type: ignore
         return self
@@ -113,7 +145,7 @@ class FastMCPClient:
         # Default fallback
         return Any, Field(default=default, description=desc)
 
-    async def get_langroid_tool(self, tool_name: str) -> Type[ToolMessage]:
+    async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]:
         """
         Create a Langroid ToolMessage subclass from the MCP Tool
         with the given `tool_name`.
@@ -163,7 +195,17 @@ class FastMCPClient:
                 **fields,
             ),
         )
-        tool_model._server = self.server  # type: ignore[attr-defined]
+        # Store ALL client configuration needed to recreate a client
+        client_config = {
+            "server": self.server,
+            "sampling_handler": self.sampling_handler,
+            "roots": self.roots,
+            "log_handler": self.log_handler,
+            "message_handler": self.message_handler,
+            "read_timeout_seconds": self.read_timeout_seconds,
+        }
+
+        tool_model._client_config = client_config  # type: ignore [attr-defined]
         tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
 
         # 2) define an arg-free call_tool_async()
@@ -171,15 +213,23 @@ class FastMCPClient:
             from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
 
             # pack up the payload
-            payload = self.dict(exclude=self.Config.schema_extra["exclude"])
+            payload = self.dict(
+                exclude=self.Config.schema_extra["exclude"].union(
+                    ["request", "purpose"]
+                ),
+            )
 
             # restore any renamed fields
             for orig, new in self.__class__._renamed_fields.items():  # type: ignore
                 if new in payload:
                     payload[orig] = payload.pop(new)
 
+            client_cfg = getattr(self.__class__, "_client_config", None)  # type: ignore
+            if not client_cfg:
+                # Fallback or error - ideally _client_config should always exist
+                raise RuntimeError(f"Client config missing on {self.__class__}")
             # open a fresh client, call the tool, then close
-            async with FastMCPClient(self.__class__._server) as client:  # type: ignore
+            async with FastMCPClient(**client_cfg) as client:  # type: ignore
                 return await client.call_mcp_tool(self.request, payload)
 
         tool_model.call_tool_async = call_tool_async  # type: ignore
@@ -195,7 +245,7 @@ class FastMCPClient:
 
         return tool_model
 
-    async def get_langroid_tools(self) -> List[Type[ToolMessage]]:
+    async def get_tools_async(self) -> List[Type[ToolMessage]]:
         """
         Get all available tools as Langroid ToolMessage classes,
         handling nested schemas, with `handle_async` methods
@@ -203,10 +253,7 @@ class FastMCPClient:
         if not self.client:
             raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
         resp = await self.client.list_tools()
-        tools: List[Type[ToolMessage]] = []
-        for t in resp:
-            tools.append(await self.get_langroid_tool(t.name))
-        return tools
+        return [await self.get_tool_async(t.name) for t in resp]
 
     async def get_mcp_tool_async(self, name: str) -> Optional[Tool]:
         """Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
@@ -270,46 +317,144 @@ class FastMCPClient:
         return self._convert_tool_result(tool_name, result)
 
 
-async def get_langroid_tool_async(
-    server: str | ClientTransport,
+# ==============================================================================
+# Convenience functions (wrappers around FastMCPClient methods)
+# These are useful for one-off calls without needing to manage the
+# FastMCPClient context explicitly.
+# ==============================================================================
+
+
+async def get_tool_async(
+    server: FastMCPServerSpec,
     tool_name: str,
+    **client_kwargs: Any,
 ) -> Type[ToolMessage]:
-    async with FastMCPClient(server) as client:
-        return await client.get_langroid_tool(tool_name)
+    """Get a single Langroid ToolMessage subclass for a specific MCP tool name (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        tool_name: The name of the tool to retrieve.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A dynamically created Langroid ToolMessage subclass representing the
+        requested tool.
+    """
+    async with FastMCPClient(server, **client_kwargs) as client:
+        return await client.get_tool_async(tool_name)
 
 
-def get_langroid_tool(
-    server: str | ClientTransport,
+def get_tool(
+    server: FastMCPServerSpec,
     tool_name: str,
+    **client_kwargs: Any,
 ) -> Type[ToolMessage]:
-    return asyncio.run(get_langroid_tool_async(server, tool_name))
+    """Get a single Langroid ToolMessage subclass
+    for a specific MCP tool name (synchronous).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
+    async `get_tool_async` function using `asyncio.run()`.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        tool_name: The name of the tool to retrieve.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A dynamically created Langroid ToolMessage subclass representing the
+        requested tool.
+    """
+    return asyncio.run(get_tool_async(server, tool_name, **client_kwargs))
 
 
-async def get_langroid_tools_async(
-    server: str | ClientTransport,
+async def get_tools_async(
+    server: FastMCPServerSpec,
+    **client_kwargs: Any,
 ) -> List[Type[ToolMessage]]:
-    async with FastMCPClient(server) as client:
-        return await client.get_langroid_tools()
+    """Get all available tools as Langroid ToolMessage subclasses (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A list of dynamically created Langroid ToolMessage subclasses
+        representing all available tools on the server.
+    """
+    async with FastMCPClient(server, **client_kwargs) as client:
+        return await client.get_tools_async()
 
 
-def get_langroid_tools(
-    server: str | ClientTransport,
+def get_tools(
+    server: FastMCPServerSpec,
+    **client_kwargs: Any,
 ) -> List[Type[ToolMessage]]:
-    return asyncio.run(get_langroid_tools_async(server))
+    """Get all available tools as Langroid ToolMessage subclasses (synchronous).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
+    async `get_tools_async` function using `asyncio.run()`.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A list of dynamically created Langroid ToolMessage subclasses
+        representing all available tools on the server.
+    """
+    return asyncio.run(get_tools_async(server, **client_kwargs))
 
 
 async def get_mcp_tool_async(
-    server: str | ClientTransport,
+    server: FastMCPServerSpec,
     name: str,
+    **client_kwargs: Any,
 ) -> Optional[Tool]:
-    async with FastMCPClient(server) as client:
+    """Get the raw MCP Tool object for a specific tool name (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient to
+    retrieve the tool definition from the server.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        name: The name of the tool to look up.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor.
+
+    Returns:
+        The raw `mcp.types.Tool` object from the server, or `None` if the tool
+        is not found.
+    """
+    async with FastMCPClient(server, **client_kwargs) as client:
         return await client.get_mcp_tool_async(name)
 
 
 async def get_mcp_tools_async(
-    server: str | ClientTransport,
+    server: FastMCPServerSpec,
+    **client_kwargs: Any,
 ) -> List[Tool]:
-    async with FastMCPClient(server) as client:
+    """Get all available raw MCP Tool objects from the server (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient to
+    retrieve the list of tool definitions from the server.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor.
+
+    Returns:
+        A list of raw `mcp.types.Tool` objects available on the server.
+    """
+    async with FastMCPClient(server, **client_kwargs) as client:
         if not client.client:
             raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
         return await client.client.list_tools()

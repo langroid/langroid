@@ -45,10 +45,11 @@ Below we go over some common ways to define transports and extract tools from th
 
 
 All examples below use the async helpers to create Langroid tools (`ToolMessage` subclasses):
+
 ```python
 from langroid.agent.tools.mcp import (
-    get_langroid_tools_async,
-    get_langroid_tool_async,
+    get_tools_async,
+    get_tool_async,
 )
 ```
 
@@ -160,8 +161,10 @@ Use `StdioTransport` to run any MCP server as a subprocess over stdio:
 
 ```python
 from fastmcp.client.transports import StdioTransport
-from langroid.agent.tools.mcp import get_langroid_tools_async, \
-    get_langroid_tool_async
+from langroid.agent.tools.mcp import get_tools_async,
+
+get_tool_async
+
 
 async def example_stdio() -> None:
     """Example: any CLI‐based MCP server via StdioTransport."""
@@ -169,8 +172,8 @@ async def example_stdio() -> None:
         command="uv",
         args=["run", "--with", "biomcp-python", "biomcp", "run"],
     )
-    tools: list[type] = await get_langroid_tools_async(transport)
-    BioTool = await get_langroid_tool_async(transport, "tool_name")
+    tools: list[type] = await get_tools_async(transport)
+    BioTool = await get_tool_async(transport, "tool_name")
     result: str = await BioTool(param="value").handle_async()
     print(result)
 ```
@@ -184,9 +187,10 @@ Use `SSETransport` to connect to a FastMCP server over HTTP/S:
 ```python
 from fastmcp.client.transports import SSETransport
 from langroid.agent.tools.mcp import (
-    get_langroid_tools_async,
-    get_langroid_tool_async,
+    get_tools_async,
+    get_tool_async,
 )
+
 
 async def example_sse() -> None:
     """Example: connect to an HTTP/S MCP server via SSETransport."""
@@ -194,8 +198,8 @@ async def example_sse() -> None:
     transport: SSETransport = SSETransport(
         url=url, headers={"Authorization": "Bearer TOKEN"}
     )
-    tools: list[type] = await get_langroid_tools_async(transport)
-    ExampleTool = await get_langroid_tool_async(transport, "tool_name")
+    tools: list[type] = await get_tools_async(transport)
+    ExampleTool = await get_tool_async(transport, "tool_name")
     result: str = await ExampleTool(param="value").handle_async()
     print(result)
 ```    
@@ -313,9 +317,10 @@ created the `ExaSearchTool` class programmatically via the `get_langroid_tool_as
 function as shown above, i.e.:
 
 ```python
-from langroid.agent.tools.mcp import get_langroid_tool_async
+from langroid.agent.tools.mcp import get_tool_async
 
-ExaSearchTool = awwait get_langroid_tool_async(transport, "web_search_exa")
+ExaSearchTool = awwait
+get_tool_async(transport, "web_search_exa")
 ```
 
 We can now define our main function where we create our `ChatAgent`,

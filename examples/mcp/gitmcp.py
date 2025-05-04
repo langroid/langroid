@@ -17,7 +17,7 @@ from typing import List
 import langroid as lr
 import langroid.language_models as lm
 from langroid.pydantic_v1 import Field
-from langroid.agent.tools.mcp.fastmcp_client import get_langroid_tools_async
+from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
 from langroid.agent.tools.orchestration import SendTool
 from fastmcp.client.transports import SSETransport
 from fire import Fire
@@ -82,7 +82,7 @@ async def main(model: str = ""):
     transport = SSETransport(
         url=gitmcp_url,
     )
-    all_tools: List[lr.ToolMessage] = await get_langroid_tools_async(transport)
+    all_tools: List[lr.ToolMessage] = await get_tools_async(transport)
 
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(

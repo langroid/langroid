@@ -15,7 +15,7 @@ import langroid.language_models as lm
 from fire import Fire
 from fastmcp.server import FastMCP
 from langroid.pydantic_v1 import Field
-from langroid.agent.tools.mcp import mcp_tool, get_langroid_tool_async
+from langroid.agent.tools.mcp import mcp_tool, get_tool_async
 
 
 def create_fs_mcp_server() -> FastMCP:
@@ -92,8 +92,8 @@ async def main(model: str = "") -> None:
         )
     )
 
-    # create ListFilesTool using the helper function get_langroid_tool_async
-    ListFilesTool = await get_langroid_tool_async(create_fs_mcp_server(), "list_files")
+    # create ListFilesTool using the helper function get_tool_async
+    ListFilesTool = await get_tool_async(create_fs_mcp_server(), "list_files")
 
     # enable all three tools
     agent.enable_message([ListFilesTool, WriteFileTool, ReadFileTool])

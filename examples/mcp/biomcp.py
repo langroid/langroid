@@ -15,7 +15,7 @@ Run like this:
 import langroid as lr
 import langroid.language_models as lm
 from langroid.mytypes import NonToolAction
-from langroid.agent.tools.mcp.fastmcp_client import get_langroid_tools_async
+from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
 from fastmcp.client.transports import StdioTransport
 from fire import Fire
 
@@ -24,7 +24,7 @@ async def main(model: str = ""):
     transport = StdioTransport(
         command="uv", args=["run", "--with", "biomcp-python", "biomcp", "run"]
     )
-    all_tools = await get_langroid_tools_async(transport)
+    all_tools = await get_tools_async(transport)
 
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(

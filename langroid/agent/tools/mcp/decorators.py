@@ -1,7 +1,7 @@
 from typing import Callable, Type
 
 from langroid.agent.tool_message import ToolMessage
-from langroid.agent.tools.mcp.fastmcp_client import get_langroid_tool
+from langroid.agent.tools.mcp.fastmcp_client import get_tool
 
 
 def mcp_tool(
@@ -18,7 +18,7 @@ def mcp_tool(
 
     def decorator(user_cls: Type[ToolMessage]) -> Type[ToolMessage]:
         # build the “real” ToolMessage subclass for this server/tool
-        RealTool: Type[ToolMessage] = get_langroid_tool(server, tool_name)
+        RealTool: Type[ToolMessage] = get_tool(server, tool_name)
 
         # copy user‐defined methods / attributes onto RealTool
         for name, attr in user_cls.__dict__.items():
