@@ -1548,7 +1548,7 @@ class ChatAgent(Agent):
                 ]
                 self.message_history.extend(llm_msgs)
 
-        hist = copy.deepcopy(self.message_history)
+        hist = self.message_history
         output_len = self.config.llm.model_max_output_tokens
         if (
             truncate
@@ -1622,7 +1622,6 @@ class ChatAgent(Agent):
                         msg_idx_to_compress,
                         tokens=30,
                         warning="... [Contents truncated!]",
-                        inplace=False,  # Do not modify self.message_history
                     )
 
                     msg_idx_to_compress += 1
@@ -1665,6 +1664,11 @@ class ChatAgent(Agent):
                     """
                     )
 
+        if isinstance(message, ChatDocument):
+            # record the position of the corresponding LLMMessage in
+            # the message_history
+            message.metadata.msg_idx = len(hist) - 1
+            message.metadata.agent_id = self.id
         return hist, output_len
 
     def _function_args(
