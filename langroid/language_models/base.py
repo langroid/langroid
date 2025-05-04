@@ -620,33 +620,31 @@ class LanguageModel(ABC):
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
         return self.generate(prompt, max_tokens)
 
+    @staticmethod
+    def _fallback_model_names(model: str) -> List[str]:
+        parts = model.split("/")
+        fallbacks = []
+        for i in range(1, len(parts)):
+            fallbacks.append("/".join(parts[i:]))
+        return fallbacks
+
     def info(self) -> ModelInfo:
         """Info of relevant chat model"""
-        model = (
-            self.config.completion_model
-            if self.config.use_completion_for_chat
-            else self.config.chat_model
-        )
         orig_model = (
             self.config.completion_model
             if self.config.use_completion_for_chat
             else self.chat_model_orig
         )
-        return get_model_info(orig_model, model)
+        return get_model_info(orig_model, self._fallback_model_names(orig_model))
 
     def completion_info(self) -> ModelInfo:
         """Info of relevant completion model"""
-        model = (
-            self.config.chat_model
-            if self.config.use_chat_for_completion
-            else self.config.completion_model
-        )
         orig_model = (
             self.chat_model_orig
             if self.config.use_chat_for_completion
             else self.config.completion_model
         )
-        return get_model_info(orig_model, model)
+        return get_model_info(orig_model, self._fallback_model_names(orig_model))
 
     def supports_functions_or_tools(self) -> bool:
         """
