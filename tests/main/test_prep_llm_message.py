@@ -100,13 +100,13 @@ def test_truncate_messages(agent):
             LLMMessage(role=Role.ASSISTANT, content=f"Assistant reply {i+1}")
         )
 
+    orig_msg_len = len(agent.message_history[1].content)
     # Call the method
     hist, output_len = agent._prep_llm_messages("Final message")
 
     # Check that early messages were truncated
     assert len(hist) == 8  # All messages still present
-    assert len(hist[1].content) < len(
-        agent.message_history[1].content
-    )  # First user message truncated
+    assert len(hist[1].content) < orig_msg_len
+    # First user message truncated
     assert "Contents truncated" in hist[1].content
     assert output_len >= MIN_OUTPUT_TOKENS  # At least min_output_tokens
