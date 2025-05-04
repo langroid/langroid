@@ -2,9 +2,14 @@ import os
 from typing import List, Optional
 
 import pytest
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+from fastmcp.client.sampling import (
+    RequestContext,
+    SamplingMessage,
+    SamplingParams,
+)
 from fastmcp.client.transports import NpxStdioTransport, UvxStdioTransport
-from mcp.types import Tool
+from mcp.types import ImageContent, TextContent, Tool
 
 # note we use pydantic v2 to define MCP server
 from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
@@ -54,9 +59,25 @@ def mcp_server():
             self.count += x
             return self.count
 
+    # create a stateful tool
     counter = Counter()
+    # we can't directly use the tool decorator on instance methods,
+    # so we use the server.add_tool() method to add the tool
     server.add_tool(counter.get_num_beans)
     server.add_tool(counter.add_beans)
+
+    # example of tool that uses an arg of type Context, and
+    # uses this arg to request client LLM sampling, and send logs
+    @server.tool()
+    async def prime_check(number: int, ctx: Context) -> str:
+        """
+        Determine if the given number is Prime or not.
+        """
+        result: TextContent | ImageContent = await ctx.sample(
+            f"Is the number {number} prime?",
+        )
+        assert isinstance(result, TextContent), "Expected a text response"
+        return result.text
 
     @server.tool()
     def greet(person: str) -> str:
@@ -150,7 +171,6 @@ async def test_get_tools_and_handle(server: FastMCP | str) -> None:
 
     assert AlertsTool is not None
     assert issubclass(AlertsTool, lr.ToolMessage)
-    # EXIT the async with client context, and it should work.
 
     # instantiate Langroid ToolMessage
     msg = AlertsTool(state="NY")
@@ -253,6 +273,35 @@ async def test_stateful_tool() -> None:
     result = await get_num_beans_msg.handle_async()
     assert isinstance(result, str)
     assert "5" in result
+
+
+@pytest.mark.asyncio
+async def test_tool_with_context_and_sampling() -> None:
+    async def sampling_handler(
+        messages: list[SamplingMessage],
+        params: SamplingParams,
+        context: RequestContext,
+    ) -> str:
+        """Handle a sampling request from server"""
+        # simulate an LLM call
+        return "Yes"
+
+    PrimeCheckTool = await get_tool_async(
+        mcp_server(),
+        "prime_check",
+        sampling_handler=sampling_handler,
+    )
+    assert issubclass(PrimeCheckTool, lr.ToolMessage)
+    # assert that "ctx" is NOT a field in the tool
+    assert "ctx" not in PrimeCheckTool.llm_function_schema().parameters["properties"]
+
+    # instantiate Langroid ToolMessage
+    prime_check_msg = PrimeCheckTool(number=7)
+    assert isinstance(prime_check_msg, lr.ToolMessage)
+
+    result = await prime_check_msg.handle_async()
+    assert isinstance(result, str)
+    assert "yes" in result.lower()
 
 
 @pytest.mark.asyncio
