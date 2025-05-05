@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.52.7"
+version = "0.53.7"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -20,6 +20,7 @@ dependencies = [
     "exa-py>=1.8.7",
     "faker<19.0.0,>=18.9.0",
     "fakeredis<3.0.0,>=2.12.1",
+    "fastmcp>=2.2.5",
     "fire<1.0.0,>=0.5.0",
     "gitpython<4.0.0,>=3.1.43",
     "google-api-python-client<3.0.0,>=2.95.0",
@@ -29,7 +30,7 @@ dependencies = [
     "halo<1.0.0,>=0.0.31",
     "jinja2<4.0.0,>=3.1.2",
     "json-repair<1.0.0,>=0.29.9",
-    "lxml<5.0.0,>=4.9.3",
+    "lxml<6.0.0,>=5.4.0",
     "markdownify>=0.13.1",
     "nest-asyncio<2.0.0,>=1.6.0",
     "nltk<4.0.0,>=3.8.2",

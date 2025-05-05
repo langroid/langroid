@@ -211,9 +211,11 @@ class TableChatAgent(ChatAgent):
         # Temporarily redirect standard output to our string-based I/O stream
         sys.stdout = code_out
 
-        # Evaluate the last line and get the result
+        # Evaluate the last line and get the result;
+        # SECURITY: eval only with empty globals and {"df": df} in locals to
+        # prevent arbitrary Python code execution.
         try:
-            eval_result = pd.eval(exprn, local_dict=local_vars)
+            eval_result = eval(exprn, {}, local_vars)
         except Exception as e:
             eval_result = f"ERROR: {type(e)}: {e}"
 

@@ -336,15 +336,16 @@ class OpenAIGPTConfig(LLMConfig):
         # (e.g. anthropic doesn't like first msg to be system msg)
         litellm.modify_params = True
         self.seed = None  # some local mdls don't support seed
-        keys_dict = litellm.utils.validate_environment(self.chat_model)
-        missing_keys = keys_dict.get("missing_keys", [])
-        if len(missing_keys) > 0:
-            raise ValueError(
-                f"""
-                Missing environment variables for litellm-proxied model:
-                {missing_keys}
-                """
-            )
+        if self.api_key == DUMMY_API_KEY:
+            keys_dict = litellm.utils.validate_environment(self.chat_model)
+            missing_keys = keys_dict.get("missing_keys", [])
+            if len(missing_keys) > 0:
+                raise ValueError(
+                    f"""
+                    Missing environment variables for litellm-proxied model:
+                    {missing_keys}
+                    """
+                )
 
     @classmethod
     def create(cls, prefix: str) -> Type["OpenAIGPTConfig"]:
@@ -1504,6 +1505,9 @@ class OpenAIGPT(LanguageModel):
                     from litellm import completion as litellm_completion
 
                     completion_call = litellm_completion
+
+                    if self.api_key != DUMMY_API_KEY:
+                        kwargs["api_key"] = self.api_key
                 else:
                     if self.client is None:
                         raise ValueError(
@@ -1587,6 +1591,10 @@ class OpenAIGPT(LanguageModel):
             else:
                 if self.config.litellm:
                     from litellm import acompletion as litellm_acompletion
+
+                    if self.api_key != DUMMY_API_KEY:
+                        kwargs["api_key"] = self.api_key
+
                 # TODO this may not work: text_completion is not async,
                 # and we didn't find an async version in litellm
                 assert isinstance(self.async_client, AsyncOpenAI)
@@ -1734,6 +1742,9 @@ class OpenAIGPT(LanguageModel):
                 from litellm import completion as litellm_completion
 
                 completion_call = litellm_completion
+
+                if self.api_key != DUMMY_API_KEY:
+                    kwargs["api_key"] = self.api_key
             else:
                 if self.client is None:
                     raise ValueError("OpenAI/equivalent chat-completion client not set")
@@ -1792,6 +1803,9 @@ class OpenAIGPT(LanguageModel):
                 from litellm import acompletion as litellm_acompletion
 
                 acompletion_call = litellm_acompletion
+
+                if self.api_key != DUMMY_API_KEY:
+                    kwargs["api_key"] = self.api_key
             else:
                 if self.async_client is None:
                     raise ValueError(

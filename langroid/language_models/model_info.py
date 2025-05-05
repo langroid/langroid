@@ -23,7 +23,7 @@ class ModelName(str, Enum):
 class OpenAIChatModel(ModelName):
     """Enum for OpenAI Chat models"""
 
-    GPT3_5_TURBO = "gpt-3.5-turbo-1106"
+    GPT3_5_TURBO = "gpt-3.5-turbo"
     GPT4 = "gpt-4o"  # avoid deprecated gpt-4
     GPT4_TURBO = "gpt-4-turbo"
     GPT4o = "gpt-4o"
@@ -406,10 +406,21 @@ MODEL_INFO: Dict[str, ModelInfo] = {
 
 def get_model_info(
     model: str | ModelName,
-    fallback_model: str | ModelName = "",
+    fallback_models: List[str] = [],
 ) -> ModelInfo:
     """Get model information by name or enum value"""
-    return _get_model_info(model) or _get_model_info(fallback_model) or ModelInfo()
+    # Sequence of models to try, starting with the primary model
+    models_to_try = [model] + fallback_models
+
+    # Find the first model in the sequence that has info defined using next()
+    # on a generator expression that filters out None results from _get_model_info
+    found_info = next(
+        (info for m in models_to_try if (info := _get_model_info(m)) is not None),
+        None,  # Default value if the iterator is exhausted (no valid info found)
+    )
+
+    # Return the found info, or a default ModelInfo if none was found
+    return found_info or ModelInfo()
 
 
 def _get_model_info(model: str | ModelName) -> ModelInfo | None:

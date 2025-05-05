@@ -15,6 +15,8 @@
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=flat&logo=discord&logoColor=white)](https://discord.gg/ZU36McDgDs)
 [![Substack](https://img.shields.io/badge/Substack-%23006f5c.svg?style=flat&logo=substack&logoColor=FF6719)](https://langroid.substack.com/p/langroid-harness-llms-with-multi-agent-programming)
+
+[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/OWNER/REPO)](https://gitmcp.io/langroid/langroid)
 </div>
 
 <h3 align="center">
@@ -137,6 +139,22 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Mar-Apr 2025:**
+  - [0.53.0](https://github.com/langroid/langroid/releases/tag/0.53.0) MCP Tools Support.
+  - [0.52.0](https://github.com/langroid/langroid/releases/tag/0.52.0) Multimodal support, i.e. allow PDF, image 
+    inputs to LLM.
+  - [0.51.0](https://github.com/langroid/langroid/releases/tag/0.51.0) `LLMPdfParser`, generalizing 
+    `GeminiPdfParser` to parse documents directly with LLM.
+  - [0.50.0](https://github.com/langroid/langroid/releases/tag/0.50.0) Structure-aware Markdown chunking with chunks 
+    enriched by section headers.
+  - [0.49.0](https://github.com/langroid/langroid/releases/tag/0.49.0) Enable easy switch to LiteLLM Proxy-server 
+  - [0.48.0](https://github.com/langroid/langroid/releases/tag/0.48.0) Exa Crawler, Markitdown Parser
+  - [0.47.0](https://github.com/langroid/langroid/releases/tag/0.47.0) Support Firecrawl URL scraper/crawler - 
+    thanks @abab-dev
+  - [0.46.0](https://github.com/langroid/langroid/releases/tag/0.46.0) Support LangDB LLM Gateway - thanks @MrunmayS.
+  - [0.45.0](https://github.com/langroid/langroid/releases/tag/0.45.0) Markdown parsing with `Marker` - thanks @abab-dev
+  - [0.44.0](https://github.com/langroid/langroid/releases/tag/0.44.0) Late imports to reduce startup time. Thanks 
+    @abab-dev
 - **Feb 2025:**
   - [0.43.0](https://github.com/langroid/langroid/releases/tag/0.43.0): `GeminiPdfParser` for parsing PDF using 
     Gemini LLMs - Thanks @abab-dev.
