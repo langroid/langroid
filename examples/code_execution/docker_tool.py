@@ -8,7 +8,7 @@ from rich.prompt import Prompt
 
 import langroid as lr
 import langroid.language_models as lm
-from langroid.agent.tools.docker_code_executor import (
+from examples.code_execution.docker_code_executor import (
     CodeBlock,
     CodeResult,
     DockerCodeExecutor,
