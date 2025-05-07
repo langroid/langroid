@@ -1,3 +1,20 @@
+"""
+Task: Process a number through a sequence of two steps:
+- Burify: increment the number by 3
+- Tonify: multiply the number by 4
+
+Planner Agent oversees the process, using two worker agents:
+- BurifyAgent: handles the Burify step
+- TonifyAgent: handles the Tonify step
+
+Planner checks intermediate results and provides feedback to worker agents,
+until their step is complete, before proceeding to the next step.
+
+Run like this from repo root (omit `-m` to use default model gpt-4.1-mini):
+
+    uv run examples/basic/planner-workflow.py -m gpt-4.1-mini
+"""
+
 from typing import List
 import langroid as lr
 import langroid.language_models as lm
@@ -7,7 +24,7 @@ from fire import Fire
 import logging
 
 logger = logging.getLogger(__name__)
-
+MODEL = lm.OpenAIChatModel.GPT4_1_MINI
 
 class BurifyTool(lr.ToolMessage):
     request: str = "burify_tool"
@@ -231,7 +248,7 @@ def main(model: str = ""):
     planner = PlannerAgent(
         PlannerConfig(
             llm=lm.OpenAIGPTConfig(
-                chat_model=model or lm.OpenAIChatModel.GPT4_1,
+                chat_model=model or MODEL,
             )
         ),
     )
@@ -258,7 +275,7 @@ def main(model: str = ""):
     burifier = lr.ChatAgent(
         BurifyAgentConfig(
             llm=lm.OpenAIGPTConfig(
-                chat_model=model or lm.OpenAIChatModel.GPT4_1,
+                chat_model=model or MODEL,
             )
         )
     )
@@ -275,7 +292,7 @@ def main(model: str = ""):
     tonifier = lr.ChatAgent(
         TonifyAgentConfig(
             llm=lm.OpenAIGPTConfig(
-                chat_model=model or lm.OpenAIChatModel.GPT4_1,
+                chat_model=model or MODEL,
             )
         )
     )
