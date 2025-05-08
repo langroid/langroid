@@ -14,7 +14,7 @@ from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output.printing import print_long_text
-from langroid.utils.pandas_utils import stringify
+from langroid.utils.pandas_utils import stringify, sanitize_command
 from langroid.utils.pydantic_utils import flatten_dict
 
 logger = logging.getLogger(__name__)
@@ -159,11 +159,12 @@ class VectorStore(ABC):
         df = pd.DataFrame(dicts)
 
         try:
-            # SECURITY: Use Python's eval() with NO globals and only {"df": df}
-            # in locals. This allows pandas operations on `df` while preventing
-            # access to builtins or other potentially harmful global functions,
-            # mitigating risks associated with executing untrusted `calc` strings.
-            result = eval(calc, {}, {"df": df})  # type: ignore
+            # SECURITY MITIGATION: Eval input is sanitized to prevent most common 
+            # code injection attack vectors.
+            vars = {"df": df}
+            calc   = sanitize_command(calc)              
+            code = compile(calc, "<calc>", "eval")
+            eval_result = eval(code, vars, {})    
         except Exception as e:
             # return error message so LLM can fix the calc string if needed
             err = f"""
