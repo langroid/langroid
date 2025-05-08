@@ -503,6 +503,10 @@ class Agent(ABC):
         self.callbacks.show_agent_response(
             content=results_str,
             language="json" if maybe_json else "text",
+            is_tool=(
+                isinstance(results, ChatDocument)
+                and self.has_tool_message_attempt(results)
+            ),
         )
         if isinstance(results, ChatDocument):
             # Preserve trail of tool_ids for OpenAI Assistant fn-calls
