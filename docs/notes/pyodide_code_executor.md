@@ -10,5 +10,5 @@
 Once Deno is installed, you can run the script using the following command:
 
 ```bash
-uv run examples/mcp/pydiode_code_executor.py --model gemini/gemini-2.0-flash  #or any model
+uv run examples/mcp/pyodide_code_executor.py --model gemini/gemini-2.0-flash  #or any model
 ```
