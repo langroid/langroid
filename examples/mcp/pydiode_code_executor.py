@@ -49,7 +49,7 @@ async def main(model: str = ""):
         )
     )
 
-    # enable the agent to use the web-search tool
+    # enable the agent to use the PythonCodeExecutor tool
     agent.enable_message(PythonCodeExecutor)
     # make task with interactive=False =>
     # waits for user only when LLM doesn't use a tool
