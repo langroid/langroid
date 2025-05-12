@@ -1,3 +1,16 @@
+"""
+Simple example of using the Pyodide MCP server.
+    https://github.com/pydantic/pydantic-ai/tree/main/mcp-run-python
+
+Before running make sure you have deno installed
+    https://docs.deno.com/runtime/getting_started/installation/
+
+Run like this:
+
+    uv run examples/mcp/pyodide_code_executor.py --model gpt-4.1-mini
+
+"""
+
 from fastmcp.client.transports import StdioTransport
 from fire import Fire
 

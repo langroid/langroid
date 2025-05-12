@@ -144,7 +144,8 @@ class EmbeddingFunctionCallable:
             # Process in batches
             for batch in batched(truncated_texts, self.batch_size):
                 result = self.embed_model.client.embeddings.create(
-                    model=self.embed_model.config.model_name,  # type: ignore
+                    input=batch,  # type: ignore
+                    model=self.embed_model.config.model_name,
                 )
                 batch_embeds = [d.embedding for d in result.data]
                 embeds.extend(batch_embeds)
@@ -531,16 +532,22 @@ class GeminiEmbeddings(EmbeddingModel):
                     "Unexpected format for embeddings: missing or incorrect type"
                 )
 
-            # Extract .values from ContentEmbedding objects
-            # Use a list comprehension with a filter
             batch_embeddings: List[List[float]] = [
-                emb.values  # This part is List[float] | None initially
+                emb.values
                 for emb in result.embeddings
                 if emb is not None
                 and hasattr(emb, "values")
                 and emb.values
                 is not None  # Filter out None values and malformed objects
             ]
+
+            if len(batch_embeddings) != len(batch):
+                raise ValueError(
+                    f"Mismatch between input texts and embeddings: "
+                    f"{len(batch)} inputs vs {len(batch_embeddings)} valid embeddings. "
+                    "Some embeddings may be missing or malformed."
+                )
+
             all_embeddings.extend(batch_embeddings)
 
         return all_embeddings
