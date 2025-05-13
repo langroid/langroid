@@ -26,6 +26,7 @@ import logging
 logger = logging.getLogger(__name__)
 MODEL = lm.OpenAIChatModel.GPT4_1_MINI
 
+
 class BurifyTool(lr.ToolMessage):
     request: str = "burify_tool"
     purpose: str = "To apply the 'Burify' process to a <number>"
