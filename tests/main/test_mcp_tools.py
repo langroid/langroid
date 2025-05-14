@@ -93,17 +93,19 @@ def mcp_server():
             f"Weather alert for {state}: Flash flood watch.",
         ]
 
-    # example of MCP tool whose fields clash with Langroid ToolMessage
+    # example of MCP tool whose fields clash with Langroid ToolMessage,
+    # and a `name` field which is reserved by pydantic
     @server.tool()
     def info_tool(
         request: str = Field(..., description="Requested information"),
+        name: str = Field(..., description="Name of the info sought"),
         recipient: str = Field(..., description="Recipient of the information"),
         purpose: str = Field(..., description="Purpose of the information"),
         date: str = Field(..., description="Date of the request"),
     ) -> str:
         """Get information for a recipient."""
         return f"""
-        Info for {recipient}: {request} (Purpose: {purpose}), date: {date}
+        Info for {recipient}: {request} {name} (Purpose: {purpose}), date: {date}
         """
 
     @server.tool()
@@ -331,12 +333,14 @@ async def test_mcp_tool_schemas() -> None:
 
     # instantiate InfoTool
     msg = InfoTool(
+        name__="InfoName",
         request__="address",
         recipient__="John Doe",
         purpose__="to know the address",
         date="2023-10-01",
     )
     assert isinstance(msg, lr.ToolMessage)
+    assert msg.name__ == "InfoName"
     assert msg.request__ == "address"
     assert msg.recipient__ == "John Doe"
     assert msg.purpose__ == "to know the address"

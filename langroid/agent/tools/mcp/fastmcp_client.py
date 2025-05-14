@@ -171,7 +171,7 @@ class FastMCPClient:
         # IMPORTANT: Avoid clashes with reserved field names in Langroid ToolMessage!
         # First figure out which field names are reserved
         reserved = set(_BaseToolMessage.__annotations__.keys())
-        reserved.update(["recipient", "_handler"])
+        reserved.update(["recipient", "_handler", "name"])
         renamed: Dict[str, str] = {}
         new_fields: Dict[str, Tuple[type, Any]] = {}
         for fname, (ftype, fld) in fields.items():
