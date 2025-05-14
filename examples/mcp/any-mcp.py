@@ -10,6 +10,8 @@ Run like this (omitting the `--model` argument will use the default GPT-4.1-Mini
 
     uv run examples/mcp/any-mcp.py --model ollama/qwen2.5-coder:32b
 
+See docs on various types of transports that are available:
+https://langroid.github.io/langroid/notes/mcp-tools/
 """
 
 import langroid as lr
@@ -21,10 +23,10 @@ from fire import Fire
 
 
 async def main(model: str = ""):
-    transport = StdioTransport(
-        command="../JotDown/target/release/JotDown",
+    transport = StdioTransport(  # or any other transport
+        command="...",
         args=[],
-        env=dict(NOTION_TOKEN="blah"),
+        env=dict(MY_VAR="blah"),
     )
     all_tools = await get_tools_async(transport)
 
