@@ -1,6 +1,8 @@
 import logging
+import os
 import os.path
-from typing import no_type_check
+import threading
+from typing import Dict, no_type_check
 
 import colorlog
 from rich.console import Console
@@ -114,22 +116,74 @@ def setup_loggers_for_package(package_name: str, level: int) -> None:
 
 
 class RichFileLogger:
-    def __init__(self, log_file: str, append: bool = False, color: bool = True):
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-        self.log_file = log_file
-        if not append:
-            if os.path.exists(self.log_file):
-                os.remove(self.log_file)
-        self.file = None
-        self.console = None
-        self.append = append
-        self.color = color
+    """Thread-safe, singleton-per-file logger.
 
+    • Only ONE RichFileLogger instance – and therefore one open FD – exists for
+      any given log-file path across all threads/tasks.
+    • Instance creation and first-time initialisation are protected against
+      races, so the file is opened exactly once.
+    """
+
+    _instances: Dict[str, "RichFileLogger"] = {}
+    _class_lock = threading.Lock()  # guards _instances map
+
+    # --------------------------------------------------------------------- #
+    # construction / initialisation
+    # --------------------------------------------------------------------- #
+    def __new__(
+        cls,
+        log_file: str,
+        append: bool = False,
+        color: bool = True,
+    ) -> "RichFileLogger":
+        with cls._class_lock:
+            if log_file in cls._instances:
+                return cls._instances[log_file]
+            inst = super().__new__(cls)
+            cls._instances[log_file] = inst
+            return inst
+
+    def __init__(self, log_file: str, append: bool = False, color: bool = True) -> None:
+        # Double-checked locking: do expensive work exactly once.
+        if getattr(self, "_init_done", False):
+            return
+        # Each instance has its own init-lock so competing threads that obtained
+        # the same (not-yet-initialised) object serialise inside __init__.
+        self._init_lock = getattr(self, "_init_lock", threading.Lock())
+        with self._init_lock:
+            if getattr(self, "_init_done", False):
+                return  # another thread finished initialising while we waited
+
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            mode = "a" if append else "w"
+            self.file = open(log_file, mode, buffering=1, encoding="utf-8")
+            self.log_file: str = log_file
+            self.color: bool = color
+            self.console: Console | None = (
+                Console(file=self.file, force_terminal=True, width=200)
+                if color
+                else None
+            )
+            self._write_lock = threading.Lock()  # guards writes
+            self._init_done = True
+
+    # --------------------------------------------------------------------- #
+    # public API
+    # --------------------------------------------------------------------- #
     @no_type_check
     def log(self, message: str) -> None:
-        with open(self.log_file, "a") as f:
-            if self.color:
-                console = Console(file=f, force_terminal=True, width=200)
-                console.print(escape(message))
+        """Write `message` to the log file in a thread-safe manner."""
+        with self._write_lock:
+            if self.color and self.console is not None:
+                self.console.print(escape(message))
             else:
-                print(message, file=f)
+                print(message, file=self.file)
+            self.file.flush()
+
+    def close(self) -> None:
+        """Close the FD and forget the singleton instance for this path."""
+        with self._write_lock:
+            if not self.file.closed:
+                self.file.close()
+        with self._class_lock:
+            self._instances.pop(self.log_file, None)
