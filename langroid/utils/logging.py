@@ -2,7 +2,7 @@ import logging
 import os
 import os.path
 import threading
-from typing import Dict, no_type_check
+from typing import ClassVar, Dict, no_type_check
 
 import colorlog
 from rich.console import Console
@@ -116,43 +116,50 @@ def setup_loggers_for_package(package_name: str, level: int) -> None:
 
 
 class RichFileLogger:
-    """Thread-safe, singleton-per-file logger.
+    """Singleton-per-path, ref-counted, thread-safe file logger.
 
-    • Only ONE RichFileLogger instance – and therefore one open FD – exists for
-      any given log-file path across all threads/tasks.
-    • Instance creation and first-time initialisation are protected against
-      races, so the file is opened exactly once.
+    • Any number of calls to `RichFileLogger(path)` yield the same object.
+    • A per-instance lock guarantees that the underlying file is opened only
+      once, even when many threads construct the logger concurrently.
+    • A reference counter tracks how many parts of the program are using the
+      logger; the FD is closed only when the counter reaches zero.
+    • All writes are serialised with a dedicated write-lock.
     """
 
-    _instances: Dict[str, "RichFileLogger"] = {}
-    _class_lock = threading.Lock()  # guards _instances map
+    _instances: ClassVar[Dict[str, "RichFileLogger"]] = {}
+    _ref_counts: ClassVar[Dict[str, int]] = {}
+    # guards _instances & _ref_counts
+    _class_lock: ClassVar[threading.Lock] = threading.Lock()
 
-    # --------------------------------------------------------------------- #
-    # construction / initialisation
-    # --------------------------------------------------------------------- #
+    # ------------------------------------------------------------------ #
+    # construction / destruction
+    # ------------------------------------------------------------------ #
     def __new__(
-        cls,
-        log_file: str,
-        append: bool = False,
-        color: bool = True,
+        cls, log_file: str, append: bool = False, color: bool = True
     ) -> "RichFileLogger":
         with cls._class_lock:
             if log_file in cls._instances:
+                cls._ref_counts[log_file] += 1
                 return cls._instances[log_file]
+
             inst = super().__new__(cls)
+            # create the per-instance init-lock *before* releasing class-lock
+            inst._init_lock = threading.Lock()
             cls._instances[log_file] = inst
+            cls._ref_counts[log_file] = 1
             return inst
 
     def __init__(self, log_file: str, append: bool = False, color: bool = True) -> None:
-        # Double-checked locking: do expensive work exactly once.
+        # Double-checked locking: perform heavy init exactly once.
         if getattr(self, "_init_done", False):
             return
-        # Each instance has its own init-lock so competing threads that obtained
-        # the same (not-yet-initialised) object serialise inside __init__.
-        self._init_lock = getattr(self, "_init_lock", threading.Lock())
+
+        if not hasattr(self, "_init_lock"):
+            self._init_lock: threading.Lock = threading.Lock()
+
         with self._init_lock:
             if getattr(self, "_init_done", False):
-                return  # another thread finished initialising while we waited
+                return
 
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             mode = "a" if append else "w"
@@ -164,15 +171,15 @@ class RichFileLogger:
                 if color
                 else None
             )
-            self._write_lock = threading.Lock()  # guards writes
-            self._init_done = True
+            self._write_lock = threading.Lock()
+            self._init_done = True  # set last
 
-    # --------------------------------------------------------------------- #
+    # ------------------------------------------------------------------ #
     # public API
-    # --------------------------------------------------------------------- #
+    # ------------------------------------------------------------------ #
     @no_type_check
     def log(self, message: str) -> None:
-        """Write `message` to the log file in a thread-safe manner."""
+        """Thread-safe write to the log file."""
         with self._write_lock:
             if self.color and self.console is not None:
                 self.console.print(escape(message))
@@ -181,9 +188,14 @@ class RichFileLogger:
             self.file.flush()
 
     def close(self) -> None:
-        """Close the FD and forget the singleton instance for this path."""
-        with self._write_lock:
-            if not self.file.closed:
-                self.file.close()
+        """Decrease ref-count; close FD only when last user is done."""
         with self._class_lock:
-            self._instances.pop(self.log_file, None)
+            count = self._ref_counts.get(self.log_file, 0) - 1
+            if count <= 0:
+                self._ref_counts.pop(self.log_file, None)
+                self._instances.pop(self.log_file, None)
+                with self._write_lock:
+                    if not self.file.closed:
+                        self.file.close()
+            else:
+                self._ref_counts[self.log_file] = count

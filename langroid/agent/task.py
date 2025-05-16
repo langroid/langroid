@@ -1044,10 +1044,6 @@ class Task:
                 f"[bold magenta]{self._leave} Finished Agent "
                 f"{self.name} ({n_messages}) [/bold magenta]"
             )
-        # Close RichFileLogger FD when the top-level task is done.
-        if self.caller is None and isinstance(self.logger, RichFileLogger):
-            self.logger.close()
-            self.logger = None
 
     def step(self, turns: int = -1) -> ChatDocument | None:
         """
