@@ -144,7 +144,7 @@ class EmbeddingFunctionCallable:
             # Process in batches
             for batch in batched(truncated_texts, self.batch_size):
                 result = self.embed_model.client.embeddings.create(
-                    input=batch, model=self.embed_model.config.model_name  # type: ignore
+                    model=self.embed_model.config.model_name,  # type: ignore
                 )
                 batch_embeds = [d.embedding for d in result.data]
                 embeds.extend(batch_embeds)
@@ -519,7 +519,7 @@ class GeminiEmbeddings(EmbeddingModel):
         all_embeddings: List[List[float]] = []
 
         for batch in batched(texts, self.config.batch_size):
-            result = self.client.models.embed_content(  # type: ignore[attr-defined]
+            result = self.client.models.embed_content(
                 model=self.config.model_name,
                 contents=batch,  # type: ignore
             )
@@ -532,9 +532,16 @@ class GeminiEmbeddings(EmbeddingModel):
                 )
 
             # Extract .values from ContentEmbedding objects
-            all_embeddings.extend(
-                [emb.values for emb in result.embeddings]  # type: ignore
-            )
+            # Use a list comprehension with a filter
+            batch_embeddings: List[List[float]] = [
+                emb.values  # This part is List[float] | None initially
+                for emb in result.embeddings
+                if emb is not None
+                and hasattr(emb, "values")
+                and emb.values
+                is not None  # Filter out None values and malformed objects
+            ]
+            all_embeddings.extend(batch_embeddings)
 
         return all_embeddings
 
