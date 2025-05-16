@@ -578,19 +578,24 @@ class Task:
         return self.pending_message
 
     def init_loggers(self) -> None:
+        """Initialise per-task Rich and TSV loggers."""
+        from langroid.utils.logging import RichFileLogger
+
         if self.caller is not None and self.caller.logger is not None:
             self.logger = self.caller.logger
         elif self.logger is None:
             self.logger = RichFileLogger(
                 str(Path(self.config.logs_dir) / f"{self.name}.log"),
+                append=True,
                 color=self.color_log,
             )
 
         if self.caller is not None and self.caller.tsv_logger is not None:
             self.tsv_logger = self.caller.tsv_logger
         elif self.tsv_logger is None:
+            # unique logger name ensures a distinct `logging.Logger` object
             self.tsv_logger = setup_file_logger(
-                "tsv_logger",
+                f"tsv_logger.{self.name}.{id(self)}",
                 str(Path(self.config.logs_dir) / f"{self.name}.tsv"),
             )
             header = ChatDocLoggerFields().tsv_header()
