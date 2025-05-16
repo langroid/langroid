@@ -68,7 +68,6 @@ def test_fd_limit(tmp_path: Path) -> None:
         resource.setrlimit(resource.RLIMIT_NOFILE, (soft0, hard0))
 
 
-
 def test_write_after_peer_close(tmp_path: Path) -> None:
     """
     Scenario that used to raise `ValueError: I/O operation on closed file`.

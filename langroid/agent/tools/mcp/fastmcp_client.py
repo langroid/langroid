@@ -68,7 +68,7 @@ class FastMCPClient:
             roots=self.roots,
             log_handler=self.log_handler,
             message_handler=self.message_handler,
-            read_timeout_seconds=self.read_timeout_seconds,
+            timeout=self.read_timeout_seconds,
         )
         # actually enter it (opens the session)
         self.client = await self._cm.__aenter__()  # type: ignore

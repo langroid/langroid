@@ -14,19 +14,31 @@ See docs on various types of transports that are available:
 https://langroid.github.io/langroid/notes/mcp-tools/
 """
 
+import os
 import langroid as lr
 import langroid.language_models as lm
 from langroid.mytypes import NonToolAction
 from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
-from fastmcp.client.transports import StdioTransport
+from fastmcp.client.transports import (
+    SSETransport,
+)
 from fire import Fire
+
+# trying to connect to openmemory
+
+URL = "http://localhost:8765"
+# set userid to my own, got from os: $USER
+userid = os.getenv("USER")
 
 
 async def main(model: str = ""):
-    transport = StdioTransport(  # or any other transport
-        command="...",
-        args=[],
-        env=dict(MY_VAR="blah"),
+    transport = SSETransport(
+        url=URL + "/mcp/cursor/sse/" + userid,
+        # Additional headers might be needed
+        headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
+        # command="...",
+        # args=[],
+        # env=dict(MY_VAR="blah"),
     )
     all_tools = await get_tools_async(transport)
 
