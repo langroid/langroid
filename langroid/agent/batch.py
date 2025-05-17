@@ -334,6 +334,21 @@ def run_batch_task_gen(
             task_i.kill()
             # exception will be handled by the caller
             raise e
+        # ----------------------------------------
+        # Propagate any exception stored on the task that may have been
+        # swallowed inside `Task.run_async`, so that the upper-level
+        # exception-handling logic works as expected.
+        for attr in ("_exception", "last_exception", "exception"):
+            exc = getattr(task_i, attr, None)
+            if isinstance(exc, BaseException):
+                raise exc
+        # Fallback: treat a KILL-status result as an error
+        if (
+            isinstance(result, ChatDocument)
+            and getattr(result, "status", None) is not None
+            and str(getattr(result, "status")) == "StatusCode.KILL"
+        ):
+            raise RuntimeError(str(result.content))
         return result
 
     return run_batched_tasks(

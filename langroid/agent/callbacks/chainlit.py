@@ -410,7 +410,12 @@ class ChainlitAgentCallbacks:
         self.last_step = step
         run_sync(step.send())
 
-    def show_agent_response(self, content: str, language="text") -> None:
+    def show_agent_response(
+        self,
+        content: str,
+        language="text",
+        is_tool: bool = False,
+    ) -> None:
         """Show message from agent (typically tool handler)."""
         if language == "text":
             content = wrap_text_preserving_structure(content, width=90)
