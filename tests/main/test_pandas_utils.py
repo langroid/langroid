@@ -1,6 +1,6 @@
 import pytest
-from langroid.utils.pandas_utils import sanitize_command, UnsafeCommandError
 
+from langroid.utils.pandas_utils import UnsafeCommandError, sanitize_command
 
 SAFE = [
     "df.groupby('state')['income'].mean()",
@@ -20,43 +20,27 @@ SAFE = [
     "df.sample(frac=0.1, random_state=42)",
 ]
 
-DEEP_EXPR = "df" + "[0]" * 26               # depth bomb (26 > MAX_DEPTH)
+DEEP_EXPR = "df" + "[0]" * 26  # depth bomb (26 > MAX_DEPTH)
 
 BLOCK_WITH_MSG = [
-    ("df.eval('2+2')",
-     r"method 'eval' not permitted"),
-
-    ("df.sample(n=5, regex=True)",
-     r"kwarg 'regex' is blocked"),
-
-    ("df['b'] * 12345678901",
-     r"numeric constant exceeds limit"),
-
-    ("df['a'] ** 8",
-     r"operator not allowed"),
-
-    ("df.head().tail().sort_values('a').groupby('state').sum().mean().std()",
-     r"method-chain too long"),
-
-    ("df.sample(n=10, inplace=True)",
-     r"kwarg 'inplace' is blocked"),
-
-    ("sales.sum()",
-     r"unexpected variable 'sales'"),
-
-    ("df2.head()",
-     r"unexpected variable 'df2'"),
-
-    ("df[other_var]",
-     r"subscript must be literal"),
-
-    ("df.where(df['income'] > other_var)['income']",
-     r"unexpected variable 'other_var'"),
-
-    (DEEP_EXPR,
-     r"AST nesting too deep"),
+    ("df.eval('2+2')", r"method 'eval' not permitted"),
+    ("df.sample(n=5, regex=True)", r"kwarg 'regex' is blocked"),
+    ("df['b'] * 12345678901", r"numeric constant exceeds limit"),
+    ("df['a'] ** 8", r"operator not allowed"),
+    (
+        "df.head().tail().sort_values('a').groupby('state').sum().mean().std()",
+        r"method-chain too long",
+    ),
+    ("df.sample(n=10, inplace=True)", r"kwarg 'inplace' is blocked"),
+    ("sales.sum()", r"unexpected variable 'sales'"),
+    ("df2.head()", r"unexpected variable 'df2'"),
+    ("df[other_var]", r"subscript must be literal"),
+    (
+        "df.where(df['income'] > other_var)['income']",
+        r"unexpected variable 'other_var'",
+    ),
+    (DEEP_EXPR, r"AST nesting too deep"),
 ]
-
 
 
 @pytest.mark.parametrize("expr", SAFE)

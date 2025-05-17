@@ -121,7 +121,9 @@ class TableChatAgentConfig(ChatAgentConfig):
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
-    full_eval: bool = False  # runs eval without sanitization. Use only on trusted input!
+    full_eval: bool = (
+        False  # runs eval without sanitization. Use only on trusted input!
+    )
     data: str | pd.DataFrame  # data file, URL, or DataFrame
     separator: None | str = None  # separator for data file
     vecdb: None | VectorStoreConfig = None
@@ -221,13 +223,13 @@ class TableChatAgent(ChatAgent):
         sys.stdout = code_out
 
         # Evaluate the last line and get the result;
-        # SECURITY MITIGATION: Eval input is sanitized by default to prevent most 
+        # SECURITY MITIGATION: Eval input is sanitized by default to prevent most
         # common code injection attack vectors.
         try:
             if not self.config.full_eval:
-                exprn = sanitize_command(exprn)              
+                exprn = sanitize_command(exprn)
             code = compile(exprn, "<calc>", "eval")
-            eval_result = eval(code, vars, {})            
+            eval_result = eval(code, vars, {})
         except Exception as e:
             eval_result = f"ERROR: {type(e)}: {e}"
 

@@ -1,40 +1,110 @@
 import ast
-import itertools
-
 from typing import Any
 
 import pandas as pd
 
-
-
 COMMON_USE_DF_METHODS = {
     "T",
-    "abs", "add", "add_prefix", "add_suffix",
-    "agg", "aggregate", "align",
-    "all", "any", "apply", "applymap",
-    "at", "at_time", "between_time",
-    "bfill", "clip", "combine", "combine_first",
-    "convert_dtypes", "corr", "corrwith", "count", "cov",
-    "cummax", "cummin", "cumprod", "cumsum",
-    "describe", "diff", "dot", "drop_duplicates", "duplicated",
-    "eq", "eval", "ewm", "expanding",
-    "explode", "filter", "first",
+    "abs",
+    "add",
+    "add_prefix",
+    "add_suffix",
+    "agg",
+    "aggregate",
+    "align",
+    "all",
+    "any",
+    "apply",
+    "applymap",
+    "at",
+    "at_time",
+    "between_time",
+    "bfill",
+    "clip",
+    "combine",
+    "combine_first",
+    "convert_dtypes",
+    "corr",
+    "corrwith",
+    "count",
+    "cov",
+    "cummax",
+    "cummin",
+    "cumprod",
+    "cumsum",
+    "describe",
+    "diff",
+    "dot",
+    "drop_duplicates",
+    "duplicated",
+    "eq",
+    "eval",
+    "ewm",
+    "expanding",
+    "explode",
+    "filter",
+    "first",
     "groupby",
-    "head", "idxmax", "idxmin", "infer_objects", "interpolate", "isin",
-    "kurt", "kurtosis",
-    "last", "le", "loc", "lt", "gt", "ge",
-    "iloc", "mask", "max", "mean", "median", "melt",
-    "min", "mode", "mul",
-    "nlargest", "nsmallest", "notna", "notnull", "nunique",
-    "pct_change", "pipe", "pivot", "pivot_table", "prod", "product",
-    "quantile", "query",
-    "rank", "replace", "resample", "rolling", "round",
-    "sample", "select_dtypes", "sem", "shift", "skew",
-    "sort_index", "sort_values", "squeeze", "stack", "std", "sum",
-    "tail", "transform", "transpose",
+    "head",
+    "idxmax",
+    "idxmin",
+    "infer_objects",
+    "interpolate",
+    "isin",
+    "kurt",
+    "kurtosis",
+    "last",
+    "le",
+    "loc",
+    "lt",
+    "gt",
+    "ge",
+    "iloc",
+    "mask",
+    "max",
+    "mean",
+    "median",
+    "melt",
+    "min",
+    "mode",
+    "mul",
+    "nlargest",
+    "nsmallest",
+    "notna",
+    "notnull",
+    "nunique",
+    "pct_change",
+    "pipe",
+    "pivot",
+    "pivot_table",
+    "prod",
+    "product",
+    "quantile",
+    "query",
+    "rank",
+    "replace",
+    "resample",
+    "rolling",
+    "round",
+    "sample",
+    "select_dtypes",
+    "sem",
+    "shift",
+    "skew",
+    "sort_index",
+    "sort_values",
+    "squeeze",
+    "stack",
+    "std",
+    "sum",
+    "tail",
+    "transform",
+    "transpose",
     "unstack",
-    "value_counts", "var",
-    "where", "xs",
+    "value_counts",
+    "var",
+    "where",
+    "xs",
 }
 
 POTENTIALLY_DANGEROUS_DF_METHODS = {
@@ -61,29 +131,35 @@ BLOCKED_KW = {
     "regex",
     "dtype",
     "converters",
-    "eval",            
+    "eval",
 }
-MAX_CHAIN = 6 
+MAX_CHAIN = 6
 MAX_DEPTH = 25
-NUMERIC_LIMIT = 1_000_000_000  
-
+NUMERIC_LIMIT = 1_000_000_000
 
 
 class UnsafeCommandError(ValueError):
     """Raised when a command string violates security policy."""
+
     pass
 
 
 def _literal_ok(node: ast.AST) -> bool:
     """Return True if *node* is a safe literal (and within numeric limit)."""
     if isinstance(node, ast.Constant):
-        if isinstance(node.value, (int, float, complex)) and abs(node.value) > NUMERIC_LIMIT:
+        if (
+            isinstance(node.value, (int, float, complex))
+            and abs(node.value) > NUMERIC_LIMIT
+        ):
             raise UnsafeCommandError("numeric constant exceeds limit")
         return True
     if isinstance(node, (ast.Tuple, ast.List)):
         return all(_literal_ok(elt) for elt in node.elts)
     if isinstance(node, ast.Slice):
-        return all(sub is None or _literal_ok(sub) for sub in (node.lower, node.upper, node.step))
+        return all(
+            sub is None or _literal_ok(sub)
+            for sub in (node.lower, node.upper, node.step)
+        )
     return False
 
 
@@ -112,7 +188,7 @@ class CommandValidator(ast.NodeVisitor):
         ast.keyword,
         ast.BinOp,
         ast.UnaryOp,
-        ast.Compare,  
+        ast.Compare,
         *ALLOWED_BINOP,
         *ALLOWED_UNARY,
         *ALLOWED_CMPOP,
@@ -124,7 +200,7 @@ class CommandValidator(ast.NodeVisitor):
         self.chain = 0
 
     # Depth guard
-    def generic_visit(self, node):
+    def generic_visit(self, node: ast.AST) -> None:
         self.depth += 1
         if self.depth > MAX_DEPTH:
             raise UnsafeCommandError("AST nesting too deep")
@@ -132,22 +208,22 @@ class CommandValidator(ast.NodeVisitor):
         self.depth -= 1
 
     # Literal validation
-    def visit_Constant(self, node):
+    def visit_Constant(self, node: ast.Constant) -> None:
         _literal_ok(node)
 
     # Arithmetic
-    def visit_BinOp(self, node):
+    def visit_BinOp(self, node: ast.BinOp) -> None:
         if not isinstance(node.op, self.ALLOWED_BINOP):
             raise UnsafeCommandError("operator not allowed")
         self.generic_visit(node)
 
-    def visit_UnaryOp(self, node):
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> None:
         if not isinstance(node.op, self.ALLOWED_UNARY):
             raise UnsafeCommandError("unary operator not allowed")
         self.generic_visit(node)
 
     # Comparisons
-    def visit_Compare(self, node):
+    def visit_Compare(self, node: ast.Compare) -> None:
         if not all(isinstance(op, self.ALLOWED_CMPOP) for op in node.ops):
             raise UnsafeCommandError("comparison operator not allowed")
         for comp in node.comparators:
@@ -155,13 +231,13 @@ class CommandValidator(ast.NodeVisitor):
         self.generic_visit(node)
 
     # Subscripts
-    def visit_Subscript(self, node):
+    def visit_Subscript(self, node: ast.Subscript) -> None:
         if not _literal_ok(node.slice):
             raise UnsafeCommandError("subscript must be literal")
         self.generic_visit(node)
 
     # Method calls
-    def visit_Call(self, node):
+    def visit_Call(self, node: ast.Call) -> None:
         if not isinstance(node.func, ast.Attribute):
             raise UnsafeCommandError("only DataFrame method calls allowed")
 
@@ -186,12 +262,12 @@ class CommandValidator(ast.NodeVisitor):
             self.chain -= 1
 
     # Names
-    def visit_Name(self, node):
+    def visit_Name(self, node: ast.Name) -> None:
         if node.id != self.df_name:
             raise UnsafeCommandError(f"unexpected variable '{node.id}'")
 
     # Top-level gate
-    def visit(self, node):
+    def visit(self, node: ast.AST) -> None:
         if not isinstance(node, self.ALLOWED_NODES):
             raise UnsafeCommandError(f"disallowed node {type(node).__name__}")
         super().visit(node)
