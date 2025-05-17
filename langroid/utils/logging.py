@@ -1,6 +1,9 @@
 import logging
+import os
 import os.path
-from typing import no_type_check
+import sys
+import threading
+from typing import ClassVar, Dict, no_type_check
 
 import colorlog
 from rich.console import Console
@@ -114,22 +117,95 @@ def setup_loggers_for_package(package_name: str, level: int) -> None:
 
 
 class RichFileLogger:
-    def __init__(self, log_file: str, append: bool = False, color: bool = True):
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-        self.log_file = log_file
-        if not append:
-            if os.path.exists(self.log_file):
-                os.remove(self.log_file)
-        self.file = None
-        self.console = None
-        self.append = append
-        self.color = color
+    """Singleton-per-path, ref-counted, thread-safe file logger.
 
+    • Any number of calls to `RichFileLogger(path)` yield the same object.
+    • A per-instance lock guarantees that the underlying file is opened only
+      once, even when many threads construct the logger concurrently.
+    • A reference counter tracks how many parts of the program are using the
+      logger; the FD is closed only when the counter reaches zero.
+    • All writes are serialised with a dedicated write-lock.
+    """
+
+    _instances: ClassVar[Dict[str, "RichFileLogger"]] = {}
+    _ref_counts: ClassVar[Dict[str, int]] = {}
+    # guards _instances & _ref_counts
+    _class_lock: ClassVar[threading.Lock] = threading.Lock()
+
+    # ------------------------------------------------------------------ #
+    # construction / destruction
+    # ------------------------------------------------------------------ #
+    def __new__(
+        cls, log_file: str, append: bool = False, color: bool = True
+    ) -> "RichFileLogger":
+        with cls._class_lock:
+            if log_file in cls._instances:
+                cls._ref_counts[log_file] += 1
+                return cls._instances[log_file]
+
+            inst = super().__new__(cls)
+            # create the per-instance init-lock *before* releasing class-lock
+            inst._init_lock = threading.Lock()
+            cls._instances[log_file] = inst
+            cls._ref_counts[log_file] = 1
+            return inst
+
+    def __init__(self, log_file: str, append: bool = False, color: bool = True) -> None:
+        # Double-checked locking: perform heavy init exactly once.
+        if getattr(self, "_init_done", False):
+            return
+
+        if not hasattr(self, "_init_lock"):
+            self._init_lock: threading.Lock = threading.Lock()
+
+        with self._init_lock:
+            if getattr(self, "_init_done", False):
+                return
+
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            mode = "a" if append else "w"
+            self._owns_file: bool = True
+            try:
+                self.file = open(log_file, mode, buffering=1, encoding="utf-8")
+            except OSError as exc:  # EMFILE: too many open files
+                if exc.errno == 24:
+                    # Fallback: reuse an already-open stream to avoid creating a new FD
+                    self.file = sys.stderr
+                    self._owns_file = False
+                else:
+                    raise
+            self.log_file: str = log_file
+            self.color: bool = color
+            self.console: Console | None = (
+                Console(file=self.file, force_terminal=True, width=200)
+                if color
+                else None
+            )
+            self._write_lock = threading.Lock()
+            self._init_done = True  # set last
+
+    # ------------------------------------------------------------------ #
+    # public API
+    # ------------------------------------------------------------------ #
     @no_type_check
     def log(self, message: str) -> None:
-        with open(self.log_file, "a") as f:
-            if self.color:
-                console = Console(file=f, force_terminal=True, width=200)
-                console.print(escape(message))
+        """Thread-safe write to the log file."""
+        with self._write_lock:
+            if self.color and self.console is not None:
+                self.console.print(escape(message))
             else:
-                print(message, file=f)
+                print(message, file=self.file)
+            self.file.flush()
+
+    def close(self) -> None:
+        """Decrease ref-count; close FD only when last user is done."""
+        with self._class_lock:
+            count = self._ref_counts.get(self.log_file, 0) - 1
+            if count <= 0:
+                self._ref_counts.pop(self.log_file, None)
+                self._instances.pop(self.log_file, None)
+                with self._write_lock:
+                    if self._owns_file and not self.file.closed:
+                        self.file.close()
+            else:
+                self._ref_counts[self.log_file] = count
