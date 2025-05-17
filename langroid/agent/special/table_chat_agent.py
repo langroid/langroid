@@ -7,6 +7,13 @@ expression (involving a dataframe `df`) to answer the query.
 The expression is passed via the `pandas_eval` tool/function-call,
 which is handled by the Agent's `pandas_eval` method. This method evaluates
 the expression and returns the result as a string.
+
+WARNING: This Agent should be used only with trusted input, as it can execute system
+commands. 
+
+The `full_eval` flag is false by default, which means that the input is sanitized
+against most common code injection attack vectors. `full_eval` may be set to True to 
+disable sanitization at all. Both cases should be used with caution.
 """
 
 import io
@@ -26,6 +33,7 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.table_loader import read_tabular_data
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.constants import DONE, PASS
+from langroid.utils.pandas_utils import sanitize_command
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -113,6 +121,9 @@ class TableChatAgentConfig(ChatAgentConfig):
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
+    full_eval: bool = (
+        False  # runs eval without sanitization. Use only on trusted input!
+    )
     data: str | pd.DataFrame  # data file, URL, or DataFrame
     separator: None | str = None  # separator for data file
     vecdb: None | VectorStoreConfig = None
@@ -204,7 +215,7 @@ class TableChatAgent(ChatAgent):
         """
         self.sent_expression = True
         exprn = msg.expression
-        local_vars = {"df": self.df}
+        vars = {"df": self.df}
         # Create a string-based I/O stream
         code_out = io.StringIO()
 
@@ -212,10 +223,13 @@ class TableChatAgent(ChatAgent):
         sys.stdout = code_out
 
         # Evaluate the last line and get the result;
-        # SECURITY: eval only with empty globals and {"df": df} in locals to
-        # prevent arbitrary Python code execution.
+        # SECURITY MITIGATION: Eval input is sanitized by default to prevent most
+        # common code injection attack vectors.
         try:
-            eval_result = eval(exprn, {}, local_vars)
+            if not self.config.full_eval:
+                exprn = sanitize_command(exprn)
+            code = compile(exprn, "<calc>", "eval")
+            eval_result = eval(code, vars, {})
         except Exception as e:
             eval_result = f"ERROR: {type(e)}: {e}"
 
@@ -226,7 +240,7 @@ class TableChatAgent(ChatAgent):
         sys.stdout = sys.__stdout__
 
         # If df has been modified in-place, save the changes back to self.df
-        self.df = local_vars["df"]
+        self.df = vars["df"]
 
         # Get the resulting string from the I/O stream
         print_result = code_out.getvalue() or ""
