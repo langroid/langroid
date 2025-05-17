@@ -284,9 +284,9 @@ def test_task_gen_batch(
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2, 3])
 @pytest.mark.parametrize(
-    "handle_exceptions", [False, True, ExceptionHandling.RETURN_EXCEPTION]
+    "handle_exceptions", [ExceptionHandling.RETURN_EXCEPTION, True, False]
 )
-@pytest.mark.parametrize("sequential", [True, False])
+@pytest.mark.parametrize("sequential", [False, True])
 @pytest.mark.parametrize("fn_api", [False, True])
 @pytest.mark.parametrize("use_done_tool", [True, False])
 def test_task_gen_batch_exceptions(
@@ -320,7 +320,7 @@ def test_task_gen_batch_exceptions(
     def task_gen(i: int) -> Task:
         cfg = ChatAgentConfig(
             vecdb=None,
-            llm=OpenAIGPTConfig(),
+            llm=OpenAIGPTConfig(async_stream_quiet=False),
             use_functions_api=fn_api,
             use_tools=not fn_api,
             use_tools_api=True,
