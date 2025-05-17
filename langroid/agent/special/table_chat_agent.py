@@ -224,7 +224,7 @@ class TableChatAgent(ChatAgent):
         # SECURITY MITIGATION: Eval input is sanitized by default to prevent most 
         # common code injection attack vectors.
         try:
-            if not config.full_eval:
+            if not self.config.full_eval:
                 exprn = sanitize_command(exprn)              
             code = compile(exprn, "<calc>", "eval")
             eval_result = eval(code, vars, {})            
