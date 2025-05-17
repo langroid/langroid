@@ -180,8 +180,10 @@ class CommandValidator(ast.NodeVisitor):
         for arg in node.args:
             _literal_ok(arg)
 
-        self.generic_visit(node)
-        self.chain -= 1
+        try:
+            self.generic_visit(node)
+        finally:
+            self.chain -= 1
 
     # Names
     def visit_Name(self, node):
