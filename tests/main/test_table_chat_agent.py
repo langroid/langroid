@@ -80,6 +80,7 @@ def _test_table_chat_agent(
             data=tabular_data,
             use_tools=not fn_api,
             use_functions_api=fn_api,
+            full_eval=True,  # Allow full evaluation in tests
         )
     )
 
@@ -168,6 +169,7 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
             data=URL,
             use_tools=not fn_api,
             use_functions_api=fn_api,
+            full_eval=True,  # Allow full evaluation in tests
         )
     )
 
