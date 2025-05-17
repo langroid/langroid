@@ -1,6 +1,7 @@
 import logging
 import os
 import os.path
+import sys
 import threading
 from typing import ClassVar, Dict, no_type_check
 
@@ -163,7 +164,16 @@ class RichFileLogger:
 
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             mode = "a" if append else "w"
-            self.file = open(log_file, mode, buffering=1, encoding="utf-8")
+            self._owns_file: bool = True
+            try:
+                self.file = open(log_file, mode, buffering=1, encoding="utf-8")
+            except OSError as exc:  # EMFILE: too many open files
+                if exc.errno == 24:
+                    # Fallback: reuse an already-open stream to avoid creating a new FD
+                    self.file = sys.stderr
+                    self._owns_file = False
+                else:
+                    raise
             self.log_file: str = log_file
             self.color: bool = color
             self.console: Console | None = (
@@ -195,7 +205,7 @@ class RichFileLogger:
                 self._ref_counts.pop(self.log_file, None)
                 self._instances.pop(self.log_file, None)
                 with self._write_lock:
-                    if not self.file.closed:
+                    if self._owns_file and not self.file.closed:
                         self.file.close()
             else:
                 self._ref_counts[self.log_file] = count
