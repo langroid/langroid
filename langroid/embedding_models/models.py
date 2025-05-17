@@ -521,7 +521,7 @@ class GeminiEmbeddings(EmbeddingModel):
         for batch in batched(texts, self.config.batch_size):
             result = self.client.models.embed_content(  # type: ignore[attr-defined]
                 model=self.config.model_name,
-                contents=batch,
+                contents=batch,  # type: ignore
             )
 
             if not hasattr(result, "embeddings") or not isinstance(
@@ -532,7 +532,9 @@ class GeminiEmbeddings(EmbeddingModel):
                 )
 
             # Extract .values from ContentEmbedding objects
-            all_embeddings.extend([emb.values for emb in result.embeddings])
+            all_embeddings.extend(
+                [emb.values for emb in result.embeddings]  # type: ignore
+            )
 
         return all_embeddings
 

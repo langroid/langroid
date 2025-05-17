@@ -27,6 +27,7 @@ class MockLMConfig(LLMConfig):
             dictionary; if last msg in dialog is x,then respond with response_dict[x]
     """
 
+    chat_context_length: int = 1_000_000_000  # infinite
     response_dict: Dict[str, str] = {}
     response_fn: Callable[[str], None | str] = none_fn
     response_fn_async: Optional[Callable[[str], Awaitable[Optional[str]]]] = None
