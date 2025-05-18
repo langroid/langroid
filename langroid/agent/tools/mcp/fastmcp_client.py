@@ -277,8 +277,22 @@ class FastMCPClient:
         result: CallToolResult,
     ) -> List[str] | str | None:
         if result.isError:
-            self.logger.error(f"Error calling MCP tool {tool_name}")
-            return None
+            # Log more detailed error information
+            error_content = None
+            if result.content and len(result.content) > 0:
+                try:
+                    error_content = [
+                        item.text if hasattr(item, "text") else str(item)
+                        for item in result.content
+                    ]
+                except Exception as e:
+                    error_content = [f"Could not extract error content: {str(e)}"]
+
+            self.logger.error(
+                f"Error calling MCP tool {tool_name}. Details: {error_content}"
+            )
+            return f"ERROR: Tool call failed - {error_content}"
+
         has_nontext_results = any(
             not isinstance(item, TextContent) for item in result.content
         )
