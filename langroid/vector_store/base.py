@@ -38,6 +38,7 @@ class VectorStoreConfig(BaseSettings):
     document_class: Type[Document] = Document
     metadata_class: Type[DocMetaData] = DocMetaData
     # compose_file: str = "langroid/vector_store/docker-compose-qdrant.yml"
+    full_eval: bool = False  # runs eval without sanitization. Use only on trusted input
 
 
 class VectorStore(ABC):
@@ -153,6 +154,10 @@ class VectorStore(ABC):
     def compute_from_docs(self, docs: List[Document], calc: str) -> str:
         """Compute a result on a set of documents,
         using a dataframe calc string like `df.groupby('state')['income'].mean()`.
+
+        If full_eval is False (default), the input expression is sanitized to prevent
+        most common code injection attack vectors.
+        If full_eval is True, sanitization is bypassed - use only with trusted input!
         """
         # convert each doc to a dict, using dotted paths for nested fields
         dicts = [flatten_dict(doc.dict(by_alias=True)) for doc in docs]
@@ -160,9 +165,10 @@ class VectorStore(ABC):
 
         try:
             # SECURITY MITIGATION: Eval input is sanitized to prevent most common
-            # code injection attack vectors.
+            # code injection attack vectors when full_eval is False.
             vars = {"df": df}
-            calc = sanitize_command(calc)
+            if not self.config.full_eval:
+                calc = sanitize_command(calc)
             code = compile(calc, "<calc>", "eval")
             result = eval(code, vars, {})
         except Exception as e:

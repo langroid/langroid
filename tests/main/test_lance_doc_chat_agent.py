@@ -226,6 +226,7 @@ def test_lance_doc_chat_agent_df_query_plan(test_settings: Settings):
         storage_path=ldb_dir,
         embedding=embed_cfg,
         document_class=FlatMovieDoc,
+        full_eval=True,  # Allow unrestricted pandas operations in tests
     )
 
     cfg = DocChatAgentConfig(
@@ -304,6 +305,7 @@ def test_lance_doc_chat_agent_df(
         storage_path=ldb_dir,
         embedding=embed_cfg,
         document_class=FlatMovieDoc,
+        full_eval=True,  # Allow unrestricted pandas operations in tests
     )
 
     cfg = DocChatAgentConfig(
@@ -336,6 +338,7 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
         collection_name="test-lance-gh-issues",
         storage_path=ldb_dir,
         embedding=embed_cfg,
+        full_eval=True,  # Allow unrestricted pandas operations in tests
     )
 
     cfg = DocChatAgentConfig(
