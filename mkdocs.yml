@@ -128,6 +128,7 @@ nav:
       - Chunking: notes/chunking.md
       - Image, PDF Input: notes/file-input.md
       - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
 
   - Examples:
     - Guide: examples/guide.md
