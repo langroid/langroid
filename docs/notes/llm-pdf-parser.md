@@ -1,7 +1,9 @@
 # Using the LLM-based PDF Parser
 
 - Converts PDF content into Markdown format using Multimodal models.
+
 - Uses multimodal models to describe images within PDFs.
+
 - Supports page-wise or chunk-based processing for optimized performance.
 
 ---
@@ -44,6 +46,7 @@ Specifies the model to use for PDF conversion.
 Limits the number of tokens in the input. The model's output limit is **8192 tokens**.
 
 - **Default:** 7000 tokens (leaving room for generated captions)
+
 - _Optional parameter_
 
 ---
@@ -53,12 +56,15 @@ Limits the number of tokens in the input. The model's output limit is **8192 tok
 Determines whether to process the document **page by page**.
 
 - **Default:** `True`
+
 - If set to `False`, the parser will create chunks based on `max_tokens` while respecting page boundaries.
+
 - When `False`, the parser will send chunks containing multiple pages (e.g., `[11,12,13,14,15]`).
 
 **Advantages of `False`:**
 
 - Reduces API calls to the LLM.
+
 - Lowers token usage since system prompts are not repeated per page.
 
 **Disadvantages of `False`:**
