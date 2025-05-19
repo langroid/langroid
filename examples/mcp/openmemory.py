@@ -15,6 +15,9 @@ Steps to create and connect to openmemory mcp server
 - add your OPENAI_API_KEY
 - make build # builds the mcp server and ui
 - make up  # runs openmemory mcp server and ui
+
+You can check ui for your memories at
+localhost:3000
 """
 
 import os
