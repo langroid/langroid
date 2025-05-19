@@ -45,8 +45,7 @@ async def main(model: str = ""):
             # forward to user when LLM doesn't use a tool
             handle_llm_no_tool=NonToolAction.FORWARD_USER,
             llm=lm.OpenAIGPTConfig(
-                # chat_model=model or "gpt-4.1-mini",
-                chat_model="gemini/gemini-2.0-flash",
+                chat_model=model or "gpt-4.1-mini",
                 max_output_tokens=1000,
                 async_stream_quiet=False,
             ),
