@@ -1,13 +1,26 @@
 """
-Refer
+OpenMemory Example - Langroid integration with mem0's OpenMemory knowledge graph system
+
+This example demonstrates how to use Langroid with OpenMemory's MCP (Model Control Protocol)
+tools to create an agent with persistent memory and knowledge graph capabilities.
+
+What this example shows:
+- Integration with OpenMemory's MCP server for persistent knowledge storage
+- How to connect to and use OpenMemory's knowledge graph tools within a Langroid agent
+- Creation of a contextually-aware agent that can access and store information in a knowledge graph
+
+What is mem0/OpenMemory?
+- OpenMemory is an open-source knowledge graph system for LLM applications
+- It allows LLMs to store and retrieve information across conversations as a connected graph
+- The MCP server provides tools for knowledge operations (create, retrieve, search)
+- This example demonstrates using these knowledge graph capabilities within a Langroid agent
+
+References:
 https://mem0.ai/blog/how-to-make-your-clients-more-context-aware-with-openmemory-mcp/
 https://docs.mem0.ai/openmemory/quickstart
 https://github.com/mem0ai/mem0/tree/main/openmemory
 
-OR
-
-
-Steps to create and connect to openmemory mcp server
+Steps to create and connect to openmemory mcp server:
 
 - git clone <https://github.com/mem0ai/mem0.git>
 - cd mem0/openmemory
