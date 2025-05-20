@@ -53,6 +53,10 @@ and works with [practically any LLM](https://langroid.github.io/langroid/tutoria
 :fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/), 
  and a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/).
 
+:fire: MCP Support: Allow any LLM-Agent to leverage MCP Servers via Langroid's simple
+[MCP tool adapter](https://langroid.github.io/langroid/notes/mcp-tools/) that converts 
+the server's tools into Langroid's `ToolMessage` instances.
+
 📢 Companies are using/adapting Langroid in **production**. Here is a quote:
 
 >[Nullify](https://www.nullify.ai) uses AI Agents for secure software development. 
