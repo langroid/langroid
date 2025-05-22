@@ -4,8 +4,8 @@ Langroid provides seamless integration with Model Context Protocol (MCP) servers
 two methods, both of which involve creating Langroid `ToolMessage` subclasses
 corresponding to the MCP tools: 
 
-1. Programmatic creation of Langroid tools using `get_langroid_tool_async`, 
-   `get_langroid_tools_async` from the tool definitions defined on an MCP server.
+1. Programmatic creation of Langroid tools using `get_tool_async`, 
+   `get_tools_async` from the tool definitions defined on an MCP server.
 2. Declarative creation of Langroid tools using the **`@mcp_tool` decorator**, which allows
    customizing the tool-handling behavior beyond what is provided by the MCP server.
 
@@ -28,7 +28,7 @@ The typical pattern to use with Langroid is as follows:
 
 - define an MCP server transport
 - create a `ToolMessage` subclass using the `@mcp_tool` decorator or 
-  `get_langroid_tool_async()` function, with the transport as the first argument
+  `get_tool_async()` function, with the transport as the first argument
 
 
 Langroid's MCP integration will work with any of [transports](https://gofastmcp.com/clients/transportsl) 
@@ -63,8 +63,8 @@ langroid repo (based on the [Anthropic quick-start guide](https://modelcontextpr
 ```python
 async def example_script_path() -> None:
     server = "tests/main/mcp/weather-server-python/weather.py"
-    tools = await get_langroid_tools_async(server) # all tools available
-    AlertTool = await get_langroid_tool_async(server, "get_alerts") # specific tool
+    tools = await get_tools_async(server) # all tools available
+    AlertTool = await get_tool_async(server, "get_alerts") # specific tool
 
     # instantiate the tool with a specific input
     msg = AlertTool(state="CA")
@@ -99,8 +99,8 @@ def make_server() -> FastMCP:
 
 async def example_in_memory() -> None:
     server = make_server()
-    tools = await get_langroid_tools_async(server)
-    IncTool = await get_langroid_tool_async(server, "increment")
+    tools = await get_tools_async(server)
+    IncTool = await get_tool_async(server, "increment")
 
     result = await IncTool(start=41).handle_async()
     print(result)  # 42
@@ -125,8 +125,8 @@ transport = NpxStdioTransport(
 )
 
 async def example_npx() -> None:
-    tools = await get_langroid_tools_async(transport)
-    SearchTool = await get_langroid_tool_async(transport, "web_search_exa")
+    tools = await get_tools_async(transport)
+    SearchTool = await get_tool_async(transport, "web_search_exa")
 
     results = await SearchTool(
         query="How does Langroid integrate with MCP?"
@@ -148,8 +148,8 @@ from fastmcp.client.transports import UvxStdioTransport
 transport = UvxStdioTransport(tool_name="mcp-server-git")
 
 async def example_uvx() -> None:
-    tools = await get_langroid_tools_async(transport)
-    GitStatus = await get_langroid_tool_async(transport, "git_status")
+    tools = await get_tools_async(transport)
+    GitStatus = await get_tool_async(transport, "git_status")
 
     status = await GitStatus(path=".").handle_async()
     print(status)
@@ -161,9 +161,7 @@ Use `StdioTransport` to run any MCP server as a subprocess over stdio:
 
 ```python
 from fastmcp.client.transports import StdioTransport
-from langroid.agent.tools.mcp import get_tools_async,
-
-get_tool_async
+from langroid.agent.tools.mcp import get_tools_async, get_tool_async
 
 
 async def example_stdio() -> None:
@@ -206,7 +204,9 @@ async def example_sse() -> None:
 ---
 
 With these patterns you can list tools, generate Pydantic-backed `ToolMessage` classes,
-and invoke them via `.handle_async()`, all with zero boilerplate client setup.
+and invoke them via `.handle_async()`, all with zero boilerplate client setup. 
+As the `FastMCP` library adds other types of transport (e.g., `StreamableHTTPTransport`),
+the pattern of usage with Langroid will remain the same.
 
 
 ---
@@ -214,7 +214,7 @@ and invoke them via `.handle_async()`, all with zero boilerplate client setup.
 ## 2. Create Langroid Tools declaratively using the `@mcp_tool` decorator
 
 The above examples showed how you can create Langroid tools programmatically using
-the helper functions `get_langroid_tool_async()` and `get_langroid_tools_async()`,
+the helper functions `get_tool_async()` and `get_tools_async()`,
 with the first argument being the transport to the MCP server. The `@mcp_tool` decorator
 works in the same way: 
 
@@ -313,7 +313,7 @@ class ExaSearchTool(lr.ToolMessage):
 ```
 
 If we did not want to override the `handle_async` method, we could simply have
-created the `ExaSearchTool` class programmatically via the `get_langroid_tool_async` 
+created the `ExaSearchTool` class programmatically via the `get_tool_async` 
 function as shown above, i.e.:
 
 ```python
