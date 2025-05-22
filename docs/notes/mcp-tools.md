@@ -155,6 +155,8 @@ async def example_uvx() -> None:
     print(status)
 ```
 
+--- 
+
 #### Generic stdio Transport
 
 Use `StdioTransport` to run any MCP server as a subprocess over stdio:
@@ -177,6 +179,8 @@ async def example_stdio() -> None:
 ```
 
 See the full example in [`examples/mcp/biomcp.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/biomcp.py).
+
+---
 
 #### Network SSE Transport
 
