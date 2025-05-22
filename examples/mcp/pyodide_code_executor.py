@@ -17,7 +17,10 @@ from fire import Fire
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.mcp import mcp_tool
+from langroid.agent.tools.orchestration import ResultTool
 from langroid.mytypes import NonToolAction
+
+RUN_ONCE: bool = True # terminate task on first result?
 
 deno_transport = StdioTransport(
     command="deno",
@@ -36,16 +39,23 @@ deno_transport = StdioTransport(
 # - use the MCP tool decorator to create a Langroid ToolMessage subclass
 # - override the handle_async() method to customize the output, sent to the LLM
 
+class MyResult(ResultTool):
+    answer: str
 
 @mcp_tool(deno_transport, "run_python_code")
 class PythonCodeExecutor(lr.ToolMessage):
     async def handle_async(self):
         result: str = await self.call_tool_async()
-        return f"""
-        <CodeResult>
-        {result} 
-        </CodeResult>
-        """
+        if RUN_ONCE:
+            # terminate task with this result
+            return MyResult(answer=result)
+        else:
+            # this result goes to LLM, and loop with user continues
+            return f"""
+            <CodeResult>
+            {result} 
+            </CodeResult>
+            """
 
 
 async def main(model: str = ""):
@@ -66,8 +76,13 @@ async def main(model: str = ""):
     agent.enable_message(PythonCodeExecutor)
     # make task with interactive=False =>
     # waits for user only when LLM doesn't use a tool
-    task = lr.Task(agent, interactive=False)
-    await task.run_async()
+    if RUN_ONCE:
+        task = lr.Task(agent, interactive=False)[MyResult]
+        result: MyResult|None = await task.run_async()
+        print("Final answer is: ", result.answer)
+    else:
+        task = lr.Task(agent, interactive=False)
+        await task.run_async()
 
 
 if __name__ == "__main__":
