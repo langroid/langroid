@@ -201,6 +201,7 @@ async def example_sse() -> None:
     result: str = await ExampleTool(param="value").handle_async()
     print(result)
 ```    
+
 ---
 
 With these patterns you can list tools, generate Pydantic-backed `ToolMessage` classes,
