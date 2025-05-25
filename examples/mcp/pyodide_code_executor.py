@@ -20,7 +20,7 @@ from langroid.agent.tools.mcp import mcp_tool
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.mytypes import NonToolAction
 
-RUN_ONCE: bool = True # terminate task on first result?
+RUN_ONCE: bool = True  # terminate task on first result?
 
 deno_transport = StdioTransport(
     command="deno",
@@ -39,8 +39,10 @@ deno_transport = StdioTransport(
 # - use the MCP tool decorator to create a Langroid ToolMessage subclass
 # - override the handle_async() method to customize the output, sent to the LLM
 
+
 class MyResult(ResultTool):
     answer: str
+
 
 @mcp_tool(deno_transport, "run_python_code")
 class PythonCodeExecutor(lr.ToolMessage):
@@ -78,7 +80,7 @@ async def main(model: str = ""):
     # waits for user only when LLM doesn't use a tool
     if RUN_ONCE:
         task = lr.Task(agent, interactive=False)[MyResult]
-        result: MyResult|None = await task.run_async()
+        result: MyResult | None = await task.run_async()
         print("Final answer is: ", result.answer)
     else:
         task = lr.Task(agent, interactive=False)
