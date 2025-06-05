@@ -14,7 +14,6 @@ Run with: python portkey_basic_chat.py
 import os
 from typing import Optional
 
-import langroid as lr
 import langroid.language_models as lm
 from langroid.language_models.provider_params import PortkeyParams
 

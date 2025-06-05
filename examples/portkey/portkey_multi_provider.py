@@ -16,7 +16,6 @@ import os
 import time
 from typing import List, Optional, Tuple
 
-import langroid as lr
 import langroid.language_models as lm
 from langroid.language_models.provider_params import PortkeyParams
 
