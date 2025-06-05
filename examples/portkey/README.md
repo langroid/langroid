@@ -21,8 +21,8 @@ Demonstrates basic chat functionality with Portkey:
 - Demonstrates model switching across providers
 
 ```python
-# Run the example
-python portkey_basic_chat.py
+# Run the example from root of repo, after activating your virtual environment with uv:
+uv run examples/portkey/portkey_basic_chat.py
 ```
 
 ### 2. Portkey Advanced Features (`portkey_advanced_features.py`)
@@ -35,7 +35,7 @@ Shows how to use Portkey's advanced features:
 
 ```python
 # Run the example
-python portkey_advanced_features.py
+uv run examples/portkey/portkey_advanced_features.py
 ```
 
 ### 3. Portkey Multi-Provider Example (`portkey_multi_provider.py`)
@@ -47,7 +47,7 @@ Showcases Portkey's ability to switch between providers:
 
 ```python
 # Run the example
-python portkey_multi_provider.py
+uv run examples/portkey/portkey_multi_provider.py
 ```
 
 ## Using Portkey

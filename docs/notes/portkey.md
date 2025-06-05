@@ -21,7 +21,7 @@ For complete documentation, visit the [Portkey Documentation](https://docs.portk
 
 First, sign up for a Portkey account at [portkey.ai](https://portkey.ai) and get your API key.
 
-Set up your environment variables:
+Set up your environment variables, either explicitly or in your `.env` file as usual: 
 
 ```bash
 # Required: Portkey API key
@@ -41,19 +41,22 @@ import langroid as lr
 import langroid.language_models as lm
 from langroid.language_models.provider_params import PortkeyParams
 
-# Configure Langroid to use OpenAI through Portkey
-config = lm.OpenAIGPTConfig(
+# Create an LLM config to use Portkey's OpenAI-compatible API
+# (Note that the name `OpenAIGPTConfig` does NOT imply it only works with OpenAI models;
+# the name reflects the fact that the config is meant to be used with an
+# OpenAI-compatible API, which Portkey provides for multiple LLM providers.)
+llm_config = lm.OpenAIGPTConfig(
     chat_model="portkey/openai/gpt-4o-mini",
     portkey_params=PortkeyParams(
-        api_key="your-portkey-api-key",  # Or use PORTKEY_API_KEY env var
+        api_key="your-portkey-api-key",  # Or set PORTKEY_API_KEY env var
     )
 )
 
 # Create LLM instance
-llm = lm.OpenAIGPT(config)
+llm = lm.OpenAIGPT(llm_config)
 
 # Use normally
-response = llm.chat("What is machine learning?")
+response = llm.chat("What is the smallest prime number?")
 print(response.message)
 ```
 

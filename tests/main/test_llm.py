@@ -330,8 +330,8 @@ def test_llm_openrouter(model: str):
     "model",
     [
         "portkey/openai/gpt-4o-mini",
-        "portkey/anthropic/claude-3-haiku-20240307",
-        "portkey/gemini/gemini-2.0-flash-lite",
+        "portkey/anthropic/claude-3-5-haiku-latest",
+        "portkey/google/gemini-2.0-flash-lite",
     ],
 )
 def test_llm_portkey(model: str):
@@ -355,7 +355,7 @@ def test_llm_portkey(model: str):
         chat_model=model,
     )
     llm = lm.OpenAIGPT(config=llm_config_portkey)
-    result = llm.chat("what is 3+4?")
+    result = llm.chat("what is 3+4 equal to?")
     assert "7" in result.message
     if result.cached:
         assert result.usage.total_tokens == 0
