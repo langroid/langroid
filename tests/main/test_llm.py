@@ -326,6 +326,130 @@ def test_llm_openrouter(model: str):
         assert result.usage.total_tokens > 0
 
 
+@pytest.mark.parametrize(
+    "model",
+    [
+        "portkey/openai/gpt-4o-mini",
+        "portkey/anthropic/claude-3-haiku-20240307",
+        "portkey/gemini/gemini-2.0-flash-lite",
+    ],
+)
+def test_llm_portkey(model: str):
+    """Test that LLM access via Portkey works."""
+    # override any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+
+    # Skip if PORTKEY_API_KEY is not set
+    if not os.getenv("PORTKEY_API_KEY"):
+        pytest.skip("PORTKEY_API_KEY not set")
+
+    # Extract provider from model string
+    provider = model.split("/")[1] if "/" in model else ""
+    provider_key_var = f"{provider.upper()}_API_KEY"
+
+    # Skip if provider API key is not set
+    if not os.getenv(provider_key_var):
+        pytest.skip(f"{provider_key_var} not set")
+
+    llm_config_portkey = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config_portkey)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+def test_portkey_params():
+    """Test that PortkeyParams are correctly configured."""
+    from langroid.language_models.provider_params import PortkeyParams
+
+    # Test with explicit parameters
+    params = PortkeyParams(
+        api_key="test-key",
+        provider="anthropic",
+        virtual_key="vk-123",
+        trace_id="trace-456",
+        metadata={"user": "test"},
+        retry={"max_retries": 3},
+        cache={"enabled": True},
+        cache_force_refresh=True,
+        user="user-123",
+        organization="org-456",
+        custom_headers={"x-custom": "value"},
+    )
+
+    headers = params.get_headers()
+
+    assert headers["x-portkey-api-key"] == "test-key"
+    assert headers["x-portkey-provider"] == "anthropic"
+    assert headers["x-portkey-virtual-key"] == "vk-123"
+    assert headers["x-portkey-trace-id"] == "trace-456"
+    assert headers["x-portkey-metadata"] == '{"user": "test"}'
+    assert headers["x-portkey-retry"] == '{"max_retries": 3}'
+    assert headers["x-portkey-cache"] == '{"enabled": true}'
+    assert headers["x-portkey-cache-force-refresh"] == "true"
+    assert headers["x-portkey-user"] == "user-123"
+    assert headers["x-portkey-organization"] == "org-456"
+    assert headers["x-custom"] == "value"
+
+    # Test model string parsing
+    provider, model = params.parse_model_string("portkey/anthropic/claude-3-sonnet")
+    assert provider == "anthropic"
+    assert model == "claude-3-sonnet"
+
+    # Test fallback parsing
+    provider2, model2 = params.parse_model_string("portkey/some-model")
+    assert provider2 == ""
+    assert model2 == "some-model"
+
+    # Test provider API key retrieval
+    os.environ["TEST_PROVIDER_API_KEY"] = "test-api-key"
+    key = params.get_provider_api_key("test_provider")
+    assert key == "test-api-key"
+    del os.environ["TEST_PROVIDER_API_KEY"]
+
+
+def test_portkey_integration():
+    """Test that Portkey integration is properly configured in OpenAIGPT."""
+    from langroid.language_models.provider_params import PortkeyParams
+
+    # Save the current chat model setting
+    original_chat_model = settings.chat_model
+
+    # Clear any global chat model override
+    settings.chat_model = ""
+
+    try:
+        # Test basic portkey model configuration
+        config = lm.OpenAIGPTConfig(
+            chat_model="portkey/anthropic/claude-3-haiku-20240307",
+            portkey_params=PortkeyParams(
+                api_key="pk-test-key",
+            ),
+        )
+
+        llm = lm.OpenAIGPT(config)
+
+        # Check that model was parsed correctly
+        assert llm.config.chat_model == "claude-3-haiku-20240307"
+        assert llm.is_portkey
+        assert llm.api_base == "https://api.portkey.ai/v1"
+        assert llm.config.portkey_params.provider == "anthropic"
+
+        # Check headers are set correctly
+        assert "x-portkey-api-key" in llm.config.headers
+        assert llm.config.headers["x-portkey-api-key"] == "pk-test-key"
+        assert llm.config.headers["x-portkey-provider"] == "anthropic"
+
+    finally:
+        # Restore original chat model setting
+        settings.chat_model = original_chat_model
+
+
 def test_followup_standalone():
     """Test that followup_to_standalone works."""
 
