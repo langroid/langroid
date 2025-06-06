@@ -143,6 +143,9 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Jun 2025:**
+  - [0.54.0](https://github.com/langroid/langroid/releases/tag/0.54.0) Portkey AI Gateway support - access 200+ models 
+    across providers through unified API with caching, retries, observability.
 - **Mar-Apr 2025:**
   - [0.53.0](https://github.com/langroid/langroid/releases/tag/0.53.0) MCP Tools Support.
   - [0.52.0](https://github.com/langroid/langroid/releases/tag/0.52.0) Multimodal support, i.e. allow PDF, image 
