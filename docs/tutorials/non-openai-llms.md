@@ -3,13 +3,14 @@
 Langroid was initially written to work with OpenAI models via their API.
 This may sound limiting, but fortunately:
 
-- many open-source LLMs can be served via 
+- Many open-source LLMs can be served via 
 OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.io/langroid/tutorials/local-llm-setup/) guide for details.
-- there are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
+- There are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
   that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
 (e.g. Anthropic's Claude, Google's Gemini).
+- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), and [OpenRouter](https://openrouter.ai/) provide unified access to multiple LLM providers with additional features like cost control, observability, caching, and fallback strategies.
   
-Below we show how you can use the LiteLLM library with Langroid.
+Below we show how you can use these various options with Langroid.
 
 ## Create an `OpenAIGPTConfig` object with `chat_model = "litellm/..."`
 
@@ -34,7 +35,6 @@ docs. For example, for the `claude-instant-1` model, you would set `chat_model` 
 these to use, from the LiteLLM docs.
 
 ```python
-import langroid as lr
 import langroid.language_models as lm
 
 llm_config = lm.OpenAIGPTConfig(
@@ -88,7 +88,40 @@ python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
 
 
 
-```python
+
+## AI Gateways for Multiple LLM Providers
+
+In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
+
+### LangDB
+
+[LangDB](https://langdb.ai/) is an AI gateway offering OpenAI-compatible APIs to access 250+ LLMs with cost control, observability, and performance benchmarking. LangDB enables seamless model switching while providing detailed analytics and usage tracking.
+
+To use LangDB with Langroid:
+- Set up your `LANGDB_API_KEY` and `LANGDB_PROJECT_ID` environment variables
+- Set `chat_model="langdb/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"langdb/anthropic/claude-3.7-sonnet"`)
+
+For detailed setup and usage instructions, see the [LangDB integration guide](../notes/langdb.md).
+
+### Portkey
+
+[Portkey](https://portkey.ai) is a comprehensive AI gateway that provides access to 200+ models from various providers through a unified API. It offers advanced features like intelligent caching, automatic retries, fallback strategies, and comprehensive observability tools for production deployments.
+
+To use Portkey with Langroid:
+- Set up your `PORTKEY_API_KEY` environment variable (plus provider API keys like `OPENAI_API_KEY`)
+- Set `chat_model="portkey/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"portkey/openai/gpt-4o-mini"`)
+
+For detailed setup and usage instructions, see the [Portkey integration guide](../notes/portkey.md).
+
+### OpenRouter
+
+[OpenRouter](https://openrouter.ai/) provides access to a wide variety of both open and proprietary LLMs through a unified API. It features automatic routing and load balancing, making it particularly useful for accessing larger open LLMs without local resources and for using multiple providers through a single interface.
+
+To use OpenRouter with Langroid:
+- Set up your `OPENROUTER_API_KEY` environment variable
+- Set `chat_model="openrouter/<model_name>"` in the `OpenAIGPTConfig`
+
+For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
 
 ## Working with the created `OpenAIGPTConfig` object
 

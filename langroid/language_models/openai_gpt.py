@@ -60,6 +60,11 @@ from langroid.language_models.prompt_formatter.hf_formatter import (
     HFFormatter,
     find_hf_formatter,
 )
+from langroid.language_models.provider_params import (
+    DUMMY_API_KEY,
+    LangDBParams,
+    PortkeyParams,
+)
 from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
     retry_with_exponential_backoff,
@@ -81,9 +86,7 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
-LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
 OLLAMA_API_KEY = "ollama"
-DUMMY_API_KEY = "xxx"
 
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
@@ -183,24 +186,6 @@ def noop() -> None:
     return None
 
 
-class LangDBParams(BaseSettings):
-    """
-    Parameters specific to LangDB integration.
-    """
-
-    api_key: str = DUMMY_API_KEY
-    project_id: str = ""
-    label: Optional[str] = None
-    run_id: Optional[str] = None
-    thread_id: Optional[str] = None
-    base_url: str = LANGDB_BASE_URL
-
-    class Config:
-        # allow setting of fields via env vars,
-        # e.g. LANGDB_PROJECT_ID=1234
-        env_prefix = "LANGDB_"
-
-
 class OpenAICallParams(BaseModel):
     """
     Various params that can be sent to an OpenAI API chat-completion call.
@@ -289,6 +274,7 @@ class OpenAIGPTConfig(LLMConfig):
     formatter: str | None = None
     hf_formatter: HFFormatter | None = None
     langdb_params: LangDBParams = LangDBParams()
+    portkey_params: PortkeyParams = PortkeyParams()
     headers: Dict[str, str] = {}
 
     def __init__(self, **kwargs) -> None:  # type: ignore
@@ -535,6 +521,7 @@ class OpenAIGPT(LanguageModel):
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
         self.is_langdb = self.config.chat_model.startswith("langdb/")
+        self.is_portkey = self.config.chat_model.startswith("portkey/")
         self.is_litellm_proxy = self.config.chat_model.startswith("litellm-proxy/")
 
         if self.is_groq:
@@ -610,6 +597,26 @@ class OpenAIGPT(LanguageModel):
                         self.config.headers["x-run-id"] = params.run_id
                     if params.thread_id:
                         self.config.headers["x-thread-id"] = params.thread_id
+            elif self.is_portkey:
+                # Parse the model string and extract provider/model
+                provider, model = self.config.portkey_params.parse_model_string(
+                    self.config.chat_model
+                )
+                self.config.chat_model = model
+                if provider:
+                    self.config.portkey_params.provider = provider
+
+                # Set Portkey base URL
+                self.api_base = self.config.portkey_params.base_url + "/v1"
+
+                # Set API key - use provider's API key from env if available
+                if self.api_key == OPENAI_API_KEY:
+                    self.api_key = self.config.portkey_params.get_provider_api_key(
+                        self.config.portkey_params.provider, DUMMY_API_KEY
+                    )
+
+                # Add Portkey-specific headers
+                self.config.headers.update(self.config.portkey_params.get_headers())
 
             self.client = OpenAI(
                 api_key=self.api_key,

@@ -123,6 +123,7 @@ nav:
       - Marker Pdf Parser: notes/marker-pdf.md
       - URLLoader : notes/url_loader.md
       - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
       - Markitdown Parsers: notes/markitdown.md
       - LiteLLM Proxy: notes/litellm-proxy.md
       - Chunking: notes/chunking.md

@@ -10,7 +10,7 @@ from openai import AzureOpenAI, OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.language_models.openai_gpt import LangDBParams
+from langroid.language_models.provider_params import LangDBParams
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
 
