@@ -117,20 +117,22 @@ async def main(question: str = "", model: str = ""):
                             chat_model=model or lm.openai_gpt.OpenAIChatModel.GPT4_1
                         ),
                         system_message="""
-                        Your goal is to answer the user's question by using
-                        browsing tools to navigate Wikipedia.
+                        Your goal is to answer the user's question by
+                        using browsing tools to navigate Wikipedia.
 
-                        Access the web through the provided browsing tool. Begin
-                        by using the `browser_navigate` tool/message to navigate
-                        to wikipedia.org.
+                        Access the web through the provided browsing
+                        tool. Begin by using the `browser_navigate`
+                        tool/message to navigate to wikipedia.org.
 
-                        Unless you are done, be SURE that you use a tool in each
-                        step. Think carefully about the next step you want to
-                        take, and then call the appropriate tool. NEVER attempt to
+                        Unless you are done, be SURE that you use a
+                        browsing tool in each step. Think carefully
+                        about the next step you want to take, and then
+                        call the appropriate tool. NEVER attempt to
                         use more than one tool at a time.
 
-                        If you are done, submit the answer with the `done_tool` tool/function;
-                        give me a succinct answer from the results of your browsing. 
+                        If you are done, submit the answer with the
+                        `done_tool` tool/function; give me a succinct
+                        answer from the results of your browsing.
                         """,
                     )
                 )
