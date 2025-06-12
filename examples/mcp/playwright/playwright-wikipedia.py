@@ -113,7 +113,7 @@ async def main(question: str = "", model: str = ""):
                 browser_tools = await client.get_tools_async()
                 agent = BrowserAgent(
                     lr.ChatAgentConfig(
-                        llm=lm.AzureConfig(
+                        llm=lm.OpenAIGPTConfig(
                             chat_model=model or lm.openai_gpt.OpenAIChatModel.GPT4_1
                         ),
                         system_message="""
