@@ -1,6 +1,8 @@
 import asyncio
 import datetime
 import logging
+from base64 import b64decode
+from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeAlias, cast
 
 from dotenv import load_dotenv
@@ -16,9 +18,20 @@ from mcp.client.session import (
     LoggingFnT,
     MessageHandlerFnT,
 )
-from mcp.types import CallToolResult, TextContent, Tool
+from mcp.types import (
+    BlobResourceContents,
+    CallToolResult,
+    EmbeddedResource,
+    ImageContent,
+    TextContent,
+    TextResourceContents,
+    Tool,
+)
 
+from langroid.agent.base import Agent
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.pydantic_v1 import AnyUrl, BaseModel, Field, create_model
 
 load_dotenv()  # load environment variables from .env
@@ -39,6 +52,10 @@ class FastMCPClient:
     def __init__(
         self,
         server: FastMCPServerSpec,
+        persist_connection: bool = False,
+        forward_images: bool = True,
+        forward_text_resources: bool = False,
+        forward_blob_resources: bool = False,
         sampling_handler: SamplingHandler | None = None,  # type: ignore
         roots: RootsList | RootsHandler | None = None,  # type: ignore
         log_handler: LoggingFnT | None = None,
@@ -58,6 +75,10 @@ class FastMCPClient:
         self.log_handler = log_handler
         self.message_handler = message_handler
         self.read_timeout_seconds = read_timeout_seconds
+        self.persist_connection = persist_connection
+        self.forward_text_resources = forward_text_resources
+        self.forward_blob_resources = forward_blob_resources
+        self.forward_images = forward_images
 
     async def __aenter__(self) -> "FastMCPClient":
         """Enter the async context manager and connect inner client."""
@@ -151,7 +172,12 @@ class FastMCPClient:
         with the given `tool_name`.
         """
         if not self.client:
-            raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
+            if self.persist_connection:
+                await self.connect()
+            else:
+                raise RuntimeError(
+                    "Client not initialized. Use async with FastMCPClient."
+                )
         target = await self.get_mcp_tool_async(tool_name)
         if target is None:
             raise ValueError(f"No tool named {tool_name}")
@@ -209,39 +235,58 @@ class FastMCPClient:
         tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
 
         # 2) define an arg-free call_tool_async()
-        async def call_tool_async(self: ToolMessage) -> Any:
+        async def call_tool_async(itself: ToolMessage) -> Any:
             from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
 
             # pack up the payload
-            payload = self.dict(
-                exclude=self.Config.schema_extra["exclude"].union(
+            payload = itself.dict(
+                exclude=itself.Config.schema_extra["exclude"].union(
                     ["request", "purpose"]
                 ),
             )
 
             # restore any renamed fields
-            for orig, new in self.__class__._renamed_fields.items():  # type: ignore
+            for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
                 if new in payload:
                     payload[orig] = payload.pop(new)
 
-            client_cfg = getattr(self.__class__, "_client_config", None)  # type: ignore
+            client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
             if not client_cfg:
                 # Fallback or error - ideally _client_config should always exist
-                raise RuntimeError(f"Client config missing on {self.__class__}")
+                raise RuntimeError(f"Client config missing on {itself.__class__}")
+
+            # Connect the client if not yet connected and keep the connection open
+            if self.persist_connection:
+                if not self.client:
+                    await self.connect()
+
+                return await self.call_mcp_tool(itself.request, payload)
+
             # open a fresh client, call the tool, then close
             async with FastMCPClient(**client_cfg) as client:  # type: ignore
-                return await client.call_mcp_tool(self.request, payload)
+                return await client.call_mcp_tool(itself.request, payload)
 
         tool_model.call_tool_async = call_tool_async  # type: ignore
 
-        if not hasattr(tool_model, "handle_async"):
-            # 3) define an arg-free handle_async() method
+        if not hasattr(tool_model, "response_async"):
+            # 3) define an arg-free response_async() method
             # if the tool model doesn't already have one
-            async def handle_async(self: ToolMessage) -> Any:
-                return await self.call_tool_async()  # type: ignore[attr-defined]
+            async def response_async(
+                self: ToolMessage, agent: Agent
+            ) -> Optional[ChatDocument]:
+                response = await self.call_tool_async()  # type: ignore[attr-defined]
+                if response is None:
+                    return response
 
-            # add the handle_async() method to the tool model
-            tool_model.handle_async = handle_async  # type: ignore
+                content, files = response
+
+                return agent.create_agent_response(
+                    content=content,
+                    files=files,
+                )
+
+            # add the response_async() method to the tool model
+            tool_model.response_async = response_async  # type: ignore
 
         return tool_model
 
@@ -251,7 +296,13 @@ class FastMCPClient:
         handling nested schemas, with `handle_async` methods
         """
         if not self.client:
-            raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
+            if self.persist_connection:
+                await self.connect()
+                assert self.client
+            else:
+                raise RuntimeError(
+                    "Client not initialized. Use async with FastMCPClient."
+                )
         resp = await self.client.list_tools()
         return [await self.get_tool_async(t.name) for t in resp]
 
@@ -267,7 +318,13 @@ class FastMCPClient:
             The raw Tool object from the server, or None.
         """
         if not self.client:
-            raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
+            if self.persist_connection:
+                await self.connect()
+                assert self.client
+            else:
+                raise RuntimeError(
+                    "Client not initialized. Use async with FastMCPClient."
+                )
         resp: List[Tool] = await self.client.list_tools()
         return next((t for t in resp if t.name == name), None)
 
@@ -275,7 +332,7 @@ class FastMCPClient:
         self,
         tool_name: str,
         result: CallToolResult,
-    ) -> List[str] | str | None:
+    ) -> Optional[str | tuple[str, list[FileAttachment]]]:
         if result.isError:
             # Log more detailed error information
             error_content = None
@@ -293,26 +350,38 @@ class FastMCPClient:
             )
             return f"ERROR: Tool call failed - {error_content}"
 
-        has_nontext_results = any(
-            not isinstance(item, TextContent) for item in result.content
-        )
-        if has_nontext_results:
-            self.logger.warning(
-                f"""
-                MCP Tool {tool_name} returned non-text results,
-                which will be skipped.
-                """,
-            )
-        results = [
+        results_text = [
             item.text for item in result.content if isinstance(item, TextContent)
         ]
-        if len(results) == 1:
-            return results[0]
-        return results
+        results_file = []
+
+        for item in result.content:
+            if isinstance(item, ImageContent) and self.forward_images:
+                results_file.append(
+                    FileAttachment.from_bytes(
+                        b64decode(item.data),
+                        mime_type=item.mimeType,
+                    )
+                )
+            elif isinstance(item, EmbeddedResource):
+                if (
+                    isinstance(item.resource, TextResourceContents)
+                    and self.forward_text_resources
+                ):
+                    results_text.append(item.resource.text)
+                elif (
+                    isinstance(item.resource, BlobResourceContents)
+                    and self.forward_blob_resources
+                ):
+                    results_file.append(
+                        FileAttachment.from_io(BytesIO(b64decode(item.resource.blob)))
+                    )
+
+        return "\n".join(results_text), results_file
 
     async def call_mcp_tool(
         self, tool_name: str, arguments: Dict[str, Any]
-    ) -> str | List[str] | None:
+    ) -> Optional[tuple[str, list[FileAttachment]]]:
         """Call an MCP tool with the given arguments.
 
         Args:
@@ -323,12 +392,23 @@ class FastMCPClient:
             The result of the tool call.
         """
         if not self.client:
-            raise RuntimeError("Client not initialized. Use async with FastMCPClient.")
+            if self.persist_connection:
+                await self.connect()
+                assert self.client
+            else:
+                raise RuntimeError(
+                    "Client not initialized. Use async with FastMCPClient."
+                )
         result: CallToolResult = await self.client.session.call_tool(
             tool_name,
             arguments,
         )
-        return self._convert_tool_result(tool_name, result)
+        results = self._convert_tool_result(tool_name, result)
+
+        if isinstance(results, str):
+            return results, []
+
+        return results
 
 
 # ==============================================================================
