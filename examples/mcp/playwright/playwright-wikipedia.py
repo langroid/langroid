@@ -5,6 +5,7 @@ browsing Wikipedia.
 Playwright requires specific versions of browsers to be installed
  hence this example requires Docker.
 """
+
 import langroid as lr
 import langroid.language_models as lm
 import docker
@@ -15,7 +16,10 @@ import asyncio
 from langroid.agent.tools.orchestration import DoneTool
 from rich import print
 from fire import Fire
+from httpx import ReadError
+import docker.errors
 import os
+
 
 class BrowserAgent(lr.ChatAgent):
     def __init__(self, config: lr.ChatAgentConfig):
@@ -33,8 +37,10 @@ class BrowserAgent(lr.ChatAgent):
 
         If you are done, submit your answer with the `done_tool` tool/function.
         """
-    
-    async def agent_response_async(self, msg: Optional[str | lr.ChatDocument] = None) -> Optional[lr.ChatDocument]:
+
+    async def agent_response_async(
+        self, msg: Optional[str | lr.ChatDocument] = None
+    ) -> Optional[lr.ChatDocument]:
         result = await super().agent_response_async(msg)
 
         # Playwright responds with a large snapshot at each step As
@@ -50,7 +56,9 @@ class BrowserAgent(lr.ChatAgent):
 
         return result
 
-    def agent_response(self,  msg: Optional[str | lr.ChatDocument] = None) -> Optional[lr.ChatDocument]:
+    def agent_response(
+        self, msg: Optional[str | lr.ChatDocument] = None
+    ) -> Optional[lr.ChatDocument]:
         result = super().agent_response(msg)
 
         # Playwright responds with a large snapshot at each step As
@@ -66,21 +74,22 @@ class BrowserAgent(lr.ChatAgent):
 
         return result
 
-async def main(
-    question: str = "",
-    model: str = ""
-):
-    question = question or """
+
+async def main(question: str = "", model: str = ""):
+    question = (
+        question
+        or """
     What was the first award won by the person who had the featured
     article on English Wikipedia on June 12, 2025? Give me the award
     which is shown first when sorted by year.
     """
+    )
     client = docker.from_env()
     tag = "playwright-mcp"
 
     try:
-        client.get(tag)
-    except:
+        client.images.get(tag)
+    except docker.errors.APIError:
         path = os.path.dirname(os.path.abspath(__file__))
         client.images.build(path=path, tag=tag)
 
@@ -104,8 +113,10 @@ async def main(
                 browser_tools = await client.get_tools_async()
                 agent = BrowserAgent(
                     lr.ChatAgentConfig(
-                        llm=lm.AzureConfig(chat_model=model or lm.openai_gpt.OpenAIChatModel.GPT4_1),
-                        system_message=f"""
+                        llm=lm.AzureConfig(
+                            chat_model=model or lm.openai_gpt.OpenAIChatModel.GPT4_1
+                        ),
+                        system_message="""
                         Your goal is to answer the user's question by using
                         browsing tools to navigate Wikipedia.
 
@@ -120,23 +131,27 @@ async def main(
 
                         If you are done, submit the answer with the `done_tool` tool/function;
                         give me a succinct answer from the results of your browsing. 
-                        """
+                        """,
                     )
                 )
 
                 for tool in browser_tools:
                     agent.enable_message(tool)
 
-                answer = await lr.Task(agent, interactive=False, recognize_string_signals=False).run_async(question)
+                answer = await lr.Task(
+                    agent, interactive=False, recognize_string_signals=False
+                ).run_async(question)
 
                 if answer:
                     print(f"[green]Answer: {answer.content}")
-        except:
+        except ReadError:
             await asyncio.sleep(0.1)
 
     container.stop()
 
+
 if __name__ == "__main__":
+
     def run_main(**kwargs) -> None:
         """Run the async main function with a proper event loop.
 
