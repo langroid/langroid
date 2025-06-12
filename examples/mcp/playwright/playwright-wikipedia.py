@@ -3,7 +3,7 @@ Simple example of Playwright MCP browser which answers questions by
 browsing Wikipedia.
 
 Playwright requires specific versions of browsers to be installed
- hence this example requires Docker.
+hence this example requires Docker.
 """
 
 import langroid as lr
