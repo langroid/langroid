@@ -995,7 +995,6 @@ async def test_task_output_format_sequence_async():
     for x in range(5):
         await test_sequence(x)
 
-
 def test_done_if_tool(test_settings: Settings):
     """Test that task terminates when LLM generates a tool and done_if_tool=True"""
 
@@ -1006,15 +1005,10 @@ def test_done_if_tool(test_settings: Settings):
         purpose: str = "A simple tool for testing"
         value: str = "test"
 
-    # Create a mock LLM that responds with a tool in JSON format
+    # Create a mock LLM that always responds with a tool in JSON format
     tool_response = SimpleTool(value="hello").to_json()
 
-    mock_lm_config = MockLMConfig(
-        response_dict={
-            "Process this message": tool_response,
-            "Do something else": tool_response,
-        }
-    )
+    mock_lm_config = MockLMConfig(default_response=tool_response)
 
     # Create agent with mock LLM
     agent = ChatAgent(
@@ -1060,3 +1054,19 @@ def test_done_if_tool(test_settings: Settings):
     # Verify the last message contains the tool
     last_msg = agent.message_history[-1]
     assert "simple_tool" in last_msg.content
+
+    # Reset agent for next test
+    agent.clear_history()
+
+    # Test 3: With done_if_tool=True and return type specified
+    task_with_return_type = Task(
+        agent,
+        interactive=False,
+        config=TaskConfig(done_if_tool=True),
+    )[SimpleTool]
+
+    result_typed = task_with_return_type.run("Process with type", turns=10)
+    # Task should terminate and return the SimpleTool instance
+    assert result_typed is not None
+    assert isinstance(result_typed, SimpleTool)
+    assert result_typed.value == "hello"
