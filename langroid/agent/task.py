@@ -104,6 +104,10 @@ class TaskConfig(BaseModel):
             to use string-based signaling, and it is recommended to use the
             new Orchestration tools instead (see agent/tools/orchestration.py),
             e.g. DoneTool, SendTool, etc.
+        done_if_tool (bool): whether to consider the task done if the pending message
+            contains a Tool attempt by the LLM
+            (including tools not handled by the agent).
+            Default is False.
 
     """
 
@@ -115,6 +119,7 @@ class TaskConfig(BaseModel):
     addressing_prefix: str = ""
     allow_subtask_multi_oai_tools: bool = True
     recognize_string_signals: bool = True
+    done_if_tool: bool = False
 
 
 class Task:
@@ -1828,6 +1833,14 @@ class Task:
         if self._is_kill():
             return (True, StatusCode.KILL)
         result = result or self.pending_message
+
+        # Check if task should be done if message contains a tool
+        if self.config.done_if_tool and result is not None:
+            if isinstance(result, ChatDocument) and self.agent.try_get_tool_messages(
+                result, all_tools=True
+            ):
+                return (True, StatusCode.DONE)
+
         allow_done_string = self.config.recognize_string_signals
         # An entity decided task is done, either via DoneTool,
         # or by explicitly saying DONE

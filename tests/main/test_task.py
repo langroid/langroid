@@ -994,3 +994,69 @@ async def test_task_output_format_sequence_async():
 
     for x in range(5):
         await test_sequence(x)
+
+
+def test_done_if_tool(test_settings: Settings):
+    """Test that task terminates when LLM generates a tool and done_if_tool=True"""
+
+    set_global(test_settings)
+
+    class SimpleTool(ToolMessage):
+        request: str = "simple_tool"
+        purpose: str = "A simple tool for testing"
+        value: str = "test"
+
+    # Create a mock LLM that responds with a tool in JSON format
+    tool_response = SimpleTool(value="hello").to_json()
+
+    mock_lm_config = MockLMConfig(
+        response_dict={
+            "Process this message": tool_response,
+            "Do something else": tool_response,
+        }
+    )
+
+    # Create agent with mock LLM
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="TestAgent",
+            llm=mock_lm_config,
+        )
+    )
+
+    # Enable the tool but don't handle it
+    # (the `use` doesn't matter here since we're hard-coding the MockLM response
+    # to always be the tool-call)
+    agent.enable_message(SimpleTool, use=False, handle=False)
+
+    # Test 1: With done_if_tool=False (default), task should not terminate on tool
+    task = Task(
+        agent,
+        interactive=False,
+        config=TaskConfig(done_if_tool=False),
+    )
+
+    result = task.run("Process this message", turns=3)
+    # Task should run for all 3 turns since done_if_tool=False
+    assert result is not None
+    assert len(agent.message_history) >= 3  # At least: system, user, assistant
+
+    # Reset agent for next test
+    agent.clear_history()
+
+    # Test 2: With done_if_tool=True, task should terminate when tool is generated
+    task_with_done = Task(
+        agent,
+        interactive=False,
+        config=TaskConfig(done_if_tool=True),
+    )
+
+    result = task_with_done.run("Do something else", turns=10)
+    # Task should terminate after first LLM response containing tool
+    assert result is not None
+    # Should have exactly 3 messages: system, user, assistant (with tool)
+    assert len(agent.message_history) == 3
+
+    # Verify the last message contains the tool
+    last_msg = agent.message_history[-1]
+    assert "simple_tool" in last_msg.content
