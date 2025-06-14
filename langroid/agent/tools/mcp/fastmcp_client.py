@@ -187,6 +187,7 @@ class FastMCPClient:
         if not self.client:
             if self.persist_connection:
                 await self.connect()
+                assert self.client
             else:
                 raise RuntimeError(
                     "Client not initialized. Use async with FastMCPClient."
@@ -281,9 +282,21 @@ class FastMCPClient:
 
         tool_model.call_tool_async = call_tool_async  # type: ignore
 
+        if not hasattr(tool_model, "handle_async"):
+            # 3) define an arg-free handle_async() method for backward compatibility
+            async def handle_async(self: ToolMessage) -> Any:
+                response = await self.call_tool_async()  # type: ignore[attr-defined]
+                if response is None:
+                    return response
+                # For backward compatibility, return just the text content
+                content, files = response
+                return content
+
+            # add the handle_async() method to the tool model
+            tool_model.handle_async = handle_async  # type: ignore
+
         if not hasattr(tool_model, "response_async"):
-            # 3) define an arg-free response_async() method
-            # if the tool model doesn't already have one
+            # 4) define response_async() method that returns ChatDocument with files
             async def response_async(
                 self: ToolMessage, agent: Agent
             ) -> Optional[ChatDocument]:
@@ -387,7 +400,10 @@ class FastMCPClient:
                     and self.forward_blob_resources
                 ):
                     results_file.append(
-                        FileAttachment.from_io(BytesIO(b64decode(item.resource.blob)))
+                        FileAttachment.from_io(
+                            BytesIO(b64decode(item.resource.blob)),
+                            mime_type=item.resource.mimeType,
+                        )
                     )
 
         return "\n".join(results_text), results_file

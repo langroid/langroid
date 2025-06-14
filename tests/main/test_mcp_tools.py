@@ -9,7 +9,14 @@ from fastmcp.client.sampling import (
     SamplingParams,
 )
 from fastmcp.client.transports import NpxStdioTransport, UvxStdioTransport
-from mcp.types import ImageContent, TextContent, Tool
+from mcp.types import (
+    BlobResourceContents,
+    EmbeddedResource,
+    ImageContent,
+    TextContent,
+    TextResourceContents,
+    Tool,
+)
 
 # note we use pydantic v2 to define MCP server
 from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
@@ -764,3 +771,165 @@ Follow these steps for each interaction:
     """
     result: lr.ChatDocument = await task.run_async(prompt, turns=3)
     assert "Maestro" in result.content
+
+
+@pytest.mark.asyncio
+async def test_persist_connection() -> None:
+    """Test that persist_connection keeps the connection open between tool calls."""
+    server = mcp_server()
+
+    # Create client with persist_connection=True
+    async with FastMCPClient(server, persist_connection=True) as client:
+        # First tool call - this should create and keep the connection open
+        tool1 = await client.get_tool_async("add_beans")
+        assert tool1 is not None
+
+        # Check that client connection is established
+        assert client.client is not None
+        initial_client = client.client
+
+        # Second tool call - should reuse the same connection
+        tool2 = await client.get_tool_async("get_num_beans")
+        assert tool2 is not None
+
+        # Verify the same client connection was reused
+        assert client.client is initial_client
+
+        # Call the tools to ensure they work
+        add_msg = tool1(x=5)
+        result1 = await add_msg.handle_async()
+        assert result1 == "5"  # handle_async returns string for backward compatibility
+
+        get_msg = tool2()
+        result2 = await get_msg.handle_async()
+        assert result2 == "5"  # handle_async returns string for backward compatibility
+
+
+@pytest.mark.asyncio
+async def test_response_async_with_images() -> None:
+    """Test that response_async returns ChatDocument with file attachments."""
+    # Create a mock server that returns image content
+    server = FastMCP("ImageServer")
+
+    @server.tool()
+    async def get_chart() -> List[TextContent | ImageContent]:
+        """Get a chart with image."""
+        return [
+            TextContent(type="text", text="Here is your chart:"),
+            ImageContent(
+                type="image",
+                mimeType="image/png",
+                data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",  # noqa: E501
+            ),
+        ]
+
+    # Get the tool and test response_async
+    async with FastMCPClient(server, forward_images=True) as client:
+        ChartTool = await client.get_tool_async("get_chart")
+
+        # Create a mock agent
+        agent = lr.ChatAgent(lr.ChatAgentConfig())
+
+        # Test response_async method
+        chart_msg = ChartTool()
+        response = await chart_msg.response_async(agent)
+
+        # Verify we got a ChatDocument
+        assert isinstance(response, lr.ChatDocument)
+        assert "Here is your chart:" in response.content
+
+        # Verify we have file attachments in the files attribute
+        assert response.files is not None
+        assert len(response.files) == 1
+
+        # Verify the file is an image
+        file = response.files[0]
+        assert file.mime_type == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_forward_text_resources() -> None:
+    """Test that forward_text_resources setting works correctly."""
+    from mcp.types import CallToolResult
+
+    server = FastMCP("TextResourceServer")
+
+    # Test the _convert_tool_result method directly with mocked data
+    async with FastMCPClient(server, forward_text_resources=True) as client:
+        # Create a mock CallToolResult with text and text resource
+        mock_result = CallToolResult(
+            content=[
+                TextContent(type="text", text="Document content:"),
+                EmbeddedResource(
+                    type="resource",
+                    resource=TextResourceContents(
+                        uri="file:///example.txt",
+                        mimeType="text/plain",
+                        text="This is embedded text content from a resource.",
+                    ),
+                ),
+            ],
+            isError=False,
+        )
+
+        # Test with forward_text_resources=True
+        result = client._convert_tool_result("test_tool", mock_result)
+        content, files = result
+
+        # Should include both the main text and the resource text
+        assert "Document content:" in content
+        assert "This is embedded text content from a resource." in content
+
+    # Test with forward_text_resources=False
+    async with FastMCPClient(server, forward_text_resources=False) as client:
+        result = client._convert_tool_result("test_tool", mock_result)
+        content, files = result
+
+        # Should only include the main text, not the resource text
+        assert "Document content:" in content
+        assert "This is embedded text content from a resource." not in content
+
+
+@pytest.mark.asyncio
+async def test_forward_blob_resources() -> None:
+    """Test that forward_blob_resources setting works correctly."""
+    from mcp.types import CallToolResult
+
+    server = FastMCP("BlobResourceServer")
+
+    # Test the _convert_tool_result method directly with mocked data
+    async with FastMCPClient(server, forward_blob_resources=True) as client:
+        # Small PNG data (1x1 blue pixel)
+        png_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD0lEQVR42mNkYPhfz/ADAAKAA4RkT4UVAAAAAElFTkSuQmCC"  # noqa: E501
+
+        # Create a mock CallToolResult with text and blob resource
+        mock_result = CallToolResult(
+            content=[
+                TextContent(type="text", text="Document with blob:"),
+                EmbeddedResource(
+                    type="resource",
+                    resource=BlobResourceContents(
+                        uri="file:///example.png", mimeType="image/png", blob=png_data
+                    ),
+                ),
+            ],
+            isError=False,
+        )
+
+        # Test with forward_blob_resources=True
+        result = client._convert_tool_result("test_tool", mock_result)
+        content, files = result
+
+        # Should have text content and file attachment
+        assert "Document with blob:" in content
+        assert len(files) == 1
+        assert files[0].mime_type == "image/png"
+
+    # Test with forward_blob_resources=False
+    async with FastMCPClient(server, forward_blob_resources=False) as client:
+        result = client._convert_tool_result("test_tool", mock_result)
+        content, files = result
+
+        # Should only have text content, no file attachments
+        assert "Document with blob:" in content
+        assert len(files) == 0

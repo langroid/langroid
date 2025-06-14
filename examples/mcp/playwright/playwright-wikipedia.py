@@ -84,14 +84,34 @@ async def main(question: str = "", model: str = ""):
     which is shown first when sorted by year.
     """
     )
-    client = docker.from_env()
+    try:
+        client = docker.from_env()
+    except docker.errors.DockerException:
+        # Docker Desktop on macOS uses a different socket path
+        client = docker.DockerClient(
+            base_url="unix:///Users/pchalasani/.docker/run/docker.sock"
+        )
     tag = "playwright-mcp"
 
     try:
         client.images.get(tag)
+        print(f"Using existing Docker image: {tag}")
     except docker.errors.APIError:
+        print(
+            f"Building Docker image {tag}... (this may take several minutes on first run)"
+        )
         path = os.path.dirname(os.path.abspath(__file__))
-        client.images.build(path=path, tag=tag)
+        # Use the low-level API to get streaming logs
+        logs = client.api.build(path=path, tag=tag, rm=True, decode=True)
+        step_count = 0
+        for log in logs:
+            if "stream" in log:
+                stream = log["stream"].strip()
+                if stream.startswith("Step "):
+                    step_count += 1
+                    print(f"[yellow]Build step {step_count}: {stream}")
+                elif stream and not stream.startswith(" ---> "):
+                    print(stream)
 
     container = client.containers.run(
         tag,
@@ -100,9 +120,29 @@ async def main(question: str = "", model: str = ""):
         detach=True,
     )
 
+    print(f"Container started: {container.short_id}")
+
+    # Give the container time to start and check if it's still running
+    import time
+
+    time.sleep(5)
+    container.reload()
+
+    if container.status != "running":
+        print(f"[red]Container exited with status: {container.status}")
+        logs = container.logs()
+        print(f"[red]Container logs:\n{logs.decode()}")
+        container.remove()
+        return
+
+    print("Container is running, attempting to connect...")
+
     # Wait for the server to start
     connected = False
-    while not connected:
+    max_attempts = 30
+    attempt = 0
+    while not connected and attempt < max_attempts:
+        attempt += 1
         try:
             transport = StreamableHttpTransport(
                 "http://localhost:8931/mcp",
