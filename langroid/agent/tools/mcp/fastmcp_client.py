@@ -117,6 +117,19 @@ class FastMCPClient:
         self.client = None
         self._cm = None
 
+    def __del__(self) -> None:
+        """Warn about unclosed persistent connections."""
+        if self.client is not None and self.persist_connection:
+            import warnings
+
+            warnings.warn(
+                f"FastMCPClient with persist_connection=True was not properly closed. "
+                f"Connection to {self.server} may leak resources. "
+                f"Use 'async with' or call await client.close()",
+                ResourceWarning,
+                stacklevel=2,
+            )
+
     def _schema_to_field(
         self, name: str, schema: Dict[str, Any], prefix: str
     ) -> Tuple[Any, Any]:
