@@ -806,7 +806,7 @@ async def test_persist_connection() -> None:
 
 
 @pytest.mark.asyncio
-async def test_response_async_with_images() -> None:
+async def test_handle_async_with_images() -> None:
     """Test that response_async returns ChatDocument with file attachments."""
     # Create a mock server that returns image content
     server = FastMCP("ImageServer")
@@ -832,7 +832,7 @@ async def test_response_async_with_images() -> None:
 
         # Test response_async method
         chart_msg = ChartTool()
-        response = await chart_msg.response_async(agent)
+        response = await chart_msg.handle_async(agent)
 
         # Verify we got a ChatDocument
         assert isinstance(response, lr.ChatDocument)
