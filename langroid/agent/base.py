@@ -251,6 +251,172 @@ class Agent(ABC):
     def clear_dialog(self) -> None:
         self.dialog = []
 
+    def _analyze_handler_params(
+        self, handler_method: Any
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """
+        Analyze parameters of a handler method to determine their types.
+
+        Returns:
+            Tuple of (has_annotations, agent_param_name, chat_doc_param_name)
+            - has_annotations: True if useful type annotations were found
+            - agent_param_name: Name of the agent parameter if found
+            - chat_doc_param_name: Name of the chat_doc parameter if found
+        """
+        sig = inspect.signature(handler_method)
+        params = list(sig.parameters.values())
+        # Remove 'self' parameter
+        params = [p for p in params if p.name != "self"]
+
+        agent_param = None
+        chat_doc_param = None
+        has_annotations = False
+
+        for param in params:
+            # First try type annotations
+            if param.annotation != inspect.Parameter.empty:
+                ann_str = str(param.annotation)
+                # Check for Agent-like types
+                if (
+                    param.annotation == self.__class__
+                    or "Agent" in ann_str
+                    or (
+                        hasattr(param.annotation, "__name__")
+                        and "Agent" in param.annotation.__name__
+                    )
+                ):
+                    agent_param = param.name
+                    has_annotations = True
+                # Check for ChatDocument-like types
+                elif "ChatDocument" in ann_str or "ChatDoc" in ann_str:
+                    chat_doc_param = param.name
+                    has_annotations = True
+
+            # Fallback to parameter names
+            elif param.name == "agent":
+                agent_param = param.name
+            elif param.name == "chat_doc":
+                chat_doc_param = param.name
+
+        return has_annotations, agent_param, chat_doc_param
+
+    @no_type_check
+    def _create_handler_wrapper(
+        self,
+        message_class: Type[ToolMessage],
+        handler_method: Any,
+        is_async: bool = False,
+    ) -> Any:
+        """
+        Create a wrapper function for a handler method based on its signature.
+
+        Args:
+            message_class: The ToolMessage class
+            handler_method: The handle/handle_async method
+            is_async: Whether this is for an async handler
+
+        Returns:
+            Appropriate wrapper function
+        """
+        sig = inspect.signature(handler_method)
+        params = list(sig.parameters.values())
+        params = [p for p in params if p.name != "self"]
+
+        has_annotations, agent_param, chat_doc_param = self._analyze_handler_params(
+            handler_method,
+        )
+
+        # Build wrapper based on found parameters
+        if len(params) == 0:
+            if is_async:
+
+                async def wrapper(obj: Any) -> Any:
+                    return await obj.handle_async()
+
+            else:
+
+                def wrapper(obj: Any) -> Any:
+                    return obj.handle()
+
+        elif agent_param and chat_doc_param:
+            # Both parameters present - build wrapper respecting their order
+            param_names = [p.name for p in params]
+            if param_names.index(agent_param) < param_names.index(chat_doc_param):
+                # agent is first parameter
+                if is_async:
+
+                    async def wrapper(obj: Any, chat_doc: Any) -> Any:
+                        return await obj.handle_async(self, chat_doc)
+
+                else:
+
+                    def wrapper(obj: Any, chat_doc: Any) -> Any:
+                        return obj.handle(self, chat_doc)
+
+            else:
+                # chat_doc is first parameter
+                if is_async:
+
+                    async def wrapper(obj: Any, chat_doc: Any) -> Any:
+                        return await obj.handle_async(chat_doc, self)
+
+                else:
+
+                    def wrapper(obj: Any, chat_doc: Any) -> Any:
+                        return obj.handle(chat_doc, self)
+
+        elif agent_param and not chat_doc_param:
+            # Only agent parameter
+            if is_async:
+
+                async def wrapper(obj: Any) -> Any:
+                    return await obj.handle_async(self)
+
+            else:
+
+                def wrapper(obj: Any) -> Any:
+                    return obj.handle(self)
+
+        elif chat_doc_param and not agent_param:
+            # Only chat_doc parameter
+            if is_async:
+
+                async def wrapper(obj: Any, chat_doc: Any) -> Any:
+                    return await obj.handle_async(chat_doc)
+
+            else:
+
+                def wrapper(obj: Any, chat_doc: Any) -> Any:
+                    return obj.handle(chat_doc)
+
+        else:
+            # No recognized parameters - backward compatibility
+            # Assume single parameter is chat_doc (legacy behavior)
+            if len(params) == 1:
+                if is_async:
+
+                    async def wrapper(obj: Any, chat_doc: Any) -> Any:
+                        return await obj.handle_async(chat_doc)
+
+                else:
+
+                    def wrapper(obj: Any, chat_doc: Any) -> Any:
+                        return obj.handle(chat_doc)
+
+            else:
+                # Multiple unrecognized parameters - best guess
+                if is_async:
+
+                    async def wrapper(obj: Any, chat_doc: Any) -> Any:
+                        return await obj.handle_async(chat_doc)
+
+                else:
+
+                    def wrapper(obj: Any, chat_doc: Any) -> Any:
+                        return obj.handle(chat_doc)
+
+        return wrapper
+
     def _get_tool_list(
         self, message_class: Optional[Type[ToolMessage]] = None
     ) -> List[str]:
@@ -304,13 +470,12 @@ class Agent(ABC):
             in one place, i.e. in the message class.
             See `tests/main/test_stateless_tool_messages.py` for an example.
             """
-            has_chat_doc_arg = (
-                len(inspect.signature(message_class.handle).parameters) > 1
+            wrapper = self._create_handler_wrapper(
+                message_class,
+                message_class.handle,
+                is_async=False,
             )
-            if has_chat_doc_arg:
-                setattr(self, handler, lambda obj, chat_doc: obj.handle(chat_doc))
-            else:
-                setattr(self, handler, lambda obj: obj.handle())
+            setattr(self, handler, wrapper)
         elif (
             hasattr(message_class, "response")
             and inspect.isfunction(message_class.response)
@@ -320,11 +485,17 @@ class Agent(ABC):
                 len(inspect.signature(message_class.response).parameters) > 2
             )
             if has_chat_doc_arg:
-                setattr(
-                    self, handler, lambda obj, chat_doc: obj.response(self, chat_doc)
-                )
+
+                def response_wrapper_with_chat_doc(obj: Any, chat_doc: Any) -> Any:
+                    return obj.response(self, chat_doc)
+
+                setattr(self, handler, response_wrapper_with_chat_doc)
             else:
-                setattr(self, handler, lambda obj: obj.response(self))
+
+                def response_wrapper_no_chat_doc(obj: Any) -> Any:
+                    return obj.response(self)
+
+                setattr(self, handler, response_wrapper_no_chat_doc)
 
         if hasattr(message_class, "handle_message_fallback") and (
             inspect.isfunction(message_class.handle_message_fallback)
@@ -334,10 +505,13 @@ class Agent(ABC):
             # `handle_message_fallback` method (which does nothing).
             # It's possible multiple tool messages have a `handle_message_fallback`,
             # in which case, the last one inserted will be used.
+            def fallback_wrapper(msg: Any) -> Any:
+                return message_class.handle_message_fallback(self, msg)
+
             setattr(
                 self,
                 "handle_message_fallback",
-                lambda msg: message_class.handle_message_fallback(self, msg),
+                fallback_wrapper,
             )
 
         async_handler_name = f"{handler}_async"
@@ -346,23 +520,12 @@ class Agent(ABC):
             and inspect.isfunction(message_class.handle_async)
             and not hasattr(self, async_handler_name)
         ):
-            has_chat_doc_arg = (
-                len(inspect.signature(message_class.handle_async).parameters) > 1
+            wrapper = self._create_handler_wrapper(
+                message_class,
+                message_class.handle_async,
+                is_async=True,
             )
-
-            if has_chat_doc_arg:
-
-                @no_type_check
-                async def handler(obj, chat_doc):
-                    return await obj.handle_async(chat_doc)
-
-            else:
-
-                @no_type_check
-                async def handler(obj):
-                    return await obj.handle_async()
-
-            setattr(self, async_handler_name, handler)
+            setattr(self, async_handler_name, wrapper)
         elif (
             hasattr(message_class, "response_async")
             and inspect.isfunction(message_class.response_async)
