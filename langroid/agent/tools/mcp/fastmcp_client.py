@@ -283,36 +283,37 @@ class FastMCPClient:
         tool_model.call_tool_async = call_tool_async  # type: ignore
 
         if not hasattr(tool_model, "handle_async"):
-            # 3) define an arg-free handle_async() method for backward compatibility
-            async def handle_async(self: ToolMessage) -> Any:
+            # 3) define handle_async() method with optional agent parameter
+            from typing import Union
+
+            async def handle_async(
+                self: ToolMessage, agent: Optional[Agent] = None
+            ) -> Union[str, Optional[ChatDocument]]:
+                """
+                Auto-generated handler for MCP tool. Returns ChatDocument with files
+                if files are present and agent is provided, otherwise returns text.
+
+                To override: define your own handle_async method with matching signature
+                if you need file handling, or simpler signature if you only need text.
+                """
                 response = await self.call_tool_async()  # type: ignore[attr-defined]
                 if response is None:
-                    return response
-                # For backward compatibility, return just the text content
+                    return None
+
                 content, files = response
-                return content
+
+                # If we have files and an agent is provided, return a ChatDocument
+                if files and agent is not None:
+                    return agent.create_agent_response(
+                        content=content,
+                        files=files,
+                    )
+                else:
+                    # Otherwise, just return the text content
+                    return str(content) if content is not None else None
 
             # add the handle_async() method to the tool model
             tool_model.handle_async = handle_async  # type: ignore
-
-        if not hasattr(tool_model, "response_async"):
-            # 4) define response_async() method that returns ChatDocument with files
-            async def response_async(
-                self: ToolMessage, agent: Agent
-            ) -> Optional[ChatDocument]:
-                response = await self.call_tool_async()  # type: ignore[attr-defined]
-                if response is None:
-                    return response
-
-                content, files = response
-
-                return agent.create_agent_response(
-                    content=content,
-                    files=files,
-                )
-
-            # add the response_async() method to the tool model
-            tool_model.response_async = response_async  # type: ignore
 
         return tool_model
 
