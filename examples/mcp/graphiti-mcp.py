@@ -28,6 +28,25 @@ URL = "http://0.0.0.0:8000/sse"
 
 
 async def main(model: str = ""):
+    SYSTEM_MESSAGE = """Add an episode with proper formatting.
+
+    - `episode_body` must be an **escaped JSON string** if `source='json'` (not a Python dict).
+    - `source` can be:
+    - 'text' – plain text (default)
+    - 'json' – structured data
+    - `source_description` optional field
+    - 'message' – conversation-style
+    - `uuid` is not needed dont add `uuid` at any cost
+
+    Examples:
+    - Text: "Acme launched a new product."
+    - JSON: "{\\\"company\\\": {\\\"name\\\": \\\"Acme\\\"}, \\\"products\\\": [{\\\"id\\\": \\\"P001\\\"}]}",
+    - Message: "user: Hello\nassistant: Hi there"
+
+    Entities and relationships are auto-extracted from JSON.
+    Use `group_id` to group episodes (optional).
+    """
+
     transport = SSETransport(
         url=URL,
         headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
@@ -36,6 +55,7 @@ async def main(model: str = ""):
 
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
+            system_message=SYSTEM_MESSAGE,
             # forward to user when LLM doesn't use a tool
             handle_llm_no_tool=NonToolAction.FORWARD_USER,
             llm=lm.OpenAIGPTConfig(
