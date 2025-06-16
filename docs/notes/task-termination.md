@@ -82,6 +82,7 @@ agent.enable_message(DoneTool)
 The `done_sequences` feature allows you to specify sequences of events that trigger task completion. This provides fine-grained control over task termination based on conversation patterns.
 
 **Key Features:**
+
 - Specify multiple termination sequences
 - Use convenient DSL syntax or full object syntax
 - Strict consecutive matching (no skipping events)
@@ -119,6 +120,7 @@ task = Task(agent, config=config)
 | `C[pattern]` | Content matching regex | `CONTENT_MATCH` |
 
 **Examples:**
+
 - `"T, A"` - Any tool followed by agent handling
 - `"T[search], A, T[calculator], A"` - Search tool, then calculator tool
 - `"L, C[complete|done|finished]"` - LLM response containing completion words
@@ -252,6 +254,7 @@ Events must occur consecutively without intervening messages:
 ```
 
 ### Performance
+
 - Efficient O(n) traversal where n is sequence length
 - No full history scan needed
 - Early termination on first matching sequence
@@ -343,15 +346,18 @@ task = Task(agent, config=config)  # No subclassing needed
 ## Troubleshooting
 
 **Sequence not matching?**
+
 - Check that events are truly consecutive (no intervening messages)
 - Use logging to see the actual message chain
 - Verify tool names match exactly
 
 **Type errors with DSL?**
+
 - Ensure you're using strings for DSL patterns
 - Check that tool names in `T[name]` don't contain special characters
 
 **Performance concerns?**
+
 - Sequences only traverse as deep as needed
 - Consider shorter sequences for better performance
 - Use specific tool names to avoid unnecessary checks
