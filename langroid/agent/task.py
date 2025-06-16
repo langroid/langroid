@@ -6,6 +6,7 @@ import logging
 import re
 import threading
 from collections import Counter, OrderedDict, deque
+from enum import Enum
 from pathlib import Path
 from types import SimpleNamespace
 from typing import (
@@ -20,6 +21,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    Union,
     cast,
     overload,
 )
@@ -69,6 +71,38 @@ def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
 
 
+class EventType(str, Enum):
+    """Types of events that can occur in a task"""
+
+    TOOL = "tool"  # Any tool generated
+    SPECIFIC_TOOL = "specific_tool"  # Specific tool by name
+    LLM_RESPONSE = "llm_response"  # LLM generates response
+    AGENT_RESPONSE = "agent_response"  # Agent responds
+    USER_RESPONSE = "user_response"  # User responds
+    CONTENT_MATCH = "content_match"  # Response matches pattern
+    NO_RESPONSE = "no_response"  # No valid response from entity
+    CUSTOM = "custom"  # Custom condition
+
+
+class AgentEvent(BaseModel):
+    """Single event in a task sequence"""
+
+    event_type: EventType
+    tool_name: Optional[str] = None  # For SPECIFIC_TOOL
+    content_pattern: Optional[str] = None  # For CONTENT_MATCH (regex)
+    responder: Optional[str] = None  # Specific responder name
+    # Optionally match only if the responder was specific entity/task
+    sender: Optional[str] = None  # Entity name or Task name that sent the message
+
+
+class DoneSequence(BaseModel):
+    """A sequence of events that triggers task completion"""
+
+    events: List[AgentEvent]
+    # Optional name for debugging
+    name: Optional[str] = None
+
+
 class TaskConfig(BaseModel):
     """Configuration for a Task. This is a container for any params that
     we didn't include in the task `__init__` method.
@@ -108,6 +142,9 @@ class TaskConfig(BaseModel):
             contains a Tool attempt by the LLM
             (including tools not handled by the agent).
             Default is False.
+        done_sequences (List[DoneSequence]): List of event sequences that trigger task
+            completion. Task is done if ANY sequence matches the recent event history.
+            Each sequence is checked against the message parent chain.
 
     """
 
@@ -120,6 +157,7 @@ class TaskConfig(BaseModel):
     allow_subtask_multi_oai_tools: bool = True
     recognize_string_signals: bool = True
     done_if_tool: bool = False
+    done_sequences: Optional[List[Union[str, DoneSequence]]] = None
 
 
 class Task:
@@ -257,6 +295,14 @@ class Task:
             set_parent_agent=noop_fn,
         )
         self.config = config
+        # Store parsed done sequences
+        self._parsed_done_sequences: Optional[List[DoneSequence]] = None
+        if self.config.done_sequences:
+            from .done_sequence_parser import parse_done_sequences
+
+            self._parsed_done_sequences = parse_done_sequences(
+                self.config.done_sequences
+            )
         # how to behave as a sub-task; can be overridden by `add_sub_task()`
         self.config_sub_task = copy.deepcopy(config)
         # counts of distinct pending messages in history,
@@ -360,6 +406,8 @@ class Task:
         self.single_round = single_round
         self.turns = -1  # no limit
         self.llm_delegate = llm_delegate
+        # Track last responder for done sequence checking
+        self._last_responder: Optional[Responder] = None
         if llm_delegate:
             if self.single_round:
                 # 0: User instructs (delegating to LLM);
@@ -1276,6 +1324,9 @@ class Task:
 
         self._update_no_answer_vars(result)
 
+        # Store the last responder for done sequence checking
+        self._last_responder = r
+
         # pending_sender is of type Responder,
         # i.e. it is either one of the agent's entities
         # OR a sub-task, that has produced a valid response.
@@ -1841,6 +1892,23 @@ class Task:
             ):
                 return (True, StatusCode.DONE)
 
+        # Check done sequences
+        if self._parsed_done_sequences and result is not None:
+            # Get the message chain from the current result
+            msg_chain = self._get_message_chain(result)
+
+            # Use last responder if r not provided
+            responder = r if r is not None else self._last_responder
+
+            # Check each sequence
+            for sequence in self._parsed_done_sequences:
+                if self._matches_sequence_with_current(
+                    msg_chain, sequence, result, responder
+                ):
+                    seq_name = sequence.name or "unnamed"
+                    logger.info(f"Task {self.name} done: matched sequence '{seq_name}'")
+                    return (True, StatusCode.DONE)
+
         allow_done_string = self.config.recognize_string_signals
         # An entity decided task is done, either via DoneTool,
         # or by explicitly saying DONE
@@ -2127,3 +2195,196 @@ class Task:
                 return False, addressee, content_to_send
 
         return None, None, None
+
+    def _classify_event(
+        self, msg: ChatDocument | None, responder: Responder | None
+    ) -> Optional[AgentEvent]:
+        """Classify a message into an AgentEvent for sequence matching."""
+        if msg is None:
+            return AgentEvent(event_type=EventType.NO_RESPONSE)
+
+        # Determine the event type based on responder and message content
+        event_type = EventType.NO_RESPONSE
+        tool_name = None
+
+        # Check if there are tool messages
+        tool_messages = self.agent.try_get_tool_messages(msg, all_tools=True)
+        if tool_messages:
+            event_type = EventType.TOOL
+            if len(tool_messages) == 1:
+                tool_name = tool_messages[0].request
+
+        # Check responder type
+        if responder == Entity.LLM and not tool_messages:
+            event_type = EventType.LLM_RESPONSE
+        elif responder == Entity.AGENT:
+            event_type = EventType.AGENT_RESPONSE
+        elif responder == Entity.USER:
+            event_type = EventType.USER_RESPONSE
+        elif isinstance(responder, Task):
+            # For sub-task responses, check the sender in metadata
+            if msg.metadata.sender == Entity.LLM:
+                event_type = EventType.LLM_RESPONSE
+            elif msg.metadata.sender == Entity.AGENT:
+                event_type = EventType.AGENT_RESPONSE
+            else:
+                event_type = EventType.USER_RESPONSE
+
+        # Get sender name
+        sender_name = None
+        if isinstance(responder, Entity):
+            sender_name = responder.value
+        elif isinstance(responder, Task):
+            sender_name = responder.name
+
+        return AgentEvent(
+            event_type=event_type,
+            tool_name=tool_name,
+            sender=sender_name,
+        )
+
+    def _get_message_chain(
+        self, msg: ChatDocument | None, max_depth: Optional[int] = None
+    ) -> List[ChatDocument]:
+        """Get the chain of messages by following parent pointers."""
+        if max_depth is None:
+            # Get max depth needed from all sequences
+            max_depth = 50  # default fallback
+            if self._parsed_done_sequences:
+                max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
+
+        chain = []
+        current = msg
+        depth = 0
+
+        while current is not None and depth < max_depth:
+            chain.append(current)
+            current = current.parent
+            depth += 1
+
+        # Reverse to get chronological order (oldest first)
+        return list(reversed(chain))
+
+    def _matches_event(self, actual: AgentEvent, expected: AgentEvent) -> bool:
+        """Check if an actual event matches an expected event pattern."""
+        # Check event type
+        if expected.event_type == EventType.SPECIFIC_TOOL:
+            if actual.event_type != EventType.TOOL:
+                return False
+            if expected.tool_name and actual.tool_name != expected.tool_name:
+                return False
+        elif actual.event_type != expected.event_type:
+            return False
+
+        # Check sender if specified
+        if expected.sender and actual.sender != expected.sender:
+            return False
+
+        # TODO: Add content pattern matching for CONTENT_MATCH type
+
+        return True
+
+    def _matches_sequence(
+        self, msg_chain: List[ChatDocument], sequence: DoneSequence
+    ) -> bool:
+        """Check if a message chain matches a done sequence.
+
+        We traverse the message chain and try to match the sequence events.
+        The events don't have to be consecutive in the chain.
+        """
+        if not sequence.events:
+            return False
+
+        # Convert messages to events
+        events = []
+        for i, msg in enumerate(msg_chain):
+            # Determine responder from metadata or by checking previous message
+            responder = None
+            if msg.metadata.sender:
+                responder = msg.metadata.sender
+            elif msg.metadata.sender_name:
+                # Could be a task name - keep as None for now since we can't resolve
+                # the actual Task object from just the name
+                responder = None
+
+            event = self._classify_event(msg, responder)
+            if event:
+                events.append(event)
+
+        # Try to match the sequence
+        seq_idx = 0
+        for event in events:
+            if seq_idx >= len(sequence.events):
+                break
+
+            expected = sequence.events[seq_idx]
+            if self._matches_event(event, expected):
+                seq_idx += 1
+
+        # Check if we matched the entire sequence
+        return seq_idx == len(sequence.events)
+
+    def _matches_sequence_with_current(
+        self,
+        msg_chain: List[ChatDocument],
+        sequence: DoneSequence,
+        current_msg: ChatDocument,
+        current_responder: Optional[Responder],
+    ) -> bool:
+        """Check if the message chain plus current message matches a done sequence.
+
+        Process messages in reverse order (newest first) and match against
+        the sequence events in reverse order.
+        """
+        # Add current message to chain if not already there
+        if not msg_chain or msg_chain[-1].id() != current_msg.id():
+            msg_chain = msg_chain + [current_msg]
+
+        # If we don't have enough messages for the sequence, can't match
+        if len(msg_chain) < len(sequence.events):
+            return False
+
+        # Process in reverse order - start from the end of both lists
+        seq_idx = len(sequence.events) - 1
+        msg_idx = len(msg_chain) - 1
+
+        while seq_idx >= 0 and msg_idx >= 0:
+            msg = msg_chain[msg_idx]
+            expected = sequence.events[seq_idx]
+
+            # Determine responder for this message
+            if msg_idx == len(msg_chain) - 1 and current_responder is not None:
+                # For the last message, use the current responder
+                responder = current_responder
+            else:
+                # For other messages, determine from metadata
+                responder = msg.metadata.sender
+
+            # Classify the event
+            event = self._classify_event(msg, responder)
+            if not event:
+                return False
+
+            # Check if it matches
+            matched = False
+
+            # Special handling for CONTENT_MATCH
+            if (
+                expected.event_type == EventType.CONTENT_MATCH
+                and expected.content_pattern
+            ):
+                if re.search(expected.content_pattern, msg.content, re.IGNORECASE):
+                    matched = True
+            elif self._matches_event(event, expected):
+                matched = True
+
+            if not matched:
+                # Strict matching - no skipping allowed
+                return False
+            else:
+                # Matched! Move to next expected event
+                seq_idx -= 1
+                msg_idx -= 1
+
+        # We matched if we've matched all events in the sequence
+        return seq_idx < 0

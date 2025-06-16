@@ -110,6 +110,7 @@ nav:
       - GLHF.chat Support: notes/glhf-chat.md
       - Structured Output: notes/structured-output.md
       - Tool Handler Name: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
       - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
       - Azure OpenAI models: notes/azure-openai-models.md
       - Custom Azure OpenAI client: notes/custom-azure-client.md
