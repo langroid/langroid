@@ -209,3 +209,9 @@ response_dict = {"content": '{"request": "my_tool", "param": "value"}'}
 ## Commit and Pull Request Guidelines
 
 - Never include "co-authored by Claude Code" or "created by Claude" in commit messages or pull request descriptions
+
+## Codecov Badge Fix (June 2025)
+
+- Fixed broken Codecov badge in README by removing the token parameter from the URL
+- Changed from `https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE` to `https://codecov.io/gh/langroid/langroid/graph/badge.svg`
+- Tokens are not needed for public repositories and can cause GitHub rendering issues
