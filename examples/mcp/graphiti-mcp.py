@@ -23,7 +23,7 @@ import langroid.language_models as lm
 from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
 from langroid.mytypes import NonToolAction
 
-# trying to connect to openmemory
+# trying to connect to graphiti-mcp
 URL = "http://0.0.0.0:8000/sse"
 
 
