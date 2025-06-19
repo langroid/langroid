@@ -153,6 +153,7 @@ class TaskConfig(BaseModel):
     inf_loop_wait_factor: int = 5
     restart_as_subtask: bool = False
     logs_dir: str = "logs"
+    enable_loggers: bool = True
     addressing_prefix: str = ""
     allow_subtask_multi_oai_tools: bool = True
     recognize_string_signals: bool = True
@@ -633,6 +634,9 @@ class Task:
     def init_loggers(self) -> None:
         """Initialise per-task Rich and TSV loggers."""
         from langroid.utils.logging import RichFileLogger
+
+        if not self.config.enable_loggers:
+            return
 
         if self.caller is not None and self.caller.logger is not None:
             self.logger = self.caller.logger
