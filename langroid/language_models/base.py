@@ -470,6 +470,7 @@ class LanguageModel(ABC):
                 """
             )
         from langroid.language_models.azure_openai import AzureGPT
+        from langroid.language_models.client_lm import ClientLM, ClientLMConfig
         from langroid.language_models.mock_lm import MockLM, MockLMConfig
         from langroid.language_models.openai_gpt import OpenAIGPT
 
@@ -478,6 +479,9 @@ class LanguageModel(ABC):
 
         if config.type == "mock":
             return MockLM(cast(MockLMConfig, config))
+
+        if config.type == "client":
+            return ClientLM(cast(ClientLMConfig, config))
 
         openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
 

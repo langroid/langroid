@@ -60,6 +60,9 @@ dependencies = [
     "wget<4.0,>=3.2",
 ]
 
+[project.scripts]
+langroid-mcp-server = "langroid.mcp.server.langroid_mcp_server:main"
+
 [project.optional-dependencies]
 doc-chat = [
     "docling<3.0.0,>=2.20.0",
