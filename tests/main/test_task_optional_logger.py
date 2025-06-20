@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task, TaskConfig

@@ -2,10 +2,7 @@
 Tests for the done_sequences feature in Task.
 """
 
-import pytest
-
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import (
     AgentEvent,
     DoneSequence,
@@ -15,7 +12,6 @@ from langroid.agent.task import (
 )
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.mock_lm import MockLMConfig
-from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 
 
