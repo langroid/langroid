@@ -1,5 +1,6 @@
 """
-AgentTool: A tool that allows agents to spawn sub-agents with specific tools enabled.
+TaskTool: A tool that allows agents to delegate a task to a sub-agent with
+    specific tools enabled.
 """
 
 from typing import List, Optional
@@ -13,12 +14,12 @@ from langroid.agent.tools.orchestration import DoneTool
 from langroid.pydantic_v1 import Field
 
 
-class AgentTool(ToolMessage):
+class TaskTool(ToolMessage):
     """
     Tool that spawns a sub-agent with specified tools to handle a task.
     """
 
-    request: str = "agent_tool"
+    request: str = "task_tool"
     purpose: str = """
         <HowToUse>
         Use this tool to delegate a task to a sub-agent with specific tools enabled.
@@ -51,9 +52,9 @@ class AgentTool(ToolMessage):
         description="""
             The prompt to run the sub-agent with. This differs from the agent's
             system message: Whereas the system message configures the sub-agent's
-            general role and task, the prompt is the specific input that the sub-agent
-            will process. In LLM terms, the system message is sent to the LLM as
-            the first message, with role = "system" or "developer", and 
+            GENERAL role and goals, the `prompt` is the SPECIFIC input that the 
+            sub-agent will process. In LLM terms, the system message is sent to the 
+            LLM as the first message, with role = "system" or "developer", and 
             the prompt is sent as a message with role = "user".
             EXAMPLE: system_message = "You are a financial analyst, when the 
                 user asks about the share-price of a company, 
@@ -89,7 +90,7 @@ class AgentTool(ToolMessage):
 
     def handle(self, agent: ChatAgent) -> Optional[ChatDocument]:
         """
-        Handle the AgentTool by creating a sub-agent with specified tools
+        Handle the TaskTool by creating a sub-agent with specified tools
         and running the task non-interactively.
 
         Args:
@@ -124,7 +125,7 @@ class AgentTool(ToolMessage):
                 agent.llm_tools_map[t]
                 for t in agent.llm_tools_known
                 if t in agent.llm_tools_map and t != self.request
-                # Exclude the AgentTool itself!
+                # Exclude the TaskTool itself!
             ]
         elif self.tools == ["NONE"]:
             # No tools enabled
