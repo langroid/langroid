@@ -1,7 +1,5 @@
 """Tests for done sequences DSL integration with Task."""
 
-import pytest
-
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task, TaskConfig
 from langroid.agent.tool_message import ToolMessage

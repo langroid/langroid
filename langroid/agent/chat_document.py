@@ -268,7 +268,7 @@ class ChatDocument(Document):
     @staticmethod
     def _clean_fn_call(fc: LLMFunctionCall | None) -> None:
         # Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
-        # with odditities:
+        # with oddities:
         # (a) the `name` is set, as well as `arguments.request` is set,
         #  and in langroid we use the `request` value as the `name`.
         #  In this case we override the `name` with the `request` value.

@@ -13,8 +13,6 @@ Examples:
 import re
 from typing import List, Union
 
-from langroid.pydantic_v1 import BaseModel
-
 from .task import AgentEvent, DoneSequence, EventType
 
 

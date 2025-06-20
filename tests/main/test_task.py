@@ -995,6 +995,7 @@ async def test_task_output_format_sequence_async():
     for x in range(5):
         await test_sequence(x)
 
+
 def test_done_if_tool(test_settings: Settings):
     """Test that task terminates when LLM generates a tool and done_if_tool=True"""
 
