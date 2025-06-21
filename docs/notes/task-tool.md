@@ -24,6 +24,10 @@ TaskTool is useful when:
 
 2. TaskTool spawns the new sub-agent, runs the task, and returns the result to the parent.
 
+## Async Support
+
+TaskTool fully supports both synchronous and asynchronous execution. The tool automatically handles async contexts when the parent task is running asynchronously.
+
 ## Usage Example
 
 ```python
@@ -32,7 +36,8 @@ from langroid.agent.tools.task_tool import TaskTool
 # Enable TaskTool for your agent
 agent.enable_message([TaskTool, YourCustomTool], use=True, handle=True)
 
-# Agent can now spawn sub-agents for tasks
+# Agent can now spawn sub-agents for tasks when the LLM generates a task_tool request:
+
 response = {
     "request": "task_tool",
     "system_message": "You are a calculator. Use the multiply_tool to compute products.",
@@ -81,7 +86,7 @@ Consider computing `Nebrowski(10, Nebrowski(3, 2))` where Nebrowski is a custom 
 See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py) for complete examples including:
 - Basic task delegation with mock agents
 - Nested operations with custom tools
-- Real LLM usage patterns
+- Both sync and async usage patterns
 
 ## Important Notes
 

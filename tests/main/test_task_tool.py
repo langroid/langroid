@@ -1,3 +1,5 @@
+import pytest
+
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task, TaskConfig
 from langroid.agent.tool_message import ToolMessage
@@ -86,12 +88,11 @@ class NebrowskiTool(ToolMessage):
         return f"Nebrowski({self.a}, {self.b}) = {result}"
 
 
-def test_task_tool_real_llm_nebrowski():
+def _create_nebrowski_task():
     """
-    Test that a real LLM agent can compute nested Nebrowski operations
-    by using TaskTool to delegate each Nebrowski computation to sub-agents.
+    Helper function to create a Nebrowski task for both sync and async tests.
+    Returns a configured Task ready to run.
     """
-
     # Configure the main agent with a real LLM
     main_config = ChatAgentConfig(
         llm=OpenAIGPTConfig(),  # Uses default model
@@ -142,9 +143,36 @@ def test_task_tool_real_llm_nebrowski():
         interactive=False,
     )
 
+    return task
+
+
+def test_task_tool_real_llm_nebrowski():
+    """
+    Test that a real LLM agent can compute nested Nebrowski operations
+    by using TaskTool to delegate each Nebrowski computation to sub-agents.
+    """
+    task = _create_nebrowski_task()
+
     # Run the task - compute Nebrowski(10, Nebrowski(3, 2))
-    # Expected: Nebrowski(3, 2) = 11, then Nebrowski(10, 25) = 41
+    # Expected: Nebrowski(3, 2) = 11, then Nebrowski(10, 11) = 41
     result = task.run("Compute Nebrowski(10, Nebrowski(3, 2))", turns=15)
+
+    # Verify the result
+    assert result is not None, "Task should return a result"
+    assert "41" in result.content, "Result should contain the final Nebrowski result"
+
+
+@pytest.mark.asyncio
+async def test_task_tool_real_llm_nebrowski_async():
+    """
+    Async version: Test that a real LLM agent can compute nested Nebrowski operations
+    by using TaskTool to delegate each Nebrowski computation to sub-agents.
+    """
+    task = _create_nebrowski_task()
+
+    # Run the task asynchronously - compute Nebrowski(10, Nebrowski(3, 2))
+    # Expected: Nebrowski(3, 2) = 11, then Nebrowski(10, 11) = 41
+    result = await task.run_async("Compute Nebrowski(10, Nebrowski(3, 2))", turns=15)
 
     # Verify the result
     assert result is not None, "Task should return a result"

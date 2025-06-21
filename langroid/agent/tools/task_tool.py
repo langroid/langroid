@@ -88,10 +88,9 @@ class TaskTool(ToolMessage):
         description="Optional max iterations for the sub-agent to run the task",
     )
 
-    def handle(self, agent: ChatAgent) -> Optional[ChatDocument]:
+    def _set_up_task(self, agent: ChatAgent) -> Task:
         """
-        Handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
+        Helper method to set up a task for the sub-agent.
 
         Args:
             agent: The parent ChatAgent that is handling this tool
@@ -144,6 +143,32 @@ class TaskTool(ToolMessage):
         # Create a non-interactive task
         task = Task(sub_agent, interactive=False)
 
+        return task
+
+    def handle(self, agent: ChatAgent) -> Optional[ChatDocument]:
+        """
+
+        Handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+        """
+
+        task = self._set_up_task(agent)
         # Run the task on the prompt, and return the result
         result = task.run(self.prompt, turns=self.max_iterations or 10)
+        return result
+
+    async def handle_async(self, agent: ChatAgent) -> Optional[ChatDocument]:
+        """
+        Async method to handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+        """
+        task = self._set_up_task(agent)
+        # Run the task on the prompt, and return the result
+        result = await task.run_async(self.prompt, turns=self.max_iterations or 10)
         return result
