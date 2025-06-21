@@ -23,7 +23,6 @@ chain without intervening messages. This ensures predictable behavior and effici
 matching.
 """
 
-import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import (
     AgentEvent,
@@ -86,12 +85,12 @@ def example0_dsl_syntax():
         ]
     )
 
-    task = Task(agent, config=config)
+    _ = Task(agent, config=config)
     print("Task configured with multiple DSL patterns.")
     print(
         "Will complete on any of: tool use, calculator use, quit words, or L->T->A->L sequence"
     )
-    # result = task.run("What is 25 * 4?")
+    # _ = task.run("What is 25 * 4?")
     # print(f"Final result: {result.content}")
 
 
@@ -130,8 +129,8 @@ def example1_tool_then_agent():
 
     task = Task(agent, config=config)
     print("Task will complete after any tool is used and handled.")
-    result = task.run("What is 25 * 4?")
-    print(f"Final result: {result.content}")
+    _ = task.run("What is 25 * 4?")
+    # print(f"Final result: {_.content}")
 
 
 def example2_specific_tool_sequence():
@@ -169,7 +168,7 @@ def example2_specific_tool_sequence():
     print("Task will complete only after calculator tool is used.")
     print("Try: 'Search for Python tutorials' (won't complete task)")
     print("Then try: 'Calculate 15 + 27' (will complete task)")
-    result = task.run()
+    _ = task.run()
 
 
 def example3_conversation_pattern():
@@ -206,7 +205,7 @@ def example3_conversation_pattern():
 
     task = Task(agent, config=config)
     print("Task will complete after: acknowledgment -> tool use -> handling -> summary")
-    result = task.run(
+    _ = task.run(
         "I need to calculate the area of a rectangle with width 12 and height 8"
     )
 
@@ -269,7 +268,7 @@ def example4_multiple_completion_paths():
     print("1. Say 'quit' or 'exit'")
     print("2. Use the calculator tool")
     print("3. Use the search tool twice")
-    result = task.run()
+    _ = task.run()
 
 
 def example5_combining_with_existing_options():
@@ -302,7 +301,7 @@ def example5_combining_with_existing_options():
 
     task = Task(agent, config=config)
     print("Task will complete as soon as any tool is generated (done_if_tool=True)")
-    result = task.run("Calculate 5 + 5")
+    _ = task.run("Calculate 5 + 5")
 
 
 if __name__ == "__main__":

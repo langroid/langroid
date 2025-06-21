@@ -50,6 +50,9 @@ Here is a summary of the dataframe:
 Do not assume any columns other than those shown.
 In the expression you submit to the `pandas_eval` tool/function, 
 you are allowed to use the variable 'df' to refer to the dataframe.
+IMPORTANT: You can only use expressions that return a value - assignment statements 
+(like df['col'] = value or temp = df['col']) are NOT allowed for security reasons.
+To modify data, use methods like df.assign() that return a new dataframe.
 
 Sometimes you may not be able to answer the question in a single call to `pandas_eval`,
 so you can use a series of calls to `pandas_eval` to build up the answer. 
@@ -63,6 +66,10 @@ Once you have the answer to the question, possibly after a few steps,
 say {DONE} and PRESENT THE ANSWER TO ME; do not just say {DONE}.
 If you receive an error message, 
 try using the `pandas_eval` tool/function again with the corrected code. 
+If the error is due to an assignment statement (e.g., df['col'] = ...), 
+use df.assign(col=...) instead, which returns a new dataframe with the modified column.
+For example: instead of df['airline'] = df['airline'].str.replace('*', ''), 
+use df.assign(airline=df['airline'].str.replace('*', '')). 
 
 VERY IMPORTANT: When using the `pandas_eval` tool/function, DO NOT EXPLAIN ANYTHING,
    SIMPLY USE THE TOOL, with the CODE.

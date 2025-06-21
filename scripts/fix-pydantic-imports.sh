@@ -14,8 +14,8 @@ directories=("langroid" "examples" "tests")
 
 # Function to perform replacements and log changes
 replace_and_log() {
-    # Use find to locate all .py files in the specified directories
-    find "${directories[@]}" -type f -name '*.py' | while read -r file; do
+    # Use find to locate all .py files in the specified directories, excluding .venv directories
+    find "${directories[@]}" -type f -name '*.py' -not -path '*/.venv/*' | while read -r file; do
         # Check and replace lines starting with specific patterns
         if grep -q '^from pydantic ' "$file" && grep -v '# keep' "$file" | grep -q '^from pydantic '; then
             sed -i'' -e  '/^from pydantic .*# keep/!s/^from pydantic /from langroid.pydantic_v1 /' "$file"

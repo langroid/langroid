@@ -144,6 +144,10 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Jun 2025:**
+  - [0.56.0](https://github.com/langroid/langroid/releases/tag/0.56.0) `TaskTool` for delegating tasks to sub-agents - 
+    enables agents to spawn sub-agents with specific tools and configurations.
+  - [0.55.0](https://github.com/langroid/langroid/releases/tag/0.55.0) Event-based task termination with `done_sequences` - 
+    declarative task completion using event patterns.
   - [0.54.0](https://github.com/langroid/langroid/releases/tag/0.54.0) Portkey AI Gateway support - access 200+ models 
     across providers through unified API with caching, retries, observability.
 - **Mar-Apr 2025:**
