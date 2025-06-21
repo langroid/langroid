@@ -3,6 +3,7 @@ TaskTool: A tool that allows agents to delegate a task to a sub-agent with
     specific tools enabled.
 """
 
+import uuid
 from typing import List, Optional
 
 import langroid.language_models as lm
@@ -17,6 +18,10 @@ from langroid.pydantic_v1 import Field
 class TaskTool(ToolMessage):
     """
     Tool that spawns a sub-agent with specified tools to handle a task.
+
+    The sub-agent can be given a custom name for identification in logs.
+    If no name is provided, a random unique name starting with 'agent'
+    will be generated.
     """
 
     request: str = "task_tool"
@@ -24,11 +29,7 @@ class TaskTool(ToolMessage):
         <HowToUse>
         Use this tool to delegate a task to a sub-agent with specific tools enabled.
         The sub-agent will be created with the specified tools and will run the task
-        non-interactively. Here is how to set the fields:
-        
-        - `system_message`: 
-        
-
+        non-interactively.
     """
 
     # Parameters for the agent tool
@@ -87,6 +88,14 @@ class TaskTool(ToolMessage):
         default=None,
         description="Optional max iterations for the sub-agent to run the task",
     )
+    agent_name: Optional[str] = Field(
+        default=None,
+        description="""
+            Optional name for the sub-agent. This will be used as the agent's name
+            in logs and for identification purposes. If not provided, a random unique
+            name starting with 'agent' will be generated.
+            """,
+    )
 
     def _set_up_task(self, agent: ChatAgent) -> Task:
         """
@@ -95,6 +104,9 @@ class TaskTool(ToolMessage):
         Args:
             agent: The parent ChatAgent that is handling this tool
         """
+        # Generate a random name if not provided
+        agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
+
         # Create chat agent config with system message if provided
         # TODO: Maybe we just copy the parent agent's config and override chat_model?
         #   -- but what if parent agent has a MockLMConfig?
@@ -102,6 +114,7 @@ class TaskTool(ToolMessage):
             chat_model=self.model or "gpt-4.1-mini",  # Default model if not specified
         )
         config = ChatAgentConfig(
+            name=agent_name,
             llm=llm_config,
             system_message=f"""
                 {self.system_message}

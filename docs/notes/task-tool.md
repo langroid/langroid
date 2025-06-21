@@ -43,8 +43,9 @@ response = {
     "system_message": "You are a calculator. Use the multiply_tool to compute products.",
     "prompt": "Calculate 5 * 7",
     "tools": ["multiply_tool"],
-    "model": "gpt-4o-mini",  # optional
-    "max_iterations": 5       # optional
+    "model": "gpt-4o-mini",   # optional
+    "max_iterations": 5,      # optional
+    "agent_name": "calculator-agent"  # optional
 }
 ```
 
@@ -58,6 +59,7 @@ response = {
 **Optional fields:**
 - `model`: LLM model name (default: "gpt-4o-mini")
 - `max_iterations`: Task iteration limit (default: 10)
+- `agent_name`: Name for the sub-agent (default: auto-generated as "agent-{uuid}")
 
 ## Example: Nested Operations
 
@@ -95,6 +97,9 @@ See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/m
 - Results are returned as `ChatDocument` objects. The Langroid framework takes care
   of converting them to a suitable format for the parent agent's LLM to consume and 
   respond to.
+- Sub-agents can be given custom names via the `agent_name` parameter, which helps with 
+  logging and debugging. If not specified, a unique name is auto-generated in the format 
+  "agent-{uuid}"
 - Only tools "known" to the parent agent can be enabled for sub-agents. This is an 
   important aspect of the current mechanism. The `TaskTool` handler method in
   the sub-agent only has access to tools that are known to the parent agent.
