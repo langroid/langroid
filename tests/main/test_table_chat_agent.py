@@ -156,6 +156,50 @@ def test_table_chat_agent_file_blanks(
     )
 
 
+def test_table_chat_agent_assignment_self_correction(test_settings: Settings) -> None:
+    """
+    Test that TableChatAgent self-corrects when trying to use assignment syntax
+    and uses df.assign() instead
+    """
+    set_global(test_settings)
+
+    # Create a simple dataframe with data that needs cleaning
+    df = pd.DataFrame(
+        {
+            "airline": ["United*", "Delta*", "American*", "Southwest*"],
+            "price": [100, 150, 120, 80],
+            "destination": ["NYC", "LAX", "CHI", "DEN"],
+        }
+    )
+
+    agent = TableChatAgent(
+        config=TableChatAgentConfig(
+            data=df,
+            use_tools=True,
+            use_functions_api=False,
+            full_eval=False,  # Keep security restrictions to test self-correction
+        )
+    )
+
+    task = Task(
+        agent,
+        name="TableChatAgent",
+        interactive=False,
+    )
+
+    # Ask to clean the airline column - this should trigger assignment attempt
+    result = task.run(
+        "Remove the asterisk (*) from all airline names and show me the cleaned data",
+        turns=5,
+    )
+
+    # Check that the result indicates success
+    assert "United*" not in result.content
+    assert "Delta*" not in result.content
+    # The agent successfully cleaned the data (it says so in the message)
+    assert "removed" in result.content.lower() and "cleaned" in result.content.lower()
+
+
 @pytest.mark.parametrize("fn_api", [True, False])
 def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
     """

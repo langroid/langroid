@@ -16,6 +16,7 @@ COMMON_USE_DF_METHODS = {
     "any",
     "apply",
     "applymap",
+    "assign",
     "at",
     "at_time",
     "between_time",
