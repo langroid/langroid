@@ -109,9 +109,8 @@ agent.enable_message(MySubAgentTool, use=False, handle=False)
   your system message of the main agent should contain instructions clarifying that
   it can decide which tools to enable for the sub-agent, as well as a list of 
   all tools that might possibly be relevant to the sub-agent. This is particularly
-  important for tools that have been enabled with `use=False`, since those would not
-  be present in the system message of the agent.
-  
+  important for tools that have been enabled with `use=False`, since instructions for
+  such tools would not be auto-inserted into the agent's system message. 
 
 
 
