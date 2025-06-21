@@ -5,7 +5,7 @@ https://github.com/getzep/graphiti/tree/main/mcp_server
 OR
 
 
-Steps to create and connect to openmemory mcp server
+Steps to create and connect to graphiti mcp server
 
 - git clone https://github.com/getzep/graphiti.git
 - cd graphiti/mcp_server
