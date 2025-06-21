@@ -92,8 +92,28 @@ See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/m
 
 - Spawned sub-agents run non-interactively (no human input)
 - `DoneTool` is automatically enabled for all sub-agents
-- Only tools known to the parent agent can be delegated
-- Results are returned as `ChatDocument` objects
+- Results are returned as `ChatDocument` objects. The Langroid framework takes care
+  of converting them to a suitable format for the parent agent's LLM to consume and 
+  respond to.
+- Only tools "known" to the parent agent can be enabled for sub-agents. This is an 
+  important aspect of the current mechanism. The `TaskTool` handler method in
+  the sub-agent only has access to tools that are known to the parent agent.
+  If there are tools that are only relevant to the sub-agent but not the parent,
+  you must still enable them in the parent agent, but you can set `use=False`
+  and `handle=False` when you enable them, e.g.:
+
+```python
+agent.enable_message(MySubAgentTool, use=False, handle=False)
+```
+  Since we are letting the main agent's LLM "decide" when to spawn a sub-agent,
+  your system message of the main agent should contain instructions clarifying that
+  it can decide which tools to enable for the sub-agent, as well as a list of 
+  all tools that might possibly be relevant to the sub-agent. This is particularly
+  important for tools that have been enabled with `use=False`, since those would not
+  be present in the system message of the agent.
+  
+
+
 
 ## Best Practices
 
