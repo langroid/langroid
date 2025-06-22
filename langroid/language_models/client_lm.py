@@ -1,6 +1,11 @@
 """Client Language Model that delegates to MCP client's sampling handler."""
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
+
+from fastmcp.client.sampling import SamplingMessage
+from mcp.types import TextContent
 
 from langroid.language_models.base import (
     LanguageModel,
@@ -22,8 +27,8 @@ class ClientLMConfig(LLMConfig):
     """Configuration for MCP client-based LLM."""
 
     type: str = "client"
-    context: Optional[Any] = None  # Set by MCP server at runtime
     chat_context_length: int = 1_000_000_000  # effectively infinite
+    max_output_tokens: int = 1000  # reasonable default for most models
 
 
 class ClientLM(LanguageModel):
@@ -32,6 +37,11 @@ class ClientLM(LanguageModel):
     def __init__(self, config: ClientLMConfig):
         super().__init__(config)
         self.config: ClientLMConfig = config
+        self._context: Optional["Context"] = None  # Store context as instance attribute
+
+    def set_context(self, context: "Context") -> None:
+        """Set the MCP context for sampling."""
+        self._context = context
 
     async def achat(
         self,
@@ -44,27 +54,35 @@ class ClientLM(LanguageModel):
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """Convert Langroid messages to MCP format and use ctx.sample()."""
-        if not self.config.context:
+        if not self._context:
             raise RuntimeError("No MCP context available for sampling")
 
         # Convert messages - handle system, user, assistant roles
-        mcp_messages = []
-        system_prompt = None
+        # MCP accepts str or SamplingMessage objects
+        mcp_messages: List[Union[str, SamplingMessage]] = []
+        system_prompt: Optional[str] = None
 
         # Ensure messages is a list
         if isinstance(messages, str):
             messages = [LLMMessage(role=Role.USER, content=messages)]
 
         for msg in messages:
-            if msg.role == "system":
-                # MCP expects system prompt separately
+            # Use SamplingMessage with TextContent for better type safety
+            if msg.role == Role.SYSTEM:
                 system_prompt = msg.content
             else:
-                mcp_messages.append({"role": msg.role, "content": msg.content})
+                mcp_messages.append(
+                    SamplingMessage(
+                        role=msg.role,
+                        content=TextContent(type="text", text=msg.content),
+                    )
+                )
 
         # Call MCP sampling
         temperature = self.config.temperature
-        result = await self.config.context.sample(
+
+        # Use FastMCP's sample method - it correctly uses snake_case parameters
+        result = await self._context.sample(
             messages=mcp_messages,
             system_prompt=system_prompt,
             temperature=temperature,
@@ -73,13 +91,14 @@ class ClientLM(LanguageModel):
 
         # Convert response back to Langroid format
         # MCP sample returns TextContent or ImageContent
-        message_text = ""
-        if hasattr(result, "text"):
+        if isinstance(result, TextContent):
             message_text = result.text
-        elif hasattr(result, "content"):
-            message_text = result.content
         else:
-            message_text = str(result)
+            # ImageContent case - for now, we don't support image responses
+            raise NotImplementedError(
+                "ClientLM does not currently support ImageContent responses "
+                "from MCP sampling"
+            )
 
         return LLMResponse(
             message=message_text,

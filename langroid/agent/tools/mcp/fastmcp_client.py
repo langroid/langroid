@@ -46,8 +46,8 @@ class FastMCPClient:
     """
 
     logger = logging.getLogger(__name__)
-    _cm: Optional[Client] = None
-    client: Optional[Client] = None
+    _cm: Optional[Client] = None  # type: ignore[type-arg]
+    client: Optional[Client] = None  # type: ignore[type-arg]
 
     def __init__(
         self,

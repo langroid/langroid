@@ -1,20 +1,11 @@
 """Tests for Langroid MCP server."""
 
-from typing import Any, Dict, List
+from typing import Dict
 
 import pytest
+from mcp.types import TextContent
 
-from langroid.agent.chat_agent import ChatAgent
-from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
-from langroid.language_models.client_lm import ClientLMConfig
 from langroid.mcp.server.langroid_mcp_server import langroid_chat, langroid_task, server
-
-
-class MockTextContent:
-    """Mock TextContent returned by MCP sampling."""
-
-    def __init__(self, text: str):
-        self.text = text
 
 
 class MockContext:
@@ -37,16 +28,18 @@ class MockContext:
         # Get the last user message to determine response
         last_user_msg = ""
         for msg in reversed(messages):
-            if msg.get("role") == "user":
-                last_user_msg = msg.get("content", "")
+            if msg.role == "user":
+                last_user_msg = msg.content.text
                 break
 
         # Return a response based on the message
         for key, response in self.responses.items():
             if key in last_user_msg.lower():
-                return MockTextContent(response)
+                return TextContent(type="text", text=response)
 
-        return MockTextContent(self.responses.get("default", "I don't understand."))
+        return TextContent(
+            type="text", text=self.responses.get("default", "I don't understand.")
+        )
 
 
 @pytest.fixture
@@ -85,7 +78,9 @@ async def test_langroid_chat_basic(mock_context):
 
     # Verify context was called
     assert mock_context.call_count == 1
-    assert mock_context.last_messages == [{"role": "user", "content": "Hello"}]
+    assert len(mock_context.last_messages) == 1
+    assert mock_context.last_messages[0].role == "user"
+    assert mock_context.last_messages[0].content.text == "Hello"
 
 
 @pytest.mark.asyncio
@@ -165,7 +160,7 @@ async def test_langroid_task_result_conversion(mock_context):
         async def sample(self, messages, **kwargs):
             await super().sample(messages, **kwargs)
             # Return something that will make the task return a dict
-            return MockTextContent("DONE")
+            return TextContent(type="text", text="DONE")
 
     obj_context = ObjectContext()
     result = await langroid_task(message="Do something", ctx=obj_context, max_turns=1)
@@ -179,14 +174,12 @@ def test_main_function():
     """Test the main entry point."""
     from unittest.mock import patch
 
-    with patch("asyncio.run") as mock_run:
+    # Mock server.run() to prevent the server from actually starting
+    with patch.object(server, "run") as mock_run:
         from langroid.mcp.server.langroid_mcp_server import main
 
         main()
         mock_run.assert_called_once()
-        # Verify server.run() was passed to asyncio.run
-        call_args = mock_run.call_args[0][0]
-        assert hasattr(call_args, "__name__")  # It's a coroutine
 
 
 @pytest.mark.asyncio
@@ -203,5 +196,5 @@ async def test_client_lm_integration(mock_context):
 
     # Should have received user message
     assert len(mock_context.last_messages) == 1
-    assert mock_context.last_messages[0]["role"] == "user"
-    assert "2 + 2" in mock_context.last_messages[0]["content"]
+    assert mock_context.last_messages[0].role == "user"
+    assert "2 + 2" in mock_context.last_messages[0].content.text

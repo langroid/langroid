@@ -639,6 +639,7 @@ class GitStatusTool(lr.ToolMessage):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="Requires mcp-server-git to be installed via uvx")
 async def test_uvxstdio_transport() -> None:
     """
     Test that we can create Langroid ToolMessage from an MCP server

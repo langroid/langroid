@@ -1,12 +1,46 @@
-"""Example client that connects to Langroid MCP server with sampling handler."""
+"""Example client that connects to Langroid MCP server with sampling handler.
+
+This example demonstrates how to use Langroid agents via MCP (Model Context Protocol).
+The Langroid MCP server exposes Langroid agents as tools that can be used by any MCP client.
+
+Prerequisites:
+1. Set your LLM API key (either as environment variable or in .env file):
+   - For OpenAI: OPENAI_API_KEY="your-api-key"
+   - For Anthropic: ANTHROPIC_API_KEY="your-api-key"
+   
+   You can either export these as environment variables or create a .env file
+   in your project root with these values.
+
+2. Install required dependencies:
+   pip install openai anthropic fastmcp python-dotenv
+
+How to run:
+1. This example automatically starts the Langroid MCP server via UVX
+2. Run the example:
+   python examples/mcp/langroid_agent_client.py
+
+Optional: Set LLM provider (defaults to OpenAI):
+   export LLM_PROVIDER=anthropic  # to use Claude instead of GPT-4
+
+The example demonstrates:
+- Basic chat interactions with Langroid agents
+- Using custom agent names
+- Enabling tools like web search
+- Multi-turn task-based conversations
+"""
 
 import asyncio
 import os
-from typing import List, Dict, Any
-from fastmcp.client import FastMCPClient
+from typing import List
+from dotenv import load_dotenv
+from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
 from fastmcp.client.transports import StdioTransport
 from fastmcp.client.sampling import SamplingMessage, SamplingParams, RequestContext
+from mcp.types import TextContent
 import openai
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 # Initialize your LLM client
@@ -25,8 +59,8 @@ async def openai_sampling_handler(
     openai_messages = []
 
     # Handle system prompt if provided
-    if params and params.system_prompt:
-        openai_messages.append({"role": "system", "content": params.system_prompt})
+    if params and params.systemPrompt:
+        openai_messages.append({"role": "system", "content": params.systemPrompt})
 
     for msg in messages:
         if isinstance(msg, str):
@@ -37,7 +71,10 @@ async def openai_sampling_handler(
             )
         else:
             # Handle SamplingMessage objects
-            openai_messages.append({"role": msg.role, "content": msg.content})
+            content = msg.content
+            if isinstance(content, TextContent):
+                content = content.text
+            openai_messages.append({"role": msg.role, "content": content})
 
     # Call OpenAI
     try:
@@ -45,7 +82,7 @@ async def openai_sampling_handler(
             model="gpt-4",
             messages=openai_messages,
             temperature=params.temperature if params else 0.7,
-            max_tokens=params.max_tokens if params else 1000,
+            max_tokens=params.maxTokens if params else 1000,
         )
 
         return response.choices[0].message.content or ""
@@ -69,8 +106,8 @@ async def anthropic_sampling_handler(
     anthropic_messages = []
     system_prompt = ""
 
-    if params and params.system_prompt:
-        system_prompt = params.system_prompt
+    if params and params.systemPrompt:
+        system_prompt = params.systemPrompt
 
     for msg in messages:
         if isinstance(msg, str):
@@ -80,7 +117,10 @@ async def anthropic_sampling_handler(
                 {"role": msg.get("role", "user"), "content": msg.get("content", "")}
             )
         else:
-            anthropic_messages.append({"role": msg.role, "content": msg.content})
+            content = msg.content
+            if isinstance(content, TextContent):
+                content = content.text
+            anthropic_messages.append({"role": msg.role, "content": content})
 
     try:
         response = await client.messages.create(
@@ -88,7 +128,7 @@ async def anthropic_sampling_handler(
             messages=anthropic_messages,
             system=system_prompt,
             temperature=params.temperature if params else 0.7,
-            max_tokens=params.max_tokens if params else 1000,
+            max_tokens=params.maxTokens if params else 1000,
         )
 
         return response.content[0].text
@@ -126,53 +166,57 @@ async def main():
             print("\nConnected to Langroid MCP server!")
 
             # Get available tools
-            tools = await client.list_tools()
-            print(f"\nAvailable tools: {[tool['name'] for tool in tools]}")
+            tool_classes = await client.get_tools_async()
+            tool_names = [cls.__name__ for cls in tool_classes]
+            print(f"\nAvailable tools: {tool_names}")
 
             # Get the langroid_chat tool
-            langroid_chat = await client.call_tool("langroid_chat")
+            LangroidChat = await client.get_tool_async("langroid_chat")
 
             # Example 1: Basic chat
             print("\n--- Example 1: Basic Chat ---")
-            response = await langroid_chat(
-                message="What is the capital of France?",
-            )
+            chat_tool = LangroidChat(message="What is the capital of France?")
+            response = await chat_tool.call_tool_async()
             print(f"Response: {response}")
 
             # Example 2: Chat with custom agent name
             print("\n--- Example 2: Custom Agent Name ---")
-            response = await langroid_chat(
+            chat_tool = LangroidChat(
                 message="Tell me a fun fact about AI", agent_name="AIExpert"
             )
+            response = await chat_tool.call_tool_async()
             print(f"Response: {response}")
 
             # Example 3: Chat with web search tool
             print("\n--- Example 3: With Web Search ---")
-            response = await langroid_chat(
+            chat_tool = LangroidChat(
                 message="Search for the latest news about large language models",
                 enable_tools=["web_search"],
             )
+            response = await chat_tool.call_tool_async()
             print(f"Response: {response}")
 
             # Get the langroid_task tool for multi-turn conversations
-            langroid_task = await client.call_tool("langroid_task")
+            LangroidTask = await client.get_tool_async("langroid_task")
 
             # Example 4: Task-based interaction
             print("\n--- Example 4: Task-based Interaction ---")
-            response = await langroid_task(
+            task_tool = LangroidTask(
                 message="Help me write a Python function to calculate fibonacci numbers",
                 max_turns=3,
             )
+            response = await task_tool.call_tool_async()
             print(f"Response: {response}")
 
             # Example 5: Task with tools
             print("\n--- Example 5: Task with Tools ---")
-            response = await langroid_task(
+            task_tool = LangroidTask(
                 message="Research and summarize information about quantum computing",
                 enable_tools=["web_search"],
                 agent_name="ResearchAgent",
                 max_turns=5,
             )
+            response = await task_tool.call_tool_async()
             print(f"Response: {response}")
 
     except Exception as e:

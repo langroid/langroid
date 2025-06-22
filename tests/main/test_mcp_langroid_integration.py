@@ -2,15 +2,15 @@
 
 import asyncio
 from typing import Any, Dict, List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
+from fastmcp.client.sampling import SamplingMessage
+from mcp.types import TextContent
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.agent.task import Task
-from langroid.language_models.client_lm import ClientLM, ClientLMConfig
-from langroid.mcp.server.langroid_mcp_server import langroid_chat, langroid_task, server
+from langroid.language_models.client_lm import ClientLMConfig
+from langroid.mcp.server.langroid_mcp_server import langroid_chat, langroid_task
 
 
 class MockSamplingHandler:
@@ -34,7 +34,10 @@ class MockSamplingHandler:
         # Get last user message
         last_msg = ""
         for msg in reversed(messages):
-            if isinstance(msg, dict) and msg.get("role") == "user":
+            if isinstance(msg, SamplingMessage) and msg.role == "user":
+                last_msg = msg.content.text.lower()
+                break
+            elif isinstance(msg, dict) and msg.get("role") == "user":
                 last_msg = msg.get("content", "").lower()
                 break
             elif isinstance(msg, str):
@@ -61,12 +64,16 @@ async def test_end_to_end_chat_flow():
     async def mock_sample(messages, **kwargs):
         sampling_calls.append({"messages": messages, "kwargs": kwargs})
         # Simulate LLM response
-        last_msg = messages[-1]["content"] if messages else ""
+        if messages:
+            last_msg_obj = messages[-1]
+            if isinstance(last_msg_obj, SamplingMessage):
+                last_msg = last_msg_obj.content.text
+            else:
+                last_msg = str(last_msg_obj)
+        else:
+            last_msg = ""
 
-        class Result:
-            text = f"Response to: {last_msg}"
-
-        return Result()
+        return TextContent(type="text", text=f"Response to: {last_msg}")
 
     mock_ctx.sample = mock_sample
 
@@ -75,8 +82,10 @@ async def test_end_to_end_chat_flow():
 
     # Verify flow
     assert len(sampling_calls) == 1
-    assert sampling_calls[0]["messages"][0]["role"] == "user"
-    assert "Hello, how are you?" in sampling_calls[0]["messages"][0]["content"]
+    msg = sampling_calls[0]["messages"][0]
+    assert isinstance(msg, SamplingMessage)
+    assert msg.role == "user"
+    assert "Hello, how are you?" in msg.content.text
     assert "Response to:" in result
 
 
@@ -93,15 +102,14 @@ async def test_multi_turn_task_flow():
         nonlocal turn_count
         turn_count += 1
 
-        class Result:
-            if turn_count == 1:
-                text = "Starting task..."
-            elif turn_count == 2:
-                text = "Working on it..."
-            else:
-                text = "Task complete! DONE"
+        if turn_count == 1:
+            text = "Starting task..."
+        elif turn_count == 2:
+            text = "Working on it..."
+        else:
+            text = "Task complete! DONE"
 
-        return Result()
+        return TextContent(type="text", text=text)
 
     mock_ctx.sample = mock_sample
 
@@ -125,20 +133,26 @@ async def test_tool_integration():
 
     async def mock_sample(messages, **kwargs):
         # Check if this is a tool-related query
-        last_msg = messages[-1]["content"] if messages else ""
-
-        class Result:
-            if "search" in last_msg.lower():
-                # Simulate tool use
-                tool_calls.append("web_search")
-                text = (
-                    '{"request": "duckduckgo_search", '
-                    '"query": "AI news", "num_results": 3}'
-                )
+        if messages:
+            last_msg_obj = messages[-1]
+            if isinstance(last_msg_obj, SamplingMessage):
+                last_msg = last_msg_obj.content.text
             else:
-                text = "Found some results about AI."
+                last_msg = str(last_msg_obj)
+        else:
+            last_msg = ""
 
-        return Result()
+        if "search" in last_msg.lower():
+            # Simulate tool use
+            tool_calls.append("web_search")
+            text = (
+                '{"request": "duckduckgo_search", '
+                '"query": "AI news", "num_results": 3}'
+            )
+        else:
+            text = "Found some results about AI."
+
+        return TextContent(type="text", text=text)
 
     mock_ctx.sample = mock_sample
 
@@ -186,17 +200,18 @@ async def test_context_preservation():
             }
         )
 
-        class Result:
-            text = "Response with context"
-
-        return Result()
+        return TextContent(type="text", text="Response with context")
 
     mock_ctx.sample = mock_sample
 
     # Create agent with specific temperature
-    config = ClientLMConfig(context=mock_ctx, temperature=0.8)
+    config = ClientLMConfig(temperature=0.8)
     agent_config = ChatAgentConfig(llm=config)
     agent = ChatAgent(agent_config)
+
+    # Set context on the LLM instance
+    if hasattr(agent.llm, "set_context"):
+        agent.llm.set_context(mock_ctx)
 
     # Get response
     await agent.llm_response_async("Test message")
@@ -216,31 +231,32 @@ async def test_message_format_conversion():
     async def mock_sample(messages, **kwargs):
         captured_messages.extend(messages)
 
-        class Result:
-            text = "Converted successfully"
-
-        return Result()
+        return TextContent(type="text", text="Converted successfully")
 
     mock_ctx.sample = mock_sample
 
     # Test with agent that has conversation history
-    config = ClientLMConfig(context=mock_ctx)
+    config = ClientLMConfig()
     agent_config = ChatAgentConfig(
         llm=config, system_message="You are a helpful assistant."
     )
     agent = ChatAgent(agent_config)
 
-    # Add some history
+    # Set context on the LLM instance
+    if hasattr(agent.llm, "set_context"):
+        agent.llm.set_context(mock_ctx)
+
+    # Add some history - must start with system message
+    from langroid.language_models.base import LLMMessage, Role
+
     agent.message_history.append(
-        ChatDocument(
-            content="Previous user message", metadata=ChatDocMetadata(sender="user")
-        )
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant.")
     )
     agent.message_history.append(
-        ChatDocument(
-            content="Previous assistant response",
-            metadata=ChatDocMetadata(sender="assistant"),
-        )
+        LLMMessage(role=Role.USER, content="Previous user message")
+    )
+    agent.message_history.append(
+        LLMMessage(role=Role.ASSISTANT, content="Previous assistant response")
     )
 
     # Get new response
@@ -249,7 +265,8 @@ async def test_message_format_conversion():
     # Check captured messages include history
     assert len(captured_messages) >= 2
     assert any(
-        msg.get("content") == "Previous user message" for msg in captured_messages
+        isinstance(msg, SamplingMessage) and msg.content.text == "Previous user message"
+        for msg in captured_messages
     )
 
 
@@ -266,10 +283,7 @@ async def test_concurrent_requests():
         request_count += 1
         await asyncio.sleep(0.1)  # Simulate processing time
 
-        class Result:
-            text = f"Response {request_count}"
-
-        return Result()
+        return TextContent(type="text", text=f"Response {request_count}")
 
     mock_ctx.sample = mock_sample
 

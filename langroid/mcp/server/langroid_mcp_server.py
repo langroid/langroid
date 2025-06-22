@@ -1,16 +1,15 @@
 """MCP server that exposes Langroid agents as tools."""
 
-import asyncio
 from typing import List, Optional
 
 from fastmcp import Context, FastMCP
 
 from langroid import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
-from langroid.language_models.client_lm import ClientLM, ClientLMConfig
+from langroid.language_models.client_lm import ClientLMConfig
 
 # Create FastMCP server
-server = FastMCP("Langroid Agent Server")
+server = FastMCP("Langroid Agent Server")  # type: ignore[var-annotated]
 
 
 @server.tool()
@@ -32,8 +31,8 @@ async def langroid_chat(
     Returns:
         Agent's response as a string
     """
-    # Create ClientLM with the MCP context
-    llm_config = ClientLMConfig(context=ctx)
+    # Create ClientLM without context in config
+    llm_config = ClientLMConfig()
 
     # Create Langroid agent
     agent_config = ChatAgentConfig(
@@ -41,6 +40,10 @@ async def langroid_chat(
         llm=llm_config,
     )
     agent = ChatAgent(agent_config)
+
+    # Set context on the LLM instance after creation
+    if agent.llm is not None and hasattr(agent.llm, "set_context"):
+        agent.llm.set_context(ctx)
 
     # Enable requested tools
     if enable_tools:
@@ -76,8 +79,8 @@ async def langroid_task(
     """
     from langroid.agent.task import Task
 
-    # Create ClientLM with the MCP context
-    llm_config = ClientLMConfig(context=ctx)
+    # Create ClientLM without context in config
+    llm_config = ClientLMConfig()
 
     # Create Langroid agent
     agent_config = ChatAgentConfig(
@@ -85,6 +88,10 @@ async def langroid_task(
         llm=llm_config,
     )
     agent = ChatAgent(agent_config)
+
+    # Set context on the LLM instance after creation
+    if agent.llm is not None and hasattr(agent.llm, "set_context"):
+        agent.llm.set_context(ctx)
 
     # Enable requested tools
     if enable_tools:
