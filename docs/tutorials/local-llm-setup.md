@@ -168,6 +168,33 @@ Besides using specific LLMs, OpenRouter also has smart routing/load-balancing.
 OpenRouter is also convenient for using proprietary LLMs (e.g. gemini, amazon) via 
 a single convenient API.
 
+## Custom LLMs via AI/ML API
+
+AI/ML API is a **flexible OpenAI-compatible platform** that supports over 300 models (e.g. DeepSeek, GPT-4o, Gemini, Claude, and more) with **enterprise-grade rate limits** and **global low-latency hosting**. See the [official model list](https://aimlapi.com/models?utm_source=langroid&utm_medium=github&utm_campaign=integration).
+
+Using it with Langroid is simple and similar to Groq or OpenRouter:
+
+* Set the `AIML_API_KEY` in your environment or `.env` file
+* Set `chat_model` in your `OpenAIGPTConfig` to `aimlapi/<model_name>`, for example:
+  `aimlapi/openai/gpt-4o-mini`, `aimlapi/google/gemini-2.5-flash`, or `aimlapi/anthropic/claude-sonnet-4.5`
+
+Optionally, set a custom `api_base`, if not using the default `https://api.aimlapi.com/v1`.
+
+This setup gives you access to powerful open and proprietary LLMs via a unified interface, ideal for:
+
+* avoiding per-provider account setup,
+* getting fast inference without local model deployment,
+* switching between models via a single flag.
+
+
+### 🔗 Website: [https://aimlapi.com/](https://aimlapi.com/app/?utm_source=langroid&utm_medium=github&utm_campaign=integration)
+
+### 🔗 Docs: [https://docs.aimlapi.com/](https://docs.aimlapi.com/?utm_source=langroid&utm_medium=github&utm_campaign=integration)
+
+---
+
+Если нужно, добавлю вариант с CLI запуском `run_api.py` как в твоём примере.
+
 ## "Local" LLMs hosted on GLHF.chat
 
 See [glhf.chat](https://glhf.chat/chat/create) for a list of available models.

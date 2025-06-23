@@ -174,6 +174,29 @@ async def test_llm_openrouter(model: str):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [
+        "aimlapi/openai/gpt-4o-mini",
+        "aimlapi/google/gemini-2.5-flash",
+        "aimlapi/anthropic/claude-sonnet-4.5",
+    ],
+)
+async def test_llm_aimlapi(model: str):
+    settings.chat_model = model
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    result = await llm.achat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+@pytest.mark.asyncio
 async def test_llm_pdf_attachment_async():
     """Test sending a PDF file attachment to the LLM asynchronously."""
     from pathlib import Path
