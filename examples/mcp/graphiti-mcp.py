@@ -7,12 +7,39 @@ OR
 
 Steps to create and connect to graphiti mcp server
 
+If you want to use docker 
 - git clone https://github.com/getzep/graphiti.git
 - cd graphiti/mcp_server
 - cp .env.example .env
 - add your OPENAI_API_KEY
 - docker compose up -d
 
+
+Without using docker ,
+
+#For data persistence
+mkdir -p $HOME/neo4j/data
+sudo chown -R 7474:7474 $HOME/neo4j/data
+
+
+#Run neo4j container
+docker run \
+  --name=my-neo4j \
+  --publish=7474:7474 \
+  --publish=7687:7687 \
+  --env NEO4J_AUTH=neo4j/demodemo \
+  --volume=$HOME/neo4j/data:/data \
+  neo4j:latest
+
+
+git clone https://github.com/getzep/graphiti.git
+cd mcp_server
+cp .env.example .env
+
+Add you OPENAI_API_KEY in .env
+
+uv sync --upgrade
+uv run graphiti_mcp_server.py
 """
 
 from fastmcp.client.transports import SSETransport
@@ -60,7 +87,7 @@ async def main(model: str = ""):
             handle_llm_no_tool=NonToolAction.FORWARD_USER,
             llm=lm.OpenAIGPTConfig(
                 # chat_model=model or "gpt-4.1-mini",
-                chat_model="gemini/gemini-2.0-flash",
+                chat_model="gemini/gemini-2.5-flash",
                 max_output_tokens=1000,
                 async_stream_quiet=False,
             ),
