@@ -279,9 +279,6 @@ class Agent(ABC):
             if param.annotation != inspect.Parameter.empty:
                 ann_str = str(param.annotation)
                 # Check for Agent-like types
-                print(param, inspect.isclass(param.annotation))
-                print(param, issubclass(param.annotation, Agent))
-                print(param, param.annotation is ChatDocument)
                 if (
                     inspect.isclass(param.annotation)
                     and issubclass(param.annotation, Agent)
@@ -312,7 +309,6 @@ class Agent(ABC):
             elif param.name == "chat_doc":
                 chat_doc_param = param.name
 
-        print(has_annotations, agent_param, chat_doc_param)
         return has_annotations, agent_param, chat_doc_param
 
     @no_type_check
