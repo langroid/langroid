@@ -86,6 +86,7 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
+AIML_API_BASE_URL = "https://api.aimlapi.com/v1"
 OLLAMA_API_KEY = "ollama"
 
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
@@ -520,6 +521,7 @@ class OpenAIGPT(LanguageModel):
         self.is_deepseek = self.is_deepseek_model()
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
+        self.is_aimlapi = self.config.chat_model.startswith("aimlapi/")
         self.is_langdb = self.config.chat_model.startswith("langdb/")
         self.is_portkey = self.config.chat_model.startswith("portkey/")
         self.is_litellm_proxy = self.config.chat_model.startswith("litellm-proxy/")
@@ -573,6 +575,15 @@ class OpenAIGPT(LanguageModel):
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
                 self.api_base = OPENROUTER_BASE_URL
+            elif self.is_aimlapi:
+                self.config.chat_model = self.config.chat_model.replace(
+                    "aimlapi/", ""
+                )
+                if self.api_key == OPENAI_API_KEY:
+                    self.api_key = os.getenv("AIML_API_KEY", DUMMY_API_KEY)
+                self.api_base = AIML_API_BASE_URL
+                self.config.headers["HTTP-Referer"] = 'https://github.com/langroid/langroid'
+                self.config.headers["X-Title"] = 'langroid'
             elif self.is_deepseek:
                 self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
                 self.api_base = DEEPSEEK_BASE_URL
