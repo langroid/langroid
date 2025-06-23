@@ -130,6 +130,50 @@ class HandleNoAnnotationsBothReversedMsg(ToolMessage):
         )
 
 
+Foo = ChatDocument
+
+
+class Bar(ChatAgent):
+    pass
+
+
+class HandleClassAnnotations(ToolMessage):
+    """
+    Tool with handle method with type annotations matched via
+    subclassing and non-standard self-parameter naming.
+    """
+
+    request: str = "handle_class_annotations"
+    purpose: str = "Test handle with annotations matched via subclassing."
+    data: str
+
+    def handle(this, bar: Bar, foo: Foo):
+        return (
+            f"agent {bar.__class__.__name__}, data: {this.data} first"
+            f"chat_doc '{foo.content}'"
+        )
+
+
+class HandleClassAnnotationsReversed(ToolMessage):
+    """
+    Tool with handle method with reversed parameter order and type
+    annotations matched via subclassing and non-standard
+    self-parameter naming.
+    """
+
+    request: str = "handle_class_annotations_reversed"
+    purpose: str = (
+        "Test handle with reversed params and annotations matched via subclassing."
+    )
+    data: str
+
+    def handle(this, foo: Foo, bar: Bar):
+        return (
+            f"chat_doc '{foo.content}' first, "
+            f"agent {bar.__class__.__name__}, data: {this.data}"
+        )
+
+
 class TestToolHandler:
     """Test the flexible tool handler extraction"""
 
@@ -322,3 +366,45 @@ class TestToolHandler:
         assert response is not None
         assert isinstance(response, ChatDocument)
         assert "chat doc only test" in response.content
+
+    def test_agent_response_class_annotations(self):
+        """
+        Test agent_response with handler that requires annotation
+        processing via subclassing
+        """
+        agent = ChatAgent(ChatAgentConfig())
+        agent.enable_message(HandleClassAnnotations)
+
+        # Create a tool message
+        tool_msg = HandleClassAnnotations(data="class annotations test")
+
+        # Since the handler expects both agent and chat_doc,
+        # we need to provide it within a ChatDocument
+        chat_doc = agent.create_agent_response(content=tool_msg.json())
+        response = agent.agent_response(chat_doc)
+        assert response is not None
+        assert isinstance(response, ChatDocument)
+        assert "class annotations test" in response.content
+        assert "agent ChatAgent" in response.content
+
+    def test_agent_response_class_annotations_reversed(self):
+        """
+        Test agent_response with handler that requires annotation
+        processing via subclassing and reversed order
+        """
+        agent = ChatAgent(ChatAgentConfig())
+        agent.enable_message(HandleClassAnnotationsReversed)
+
+        # Create a tool message
+        tool_msg = HandleClassAnnotationsReversed(
+            data="class annotations test reversed"
+        )
+
+        # Since the handler expects both agent and chat_doc,
+        # we need to provide it within a ChatDocument
+        chat_doc = agent.create_agent_response(content=tool_msg.json())
+        response = agent.agent_response(chat_doc)
+        assert response is not None
+        assert isinstance(response, ChatDocument)
+        assert "class annotations test reversed" in response.content
+        assert "agent ChatAgent" in response.content

@@ -265,8 +265,10 @@ class Agent(ABC):
         """
         sig = inspect.signature(handler_method)
         params = list(sig.parameters.values())
-        # Remove 'self' parameter
-        params = [p for p in params if p.name != "self"]
+        # Remove the first 'self' parameter
+        params = params[1:]
+        # Don't use name
+        # [p for p in params if p.name != "self"]
 
         agent_param = None
         chat_doc_param = None
@@ -277,18 +279,30 @@ class Agent(ABC):
             if param.annotation != inspect.Parameter.empty:
                 ann_str = str(param.annotation)
                 # Check for Agent-like types
+                print(param, inspect.isclass(param.annotation))
+                print(param, issubclass(param.annotation, Agent))
+                print(param, param.annotation is ChatDocument)
                 if (
-                    param.annotation == self.__class__
-                    or "Agent" in ann_str
-                    or (
-                        hasattr(param.annotation, "__name__")
-                        and "Agent" in param.annotation.__name__
+                    inspect.isclass(param.annotation)
+                    and issubclass(param.annotation, Agent)
+                ) or (
+                    not inspect.isclass(param.annotation)
+                    and (
+                        "Agent" in ann_str
+                        or (
+                            hasattr(param.annotation, "__name__")
+                            and "Agent" in param.annotation.__name__
+                        )
                     )
                 ):
                     agent_param = param.name
                     has_annotations = True
                 # Check for ChatDocument-like types
-                elif "ChatDocument" in ann_str or "ChatDoc" in ann_str:
+                elif (
+                    param.annotation is ChatDocument
+                    or "ChatDocument" in ann_str
+                    or "ChatDoc" in ann_str
+                ):
                     chat_doc_param = param.name
                     has_annotations = True
 
@@ -298,12 +312,12 @@ class Agent(ABC):
             elif param.name == "chat_doc":
                 chat_doc_param = param.name
 
+        print(has_annotations, agent_param, chat_doc_param)
         return has_annotations, agent_param, chat_doc_param
 
     @no_type_check
     def _create_handler_wrapper(
         self,
-        message_class: Type[ToolMessage],
         handler_method: Any,
         is_async: bool = False,
     ) -> Any:
@@ -320,7 +334,8 @@ class Agent(ABC):
         """
         sig = inspect.signature(handler_method)
         params = list(sig.parameters.values())
-        params = [p for p in params if p.name != "self"]
+        params = params[1:]
+        # params = [p for p in params if p.name != "self"]
 
         has_annotations, agent_param, chat_doc_param = self._analyze_handler_params(
             handler_method,
@@ -471,7 +486,6 @@ class Agent(ABC):
             See `tests/main/test_stateless_tool_messages.py` for an example.
             """
             wrapper = self._create_handler_wrapper(
-                message_class,
                 message_class.handle,
                 is_async=False,
             )
@@ -521,7 +535,6 @@ class Agent(ABC):
             and not hasattr(self, async_handler_name)
         ):
             wrapper = self._create_handler_wrapper(
-                message_class,
                 message_class.handle_async,
                 is_async=True,
             )
