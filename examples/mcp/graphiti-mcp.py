@@ -55,39 +55,66 @@ URL = "http://0.0.0.0:8000/sse"
 
 
 async def main(model: str = ""):
-    SYSTEM_MESSAGE = """Add an episode with proper formatting.
+    SYSTEM_MESSAGE = """
+        You are Graphiti, an intelligent memory agent managing a knowledge graph. 
 
-    - `episode_body` must be an **escaped JSON string** if `source='json'` (not a Python dict).
-    - `source` can be:
-    - 'text' – plain text (default)
-    - 'json' – structured data
-    - `source_description` optional field
-    - 'message' – conversation-style
-    - `uuid` is not needed dont add `uuid` at any cost
+        **General Instructions:**
 
-    Examples:
-    - Text: "Acme launched a new product."
-    - JSON: "{\\\"company\\\": {\\\"name\\\": \\\"Acme\\\"}, \\\"products\\\": [{\\\"id\\\": \\\"P001\\\"}]}",
-    - Message: "user: Hello\nassistant: Hi there"
+        1.  **Always Search First:** Before adding new information, attempt to find existing data using `search_memory_nodes` or `search_memory_facts`.
+        2.  **Optional Arguments:** It is perfectly acceptable to omit optional arguments if the information is not provided by the user or relevant to the current task. **Crucially, unless explicitly provided by the user, DO NOT GENERATE VALUES for optional arguments.** Simply exclude the argument from the tool call.
+        3.  **Error Reporting:** If a tool call fails, inform the user about the error message.
 
-    Entities and relationships are auto-extracted from JSON.
-    Use `group_id` to group episodes (optional).
+        **Specific Tool Nuances:**
+        *   ** add_memory 
+        * You are intelligent to fill in name and source_description
+        * Remember to format json source like where each quote inside curly is escaped by triple backslashes "episode_body": "{\\\"mission\\\": \\\"Apollo 11\\\", \\\"event_date\\\": \\\"1969-07-20\\\", \\\"first_step_by\\\": \\\"Neil Armstrong\\\"}",
+        
+        {
+        "request": "add_memory",
+        "name__": "Apollo 11 Moon Landing",
+        "episode_body": "{\\\"mission\\\": \\\"Apollo 11\\\", \\\"event_date\\\": \\\"1969-07-20\\\", \\\"first_step_by\\\": \\\"Neil Armstrong\\\"}",
+        "source": "json",
+        "source_description": "Structured data of the first human moon landing"
+        }
+
+        {
+        "request": "add_memory",
+        "name__": "Fall of the Berlin Wall",
+        "episode_body": "The Berlin Wall fell on November 9, 1989, marking a symbolic end to the Cold War and leading to German reunification.",
+        "source": "text",
+        "source_description": "Summary of the fall of the Berlin Wall"
+        }
+
+        {
+        "request": "add_memory",
+        "name__": "User Booked Doctor Appointment",
+        "episode_body": "user: Can you schedule a doctor appointment for Tuesday?\nassistant: Sure, I’ve booked a doctor appointment for Tuesday at 3 PM.",
+        "source": "message",
+        "source_description": "Conversation about scheduling an appointment"
+        }
+
+
+        *   **`delete_entity_edge`, `delete_episode`, `get_entity_edge`:** These tools require a precise `uuid`.
+        *   **`clear_graph`:** This action is irreversible and deletes ALL data. Only use if explicitly commanded and confirmed by the user.
+
+        Your goal is to be helpful and accurate by leveraging your memory access capabilities.
+            
     """
-
     transport = SSETransport(
         url=URL,
         headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
     )
     all_tools = await get_tools_async(transport)
 
-    agent = lr.ChatAgent(
+    graphiti_agent = lr.ChatAgent(
         lr.ChatAgentConfig(
             system_message=SYSTEM_MESSAGE,
             # forward to user when LLM doesn't use a tool
             handle_llm_no_tool=NonToolAction.FORWARD_USER,
             llm=lm.OpenAIGPTConfig(
                 # chat_model=model or "gpt-4.1-mini",
-                chat_model="gemini/gemini-2.5-flash",
+                chat_model="gemini/gemini-2.0-flash-lite",
+                # chat_model="groq/llama-3.1-8b-instant",
                 max_output_tokens=1000,
                 async_stream_quiet=False,
             ),
@@ -95,11 +122,12 @@ async def main(model: str = ""):
     )
 
     # enable the agent to use all tools
-    agent.enable_message(all_tools)
+    graphiti_agent.enable_message(all_tools)
     # make task with interactive=False =>
     # waits for user only when LLM doesn't use a tool
-    task = lr.Task(agent, interactive=False)
-    await task.run_async(
+    graphiti_task = lr.Task(graphiti_agent, interactive=False)
+
+    await graphiti_task.run_async(
         "Based on the TOOLs available to you, greet the user and"
         "tell them what kinds of help you can provide."
     )
