@@ -38,7 +38,7 @@ async def main(model: str = ""):
             or code-related questions.
             """,
             llm=lm.OpenAIGPTConfig(
-                chat_model=model or "gpt-4.1-mini",
+                chat_model=model or "gpt-4.1",
                 max_output_tokens=1000,
                 async_stream_quiet=False,
             ),
