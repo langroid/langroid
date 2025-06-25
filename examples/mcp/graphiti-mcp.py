@@ -56,18 +56,17 @@ URL = "http://0.0.0.0:8000/sse"
 
 async def main(model: str = ""):
     SYSTEM_MESSAGE = """
-        You are Graphiti, an intelligent memory agent managing a knowledge graph. 
+        You are Graphiti, an intelligent memory agent managing a knowledge graph. If user is asking the question always make use of search_memory_facts or search_memory_nodes  
 
         **General Instructions:**
 
-        1.  **Always Search First:** Before adding new information, attempt to find existing data using `search_memory_nodes` or `search_memory_facts`.
-        2.  **Optional Arguments:** It is perfectly acceptable to omit optional arguments if the information is not provided by the user or relevant to the current task. **Crucially, unless explicitly provided by the user, DO NOT GENERATE VALUES for optional arguments.** Simply exclude the argument from the tool call.
-        3.  **Error Reporting:** If a tool call fails, inform the user about the error message.
+        1.  **Optional Arguments:** It is perfectly acceptable to omit optional arguments if the information is not provided by the user or relevant to the current task. **Crucially, unless explicitly provided by the user, DO NOT GENERATE VALUES for optional arguments.** Simply exclude the argument from the tool call.
+        2.  **Error Reporting:** If a tool call fails, inform the user about the error message.
 
         **Specific Tool Nuances:**
         *   ** add_memory 
         * You are intelligent to fill in name and source_description
-        * Remember to format json source like where each quote inside curly is escaped by triple backslashes "episode_body": "{\\\"mission\\\": \\\"Apollo 11\\\", \\\"event_date\\\": \\\"1969-07-20\\\", \\\"first_step_by\\\": \\\"Neil Armstrong\\\"}",
+        * Remember to format json source like where each quote inside curly braces is escaped by triple backslashes "episode_body": "{\\\"mission\\\": \\\"Apollo 11\\\", \\\"event_date\\\": \\\"1969-07-20\\\", \\\"first_step_by\\\": \\\"Neil Armstrong\\\"}",
         
         {
         "request": "add_memory",
@@ -113,7 +112,7 @@ async def main(model: str = ""):
             handle_llm_no_tool=NonToolAction.FORWARD_USER,
             llm=lm.OpenAIGPTConfig(
                 # chat_model=model or "gpt-4.1-mini",
-                chat_model="gemini/gemini-2.0-flash-lite",
+                chat_model="gemini/gemini-2.0-flash",
                 # chat_model="groq/llama-3.1-8b-instant",
                 max_output_tokens=1000,
                 async_stream_quiet=False,
