@@ -233,7 +233,7 @@ class BurifyAgentConfig(lr.ChatAgentConfig):
 class TonifyAgentConfig(lr.ChatAgentConfig):
     name: str = "Tonify"
     handle_llm_no_tool: str = f"You FORGOT to use the TOOL `{TonifySubmitTool.name()}`!"
-    system_message: str = """
+    system_message: str = f"""
     You will receive an integer from your supervisor, to apply
     a process Tonify to it, which you are not quite sure how to do,
     but you only know that it involves MULTIPLYING the number by 2 a few times
