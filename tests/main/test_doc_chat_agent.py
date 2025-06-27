@@ -167,9 +167,10 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
         use_chat_for_completion=True,
     )
 
+    n_similar_chunks = 3
+    n_relevant_chunks = 3
     parsing: ParsingConfig = ParsingConfig(
         splitter=Splitter.SIMPLE,
-        n_similar_docs=3,
     )
 
     prompts: PromptsConfig = PromptsConfig(
@@ -442,9 +443,10 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
         use_chat_for_completion=True,
     )
 
+    n_similar_chunks = 2
+    n_relevant_chunks = 2
     parsing: ParsingConfig = ParsingConfig(
         splitter=Splitter.SIMPLE,
-        n_similar_docs=2,
         n_neighbor_ids=5,
     )
 
@@ -463,10 +465,11 @@ def test_doc_chat_retrieval(
     """
     agent = DocChatAgent(
         _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
             parsing=ParsingConfig(
                 splitter=splitter,
-                n_similar_docs=3,
-            )
+            ),
         )
     )
     agent.config.conversation_mode = conv_mode
@@ -512,7 +515,8 @@ def test_doc_chat_rerank_diversity(test_settings: Settings, vecdb):
     cfg = _MyDocChatAgentConfig(
         n_neighbor_chunks=0,
     )
-    cfg.parsing.n_similar_docs = 8
+    cfg.n_similar_chunks = 8
+    cfg.n_relevant_chunks = 8
     agent = DocChatAgent(cfg)
     agent.vecdb = vecdb
 
@@ -553,7 +557,8 @@ def test_reciprocal_rank_fusion(test_settings: Settings, vecdb):
         use_fuzzy_match=True,
         use_reciprocal_rank_fusion=True,
     )
-    cfg.parsing.n_similar_docs = 3
+    cfg.n_similar_chunks = 3
+    cfg.n_relevant_chunks = 3
     agent = DocChatAgent(cfg)
     agent.vecdb = vecdb
 
@@ -593,7 +598,8 @@ def test_doc_chat_rerank_periphery(test_settings: Settings, vecdb):
     cfg = _MyDocChatAgentConfig(
         n_neighbor_chunks=0,
     )
-    cfg.parsing.n_similar_docs = 8
+    cfg.n_similar_chunks = 8
+    cfg.n_relevant_chunks = 8
     agent = DocChatAgent(cfg)
     agent.vecdb = vecdb
 
@@ -712,10 +718,11 @@ def test_doc_chat_incremental_ingest(
     """
     agent = DocChatAgent(
         _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
             parsing=ParsingConfig(
                 splitter=splitter,
-                n_similar_docs=3,
-            )
+            ),
         )
     )
     agent.vecdb = vecdb
@@ -769,10 +776,11 @@ def test_doc_chat_ingest_paths(
     """
     agent = DocChatAgent(
         _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
             parsing=ParsingConfig(
                 splitter=splitter,
-                n_similar_docs=3,
-            )
+            ),
         )
     )
     agent.vecdb = vecdb
@@ -835,10 +843,11 @@ def test_doc_chat_ingest_path_metadata(
     """
     agent = DocChatAgent(
         _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
             parsing=ParsingConfig(
                 splitter=splitter,
-                n_similar_docs=3,
-            )
+            ),
         )
     )
     agent.vecdb = vecdb

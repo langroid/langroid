@@ -59,8 +59,9 @@ agent_config = DocChatAgentConfig(
     parsing=ParsingConfig(
         separators=["\n"],
         splitter=Splitter.SIMPLE,
-        n_similar_docs=2,
-    )
+    ),
+    n_similar_chunks=2,
+    n_relevant_chunks=2,
 )
 
 agent = DocChatAgent(config=agent_config)

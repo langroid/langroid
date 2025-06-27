@@ -126,8 +126,9 @@ config = DocChatAgentConfig(
     parsing=lr.parsing.parser.ParsingConfig(
         separators=["\n\n"],
         splitter=lr.parsing.parser.Splitter.SIMPLE, #(2)!
-        n_similar_docs=2, #(3)!
-    )
+    ),
+    n_similar_chunks=2, #(3)!
+    n_relevant_chunks=2, #(3)!
 )
 agent = DocChatAgent(config)
 ```
@@ -136,7 +137,7 @@ agent = DocChatAgent(config)
 rather than re-use the existing one with the same name.
 2. Specifies to split all text content by the first separator in the `separators` list
 3. Specifies that, for a query,
-   we want to retrieve at most 2 similar shards from the vector-store
+   we want to retrieve at most 2 similar chunks from the vector-store
 
 Now that the [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] is configured, we can ingest the documents 
 into the vector-store:

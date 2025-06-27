@@ -100,6 +100,8 @@ def main(
         hypothetical_answer=False,
         assistant_mode=True,
         n_neighbor_chunks=2,
+        n_similar_chunks=5,
+        n_relevant_chunks=5,
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
             chunk_size=100,  # aim for this many tokens per chunk
@@ -110,7 +112,6 @@ def main(
             # truncating due to punctuation
             min_chunk_chars=200,
             discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-            n_similar_docs=5,
             # NOTE: PDF parsing is extremely challenging, each library has its own
             # strengths and weaknesses. Try one that works for your use case.
             pdf=PdfParsingConfig(

@@ -23,10 +23,11 @@ def configure(filename: str, chat_model: str = "") -> DocChatAgentConfig:
 
     # Configuring DocChatAgent
     cfg = DocChatAgentConfig(
+        n_similar_chunks=4,
+        n_relevant_chunks=4,
         parsing=ParsingConfig(
             chunk_size=100,
             overlap=20,
-            n_similar_docs=4,
         ),
         show_stats=False,
         cross_encoder_reranking_model="",

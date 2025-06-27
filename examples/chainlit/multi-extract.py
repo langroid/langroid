@@ -142,10 +142,11 @@ async def main(
     doc_agent = DocChatAgent(
         DocChatAgentConfig(
             llm=llm_cfg,
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
             parsing=ParsingConfig(
                 chunk_size=300,
                 overlap=50,
-                n_similar_docs=3,
             ),
             cross_encoder_reranking_model="",
         )

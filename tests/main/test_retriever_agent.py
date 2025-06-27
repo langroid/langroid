@@ -66,13 +66,13 @@ class _TestRetrieverAgentConfig(DocChatAgentConfig):
     data: Optional[List[Dict[str, Any]]] = None
     retrieve_only = True
     retrieval_granularity = -1  # extract whole content
+    n_similar_chunks = 5
+    n_relevant_chunks = 5
     vecdb: QdrantDBConfig = QdrantDBConfig(
         collection_name="test-retriever",
         storage_path=":memory:",
     )
-    parsing: ParsingConfig = ParsingConfig(
-        n_similar_docs=5,
-    )
+    parsing: ParsingConfig = ParsingConfig()
     cross_encoder_reranking_model = ""  # turn off cross-encoder reranking
 
 

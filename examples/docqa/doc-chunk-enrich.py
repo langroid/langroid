@@ -116,11 +116,12 @@ def run_document_chatbot(
         rerank_diversity=False,
         rerank_periphery=False,
         use_reciprocal_rank_fusion=False,
+        n_similar_chunks=10,
+        n_relevant_chunks=10,
         parsing=ParsingConfig(
             chunk_size=120,
             overlap=15,
             min_chunk_chars=50,
-            n_similar_docs=10,
         ),
         # n_neighbor_chunks=1,
         chunk_enrichment_config=enrichment_config if use_hq else None,

@@ -147,8 +147,9 @@ def test_lance_doc_chat_agent(
         vecdb=ldb_cfg,
         parsing=ParsingConfig(
             splitter=Splitter.SIMPLE,
-            n_similar_docs=3,
         ),
+        n_similar_chunks=3,
+        n_relevant_chunks=3,
         use_functions_api=functions_api,
         use_tools=not functions_api,
         use_tools_api=tools_api,
