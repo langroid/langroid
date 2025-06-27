@@ -372,7 +372,7 @@ lint.select = [
 lint.exclude = ["docs/**", ".venv", "venv", "examples/**", "examples_dev", "langroid/utils/web", "notebooks", "__init__.py", "langroid/embedding_models/protoc/*"]
 lint.fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
 lint.unfixable = []
-lint.extend-ignore = ["F821", "F401"]
+lint.extend-ignore = ["F821"]
 # Assume Python 3.11.
 target-version = "py311"
 

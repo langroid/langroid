@@ -14,21 +14,22 @@ python3 examples/basic/multi-agent-triage.py --model groq/llama-3.1-70b-versatil
 
 """
 
+import os
 from typing import Optional
+
+from fire import Fire
 
 import langroid as lr
 import langroid.language_models as lm
-from langroid.parsing.urls import find_urls
 from langroid import ChatDocument
 from langroid.agent.tools.orchestration import (
-    ForwardTool,
     AgentDoneTool,
+    ForwardTool,
     SendTool,
 )
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
+from langroid.parsing.urls import find_urls
 from langroid.vector_store.qdrantdb import QdrantDBConfig
-import os
-from fire import Fire
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

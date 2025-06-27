@@ -1,10 +1,10 @@
-import chainlit as cl
 import logging
-from models import SystemMessages
-from typing import Tuple, Optional
-from config import MODEL_MAP
-from utils import extract_topics
+from typing import Optional, Tuple
 
+import chainlit as cl
+from config import MODEL_MAP
+from models import SystemMessages
+from utils import extract_topics
 
 DEFAULT_TURN_COUNT = 2
 DEFAULT_TIMEOUT = 100

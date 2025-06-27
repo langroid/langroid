@@ -25,12 +25,14 @@ To use a different model, for example, run like this:
 
 """
 
+import logging
+
+from fire import Fire
+
 import langroid as lr
 import langroid.language_models as lm
-from langroid.pydantic_v1 import Field
 from langroid.agent.tools.orchestration import DoneTool
-from fire import Fire
-import logging
+from langroid.pydantic_v1 import Field
 
 logger = logging.getLogger(__name__)
 MODEL = lm.OpenAIChatModel.GPT4_1

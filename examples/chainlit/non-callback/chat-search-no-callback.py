@@ -19,6 +19,7 @@ chainlit run examples/chainlit/chat-search-no-callback.py
 """
 
 import chainlit as cl
+
 import langroid as lr
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 

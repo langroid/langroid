@@ -16,7 +16,7 @@ When it waits for user input, try asking things like:
 """
 
 import langroid as lr
-from langroid.utils.constants import NO_ANSWER, DONE, AT
+from langroid.utils.constants import AT, DONE, NO_ANSWER
 
 planner = lr.ChatAgent(
     lr.ChatAgentConfig(

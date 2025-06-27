@@ -12,9 +12,7 @@ main_task has sub-tasks even_task and odd_task.
 """
 
 import langroid as lr
-
 from langroid.agent.tools.orchestration import FinalResultTool
-
 
 main_agent = lr.ChatAgent(
     lr.ChatAgentConfig(

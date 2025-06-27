@@ -5,6 +5,7 @@ and checking its results for accuracy.
 
 import textwrap
 from typing import List
+
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.utils.logging import setup_colored_logging

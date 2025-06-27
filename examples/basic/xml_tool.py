@@ -13,12 +13,13 @@ Run like this (--model is optional, defaults to GPT4o):
 python3 examples/basic/xml_tool.py --model groq/llama-3.1-8b-instant
 """
 
+import fire
+
 import langroid as lr
 import langroid.language_models as lm
-from langroid.pydantic_v1 import Field
 from langroid.agent.tools.orchestration import SendTool
 from langroid.agent.xml_tool_message import XMLToolMessage
-import fire
+from langroid.pydantic_v1 import Field
 
 
 class XMLSendTool(SendTool, XMLToolMessage):

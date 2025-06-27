@@ -13,25 +13,25 @@ python3 examples/chainlit/extract-then-chat.py
 
 """
 
-from langroid import ChatDocument
-from langroid.pydantic_v1 import BaseModel
-from typing import List
 import os
-from fire import Fire
-
-from rich import print
-import langroid as lr
-import langroid.language_models as lm
-from langroid.mytypes import Entity
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.parsing.parser import ParsingConfig
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
-from langroid.utils.configuration import set_global, Settings
-from langroid.utils.constants import NO_ANSWER, DONE, SEND_TO, PASS
+from typing import List
 
 from dotenv import load_dotenv
+from fire import Fire
+from rich import print
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid import ChatDocument
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
+from langroid.mytypes import Entity
+from langroid.parsing.parser import ParsingConfig
+from langroid.pydantic_v1 import BaseModel
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE, NO_ANSWER, PASS, SEND_TO
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

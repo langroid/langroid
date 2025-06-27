@@ -15,21 +15,22 @@ and you have your OpenAI API Key in the .env file, run like this:
 chainlit run examples/chainlit/chat-search.py
 """
 
+import logging
+from textwrap import dedent
 from typing import Optional
 
 import chainlit as cl
+
 import langroid as lr
 from langroid import ChatDocument
-from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
-from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
     make_llm_settings_widgets,
     setup_llm,
     update_llm,
 )
-from textwrap import dedent
-import logging
+from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
+from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 
 logger = logging.getLogger(__name__)
 

@@ -7,14 +7,16 @@ Toy example showing how to combine results from multiple tasks running concurren
 - main agent/task then uses the combined results to generate a final response
 """
 
+from typing import Dict
+
+from fire import Fire
+from rich.prompt import Prompt
+
 import langroid as lr
 import langroid.language_models as lm
+from langroid.agent.batch import run_batch_task_gen
 from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.utils.globals import GlobalState
-from langroid.agent.batch import run_batch_task_gen
-from typing import Dict
-from rich.prompt import Prompt
-from fire import Fire
 
 CITY_AGENT_NAME = "CityAgent"
 NAME_AGENT_NAME = "NameAgent"

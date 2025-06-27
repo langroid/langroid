@@ -12,7 +12,6 @@ import langroid as lr
 from langroid.agent.batch import run_batch_task_gen
 from langroid.utils.constants import NO_ANSWER
 
-
 agent1 = lr.ChatAgent(
     lr.ChatAgentConfig(
         name="agent1",

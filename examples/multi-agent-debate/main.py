@@ -1,20 +1,10 @@
-import typer
 import logging
+from typing import Any, List
 
-from rich.prompt import Prompt
-from typing import List, Any
-
-import langroid as lr
-from langroid.language_models import OpenAIGPTConfig
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
-from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
-from langroid.utils.logging import setup_logger
-from langroid.agent.tools.orchestration import DoneTool
-from langroid import ChatDocument, Entity
-
+import typer
 from config import get_base_llm_config, get_global_settings, get_questions_agent_config
 from models import SystemMessages, load_system_messages
+from rich.prompt import Prompt
 from system_messages import (
     DEFAULT_SYSTEM_MESSAGE_ADDITION,
     FEEDBACK_AGENT_SYSTEM_MESSAGE,
@@ -23,15 +13,24 @@ from system_messages import (
 
 # Import from utils.py
 from utils import (
-    select_model,
-    select_topic_and_setup_side,
+    extract_urls,
     is_llm_delegate,
     is_metaphor_search_key_set,
     is_same_llm_for_all_agents,
-    select_max_debate_turns,
     is_url_ask_question,
-    extract_urls,
+    select_max_debate_turns,
+    select_model,
+    select_topic_and_setup_side,
 )
+
+import langroid as lr
+from langroid import ChatDocument, Entity
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+from langroid.agent.tools.orchestration import DoneTool
+from langroid.language_models import OpenAIGPTConfig
+from langroid.utils.logging import setup_logger
 
 
 class MetaphorSearchChatAgent(ChatAgent):

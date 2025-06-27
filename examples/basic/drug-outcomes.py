@@ -33,12 +33,14 @@ References:
         https://www.brookings.edu/wp-content/uploads/2012/04/OMOP-methods-review.pdf
 """
 
+import re
+
+import numpy as np
+from fire import Fire
+
 import langroid as lr
 import langroid.language_models as lm
 from langroid.utils.configuration import settings
-import numpy as np
-import re
-from fire import Fire
 
 # Turn off cache retrieval, to get independent estimates on each run
 settings.cache = False

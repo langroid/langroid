@@ -16,11 +16,12 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
 import os
+
 import fire
 
 import langroid as lr
-from langroid.utils.configuration import settings
 import langroid.language_models as lm
+from langroid.utils.configuration import settings
 
 # for best results:
 DEFAULT_LLM = lm.OpenAIChatModel.GPT4o

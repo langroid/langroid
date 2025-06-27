@@ -19,8 +19,9 @@ python3 examples/kg-chat/chat-neo4j.py
 ```
 """
 
-import typer
 import os
+
+import typer
 from dotenv import load_dotenv
 from rich import print
 from rich.console import Console
@@ -29,14 +30,13 @@ from rich.prompt import Prompt
 import langroid.language_models as lm
 from langroid import TaskConfig
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
-    Neo4jSettings,
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
+    Neo4jSettings,
 )
-from langroid.utils.constants import SEND_TO
 from langroid.agent.task import Task
 from langroid.utils.configuration import Settings, set_global
-
+from langroid.utils.constants import SEND_TO
 
 console = Console()
 app = typer.Typer()

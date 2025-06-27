@@ -16,15 +16,17 @@ Run like this (-m model optional; defaults to gpt-4.1-mini):
 
 """
 
-import chainlit as cl
 from textwrap import dedent
+
+import chainlit as cl
+from fastmcp.client.transports import SSETransport
+
 import langroid as lr
 import langroid.language_models as lm
-from langroid.pydantic_v1 import Field
 from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
 from langroid.agent.tools.orchestration import SendTool
 from langroid.mytypes import NonToolAction
-from fastmcp.client.transports import SSETransport
+from langroid.pydantic_v1 import Field
 
 
 class SendUserTool(SendTool):

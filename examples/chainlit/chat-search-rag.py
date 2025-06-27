@@ -15,33 +15,33 @@ Run like this:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
-from typing import List, Optional, Any
-
-import typer
-import langroid as lr
-import langroid.language_models as lm
-from langroid.agent.tool_message import ToolMessage
-from langroid.agent.tools.orchestration import ForwardTool
-from langroid.agent.chat_agent import ChatAgent, ChatDocument
-from langroid.agent.special.doc_chat_agent import (
-    DocChatAgent,
-    DocChatAgentConfig,
-)
-from langroid.parsing.web_search import metaphor_search
-from langroid.agent.task import Task
-from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.utils.constants import NO_ANSWER
-from langroid.utils.configuration import set_global, Settings
+import logging
+from textwrap import dedent
+from typing import Any, List, Optional
 
 import chainlit as cl
+import typer
+
+import langroid as lr
+import langroid.language_models as lm
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
     make_llm_settings_widgets,
     setup_llm,
     update_llm,
 )
-from textwrap import dedent
-import logging
+from langroid.agent.chat_agent import ChatAgent, ChatDocument
+from langroid.agent.special.doc_chat_agent import (
+    DocChatAgent,
+    DocChatAgentConfig,
+)
+from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import ForwardTool
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
+from langroid.parsing.web_search import metaphor_search
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import NO_ANSWER
 
 logger = logging.getLogger(__name__)
 

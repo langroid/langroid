@@ -177,3 +177,96 @@ async def test_task_tool_real_llm_nebrowski_async():
     # Verify the result
     assert result is not None, "Task should return a result"
     assert "41" in result.content, "Result should contain the final Nebrowski result"
+
+
+def test_task_tool_all_tools():
+    """
+    Test that tools="all" enables all available tools for the sub-agent.
+    """
+    # Create a main agent with multiple tools available
+    main_config = ChatAgentConfig(
+        llm=MockLMConfig(
+            default_response=TaskTool(
+                agent_name="Calculator",
+                system_message="""
+                    You are a multi-tool assistant. Use the appropriate tool
+                    to complete the task, then use DoneTool to return the result.
+                    """,
+                prompt="Multiply 4 and 6, call it x, then compute Nebrowski(x, 5)",
+                model="gpt-4o-mini",
+                tools=["ALL"],  # Enable all tools
+                max_iterations=5,
+            ).json()
+        ),
+        name="MainAgent",
+    )
+    main_agent = ChatAgent(main_config)
+
+    # Enable multiple tools for the main agent
+    main_agent.enable_message(
+        [TaskTool, MultiplierTool, NebrowskiTool], use=True, handle=True
+    )
+
+    # Create task
+    task = Task(
+        main_agent,
+        name="AllToolsTask",
+        interactive=False,
+        config=TaskConfig(
+            done_sequences=["T,A"],  # LLM (Tool), Agent(Handled) -> done
+        ),
+    )
+
+    # Run the task
+    result = task.run(msg="Test all tools")
+
+    # Verify that the sub-agent had access to all tools
+    # Expected: Multiply 4 and 6 = 24, Nebrowski(3, 5) = 14
+    assert result is not None, "Task should return a result"
+    assert "77" in result.content, "Result should contain 77"
+
+
+def test_task_tool_none_tools():
+    """
+    Test that tools="none" disables all tools except DoneTool for the sub-agent.
+    """
+    # Create a main agent that delegates with no tools
+    main_config = ChatAgentConfig(
+        llm=MockLMConfig(
+            default_response=TaskTool(
+                agent_name="Calculator",
+                system_message="""
+                    You are an assistant with no tools. Just respond directly
+                    to the prompt and use DoneTool to return your answer.
+                    """,
+                prompt="What is 2 + 2? Just tell me the answer.",
+                model="gpt-4o-mini",
+                tools=["NONE"],  # Disable all tools except DoneTool
+                max_iterations=5,
+            ).json()
+        ),
+        name="MainAgent",
+    )
+    main_agent = ChatAgent(main_config)
+
+    # Enable TaskTool and other tools for the main agent
+    # (sub-agent won't have access to these)
+    main_agent.enable_message(
+        [TaskTool, MultiplierTool, NebrowskiTool], use=True, handle=True
+    )
+
+    # Create task
+    task = Task(
+        main_agent,
+        name="NoToolsTask",
+        interactive=False,
+        config=TaskConfig(
+            done_sequences=["T,A"],  # LLM (Tool), Agent(Handled) -> done
+        ),
+    )
+
+    # Run the task
+    result = task.run(msg="Test no tools")
+
+    # Verify that the task completed (sub-agent can still use DoneTool)
+    assert result is not None, "Task should return a result"

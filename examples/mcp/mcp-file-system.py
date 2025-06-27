@@ -8,14 +8,16 @@ uv run examples/mcp/mcp-file-system.py --model gpt-4.1-mini
 Then ask your agent to list, write, or read files.
 """
 
-import os
 import asyncio
+import os
+
+from fastmcp.server import FastMCP
+from fire import Fire
+
 import langroid as lr
 import langroid.language_models as lm
-from fire import Fire
-from fastmcp.server import FastMCP
+from langroid.agent.tools.mcp import get_tool_async, mcp_tool
 from langroid.pydantic_v1 import Field
-from langroid.agent.tools.mcp import mcp_tool, get_tool_async
 
 
 def create_fs_mcp_server() -> FastMCP:

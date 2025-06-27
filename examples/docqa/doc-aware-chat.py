@@ -17,26 +17,26 @@ Run like this:
 python3 examples/docqa/doc-aware-chat.py
 """
 
-from typing import Optional, Any
+import os
+from typing import Any, Optional
 
+from fire import Fire
 from rich import print
 from rich.prompt import Prompt
-import os
 
+import langroid.language_models as lm
 from langroid import ChatDocument
+from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-import langroid.language_models as lm
-from langroid.mytypes import Entity
-from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.task import Task
 from langroid.agent.tools.orchestration import ForwardTool
 from langroid.agent.tools.retrieval_tool import RetrievalTool
-from langroid.utils.configuration import set_global, Settings
-from fire import Fire
+from langroid.mytypes import Entity
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
+from langroid.utils.configuration import Settings, set_global
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

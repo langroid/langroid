@@ -1,6 +1,7 @@
-from typing import Optional
-from langroid.pydantic_v1 import BaseModel, Field
 import json
+from typing import Optional
+
+from langroid.pydantic_v1 import BaseModel, Field
 
 
 class GenerationConfig(BaseModel):

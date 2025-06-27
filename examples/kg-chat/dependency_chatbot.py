@@ -27,14 +27,15 @@ python3 examples/kg-chat/dependency_chatbot.py
 ```
 """
 
-import typer
-from rich import print
-from rich.prompt import Prompt
-from dotenv import load_dotenv
-
-from pyvis.network import Network
 import webbrowser
 from pathlib import Path
+
+import typer
+from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
+from dotenv import load_dotenv
+from pyvis.network import Network
+from rich import print
+from rich.prompt import Prompt
 
 from langroid import TaskConfig
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
@@ -42,14 +43,12 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from langroid.utils.constants import NO_ANSWER, SEND_TO
-from langroid.utils.configuration import set_global, Settings
+from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
-
-from langroid.agent.task import Task
-from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import NO_ANSWER, SEND_TO
 
 app = typer.Typer()
 

@@ -8,15 +8,14 @@ python3 examples/basic/oai-asst-chat.py
 """
 
 import typer
+from dotenv import load_dotenv
 from rich import print
 from rich.prompt import Prompt
-from dotenv import load_dotenv
 
 from langroid.agent.openai_assistant import OpenAIAssistant, OpenAIAssistantConfig
 from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.logging import setup_colored_logging
-
 
 app = typer.Typer()
 

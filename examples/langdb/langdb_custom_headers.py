@@ -6,10 +6,9 @@ when using LangDB. These headers are specific to LangDB and won't have any effec
 """
 
 from uuid import uuid4
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.language_models.openai_gpt import OpenAIGPT
+
+from langroid.language_models.openai_gpt import LangDBParams, OpenAIGPT, OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
-from langroid.language_models.openai_gpt import LangDBParams
 
 # Set up settings
 settings = Settings(debug=True)

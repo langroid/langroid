@@ -20,12 +20,11 @@ python3 examples/quick-start/three-agent-chat.py
 import typer
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.agent.task import Task
+from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.utils.configuration import set_global, Settings
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.logging import setup_colored_logging
-
 
 app = typer.Typer()
 

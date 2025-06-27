@@ -7,12 +7,13 @@ Run like this (omit the model to use default GPT-4o):
     
 """
 
+from fire import Fire
+
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from fire import Fire
 
 
 def main(model: str = ""):

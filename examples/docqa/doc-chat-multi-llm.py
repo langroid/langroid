@@ -17,23 +17,24 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
 
+import os
+
 import typer
 from rich import print
-import os
 
 import langroid as lr
 import langroid.language_models as lm
 import langroid.language_models.base
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.utils.configuration import set_global, Settings
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 
 app = typer.Typer()

@@ -11,13 +11,15 @@ Run like this -- (omit the -m arg for default gpt-4o-mini LLM)
 uv run examples/basic/schedule-extract.py -m gpt-4o
 """
 
+from typing import Dict, List, Literal, Tuple
+
+from fire import Fire
+from rich.prompt import Prompt
+
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import FinalResultTool
-from typing import List, Dict, Literal, Tuple
 from langroid.pydantic_v1 import BaseModel, Field
-from rich.prompt import Prompt
-from fire import Fire
 
 
 class Slot(BaseModel):

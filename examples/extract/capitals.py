@@ -6,10 +6,12 @@ python3 examples/extract/capitals.py
 
 """
 
-from rich import print
-from langroid.pydantic_v1 import BaseModel
 from typing import List
+
+from rich import print
+
 import langroid as lr
+from langroid.pydantic_v1 import BaseModel
 
 
 class City(BaseModel):

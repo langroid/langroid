@@ -20,10 +20,11 @@ ollama/deepseek-r1:8b
 gemini/gemini-2.0-flash-thinking-exp
 """
 
+from fire import Fire
+
 import langroid as lr
 import langroid.language_models as lm
 from langroid.utils.configuration import settings
-from fire import Fire
 
 
 def main(

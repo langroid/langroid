@@ -4,6 +4,7 @@ Barebones example of a single agent using 3 tools.
 """
 
 from typing import Any, List, Tuple
+
 import fire
 
 import langroid as lr

@@ -31,11 +31,11 @@ from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
 
-from langroid.agent.special.neo4j.neo4j_chat_agent import Neo4jSettings
 from langroid.agent.special.neo4j.csv_kg_chat import (
     CSVGraphAgent,
     CSVGraphAgentConfig,
 )
+from langroid.agent.special.neo4j.neo4j_chat_agent import Neo4jSettings
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global

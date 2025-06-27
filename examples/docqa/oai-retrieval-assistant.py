@@ -6,20 +6,21 @@ python3 examples/docqa/oai-retrieval-assistant.py
 
 """
 
-import typer
-from rich import print
-from rich.prompt import Prompt
 import os
 import tempfile
 
+import typer
+from rich import print
+from rich.prompt import Prompt
+
 from langroid.agent.openai_assistant import (
-    OpenAIAssistantConfig,
-    OpenAIAssistant,
     AssistantTool,
+    OpenAIAssistant,
+    OpenAIAssistantConfig,
 )
-from langroid.parsing.url_loader import URLLoader
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.agent.task import Task
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.parsing.url_loader import URLLoader
 from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()

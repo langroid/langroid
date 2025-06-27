@@ -16,10 +16,12 @@ uv run chainlit run examples/chainlit/chat-transcript.py
 
 """
 
+import logging
+
 import chainlit as cl
+
 import langroid as lr
 from langroid.agent.callbacks.chainlit import add_instructions
-import logging
 
 # set info logger
 logging.basicConfig(level=logging.INFO)

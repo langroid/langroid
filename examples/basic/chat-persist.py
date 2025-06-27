@@ -22,19 +22,19 @@ For details on running with local or non-OpenAI models, see:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
-import typer
+import logging
 import pickle
+from pathlib import Path
+
+import typer
+from dotenv import load_dotenv
 from rich import print
 from rich.prompt import Prompt
-from dotenv import load_dotenv
-from pathlib import Path
-import logging
-
 
 import langroid.language_models as lm
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.utils.configuration import set_global, Settings
+from langroid.utils.configuration import Settings, set_global
 
 STATE_CACHE_DIR = ".cache/agent-state"
 

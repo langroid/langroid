@@ -1,7 +1,6 @@
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.agent.tools.orchestration import DoneTool
 
-
 DEFAULT_SYSTEM_MESSAGE_ADDITION = """
             DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
             AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 

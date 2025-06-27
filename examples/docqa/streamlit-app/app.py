@@ -1,9 +1,10 @@
-from langroid.utils.configuration import settings
-from utils import configure, agent
-import langroid.language_models as lm
+import os
 
 import streamlit as st
-import os
+from utils import agent, configure
+
+import langroid.language_models as lm
+from langroid.utils.configuration import settings
 
 settings.cache_type = "fakeredis"
 if st.session_state.get("specified_file") is None:

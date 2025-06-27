@@ -19,16 +19,17 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 import os
 from typing import List
-import fire
 
-from langroid.pydantic_v1 import BaseModel, Field
+import fire
+from rich.prompt import Prompt
+
 import langroid as lr
-from langroid.utils.configuration import settings
+import langroid.language_models as lm
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import FinalResultTool
-import langroid.language_models as lm
-from rich.prompt import Prompt
-from langroid.agent.chat_document import ChatDocument
+from langroid.pydantic_v1 import BaseModel, Field
+from langroid.utils.configuration import settings
 
 # for best results:
 DEFAULT_LLM = lm.OpenAIChatModel.GPT4o

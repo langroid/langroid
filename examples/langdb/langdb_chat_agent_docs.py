@@ -17,11 +17,12 @@ For more explanation see
 """
 
 import uuid
+
 import typer
 from rich import print
+
 import langroid as lr
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.language_models.openai_gpt import LangDBParams
+from langroid.language_models.openai_gpt import LangDBParams, OpenAIGPTConfig
 
 app = typer.Typer()
 

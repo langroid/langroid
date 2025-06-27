@@ -17,11 +17,12 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
 import os
+
 import fire
+
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

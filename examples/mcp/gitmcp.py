@@ -14,18 +14,20 @@ Run like this (-m model optional; defaults to gpt-4.1-mini):
 
 from textwrap import dedent
 from typing import List
-import langroid as lr
-import langroid.language_models as lm
-from langroid.pydantic_v1 import Field
-from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
-from langroid.agent.tools.orchestration import SendTool
+
 from fastmcp.client.transports import SSETransport
 from fire import Fire
 
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
+from langroid.agent.tools.orchestration import SendTool
+from langroid.pydantic_v1 import Field
+
 
 def get_gitmcp_url() -> str:
-    from rich.prompt import Prompt
     from rich.console import Console
+    from rich.prompt import Prompt
 
     console = Console()
     import re
