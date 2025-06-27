@@ -32,13 +32,14 @@ https://langroid.github.io/langroid/notes/structured-output/.
 """
 
 import typer
+from rich.prompt import Prompt
+
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
-from rich.prompt import Prompt
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
 from langroid.utils.logging import setup_colored_logging
-from langroid.utils.configuration import set_global, Settings
 
 app = typer.Typer()
 

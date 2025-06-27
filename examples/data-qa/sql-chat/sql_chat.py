@@ -12,12 +12,14 @@ Note if you are using this with a postgres db, you will need to:
     If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 """
 
+import json
+import os
+from typing import Any, Dict
+
 import typer
 from rich import print
 from rich.prompt import Prompt
-from typing import Dict, Any
-import json
-import os
+
 from langroid.exceptions import LangroidImportError
 
 try:
@@ -29,18 +31,19 @@ except ImportError as e:
 from prettytable import PrettyTable
 
 try:
-    from .utils import get_database_uri, fix_uri
+    from .utils import fix_uri, get_database_uri
 except ImportError:
-    from utils import get_database_uri, fix_uri
-from langroid.agent.task import Task
-from langroid.agent.special.sql.sql_chat_agent import (
-    SQLChatAgentConfig,
-    SQLChatAgent,
-)
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.utils.configuration import set_global, Settings
-from langroid.utils.constants import SEND_TO
+    from utils import fix_uri, get_database_uri
 import logging
+
+from langroid.agent.special.sql.sql_chat_agent import (
+    SQLChatAgent,
+    SQLChatAgentConfig,
+)
+from langroid.agent.task import Task
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import SEND_TO
 
 logger = logging.getLogger(__name__)
 

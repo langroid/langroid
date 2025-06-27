@@ -24,16 +24,18 @@ In each row of this dataset, there is a QUESTION, and a final_decision
 which we use as reference to compare the system-generated final decision.
 """
 
+import logging
+
+import datasets
+import pandas as pd
+from rich.prompt import Prompt
+
 import langroid as lr
 import langroid.language_models as lm
-import logging
+from langroid.agent.task import TaskConfig
+from langroid.agent.tools.orchestration import ForwardTool, ResultTool
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import settings
-from langroid.agent.tools.orchestration import ForwardTool, ResultTool
-from langroid.agent.task import TaskConfig
-import datasets
-from rich.prompt import Prompt
-import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

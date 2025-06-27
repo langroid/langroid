@@ -19,15 +19,13 @@ For more explanation see
 """
 
 import uuid
+
 import typer
 from rich import print
-from langroid.pydantic_v1 import BaseSettings
-
 
 import langroid as lr
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.language_models.openai_gpt import LangDBParams
-
+from langroid.language_models.openai_gpt import LangDBParams, OpenAIGPTConfig
+from langroid.pydantic_v1 import BaseSettings
 
 app = typer.Typer()
 

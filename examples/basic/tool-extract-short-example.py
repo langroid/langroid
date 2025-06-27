@@ -12,13 +12,14 @@ uv run examples/basic/tool-extract-short-example.py --model deepseek/deepseek-re
 
 """
 
+from fire import Fire
+from rich import print
+from rich.prompt import Prompt
+
 import langroid as lr
 import langroid.language_models as lm
-from langroid.pydantic_v1 import BaseModel, Field
 from langroid.agent.tools.orchestration import ResultTool
-from rich.prompt import Prompt
-from rich import print
-from fire import Fire
+from langroid.pydantic_v1 import BaseModel, Field
 
 
 # desired output structure

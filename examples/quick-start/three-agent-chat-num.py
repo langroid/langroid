@@ -16,8 +16,9 @@ For more explanation, see the
 """
 
 import typer
-import langroid as lr
 from rich.prompt import Prompt
+
+import langroid as lr
 
 app = typer.Typer()
 

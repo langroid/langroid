@@ -52,13 +52,14 @@ https://langroid.github.io/langroid/tutorials/non-openai-llms/
 
 from typing import List, Tuple
 
+import fire
+from rich.prompt import Prompt
+
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.pydantic_v1 import BaseModel
 from langroid.utils.globals import GlobalState
-from rich.prompt import Prompt
-import fire
 
 
 class ScreenState(BaseModel):

@@ -33,24 +33,25 @@ Optional script args:
 -d to enable debug mode: see prompts, agent msgs etc.
 """
 
-import typer
-from rich import print
-from langroid.pydantic_v1 import BaseModel
-from typing import List, Optional
 import json
 import os
+from typing import List, Optional
+
+import typer
+from rich import print
 
 import langroid.language_models as lm
 from langroid.agent import ChatDocument
-from langroid.mytypes import Entity
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.parsing.parser import ParsingConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.utils.configuration import set_global, Settings
-from langroid.utils.constants import NO_ANSWER, DONE
+from langroid.mytypes import Entity
+from langroid.parsing.parser import ParsingConfig
+from langroid.pydantic_v1 import BaseModel
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE, NO_ANSWER
 from langroid.utils.pydantic_utils import get_field_names
 
 app = typer.Typer()

@@ -22,12 +22,14 @@ To use a different model, for example gpt-4-turbo, run:
 
 """
 
+import logging
+
+from fire import Fire
+
 import langroid as lr
 import langroid.language_models as lm
-from langroid.agent.tools.task_tool import TaskTool
 from langroid.agent.tools.orchestration import DoneTool, ResultTool
-from fire import Fire
-import logging
+from langroid.agent.tools.task_tool import TaskTool
 
 logger = logging.getLogger(__name__)
 MODEL = lm.OpenAIChatModel.GPT4_1

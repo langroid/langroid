@@ -36,10 +36,12 @@ import typer
 from dotenv import load_dotenv
 from rich import print
 from rich.prompt import Prompt
-from .search_agent import make_search_task
-from .critic_agent import make_critic_task
-from .assistant_agent import make_assistant_task
+
 from langroid.utils.configuration import Settings, set_global
+
+from .assistant_agent import make_assistant_task
+from .critic_agent import make_critic_task
+from .search_agent import make_search_task
 
 app = typer.Typer()
 

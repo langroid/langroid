@@ -11,14 +11,16 @@ Run like this (leave model empty to use default GPT4o)
 uv run examples/basic/python-code-exec-tool.py -m gpt4o-mini
 """
 
-import io
 import contextlib
+import io
+
 from fire import Fire
 from rich.prompt import Prompt
-from langroid.pydantic_v1 import Field
-from langroid.agent.tools.orchestration import ResultTool
+
 import langroid as lr
 import langroid.language_models as lm
+from langroid.agent.tools.orchestration import ResultTool
+from langroid.pydantic_v1 import Field
 
 
 def execute_code(code_string):

@@ -15,14 +15,15 @@ For more ways to use langroid with other LLMs, see:
 - non-OpenAPI LLMs: https://langroid.github.io/langroid/tutorials/non-openai-llms/
 """
 
+from enum import Enum
 from typing import List, Tuple
 
-import langroid as lr
-from langroid.agent.tools.orchestration import ResultTool
-import langroid.language_models as lm
-from enum import Enum
-from rich.prompt import Prompt
 from fire import Fire
+from rich.prompt import Prompt
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.orchestration import ResultTool
 
 
 class Intent(str, Enum):

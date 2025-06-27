@@ -32,12 +32,13 @@ continuous chat with the user.
 
 """
 
-import langroid as lr
-import langroid.language_models as lm
-from langroid.agent.tools.orchestration import DoneTool
-from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
 from fastmcp.client.transports import NpxStdioTransport
 from fire import Fire
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
+from langroid.agent.tools.orchestration import DoneTool
 
 
 async def main(model: str = ""):

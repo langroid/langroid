@@ -11,12 +11,14 @@ Run like this (omitting the `--model` argument will use the default GPT-4.1-Mini
 """
 
 import os
-import langroid as lr
-import langroid.language_models as lm
-from langroid.mytypes import NonToolAction
-from langroid.agent.tools.mcp import mcp_tool
+
 from fastmcp.client.transports import NpxStdioTransport
 from fire import Fire
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.mcp import mcp_tool
+from langroid.mytypes import NonToolAction
 
 transport = NpxStdioTransport(
     package="exa-mcp-server",

@@ -23,29 +23,29 @@ Optional args:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
-import re
-from typing import List, Any
 import json
+import re
+from typing import Any, List
 
+from fire import Fire
 from rich import print
 from rich.prompt import Prompt
 
 import langroid as lr
 import langroid.language_models as lm
-from langroid.pydantic_v1 import Field
-from langroid.agent.tools.orchestration import ForwardTool
-from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.parsing.web_search import metaphor_search
-from langroid.parsing.parser import ParsingConfig, Splitter, PdfParsingConfig
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import ForwardTool
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
+from langroid.parsing.web_search import metaphor_search
+from langroid.pydantic_v1 import Field
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
-from langroid.utils.configuration import set_global, Settings
-from fire import Fire
 
 
 class RelevantExtractsTool(ToolMessage):

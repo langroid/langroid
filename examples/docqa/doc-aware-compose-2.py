@@ -24,26 +24,26 @@ python3 examples/docqa/doc-aware-guide-2.py
 
 """
 
+import os
 from typing import Optional
 
+from fire import Fire
 from rich import print
 from rich.prompt import Prompt
-import os
 
+import langroid as lr
+import langroid.language_models as lm
 from langroid import ChatDocument
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-import langroid as lr
-import langroid.language_models as lm
+from langroid.agent.task import Task
 from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
-from langroid.utils.configuration import set_global, Settings
-from langroid.utils.constants import DONE, NO_ANSWER, AT
-from fire import Fire
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import AT, DONE, NO_ANSWER
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

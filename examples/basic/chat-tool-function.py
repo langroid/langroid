@@ -15,11 +15,12 @@ uv run examples/basic/chat-tool-function.py -m deepseek/deepseek-reasoner
 
 """
 
+from fire import Fire
+
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import FinalResultTool
 from langroid.pydantic_v1 import BaseModel, Field
-from fire import Fire
 
 # define a nested structure for Company information
 

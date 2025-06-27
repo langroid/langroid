@@ -19,8 +19,6 @@ type-check:
 	@uv run black --check .
 	@echo "Running ruff check (without fix)..."
 	@uv run ruff check .
-	@echo "Running flake8 on git-tracked files ONLY! ..."
-	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv,langroid/embedding_models/protoc/*
 	@echo "Running mypy...";
 	@uv run mypy -p langroid
 	@echo "All checks passed!"
@@ -30,7 +28,7 @@ lint:
 	uv run black .
 	uv run ruff check . --fix
 	@echo "Auto-fixing issues in examples folder..."
-	@uv run ruff check examples/ --fix-only
+	@uv run ruff check examples/ --fix-only --no-force-exclude
 
 .PHONY: stubs
 stubs:

@@ -11,20 +11,20 @@ Use -f option to use OpenAI function calling API instead of Langroid tool.
 
 """
 
-import textwrap
 import json
+import textwrap
+from typing import List
 
 import typer
-from typing import List
+from kaggle_text import kaggle_description
 from rich import print
-from langroid.pydantic_v1 import BaseModel
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from kaggle_text import kaggle_description
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.utils.configuration import set_global, Settings
+from langroid.pydantic_v1 import BaseModel
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()

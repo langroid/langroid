@@ -24,14 +24,15 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
 
+import os
+
 import typer
 from rich import print
-import os
 
 import langroid as lr
 import langroid.language_models as lm
 from langroid.parsing.urls import get_list_from_user
-from langroid.utils.configuration import set_global, Settings
+from langroid.utils.configuration import Settings, set_global
 
 app = typer.Typer()
 

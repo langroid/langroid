@@ -15,13 +15,15 @@ Run like this from repo root (omit `-m` to use default model gpt-4.1-mini):
     uv run examples/basic/planner-workflow.py -m gpt-4.1-mini
 """
 
+import logging
 from typing import List
+
+from fire import Fire
+
 import langroid as lr
 import langroid.language_models as lm
-from langroid.pydantic_v1 import Field
 from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
-from fire import Fire
-import logging
+from langroid.pydantic_v1 import Field
 
 logger = logging.getLogger(__name__)
 MODEL = lm.OpenAIChatModel.GPT4_1_MINI

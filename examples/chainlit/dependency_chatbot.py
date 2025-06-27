@@ -13,36 +13,34 @@ The requirements are described in
  `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
 """
 
-import typer
-from rich import print
-
-from pyvis.network import Network
 import webbrowser
 from pathlib import Path
+from textwrap import dedent
+
+import chainlit as cl
+import typer
+from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
+from pyvis.network import Network
+from rich import print
 
 import langroid as lr
 import langroid.language_models as lm
-import chainlit as cl
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
     make_llm_settings_widgets,
     setup_llm,
     update_llm,
 )
-from textwrap import dedent
-
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
-from langroid.utils.constants import NO_ANSWER
-from langroid.utils.configuration import set_global, Settings
+from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
-
-from langroid.agent.task import Task
-from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import NO_ANSWER
 
 app = typer.Typer()
 

@@ -16,25 +16,25 @@ and other non-OpenAI LLMs:
 - https://langroid.github.io/langroid/tutorials/non-openai-llms/
 """
 
+import logging
 import os
 from typing import Optional
-from dotenv import load_dotenv
-from rich import print
 
+from dotenv import load_dotenv
 from fire import Fire
+from rich import print
 
 import langroid.language_models as lm
 from langroid import TaskConfig
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.arangodb.arangodb_agent import (
-    ArangoChatAgentConfig,
     ArangoChatAgent,
+    ArangoChatAgentConfig,
     ArangoSettings,
 )
-from langroid.utils.constants import SEND_TO
-from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
 from langroid.utils.configuration import Settings, set_global
-import logging
+from langroid.utils.constants import SEND_TO
 
 logging.basicConfig(
     level=logging.INFO,

@@ -38,15 +38,15 @@ from rich.table import Table
 
 import langroid as lr
 import langroid.language_models as lm
+from langroid.agent.batch import run_batch_function
 from langroid.agent.special.doc_chat_agent import (
+    ChunkEnrichmentAgentConfig,
     DocChatAgent,
     DocChatAgentConfig,
-    ChunkEnrichmentAgentConfig,
 )
 from langroid.parsing.parser import ParsingConfig
 from langroid.utils.configuration import Settings
 from langroid.vector_store.qdrantdb import QdrantDBConfig
-from langroid.agent.batch import run_batch_function
 
 app = typer.Typer()
 

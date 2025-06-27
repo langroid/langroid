@@ -22,16 +22,17 @@ to using open/local LLMs with Langroid for more details).
 
 """
 
-from typing import List, Optional, Type
 import os
-from dotenv import load_dotenv
 from textwrap import dedent
+from typing import List, Optional, Type
 
 import chainlit as cl
+from dotenv import load_dotenv
+
 import langroid as lr
-from langroid.agent.callbacks.chainlit import add_instructions
 import langroid.language_models as lm
 from langroid import ChatDocument
+from langroid.agent.callbacks.chainlit import add_instructions
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.configuration import Settings, set_global
 

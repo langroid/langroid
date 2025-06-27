@@ -15,14 +15,16 @@ https://langroid.github.io/langroid/notes/mcp-tools/
 """
 
 import os
-import langroid as lr
-import langroid.language_models as lm
-from langroid.mytypes import NonToolAction
-from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
+
 from fastmcp.client.transports import (
     SSETransport,
 )
 from fire import Fire
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
+from langroid.mytypes import NonToolAction
 
 # trying to connect to openmemory
 

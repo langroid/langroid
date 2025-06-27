@@ -29,23 +29,24 @@ For more on setting up local LLMs with Langroid, see here:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
-import typer
-from rich import print
-from langroid.pydantic_v1 import BaseModel
-from typing import List
 import json
 import os
+from typing import List
+
+import typer
+from rich import print
 
 import langroid.language_models as lm
-from langroid.mytypes import Entity
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.parsing.parser import ParsingConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.utils.configuration import set_global, Settings
-from langroid.utils.constants import NO_ANSWER, DONE
+from langroid.mytypes import Entity
+from langroid.parsing.parser import ParsingConfig
+from langroid.pydantic_v1 import BaseModel
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE, NO_ANSWER
 
 app = typer.Typer()
 

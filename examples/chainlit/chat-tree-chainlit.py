@@ -7,17 +7,19 @@ Run like this:
 chainlit run examples/chainlit/chat-tree-chainlit.py
 """
 
+from textwrap import dedent
+
+import chainlit as cl
+
+import langroid as lr
+from langroid.agent.callbacks.chainlit import add_instructions
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.utils.globals import GlobalState
-from langroid.utils.configuration import set_global, Settings
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
-from langroid.agent.callbacks.chainlit import add_instructions
-import langroid as lr
-import chainlit as cl
-from textwrap import dedent
+from langroid.utils.globals import GlobalState
 
 INTERACTIVE = False
 

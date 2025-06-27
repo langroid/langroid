@@ -22,14 +22,14 @@ import typer
 from dotenv import load_dotenv
 
 import langroid as lr
-from .tools import QuestionTool, AnswerTool
 import langroid.language_models as lm
-from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid import ChatDocument
-from langroid.utils.configuration import Settings, set_global
-
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+from langroid.agent.tools.orchestration import AgentDoneTool
+from langroid.utils.configuration import Settings, set_global
+
+from .tools import AnswerTool, QuestionTool
 
 app = typer.Typer()
 

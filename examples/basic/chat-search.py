@@ -50,8 +50,8 @@ from rich import print
 
 import langroid as lr
 import langroid.language_models as lm
-from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
+from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.utils.configuration import Settings, set_global
 
 app = typer.Typer()

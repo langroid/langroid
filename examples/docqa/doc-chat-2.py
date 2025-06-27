@@ -7,24 +7,25 @@ who has access to the docs via a vector-db.
 python3 examples/docqa/doc-chat-2.py
 """
 
-from rich import print
-from rich.prompt import Prompt
 import os
 
+from fire import Fire
+from rich import print
+from rich.prompt import Prompt
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-import langroid as lr
-import langroid.language_models as lm
-from langroid.mytypes import Entity
-from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.utils.configuration import set_global, Settings
+from langroid.mytypes import Entity
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
-from fire import Fire
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

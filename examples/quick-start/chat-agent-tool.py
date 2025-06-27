@@ -17,9 +17,9 @@ For more explanation see
 
 import typer
 from rich import print
-from langroid.pydantic_v1 import BaseSettings
 
 import langroid as lr
+from langroid.pydantic_v1 import BaseSettings
 
 app = typer.Typer()
 

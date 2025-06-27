@@ -1,30 +1,24 @@
 import logging
-from textwrap import dedent
-import chainlit as cl
 import os
+from textwrap import dedent
 
-import langroid as lr
-from langroid.agent.chat_agent import ChatAgent
-from langroid.language_models import OpenAIGPTConfig
-from langroid.agent.chat_agent import ChatAgentConfig
-from langroid.agent.task import Task
-from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
-from langroid.utils.logging import setup_logger
-from langroid.agent.tools.orchestration import DoneTool
-from langroid.utils.configuration import settings
-from langroid.agent.callbacks.chainlit import (
-    ChainlitTaskCallbacks,
-    ChainlitCallbackConfig,
+import chainlit as cl
+from chainlit_utils import (
+    is_llm_delegate,
+    is_metaphor_search_key_set,
+    is_same_llm_for_all_agents,
+    is_url_ask_question,
+    select_max_debate_turns,
+    select_model,
+    select_topic_and_setup_side,
 )
-from langroid.agent.callbacks.chainlit import add_instructions
-
 from config import get_base_llm_config, get_global_settings, get_questions_agent_config
-from models import SystemMessages, load_system_messages
 from main import (
-    parse_and_format_message_history,
     MetaphorSearchChatAgent,
     create_chat_agent,
+    parse_and_format_message_history,
 )
+from models import SystemMessages, load_system_messages
 from system_messages import (
     DEFAULT_SYSTEM_MESSAGE_ADDITION,
     FEEDBACK_AGENT_SYSTEM_MESSAGE,
@@ -36,15 +30,19 @@ from utils import (
     extract_urls,
 )
 
-from chainlit_utils import (
-    select_model,
-    is_same_llm_for_all_agents,
-    is_llm_delegate,
-    select_max_debate_turns,
-    select_topic_and_setup_side,
-    is_metaphor_search_key_set,
-    is_url_ask_question,
+import langroid as lr
+from langroid.agent.callbacks.chainlit import (
+    ChainlitCallbackConfig,
+    ChainlitTaskCallbacks,
+    add_instructions,
 )
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+from langroid.agent.tools.orchestration import DoneTool
+from langroid.language_models import OpenAIGPTConfig
+from langroid.utils.configuration import settings
+from langroid.utils.logging import setup_logger
 
 
 class CustomChainlitTaskCallbacks(ChainlitTaskCallbacks):

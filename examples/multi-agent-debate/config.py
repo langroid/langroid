@@ -1,12 +1,14 @@
-from typing import Optional, List
+from typing import List, Optional
+
+from generation_config_models import GenerationConfig, load_generation_config
+
 import langroid as lr
 import langroid.language_models as lm
 import langroid.utils.configuration
-from langroid.language_models import OpenAIGPTConfig
-from langroid.utils.configuration import Settings
 from langroid.agent.special import DocChatAgentConfig
+from langroid.language_models import OpenAIGPTConfig
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from generation_config_models import load_generation_config, GenerationConfig
+from langroid.utils.configuration import Settings
 
 # Constants
 MODEL_MAP = {

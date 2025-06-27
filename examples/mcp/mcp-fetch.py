@@ -13,12 +13,13 @@ Summarize the content of this page:
 https://www.anthropic.com/news/model-context-protocol
 """
 
-import langroid as lr
-import langroid.language_models as lm
-from langroid.mytypes import NonToolAction
-from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
 from fastmcp.client.transports import UvxStdioTransport
 from fire import Fire
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
+from langroid.mytypes import NonToolAction
 
 
 async def main(model: str = ""):

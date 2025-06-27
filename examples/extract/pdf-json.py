@@ -21,18 +21,19 @@ pip install "langroid[marker-pdf]"
   You may need to adapt it to your needs.
 """
 
-import os
-
-from langroid.parsing.document_parser import DocumentParser
-from langroid.parsing.parser import PdfParsingConfig, ParsingConfig, LLMPdfParserConfig
 import logging
+import os
+from typing import List
+
 from fire import Fire
 from rich.console import Console
 from rich.table import Table
-from typing import List
+
 import langroid as lr
-from langroid.agent.tools.orchestration import ResultTool
 import langroid.language_models as lm
+from langroid.agent.tools.orchestration import ResultTool
+from langroid.parsing.document_parser import DocumentParser
+from langroid.parsing.parser import LLMPdfParserConfig, ParsingConfig, PdfParsingConfig
 from langroid.pydantic_v1 import BaseModel, Field
 
 logger = logging.getLogger(__name__)

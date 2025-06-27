@@ -29,13 +29,12 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
 import typer
+from dotenv import load_dotenv
 from rich import print
 from rich.prompt import Prompt
-from dotenv import load_dotenv
 
 import langroid.language_models as lm
-from langroid.utils.configuration import set_global, Settings
-
+from langroid.utils.configuration import Settings, set_global
 
 app = typer.Typer()
 

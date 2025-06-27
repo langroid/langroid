@@ -4,8 +4,9 @@ Agent to detect and annotate sensitive information in text.
 
 import textwrap
 from typing import List, Optional
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+
 from langroid.agent.base import ChatDocument
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.utils.logging import setup_colored_logging
 
 setup_colored_logging()

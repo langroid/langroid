@@ -18,14 +18,15 @@ What is the prime number that comes after 17?
 
 """
 
+import logging
+
+from fire import Fire
+from rich.prompt import Prompt
+
 import langroid as lr
 import langroid.language_models as lm
-from rich.prompt import Prompt
-from langroid.agent.tools.orchestration import FinalResultTool
 from langroid.agent.task import TaskConfig
-from fire import Fire
-
-import logging
+from langroid.agent.tools.orchestration import FinalResultTool
 
 # set info level
 logging.basicConfig(level=logging.INFO)

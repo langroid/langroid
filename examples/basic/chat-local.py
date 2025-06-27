@@ -13,6 +13,7 @@ python examples/basic/chat-local.py --model <local_model_spec>
 """
 
 from fire import Fire
+
 import langroid as lr
 import langroid.language_models as lm
 
