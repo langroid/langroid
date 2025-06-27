@@ -120,7 +120,7 @@ class ParsingConfig(BaseSettings):
     # aim to have at least this many chars per chunk when truncating due to punctuation
     min_chunk_chars: int = 350
     discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
-    n_similar_docs: Optional[int] = 4  # deprecated
+    n_similar_docs: Optional[int] = None  # deprecated
     n_neighbor_ids: int = 5  # window size to store around each chunk
     separators: List[str] = ["\n\n", "\n", " ", ""]
     token_encoding_model: str = "text-embedding-3-small"
