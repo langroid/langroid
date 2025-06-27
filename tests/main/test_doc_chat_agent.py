@@ -556,6 +556,11 @@ def test_reciprocal_rank_fusion(test_settings: Settings, vecdb):
         use_bm25_search=True,
         use_fuzzy_match=True,
         use_reciprocal_rank_fusion=True,
+        parsing=ParsingConfig(
+            splitter=Splitter.SIMPLE,
+            n_neighbor_ids=5,
+            n_similar_docs=None,  # Ensure we don't trigger backward compatibility
+        ),
     )
     cfg.n_similar_chunks = 3
     cfg.n_relevant_chunks = 3

@@ -1403,8 +1403,9 @@ class DocChatAgent(ChatAgent):
             # so we need to take the top n_similar_chunks from the combined list
             passages = [
                 id2doc[id]
-                for i, (id, _) in enumerate(id2_reciprocal_score.items())
-                if i < self.config.n_similar_chunks
+                for id, _ in list(id2_reciprocal_score.items())[
+                    : self.config.n_similar_chunks
+                ]
             ]
             # passages must have distinct ids
             assert len(passages) == len(set([d.id() for d in passages])), (
