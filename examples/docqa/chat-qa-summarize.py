@@ -55,10 +55,11 @@ def main(
     config = lr.agent.special.DocChatAgentConfig(
         llm=llm_config,
         n_neighbor_chunks=2,
+        n_similar_chunks=3,
+        n_relevant_chunks=3,
         parsing=lr.parsing.parser.ParsingConfig(
             chunk_size=50,
             overlap=10,
-            n_similar_docs=3,
             n_neighbor_ids=4,
         ),
     )

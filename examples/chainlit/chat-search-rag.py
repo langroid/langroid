@@ -158,6 +158,8 @@ async def setup_agent_task():
     config = DocChatAgentConfig(
         name="Searcher",
         llm=llm_config,
+        n_similar_chunks=3,
+        n_relevant_chunks=3,
         system_message=f"""
         You are a savvy, tenacious, persistent researcher, who knows when to search the 
         internet for an answer.
@@ -199,7 +201,6 @@ async def setup_agent_task():
             # truncating due to punctuation
             min_chunk_chars=200,
             discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-            n_similar_docs=3,
             # NOTE: PDF parsing is extremely challenging, each library has its own
             # strengths and weaknesses. Try one that works for your use case.
             pdf=PdfParsingConfig(

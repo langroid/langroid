@@ -90,6 +90,8 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     cross_encoder_reranking_model = ""
     n_query_rephrases = 0
     n_neighbor_chunks = 2
+    n_similar_chunks = 2
+    n_relevant_chunks = 2
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     conversation_mode = True
@@ -111,7 +113,6 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
 
     parsing: ParsingConfig = ParsingConfig(
         splitter=Splitter.SIMPLE,
-        n_similar_docs=2,
         n_neighbor_ids=5,
     )
 
@@ -130,10 +131,11 @@ def test_doc_chat_retrieval(
     """
     agent = DocChatAgent(
         _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
             parsing=ParsingConfig(
                 splitter=splitter,
-                n_similar_docs=3,
-            )
+            ),
         )
     )
     agent.config.conversation_mode = conv_mode
@@ -177,7 +179,8 @@ def test_doc_chat_rerank_diversity(test_settings: Settings, vecdb):
     cfg = _MyDocChatAgentConfig(
         n_neighbor_chunks=0,
     )
-    cfg.parsing.n_similar_docs = 8
+    cfg.n_similar_chunks = 8
+    cfg.n_relevant_chunks = 8
     agent = DocChatAgent(cfg)
     agent.vecdb = vecdb
 
@@ -214,7 +217,8 @@ def test_doc_chat_rerank_periphery(test_settings: Settings, vecdb):
     cfg = _MyDocChatAgentConfig(
         n_neighbor_chunks=0,
     )
-    cfg.parsing.n_similar_docs = 8
+    cfg.n_similar_chunks = 8
+    cfg.n_relevant_chunks = 8
     agent = DocChatAgent(cfg)
     agent.vecdb = vecdb
 

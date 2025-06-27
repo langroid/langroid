@@ -72,8 +72,9 @@ def chat() -> None:
         parsing=lr.parsing.parser.ParsingConfig(
             separators=["\n\n"],
             splitter=lr.parsing.parser.Splitter.SIMPLE,
-            n_similar_docs=2,
         ),
+        n_similar_chunks=2,
+        n_relevant_chunks=2,
     )
     agent = lr.agent.special.DocChatAgent(config)
     agent.ingest_docs(documents)

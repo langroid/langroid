@@ -142,6 +142,8 @@ class DocChatAgentConfig(ChatAgentConfig):
     # improve retrieval.
     chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
 
+    n_relevant_chunks: int = 3  # how many relevant chunks to retrieve finally
+    n_similar_chunks: int = 3  # how many similar chunks to retrieve, by each method
     n_query_rephrases: int = 0
     n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
@@ -185,7 +187,8 @@ class DocChatAgentConfig(ChatAgentConfig):
         # truncating due to punctuation
         min_chunk_chars=200,
         discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-        n_similar_docs=3,
+        # set deprecated n_similar_docs to None; use n_similar_chunks above instead
+        n_similar_docs=None,
         n_neighbor_ids=0,  # num chunk IDs to store on either side of each chunk
         pdf=PdfParsingConfig(
             # NOTE: PDF parsing is extremely challenging, and each library
@@ -240,6 +243,60 @@ class DocChatAgent(ChatAgent):
         self.chunked_docs: List[Document] = []
         self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
+        if (
+            self.config.cross_encoder_reranking_model != ""
+            and self.config.use_reciprocal_rank_fusion
+        ):
+            logger.warning(
+                """
+                You have set `use_reciprocal_rank_fusion` to True,
+                but it will be ignored since you have also set
+                `cross_encoder_reranking_model` to a non-empty value.
+                To use RRF (Reciprocal Rank Fusion), set
+                `cross_encoder_reranking_model` to an empty string.
+                """
+            )
+
+        if (
+            self.config.cross_encoder_reranking_model == ""
+            and not self.config.use_reciprocal_rank_fusion
+            and (self.config.use_fuzzy_match or self.config.use_bm25_search)
+            and (
+                self.config.n_relevant_chunks
+                < self.config.n_similar_chunks
+                * (self.config.use_bm25_search + self.config.use_fuzzy_match)
+            )
+        ):
+            logger.warning(
+                """
+                DocChatAgent has been configured to have no cross encoder reranking,
+                AND `use_reciprocal_rank_fusion` is set to False,
+                AND `use_fuzzy_match` or `use_bm25_search` is True,
+                AND `n_relevant_chunks` is less than `n_similar_chunks` * (
+                    `use_bm25_search` + `use_fuzzy_match`
+                ), 
+                BUT there is no way to rerank the chunks retrieved by multiple methods,
+                so we will set `use_reciprocal_rank_fusion` to True.
+                """
+            )
+            self.config.use_reciprocal_rank_fusion = True
+
+        # Handle backward compatibility for deprecated n_similar_docs
+        if self.config.parsing.n_similar_docs is not None:
+            logger.warning(
+                """
+                The parameter `parsing.n_similar_docs` is deprecated and will be
+                removed in a future version. Please use `n_similar_chunks` and
+                `n_relevant_chunks` instead, which provide more fine-grained
+                control over retrieval.
+                - n_similar_chunks: number of chunks to retrieve by each method
+                - n_relevant_chunks: final number of chunks to return after reranking
+                """
+            )
+            # Use the deprecated value for both parameters
+            self.config.n_similar_chunks = self.config.parsing.n_similar_docs
+            self.config.n_relevant_chunks = self.config.parsing.n_similar_docs
+
         self.ingest()
 
     def clear(self) -> None:
@@ -486,7 +543,7 @@ class DocChatAgent(ChatAgent):
     def retrieval_tool(self, msg: RetrievalTool) -> str:
         """Handle the RetrievalTool message"""
         self.config.retrieve_only = True
-        self.config.parsing.n_similar_docs = msg.num_results
+        self.config.n_relevant_chunks = msg.num_results
         content_doc = self.answer_from_docs(msg.query)
         return content_doc.content
 
@@ -1005,7 +1062,7 @@ class DocChatAgent(ChatAgent):
                 self.chunked_docs,
                 self.chunked_docs_clean,  # already pre-processed!
                 query,
-                k=self.config.parsing.n_similar_docs * multiple,
+                k=self.config.n_similar_chunks * multiple,
             )
         return docs_scores
 
@@ -1025,7 +1082,7 @@ class DocChatAgent(ChatAgent):
                 query,
                 self.chunked_docs,
                 self.chunked_docs_clean,
-                k=self.config.parsing.n_similar_docs * multiple,
+                k=self.config.n_similar_chunks * multiple,
                 words_before=self.config.n_fuzzy_neighbor_words or None,
                 words_after=self.config.n_fuzzy_neighbor_words or None,
             )
@@ -1056,9 +1113,7 @@ class DocChatAgent(ChatAgent):
                 key=lambda x: x[0],
                 reverse=True,
             )
-            passages = [
-                d for _, d in sorted_pairs[: self.config.parsing.n_similar_docs]
-            ]
+            passages = [d for _, d in sorted_pairs[: self.config.n_similar_chunks]]
         return passages
 
     def rerank_with_diversity(self, passages: List[Document]) -> List[Document]:
@@ -1229,7 +1284,7 @@ class DocChatAgent(ChatAgent):
 
         # if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
         # we can retrieve more docs during retrieval, and leave it to the cross-encoder
-        # or RRF reranking to whittle down to self.config.parsing.n_similar_docs
+        # or RRF reranking to whittle down to self.config.n_similar_chunks
         retrieval_multiple = (
             1
             if (
@@ -1247,7 +1302,7 @@ class DocChatAgent(ChatAgent):
             for q in [query] + query_proxies:
                 docs_and_scores += self.get_semantic_search_results(
                     q,
-                    k=self.config.parsing.n_similar_docs * retrieval_multiple,
+                    k=self.config.n_similar_chunks * retrieval_multiple,
                 )
                 # sort by score descending
                 docs_and_scores = sorted(
@@ -1265,8 +1320,12 @@ class DocChatAgent(ChatAgent):
             # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
             id2doc.update({d.id(): d for d, _ in docs_scores})
-            if self.config.cross_encoder_reranking_model == "":
-                # only if we're not re-ranking with a cross-encoder,
+            if (
+                self.config.cross_encoder_reranking_model == ""
+                and self.config.use_reciprocal_rank_fusion
+            ):
+                # if we're not re-ranking with a cross-encoder, and have RRF enabled,
+                # instead of accumulating the bm25 results into passages,
                 # we collect these ranks for Reciprocal Rank Fusion down below.
                 docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
                 id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
@@ -1279,8 +1338,12 @@ class DocChatAgent(ChatAgent):
         if self.config.use_fuzzy_match:
             # TODO: Add score threshold in config
             fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
-            if self.config.cross_encoder_reranking_model == "":
-                # only if we're not re-ranking with a cross-encoder,
+            if (
+                self.config.cross_encoder_reranking_model == ""
+                and self.config.use_reciprocal_rank_fusion
+            ):
+                # if we're not re-ranking with a cross-encoder,
+                # instead of accumulating the fuzzy match results into passages,
                 # we collect these ranks for Reciprocal Rank Fusion down below.
                 fuzzy_match_doc_scores = sorted(
                     fuzzy_match_doc_scores, key=lambda x: x[1], reverse=True
@@ -1316,9 +1379,12 @@ class DocChatAgent(ChatAgent):
                 | set(id2_rank_bm25.keys())
                 | set(id2_rank_fuzzy.keys())
             ):
-                rank_semantic = id2_rank_semantic.get(id_, float("inf"))
-                rank_bm25 = id2_rank_bm25.get(id_, float("inf"))
-                rank_fuzzy = id2_rank_fuzzy.get(id_, float("inf"))
+                # Use max_rank instead of infinity to avoid bias against
+                # single-method docs
+                max_rank = self.config.n_similar_chunks * retrieval_multiple
+                rank_semantic = id2_rank_semantic.get(id_, max_rank)
+                rank_bm25 = id2_rank_bm25.get(id_, max_rank)
+                rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank)
                 c = self.config.reciprocal_rank_fusion_constant
                 reciprocal_fusion_score = (
                     1 / (rank_semantic + c) + 1 / (rank_bm25 + c) + 1 / (rank_fuzzy + c)
@@ -1333,12 +1399,12 @@ class DocChatAgent(ChatAgent):
                     reverse=True,
                 )
             )
-            # each method retrieved up to retrieval_multiple * n_similar_docs,
-            # so we need to take the top n_similar_docs from the combined list
+            # each method retrieved up to retrieval_multiple * n_similar_chunks,
+            # so we need to take the top n_similar_chunks from the combined list
             passages = [
                 id2doc[id]
                 for i, (id, _) in enumerate(id2_reciprocal_score.items())
-                if i < self.config.parsing.n_similar_docs
+                if i < self.config.n_similar_chunks
             ]
             # passages must have distinct ids
             assert len(passages) == len(set([d.id() for d in passages])), (
@@ -1355,7 +1421,7 @@ class DocChatAgent(ChatAgent):
             passages = [p for p, _ in passages_scores]
         # now passages can potentially have a lot of doc chunks,
         # so we re-rank them using a cross-encoder scoring model,
-        # and pick top k where k = config.parsing.n_similar_docs
+        # and pick top k where k = config..n_similar_chunks
         # https://www.sbert.net/examples/applications/retrieve_rerank
         if self.config.cross_encoder_reranking_model != "":
             passages = self.rerank_with_cross_encoder(query, passages)
@@ -1374,7 +1440,7 @@ class DocChatAgent(ChatAgent):
             passages_scores = self.add_context_window(passages_scores)
             passages = [p for p, _ in passages_scores]
 
-        return passages[: self.config.parsing.n_similar_docs]
+        return passages[: self.config.n_relevant_chunks]
 
     @no_type_check
     def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]:

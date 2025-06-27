@@ -255,7 +255,7 @@ class LanceDocChatAgent(DocChatAgent):
         result = (
             tbl.search(query_clean)
             .where(self.config.filter or None)
-            .limit(self.config.parsing.n_similar_docs * multiple)
+            .limit(self.config.n_similar_chunks * multiple)
         )
         docs = self.vecdb._lance_result_to_docs(result)
         scores = [r["score"] for r in result.to_list()]

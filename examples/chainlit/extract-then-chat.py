@@ -127,10 +127,11 @@ async def on_chat_start():
         DocChatAgentConfig(
             llm=llm_cfg,
             n_neighbor_chunks=2,
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
             parsing=ParsingConfig(
                 chunk_size=50,
                 overlap=10,
-                n_similar_docs=3,
                 n_neighbor_ids=4,
             ),
             vecdb=lr.vector_store.QdrantDBConfig(

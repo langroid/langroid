@@ -247,10 +247,11 @@ def main(
             llm=llm_cfg,
             assistant_mode=True,
             n_neighbor_chunks=2,
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
             parsing=ParsingConfig(
                 chunk_size=150,
                 overlap=30,
-                n_similar_docs=3,
                 n_neighbor_ids=4,
             ),
             cross_encoder_reranking_model="",
