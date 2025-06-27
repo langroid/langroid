@@ -78,7 +78,7 @@ class LLMConfig(BaseSettings):
     completion_model: str = ""
     temperature: float = 0.0
     chat_context_length: int | None = None
-    async_stream_quiet: bool = True  # suppress streaming output in async mode?
+    async_stream_quiet: bool = False  # suppress streaming output in async mode?
     completion_context_length: int | None = None
     # if input length + max_output_tokens > context length of model,
     # we will try shortening requested output

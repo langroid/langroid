@@ -24,6 +24,7 @@ class TaskTool(ToolMessage):
     will be generated.
     """
 
+    # TODO: setting up termination conditions of sub-task needs to be improved
     request: str = "task_tool"
     purpose: str = """
         <HowToUse>
@@ -77,6 +78,7 @@ class TaskTool(ToolMessage):
         To disable all tools, set it to a singleton list containing 'NONE'
         """,
     )
+    # TODO: ensure valid model name
     model: str = Field(
         default=None,
         description="""
@@ -183,5 +185,7 @@ class TaskTool(ToolMessage):
         """
         task = self._set_up_task(agent)
         # Run the task on the prompt, and return the result
+        # TODO eventually allow the various task setup configs,
+        #  including termination conditions
         result = await task.run_async(self.prompt, turns=self.max_iterations or 10)
         return result
