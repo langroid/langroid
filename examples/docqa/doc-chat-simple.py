@@ -10,6 +10,7 @@ Run like this (omit the model to use default GPT-4o):
 from fire import Fire
 
 import langroid.language_models as lm
+from langroid.vector_store.chromadb import ChromaDBConfig
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
@@ -20,9 +21,10 @@ def main(model: str = ""):
     # set up the agent
     agent = DocChatAgent(
         DocChatAgentConfig(
+            vecdb=ChromaDBConfig(),
             llm=lm.OpenAIGPTConfig(chat_model=model or lm.OpenAIChatModel.GPT4o),
             # several configs possible here, omitted for brevity
-        )
+        ),
     )
 
     # ingest document(s), could be a local file/folder or URL
