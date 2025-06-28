@@ -150,7 +150,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
     use_reciprocal_rank_fusion: bool = False
-    cross_encoder_reranking_model: str = ( # ignored if use_reciprocal_rank_fusion=True
+    cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
     )
     rerank_diversity: bool = True  # rerank to maximize diversity?
@@ -1350,9 +1350,8 @@ class DocChatAgent(ChatAgent):
                 # eliminate duplicate ids
                 passages = [id2doc[id] for id in id2doc.keys()]
 
-        if (
-            self.config.use_reciprocal_rank_fusion
-            and (self.config.use_bm25_search or self.config.use_fuzzy_match)
+        if self.config.use_reciprocal_rank_fusion and (
+            self.config.use_bm25_search or self.config.use_fuzzy_match
         ):
             # Since we're not using cross-enocder re-ranking,
             # we need to re-order the retrieved chunks from potentially three
@@ -1418,8 +1417,8 @@ class DocChatAgent(ChatAgent):
         # and pick top k where k = config..n_similar_chunks
         # https://www.sbert.net/examples/applications/retrieve_rerank
         if (
-            self.config.cross_encoder_reranking_model != "" and
-            not self.config.use_reciprocal_rank_fusion
+            self.config.cross_encoder_reranking_model != ""
+            and not self.config.use_reciprocal_rank_fusion
         ):
             passages = self.rerank_with_cross_encoder(query, passages)
 
