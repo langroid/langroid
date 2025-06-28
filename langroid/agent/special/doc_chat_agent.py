@@ -149,8 +149,8 @@ class DocChatAgentConfig(ChatAgentConfig):
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
-    use_reciprocal_rank_fusion: bool = True  # ignored if using cross-encoder reranking
-    cross_encoder_reranking_model: str = (
+    use_reciprocal_rank_fusion: bool = False
+    cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
     )
     rerank_diversity: bool = True  # rerank to maximize diversity?
@@ -249,11 +249,10 @@ class DocChatAgent(ChatAgent):
         ):
             logger.warning(
                 """
-                You have set `use_reciprocal_rank_fusion` to True,
-                but it will be ignored since you have also set
-                `cross_encoder_reranking_model` to a non-empty value.
-                To use RRF (Reciprocal Rank Fusion), set
-                `cross_encoder_reranking_model` to an empty string.
+                Ignoring `cross_encoder_reranking_model` since you have set  
+                `use_reciprocal_rank_fusion` to True.
+                To use cross-encoder reranking, set
+                `use_reciprocal_rank_fusion` to False.
                 """
             )
 
@@ -1113,7 +1112,7 @@ class DocChatAgent(ChatAgent):
                 key=lambda x: x[0],
                 reverse=True,
             )
-            passages = [d for _, d in sorted_pairs[: self.config.n_similar_chunks]]
+            passages = [d for _, d in sorted_pairs]
         return passages
 
     def rerank_with_diversity(self, passages: List[Document]) -> List[Document]:
@@ -1320,10 +1319,7 @@ class DocChatAgent(ChatAgent):
             # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
             id2doc.update({d.id(): d for d, _ in docs_scores})
-            if (
-                self.config.cross_encoder_reranking_model == ""
-                and self.config.use_reciprocal_rank_fusion
-            ):
+            if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,
                 # instead of accumulating the bm25 results into passages,
                 # we collect these ranks for Reciprocal Rank Fusion down below.
@@ -1338,10 +1334,7 @@ class DocChatAgent(ChatAgent):
         if self.config.use_fuzzy_match:
             # TODO: Add score threshold in config
             fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
-            if (
-                self.config.cross_encoder_reranking_model == ""
-                and self.config.use_reciprocal_rank_fusion
-            ):
+            if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder,
                 # instead of accumulating the fuzzy match results into passages,
                 # we collect these ranks for Reciprocal Rank Fusion down below.
@@ -1357,10 +1350,8 @@ class DocChatAgent(ChatAgent):
                 # eliminate duplicate ids
                 passages = [id2doc[id] for id in id2doc.keys()]
 
-        if (
-            self.config.cross_encoder_reranking_model == ""
-            and self.config.use_reciprocal_rank_fusion
-            and (self.config.use_bm25_search or self.config.use_fuzzy_match)
+        if self.config.use_reciprocal_rank_fusion and (
+            self.config.use_bm25_search or self.config.use_fuzzy_match
         ):
             # Since we're not using cross-enocder re-ranking,
             # we need to re-order the retrieved chunks from potentially three
@@ -1382,9 +1373,9 @@ class DocChatAgent(ChatAgent):
                 # Use max_rank instead of infinity to avoid bias against
                 # single-method docs
                 max_rank = self.config.n_similar_chunks * retrieval_multiple
-                rank_semantic = id2_rank_semantic.get(id_, max_rank)
-                rank_bm25 = id2_rank_bm25.get(id_, max_rank)
-                rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank)
+                rank_semantic = id2_rank_semantic.get(id_, max_rank + 1)
+                rank_bm25 = id2_rank_bm25.get(id_, max_rank + 1)
+                rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank + 1)
                 c = self.config.reciprocal_rank_fusion_constant
                 reciprocal_fusion_score = (
                     1 / (rank_semantic + c) + 1 / (rank_bm25 + c) + 1 / (rank_fuzzy + c)
@@ -1421,10 +1412,14 @@ class DocChatAgent(ChatAgent):
             passages_scores = self.add_context_window(passages_scores)
             passages = [p for p, _ in passages_scores]
         # now passages can potentially have a lot of doc chunks,
-        # so we re-rank them using a cross-encoder scoring model,
+        # so we re-rank them using a cross-encoder scoring model
+        # (provided that `reciprocal_rank_fusion` is not enabled),
         # and pick top k where k = config..n_similar_chunks
         # https://www.sbert.net/examples/applications/retrieve_rerank
-        if self.config.cross_encoder_reranking_model != "":
+        if (
+            self.config.cross_encoder_reranking_model != ""
+            and not self.config.use_reciprocal_rank_fusion
+        ):
             passages = self.rerank_with_cross_encoder(query, passages)
 
         if self.config.rerank_diversity:
