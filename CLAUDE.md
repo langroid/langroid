@@ -206,6 +206,85 @@ task = Task(agent, config=config)
 response_dict = {"content": '{"request": "my_tool", "param": "value"}'}
 ```
 
+## Multi-Agent System Development
+
+### Important Patterns and Best Practices
+
+#### 1. Pydantic Imports
+**ALWAYS import Pydantic classes from `langroid.pydantic_v1`**, not from `pydantic` directly:
+```python
+# CORRECT
+from langroid.pydantic_v1 import Field, BaseModel
+
+# WRONG - will cause issues
+from pydantic import Field, BaseModel
+```
+
+#### 2. Tool Name References in System Messages
+When referencing tool names in f-strings within system messages, use the `.name()` method:
+```python
+system_message: str = f"""
+Use {MyTool.name()} to perform the action.
+"""
+```
+This works at module level in configs, but be aware that complex initialization at module level can sometimes cause issues.
+
+#### 3. Agent Configuration with LLM
+Always specify the LLM configuration explicitly in agent configs:
+```python
+class MyAgentConfig(lr.ChatAgentConfig):
+    name: str = "MyAgent"
+    llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
+        chat_model="gpt-4",  # or "gpt-4.1" etc.
+    )
+    system_message: str = "..."
+```
+
+#### 4. Tool Organization in Multi-Agent Systems
+When tools delegate to agents:
+- Define agent configs and agents BEFORE the tools that use them
+- Tools can directly instantiate agents in their `handle()` methods:
+```python
+class MyTool(lr.ToolMessage):
+    def handle(self) -> str:
+        agent = MyAgent(MyAgentConfig())
+        task = lr.Task(agent, interactive=False)
+        result = task.run(prompt)
+        return result.content
+```
+
+#### 5. Task Termination with Done Sequences
+Use `done_sequences` for precise task termination control:
+```python
+# For a task that should complete after: Tool -> Agent handles -> LLM responds
+task = lr.Task(
+    agent,
+    interactive=False,
+    config=lr.TaskConfig(done_sequences=["T,A,L"]),
+)
+```
+
+Common patterns:
+- `"T,A"` - Tool used and handled by agent
+- `"T,A,L"` - Tool used, handled, then LLM responds
+- `"T[specific_tool],A"` - Specific tool used and handled
+
+See `docs/notes/task-termination.md` for comprehensive documentation.
+
+#### 6. Handling Non-Tool LLM Responses
+Use `handle_llm_no_tool` in agent configs to handle cases where the LLM forgets to use a tool:
+```python
+class MyAgentConfig(lr.ChatAgentConfig):
+    handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
+```
+
+#### 7. Agent Method Parameters
+Note that `ChatAgentConfig` does not have a `use_tools` parameter. Instead, enable tools on the agent after creation:
+```python
+agent = MyAgent(config)
+agent.enable_message([Tool1, Tool2, Tool3])  # Pass list of tool classes
+```
+
 ## Commit and Pull Request Guidelines
 
 - Never include "co-authored by Claude Code" or "created by Claude" in commit messages or pull request descriptions

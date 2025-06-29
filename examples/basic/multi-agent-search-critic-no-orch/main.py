@@ -1,9 +1,9 @@
 """
-Version of main.py, but does NOT use any inter-agent orchestration,
- i.e. we create a separate Task object from each agent, but we do not
- connect them as sub-tasks.
- Instead we write extra code to handle each task's output, and
- determine what to do with it.
+Version of examples/basic/multi-agent-search-critic/main.py, but does NOT use any
+inter-agent orchestration, i.e. we create a separate Task object from each agent,
+but we do not connect them as sub-tasks.
+Instead we write extra code to handle each task's output, and
+determine what to do with it.
 
 3-Agent system where:
 - Assistant takes user's (complex) question, breaks it down into smaller pieces
