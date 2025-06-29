@@ -231,6 +231,7 @@ fact two possibilities here:
     - [groq](https://groq.com/) amazingly it is free, and you can run `llama-3.1-70b`
     - [cerebras](https://cerebras.ai/)
     - [open-router](https://openrouter.ai/)
+    - [AI/ML API](https://aimlapi.com/app/?utm_source=langroid&utm_medium=github&utm_campaign=integration)
 - The LLM is running on your computer. This is a good option if your machine has sufficient RAM to accommodate the LLM you are trying to run, and if you are 
 concerned about data privacy. The most user-friendly option is [Ollama](https://github.com/ollama/ollama); see more below.
 
