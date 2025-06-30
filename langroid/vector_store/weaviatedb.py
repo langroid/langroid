@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 
@@ -177,7 +177,11 @@ class WeaviateDB(VectorStore):
             logger.info(collection_info)
             logger.setLevel(level)
 
-    def add_documents(self, documents: Sequence[Document]) -> None:
+    def add_documents(
+        self,
+        documents: Sequence[Document],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> None:
         super().maybe_add_ids(documents)
         colls = self.list_collections(empty=True)
         for doc in documents:

@@ -1,10 +1,17 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Sequence, Tuple, Type
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type
 
 import numpy as np
 import pandas as pd
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+)
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -95,6 +102,35 @@ class VectorStore(ABC):
     def embedding_dim(self) -> int:
         return len(self.embedding_fn(["test"])[0])
 
+    def _create_default_progress_callback(
+        self,
+    ) -> Tuple[Progress, Callable[[str, int, int], None]]:
+        """Create a default progress callback using rich progress bars."""
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[dim]{task.fields[info]}"),
+        )
+
+        tasks = {}
+
+        def callback(stage: str, current: int, total: int) -> None:
+            if stage not in tasks:
+                tasks[stage] = progress.add_task(
+                    f"{stage.capitalize()}...",
+                    total=total,
+                    info=f"0/{total}",
+                )
+            progress.update(
+                tasks[stage],
+                completed=current,
+                info=f"{current}/{total}",
+            )
+
+        return progress, callback
+
     @abstractmethod
     def clear_empty_collections(self) -> int:
         """Clear all empty collections in the vector store.
@@ -148,7 +184,20 @@ class VectorStore(ABC):
         pass
 
     @abstractmethod
-    def add_documents(self, documents: Sequence[Document]) -> None:
+    def add_documents(
+        self,
+        documents: Sequence[Document],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> None:
+        """
+        Add documents to the vector store.
+
+        Args:
+            documents: Sequence of documents to add
+            progress_callback: Optional callback for progress updates.
+                Called with (stage, current, total) where stage is
+                'embedding' or 'storing'.
+        """
         pass
 
     def compute_from_docs(self, docs: List[Document], calc: str) -> str:

@@ -180,7 +180,11 @@ class MeiliSearch(VectorStore):
                 primary_key=self.config.primary_key,
             )
 
-    def add_documents(self, documents: Sequence[Document]) -> None:
+    def add_documents(
+        self,
+        documents: Sequence[Document],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> None:
         super().maybe_add_ids(documents)
         if len(documents) == 0:
             return

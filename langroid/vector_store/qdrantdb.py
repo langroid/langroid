@@ -4,7 +4,16 @@ import logging
 import os
 import time
 import uuid
-from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
 
 from dotenv import load_dotenv
 
@@ -295,7 +304,11 @@ class QdrantDB(VectorStore):
             )
         return sparse_embeddings
 
-    def add_documents(self, documents: Sequence[Document]) -> None:
+    def add_documents(
+        self,
+        documents: Sequence[Document],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> None:
         from qdrant_client.http.models import (
             Batch,
             CollectionStatus,
@@ -310,8 +323,24 @@ class QdrantDB(VectorStore):
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return
+
+        # Set up progress tracking if no callback provided
+        progress_context = None
+        if progress_callback is None and len(documents) > 10:
+            # Only show progress for more than 10 documents
+            progress_context, progress_callback = (
+                self._create_default_progress_callback()
+            )
+            progress_context.__enter__()
+
         document_dicts = [doc.dict() for doc in documents]
+
+        # Generate embeddings with progress tracking
+        if progress_callback:
+            progress_callback("embedding", 0, len(documents))
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+        if progress_callback:
+            progress_callback("embedding", len(documents), len(documents))
         sparse_embedding_vecs = self.get_sparse_embeddings(
             [doc.content for doc in documents]
         )
@@ -323,7 +352,9 @@ class QdrantDB(VectorStore):
         # don't insert all at once, batch in chunks of b,
         # else we get an API error
         b = self.config.batch_size
-        for i in range(0, len(ids), b):
+        for batch_idx, i in enumerate(range(0, len(ids), b)):
+            if progress_callback:
+                progress_callback("storing", batch_idx * b, len(ids))
             vectors: Dict[str, Embeddings | List[SparseVector]] = {
                 "": embedding_vecs[i : i + b]
             }
@@ -357,6 +388,14 @@ class QdrantDB(VectorStore):
                     payloads=document_dicts[i : i + b],
                 ),
             )
+
+        # Final progress update
+        if progress_callback:
+            progress_callback("storing", len(ids), len(ids))
+
+        # Clean up progress context if we created it
+        if progress_context:
+            progress_context.__exit__(None, None, None)
 
     def delete_collection(self, collection_name: str) -> None:
         self.client.delete_collection(collection_name=collection_name)

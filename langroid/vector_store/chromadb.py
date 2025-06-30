@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
@@ -121,10 +121,24 @@ class ChromaDB(VectorStore):
             },
         )
 
-    def add_documents(self, documents: Sequence[Document]) -> None:
+    def add_documents(
+        self,
+        documents: Sequence[Document],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> None:
         super().maybe_add_ids(documents)
         if documents is None:
             return
+
+        # Set up progress tracking if no callback provided
+        progress_context = None
+        if progress_callback is None and len(documents) > 10:
+            # Only show progress for more than 10 documents
+            progress_context, progress_callback = (
+                self._create_default_progress_callback()
+            )
+            progress_context.__enter__()
+
         contents: List[str] = [document.content for document in documents]
         # convert metadatas to dicts so chroma can handle them
         metadata_dicts: List[dict[str, Any]] = [
@@ -142,12 +156,25 @@ class ChromaDB(VectorStore):
         if self.config.collection_name not in colls:
             self.create_collection(self.config.collection_name, replace=True)
 
+        # ChromaDB generates embeddings internally, so we track that phase
+        if progress_callback:
+            progress_callback("embedding", 0, len(documents))
+
         self.collection.add(
             # embedding_models=embedding_models,
             documents=contents,
             metadatas=metadata_dicts,
             ids=ids,
         )
+
+        # Progress complete
+        if progress_callback:
+            progress_callback("embedding", len(documents), len(documents))
+            progress_callback("storing", len(documents), len(documents))
+
+        # Clean up progress context if we created it
+        if progress_context:
+            progress_context.__exit__(None, None, None)
 
     def get_all_documents(self, where: str = "") -> List[Document]:
         filter = json.loads(where) if where else None

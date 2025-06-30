@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import uuid
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
@@ -323,16 +323,36 @@ class PostgresDB(VectorStore):
             ]
             return documents
 
-    def add_documents(self, documents: Sequence[Document]) -> None:
+    def add_documents(
+        self,
+        documents: Sequence[Document],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> None:
         super().maybe_add_ids(documents)
         for doc in documents:
             doc.metadata.id = str(PostgresDB._id_to_uuid(doc.metadata.id, doc.metadata))
 
+        # Set up progress tracking if no callback provided
+        progress_context = None
+        if progress_callback is None and len(documents) > 10:
+            # Only show progress for more than 10 documents
+            progress_context, progress_callback = (
+                self._create_default_progress_callback()
+            )
+            progress_context.__enter__()
+
+        # Generate embeddings with progress tracking
+        if progress_callback:
+            progress_callback("embedding", 0, len(documents))
         embeddings = self.embedding_fn([doc.content for doc in documents])
+        if progress_callback:
+            progress_callback("embedding", len(documents), len(documents))
 
         batch_size = self.config.batch_size
         with self.SessionLocal() as session:
-            for i in range(0, len(documents), batch_size):
+            for batch_idx, i in enumerate(range(0, len(documents), batch_size)):
+                if progress_callback:
+                    progress_callback("storing", i, len(documents))
                 batch_docs = documents[i : i + batch_size]
                 batch_embeddings = embeddings[i : i + batch_size]
 
@@ -350,6 +370,14 @@ class PostgresDB(VectorStore):
                     stmt = insert(self.embeddings_table).values(new_records)
                     session.execute(stmt)
                 session.commit()
+
+            # Final progress update
+            if progress_callback:
+                progress_callback("storing", len(documents), len(documents))
+
+            # Clean up progress context if we created it
+            if progress_context:
+                progress_context.__exit__(None, None, None)
 
     @staticmethod
     def _id_to_uuid(id: str, obj: object) -> str:

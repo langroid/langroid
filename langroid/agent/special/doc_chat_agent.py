@@ -23,6 +23,13 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, no_type_chec
 import nest_asyncio
 import numpy as np
 import pandas as pd
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+)
 from rich.prompt import Prompt
 
 from langroid.agent.batch import run_batch_agent_method, run_batch_tasks
@@ -534,7 +541,33 @@ class DocChatAgent(ChatAgent):
                 "No documents to ingest after processing. Skipping VecDB addition."
             )
             return 0  # Return 0 since no documents were added
-        self.vecdb.add_documents(docs)
+
+        # Create progress callback that updates both embedding and storing stages
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[dim]{task.fields[info]}"),
+        ) as progress:
+            tasks = {}
+
+            def progress_callback(stage: str, current: int, total: int) -> None:
+                if stage not in tasks:
+                    tasks[stage] = progress.add_task(
+                        f"{stage.capitalize()} documents...",
+                        total=total,
+                        info=f"0/{total}",
+                    )
+                progress.update(
+                    tasks[stage],
+                    completed=current,
+                    info=f"{current}/{total}",
+                )
+
+            # Only show progress for more than 10 documents
+            callback = progress_callback if len(docs) > 10 else None
+            self.vecdb.add_documents(docs, progress_callback=callback)
         self.original_docs_length = self.doc_length(docs)
         self.setup_documents(docs, filter=self.config.filter)
         return len(docs)

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     List,
     Literal,
@@ -237,7 +238,13 @@ class PineconeDB(VectorStore):
             logger.error(f"Failed to delete {collection_name}")
             logger.error(e)
 
-    def add_documents(self, documents: Sequence[Document], namespace: str = "") -> None:
+    def add_documents(
+        self,
+        documents: Sequence[Document],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+        *,
+        namespace: str = "",
+    ) -> None:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot ingest docs")
 

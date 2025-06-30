@@ -4,6 +4,7 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     Generator,
     List,
@@ -193,12 +194,31 @@ class LanceDB(VectorStore):
         if replace:
             self.delete_collection(collection_name)
 
-    def add_documents(self, documents: Sequence[Document]) -> None:
+    def add_documents(
+        self,
+        documents: Sequence[Document],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> None:
         super().maybe_add_ids(documents)
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return
+
+        # Set up progress tracking if no callback provided
+        progress_context = None
+        if progress_callback is None and len(documents) > 10:
+            # Only show progress for more than 10 documents
+            progress_context, progress_callback = (
+                self._create_default_progress_callback()
+            )
+            progress_context.__enter__()
+
+        # Generate embeddings with progress tracking
+        if progress_callback:
+            progress_callback("embedding", 0, len(documents))
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+        if progress_callback:
+            progress_callback("embedding", len(documents), len(documents))
         coll_name = self.config.collection_name
         if coll_name is None:
             raise ValueError("No collection name set, cannot ingest docs")
@@ -222,7 +242,9 @@ class LanceDB(VectorStore):
         b = self.config.batch_size
 
         def make_batches() -> Generator[List[Dict[str, Any]], None, None]:
-            for i in range(0, len(ids), b):
+            for batch_idx, i in enumerate(range(0, len(ids), b)):
+                if progress_callback:
+                    progress_callback("storing", batch_idx * b, len(ids))
                 batch = [
                     dict(
                         id=ids[i + j],
@@ -248,6 +270,14 @@ class LanceDB(VectorStore):
                 )
                 # ... and add the rest
                 tbl.add(batch_gen)
+
+            # Final progress update
+            if progress_callback:
+                progress_callback("storing", len(ids), len(ids))
+
+            # Clean up progress context if we created it
+            if progress_context:
+                progress_context.__exit__(None, None, None)
         except Exception as e:
             logger.error(
                 f"""
