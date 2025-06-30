@@ -119,6 +119,10 @@ async def main(model: str = ""):
         yourself. You must use the tools as many times as needed for each step and then 
         proceed to the next step. 
         
+        CRITICAL: You must call ONE TOOL only and wait for its result, 
+        and then call another tool. 
+        NEVER EVER call multiple tools at the same time.  
+        
         Once you are done, use the TOOL `{DoneTool.name()}` to return the final result.
         """
 
