@@ -314,6 +314,10 @@ class DocChatAgent(ChatAgent):
             # Note we may have used a vecdb with a config.collection_name
             # different from the agent's config.vecdb.collection_name!!
             self.vecdb.delete_collection(collection_name)
+            # Close the old vecdb before creating a new one
+            old_vecdb = self.vecdb
+            if old_vecdb and hasattr(old_vecdb, "close"):
+                old_vecdb.close()
             self.vecdb = VectorStore.create(self.vecdb.config)
         except Exception as e:
             logger.warning(

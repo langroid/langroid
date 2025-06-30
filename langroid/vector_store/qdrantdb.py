@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import uuid
-from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from dotenv import load_dotenv
 
@@ -142,6 +142,24 @@ class QdrantDB(VectorStore):
             self.create_collection(
                 config.collection_name, replace=config.replace_collection
             )
+
+    def close(self) -> None:
+        """
+        Close the QdrantDB client and release any resources (e.g., file locks).
+        This is especially important for local storage to release the .lock file.
+        """
+        if hasattr(self.client, "close"):
+            # QdrantLocal has a close method that releases the lock
+            self.client.close()
+            logger.info(f"Closed QdrantDB connection for {self.config.storage_path}")
+
+    def __enter__(self) -> "QdrantDB":
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Context manager exit - ensure cleanup even if an exception occurred."""
+        self.close()
 
     def clear_empty_collections(self) -> int:
         coll_names = self.list_collections()
