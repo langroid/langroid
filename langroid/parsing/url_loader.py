@@ -1,8 +1,9 @@
+import asyncio
 import logging
 import os
 from abc import ABC, abstractmethod
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 import markdownify as md
 from dotenv import load_dotenv
@@ -15,6 +16,15 @@ from langroid.pydantic_v1 import BaseSettings
 
 if TYPE_CHECKING:
     from firecrawl import FirecrawlApp
+
+try:
+    from crawl4ai import CrawlResult
+    from crawl4ai.content_scraping_strategy import ContentScrapingStrategy
+    from crawl4ai.deep_crawling import DeepCrawlStrategy
+    from crawl4ai.extraction_strategy import ExtractionStrategy
+    from crawl4ai.markdown_generation_strategy import MarkdownGenerationStrategy
+except ImportError:
+    LangroidImportError("crawl4ai", "crawl-4-ai")
 
 load_dotenv()
 
@@ -57,6 +67,35 @@ class ExaCrawlerConfig(BaseCrawlerConfig):
         # Allow setting of fields via env vars with prefix EXA_
         # e.g., EXA_API_KEY=your_api_key
         env_prefix = "EXA_"
+
+
+class Crawl4aiConfig(BaseCrawlerConfig):
+    """
+    Configuration for the Crawl4aiCrawler.
+    """
+
+    crawl_mode: Literal["simple", "deep"] = "simple"
+    extraction_strategy: Optional[ExtractionStrategy] = None
+    markdown_strategy: Optional[MarkdownGenerationStrategy] = None
+    deep_crawl_strategy: Optional[DeepCrawlStrategy] = None
+    scraping_strategy: Optional[ContentScrapingStrategy] = None
+
+    @property
+    def browser_config(self) -> Any:
+        """Returns fresh browser config each time"""
+        from crawl4ai.async_configs import BrowserConfig
+
+        return BrowserConfig()
+
+    @property
+    def run_config(self) -> Any:
+        """Returns fresh run config each time"""
+        from crawl4ai.async_configs import CrawlerRunConfig
+
+        return CrawlerRunConfig()
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class BaseCrawler(ABC):
@@ -163,6 +202,8 @@ class CrawlerFactory:
             return FirecrawlCrawler(config)
         elif isinstance(config, ExaCrawlerConfig):
             return ExaCrawler(config)
+        elif isinstance(config, Crawl4aiConfig):
+            return Crawl4aiCrawler(config)
         else:
             raise ValueError(f"Unsupported crawler configuration type: {type(config)}")
 
@@ -417,6 +458,157 @@ class ExaCrawler(BaseCrawler):
             logging.error(f"Error retrieving content from Exa API: {e}")
 
         return docs
+
+
+class Crawl4aiCrawler(BaseCrawler):
+    """
+    Crawler implementation using the crawl4ai library.
+
+    This crawler intelligently dispatches URLs. Standard web pages are rendered
+    and scraped using the crawl4ai browser engine. Direct links to documents
+    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
+    """
+
+    def __init__(self, config: Crawl4aiConfig) -> None:
+        """Initialize the Crawl4ai crawler."""
+        super().__init__(config)
+        self.config: Crawl4aiConfig = config
+
+    @property
+    def needs_parser(self) -> bool:
+        """
+        Indicates that this crawler relies on the framework's DocumentParser
+        for handling specific file types like PDF, DOCX, etc., which
+        the browser engine cannot parse directly.
+        """
+        return True
+
+    def crawl(self, urls: List[str]) -> List[Document]:
+        """
+        Executes the crawl by separating document URLs from web page URLs.
+
+        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
+        - Web page URLs are handled using the async crawl4ai engine.
+        """
+        all_documents: List[Document] = []
+        webpage_urls: List[str] = []
+
+        # Step 1: Separate URLs into documents and web pages
+        for url in urls:
+            parsed_doc_chunks = self._process_document(url)
+            if parsed_doc_chunks:
+                all_documents.extend(parsed_doc_chunks)
+            else:
+                webpage_urls.append(url)
+
+        # Step 2: Process web page URLs asynchronously
+        if webpage_urls:
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    import nest_asyncio
+
+                    nest_asyncio.apply()
+                web_docs = asyncio.run(self._async_crawl(webpage_urls))
+            except RuntimeError:
+                web_docs = asyncio.run(self._async_crawl(webpage_urls))
+
+            all_documents.extend(web_docs)
+
+        return all_documents
+
+    def _translate_result_to_document(
+        self, result: "CrawlResult"
+    ) -> Optional[Document]:
+        """Converts a crawl4ai CrawlResult into the framework's Document format."""
+        if not result.success:
+            logging.warning(
+                f"Crawl4ai failed for URL {result.url}: {result.error_message}"
+            )
+            return None
+
+        content = ""
+        if result.extracted_content:
+            content = result.extracted_content
+        elif result.markdown:
+            if (
+                hasattr(result.markdown, "fit_markdown")
+                and result.markdown.fit_markdown
+            ):
+                content = result.markdown.fit_markdown
+            elif hasattr(result.markdown, "raw_markdown"):
+                content = result.markdown.raw_markdown
+            else:
+                content = str(result.markdown)
+
+        if not content:
+            logging.warning(f"Crawl4ai returned no content for URL {result.url}")
+            return None
+
+        meta = DocMetaData(
+            source=result.url,
+            # title=result.metadata.get("title", "Unknown Title"),
+            # source_content=result.metadata,
+        )
+        return Document(content=content, metadata=meta)
+
+    async def _async_crawl(self, urls: List[str]) -> List[Document]:
+        try:
+            from crawl4ai import AsyncWebCrawler
+        except ImportError:
+            raise LangroidImportError(
+                "crawl4ai", "pip install 'crawl4ai[all]' or 'crawl4ai'"
+            )
+
+        # Access configs through properties - they'll be lazily loaded
+        browser_config = self.config.browser_config
+        run_config = self.config.run_config
+
+        if self.config.extraction_strategy:
+            run_config.extraction_strategy = self.config.extraction_strategy
+        if self.config.markdown_strategy:
+            run_config.markdown_generator = self.config.markdown_strategy
+        if self.config.deep_crawl_strategy:
+            run_config.deep_crawl_strategy = self.config.deep_crawl_strategy
+        if self.config.scraping_strategy:
+            run_config.scraping_strategy = self.config.scraping_strategy
+
+        crawled_documents: List[Document] = []
+
+        async with AsyncWebCrawler(config=browser_config) as crawler:
+            if self.config.crawl_mode == "simple":
+                for url in urls:
+                    result = await crawler.arun(url, config=run_config)
+                    doc = self._translate_result_to_document(result)
+                    if doc:
+                        crawled_documents.append(doc)
+
+            elif self.config.crawl_mode == "deep":
+                if not urls:
+                    return []
+                if not run_config.deep_crawl_strategy:
+                    logging.warning(
+                        "Deep crawl mode requires a deep_crawl_strategy in the config."
+                    )
+                    return []
+
+                # In deep crawl mode, `crawl4ai` will discover and crawl pages
+                # starting from the seed URL. It will not process direct document links
+                # found during the deep crawl; it is designed to follow hyperlinks.
+                crawl_results = await crawler.arun(urls[0], config=run_config)
+
+                if isinstance(crawl_results, list):
+                    for result in crawl_results:
+                        doc = self._translate_result_to_document(result)
+                        if doc:
+                            crawled_documents.append(doc)
+                else:
+                    async for result in crawl_results:
+                        doc = self._translate_result_to_document(result)
+                        if doc:
+                            crawled_documents.append(doc)
+
+        return crawled_documents
 
 
 class URLLoader:
