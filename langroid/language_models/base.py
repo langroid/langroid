@@ -92,9 +92,8 @@ class LLMConfig(BaseSettings):
     cache_config: None | CacheDBConfig = RedisCacheConfig()
     thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
 
-    # Dict of model -> (input/prompt cost, output/completion cost)
-    chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
-    completion_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
+    # Dict of model -> (input/prompt cost, input/cached cost, output/completion cost)
+    chat_cost_per_1k_tokens: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     retry_params: RetryParams = RetryParams()
 
     @property
@@ -131,7 +130,7 @@ class LLMFunctionCall(BaseModel):
             if not isinstance(dict_or_list, dict):
                 raise ValueError(
                     f"""
-                        Invalid function args: {fun_args_str} 
+                        Invalid function args: {fun_args_str}
                         parsed as {dict_or_list},
                         which is not a valid dict.
                         """
@@ -224,12 +223,14 @@ class LLMTokenUsage(BaseModel):
     """
 
     prompt_tokens: int = 0
+    cached_tokens: int = 0
     completion_tokens: int = 0
     cost: float = 0.0
     calls: int = 0  # how many API calls - not used as of 2025-04-04
 
     def reset(self) -> None:
         self.prompt_tokens = 0
+        self.cached_tokens = 0
         self.completion_tokens = 0
         self.cost = 0.0
         self.calls = 0
@@ -237,7 +238,8 @@ class LLMTokenUsage(BaseModel):
     def __str__(self) -> str:
         return (
             f"Tokens = "
-            f"(prompt {self.prompt_tokens}, completion {self.completion_tokens}), "
+            f"(prompt {self.prompt_tokens}, cached {self.cached_tokens}, "
+            f"completion {self.completion_tokens}), "
             f"Cost={self.cost}, Calls={self.calls}"
         )
 
@@ -462,9 +464,9 @@ class LanguageModel(ABC):
         if type(config) is LLMConfig:
             raise ValueError(
                 """
-                Cannot create a Language Model object from LLMConfig. 
-                Please specify a specific subclass of LLMConfig e.g., 
-                OpenAIGPTConfig. If you are creating a ChatAgent from 
+                Cannot create a Language Model object from LLMConfig.
+                Please specify a specific subclass of LLMConfig e.g.,
+                OpenAIGPTConfig. If you are creating a ChatAgent from
                 a ChatAgentConfig, please specify the `llm` field of this config
                 as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
                 """
@@ -666,7 +668,7 @@ class LanguageModel(ABC):
     def completion_context_length(self) -> int:
         return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
 
-    def chat_cost(self) -> Tuple[float, float]:
+    def chat_cost(self) -> Tuple[float, float, float]:
         return self.config.chat_cost_per_1k_tokens
 
     def reset_usage_cost(self) -> None:
@@ -754,18 +756,18 @@ class LanguageModel(ABC):
 
         prompt = f"""
         You are an expert at understanding a CHAT HISTORY between an AI Assistant
-        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP 
-        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood 
+        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP
+        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood
         WITHOUT the context of the chat history.
-        
-        Below is the CHAT HISTORY. When the User asks you to rephrase a 
-        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the 
-        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional 
+
+        Below is the CHAT HISTORY. When the User asks you to rephrase a
+        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the
+        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional
         text or context.
-        
+
         <CHAT_HISTORY>
         {history}
-        </CHAT_HISTORY>        
+        </CHAT_HISTORY>
         """.strip()
 
         follow_up_question = f"""

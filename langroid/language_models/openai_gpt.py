@@ -736,14 +736,19 @@ class OpenAIGPT(LanguageModel):
             or self.completion_info().context_length
         )
 
-    def chat_cost(self) -> Tuple[float, float]:
+    def chat_cost(self) -> Tuple[float, float, float]:
         """
-        (Prompt, Generation) cost per 1000 tokens, for chat-completion
+        (Prompt, Cached, Generation) cost per 1000 tokens, for chat-completion
         models/endpoints.
         Get it from the dict, otherwise fail-over to general method
         """
         info = self.info()
-        return (info.input_cost_per_million / 1000, info.output_cost_per_million / 1000)
+        cached_cost_per_million = info.cached_cost_per_million
+        if not cached_cost_per_million:
+            cached_cost_per_million = info.input_cost_per_million
+        return (info.input_cost_per_million / 1000,
+                cached_cost_per_million / 1000,
+                info.output_cost_per_million / 1000)
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
@@ -1399,6 +1404,11 @@ class OpenAIGPT(LanguageModel):
             # and the reasoning may be included in the message content
             # within delimiters like <think> ... </think>
             reasoning, completion = self.get_reasoning_final(completion)
+
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        cached_tokens = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+
         return (
             LLMResponse(
                 message=completion,
@@ -1408,11 +1418,13 @@ class OpenAIGPT(LanguageModel):
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
                 function_call=function_call if has_function else None,
                 usage=LLMTokenUsage(
-                    prompt_tokens=usage.get("prompt_tokens", 0),
-                    completion_tokens=usage.get("completion_tokens", 0),
+                    prompt_tokens=prompt_tokens,
+                    cached_tokens=cached_tokens,
+                    completion_tokens=completion_tokens,
                     cost=self._cost_chat_model(
-                        usage.get("prompt_tokens", 0),
-                        usage.get("completion_tokens", 0),
+                        prompt_tokens,
+                        cached_tokens,
+                        completion_tokens,
                     ),
                 ),
             ),
@@ -1449,9 +1461,11 @@ class OpenAIGPT(LanguageModel):
             return hashed_key, None
         return hashed_key, cached_val
 
-    def _cost_chat_model(self, prompt: int, completion: int) -> float:
+    def _cost_chat_model(self, prompt: int, cached: int, completion: int) -> float:
         price = self.chat_cost()
-        return (price[0] * prompt + price[1] * completion) / 1000
+        return (price[0] * (prompt - cached) +
+                price[1] * cached +
+                price[2] * completion) / 1000
 
     def _get_non_stream_token_usage(
         self, cached: bool, response: Dict[str, Any]
@@ -1469,14 +1483,24 @@ class OpenAIGPT(LanguageModel):
         """
         cost = 0.0
         prompt_tokens = 0
+        cached_tokens = 0
         completion_tokens = 0
-        if not cached and not self.get_stream() and response["usage"] is not None:
-            prompt_tokens = response["usage"]["prompt_tokens"] or 0
-            completion_tokens = response["usage"]["completion_tokens"] or 0
-            cost = self._cost_chat_model(prompt_tokens, completion_tokens)
+
+        usage = response.get("usage")
+        if not cached and not self.get_stream() and usage is not None:
+            prompt_tokens = usage.get("prompt_tokens") or 0
+            prompt_tokens_details = usage.get("prompt_tokens_details", {})
+            cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
+            completion_tokens = usage.get("completion_tokens") or 0
+            cost = self._cost_chat_model(
+                prompt_tokens, cached_tokens, completion_tokens
+            )
 
         return LLMTokenUsage(
-            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
+            prompt_tokens=prompt_tokens,
+            cached_tokens=cached_tokens,
+            completion_tokens=completion_tokens,
+            cost=cost
         )
 
     def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
