@@ -24,7 +24,7 @@ try:
     from crawl4ai.extraction_strategy import ExtractionStrategy
     from crawl4ai.markdown_generation_strategy import MarkdownGenerationStrategy
 except ImportError:
-    LangroidImportError("crawl4ai", "crawl-4-ai")
+    raise LangroidImportError("crawl4ai", "crawl-4-ai")
 
 load_dotenv()
 
@@ -517,9 +517,7 @@ class Crawl4aiCrawler(BaseCrawler):
 
         return all_documents
 
-    def _translate_result_to_document(
-        self, result: "CrawlResult"
-    ) -> Optional[Document]:
+    def _translate_result_to_document(self, result: CrawlResult) -> Optional[Document]:
         """Converts a crawl4ai CrawlResult into the framework's Document format."""
         if not result.success:
             logging.warning(
@@ -545,10 +543,29 @@ class Crawl4aiCrawler(BaseCrawler):
             logging.warning(f"Crawl4ai returned no content for URL {result.url}")
             return None
 
+        # Extract metadata safely
+        title = "Unknown Title"
+        published_date = "Unknown Date"
+
+        if result.metadata:
+            title = result.metadata.get("title", "Unknown Title")
+            # Try common date field names
+            for date_field in [
+                "published_date",
+                "datePublished",
+                "article:published_time",
+                "pubdate",
+            ]:
+                if date_field in result.metadata:
+                    published_date = result.metadata.get(date_field)
+                    break
+
         meta = DocMetaData(
             source=result.url,
-            # title=result.metadata.get("title", "Unknown Title"),
-            # source_content=result.metadata,
+            title=title,
+            published_date=published_date,
+            # Note: source_content is meant for reference content, not metadata
+            # Keeping it minimal as other crawlers don't populate it
         )
         return Document(content=content, metadata=meta)
 
