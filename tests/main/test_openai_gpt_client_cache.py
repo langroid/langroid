@@ -2,6 +2,7 @@
 Tests for OpenAIGPT client caching functionality.
 """
 
+import pytest
 from httpx import Timeout
 
 from langroid.language_models.client_cache import (
@@ -297,6 +298,51 @@ class TestOpenAIGPTClientCache:
 
         assert instance_diff.client is not instances[0].client
         assert instance_diff.async_client is not instances[0].async_client
+
+    @pytest.mark.asyncio
+    async def test_concurrent_async_achat(self):
+        """Test that multiple OpenAIGPT instances can make concurrent achat calls."""
+        import asyncio
+
+        # Create 10 OpenAIGPT instances with same config
+        # API key will be picked up from environment
+        config = OpenAIGPTConfig(
+            chat_model="gpt-4o-mini",  # Use a cheaper model for testing
+            use_cached_client=True,
+            max_output_tokens=10,  # Keep responses short for testing
+        )
+
+        instances = [OpenAIGPT(config) for _ in range(10)]
+
+        # Verify they all share the same async client
+        for i in range(1, 10):
+            assert instances[0].async_client is instances[i].async_client
+
+        # Define async function to make an achat request
+        async def make_achat_request(gpt_instance, idx):
+            """Make an async achat request."""
+            try:
+                response = await gpt_instance.achat(
+                    messages=f"what comes after {idx}?",
+                    max_tokens=10,
+                )
+                return idx, "success", response.message
+            except Exception as e:
+                return idx, "error", f"{type(e).__name__}: {str(e)}"
+
+        # Run all requests concurrently
+        tasks = [make_achat_request(inst, i) for i, inst in enumerate(instances)]
+        results = await asyncio.gather(*tasks)
+
+        # Verify all requests completed
+        assert len(results) == 10
+
+        # Verify they all succeeded
+        for idx, (req_idx, status, response) in enumerate(results):
+            assert req_idx == idx
+            assert status == "success"
+            # Response should contain the number
+            assert str(idx + 1) in response or "zero" in response.lower()
 
     def test_client_sharing_different_models(self):
         """Test client sharing with different model configurations."""
