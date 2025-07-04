@@ -45,6 +45,14 @@ from langroid.language_models.base import (
     StreamEventType,
     ToolChoiceTypes,
 )
+from langroid.language_models.client_cache import (
+    get_async_cerebras_client,
+    get_async_groq_client,
+    get_async_openai_client,
+    get_cerebras_client,
+    get_groq_client,
+    get_openai_client,
+)
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
     DeepSeekModel,
@@ -256,6 +264,9 @@ class OpenAIGPTConfig(LLMConfig):
     temperature: float = 0.2
     seed: int | None = 42
     params: OpenAICallParams | None = None
+    use_cached_client: bool = (
+        True  # Whether to reuse cached clients (prevents resource exhaustion)
+    )
     # these can be any model name that is served at an OpenAI-compatible API end point
     chat_model: str = default_openai_chat_model
     chat_model_orig: str = default_openai_chat_model
@@ -529,24 +540,26 @@ class OpenAIGPT(LanguageModel):
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
             if self.api_key == OPENAI_API_KEY:
                 self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
-            self.client = Groq(
-                api_key=self.api_key,
-            )
-            self.async_client = AsyncGroq(
-                api_key=self.api_key,
-            )
+            if self.config.use_cached_client:
+                self.client = get_groq_client(api_key=self.api_key)
+                self.async_client = get_async_groq_client(api_key=self.api_key)
+            else:
+                # Create new clients without caching
+                self.client = Groq(api_key=self.api_key)
+                self.async_client = AsyncGroq(api_key=self.api_key)
         elif self.is_cerebras:
             # use cerebras-specific client
             self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
             if self.api_key == OPENAI_API_KEY:
                 self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
-            self.client = Cerebras(
-                api_key=self.api_key,
-            )
-            # TODO there is not async client, so should we do anything here?
-            self.async_client = AsyncCerebras(
-                api_key=self.api_key,
-            )
+            if self.config.use_cached_client:
+                self.client = get_cerebras_client(api_key=self.api_key)
+                # TODO there is not async client, so should we do anything here?
+                self.async_client = get_async_cerebras_client(api_key=self.api_key)
+            else:
+                # Create new clients without caching
+                self.client = Cerebras(api_key=self.api_key)
+                self.async_client = AsyncCerebras(api_key=self.api_key)
         else:
             # in these cases, there's no specific client: OpenAI python client suffices
             if self.is_litellm_proxy:
@@ -618,20 +631,37 @@ class OpenAIGPT(LanguageModel):
                 # Add Portkey-specific headers
                 self.config.headers.update(self.config.portkey_params.get_headers())
 
-            self.client = OpenAI(
-                api_key=self.api_key,
-                base_url=self.api_base,
-                organization=self.config.organization,
-                timeout=Timeout(self.config.timeout),
-                default_headers=self.config.headers,
-            )
-            self.async_client = AsyncOpenAI(
-                api_key=self.api_key,
-                organization=self.config.organization,
-                base_url=self.api_base,
-                timeout=Timeout(self.config.timeout),
-                default_headers=self.config.headers,
-            )
+            if self.config.use_cached_client:
+                self.client = get_openai_client(
+                    api_key=self.api_key,
+                    base_url=self.api_base,
+                    organization=self.config.organization,
+                    timeout=Timeout(self.config.timeout),
+                    default_headers=self.config.headers,
+                )
+                self.async_client = get_async_openai_client(
+                    api_key=self.api_key,
+                    base_url=self.api_base,
+                    organization=self.config.organization,
+                    timeout=Timeout(self.config.timeout),
+                    default_headers=self.config.headers,
+                )
+            else:
+                # Create new clients without caching
+                self.client = OpenAI(
+                    api_key=self.api_key,
+                    base_url=self.api_base,
+                    organization=self.config.organization,
+                    timeout=Timeout(self.config.timeout),
+                    default_headers=self.config.headers,
+                )
+                self.async_client = AsyncOpenAI(
+                    api_key=self.api_key,
+                    base_url=self.api_base,
+                    organization=self.config.organization,
+                    timeout=Timeout(self.config.timeout),
+                    default_headers=self.config.headers,
+                )
 
         self.cache: CacheDB | None = None
         use_cache = self.config.cache_config is not None
