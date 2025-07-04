@@ -2068,3 +2068,15 @@ class ChatAgent(Agent):
             return str(self.message_history[i])
         else:
             return "\n".join([str(m) for m in self.message_history[i:]])
+
+    def __del__(self) -> None:
+        """
+        Cleanup method called when the ChatAgent is garbage collected.
+        Note: We don't close LLM clients here because they may be shared
+        across multiple agents when client caching is enabled.
+        The clients are managed centrally and cleaned up via atexit hooks.
+        """
+        # Previously we closed clients here, but this caused issues when
+        # multiple agents shared the same cached client instance.
+        # Clients are now managed centrally in langroid.language_models.client_cache
+        pass

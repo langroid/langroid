@@ -133,6 +133,7 @@ nav:
       - Code-Injection Protection: notes/code-injection-protection.md
       - TaskTool: notes/task-tool.md
       - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
 
   - Examples:
     - Guide: examples/guide.md
