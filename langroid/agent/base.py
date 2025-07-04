@@ -2142,7 +2142,7 @@ class Agent(ABC):
                 completion_tokens = self.num_tokens(response.message)
                 if response.function_call is not None:
                     completion_tokens += self.num_tokens(str(response.function_call))
-                cost = self.compute_token_cost(prompt_tokens, completion_tokens)
+                cost = self.compute_token_cost(prompt_tokens, 0, completion_tokens)
             response.usage = LLMTokenUsage(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
@@ -2166,9 +2166,11 @@ class Agent(ABC):
             if print_response_stats:
                 print(self.indent + self.token_stats_str)
 
-    def compute_token_cost(self, prompt: int, completion: int) -> float:
+    def compute_token_cost(self, prompt: int, cached: int, completion: int) -> float:
         price = cast(LanguageModel, self.llm).chat_cost()
-        return (price[0] * prompt + price[1] * completion) / 1000
+        return (price[0] * (prompt - cached) +
+                price[1] * cached +
+                price[2] * completion) / 1000
 
     def ask_agent(
         self,
