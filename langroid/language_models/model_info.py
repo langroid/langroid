@@ -69,7 +69,9 @@ class GeminiModel(ModelName):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
     GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
     GEMINI_1_5_PRO = "gemini-1.5-pro"
-    GEMINI_2_5_PRO = "gemini-2.5-pro-exp-02-05"
+    GEMINI_2_5_PRO = "gemini-2.5-pro"
+    GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    GEMINI_2_5_FLASH_LITE_PREVIEW = "gemini-2.5-flash-lite-preview-06-17"
     GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
     GEMINI_2_FLASH = "gemini-2.0-flash"
     GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite-preview"
@@ -418,6 +420,40 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=64_000,
         rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.0 Flash Thinking",
+    ),
+    # Gemini 2.5 Models
+    GeminiModel.GEMINI_2_5_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_536,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.31,
+        output_cost_per_million=10.0,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Pro",
+    ),
+    GeminiModel.GEMINI_2_5_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.30,
+        cached_cost_per_million=0.075,
+        output_cost_per_million=2.50,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Flash",
+    ),
+    GeminiModel.GEMINI_2_5_FLASH_LITE_PREVIEW.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH_LITE_PREVIEW.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=65_536,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=0.40,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Flash Lite Preview",
     ),
 }
 

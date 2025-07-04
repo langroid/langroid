@@ -91,9 +91,6 @@ class LLMConfig(BaseSettings):
     # reasoning output from reasoning models
     cache_config: None | CacheDBConfig = RedisCacheConfig()
     thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
-
-    # Dict of model -> (input/prompt cost, input/cached cost, output/completion cost)
-    chat_cost_per_1k_tokens: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     retry_params: RetryParams = RetryParams()
 
     @property
@@ -669,7 +666,14 @@ class LanguageModel(ABC):
         return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
 
     def chat_cost(self) -> Tuple[float, float, float]:
-        return self.config.chat_cost_per_1k_tokens
+        """
+        Return the cost per 1000 tokens for chat completions.
+
+        Returns:
+            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
+                per 1000 tokens
+        """
+        return (0.0, 0.0, 0.0)
 
     def reset_usage_cost(self) -> None:
         for mdl in [self.config.chat_model, self.config.completion_model]:

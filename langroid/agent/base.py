@@ -2168,9 +2168,9 @@ class Agent(ABC):
 
     def compute_token_cost(self, prompt: int, cached: int, completion: int) -> float:
         price = cast(LanguageModel, self.llm).chat_cost()
-        return (price[0] * (prompt - cached) +
-                price[1] * cached +
-                price[2] * completion) / 1000
+        return (
+            price[0] * (prompt - cached) + price[1] * cached + price[2] * completion
+        ) / 1000
 
     def ask_agent(
         self,

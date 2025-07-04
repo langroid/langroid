@@ -776,9 +776,11 @@ class OpenAIGPT(LanguageModel):
         cached_cost_per_million = info.cached_cost_per_million
         if not cached_cost_per_million:
             cached_cost_per_million = info.input_cost_per_million
-        return (info.input_cost_per_million / 1000,
-                cached_cost_per_million / 1000,
-                info.output_cost_per_million / 1000)
+        return (
+            info.input_cost_per_million / 1000,
+            cached_cost_per_million / 1000,
+            info.output_cost_per_million / 1000,
+        )
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
@@ -1436,7 +1438,12 @@ class OpenAIGPT(LanguageModel):
             reasoning, completion = self.get_reasoning_final(completion)
 
         prompt_tokens = usage.get("prompt_tokens", 0)
-        cached_tokens = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
+        prompt_tokens_details: Any = usage.get("prompt_tokens_details", {})
+        cached_tokens = (
+            prompt_tokens_details.get("cached_tokens", 0)
+            if isinstance(prompt_tokens_details, dict)
+            else 0
+        )
         completion_tokens = usage.get("completion_tokens", 0)
 
         return (
@@ -1493,9 +1500,9 @@ class OpenAIGPT(LanguageModel):
 
     def _cost_chat_model(self, prompt: int, cached: int, completion: int) -> float:
         price = self.chat_cost()
-        return (price[0] * (prompt - cached) +
-                price[1] * cached +
-                price[2] * completion) / 1000
+        return (
+            price[0] * (prompt - cached) + price[1] * cached + price[2] * completion
+        ) / 1000
 
     def _get_non_stream_token_usage(
         self, cached: bool, response: Dict[str, Any]
@@ -1530,7 +1537,7 @@ class OpenAIGPT(LanguageModel):
             prompt_tokens=prompt_tokens,
             cached_tokens=cached_tokens,
             completion_tokens=completion_tokens,
-            cost=cost
+            cost=cost,
         )
 
     def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:

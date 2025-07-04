@@ -165,3 +165,56 @@ async def test_agent_token_usage_async(stream):
         == agent.total_llm_token_usage
     )
     assert llm_usage.cost == agent.total_llm_token_cost
+
+
+def test_cached_tokens_tracking():
+    """Test that cached tokens are properly tracked in token usage"""
+    set_global(Settings(cache=False, stream=False))
+    cfg = _TestChatAgentConfig(llm=config)
+    agent = ChatAgent(cfg)
+    agent.llm.reset_usage_cost()
+
+    # First request - no cached tokens expected
+    question = "What is 2+2?"
+    response1 = agent.llm_response(question)
+    usage1 = response1.metadata.usage
+    assert usage1.cached_tokens == 0
+    assert usage1.prompt_tokens > 0
+    assert usage1.completion_tokens > 0
+
+    # Check cost calculation with no cached tokens
+    cost1 = agent.compute_token_cost(usage1.prompt_tokens, 0, usage1.completion_tokens)
+    assert cost1 > 0
+
+    # Check cost calculation with simulated cached tokens
+    # If half the prompt tokens were cached, cost should be lower
+    simulated_cached = usage1.prompt_tokens // 2
+    cost_with_cache = agent.compute_token_cost(
+        usage1.prompt_tokens, simulated_cached, usage1.completion_tokens
+    )
+    # With cached tokens, cost should be less (assuming cached cost < input cost)
+    assert cost_with_cache < cost1
+
+
+def test_cached_tokens_in_llm_response():
+    """Test that LLMTokenUsage properly includes cached_tokens field"""
+    from langroid.language_models.base import LLMTokenUsage
+
+    # Create token usage with cached tokens
+    usage = LLMTokenUsage(
+        prompt_tokens=100, cached_tokens=25, completion_tokens=50, cost=0.001
+    )
+
+    # Verify cached_tokens is tracked
+    assert usage.cached_tokens == 25
+    assert usage.prompt_tokens == 100
+    assert usage.completion_tokens == 50
+
+    # Test string representation includes cached tokens
+    usage_str = str(usage)
+    assert "cached 25" in usage_str
+
+    # Test reset clears cached tokens
+    usage.reset()
+    assert usage.cached_tokens == 0
+    assert usage.prompt_tokens == 0
