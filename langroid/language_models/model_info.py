@@ -69,7 +69,9 @@ class GeminiModel(ModelName):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
     GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
     GEMINI_1_5_PRO = "gemini-1.5-pro"
-    GEMINI_2_5_PRO = "gemini-2.5-pro-exp-02-05"
+    GEMINI_2_5_PRO = "gemini-2.5-pro"
+    GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    GEMINI_2_5_FLASH_LITE_PREVIEW = "gemini-2.5-flash-lite-preview-06-17"
     GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
     GEMINI_2_FLASH = "gemini-2.0-flash"
     GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite-preview"
@@ -108,6 +110,7 @@ class ModelInfo(BaseModel):
     max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
     max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
     input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
+    cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
     output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
     allows_streaming: bool = True  # Whether model supports streaming output
     allows_system_message: bool = True  # Whether model supports system messages
@@ -173,6 +176,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=1_047_576,
         max_output_tokens=32_768,
         input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
         output_cost_per_million=0.40,
         description="GPT-4.1",
     ),
@@ -182,6 +186,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=1_047_576,
         max_output_tokens=32_768,
         input_cost_per_million=0.40,
+        cached_cost_per_million=0.10,
         output_cost_per_million=1.60,
         description="GPT-4.1 Mini",
     ),
@@ -191,6 +196,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=1_047_576,
         max_output_tokens=32_768,
         input_cost_per_million=2.00,
+        cached_cost_per_million=0.50,
         output_cost_per_million=8.00,
         description="GPT-4.1",
     ),
@@ -200,6 +206,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=128_000,
         max_output_tokens=16_384,
         input_cost_per_million=2.5,
+        cached_cost_per_million=1.25,
         output_cost_per_million=10.0,
         has_structured_output=True,
         description="GPT-4o (128K context)",
@@ -210,6 +217,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=128_000,
         max_output_tokens=16_384,
         input_cost_per_million=0.15,
+        cached_cost_per_million=0.075,
         output_cost_per_million=0.60,
         has_structured_output=True,
         description="GPT-4o Mini",
@@ -220,6 +228,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=200_000,
         max_output_tokens=100_000,
         input_cost_per_million=15.0,
+        cached_cost_per_million=7.50,
         output_cost_per_million=60.0,
         allows_streaming=True,
         allows_system_message=False,
@@ -233,8 +242,9 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         provider=ModelProvider.OPENAI,
         context_length=200_000,
         max_output_tokens=100_000,
-        input_cost_per_million=10.0,
-        output_cost_per_million=40.0,
+        input_cost_per_million=2.0,
+        cached_cost_per_million=0.50,
+        output_cost_per_million=8.0,
         allows_streaming=True,
         allows_system_message=False,
         unsupported_params=["temperature"],
@@ -248,6 +258,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=128_000,
         max_output_tokens=65_536,
         input_cost_per_million=1.1,
+        cached_cost_per_million=0.55,
         output_cost_per_million=4.4,
         allows_streaming=False,
         allows_system_message=False,
@@ -262,6 +273,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=200_000,
         max_output_tokens=100_000,
         input_cost_per_million=1.1,
+        cached_cost_per_million=0.55,
         output_cost_per_million=4.4,
         allows_streaming=False,
         allows_system_message=False,
@@ -276,6 +288,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=200_000,
         max_output_tokens=100_000,
         input_cost_per_million=1.10,
+        cached_cost_per_million=0.275,
         output_cost_per_million=4.40,
         allows_streaming=False,
         allows_system_message=False,
@@ -291,6 +304,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=200_000,
         max_output_tokens=8192,
         input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
         output_cost_per_million=15.0,
         description="Claude 3.5 Sonnet",
     ),
@@ -300,6 +314,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=200_000,
         max_output_tokens=4096,
         input_cost_per_million=15.0,
+        cached_cost_per_million=1.50,
         output_cost_per_million=75.0,
         description="Claude 3 Opus",
     ),
@@ -309,6 +324,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=200_000,
         max_output_tokens=4096,
         input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
         output_cost_per_million=15.0,
         description="Claude 3 Sonnet",
     ),
@@ -318,6 +334,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=200_000,
         max_output_tokens=4096,
         input_cost_per_million=0.25,
+        cached_cost_per_million=0.03,
         output_cost_per_million=1.25,
         description="Claude 3 Haiku",
     ),
@@ -328,6 +345,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=64_000,
         max_output_tokens=8_000,
         input_cost_per_million=0.27,
+        cached_cost_per_million=0.07,
         output_cost_per_million=1.10,
         description="DeepSeek Chat",
     ),
@@ -337,6 +355,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=64_000,
         max_output_tokens=8_000,
         input_cost_per_million=0.55,
+        cached_cost_per_million=0.14,
         output_cost_per_million=2.19,
         description="DeepSeek-R1 Reasoning LM",
     ),
@@ -347,6 +366,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         context_length=1_056_768,
         max_output_tokens=8192,
         input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
         output_cost_per_million=0.40,
         rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.0 Flash",
@@ -400,6 +420,40 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=64_000,
         rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.0 Flash Thinking",
+    ),
+    # Gemini 2.5 Models
+    GeminiModel.GEMINI_2_5_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_536,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.31,
+        output_cost_per_million=10.0,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Pro",
+    ),
+    GeminiModel.GEMINI_2_5_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.30,
+        cached_cost_per_million=0.075,
+        output_cost_per_million=2.50,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Flash",
+    ),
+    GeminiModel.GEMINI_2_5_FLASH_LITE_PREVIEW.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH_LITE_PREVIEW.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=65_536,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=0.40,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Flash Lite Preview",
     ),
 }
 
