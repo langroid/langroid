@@ -17,15 +17,15 @@ from langroid.pydantic_v1 import BaseSettings
 if TYPE_CHECKING:
     from firecrawl import FirecrawlApp
 
-try:
-    from crawl4ai import CrawlResult
-    from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
-    from crawl4ai.content_scraping_strategy import ContentScrapingStrategy
-    from crawl4ai.deep_crawling import DeepCrawlStrategy
-    from crawl4ai.extraction_strategy import ExtractionStrategy
-    from crawl4ai.markdown_generation_strategy import MarkdownGenerationStrategy
-except ImportError:
-    raise LangroidImportError("crawl4ai", "crawl-4-ai")
+    try:
+        from crawl4ai import CrawlResult
+        from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
+        from crawl4ai.content_scraping_strategy import ContentScrapingStrategy
+        from crawl4ai.deep_crawling import DeepCrawlStrategy
+        from crawl4ai.extraction_strategy import ExtractionStrategy
+        from crawl4ai.markdown_generation_strategy import MarkdownGenerationStrategy
+    except ImportError:
+        raise LangroidImportError("crawl4ai", "crawl-4-ai")
 
 load_dotenv()
 
@@ -535,7 +535,9 @@ class Crawl4aiCrawler(BaseCrawler):
 
         return all_documents
 
-    def _translate_result_to_document(self, result: CrawlResult) -> Optional[Document]:
+    def _translate_result_to_document(
+        self, result: "CrawlResult"
+    ) -> Optional[Document]:
         """Converts a crawl4ai CrawlResult into the framework's Document format."""
         if not result.success:
             logging.warning(
