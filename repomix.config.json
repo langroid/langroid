@@ -1,17 +1,5 @@
 {
-  "include": [
-    "**/*.py",
-    "**/*.md",
-    "**/*.yaml",
-    "**/*.yml",
-    "**/*.toml",
-    "**/*.txt",
-    "**/*.sh",
-    "Makefile",
-    "pyproject.toml",
-    "setup.cfg",
-    ".github/**/*"
-  ],
+  "include": [],
   "ignore": {
     "useGitignore": true,
     "useDefaultPatterns": true,
@@ -20,6 +8,8 @@
       "!.github",
       "!.github/**",
       "data/**",
+      "**/data/**",
+      "**/*.csv",
       "logs/**",
       "build/**",
       "dist/**",
@@ -36,6 +26,10 @@
       "llms.txt",
       "llms-compressed.txt",
       "llms-128k.txt",
+      "llms-no-tests.txt",
+      "llms-no-tests-compressed.txt",
+      "llms-no-tests-no-examples.txt",
+      "llms-no-tests-no-examples-compressed.txt",
       "file-list.txt",
       "file-list-updated.txt",
       "examples/data/**",
