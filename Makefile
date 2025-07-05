@@ -44,8 +44,6 @@ fix-pydantic:
 	@chmod +x scripts/fix-pydantic-imports.sh
 	@./scripts/fix-pydantic-imports.sh
 
-.PHONY: check
-check: fix-pydantic lint type-check
 
 .PHONY: tests
 tests:
@@ -96,6 +94,9 @@ repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (exclude
 	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
 
 repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
+
+.PHONY: check
+check: fix-pydantic lint type-check repomix-all
 
 .PHONY: revert-tag
 revert-tag:
