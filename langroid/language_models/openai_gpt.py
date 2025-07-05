@@ -45,6 +45,14 @@ from langroid.language_models.base import (
     StreamEventType,
     ToolChoiceTypes,
 )
+from langroid.language_models.client_cache import (
+    get_async_cerebras_client,
+    get_async_groq_client,
+    get_async_openai_client,
+    get_cerebras_client,
+    get_groq_client,
+    get_openai_client,
+)
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
     DeepSeekModel,
@@ -256,6 +264,9 @@ class OpenAIGPTConfig(LLMConfig):
     temperature: float = 0.2
     seed: int | None = 42
     params: OpenAICallParams | None = None
+    use_cached_client: bool = (
+        True  # Whether to reuse cached clients (prevents resource exhaustion)
+    )
     # these can be any model name that is served at an OpenAI-compatible API end point
     chat_model: str = default_openai_chat_model
     chat_model_orig: str = default_openai_chat_model
@@ -529,24 +540,26 @@ class OpenAIGPT(LanguageModel):
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
             if self.api_key == OPENAI_API_KEY:
                 self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
-            self.client = Groq(
-                api_key=self.api_key,
-            )
-            self.async_client = AsyncGroq(
-                api_key=self.api_key,
-            )
+            if self.config.use_cached_client:
+                self.client = get_groq_client(api_key=self.api_key)
+                self.async_client = get_async_groq_client(api_key=self.api_key)
+            else:
+                # Create new clients without caching
+                self.client = Groq(api_key=self.api_key)
+                self.async_client = AsyncGroq(api_key=self.api_key)
         elif self.is_cerebras:
             # use cerebras-specific client
             self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
             if self.api_key == OPENAI_API_KEY:
                 self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
-            self.client = Cerebras(
-                api_key=self.api_key,
-            )
-            # TODO there is not async client, so should we do anything here?
-            self.async_client = AsyncCerebras(
-                api_key=self.api_key,
-            )
+            if self.config.use_cached_client:
+                self.client = get_cerebras_client(api_key=self.api_key)
+                # TODO there is not async client, so should we do anything here?
+                self.async_client = get_async_cerebras_client(api_key=self.api_key)
+            else:
+                # Create new clients without caching
+                self.client = Cerebras(api_key=self.api_key)
+                self.async_client = AsyncCerebras(api_key=self.api_key)
         else:
             # in these cases, there's no specific client: OpenAI python client suffices
             if self.is_litellm_proxy:
@@ -618,20 +631,37 @@ class OpenAIGPT(LanguageModel):
                 # Add Portkey-specific headers
                 self.config.headers.update(self.config.portkey_params.get_headers())
 
-            self.client = OpenAI(
-                api_key=self.api_key,
-                base_url=self.api_base,
-                organization=self.config.organization,
-                timeout=Timeout(self.config.timeout),
-                default_headers=self.config.headers,
-            )
-            self.async_client = AsyncOpenAI(
-                api_key=self.api_key,
-                organization=self.config.organization,
-                base_url=self.api_base,
-                timeout=Timeout(self.config.timeout),
-                default_headers=self.config.headers,
-            )
+            if self.config.use_cached_client:
+                self.client = get_openai_client(
+                    api_key=self.api_key,
+                    base_url=self.api_base,
+                    organization=self.config.organization,
+                    timeout=Timeout(self.config.timeout),
+                    default_headers=self.config.headers,
+                )
+                self.async_client = get_async_openai_client(
+                    api_key=self.api_key,
+                    base_url=self.api_base,
+                    organization=self.config.organization,
+                    timeout=Timeout(self.config.timeout),
+                    default_headers=self.config.headers,
+                )
+            else:
+                # Create new clients without caching
+                self.client = OpenAI(
+                    api_key=self.api_key,
+                    base_url=self.api_base,
+                    organization=self.config.organization,
+                    timeout=Timeout(self.config.timeout),
+                    default_headers=self.config.headers,
+                )
+                self.async_client = AsyncOpenAI(
+                    api_key=self.api_key,
+                    base_url=self.api_base,
+                    organization=self.config.organization,
+                    timeout=Timeout(self.config.timeout),
+                    default_headers=self.config.headers,
+                )
 
         self.cache: CacheDB | None = None
         use_cache = self.config.cache_config is not None
@@ -736,14 +766,21 @@ class OpenAIGPT(LanguageModel):
             or self.completion_info().context_length
         )
 
-    def chat_cost(self) -> Tuple[float, float]:
+    def chat_cost(self) -> Tuple[float, float, float]:
         """
-        (Prompt, Generation) cost per 1000 tokens, for chat-completion
+        (Prompt, Cached, Generation) cost per 1000 tokens, for chat-completion
         models/endpoints.
         Get it from the dict, otherwise fail-over to general method
         """
         info = self.info()
-        return (info.input_cost_per_million / 1000, info.output_cost_per_million / 1000)
+        cached_cost_per_million = info.cached_cost_per_million
+        if not cached_cost_per_million:
+            cached_cost_per_million = info.input_cost_per_million
+        return (
+            info.input_cost_per_million / 1000,
+            cached_cost_per_million / 1000,
+            info.output_cost_per_million / 1000,
+        )
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
@@ -1399,6 +1436,16 @@ class OpenAIGPT(LanguageModel):
             # and the reasoning may be included in the message content
             # within delimiters like <think> ... </think>
             reasoning, completion = self.get_reasoning_final(completion)
+
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        prompt_tokens_details: Any = usage.get("prompt_tokens_details", {})
+        cached_tokens = (
+            prompt_tokens_details.get("cached_tokens", 0)
+            if isinstance(prompt_tokens_details, dict)
+            else 0
+        )
+        completion_tokens = usage.get("completion_tokens", 0)
+
         return (
             LLMResponse(
                 message=completion,
@@ -1408,11 +1455,13 @@ class OpenAIGPT(LanguageModel):
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
                 function_call=function_call if has_function else None,
                 usage=LLMTokenUsage(
-                    prompt_tokens=usage.get("prompt_tokens", 0),
-                    completion_tokens=usage.get("completion_tokens", 0),
+                    prompt_tokens=prompt_tokens,
+                    cached_tokens=cached_tokens,
+                    completion_tokens=completion_tokens,
                     cost=self._cost_chat_model(
-                        usage.get("prompt_tokens", 0),
-                        usage.get("completion_tokens", 0),
+                        prompt_tokens,
+                        cached_tokens,
+                        completion_tokens,
                     ),
                 ),
             ),
@@ -1449,9 +1498,11 @@ class OpenAIGPT(LanguageModel):
             return hashed_key, None
         return hashed_key, cached_val
 
-    def _cost_chat_model(self, prompt: int, completion: int) -> float:
+    def _cost_chat_model(self, prompt: int, cached: int, completion: int) -> float:
         price = self.chat_cost()
-        return (price[0] * prompt + price[1] * completion) / 1000
+        return (
+            price[0] * (prompt - cached) + price[1] * cached + price[2] * completion
+        ) / 1000
 
     def _get_non_stream_token_usage(
         self, cached: bool, response: Dict[str, Any]
@@ -1469,14 +1520,24 @@ class OpenAIGPT(LanguageModel):
         """
         cost = 0.0
         prompt_tokens = 0
+        cached_tokens = 0
         completion_tokens = 0
-        if not cached and not self.get_stream() and response["usage"] is not None:
-            prompt_tokens = response["usage"]["prompt_tokens"] or 0
-            completion_tokens = response["usage"]["completion_tokens"] or 0
-            cost = self._cost_chat_model(prompt_tokens, completion_tokens)
+
+        usage = response.get("usage")
+        if not cached and not self.get_stream() and usage is not None:
+            prompt_tokens = usage.get("prompt_tokens") or 0
+            prompt_tokens_details = usage.get("prompt_tokens_details", {})
+            cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
+            completion_tokens = usage.get("completion_tokens") or 0
+            cost = self._cost_chat_model(
+                prompt_tokens, cached_tokens, completion_tokens
+            )
 
         return LLMTokenUsage(
-            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
+            prompt_tokens=prompt_tokens,
+            cached_tokens=cached_tokens,
+            completion_tokens=completion_tokens,
+            cost=cost,
         )
 
     def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
