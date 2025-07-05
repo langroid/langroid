@@ -94,8 +94,8 @@ This is the most basic usage. It will fetch the content of each URL and convert 
 from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
 
 urls = [
-    "https://pytorch.org/blog/introducing-torchrecipes/",
-    "https://techcrunch.com/2024/03/04/anthropic-releases-claude-3/",
+    "https://pytorch.org/",
+    "https://techcrunch.com/",
 ]
 
 # Use default settings
