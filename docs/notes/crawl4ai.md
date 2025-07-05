@@ -232,16 +232,20 @@ print(docs[0].content)
 
 To crawl an entire website or a specific section, use `deep` mode.
 
+Recommended setting is BestFirstCrawlingStrategy
+
 ```python
 from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
+from crawl4ai.deep_crawling import BestFirstCrawlingStrategy
 from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
 
-# Crawl up to 2 levels deep, for a max of 5 pages, containing 'core' in the URL
-deep_crawl_strategy = BFSDeepCrawlStrategy(
+
+deep_crawl_strategy = BestFirstCrawlingStrategy(
     max_depth=2,
-    max_pages=5,
-    filter_chain=FilterChain([URLPatternFilter(patterns=["*core*"])])
+    include_external=False,
+    url_scorer=scorer,
+    max_pages=25,              # Maximum number of pages to crawl (optional)
+    filter_chain=FilterChain([URLPatternFilter(patterns=["*core*"])]) # Pattern matching for granular control (optional)
 )
 
 crawler_config = Crawl4aiConfig(
