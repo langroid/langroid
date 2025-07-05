@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 try:
     from crawl4ai import CrawlResult
+    from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
     from crawl4ai.content_scraping_strategy import ContentScrapingStrategy
     from crawl4ai.deep_crawling import DeepCrawlStrategy
     from crawl4ai.extraction_strategy import ExtractionStrategy
@@ -69,30 +70,47 @@ class ExaCrawlerConfig(BaseCrawlerConfig):
         env_prefix = "EXA_"
 
 
+def _resolve_crawl4ai_forward_refs(cls: Any) -> Any:
+    """
+    A class decorator that resolves forward references for fields in a Pydantic
+    model that depend on the optional 'crawl4ai' library.
+    """
+    try:
+        from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig  # noqa: F401
+        from crawl4ai.content_scraping_strategy import (  # noqa: F401
+            ContentScrapingStrategy,
+        )
+        from crawl4ai.deep_crawling import DeepCrawlStrategy  # noqa: F401
+        from crawl4ai.extraction_strategy import ExtractionStrategy  # noqa: F401
+        from crawl4ai.markdown_generation_strategy import (  # noqa: F401
+            MarkdownGenerationStrategy,
+        )
+
+        #  Create a namespace dictionary from locals() but exclude 'cls'.
+        # This prevents the TypeError.
+        namespace = {name: value for name, value in locals().items() if name != "cls"}
+        cls.update_forward_refs(**namespace)
+
+    except ImportError:
+        # If crawl4ai is not installed, do nothing.
+        pass
+    return cls
+
+
+@_resolve_crawl4ai_forward_refs
 class Crawl4aiConfig(BaseCrawlerConfig):
     """
     Configuration for the Crawl4aiCrawler.
     """
 
     crawl_mode: Literal["simple", "deep"] = "simple"
-    extraction_strategy: Optional[ExtractionStrategy] = None
-    markdown_strategy: Optional[MarkdownGenerationStrategy] = None
-    deep_crawl_strategy: Optional[DeepCrawlStrategy] = None
-    scraping_strategy: Optional[ContentScrapingStrategy] = None
+    extraction_strategy: Optional["ExtractionStrategy"] = None
+    markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
+    deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
+    scraping_strategy: Optional["ContentScrapingStrategy"] = None
 
-    @property
-    def browser_config(self) -> Any:
-        """Returns fresh browser config each time"""
-        from crawl4ai.async_configs import BrowserConfig
-
-        return BrowserConfig()
-
-    @property
-    def run_config(self) -> Any:
-        """Returns fresh run config each time"""
-        from crawl4ai.async_configs import CrawlerRunConfig
-
-        return CrawlerRunConfig()
+    browser_config: Optional["BrowserConfig"] = None
+    run_config: Optional["CrawlerRunConfig"] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -572,14 +590,18 @@ class Crawl4aiCrawler(BaseCrawler):
     async def _async_crawl(self, urls: List[str]) -> List[Document]:
         try:
             from crawl4ai import AsyncWebCrawler
+
+            # Import configs here for lazy loading
+            from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
         except ImportError:
             raise LangroidImportError(
                 "crawl4ai", "pip install 'crawl4ai[all]' or 'crawl4ai'"
             )
 
-        # Access configs through properties - they'll be lazily loaded
-        browser_config = self.config.browser_config
-        run_config = self.config.run_config
+        # CHANGE 2: Handle the new optional config fields.
+        # Use the user-provided config if it exists, otherwise create a default one.
+        browser_config = self.config.browser_config or BrowserConfig()
+        run_config = self.config.run_config or CrawlerRunConfig()
 
         if self.config.extraction_strategy:
             run_config.extraction_strategy = self.config.extraction_strategy
