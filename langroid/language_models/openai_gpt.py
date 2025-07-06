@@ -203,8 +203,8 @@ class OpenAICallParams(BaseModel):
     https://platform.openai.com/docs/api-reference/chat
     """
 
-    max_tokens: int = 1024
-    temperature: float = 0.2
+    max_tokens: int | None = None
+    temperature: float | None = None
     frequency_penalty: float | None = None  # between -2 and 2
     presence_penalty: float | None = None  # between -2 and 2
     response_format: Dict[str, str] | None = None
