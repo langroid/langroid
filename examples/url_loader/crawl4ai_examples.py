@@ -368,6 +368,11 @@ def llm_content_filter_example():
     """
     print("\n--- Running llm_content_filter_example ---")
 
+    if not os.getenv("GEMINI_API_KEY"):
+        print("GEMINI_API_KEY not found. Skipping llm_extraction_example.")
+        print("Please set the GEMINI_API_KEY environment variable to run this example.")
+        return
+
     url = "https://news.ycombinator.com"  # A page with varied content
 
     llm_filter = LLMContentFilter(
