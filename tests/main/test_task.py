@@ -1071,3 +1071,70 @@ def test_done_if_tool(test_settings: Settings):
     assert result_typed is not None
     assert isinstance(result_typed, SimpleTool)
     assert result_typed.value == "hello"
+
+
+def test_task_init_preserves_parent_id():
+    """Test that task.init() preserves parent_id when deep copying ChatDocument"""
+
+    # Create an agent
+    agent = ChatAgent(ChatAgentConfig(name="TestAgent"))
+
+    # Test 1: Basic parent_id preservation
+    parent_doc = ChatDocument(
+        content="Parent message",
+        metadata=lr.agent.chat_document.ChatDocMetaData(
+            sender=Entity.USER,
+        ),
+    )
+    child_doc = ChatDocument(
+        content="Child message",
+        metadata=lr.agent.chat_document.ChatDocMetaData(
+            parent_id=parent_doc.id(),
+            sender=Entity.USER,
+        ),
+    )
+
+    task = Task(agent, interactive=False)
+    task.init(child_doc)
+
+    # The pending message should preserve the parent_id
+    assert task.pending_message is not None
+    assert task.pending_message.metadata.parent_id == parent_doc.id()
+    assert task.pending_message.content == "Child message"
+
+    # Test 2: With caller (subtask scenario)
+    caller_task = Task(agent, interactive=False, name="CallerTask")
+    sub_task = Task(agent, interactive=False, name="SubTask")
+
+    # When message already has parent_id, it should be preserved
+    msg_with_parent = ChatDocument(
+        content="Message with parent",
+        metadata=lr.agent.chat_document.ChatDocMetaData(
+            parent_id=parent_doc.id(),
+            sender=Entity.USER,
+        ),
+    )
+
+    # Set caller to simulate subtask scenario
+    sub_task.caller = caller_task
+    sub_task.init(msg_with_parent)
+
+    # Parent_id should still be preserved (not overridden to msg.id)
+    assert sub_task.pending_message is not None
+    assert sub_task.pending_message.metadata.parent_id == parent_doc.id()
+
+    # Test 3: With caller but no original parent_id
+    msg_no_parent = ChatDocument(
+        content="Message without parent",
+        metadata=lr.agent.chat_document.ChatDocMetaData(
+            sender=Entity.USER,
+        ),
+    )
+
+    sub_task2 = Task(agent, interactive=False, name="SubTask2")
+    sub_task2.caller = caller_task
+    sub_task2.init(msg_no_parent)
+
+    # Since original had no parent_id, it should be set to msg.id
+    assert sub_task2.pending_message is not None
+    assert sub_task2.pending_message.metadata.parent_id == msg_no_parent.id()

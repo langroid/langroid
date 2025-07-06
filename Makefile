@@ -44,8 +44,6 @@ fix-pydantic:
 	@chmod +x scripts/fix-pydantic-imports.sh
 	@./scripts/fix-pydantic-imports.sh
 
-.PHONY: check
-check: fix-pydantic lint type-check
 
 .PHONY: tests
 tests:
@@ -71,6 +69,34 @@ nodocs:
 loc:
 	@echo "Lines in git-tracked files python files:"
 	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
+
+.PHONY: repomix repomix-no-tests repomix-all
+
+repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
+	@echo "Generating llms.txt (with tests)..."
+	@git ls-files | repomix --stdin
+	@echo "Generating llms-compressed.txt..."
+	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
+	@echo "Generated llms.txt and llms-compressed.txt"
+
+repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
+	@echo "Generating llms-no-tests.txt (without tests)..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
+	@echo "Generating llms-no-tests-compressed.txt..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
+	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
+
+repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
+	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
+	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
+	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
+
+repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
+
+.PHONY: check
+check: fix-pydantic lint type-check repomix-all
 
 .PHONY: revert-tag
 revert-tag:

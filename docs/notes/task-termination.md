@@ -230,19 +230,43 @@ config = TaskConfig(
 
 ## Implementation Details
 
-### Message Chain Traversal
-Done sequences are checked by traversing the message history using parent pointers:
+### How Done Sequences Work
+
+Done sequences operate at the **task level** and are based on the **sequence of valid responses** generated during a task's execution. When a task runs, it maintains a `response_sequence` that tracks each message (ChatDocument) as it's processed.
+
+**Key points:**
+- Done sequences are checked only within a single task's scope
+- They track the temporal order of responses within that task
+- The response sequence is built incrementally as the task processes each step
+- Only messages that represent valid responses are added to the sequence
+
+### Response Sequence Building
+The task builds its response sequence during execution:
+
+```python
+# In task.run(), after each step:
+if self.pending_message is not None:
+    if (not self.response_sequence or 
+        self.pending_message.id() != self.response_sequence[-1].id()):
+        self.response_sequence.append(self.pending_message)
+```
+
+### Message Chain Retrieval
+Done sequences are checked against the response sequence:
 
 ```python
 def _get_message_chain(self, msg: ChatDocument, max_depth: Optional[int] = None):
-    """Efficiently traverse message history via parent pointers"""
-    chain = []
-    current = msg
-    while current and (max_depth is None or len(chain) < max_depth):
-        chain.append(current)
-        current = current.parent
-    return chain
+    """Get the chain of messages from response sequence"""
+    if max_depth is None:
+        max_depth = 50  # default
+        if self._parsed_done_sequences:
+            max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
+    
+    # Simply return the last max_depth elements from response_sequence
+    return self.response_sequence[-max_depth:]
 ```
+
+**Note:** The response sequence used for done sequences is separate from the parent-child pointer system. Parent pointers track causal relationships and lineage across agent boundaries (important for debugging and understanding delegation patterns), while response sequences track temporal order within a single task for termination checking.
 
 ### Strict Matching
 Events must occur consecutively without intervening messages:

@@ -28,14 +28,21 @@ repomix --no-files -o file-list.txt
 ```
 This allows you to review which files will be included before generating the full output.
 
-### 5. Generate Two Output Versions
-```bash
-# Standard version (uncompressed)
-repomix
+### 5. Generate Output Versions
 
-# Compressed version (smaller file size)
-repomix --compress -o llms-compressed.txt
+Use the Makefile targets to generate repomix files:
+
+```bash
+# Generate all variants (recommended)
+make repomix-all
+
+# Or generate specific versions:
+make repomix                      # llms.txt and llms-compressed.txt (includes tests)
+make repomix-no-tests             # llms-no-tests.txt and llms-no-tests-compressed.txt
+make repomix-no-tests-no-examples # llms-no-tests-no-examples.txt and compressed version
 ```
+
+All commands use `git ls-files` to ensure only git-tracked files are included.
 
 ### 6. Verify Results
 - Check file sizes and token counts in repomix output
@@ -43,8 +50,12 @@ repomix --compress -o llms-compressed.txt
 - Confirm only relevant source files are packaged
 
 ## Expected Outcome
-Two text files optimized for different LLM context windows:
-- `llms.txt`: Full version for detailed analysis
-- `llms-compressed.txt`: Compressed version for general use
+Six text files optimized for different LLM contexts:
+- `llms.txt`: Full version with tests and examples (870K tokens)
+- `llms-compressed.txt`: Compressed version with tests and examples (513K tokens)
+- `llms-no-tests.txt`: Full version without tests (677K tokens)
+- `llms-no-tests-compressed.txt`: Compressed version without tests (433K tokens)
+- `llms-no-tests-no-examples.txt`: Core library code only (no tests/examples)
+- `llms-no-tests-no-examples-compressed.txt`: Compressed core library code (285K tokens)
 
-The files should contain only git-tracked source code with proper exclusions for clean, focused LLM consumption.
+The files contain only git-tracked source code with proper exclusions for clean, focused LLM consumption.
