@@ -137,6 +137,7 @@ class Agent(ABC):
 
     def __init__(self, config: AgentConfig = AgentConfig()):
         self.config = config
+        self.id = ObjectRegistry.new_id()  # Initialize agent ID
         self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
@@ -685,6 +686,7 @@ class Agent(ABC):
             results.metadata.tool_ids = (
                 [] if msg is None or isinstance(msg, str) else msg.metadata.tool_ids
             )
+            results.metadata.agent_id = self.id
             return results
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
@@ -703,6 +705,7 @@ class Agent(ABC):
             metadata=ChatDocMetaData(
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
+                agent_id=self.id,
                 sender_name=sender_name,
                 oai_tool_id=oai_tool_id,
                 # preserve trail of tool_ids for OpenAI Assistant fn-calls
@@ -967,6 +970,7 @@ class Agent(ABC):
             return ChatDocument(
                 content=user_msg,
                 metadata=ChatDocMetaData(
+                    agent_id=self.id,
                     source=source,
                     sender=sender,
                     # preserve trail of tool_ids for OpenAI Assistant fn-calls

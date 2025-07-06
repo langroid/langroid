@@ -38,10 +38,13 @@ class TaskTool(ToolMessage):
     system_message: Optional[str] = Field(
         ...,
         description="""
-        Optional system message to configure the sub-agent's general behavior.
+        Optional system message to configure the sub-agent's general behavior and 
+        to specify the task and its context.
             A good system message will have these components:
             - Inform the sub-agent of its role, e.g. "You are a financial analyst."
-            - Clear spec of the task
+            - Clear spec of the task, with sufficient context for the sub-agent to 
+              understand what it needs to do, since the sub-agent does 
+              NOT have access to your conversation history!
             - Any additional general context needed for the task, such as a
               (part of a) document, or data items, etc.
             - Specify when to use certain tools, e.g. 
@@ -73,9 +76,10 @@ class TaskTool(ToolMessage):
         A list of tool names to enable for the sub-agent.
         This must be a list of strings referring to the names of tools
         that are known to you. 
-        If you want to enable all tools, you can set this field
-         to a singleton list containing 'ALL'
-        To disable all tools, set it to a singleton list containing 'NONE'
+        If you want to enable all tools, or you do not have any preference
+        on what tools are enabled for the sub-agent, you can set 
+        this field to a singleton list ['ALL']
+        To disable all tools, set it to a singleton list ['NONE']
         """,
     )
     # TODO: ensure valid model name
@@ -113,11 +117,20 @@ class TaskTool(ToolMessage):
         # TODO: Maybe we just copy the parent agent's config and override chat_model?
         #   -- but what if parent agent has a MockLMConfig?
         llm_config = lm.OpenAIGPTConfig(
-            chat_model=self.model or "gpt-4.1-mini",  # Default model if not specified
+            chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
         )
         config = ChatAgentConfig(
             name=agent_name,
             llm=llm_config,
+            handle_llm_no_tool=f"""
+                You forgot to use one of your TOOLs! Remember that you must either:
+                - use a tool, or a sequence of tools, to complete your task, OR
+                - if you are done with your task, use the `{DoneTool.name()}` tool
+                to return the result.
+                
+                As a reminder, this was your task:
+                {self.prompt}
+                """,
             system_message=f"""
                 {self.system_message}
                 
@@ -138,7 +151,9 @@ class TaskTool(ToolMessage):
             tool_classes = [
                 agent.llm_tools_map[t]
                 for t in agent.llm_tools_known
-                if t in agent.llm_tools_map and t != self.request
+                if t in agent.llm_tools_map
+                and t != self.request
+                and agent.llm_tools_map[t]._allow_llm_use
                 # Exclude the TaskTool itself!
             ]
         elif self.tools == ["NONE"]:
@@ -150,6 +165,7 @@ class TaskTool(ToolMessage):
                 agent.llm_tools_map[tool_name]
                 for tool_name in self.tools
                 if tool_name in agent.llm_tools_map
+                and agent.llm_tools_map[tool_name]._allow_llm_use
             ]
 
         # always enable the DoneTool to signal task completion
@@ -160,7 +176,9 @@ class TaskTool(ToolMessage):
 
         return task
 
-    def handle(self, agent: ChatAgent) -> Optional[ChatDocument]:
+    def handle(
+        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+    ) -> Optional[ChatDocument]:
         """
 
         Handle the TaskTool by creating a sub-agent with specified tools
@@ -168,24 +186,64 @@ class TaskTool(ToolMessage):
 
         Args:
             agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
         """
 
         task = self._set_up_task(agent)
-        # Run the task on the prompt, and return the result
-        result = task.run(self.prompt, turns=self.max_iterations or 10)
+
+        # Create a ChatDocument for the prompt with parent pointer
+        prompt_doc = None
+        if chat_doc is not None:
+            from langroid.agent.chat_document import ChatDocMetaData
+
+            prompt_doc = ChatDocument(
+                content=self.prompt,
+                metadata=ChatDocMetaData(
+                    parent_id=chat_doc.id(),
+                    agent_id=agent.id,
+                    sender=chat_doc.metadata.sender,
+                ),
+            )
+            # Set bidirectional parent-child relationship
+            chat_doc.metadata.child_id = prompt_doc.id()
+
+        # Run the task with the ChatDocument or string prompt
+        result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
         return result
 
-    async def handle_async(self, agent: ChatAgent) -> Optional[ChatDocument]:
+    async def handle_async(
+        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+    ) -> Optional[ChatDocument]:
         """
         Async method to handle the TaskTool by creating a sub-agent with specified tools
         and running the task non-interactively.
 
         Args:
             agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
         """
         task = self._set_up_task(agent)
-        # Run the task on the prompt, and return the result
+
+        # Create a ChatDocument for the prompt with parent pointer
+        prompt_doc = None
+        if chat_doc is not None:
+            from langroid.agent.chat_document import ChatDocMetaData
+
+            prompt_doc = ChatDocument(
+                content=self.prompt,
+                metadata=ChatDocMetaData(
+                    parent_id=chat_doc.id(),
+                    agent_id=agent.id,
+                    sender=chat_doc.metadata.sender,
+                ),
+            )
+            # Set bidirectional parent-child relationship
+            chat_doc.metadata.child_id = prompt_doc.id()
+
+        # Run the task with the ChatDocument or string prompt
         # TODO eventually allow the various task setup configs,
         #  including termination conditions
-        result = await task.run_async(self.prompt, turns=self.max_iterations or 10)
+        result = await task.run_async(
+            prompt_doc or self.prompt, turns=self.max_iterations or 10
+        )
         return result
