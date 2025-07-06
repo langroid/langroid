@@ -188,21 +188,24 @@ def test_task_tool_all_tools():
         llm=MockLMConfig(
             default_response=TaskTool(
                 agent_name="Calculator",
-                system_message="""
+                system_message=f"""
                     You are a multi-tool assistant. Use the appropriate tool
-                    to complete the task, then use DoneTool to return the result.
+                    to complete the task, then use `{DoneTool.name()}` to return the 
+                    result.
                     """,
-                prompt="Multiply 4 and 6, call it x, then compute Nebrowski(x, 5)",
+                prompt="""
+                    Multiply 4 and 6, call it x, then compute Nebrowski(x, 5)
+                    """,
                 model="gpt-4o-mini",
                 tools=["ALL"],  # Enable all tools
-                max_iterations=5,
+                max_iterations=20,
             ).json()
         ),
         name="MainAgent",
     )
     main_agent = ChatAgent(main_config)
 
-    # Enable multiple tools for the main agent
+    # Set up multiple tools for the main agent
     main_agent.enable_message(
         [TaskTool, MultiplierTool, NebrowskiTool], use=True, handle=True
     )
@@ -217,13 +220,53 @@ def test_task_tool_all_tools():
         ),
     )
 
-    # Run the task
+    # Run the task: input text is immaterial since the
+    # MockLM is hard-coded to return the TaskTool request
     result = task.run(msg="Test all tools")
 
     # Verify that the sub-agent had access to all tools
     # Expected: Multiply 4 and 6 = 24, Nebrowski(3, 5) = 14
     assert result is not None, "Task should return a result"
     assert "77" in result.content, "Result should contain 77"
+
+    # Verify that parent chain is maintained through TaskTool
+    # When TaskTool creates a prompt ChatDocument with parent_id pointing to the
+    # TaskTool message, and passes it to the subtask, the subtask's init() method
+    # should preserve that parent_id even though it deep copies the message.
+    # This ensures the parent chain is not broken.
+    assert hasattr(result, "parent"), "Result should have a parent pointer"
+
+    # Traverse up the parent chain to find the TaskTool message
+    current = result
+    task_tool_found = False
+    depth = 0
+    # Prevent infinite loops, and allow enough look-back
+    # to accommodate tool-forgetting retries that may occur.
+    max_depth = 40
+
+    while current and depth < max_depth:
+        # Check if current message is from TaskTool
+        if current.content and "task_tool" in current.content.lower():
+            task_tool_found = True
+            break
+
+        # Also check if it's a tool message with TaskTool request
+        try:
+            tool_messages = main_agent.try_get_tool_messages(current.content)
+            if tool_messages:
+                for tool_msg in tool_messages:
+                    if isinstance(tool_msg, TaskTool):
+                        task_tool_found = True
+                        break
+        except Exception:
+            pass  # Not a tool message
+
+        if task_tool_found:
+            break
+        current = current.parent
+        depth += 1
+
+    assert task_tool_found, "Parent chain should lead back to TaskTool message"
 
 
 def test_task_tool_none_tools():
@@ -235,14 +278,14 @@ def test_task_tool_none_tools():
         llm=MockLMConfig(
             default_response=TaskTool(
                 agent_name="Calculator",
-                system_message="""
+                system_message=f"""
                     You are an assistant with no tools. Just respond directly
-                    to the prompt and use DoneTool to return your answer.
+                    to the prompt and use `{DoneTool.name()}` to return your answer.
                     """,
                 prompt="What is 2 + 2? Just tell me the answer.",
                 model="gpt-4o-mini",
                 tools=["NONE"],  # Disable all tools except DoneTool
-                max_iterations=5,
+                max_iterations=20,
             ).json()
         ),
         name="MainAgent",
