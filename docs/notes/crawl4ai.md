@@ -10,7 +10,7 @@ It is local crawler, so no need for API keys.
 
 To use `Crawl4aiCrawler`, you must install the `crawl-4-ai` extra dependencies.
 
-This installs and tests for crawl4ai setup readiness.
+To install and prepare crawl4ai
 
 ```bash
 # Install langroid with crawl4ai support
@@ -84,7 +84,7 @@ config = Crawl4aiConfig(
 
 ## Usage Examples
 
-These are representative example for runnable examples check the script [`examples/url_loader/cralw4ai_examples.py`](https://github.com/langroid/langroid/blob/main/examples/url_loader/cralw4ai_examples.py)
+These are representative example for runnable examples check the script [`examples/url_loader/crawl4ai_examples.py`](https://github.com/langroid/langroid/blob/main/examples/url_loader/cralw4ai_examples.py)
 
 ### 1. Simple Crawling (Default Markdown)
 
