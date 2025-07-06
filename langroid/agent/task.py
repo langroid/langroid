@@ -409,6 +409,8 @@ class Task:
         self.llm_delegate = llm_delegate
         # Track last responder for done sequence checking
         self._last_responder: Optional[Responder] = None
+        # Track response sequence for message chain
+        self.response_sequence: List[ChatDocument] = []
         if llm_delegate:
             if self.single_round:
                 # 0: User instructs (delegating to LLM);
@@ -761,6 +763,13 @@ class Task:
         while True:
             self._step_idx = i  # used in step() below
             self.step()
+            # Track pending message in response sequence
+            if self.pending_message is not None:
+                if (
+                    not self.response_sequence
+                    or self.pending_message.id() != self.response_sequence[-1].id()
+                ):
+                    self.response_sequence.append(self.pending_message)
             done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
@@ -2257,33 +2266,15 @@ class Task:
     def _get_message_chain(
         self, msg: ChatDocument | None, max_depth: Optional[int] = None
     ) -> List[ChatDocument]:
-        """Get the chain of messages using agent's message history."""
+        """Get the chain of messages from response sequence."""
         if max_depth is None:
             # Get max depth needed from all sequences
             max_depth = 50  # default fallback
             if self._parsed_done_sequences:
                 max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
 
-        # Get chat document IDs from message history
-        doc_ids = [
-            m.chat_document_id for m in self.agent.message_history if m.chat_document_id
-        ]
-
-        # Add current message ID if it exists and is not already the last one
-        if msg:
-            msg_id = msg.id()
-            if not doc_ids or doc_ids[-1] != msg_id:
-                doc_ids.append(msg_id)
-
-        # Take only the last max_depth elements
-        relevant_ids = doc_ids[-max_depth:]
-
-        # Convert IDs to ChatDocuments and filter out None values
-        return [
-            doc
-            for doc_id in relevant_ids
-            if (doc := ChatDocument.from_id(doc_id)) is not None
-        ]
+        # Simply return the last max_depth elements from response_sequence
+        return self.response_sequence[-max_depth:]
 
     def _matches_event(self, actual: AgentEvent, expected: AgentEvent) -> bool:
         """Check if an actual event matches an expected event pattern."""
