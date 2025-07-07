@@ -45943,6 +45943,157 @@ agent.enable_message(MySubAgentTool, use=False, handle=False)
 4. **Iteration Limits**: Set reasonable limits based on task complexity
 </file>
 
+<file path="examples/basic/planner-workflow.py">
+"""
+Task: Process a number through a sequence of two steps:
+- Burify: increment the number by 3
+- Tonify: multiply the number by 4
+
+Planner Agent oversees the process, using two worker agents:
+- BurifyAgent: handles the Burify step
+- TonifyAgent: handles the Tonify step
+
+Planner checks intermediate results and provides feedback to worker agents,
+until their step is complete, before proceeding to the next step.
+
+Run like this from repo root (omit `-m` to use default model gpt-4.1-mini):
+
+    uv run examples/basic/planner-workflow.py -m gpt-4.1-mini
+"""
+⋮----
+logger = logging.getLogger(__name__)
+MODEL = lm.OpenAIChatModel.GPT4_1_MINI
+⋮----
+class BurifyTool(lr.ToolMessage)
+⋮----
+request: str = "burify_tool"
+purpose: str = "To apply the 'Burify' process to a <number>"
+number: int = Field(..., description="The number (int) to Burify")
+⋮----
+def handle(self) -> str
+⋮----
+# stateless tool: handler used in BurifyAgent
+⋮----
+class TonifyTool(lr.ToolMessage)
+⋮----
+request: str = "tonify_tool"
+purpose: str = "To apply the 'Tonify' process to a <number>"
+number: int = Field(..., description="The number (int) to Tonify")
+⋮----
+# stateless tool: handler used in TonifyAgent
+⋮----
+class BurifyCheckTool(lr.ToolMessage)
+⋮----
+request: str = "burify_check_tool"
+purpose: str = "To check if the Burify process is complete"
+number: int = Field(..., description="The number (int) to check")
+original_number: int = Field(
+⋮----
+# stateless tool
+⋮----
+class TonifyCheckTool(lr.ToolMessage)
+⋮----
+request: str = "tonify_check_tool"
+purpose: str = "To check if the Tonify process is complete"
+⋮----
+def handle(self)
+⋮----
+class BurifyRevisionTool(lr.ToolMessage)
+⋮----
+request: str = "burify_revision_tool"
+purpose: str = "To give <feedback> to the  'BurifyAgent' on their Burify Attempt"
+feedback: str = Field(..., description="Feedback for the BurifyAgent")
+⋮----
+class TonifyRevisionTool(lr.ToolMessage)
+⋮----
+request: str = "tonify_revision_tool"
+purpose: str = "To give <feedback> to the  'TonifyAgent' on their Tonify Attempt"
+feedback: str = Field(..., description="Feedback for the TonifyAgent")
+⋮----
+class BurifySubmitTool(lr.ToolMessage)
+⋮----
+request: str = "burify_submit_tool"
+purpose: str = "To submit the result of an attempt of the Burify process"
+result: int = Field(..., description="The result (int) to submit")
+⋮----
+class TonifySubmitTool(lr.ToolMessage)
+⋮----
+request: str = "tonify_submit_tool"
+purpose: str = "To submit the result of an attempt of the Tonify process"
+⋮----
+class AcceptTool(lr.ToolMessage)
+⋮----
+request: str = "accept_tool"
+purpose: str = "To accept the result of the 'Burify' or 'Tonify' process"
+result: int
+⋮----
+class PlannerConfig(lr.ChatAgentConfig)
+⋮----
+name: str = "Planner"
+steps: List[str] = ["Burify", "Tonify"]
+handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
+system_message: str = f"""
+⋮----
+class PlannerAgent(lr.ChatAgent)
+⋮----
+current_step: int
+current_num: int
+original_num: int
+⋮----
+def __init__(self, config: PlannerConfig)
+⋮----
+def burify_tool(self, msg: BurifyTool) -> str
+⋮----
+"""Handler of BurifyTool: uses/updates Agent state"""
+⋮----
+def tonify_tool(self, msg: TonifyTool) -> str
+⋮----
+"""Handler of TonifyTool: uses/updates Agent state"""
+⋮----
+def accept_tool(self, msg: AcceptTool) -> str
+⋮----
+"""Handler of AcceptTool: uses/updates Agent state"""
+curr_step_name = self.config.steps[self.current_step]
+n_steps = len(self.config.steps)
+⋮----
+# last step -> done
+⋮----
+next_step_name = self.config.steps[self.current_step]
+⋮----
+class BurifyAgentConfig(lr.ChatAgentConfig)
+⋮----
+name: str = "Burify"
+handle_llm_no_tool: str = f"You FORGOT to use the TOOL `{BurifySubmitTool.name()}`!"
+⋮----
+class TonifyAgentConfig(lr.ChatAgentConfig)
+⋮----
+name: str = "Tonify"
+handle_llm_no_tool: str = f"You FORGOT to use the TOOL `{TonifySubmitTool.name()}`!"
+⋮----
+def main(model: str = "")
+⋮----
+planner = PlannerAgent(
+⋮----
+use=True,  # LLM allowed to generate
+handle=False,  # agent cannot handle
+⋮----
+planner.enable_message(  # can use and handle
+⋮----
+burifier = lr.ChatAgent(
+⋮----
+use=False,  # LLM cannot generate
+handle=True,  # agent can handle
+⋮----
+tonifier = lr.ChatAgent(
+⋮----
+planner_task = lr.Task(planner, interactive=False)
+burifier_task = lr.Task(burifier, interactive=False)
+tonifier_task = lr.Task(tonifier, interactive=False)
+⋮----
+# Buify(5) = 5+3 = 8; Tonify(8) = 8*4 = 32
+result = planner_task.run("Sequentially all processes to this number: 5")
+</file>
+
 <file path="langroid/agent/tools/task_tool.py">
 """
 TaskTool: A tool that allows agents to delegate a task to a sub-agent with
@@ -46307,6 +46458,8 @@ self.turns = -1  # no limit
 ⋮----
 # Track last responder for done sequence checking
 ⋮----
+# Track response sequence for message chain
+⋮----
 # 0: User instructs (delegating to LLM);
 # 1: LLM (as the Controller) asks;
 # 2: user replies.
@@ -46494,6 +46647,8 @@ turns = self.turns if turns < 0 else turns
 i = 0
 ⋮----
 self._step_idx = i  # used in step() below
+⋮----
+# Track pending message in response sequence
 ⋮----
 max_turns = (
 ⋮----
@@ -47190,24 +47345,14 @@ sender_name = responder.value
 ⋮----
 sender_name = responder.name
 ⋮----
-"""Get the chain of messages using agent's message history."""
+"""Get the chain of messages from response sequence."""
 ⋮----
 # Get max depth needed from all sequences
 max_depth = 50  # default fallback
 ⋮----
 max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
 ⋮----
-# Get chat document IDs from message history
-doc_ids = [
-⋮----
-# Add current message ID if it exists and is not already the last one
-⋮----
-msg_id = msg.id()
-⋮----
-# Take only the last max_depth elements
-relevant_ids = doc_ids[-max_depth:]
-⋮----
-# Convert IDs to ChatDocuments and filter out None values
+# Simply return the last max_depth elements from response_sequence
 ⋮----
 def _matches_event(self, actual: AgentEvent, expected: AgentEvent) -> bool
 ⋮----
