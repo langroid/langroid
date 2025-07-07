@@ -1459,9 +1459,9 @@ class OpenAIGPT(LanguageModel):
                     cached_tokens=cached_tokens,
                     completion_tokens=completion_tokens,
                     cost=self._cost_chat_model(
-                        prompt_tokens,
-                        cached_tokens,
-                        completion_tokens,
+                        prompt_tokens or 0,
+                        cached_tokens or 0,
+                        completion_tokens or 0,
                     ),
                 ),
             ),
@@ -1530,7 +1530,9 @@ class OpenAIGPT(LanguageModel):
             cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
             completion_tokens = usage.get("completion_tokens") or 0
             cost = self._cost_chat_model(
-                prompt_tokens, cached_tokens, completion_tokens
+                prompt_tokens or 0,
+                cached_tokens or 0,
+                completion_tokens or 0,
             )
 
         return LLMTokenUsage(
