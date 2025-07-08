@@ -409,6 +409,8 @@ class Task:
         self.llm_delegate = llm_delegate
         # Track last responder for done sequence checking
         self._last_responder: Optional[Responder] = None
+        # Track response sequence for message chain
+        self.response_sequence: List[ChatDocument] = []
         if llm_delegate:
             if self.single_round:
                 # 0: User instructs (delegating to LLM);
@@ -615,7 +617,10 @@ class Task:
             if isinstance(msg, ChatDocument):
                 # carefully deep-copy: fresh metadata.id, register
                 # as new obj in registry
+                original_parent_id = msg.metadata.parent_id
                 self.pending_message = ChatDocument.deepcopy(msg)
+                # Preserve the parent pointer from the original message
+                self.pending_message.metadata.parent_id = original_parent_id
             if self.pending_message is not None and self.caller is not None:
                 # msg may have come from `caller`, so we pretend this is from
                 # the CURRENT task's USER entity
@@ -623,7 +628,11 @@ class Task:
                 # update parent, child, agent pointers
                 if msg is not None:
                     msg.metadata.child_id = self.pending_message.metadata.id
-                    self.pending_message.metadata.parent_id = msg.metadata.id
+                    # Only override parent_id if it wasn't already set in the
+                    # original message. This preserves parent chains from TaskTool
+                    if not msg.metadata.parent_id:
+                        self.pending_message.metadata.parent_id = msg.metadata.id
+            if self.pending_message is not None:
                 self.pending_message.metadata.agent_id = self.agent.id
 
         self._show_pending_message_if_debug()
@@ -754,6 +763,13 @@ class Task:
         while True:
             self._step_idx = i  # used in step() below
             self.step()
+            # Track pending message in response sequence
+            if self.pending_message is not None:
+                if (
+                    not self.response_sequence
+                    or self.pending_message.id() != self.response_sequence[-1].id()
+                ):
+                    self.response_sequence.append(self.pending_message)
             done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
@@ -2250,24 +2266,15 @@ class Task:
     def _get_message_chain(
         self, msg: ChatDocument | None, max_depth: Optional[int] = None
     ) -> List[ChatDocument]:
-        """Get the chain of messages by following parent pointers."""
+        """Get the chain of messages from response sequence."""
         if max_depth is None:
             # Get max depth needed from all sequences
             max_depth = 50  # default fallback
             if self._parsed_done_sequences:
                 max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
 
-        chain = []
-        current = msg
-        depth = 0
-
-        while current is not None and depth < max_depth:
-            chain.append(current)
-            current = current.parent
-            depth += 1
-
-        # Reverse to get chronological order (oldest first)
-        return list(reversed(chain))
+        # Simply return the last max_depth elements from response_sequence
+        return self.response_sequence[-max_depth:]
 
     def _matches_event(self, actual: AgentEvent, expected: AgentEvent) -> bool:
         """Check if an actual event matches an expected event pattern."""

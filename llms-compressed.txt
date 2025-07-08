@@ -518,6 +518,7 @@ release-notes/
   v0-56-0-task-tool.md
   v0-56-11-openai-client-caching.md
   v0-56-12-cached-tokens-support.md
+  v0-56-13-done-sequences-parent-chain-fixes.md
   v0-56-2-table-chat-fix.md
   v0-56-4-handler-params.md
   v0-56-6-doc-chat-refactor.md
@@ -42106,6 +42107,125 @@ None - all changes are backward compatible.
 Original implementation by @alexagr in PR #882, with enhancements in PR #884.
 </file>
 
+<file path="release-notes/v0-56-13-done-sequences-parent-chain-fixes.md">
+# v0.56.13: DoneSequences Parent Chain and Agent ID Fixes
+
+## Summary
+
+This release fixes critical issues with the DoneSequence implementation, parent pointer chain preservation in TaskTool, and agent ID initialization. These fixes ensure that task termination sequences work correctly with subtasks and that message lineage is properly maintained across agent boundaries.
+
+## Key Fixes
+
+### 1. Agent ID Initialization Fix
+
+**Problem**: The `Agent.id` field was incorrectly returning a `FieldInfo` object instead of an actual ID string because `Agent` is not a Pydantic model but was using Pydantic's `Field` syntax.
+
+**Solution**: Added proper ID initialization in `Agent.__init__()`:
+```python
+self.id = ObjectRegistry.new_id()  # Initialize agent ID
+```
+
+**Impact**: This ensures that `agent_id` is correctly set in `ChatDocument` metadata, which is crucial for tracking which agent owns which messages.
+
+### 2. DoneSequence Message Chain Fix
+
+**Problem**: The `_get_message_chain` method in `Task` was traversing parent pointers to build the message chain. When subtasks are involved, parent pointers can cross agent boundaries, incorrectly including messages from subtask agents in the parent task's chain.
+
+**Solution**: Replaced parent pointer traversal with agent message history:
+```python
+def _get_message_chain(self, msg: ChatDocument | None, max_depth: Optional[int] = None) -> List[ChatDocument]:
+    """Get the chain of messages using agent's message history."""
+    # Get chat document IDs from message history
+    doc_ids = [m.chat_document_id for m in self.agent.message_history 
+               if m.chat_document_id]
+    
+    # Add current message ID if it exists and is not already the last one
+    if msg:
+        msg_id = msg.id()
+        if not doc_ids or doc_ids[-1] != msg_id:
+            doc_ids.append(msg_id)
+    
+    # Take only the last max_depth elements
+    relevant_ids = doc_ids[-max_depth:]
+    
+    # Convert IDs to ChatDocuments
+    return [doc for doc_id in relevant_ids 
+            if (doc := ChatDocument.from_id(doc_id)) is not None]
+```
+
+**Impact**: DoneSequences now correctly check only messages from the current agent, preventing incorrect task termination when subtasks generate matching sequences.
+
+### 3. Parent Pointer Preservation in Task.init()
+
+**Problem**: When `ChatDocument.deepcopy()` is called during `task.init()`, it resets `parent_id` and `child_id` to empty strings, breaking the parent chain. This particularly affected TaskTool when creating subtasks with parent pointers.
+
+**Solution**: Modified `task.init()` to preserve the original parent_id after deepcopy:
+```python
+if isinstance(msg, ChatDocument):
+    original_parent_id = msg.metadata.parent_id
+    self.pending_message = ChatDocument.deepcopy(msg)
+    # Preserve the parent pointer from the original message
+    self.pending_message.metadata.parent_id = original_parent_id
+```
+
+Additionally, added conditional logic to only override parent_id when necessary:
+```python
+if self.pending_message is not None and self.caller is not None:
+    # Only override parent_id if it wasn't already set in the original message
+    if not msg.metadata.parent_id:
+        self.pending_message.metadata.parent_id = msg.metadata.id
+```
+
+**Impact**: Parent chains are now preserved when TaskTool creates subtasks, maintaining proper message lineage.
+
+### 4. TaskTool Parent-Child Relationship
+
+**Problem**: TaskTool was only setting the parent pointer on the prompt ChatDocument but not the corresponding child pointer on the TaskTool message.
+
+**Solution**: Added bidirectional parent-child relationship in TaskTool handlers:
+```python
+if chat_doc is not None:
+    prompt_doc = ChatDocument(
+        content=self.prompt,
+        metadata=ChatDocMetaData(
+            parent_id=chat_doc.id(),
+            agent_id=agent.id,
+            sender=chat_doc.metadata.sender,
+        )
+    )
+    # Set bidirectional parent-child relationship
+    chat_doc.metadata.child_id = prompt_doc.id()
+```
+
+**Impact**: Complete bidirectional parent-child chains are maintained, improving message traceability.
+
+## Tests Added
+
+Added comprehensive test `test_task_init_preserves_parent_id()` in `test_task.py` that verifies:
+- Parent IDs are preserved during ChatDocument deep copying
+- Conditional parent_id override logic works correctly for subtasks
+- Parent chains are maintained in various scenarios
+
+## Breaking Changes
+
+None. All changes are backward compatible bug fixes.
+
+## Migration Guide
+
+No migration needed. The fixes will automatically apply to existing code.
+
+## Technical Details
+
+The core issue was that DoneSequences were incorrectly checking messages across agent boundaries due to parent pointer traversal. Combined with the agent ID initialization bug and parent chain breaks in deepcopy, this caused incorrect task termination behavior. The fixes ensure:
+
+1. Each agent's messages are properly tagged with the agent's ID
+2. DoneSequence checking is confined to the current agent's message history
+3. Parent chains are preserved through TaskTool subtask creation
+4. Bidirectional parent-child relationships are maintained
+
+These changes work together to ensure proper message lineage and task termination behavior in multi-agent systems.
+</file>
+
 <file path="release-notes/v0-56-2-table-chat-fix.md">
 # Release Notes - v0.56.2
 
@@ -44389,376 +44509,6 @@ The method was enhanced to support direct type checking of handler parameters:
 
 ## Related PR
 This investigation was prompted by PR #861 "MCP updates" which made changes to how `FastMCPServer` forwards image context and resources, and added optional persistence for MCP server connections. The handler parameter analysis improvements were made to support more robust type checking for MCP tool handlers.
-</file>
-
-<file path="docs/notes/task-termination.md">
-# Task Termination in Langroid
-
-## Why Task Termination Matters
-
-When building agent-based systems, one of the most critical yet challenging aspects is determining when a task should complete. Unlike traditional programs with clear exit points, agent conversations can meander, loop, or continue indefinitely. Getting termination wrong leads to two equally problematic scenarios:
-
-**Terminating too early** means missing crucial information or cutting off an agent mid-process. Imagine an agent that searches for information, finds it, but terminates before it can process or summarize the results. The task completes "successfully" but fails to deliver value.
-
-**Terminating too late** wastes computational resources, frustrates users, and can lead to repetitive loops where agents keep responding without making progress. We've all experienced chatbots that won't stop talking or systems that keep asking "Is there anything else?" long after the conversation should have ended. Even worse, agents can fall into infinite loops—repeatedly exchanging the same messages, calling the same tools, or cycling through states without making progress. These loops not only waste resources but can rack up significant costs when using paid LLM APIs.
-
-The challenge is that the "right" termination point depends entirely on context. A customer service task might complete after resolving an issue and confirming satisfaction. A research task might need to gather multiple sources, synthesize them, and present findings. A calculation task should end after computing and presenting the result. Each scenario requires different termination logic.
-
-Traditionally, developers would subclass `Task` and override the `done()` method with custom logic. While flexible, this approach scattered termination logic across multiple subclasses, making systems harder to understand and maintain. It also meant that common patterns—like "complete after tool use" or "stop when the user says goodbye"—had to be reimplemented repeatedly.
-
-This guide introduces Langroid's declarative approach to task termination, culminating in the powerful `done_sequences` feature. Instead of writing imperative code, you can now describe *what* patterns should trigger completion, and Langroid handles the *how*. This makes your agent systems more predictable, maintainable, and easier to reason about.
-
-## Table of Contents
-- [Overview](#overview)
-- [Basic Termination Methods](#basic-termination-methods)
-- [Done Sequences: Event-Based Termination](#done-sequences-event-based-termination)
-  - [Concept](#concept)
-  - [DSL Syntax (Recommended)](#dsl-syntax-recommended)
-  - [Full Object Syntax](#full-object-syntax)
-  - [Event Types](#event-types)
-  - [Examples](#examples)
-- [Implementation Details](#implementation-details)
-- [Best Practices](#best-practices)
-- [Reference](#reference)
-
-## Overview
-
-In Langroid, a `Task` wraps an `Agent` and manages the conversation flow. Controlling when a task terminates is crucial for building reliable agent systems. Langroid provides several methods for task termination, from simple flags to sophisticated event sequence matching.
-
-## Basic Termination Methods
-
-### 1. Turn Limits
-```python
-# Task runs for exactly 5 turns
-result = task.run("Start conversation", turns=5)
-```
-
-### 2. Single Round Mode
-```python
-# Task completes after one exchange
-config = TaskConfig(single_round=True)
-task = Task(agent, config=config)
-```
-
-### 3. Done If Tool
-```python
-# Task completes when any tool is generated
-config = TaskConfig(done_if_tool=True)
-task = Task(agent, config=config)
-```
-
-### 4. Done If Response/No Response
-```python
-# Task completes based on response from specific entities
-config = TaskConfig(
-    done_if_response=[Entity.LLM],      # Done if LLM responds
-    done_if_no_response=[Entity.USER]   # Done if USER doesn't respond
-)
-```
-
-### 5. String Signals
-```python
-# Task completes when special strings like "DONE" are detected
-# (enabled by default with recognize_string_signals=True)
-```
-
-### 6. Orchestration Tools
-```python
-# Using DoneTool, FinalResultTool, etc.
-from langroid.agent.tools.orchestration import DoneTool
-agent.enable_message(DoneTool)
-```
-
-## Done Sequences: Event-Based Termination
-
-### Concept
-
-The `done_sequences` feature allows you to specify sequences of events that trigger task completion. This provides fine-grained control over task termination based on conversation patterns.
-
-**Key Features:**
-
-- Specify multiple termination sequences
-- Use convenient DSL syntax or full object syntax
-- Strict consecutive matching (no skipping events)
-- Efficient implementation using message parent pointers
-
-### DSL Syntax (Recommended)
-
-The DSL (Domain Specific Language) provides a concise way to specify sequences:
-
-```python
-from langroid.agent.task import Task, TaskConfig
-
-config = TaskConfig(
-    done_sequences=[
-        "T, A",                    # Tool followed by agent response
-        "T[calculator], A",        # Specific calculator tool
-        "L, T, A, L",              # LLM, tool, agent, LLM sequence
-        "C[quit|exit|bye]",        # Content matching regex
-        "U, L, A",                 # User, LLM, agent sequence
-    ]
-)
-task = Task(agent, config=config)
-```
-
-#### DSL Pattern Reference
-
-| Pattern | Description | Event Type |
-|---------|-------------|------------|
-| `T` | Any tool | `TOOL` |
-| `T[name]` | Specific tool by name | `SPECIFIC_TOOL` |
-| `A` | Agent response | `AGENT_RESPONSE` |
-| `L` | LLM response | `LLM_RESPONSE` |
-| `U` | User response | `USER_RESPONSE` |
-| `N` | No response | `NO_RESPONSE` |
-| `C[pattern]` | Content matching regex | `CONTENT_MATCH` |
-
-**Examples:**
-
-- `"T, A"` - Any tool followed by agent handling
-- `"T[search], A, T[calculator], A"` - Search tool, then calculator tool
-- `"L, C[complete|done|finished]"` - LLM response containing completion words
-- `"TOOL, AGENT"` - Full words also supported
-
-### Full Object Syntax
-
-For more control, use the full object syntax:
-
-```python
-from langroid.agent.task import (
-    Task, TaskConfig, DoneSequence, AgentEvent, EventType
-)
-
-config = TaskConfig(
-    done_sequences=[
-        DoneSequence(
-            name="tool_handled",
-            events=[
-                AgentEvent(event_type=EventType.TOOL),
-                AgentEvent(event_type=EventType.AGENT_RESPONSE),
-            ]
-        ),
-        DoneSequence(
-            name="specific_tool_pattern",
-            events=[
-                AgentEvent(
-                    event_type=EventType.SPECIFIC_TOOL,
-                    tool_name="calculator"
-                ),
-                AgentEvent(event_type=EventType.AGENT_RESPONSE),
-            ]
-        ),
-    ]
-)
-```
-
-### Event Types
-
-The following event types are available:
-
-| EventType | Description | Additional Parameters |
-|-----------|-------------|----------------------|
-| `TOOL` | Any tool message generated | - |
-| `SPECIFIC_TOOL` | Specific tool by name | `tool_name` |
-| `LLM_RESPONSE` | LLM generates a response | - |
-| `AGENT_RESPONSE` | Agent responds (e.g., handles tool) | - |
-| `USER_RESPONSE` | User provides input | - |
-| `CONTENT_MATCH` | Response matches regex pattern | `content_pattern` |
-| `NO_RESPONSE` | No valid response from entity | - |
-
-### Examples
-
-#### Example 1: Tool Completion
-Task completes after any tool is used and handled:
-
-```python
-config = TaskConfig(done_sequences=["T, A"])
-```
-
-This is equivalent to `done_if_tool=True` but happens after the agent handles the tool.
-
-#### Example 2: Multi-Step Process
-Task completes after a specific conversation pattern:
-
-```python
-config = TaskConfig(
-    done_sequences=["L, T[calculator], A, L"]
-)
-# Completes after: LLM response → calculator tool → agent handles → LLM summary
-```
-
-#### Example 3: Multiple Exit Conditions
-Different ways to complete the task:
-
-```python
-config = TaskConfig(
-    done_sequences=[
-        "C[quit|exit|bye]",           # User says quit
-        "T[calculator], A",           # Calculator used
-        "T[search], A, T[search], A", # Two searches performed
-    ]
-)
-```
-
-#### Example 4: Mixed Syntax
-Combine DSL strings and full objects:
-
-```python
-config = TaskConfig(
-    done_sequences=[
-        "T, A",  # Simple DSL
-        DoneSequence(  # Full control
-            name="complex_check",
-            events=[
-                AgentEvent(
-                    event_type=EventType.SPECIFIC_TOOL,
-                    tool_name="database_query",
-                    responder="DatabaseAgent"  # Can specify responder
-                ),
-                AgentEvent(event_type=EventType.AGENT_RESPONSE),
-            ]
-        ),
-    ]
-)
-```
-
-## Implementation Details
-
-### Message Chain Traversal
-Done sequences are checked by traversing the message history using parent pointers:
-
-```python
-def _get_message_chain(self, msg: ChatDocument, max_depth: Optional[int] = None):
-    """Efficiently traverse message history via parent pointers"""
-    chain = []
-    current = msg
-    while current and (max_depth is None or len(chain) < max_depth):
-        chain.append(current)
-        current = current.parent
-    return chain
-```
-
-### Strict Matching
-Events must occur consecutively without intervening messages:
-
-```python
-# This sequence: [TOOL, AGENT_RESPONSE]
-# Matches: USER → LLM(tool) → AGENT
-# Does NOT match: USER → LLM(tool) → USER → AGENT
-```
-
-### Performance
-
-- Efficient O(n) traversal where n is sequence length
-- No full history scan needed
-- Early termination on first matching sequence
-
-## Best Practices
-
-1. **Use DSL for Simple Cases**
-   ```python
-   # Good: Clear and concise
-   done_sequences=["T, A"]
-   
-   # Avoid: Verbose for simple patterns
-   done_sequences=[DoneSequence(events=[...])]
-   ```
-
-2. **Name Your Sequences**
-   ```python
-   DoneSequence(
-       name="calculation_complete",  # Helps with debugging
-       events=[...]
-   )
-   ```
-
-3. **Order Matters**
-   - Put more specific sequences first
-   - General patterns at the end
-
-4. **Test Your Sequences**
-   ```python
-   # Use MockLM for testing
-   agent = ChatAgent(
-       ChatAgentConfig(
-           llm=MockLMConfig(response_fn=lambda x: "test response")
-       )
-   )
-   ```
-
-5. **Combine with Other Methods**
-   ```python
-   config = TaskConfig(
-       done_if_tool=True,      # Quick exit on any tool
-       done_sequences=["L, L, L"],  # Or after 3 LLM responses
-       max_turns=10,           # Hard limit
-   )
-   ```
-
-## Reference
-
-### Code Examples
-- **Basic example**: [`examples/basic/done_sequences_example.py`](../../examples/basic/done_sequences_example.py)
-- **Test cases**: [`tests/main/test_done_sequences.py`](../../tests/main/test_done_sequences.py)
-- **DSL tests**: [`tests/main/test_done_sequences_dsl.py`](../../tests/main/test_done_sequences_dsl.py)
-- **Parser tests**: [`tests/main/test_done_sequence_parser.py`](../../tests/main/test_done_sequence_parser.py)
-
-### Core Classes
-- `TaskConfig` - Configuration including `done_sequences`
-- `DoneSequence` - Container for event sequences
-- `AgentEvent` - Individual event in a sequence
-- `EventType` - Enumeration of event types
-
-### Parser Module
-- `langroid.agent.done_sequence_parser` - DSL parsing functionality
-
-### Task Methods
-- `Task.done()` - Main method that checks sequences
-- `Task._matches_sequence_with_current()` - Sequence matching logic
-- `Task._classify_event()` - Event classification
-- `Task._get_message_chain()` - Message traversal
-
-## Migration Guide
-
-If you're currently overriding `Task.done()`:
-
-```python
-# Before: Custom done() method
-class MyTask(Task):
-    def done(self, result=None, r=None):
-        if some_complex_logic(result):
-            return (True, StatusCode.DONE)
-        return super().done(result, r)
-
-# After: Use done_sequences
-config = TaskConfig(
-    done_sequences=["T[my_tool], A, L"]  # Express as sequence
-)
-task = Task(agent, config=config)  # No subclassing needed
-```
-
-## Troubleshooting
-
-**Sequence not matching?**
-
-- Check that events are truly consecutive (no intervening messages)
-- Use logging to see the actual message chain
-- Verify tool names match exactly
-
-**Type errors with DSL?**
-
-- Ensure you're using strings for DSL patterns
-- Check that tool names in `T[name]` don't contain special characters
-
-**Performance concerns?**
-
-- Sequences only traverse as deep as needed
-- Consider shorter sequences for better performance
-- Use specific tool names to avoid unnecessary checks
-
-## Summary
-
-The `done_sequences` feature provides a powerful, declarative way to control task termination based on conversation patterns. The DSL syntax makes common cases simple while the full object syntax provides complete control when needed. This approach eliminates the need to subclass `Task` and override `done()` for most use cases, leading to cleaner, more maintainable code.
 </file>
 
 <file path="examples/basic/multi-agent-search-critic-no-orch/main.py">
@@ -54151,9 +53901,6 @@ agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
 # TODO: Maybe we just copy the parent agent's config and override chat_model?
 #   -- but what if parent agent has a MockLMConfig?
 llm_config = lm.OpenAIGPTConfig(
-⋮----
-chat_model=self.model or "gpt-4.1-mini",  # Default model if not specified
-⋮----
 config = ChatAgentConfig(
 ⋮----
 # Create the sub-agent
@@ -54178,8 +53925,6 @@ tool_classes = []
 # Create a non-interactive task
 task = Task(sub_agent, interactive=False)
 ⋮----
-def handle(self, agent: ChatAgent) -> Optional[ChatDocument]
-⋮----
 """
 
         Handle the TaskTool by creating a sub-agent with specified tools
@@ -54187,13 +53932,19 @@ def handle(self, agent: ChatAgent) -> Optional[ChatDocument]
 
         Args:
             agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
         """
 ⋮----
 task = self._set_up_task(agent)
-# Run the task on the prompt, and return the result
-result = task.run(self.prompt, turns=self.max_iterations or 10)
 ⋮----
-async def handle_async(self, agent: ChatAgent) -> Optional[ChatDocument]
+# Create a ChatDocument for the prompt with parent pointer
+prompt_doc = None
+⋮----
+prompt_doc = ChatDocument(
+# Set bidirectional parent-child relationship
+⋮----
+# Run the task with the ChatDocument or string prompt
+result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
 ⋮----
 """
         Async method to handle the TaskTool by creating a sub-agent with specified tools
@@ -54201,11 +53952,12 @@ async def handle_async(self, agent: ChatAgent) -> Optional[ChatDocument]
 
         Args:
             agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
         """
 ⋮----
 # TODO eventually allow the various task setup configs,
 #  including termination conditions
-result = await task.run_async(self.prompt, turns=self.max_iterations or 10)
+result = await task.run_async(
 </file>
 
 <file path="langroid/agent/task.py">
@@ -54466,6 +54218,8 @@ self.turns = -1  # no limit
 ⋮----
 # Track last responder for done sequence checking
 ⋮----
+# Track response sequence for message chain
+⋮----
 # 0: User instructs (delegating to LLM);
 # 1: LLM (as the Controller) asks;
 # 2: user replies.
@@ -54596,11 +54350,17 @@ last_agent_msg = self.agent.message_history[-1]
 ⋮----
 # carefully deep-copy: fresh metadata.id, register
 # as new obj in registry
+original_parent_id = msg.metadata.parent_id
+⋮----
+# Preserve the parent pointer from the original message
 ⋮----
 # msg may have come from `caller`, so we pretend this is from
 # the CURRENT task's USER entity
 ⋮----
 # update parent, child, agent pointers
+⋮----
+# Only override parent_id if it wasn't already set in the
+# original message. This preserves parent chains from TaskTool
 ⋮----
 def init_loggers(self) -> None
 ⋮----
@@ -54647,6 +54407,8 @@ turns = self.turns if turns < 0 else turns
 i = 0
 ⋮----
 self._step_idx = i  # used in step() below
+⋮----
+# Track pending message in response sequence
 ⋮----
 max_turns = (
 ⋮----
@@ -55343,20 +55105,14 @@ sender_name = responder.value
 ⋮----
 sender_name = responder.name
 ⋮----
-"""Get the chain of messages by following parent pointers."""
+"""Get the chain of messages from response sequence."""
 ⋮----
 # Get max depth needed from all sequences
 max_depth = 50  # default fallback
 ⋮----
 max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
 ⋮----
-chain = []
-current = msg
-depth = 0
-⋮----
-current = current.parent
-⋮----
-# Reverse to get chronological order (oldest first)
+# Simply return the last max_depth elements from response_sequence
 ⋮----
 def _matches_event(self, actual: AgentEvent, expected: AgentEvent) -> bool
 ⋮----
@@ -57712,6 +57468,7 @@ oai_tool_id2call: Dict[str, OpenAIToolCall] = {}
 ⋮----
 def __init__(self, config: AgentConfig = AgentConfig())
 ⋮----
+self.id = ObjectRegistry.new_id()  # Initialize agent ID
 self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
 self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
 ⋮----
@@ -58729,189 +58486,6 @@ user_response = Prompt.ask(
 answer = agent.llm_response(request)
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path=".pre-commit-config.yaml">
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -58924,7 +58498,7 @@ repos:
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.56.12"
+version = "0.56.13"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

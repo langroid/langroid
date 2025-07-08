@@ -305,6 +305,7 @@ release-notes/
   v0-56-0-task-tool.md
   v0-56-11-openai-client-caching.md
   v0-56-12-cached-tokens-support.md
+  v0-56-13-done-sequences-parent-chain-fixes.md
   v0-56-2-table-chat-fix.md
   v0-56-4-handler-params.md
   v0-56-6-doc-chat-refactor.md
@@ -41987,10 +41988,13 @@ class TaskTool(ToolMessage):
     system_message: Optional[str] = Field(
         ...,
         description="""
-        Optional system message to configure the sub-agent's general behavior.
+        Optional system message to configure the sub-agent's general behavior and 
+        to specify the task and its context.
             A good system message will have these components:
             - Inform the sub-agent of its role, e.g. "You are a financial analyst."
-            - Clear spec of the task
+            - Clear spec of the task, with sufficient context for the sub-agent to 
+              understand what it needs to do, since the sub-agent does 
+              NOT have access to your conversation history!
             - Any additional general context needed for the task, such as a
               (part of a) document, or data items, etc.
             - Specify when to use certain tools, e.g. 
@@ -42022,9 +42026,10 @@ class TaskTool(ToolMessage):
         A list of tool names to enable for the sub-agent.
         This must be a list of strings referring to the names of tools
         that are known to you. 
-        If you want to enable all tools, you can set this field
-         to a singleton list containing 'ALL'
-        To disable all tools, set it to a singleton list containing 'NONE'
+        If you want to enable all tools, or you do not have any preference
+        on what tools are enabled for the sub-agent, you can set 
+        this field to a singleton list ['ALL']
+        To disable all tools, set it to a singleton list ['NONE']
         """,
     )
     # TODO: ensure valid model name
@@ -42062,11 +42067,20 @@ class TaskTool(ToolMessage):
         # TODO: Maybe we just copy the parent agent's config and override chat_model?
         #   -- but what if parent agent has a MockLMConfig?
         llm_config = lm.OpenAIGPTConfig(
-            chat_model=self.model or "gpt-4.1-mini",  # Default model if not specified
+            chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
         )
         config = ChatAgentConfig(
             name=agent_name,
             llm=llm_config,
+            handle_llm_no_tool=f"""
+                You forgot to use one of your TOOLs! Remember that you must either:
+                - use a tool, or a sequence of tools, to complete your task, OR
+                - if you are done with your task, use the `{DoneTool.name()}` tool
+                to return the result.
+                
+                As a reminder, this was your task:
+                {self.prompt}
+                """,
             system_message=f"""
                 {self.system_message}
                 
@@ -42087,7 +42101,9 @@ class TaskTool(ToolMessage):
             tool_classes = [
                 agent.llm_tools_map[t]
                 for t in agent.llm_tools_known
-                if t in agent.llm_tools_map and t != self.request
+                if t in agent.llm_tools_map
+                and t != self.request
+                and agent.llm_tools_map[t]._allow_llm_use
                 # Exclude the TaskTool itself!
             ]
         elif self.tools == ["NONE"]:
@@ -42099,6 +42115,7 @@ class TaskTool(ToolMessage):
                 agent.llm_tools_map[tool_name]
                 for tool_name in self.tools
                 if tool_name in agent.llm_tools_map
+                and agent.llm_tools_map[tool_name]._allow_llm_use
             ]
 
         # always enable the DoneTool to signal task completion
@@ -42109,7 +42126,9 @@ class TaskTool(ToolMessage):
 
         return task
 
-    def handle(self, agent: ChatAgent) -> Optional[ChatDocument]:
+    def handle(
+        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+    ) -> Optional[ChatDocument]:
         """
 
         Handle the TaskTool by creating a sub-agent with specified tools
@@ -42117,26 +42136,66 @@ class TaskTool(ToolMessage):
 
         Args:
             agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
         """
 
         task = self._set_up_task(agent)
-        # Run the task on the prompt, and return the result
-        result = task.run(self.prompt, turns=self.max_iterations or 10)
+
+        # Create a ChatDocument for the prompt with parent pointer
+        prompt_doc = None
+        if chat_doc is not None:
+            from langroid.agent.chat_document import ChatDocMetaData
+
+            prompt_doc = ChatDocument(
+                content=self.prompt,
+                metadata=ChatDocMetaData(
+                    parent_id=chat_doc.id(),
+                    agent_id=agent.id,
+                    sender=chat_doc.metadata.sender,
+                ),
+            )
+            # Set bidirectional parent-child relationship
+            chat_doc.metadata.child_id = prompt_doc.id()
+
+        # Run the task with the ChatDocument or string prompt
+        result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
         return result
 
-    async def handle_async(self, agent: ChatAgent) -> Optional[ChatDocument]:
+    async def handle_async(
+        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+    ) -> Optional[ChatDocument]:
         """
         Async method to handle the TaskTool by creating a sub-agent with specified tools
         and running the task non-interactively.
 
         Args:
             agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
         """
         task = self._set_up_task(agent)
-        # Run the task on the prompt, and return the result
+
+        # Create a ChatDocument for the prompt with parent pointer
+        prompt_doc = None
+        if chat_doc is not None:
+            from langroid.agent.chat_document import ChatDocMetaData
+
+            prompt_doc = ChatDocument(
+                content=self.prompt,
+                metadata=ChatDocMetaData(
+                    parent_id=chat_doc.id(),
+                    agent_id=agent.id,
+                    sender=chat_doc.metadata.sender,
+                ),
+            )
+            # Set bidirectional parent-child relationship
+            chat_doc.metadata.child_id = prompt_doc.id()
+
+        # Run the task with the ChatDocument or string prompt
         # TODO eventually allow the various task setup configs,
         #  including termination conditions
-        result = await task.run_async(self.prompt, turns=self.max_iterations or 10)
+        result = await task.run_async(
+            prompt_doc or self.prompt, turns=self.max_iterations or 10
+        )
         return result
 </file>
 
@@ -42552,6 +42611,8 @@ class Task:
         self.llm_delegate = llm_delegate
         # Track last responder for done sequence checking
         self._last_responder: Optional[Responder] = None
+        # Track response sequence for message chain
+        self.response_sequence: List[ChatDocument] = []
         if llm_delegate:
             if self.single_round:
                 # 0: User instructs (delegating to LLM);
@@ -42758,7 +42819,10 @@ class Task:
             if isinstance(msg, ChatDocument):
                 # carefully deep-copy: fresh metadata.id, register
                 # as new obj in registry
+                original_parent_id = msg.metadata.parent_id
                 self.pending_message = ChatDocument.deepcopy(msg)
+                # Preserve the parent pointer from the original message
+                self.pending_message.metadata.parent_id = original_parent_id
             if self.pending_message is not None and self.caller is not None:
                 # msg may have come from `caller`, so we pretend this is from
                 # the CURRENT task's USER entity
@@ -42766,7 +42830,11 @@ class Task:
                 # update parent, child, agent pointers
                 if msg is not None:
                     msg.metadata.child_id = self.pending_message.metadata.id
-                    self.pending_message.metadata.parent_id = msg.metadata.id
+                    # Only override parent_id if it wasn't already set in the
+                    # original message. This preserves parent chains from TaskTool
+                    if not msg.metadata.parent_id:
+                        self.pending_message.metadata.parent_id = msg.metadata.id
+            if self.pending_message is not None:
                 self.pending_message.metadata.agent_id = self.agent.id
 
         self._show_pending_message_if_debug()
@@ -42897,6 +42965,13 @@ class Task:
         while True:
             self._step_idx = i  # used in step() below
             self.step()
+            # Track pending message in response sequence
+            if self.pending_message is not None:
+                if (
+                    not self.response_sequence
+                    or self.pending_message.id() != self.response_sequence[-1].id()
+                ):
+                    self.response_sequence.append(self.pending_message)
             done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
@@ -44393,24 +44468,15 @@ class Task:
     def _get_message_chain(
         self, msg: ChatDocument | None, max_depth: Optional[int] = None
     ) -> List[ChatDocument]:
-        """Get the chain of messages by following parent pointers."""
+        """Get the chain of messages from response sequence."""
         if max_depth is None:
             # Get max depth needed from all sequences
             max_depth = 50  # default fallback
             if self._parsed_done_sequences:
                 max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
 
-        chain = []
-        current = msg
-        depth = 0
-
-        while current is not None and depth < max_depth:
-            chain.append(current)
-            current = current.parent
-            depth += 1
-
-        # Reverse to get chronological order (oldest first)
-        return list(reversed(chain))
+        # Simply return the last max_depth elements from response_sequence
+        return self.response_sequence[-max_depth:]
 
     def _matches_event(self, actual: AgentEvent, expected: AgentEvent) -> bool:
         """Check if an actual event matches an expected event pattern."""
@@ -48041,6 +48107,7 @@ class Agent(ABC):
 
     def __init__(self, config: AgentConfig = AgentConfig()):
         self.config = config
+        self.id = ObjectRegistry.new_id()  # Initialize agent ID
         self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
@@ -48589,6 +48656,7 @@ class Agent(ABC):
             results.metadata.tool_ids = (
                 [] if msg is None or isinstance(msg, str) else msg.metadata.tool_ids
             )
+            results.metadata.agent_id = self.id
             return results
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
@@ -48607,6 +48675,7 @@ class Agent(ABC):
             metadata=ChatDocMetaData(
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
+                agent_id=self.id,
                 sender_name=sender_name,
                 oai_tool_id=oai_tool_id,
                 # preserve trail of tool_ids for OpenAI Assistant fn-calls
@@ -48871,6 +48940,7 @@ class Agent(ABC):
             return ChatDocument(
                 content=user_msg,
                 metadata=ChatDocMetaData(
+                    agent_id=self.id,
                     source=source,
                     sender=sender,
                     # preserve trail of tool_ids for OpenAI Assistant fn-calls
@@ -50115,189 +50185,6 @@ class Agent(ABC):
         return None
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path=".pre-commit-config.yaml">
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -50310,7 +50197,7 @@ repos:
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.56.12"
+version = "0.56.13"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
