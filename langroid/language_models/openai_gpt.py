@@ -1455,9 +1455,9 @@ class OpenAIGPT(LanguageModel):
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
                 function_call=function_call if has_function else None,
                 usage=LLMTokenUsage(
-                    prompt_tokens=prompt_tokens,
-                    cached_tokens=cached_tokens,
-                    completion_tokens=completion_tokens,
+                    prompt_tokens=prompt_tokens or 0,
+                    cached_tokens=cached_tokens or 0,
+                    completion_tokens=completion_tokens or 0,
                     cost=self._cost_chat_model(
                         prompt_tokens or 0,
                         cached_tokens or 0,
