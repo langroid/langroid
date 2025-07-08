@@ -82,7 +82,7 @@ def setup_file_logger(
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     file_mode = "a" if append else "w"
     logger = setup_logger(name, terminal=False)
-    handler = logging.FileHandler(filename, mode=file_mode)
+    handler = logging.FileHandler(filename, mode=file_mode, encoding="utf-8")
     handler.setLevel(logging.INFO)
     if log_format:
         formatter = logging.Formatter(

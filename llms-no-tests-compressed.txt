@@ -40705,7 +40705,7 @@ logger = setup_logger(name)
 ⋮----
 file_mode = "a" if append else "w"
 logger = setup_logger(name, terminal=False)
-handler = logging.FileHandler(filename, mode=file_mode)
+handler = logging.FileHandler(filename, mode=file_mode, encoding="utf-8")
 ⋮----
 formatter = logging.Formatter("%(message)s")
 ⋮----
@@ -45149,935 +45149,6 @@ result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
 result = await task.run_async(
 </file>
 
-<file path="langroid/language_models/openai_gpt.py">
-OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
-⋮----
-OLLAMA_BASE_URL = "http://localhost:11434/v1"
-⋮----
-DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
-OLLAMA_API_KEY = "ollama"
-⋮----
-VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
-LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
-⋮----
-openai_chat_model_pref_list = [
-⋮----
-openai_completion_model_pref_list = [
-⋮----
-available_models = set(map(lambda m: m.id, OpenAI().models.list()))
-⋮----
-available_models = set()
-⋮----
-default_openai_chat_model = next(
-default_openai_completion_model = next(
-⋮----
-class AccessWarning(Warning)
-⋮----
-@cache
-def gpt_3_5_warning() -> None
-⋮----
-@cache
-def parallel_strict_warning() -> None
-⋮----
-def noop() -> None
-⋮----
-"""Does nothing."""
-⋮----
-class OpenAICallParams(BaseModel)
-⋮----
-"""
-    Various params that can be sent to an OpenAI API chat-completion call.
-    When specified, any param here overrides the one with same name in the
-    OpenAIGPTConfig.
-    See OpenAI API Reference for details on the params:
-    https://platform.openai.com/docs/api-reference/chat
-    """
-⋮----
-max_tokens: int | None = None
-temperature: float | None = None
-frequency_penalty: float | None = None  # between -2 and 2
-presence_penalty: float | None = None  # between -2 and 2
-response_format: Dict[str, str] | None = None
-logit_bias: Dict[int, float] | None = None  # token_id -> bias
-logprobs: bool | None = None
-top_p: float | None = None
-reasoning_effort: str | None = None  # or "low" or "high" or "medium"
-top_logprobs: int | None = None  # if int, requires logprobs=True
-n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
-stop: str | List[str] | None = None  # (list of) stop sequence(s)
-seed: int | None = None
-user: str | None = None  # user id for tracking
-extra_body: Dict[str, Any] | None = None  # additional params for API request body
-⋮----
-def to_dict_exclude_none(self) -> Dict[str, Any]
-⋮----
-class LiteLLMProxyConfig(BaseSettings)
-⋮----
-"""Configuration for LiteLLM proxy connection."""
-⋮----
-api_key: str = ""  # read from env var LITELLM_API_KEY if set
-api_base: str = ""  # read from env var LITELLM_API_BASE if set
-⋮----
-class Config
-⋮----
-env_prefix = "LITELLM_"
-⋮----
-class OpenAIGPTConfig(LLMConfig)
-⋮----
-"""
-    Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
-    (a) locally-served models behind an OpenAI-compatible API
-    (b) non-local models, using a proxy adaptor lib like litellm that provides
-        an OpenAI-compatible API.
-    (We could rename this class to OpenAILikeConfig, but we keep it as-is for now)
-
-    Important Note:
-    Due to the `env_prefix = "OPENAI_"` defined below,
-    all of the fields below can be set AND OVERRIDDEN via env vars,
-    # by upper-casing the name and prefixing with OPENAI_, e.g.
-    # OPENAI_MAX_OUTPUT_TOKENS=1000.
-    # If any of these is defined in this way in the environment
-    # (either via explicit setenv or export or via .env file + load_dotenv()),
-    # the environment variable takes precedence over the value in the config.
-    """
-⋮----
-type: str = "openai"
-api_key: str = DUMMY_API_KEY
-organization: str = ""
-api_base: str | None = None  # used for local or other non-OpenAI models
-litellm: bool = False  # use litellm api?
-litellm_proxy: LiteLLMProxyConfig = LiteLLMProxyConfig()
-ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
-min_output_tokens: int = 1
-use_chat_for_completion = True  # do not change this, for OpenAI models!
-timeout: int = 20
-temperature: float = 0.2
-seed: int | None = 42
-params: OpenAICallParams | None = None
-use_cached_client: bool = (
-⋮----
-True  # Whether to reuse cached clients (prevents resource exhaustion)
-⋮----
-# these can be any model name that is served at an OpenAI-compatible API end point
-chat_model: str = default_openai_chat_model
-chat_model_orig: str = default_openai_chat_model
-completion_model: str = default_openai_completion_model
-run_on_first_use: Callable[[], None] = noop
-parallel_tool_calls: Optional[bool] = None
-# Supports constrained decoding which enforces that the output of the LLM
-# adheres to a JSON schema
-supports_json_schema: Optional[bool] = None
-# Supports strict decoding for the generation of tool calls with
-# the OpenAI Tools API; this ensures that the generated tools
-# adhere to the provided schema.
-supports_strict_tools: Optional[bool] = None
-# a string that roughly matches a HuggingFace chat_template,
-# e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
-formatter: str | None = None
-hf_formatter: HFFormatter | None = None
-langdb_params: LangDBParams = LangDBParams()
-portkey_params: PortkeyParams = PortkeyParams()
-headers: Dict[str, str] = {}
-⋮----
-def __init__(self, **kwargs) -> None:  # type: ignore
-⋮----
-local_model = "api_base" in kwargs and kwargs["api_base"] is not None
-⋮----
-chat_model = kwargs.get("chat_model", "")
-local_prefixes = ["local/", "litellm/", "ollama/", "vllm/", "llamacpp/"]
-⋮----
-local_model = True
-⋮----
-warn_gpt_3_5 = (
-⋮----
-existing_hook = kwargs.get("run_on_first_use", noop)
-⋮----
-def with_warning() -> None
-⋮----
-env_prefix = "OPENAI_"
-⋮----
-def _validate_litellm(self) -> None
-⋮----
-"""
-        When using liteLLM, validate whether all env vars required by the model
-        have been set.
-        """
-⋮----
-litellm.drop_params = True  # drop un-supported params without crashing
-# modify params to fit the model expectations, and avoid crashing
-# (e.g. anthropic doesn't like first msg to be system msg)
-⋮----
-self.seed = None  # some local mdls don't support seed
-⋮----
-keys_dict = litellm.utils.validate_environment(self.chat_model)
-missing_keys = keys_dict.get("missing_keys", [])
-⋮----
-@classmethod
-    def create(cls, prefix: str) -> Type["OpenAIGPTConfig"]
-⋮----
-"""Create a config class whose params can be set via a desired
-        prefix from the .env file or env vars.
-        E.g., using
-        ```python
-        OllamaConfig = OpenAIGPTConfig.create("ollama")
-        ollama_config = OllamaConfig()
-        ```
-        you can have a group of params prefixed by "OLLAMA_", to be used
-        with models served via `ollama`.
-        This way, you can maintain several setting-groups in your .env file,
-        one per model type.
-        """
-⋮----
-class DynamicConfig(OpenAIGPTConfig)
-⋮----
-class OpenAIResponse(BaseModel)
-⋮----
-"""OpenAI response model, either completion or chat."""
-⋮----
-choices: List[Dict]  # type: ignore
-usage: Dict  # type: ignore
-⋮----
-def litellm_logging_fn(model_call_dict: Dict[str, Any]) -> None
-⋮----
-"""Logging function for litellm"""
-⋮----
-api_input_dict = model_call_dict.get("additional_args", {}).get(
-⋮----
-text = escape(json.dumps(api_input_dict, indent=2))
-⋮----
-# Define a class for OpenAI GPT models that extends the base class
-class OpenAIGPT(LanguageModel)
-⋮----
-"""
-    Class for OpenAI LLMs
-    """
-⋮----
-client: OpenAI | Groq | Cerebras | None
-async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras | None
-⋮----
-def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig())
-⋮----
-"""
-        Args:
-            config: configuration for openai-gpt model
-        """
-# copy the config to avoid modifying the original
-config = config.copy()
-⋮----
-# save original model name such as `provider/model` before
-# we strip out the `provider` - we retain the original in
-# case some params are specific to a provider.
-⋮----
-# Run the first time the model is used
-⋮----
-# global override of chat_model,
-# to allow quick testing with other models
-⋮----
-# there is a formatter specified, e.g.
-# "litellm/ollama/mistral//hf" or
-# "local/localhost:8000/v1//mistral-instruct-v0.2"
-formatter = parts[1]
-⋮----
-# e.g. "litellm/ollama/mistral//hf" -> "litellm/ollama/mistral"
-formatter = find_hf_formatter(self.config.chat_model)
-⋮----
-# e.g. "mistral"
-⋮----
-# e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
-⋮----
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
-⋮----
-# if model name starts with "litellm",
-# set the actual model name by stripping the "litellm/" prefix
-# and set the litellm flag to True
-⋮----
-# e.g. litellm/ollama/mistral
-⋮----
-# strip the "litellm/" prefix
-# e.g. litellm/ollama/llama2 => ollama/llama2
-⋮----
-# expect this to be of the form "local/localhost:8000/v1",
-# depending on how the model is launched locally.
-# In this case the model served locally behind an OpenAI-compatible API
-# so we can just use `openai.*` methods directly,
-# and don't need a adaptor library like litellm
-⋮----
-self.config.seed = None  # some models raise an error when seed is set
-# Extract the api_base from the model name after the "local/" prefix
-⋮----
-# use api_base from config if set, else fall back on OLLAMA_BASE_URL
-⋮----
-# If api_base is unset we use OpenAI's endpoint, which supports
-# these features (with JSON schema restricted to a limited set of models)
-⋮----
-# if we're overriding chat model globally, set completion model to same
-⋮----
-# we want to format chats -> completions using this specific formatter
-⋮----
-# use groq-specific client
-⋮----
-# Create new clients without caching
-⋮----
-# use cerebras-specific client
-⋮----
-# TODO there is not async client, so should we do anything here?
-⋮----
-# in these cases, there's no specific client: OpenAI python client suffices
-⋮----
-project_id = self.config.langdb_params.project_id
-⋮----
-params = self.config.langdb_params
-⋮----
-# Parse the model string and extract provider/model
-⋮----
-# Set Portkey base URL
-⋮----
-# Set API key - use provider's API key from env if available
-⋮----
-# Add Portkey-specific headers
-⋮----
-use_cache = self.config.cache_config is not None
-⋮----
-# switch to fresh redis config if needed
-⋮----
-# force use of fake redis if global cache_type is "fakeredis"
-⋮----
-def _openai_api_call_params(self, kwargs: Dict[str, Any]) -> Dict[str, Any]
-⋮----
-"""
-        Prep the params to be sent to the OpenAI API
-        (or any OpenAI-compatible API, e.g. from Ooba or LmStudio)
-        for chat-completion.
-
-        Order of priority:
-        - (1) Params (mainly max_tokens) in the chat/achat/generate/agenerate call
-                (these are passed in via kwargs)
-        - (2) Params in OpenAIGPTConfig.params (of class OpenAICallParams)
-        - (3) Specific Params in OpenAIGPTConfig (just temperature for now)
-        """
-params = dict(
-⋮----
-def is_openai_chat_model(self) -> bool
-⋮----
-openai_chat_models = [e.value for e in OpenAIChatModel]
-⋮----
-def is_openai_completion_model(self) -> bool
-⋮----
-openai_completion_models = [e.value for e in OpenAICompletionModel]
-⋮----
-def is_gemini_model(self) -> bool
-⋮----
-"""Are we using the gemini OpenAI-compatible API?"""
-⋮----
-def is_deepseek_model(self) -> bool
-⋮----
-deepseek_models = [e.value for e in DeepSeekModel]
-⋮----
-def unsupported_params(self) -> List[str]
-⋮----
-"""
-        List of params that are not supported by the current model
-        """
-unsupported = set(self.info().unsupported_params)
-⋮----
-def rename_params(self) -> Dict[str, str]
-⋮----
-"""
-        Map of param name -> new name for specific models.
-        Currently main troublemaker is o1* series.
-        """
-⋮----
-def chat_context_length(self) -> int
-⋮----
-"""
-        Context-length for chat-completion models/endpoints.
-        Get it from the config if explicitly given,
-         otherwise use model_info based on model name, and fall back to
-         generic model_info if there's no match.
-        """
-⋮----
-def completion_context_length(self) -> int
-⋮----
-"""
-        Context-length for completion models/endpoints.
-        Get it from the config if explicitly given,
-         otherwise use model_info based on model name, and fall back to
-         generic model_info if there's no match.
-        """
-⋮----
-def chat_cost(self) -> Tuple[float, float, float]
-⋮----
-"""
-        (Prompt, Cached, Generation) cost per 1000 tokens, for chat-completion
-        models/endpoints.
-        Get it from the dict, otherwise fail-over to general method
-        """
-info = self.info()
-cached_cost_per_million = info.cached_cost_per_million
-⋮----
-cached_cost_per_million = info.input_cost_per_million
-⋮----
-def set_stream(self, stream: bool) -> bool
-⋮----
-"""Enable or disable streaming output from API.
-        Args:
-            stream: enable streaming output from API
-        Returns: previous value of stream
-        """
-tmp = self.config.stream
-⋮----
-def get_stream(self) -> bool
-⋮----
-"""Get streaming status."""
-⋮----
-"""Process state vars while processing a streaming API response.
-            Returns a tuple consisting of:
-        - is_break: whether to break out of the loop
-        - has_function: whether the response contains a function_call
-        - function_name: name of the function
-        - function_args: args of the function
-        - completion: completion text
-        - reasoning: reasoning text
-        - usage: usage dict
-        """
-# convert event obj (of type ChatCompletionChunk) to dict so rest of code,
-# which expects dicts, works as it did before switching to openai v1.x
-⋮----
-event = event.model_dump()
-⋮----
-usage = event.get("usage", {}) or {}
-choices = event.get("choices", [{}])
-⋮----
-choices = [{}]
-⋮----
-# we have a "usage" chunk, and empty choices, so we're done
-# ASSUMPTION: a usage chunk ONLY arrives AFTER all normal completion text!
-# If any API does not follow this, we need to change this code.
-⋮----
-event_args = ""
-event_fn_name = ""
-event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-silent = settings.quiet
-# The first two events in the stream of Azure OpenAI is useless.
-# In the 1st: choices list is empty, in the 2nd: the dict delta has null content
-⋮----
-delta = choices[0].get("delta", {})
-# capture both content and reasoning_content
-event_text = delta.get("content", "")
-event_reasoning = delta.get(
-⋮----
-event_fn_name = delta["function_call"]["name"]
-⋮----
-event_args = delta["function_call"]["arguments"]
-⋮----
-# it's a list of deltas, usually just one
-event_tool_deltas = delta["tool_calls"]
-⋮----
-event_text = choices[0]["text"]
-event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
-⋮----
-finish_reason = choices[0].get("finish_reason", "")
-⋮----
-filter_names = [
-event_text = (
-⋮----
-function_name = event_fn_name
-has_function = True
-⋮----
-# print out streaming tool calls, if not async
-⋮----
-tool_fn_name = td["function"]["name"]
-⋮----
-tool_fn_args = td["function"]["arguments"]
-⋮----
-# show this delta in the stream
-is_break = finish_reason in [
-# for function_call, finish_reason does not necessarily
-# contain "function_call" as mentioned in the docs.
-# So we check for "stop" or "function_call" here.
-⋮----
-# we got usage chunk, and empty choices, so we're done
-⋮----
-silent = self.config.async_stream_quiet or settings.quiet
-⋮----
-is_break = choices[0].get("finish_reason", "") in [
-⋮----
-def _stream_response(  # type: ignore
-⋮----
-"""
-        Grab and print streaming response from API.
-        Args:
-            response: event-sequence emitted by API
-            chat: whether in chat-mode (or else completion-mode)
-        Returns:
-            Tuple consisting of:
-                LLMResponse object (with message, usage),
-                Dict version of OpenAIResponse object (with choices, usage)
-
-        """
-completion = ""
-reasoning = ""
-function_args = ""
-function_name = ""
-⋮----
-has_function = False
-tool_deltas: List[Dict[str, Any]] = []
-token_usage: Dict[str, int] = {}
-done: bool = False
-⋮----
-# capture the token usage when non-empty
-token_usage = usage
-⋮----
-# if not streaming, then we don't wait for last "usage" chunk
-⋮----
-# mark done, so we quit after the last "usage" chunk
-done = True
-⋮----
-# TODO- get usage info in stream mode (?)
-⋮----
-async def _stream_response_async(  # type: ignore
-⋮----
-"""
-        Grab and print streaming response from API.
-        Args:
-            response: event-sequence emitted by API
-            chat: whether in chat-mode (or else completion-mode)
-        Returns:
-            Tuple consisting of:
-                LLMResponse object (with message, usage),
-                OpenAIResponse object (with choices, usage)
-
-        """
-⋮----
-# mark done, so we quit after the next "usage" chunk
-⋮----
-"""
-        Convert accumulated tool-call deltas to OpenAIToolCall objects.
-        Adapted from this excellent code:
-         https://community.openai.com/t/help-for-function-calls-with-streaming/627170/2
-
-        Args:
-            tools: list of tool deltas received from streaming API
-
-        Returns:
-            str: plain text corresponding to tool calls that failed to parse
-            List[OpenAIToolCall]: list of OpenAIToolCall objects
-            List[Dict[str, Any]]: list of tool dicts
-                (to reconstruct OpenAI API response, so it can be cached)
-        """
-# Initialize a dictionary with default values
-⋮----
-# idx -> dict repr of tool
-# (used to simulate OpenAIResponse object later, and also to
-# accumulate function args as strings)
-idx2tool_dict: Dict[str, Dict[str, Any]] = defaultdict(
-⋮----
-# (try to) parse the fn args of each tool
-contents: List[str] = []
-good_indices = []
-id2args: Dict[str, None | Dict[str, Any]] = {}
-⋮----
-# used to build tool_calls_list below
-id2args[tool_dict["id"]] = args_dict or None  # if {}, store as None
-⋮----
-# remove the failed tool calls
-idx2tool_dict = {
-⋮----
-# create OpenAIToolCall list
-tool_calls_list = [
-⋮----
-@staticmethod
-    def _parse_function_args(args: str) -> Tuple[str, Dict[str, Any]]
-⋮----
-"""
-        Try to parse the `args` string as function args.
-
-        Args:
-            args: string containing function args
-
-        Returns:
-            Tuple of content, function name and args dict.
-            If parsing unsuccessful, returns the original string as content,
-            else returns the args dict.
-        """
-content = ""
-args_dict = {}
-⋮----
-stripped_fn_args = args.strip()
-dict_or_list = parse_imperfect_json(stripped_fn_args)
-⋮----
-args_dict = dict_or_list
-⋮----
-content = args
-⋮----
-"""
-        Create an LLMResponse object from the streaming API response.
-
-        Args:
-            chat: whether in chat-mode (or else completion-mode)
-            tool_deltas: list of tool deltas received from streaming API
-            has_function: whether the response contains a function_call
-            completion: completion text
-            reasoning: reasoning text
-            function_args: string representing function args
-            function_name: name of the function
-            usage: token usage dict
-        Returns:
-            Tuple consisting of:
-                LLMResponse object (with message, usage),
-                Dict version of OpenAIResponse object (with choices, usage)
-                    (this is needed so we can cache the response, as if it were
-                    a non-streaming response)
-        """
-# check if function_call args are valid, if not,
-# treat this as a normal msg, not a function call
-args: Dict[str, Any] = {}
-⋮----
-completion = completion + content
-⋮----
-# mock openai response so we can cache it
-⋮----
-completion = completion + "\n" + failed_content
-msg: Dict[str, Any] = dict(
-⋮----
-function_call = LLMFunctionCall(name=function_name)
-function_call_dict = function_call.dict()
-⋮----
-# non-chat mode has no function_call
-msg = dict(text=completion)
-# TODO: Ignoring reasoning content for non-chat models
-⋮----
-# create an OpenAIResponse object so we can cache it as if it were
-# a non-streaming response
-openai_response = OpenAIResponse(
-⋮----
-# some LLM APIs may not return a separate reasoning field,
-# and the reasoning may be included in the message content
-# within delimiters like <think> ... </think>
-⋮----
-prompt_tokens = usage.get("prompt_tokens", 0)
-prompt_tokens_details: Any = usage.get("prompt_tokens_details", {})
-cached_tokens = (
-completion_tokens = usage.get("completion_tokens", 0)
-⋮----
-# don't allow empty list [] here
-⋮----
-def _cache_store(self, k: str, v: Any) -> None
-⋮----
-def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]
-⋮----
-return "", None  # no cache, return empty key and None result
-# Use the kwargs as the cache key
-sorted_kwargs_str = str(sorted(kwargs.items()))
-raw_key = f"{fn_name}:{sorted_kwargs_str}"
-⋮----
-# Hash the key to a fixed length using SHA256
-hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
-⋮----
-# when caching disabled, return the hashed_key and none result
-⋮----
-# Try to get the result from the cache
-⋮----
-cached_val = self.cache.retrieve(hashed_key)
-⋮----
-def _cost_chat_model(self, prompt: int, cached: int, completion: int) -> float
-⋮----
-price = self.chat_cost()
-⋮----
-"""
-        Extracts token usage from ``response`` and computes cost, only when NOT
-        in streaming mode, since the LLM API (OpenAI currently) was not
-        populating the usage fields in streaming mode (but as of Sep 2024, streaming
-        responses include  usage info as well, so we should update the code
-        to directly use usage information from the streaming response, which is more
-        accurate, esp with "thinking" LLMs like o1 series which consume
-        thinking tokens).
-        In streaming mode, these are set to zero for
-        now, and will be updated later by the fn ``update_token_usage``.
-        """
-cost = 0.0
-prompt_tokens = 0
-cached_tokens = 0
-completion_tokens = 0
-⋮----
-usage = response.get("usage")
-⋮----
-prompt_tokens = usage.get("prompt_tokens") or 0
-prompt_tokens_details = usage.get("prompt_tokens_details", {})
-cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
-completion_tokens = usage.get("completion_tokens") or 0
-cost = self._cost_chat_model(
-⋮----
-def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-# log and re-raise exception
-⋮----
-def _generate(self, prompt: str, max_tokens: int) -> LLMResponse
-⋮----
-@retry_with_exponential_backoff
-        def completions_with_backoff(**kwargs):  # type: ignore
-⋮----
-cached = False
-⋮----
-cached = True
-⋮----
-completion_call = litellm_completion
-⋮----
-completion_call = self.client.completions.create
-⋮----
-# If it's not in the cache, call the API
-result = completion_call(**kwargs)
-⋮----
-kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
-⋮----
-# TODO this is a temp fix, we should really be using a proper completion fn
-# that takes a pre-formatted prompt, rather than mocking it as a sys msg.
-⋮----
-else:  # any other OpenAI-compatible endpoint
-⋮----
-args = dict(
-⋮----
-max_tokens=max_tokens,  # for output/completion
-⋮----
-args = self._openai_api_call_params(args)
-⋮----
-# assume response is an actual response rather than a streaming event
-⋮----
-response = response.dict()
-⋮----
-msg = response["choices"][0]["message"]["content"].strip()
-⋮----
-msg = response["choices"][0]["text"].strip()
-⋮----
-async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse
-⋮----
-# note we typically will not have self.config.stream = True
-# when issuing several api calls concurrently/asynchronously.
-# The calling fn should use the context `with Streaming(..., False)` to
-# disable streaming.
-⋮----
-# WARNING: .Completion.* endpoints are deprecated,
-# and as of Sep 2023 only legacy models will work here,
-# e.g. text-davinci-003, text-ada-001.
-⋮----
-@async_retry_with_exponential_backoff
-        async def completions_with_backoff(**kwargs):  # type: ignore
-⋮----
-# TODO this may not work: text_completion is not async,
-# and we didn't find an async version in litellm
-⋮----
-acompletion_call = (
-⋮----
-result = await acompletion_call(**kwargs)
-⋮----
-# only makes sense for non-OpenAI models
-⋮----
-messages = [
-prompt = self.config.hf_formatter.format(messages)
-⋮----
-# turn off streaming for async calls
-⋮----
-# only makes sense for local models, where we are trying to
-# convert a chat dialog msg-sequence to a simple completion prompt.
-⋮----
-formatter = HFFormatter(
-⋮----
-prompt = formatter.format(messages)
-⋮----
-result = await self._achat(
-⋮----
-def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
-⋮----
-# If it's not in the cache, call the API
-⋮----
-completion_call = self.client.chat.completions.create
-⋮----
-# If streaming, cannot cache result
-# since it is a generator. Instead,
-# we hold on to the hashed_key and
-# cache the result later
-⋮----
-# Test if this is a stream with an exception by
-# trying to get first chunk: Some providers like LiteLLM
-# produce a valid stream object `result` instead of throwing a
-# rate-limit error, and if we don't catch it here,
-# we end up returning an empty response and not
-# using the retry mechanism in the decorator.
-⋮----
-# try to get the first chunk to check for errors
-test_iter = iter(result)
-first_chunk = next(test_iter)
-# If we get here without error, recreate the stream
-result = chain([first_chunk], test_iter)
-⋮----
-# Empty stream is fine
-⋮----
-# Propagate any errors in the stream
-⋮----
-def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
-⋮----
-retry_func = retry_with_exponential_backoff(
-⋮----
-async def _achat_completions_with_backoff_body(self, **kwargs):  # type: ignore
-⋮----
-acompletion_call = litellm_acompletion
-⋮----
-acompletion_call = self.async_client.chat.completions.create
-⋮----
-# Try to peek at the first chunk to immediately catch any errors
-# Store the original result (the stream)
-original_stream = result
-⋮----
-# Manually create and advance the iterator to check for errors
-stream_iter = original_stream.__aiter__()
-⋮----
-# This will raise an exception if the stream is invalid
-first_chunk = await anext(stream_iter)
-⋮----
-# If we reach here, the stream started successfully
-# Now recreate a fresh stream from the original API result
-# Otherwise, return a new stream that yields the first chunk
-# and remaining items
-async def combined_stream():  # type: ignore
-⋮----
-result = combined_stream()  # type: ignore
-⋮----
-# Empty stream is normal - nothing to do
-⋮----
-# Any exception here should be raised to trigger the retry mechanism
-⋮----
-async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
-⋮----
-retry_func = async_retry_with_exponential_backoff(
-⋮----
-"""Prepare args for LLM chat-completion API call"""
-⋮----
-llm_messages = [
-⋮----
-llm_messages = messages
-⋮----
-# TODO: we will unconditionally insert a dummy user msg
-# if the only msg is a system msg.
-# We could make this conditional on ModelInfo.needs_first_user_message
-⋮----
-# some LLMs, notable Gemini as of 12/11/24,
-# require the first message to be from the user,
-# so insert a dummy user msg if needed.
-⋮----
-chat_model = self.config.chat_model
-⋮----
-args: Dict[str, Any] = dict(
-⋮----
-# groq fails when we include stream_options in the request
-⋮----
-# get token-usage numbers in stream mode from OpenAI API,
-# and possibly other OpenAI-compatible APIs.
-⋮----
-# only include functions-related args if functions are provided
-# since the OpenAI API will throw an error if `functions` is None or []
-⋮----
-# some models e.g. o1-mini (as of sep 2024) don't support some params,
-# like temperature and stream, so we need to remove them.
-⋮----
-param_rename_map = self.rename_params()
-⋮----
-# finally, get rid of extra_body params exclusive to certain models
-extra_params = args.get("extra_body", {})
-⋮----
-# openAI response will look like this:
-"""
-        {
-            "id": "chatcmpl-123",
-            "object": "chat.completion",
-            "created": 1677652288,
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "name": "",
-                    "content": "\n\nHello there, how may I help you?",
-                    "reasoning_content": "Okay, let's see here, hmmm...",
-                    "function_call": {
-                        "name": "fun_name",
-                        "arguments: {
-                            "arg1": "val1",
-                            "arg2": "val2"
-                        }
-                    },
-                },
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 9,
-                "completion_tokens": 12,
-                "total_tokens": 21
-            }
-        }
-        """
-⋮----
-message = {}
-⋮----
-message = response["choices"][0].get("message", {})
-⋮----
-msg = message.get("content", "")
-reasoning = message.get("reasoning_content", "")
-⋮----
-fun_call = None
-⋮----
-fun_call = LLMFunctionCall.from_dict(message["function_call"])
-⋮----
-args_str = message["function_call"]["arguments"] or ""
-msg_str = message["content"] or ""
-msg = msg_str + args_str
-oai_tool_calls = None
-⋮----
-oai_tool_calls = []
-⋮----
-tool_call = OpenAIToolCall.from_dict(tool_call_dict)
-⋮----
-msg = msg + "\n" + json.dumps(tool_call_dict)
-⋮----
-oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
-⋮----
-"""
-        ChatCompletion API call to OpenAI.
-        Args:
-            messages: list of messages  to send to the API, typically
-                represents back and forth dialogue between user and LLM, but could
-                also include "function"-role messages. If messages is a string,
-                it is assumed to be a user message.
-            max_tokens: max output tokens to generate
-            functions: list of LLMFunction specs available to the LLM, to possibly
-                use in its response
-            function_call: controls how the LLM uses `functions`:
-                - "auto": LLM decides whether to use `functions` or not,
-                - "none": LLM blocked from using any function
-                - a dict of {"name": "function_name"} which forces the LLM to use
-                    the specified function.
-        Returns:
-            LLMResponse object
-        """
-args = self._prep_chat_completion(
-cached, hashed_key, response = self._chat_completions_with_backoff(**args)  # type: ignore
-⋮----
-return llm_response  # type: ignore
-⋮----
-response_dict = response
-⋮----
-response_dict = response.model_dump()
-⋮----
-"""
-        Async version of _chat(). See that function for details.
-        """
-⋮----
-cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
-</file>
-
 <file path="langroid/agent/task.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -47305,6 +46376,935 @@ matched = True
 # Matched! Move to next expected event
 ⋮----
 # We matched if we've matched all events in the sequence
+</file>
+
+<file path="langroid/language_models/openai_gpt.py">
+OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
+⋮----
+OLLAMA_BASE_URL = "http://localhost:11434/v1"
+⋮----
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
+OLLAMA_API_KEY = "ollama"
+⋮----
+VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
+LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
+⋮----
+openai_chat_model_pref_list = [
+⋮----
+openai_completion_model_pref_list = [
+⋮----
+available_models = set(map(lambda m: m.id, OpenAI().models.list()))
+⋮----
+available_models = set()
+⋮----
+default_openai_chat_model = next(
+default_openai_completion_model = next(
+⋮----
+class AccessWarning(Warning)
+⋮----
+@cache
+def gpt_3_5_warning() -> None
+⋮----
+@cache
+def parallel_strict_warning() -> None
+⋮----
+def noop() -> None
+⋮----
+"""Does nothing."""
+⋮----
+class OpenAICallParams(BaseModel)
+⋮----
+"""
+    Various params that can be sent to an OpenAI API chat-completion call.
+    When specified, any param here overrides the one with same name in the
+    OpenAIGPTConfig.
+    See OpenAI API Reference for details on the params:
+    https://platform.openai.com/docs/api-reference/chat
+    """
+⋮----
+max_tokens: int | None = None
+temperature: float | None = None
+frequency_penalty: float | None = None  # between -2 and 2
+presence_penalty: float | None = None  # between -2 and 2
+response_format: Dict[str, str] | None = None
+logit_bias: Dict[int, float] | None = None  # token_id -> bias
+logprobs: bool | None = None
+top_p: float | None = None
+reasoning_effort: str | None = None  # or "low" or "high" or "medium"
+top_logprobs: int | None = None  # if int, requires logprobs=True
+n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
+stop: str | List[str] | None = None  # (list of) stop sequence(s)
+seed: int | None = None
+user: str | None = None  # user id for tracking
+extra_body: Dict[str, Any] | None = None  # additional params for API request body
+⋮----
+def to_dict_exclude_none(self) -> Dict[str, Any]
+⋮----
+class LiteLLMProxyConfig(BaseSettings)
+⋮----
+"""Configuration for LiteLLM proxy connection."""
+⋮----
+api_key: str = ""  # read from env var LITELLM_API_KEY if set
+api_base: str = ""  # read from env var LITELLM_API_BASE if set
+⋮----
+class Config
+⋮----
+env_prefix = "LITELLM_"
+⋮----
+class OpenAIGPTConfig(LLMConfig)
+⋮----
+"""
+    Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
+    (a) locally-served models behind an OpenAI-compatible API
+    (b) non-local models, using a proxy adaptor lib like litellm that provides
+        an OpenAI-compatible API.
+    (We could rename this class to OpenAILikeConfig, but we keep it as-is for now)
+
+    Important Note:
+    Due to the `env_prefix = "OPENAI_"` defined below,
+    all of the fields below can be set AND OVERRIDDEN via env vars,
+    # by upper-casing the name and prefixing with OPENAI_, e.g.
+    # OPENAI_MAX_OUTPUT_TOKENS=1000.
+    # If any of these is defined in this way in the environment
+    # (either via explicit setenv or export or via .env file + load_dotenv()),
+    # the environment variable takes precedence over the value in the config.
+    """
+⋮----
+type: str = "openai"
+api_key: str = DUMMY_API_KEY
+organization: str = ""
+api_base: str | None = None  # used for local or other non-OpenAI models
+litellm: bool = False  # use litellm api?
+litellm_proxy: LiteLLMProxyConfig = LiteLLMProxyConfig()
+ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
+min_output_tokens: int = 1
+use_chat_for_completion = True  # do not change this, for OpenAI models!
+timeout: int = 20
+temperature: float = 0.2
+seed: int | None = 42
+params: OpenAICallParams | None = None
+use_cached_client: bool = (
+⋮----
+True  # Whether to reuse cached clients (prevents resource exhaustion)
+⋮----
+# these can be any model name that is served at an OpenAI-compatible API end point
+chat_model: str = default_openai_chat_model
+chat_model_orig: str = default_openai_chat_model
+completion_model: str = default_openai_completion_model
+run_on_first_use: Callable[[], None] = noop
+parallel_tool_calls: Optional[bool] = None
+# Supports constrained decoding which enforces that the output of the LLM
+# adheres to a JSON schema
+supports_json_schema: Optional[bool] = None
+# Supports strict decoding for the generation of tool calls with
+# the OpenAI Tools API; this ensures that the generated tools
+# adhere to the provided schema.
+supports_strict_tools: Optional[bool] = None
+# a string that roughly matches a HuggingFace chat_template,
+# e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
+formatter: str | None = None
+hf_formatter: HFFormatter | None = None
+langdb_params: LangDBParams = LangDBParams()
+portkey_params: PortkeyParams = PortkeyParams()
+headers: Dict[str, str] = {}
+⋮----
+def __init__(self, **kwargs) -> None:  # type: ignore
+⋮----
+local_model = "api_base" in kwargs and kwargs["api_base"] is not None
+⋮----
+chat_model = kwargs.get("chat_model", "")
+local_prefixes = ["local/", "litellm/", "ollama/", "vllm/", "llamacpp/"]
+⋮----
+local_model = True
+⋮----
+warn_gpt_3_5 = (
+⋮----
+existing_hook = kwargs.get("run_on_first_use", noop)
+⋮----
+def with_warning() -> None
+⋮----
+env_prefix = "OPENAI_"
+⋮----
+def _validate_litellm(self) -> None
+⋮----
+"""
+        When using liteLLM, validate whether all env vars required by the model
+        have been set.
+        """
+⋮----
+litellm.drop_params = True  # drop un-supported params without crashing
+# modify params to fit the model expectations, and avoid crashing
+# (e.g. anthropic doesn't like first msg to be system msg)
+⋮----
+self.seed = None  # some local mdls don't support seed
+⋮----
+keys_dict = litellm.utils.validate_environment(self.chat_model)
+missing_keys = keys_dict.get("missing_keys", [])
+⋮----
+@classmethod
+    def create(cls, prefix: str) -> Type["OpenAIGPTConfig"]
+⋮----
+"""Create a config class whose params can be set via a desired
+        prefix from the .env file or env vars.
+        E.g., using
+        ```python
+        OllamaConfig = OpenAIGPTConfig.create("ollama")
+        ollama_config = OllamaConfig()
+        ```
+        you can have a group of params prefixed by "OLLAMA_", to be used
+        with models served via `ollama`.
+        This way, you can maintain several setting-groups in your .env file,
+        one per model type.
+        """
+⋮----
+class DynamicConfig(OpenAIGPTConfig)
+⋮----
+class OpenAIResponse(BaseModel)
+⋮----
+"""OpenAI response model, either completion or chat."""
+⋮----
+choices: List[Dict]  # type: ignore
+usage: Dict  # type: ignore
+⋮----
+def litellm_logging_fn(model_call_dict: Dict[str, Any]) -> None
+⋮----
+"""Logging function for litellm"""
+⋮----
+api_input_dict = model_call_dict.get("additional_args", {}).get(
+⋮----
+text = escape(json.dumps(api_input_dict, indent=2))
+⋮----
+# Define a class for OpenAI GPT models that extends the base class
+class OpenAIGPT(LanguageModel)
+⋮----
+"""
+    Class for OpenAI LLMs
+    """
+⋮----
+client: OpenAI | Groq | Cerebras | None
+async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras | None
+⋮----
+def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig())
+⋮----
+"""
+        Args:
+            config: configuration for openai-gpt model
+        """
+# copy the config to avoid modifying the original
+config = config.copy()
+⋮----
+# save original model name such as `provider/model` before
+# we strip out the `provider` - we retain the original in
+# case some params are specific to a provider.
+⋮----
+# Run the first time the model is used
+⋮----
+# global override of chat_model,
+# to allow quick testing with other models
+⋮----
+# there is a formatter specified, e.g.
+# "litellm/ollama/mistral//hf" or
+# "local/localhost:8000/v1//mistral-instruct-v0.2"
+formatter = parts[1]
+⋮----
+# e.g. "litellm/ollama/mistral//hf" -> "litellm/ollama/mistral"
+formatter = find_hf_formatter(self.config.chat_model)
+⋮----
+# e.g. "mistral"
+⋮----
+# e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
+⋮----
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
+⋮----
+# if model name starts with "litellm",
+# set the actual model name by stripping the "litellm/" prefix
+# and set the litellm flag to True
+⋮----
+# e.g. litellm/ollama/mistral
+⋮----
+# strip the "litellm/" prefix
+# e.g. litellm/ollama/llama2 => ollama/llama2
+⋮----
+# expect this to be of the form "local/localhost:8000/v1",
+# depending on how the model is launched locally.
+# In this case the model served locally behind an OpenAI-compatible API
+# so we can just use `openai.*` methods directly,
+# and don't need a adaptor library like litellm
+⋮----
+self.config.seed = None  # some models raise an error when seed is set
+# Extract the api_base from the model name after the "local/" prefix
+⋮----
+# use api_base from config if set, else fall back on OLLAMA_BASE_URL
+⋮----
+# If api_base is unset we use OpenAI's endpoint, which supports
+# these features (with JSON schema restricted to a limited set of models)
+⋮----
+# if we're overriding chat model globally, set completion model to same
+⋮----
+# we want to format chats -> completions using this specific formatter
+⋮----
+# use groq-specific client
+⋮----
+# Create new clients without caching
+⋮----
+# use cerebras-specific client
+⋮----
+# TODO there is not async client, so should we do anything here?
+⋮----
+# in these cases, there's no specific client: OpenAI python client suffices
+⋮----
+project_id = self.config.langdb_params.project_id
+⋮----
+params = self.config.langdb_params
+⋮----
+# Parse the model string and extract provider/model
+⋮----
+# Set Portkey base URL
+⋮----
+# Set API key - use provider's API key from env if available
+⋮----
+# Add Portkey-specific headers
+⋮----
+use_cache = self.config.cache_config is not None
+⋮----
+# switch to fresh redis config if needed
+⋮----
+# force use of fake redis if global cache_type is "fakeredis"
+⋮----
+def _openai_api_call_params(self, kwargs: Dict[str, Any]) -> Dict[str, Any]
+⋮----
+"""
+        Prep the params to be sent to the OpenAI API
+        (or any OpenAI-compatible API, e.g. from Ooba or LmStudio)
+        for chat-completion.
+
+        Order of priority:
+        - (1) Params (mainly max_tokens) in the chat/achat/generate/agenerate call
+                (these are passed in via kwargs)
+        - (2) Params in OpenAIGPTConfig.params (of class OpenAICallParams)
+        - (3) Specific Params in OpenAIGPTConfig (just temperature for now)
+        """
+params = dict(
+⋮----
+def is_openai_chat_model(self) -> bool
+⋮----
+openai_chat_models = [e.value for e in OpenAIChatModel]
+⋮----
+def is_openai_completion_model(self) -> bool
+⋮----
+openai_completion_models = [e.value for e in OpenAICompletionModel]
+⋮----
+def is_gemini_model(self) -> bool
+⋮----
+"""Are we using the gemini OpenAI-compatible API?"""
+⋮----
+def is_deepseek_model(self) -> bool
+⋮----
+deepseek_models = [e.value for e in DeepSeekModel]
+⋮----
+def unsupported_params(self) -> List[str]
+⋮----
+"""
+        List of params that are not supported by the current model
+        """
+unsupported = set(self.info().unsupported_params)
+⋮----
+def rename_params(self) -> Dict[str, str]
+⋮----
+"""
+        Map of param name -> new name for specific models.
+        Currently main troublemaker is o1* series.
+        """
+⋮----
+def chat_context_length(self) -> int
+⋮----
+"""
+        Context-length for chat-completion models/endpoints.
+        Get it from the config if explicitly given,
+         otherwise use model_info based on model name, and fall back to
+         generic model_info if there's no match.
+        """
+⋮----
+def completion_context_length(self) -> int
+⋮----
+"""
+        Context-length for completion models/endpoints.
+        Get it from the config if explicitly given,
+         otherwise use model_info based on model name, and fall back to
+         generic model_info if there's no match.
+        """
+⋮----
+def chat_cost(self) -> Tuple[float, float, float]
+⋮----
+"""
+        (Prompt, Cached, Generation) cost per 1000 tokens, for chat-completion
+        models/endpoints.
+        Get it from the dict, otherwise fail-over to general method
+        """
+info = self.info()
+cached_cost_per_million = info.cached_cost_per_million
+⋮----
+cached_cost_per_million = info.input_cost_per_million
+⋮----
+def set_stream(self, stream: bool) -> bool
+⋮----
+"""Enable or disable streaming output from API.
+        Args:
+            stream: enable streaming output from API
+        Returns: previous value of stream
+        """
+tmp = self.config.stream
+⋮----
+def get_stream(self) -> bool
+⋮----
+"""Get streaming status."""
+⋮----
+"""Process state vars while processing a streaming API response.
+            Returns a tuple consisting of:
+        - is_break: whether to break out of the loop
+        - has_function: whether the response contains a function_call
+        - function_name: name of the function
+        - function_args: args of the function
+        - completion: completion text
+        - reasoning: reasoning text
+        - usage: usage dict
+        """
+# convert event obj (of type ChatCompletionChunk) to dict so rest of code,
+# which expects dicts, works as it did before switching to openai v1.x
+⋮----
+event = event.model_dump()
+⋮----
+usage = event.get("usage", {}) or {}
+choices = event.get("choices", [{}])
+⋮----
+choices = [{}]
+⋮----
+# we have a "usage" chunk, and empty choices, so we're done
+# ASSUMPTION: a usage chunk ONLY arrives AFTER all normal completion text!
+# If any API does not follow this, we need to change this code.
+⋮----
+event_args = ""
+event_fn_name = ""
+event_tool_deltas: Optional[List[Dict[str, Any]]] = None
+silent = settings.quiet
+# The first two events in the stream of Azure OpenAI is useless.
+# In the 1st: choices list is empty, in the 2nd: the dict delta has null content
+⋮----
+delta = choices[0].get("delta", {})
+# capture both content and reasoning_content
+event_text = delta.get("content", "")
+event_reasoning = delta.get(
+⋮----
+event_fn_name = delta["function_call"]["name"]
+⋮----
+event_args = delta["function_call"]["arguments"]
+⋮----
+# it's a list of deltas, usually just one
+event_tool_deltas = delta["tool_calls"]
+⋮----
+event_text = choices[0]["text"]
+event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
+⋮----
+finish_reason = choices[0].get("finish_reason", "")
+⋮----
+filter_names = [
+event_text = (
+⋮----
+function_name = event_fn_name
+has_function = True
+⋮----
+# print out streaming tool calls, if not async
+⋮----
+tool_fn_name = td["function"]["name"]
+⋮----
+tool_fn_args = td["function"]["arguments"]
+⋮----
+# show this delta in the stream
+is_break = finish_reason in [
+# for function_call, finish_reason does not necessarily
+# contain "function_call" as mentioned in the docs.
+# So we check for "stop" or "function_call" here.
+⋮----
+# we got usage chunk, and empty choices, so we're done
+⋮----
+silent = self.config.async_stream_quiet or settings.quiet
+⋮----
+is_break = choices[0].get("finish_reason", "") in [
+⋮----
+def _stream_response(  # type: ignore
+⋮----
+"""
+        Grab and print streaming response from API.
+        Args:
+            response: event-sequence emitted by API
+            chat: whether in chat-mode (or else completion-mode)
+        Returns:
+            Tuple consisting of:
+                LLMResponse object (with message, usage),
+                Dict version of OpenAIResponse object (with choices, usage)
+
+        """
+completion = ""
+reasoning = ""
+function_args = ""
+function_name = ""
+⋮----
+has_function = False
+tool_deltas: List[Dict[str, Any]] = []
+token_usage: Dict[str, int] = {}
+done: bool = False
+⋮----
+# capture the token usage when non-empty
+token_usage = usage
+⋮----
+# if not streaming, then we don't wait for last "usage" chunk
+⋮----
+# mark done, so we quit after the last "usage" chunk
+done = True
+⋮----
+# TODO- get usage info in stream mode (?)
+⋮----
+async def _stream_response_async(  # type: ignore
+⋮----
+"""
+        Grab and print streaming response from API.
+        Args:
+            response: event-sequence emitted by API
+            chat: whether in chat-mode (or else completion-mode)
+        Returns:
+            Tuple consisting of:
+                LLMResponse object (with message, usage),
+                OpenAIResponse object (with choices, usage)
+
+        """
+⋮----
+# mark done, so we quit after the next "usage" chunk
+⋮----
+"""
+        Convert accumulated tool-call deltas to OpenAIToolCall objects.
+        Adapted from this excellent code:
+         https://community.openai.com/t/help-for-function-calls-with-streaming/627170/2
+
+        Args:
+            tools: list of tool deltas received from streaming API
+
+        Returns:
+            str: plain text corresponding to tool calls that failed to parse
+            List[OpenAIToolCall]: list of OpenAIToolCall objects
+            List[Dict[str, Any]]: list of tool dicts
+                (to reconstruct OpenAI API response, so it can be cached)
+        """
+# Initialize a dictionary with default values
+⋮----
+# idx -> dict repr of tool
+# (used to simulate OpenAIResponse object later, and also to
+# accumulate function args as strings)
+idx2tool_dict: Dict[str, Dict[str, Any]] = defaultdict(
+⋮----
+# (try to) parse the fn args of each tool
+contents: List[str] = []
+good_indices = []
+id2args: Dict[str, None | Dict[str, Any]] = {}
+⋮----
+# used to build tool_calls_list below
+id2args[tool_dict["id"]] = args_dict or None  # if {}, store as None
+⋮----
+# remove the failed tool calls
+idx2tool_dict = {
+⋮----
+# create OpenAIToolCall list
+tool_calls_list = [
+⋮----
+@staticmethod
+    def _parse_function_args(args: str) -> Tuple[str, Dict[str, Any]]
+⋮----
+"""
+        Try to parse the `args` string as function args.
+
+        Args:
+            args: string containing function args
+
+        Returns:
+            Tuple of content, function name and args dict.
+            If parsing unsuccessful, returns the original string as content,
+            else returns the args dict.
+        """
+content = ""
+args_dict = {}
+⋮----
+stripped_fn_args = args.strip()
+dict_or_list = parse_imperfect_json(stripped_fn_args)
+⋮----
+args_dict = dict_or_list
+⋮----
+content = args
+⋮----
+"""
+        Create an LLMResponse object from the streaming API response.
+
+        Args:
+            chat: whether in chat-mode (or else completion-mode)
+            tool_deltas: list of tool deltas received from streaming API
+            has_function: whether the response contains a function_call
+            completion: completion text
+            reasoning: reasoning text
+            function_args: string representing function args
+            function_name: name of the function
+            usage: token usage dict
+        Returns:
+            Tuple consisting of:
+                LLMResponse object (with message, usage),
+                Dict version of OpenAIResponse object (with choices, usage)
+                    (this is needed so we can cache the response, as if it were
+                    a non-streaming response)
+        """
+# check if function_call args are valid, if not,
+# treat this as a normal msg, not a function call
+args: Dict[str, Any] = {}
+⋮----
+completion = completion + content
+⋮----
+# mock openai response so we can cache it
+⋮----
+completion = completion + "\n" + failed_content
+msg: Dict[str, Any] = dict(
+⋮----
+function_call = LLMFunctionCall(name=function_name)
+function_call_dict = function_call.dict()
+⋮----
+# non-chat mode has no function_call
+msg = dict(text=completion)
+# TODO: Ignoring reasoning content for non-chat models
+⋮----
+# create an OpenAIResponse object so we can cache it as if it were
+# a non-streaming response
+openai_response = OpenAIResponse(
+⋮----
+# some LLM APIs may not return a separate reasoning field,
+# and the reasoning may be included in the message content
+# within delimiters like <think> ... </think>
+⋮----
+prompt_tokens = usage.get("prompt_tokens", 0)
+prompt_tokens_details: Any = usage.get("prompt_tokens_details", {})
+cached_tokens = (
+completion_tokens = usage.get("completion_tokens", 0)
+⋮----
+# don't allow empty list [] here
+⋮----
+def _cache_store(self, k: str, v: Any) -> None
+⋮----
+def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]
+⋮----
+return "", None  # no cache, return empty key and None result
+# Use the kwargs as the cache key
+sorted_kwargs_str = str(sorted(kwargs.items()))
+raw_key = f"{fn_name}:{sorted_kwargs_str}"
+⋮----
+# Hash the key to a fixed length using SHA256
+hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+⋮----
+# when caching disabled, return the hashed_key and none result
+⋮----
+# Try to get the result from the cache
+⋮----
+cached_val = self.cache.retrieve(hashed_key)
+⋮----
+def _cost_chat_model(self, prompt: int, cached: int, completion: int) -> float
+⋮----
+price = self.chat_cost()
+⋮----
+"""
+        Extracts token usage from ``response`` and computes cost, only when NOT
+        in streaming mode, since the LLM API (OpenAI currently) was not
+        populating the usage fields in streaming mode (but as of Sep 2024, streaming
+        responses include  usage info as well, so we should update the code
+        to directly use usage information from the streaming response, which is more
+        accurate, esp with "thinking" LLMs like o1 series which consume
+        thinking tokens).
+        In streaming mode, these are set to zero for
+        now, and will be updated later by the fn ``update_token_usage``.
+        """
+cost = 0.0
+prompt_tokens = 0
+cached_tokens = 0
+completion_tokens = 0
+⋮----
+usage = response.get("usage")
+⋮----
+prompt_tokens = usage.get("prompt_tokens") or 0
+prompt_tokens_details = usage.get("prompt_tokens_details", {})
+cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
+completion_tokens = usage.get("completion_tokens") or 0
+cost = self._cost_chat_model(
+⋮----
+def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+# log and re-raise exception
+⋮----
+def _generate(self, prompt: str, max_tokens: int) -> LLMResponse
+⋮----
+@retry_with_exponential_backoff
+        def completions_with_backoff(**kwargs):  # type: ignore
+⋮----
+cached = False
+⋮----
+cached = True
+⋮----
+completion_call = litellm_completion
+⋮----
+completion_call = self.client.completions.create
+⋮----
+# If it's not in the cache, call the API
+result = completion_call(**kwargs)
+⋮----
+kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
+⋮----
+# TODO this is a temp fix, we should really be using a proper completion fn
+# that takes a pre-formatted prompt, rather than mocking it as a sys msg.
+⋮----
+else:  # any other OpenAI-compatible endpoint
+⋮----
+args = dict(
+⋮----
+max_tokens=max_tokens,  # for output/completion
+⋮----
+args = self._openai_api_call_params(args)
+⋮----
+# assume response is an actual response rather than a streaming event
+⋮----
+response = response.dict()
+⋮----
+msg = response["choices"][0]["message"]["content"].strip()
+⋮----
+msg = response["choices"][0]["text"].strip()
+⋮----
+async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse
+⋮----
+# note we typically will not have self.config.stream = True
+# when issuing several api calls concurrently/asynchronously.
+# The calling fn should use the context `with Streaming(..., False)` to
+# disable streaming.
+⋮----
+# WARNING: .Completion.* endpoints are deprecated,
+# and as of Sep 2023 only legacy models will work here,
+# e.g. text-davinci-003, text-ada-001.
+⋮----
+@async_retry_with_exponential_backoff
+        async def completions_with_backoff(**kwargs):  # type: ignore
+⋮----
+# TODO this may not work: text_completion is not async,
+# and we didn't find an async version in litellm
+⋮----
+acompletion_call = (
+⋮----
+result = await acompletion_call(**kwargs)
+⋮----
+# only makes sense for non-OpenAI models
+⋮----
+messages = [
+prompt = self.config.hf_formatter.format(messages)
+⋮----
+# turn off streaming for async calls
+⋮----
+# only makes sense for local models, where we are trying to
+# convert a chat dialog msg-sequence to a simple completion prompt.
+⋮----
+formatter = HFFormatter(
+⋮----
+prompt = formatter.format(messages)
+⋮----
+result = await self._achat(
+⋮----
+def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
+⋮----
+# If it's not in the cache, call the API
+⋮----
+completion_call = self.client.chat.completions.create
+⋮----
+# If streaming, cannot cache result
+# since it is a generator. Instead,
+# we hold on to the hashed_key and
+# cache the result later
+⋮----
+# Test if this is a stream with an exception by
+# trying to get first chunk: Some providers like LiteLLM
+# produce a valid stream object `result` instead of throwing a
+# rate-limit error, and if we don't catch it here,
+# we end up returning an empty response and not
+# using the retry mechanism in the decorator.
+⋮----
+# try to get the first chunk to check for errors
+test_iter = iter(result)
+first_chunk = next(test_iter)
+# If we get here without error, recreate the stream
+result = chain([first_chunk], test_iter)
+⋮----
+# Empty stream is fine
+⋮----
+# Propagate any errors in the stream
+⋮----
+def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
+⋮----
+retry_func = retry_with_exponential_backoff(
+⋮----
+async def _achat_completions_with_backoff_body(self, **kwargs):  # type: ignore
+⋮----
+acompletion_call = litellm_acompletion
+⋮----
+acompletion_call = self.async_client.chat.completions.create
+⋮----
+# Try to peek at the first chunk to immediately catch any errors
+# Store the original result (the stream)
+original_stream = result
+⋮----
+# Manually create and advance the iterator to check for errors
+stream_iter = original_stream.__aiter__()
+⋮----
+# This will raise an exception if the stream is invalid
+first_chunk = await anext(stream_iter)
+⋮----
+# If we reach here, the stream started successfully
+# Now recreate a fresh stream from the original API result
+# Otherwise, return a new stream that yields the first chunk
+# and remaining items
+async def combined_stream():  # type: ignore
+⋮----
+result = combined_stream()  # type: ignore
+⋮----
+# Empty stream is normal - nothing to do
+⋮----
+# Any exception here should be raised to trigger the retry mechanism
+⋮----
+async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
+⋮----
+retry_func = async_retry_with_exponential_backoff(
+⋮----
+"""Prepare args for LLM chat-completion API call"""
+⋮----
+llm_messages = [
+⋮----
+llm_messages = messages
+⋮----
+# TODO: we will unconditionally insert a dummy user msg
+# if the only msg is a system msg.
+# We could make this conditional on ModelInfo.needs_first_user_message
+⋮----
+# some LLMs, notable Gemini as of 12/11/24,
+# require the first message to be from the user,
+# so insert a dummy user msg if needed.
+⋮----
+chat_model = self.config.chat_model
+⋮----
+args: Dict[str, Any] = dict(
+⋮----
+# groq fails when we include stream_options in the request
+⋮----
+# get token-usage numbers in stream mode from OpenAI API,
+# and possibly other OpenAI-compatible APIs.
+⋮----
+# only include functions-related args if functions are provided
+# since the OpenAI API will throw an error if `functions` is None or []
+⋮----
+# some models e.g. o1-mini (as of sep 2024) don't support some params,
+# like temperature and stream, so we need to remove them.
+⋮----
+param_rename_map = self.rename_params()
+⋮----
+# finally, get rid of extra_body params exclusive to certain models
+extra_params = args.get("extra_body", {})
+⋮----
+# openAI response will look like this:
+"""
+        {
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "created": 1677652288,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "name": "",
+                    "content": "\n\nHello there, how may I help you?",
+                    "reasoning_content": "Okay, let's see here, hmmm...",
+                    "function_call": {
+                        "name": "fun_name",
+                        "arguments: {
+                            "arg1": "val1",
+                            "arg2": "val2"
+                        }
+                    },
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 9,
+                "completion_tokens": 12,
+                "total_tokens": 21
+            }
+        }
+        """
+⋮----
+message = {}
+⋮----
+message = response["choices"][0].get("message", {})
+⋮----
+msg = message.get("content", "")
+reasoning = message.get("reasoning_content", "")
+⋮----
+fun_call = None
+⋮----
+fun_call = LLMFunctionCall.from_dict(message["function_call"])
+⋮----
+args_str = message["function_call"]["arguments"] or ""
+msg_str = message["content"] or ""
+msg = msg_str + args_str
+oai_tool_calls = None
+⋮----
+oai_tool_calls = []
+⋮----
+tool_call = OpenAIToolCall.from_dict(tool_call_dict)
+⋮----
+msg = msg + "\n" + json.dumps(tool_call_dict)
+⋮----
+oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
+⋮----
+"""
+        ChatCompletion API call to OpenAI.
+        Args:
+            messages: list of messages  to send to the API, typically
+                represents back and forth dialogue between user and LLM, but could
+                also include "function"-role messages. If messages is a string,
+                it is assumed to be a user message.
+            max_tokens: max output tokens to generate
+            functions: list of LLMFunction specs available to the LLM, to possibly
+                use in its response
+            function_call: controls how the LLM uses `functions`:
+                - "auto": LLM decides whether to use `functions` or not,
+                - "none": LLM blocked from using any function
+                - a dict of {"name": "function_name"} which forces the LLM to use
+                    the specified function.
+        Returns:
+            LLMResponse object
+        """
+args = self._prep_chat_completion(
+cached, hashed_key, response = self._chat_completions_with_backoff(**args)  # type: ignore
+⋮----
+return llm_response  # type: ignore
+⋮----
+response_dict = response
+⋮----
+response_dict = response.model_dump()
+⋮----
+"""
+        Async version of _chat(). See that function for details.
+        """
+⋮----
+cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
 </file>
 
 <file path=".pre-commit-config.yaml">
@@ -48574,7 +48574,7 @@ answer = agent.llm_response(request)
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.56.16"
+version = "0.56.17"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
