@@ -707,9 +707,9 @@ class Task:
                     model_info=model_info,
                     append=False,
                 )
-                # Print clickable file:// link to the HTML log
+                # Log clickable file:// link to the HTML log
                 html_log_path = self.html_logger.file_path.resolve()
-                print(f"\n📊 HTML Log: file://{html_log_path}\n")
+                logger.warning(f"📊 HTML Log: file://{html_log_path}")
 
     def reset_all_sub_tasks(self) -> None:
         """
