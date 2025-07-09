@@ -1565,7 +1565,7 @@ class ChatAgent(Agent):
                 - CHAT_HISTORY_BUFFER
             )
             if output_len > self.config.llm.min_output_tokens:
-                logger.warning(
+                logger.debug(
                     f"""
                     Chat Model context length is {self.llm.chat_context_length()},
                     but the current message history is {self.chat_num_tokens(hist)} 

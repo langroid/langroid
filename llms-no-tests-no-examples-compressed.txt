@@ -21869,6 +21869,301 @@ sender_role = Role.ASSISTANT
 tool_id=tool_id,  # for OpenAI Assistant
 </file>
 
+<file path="langroid/embedding_models/models.py">
+AzureADTokenProvider = Callable[[], str]
+⋮----
+class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "openai"
+model_name: str = "text-embedding-3-small"
+api_key: str = ""
+api_base: Optional[str] = None
+organization: str = ""
+dims: int = 1536
+context_length: int = 8192
+langdb_params: LangDBParams = LangDBParams()
+⋮----
+class Config
+⋮----
+# enable auto-loading of env vars with OPENAI_ prefix, e.g.
+# api_base is set from OPENAI_API_BASE env var, in .env or system env
+env_prefix = "OPENAI_"
+⋮----
+class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "azure-openai"
+⋮----
+api_base: str = ""
+deployment_name: Optional[str] = None
+# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
+# change this to required  supported version
+api_version: Optional[str] = "2024-06-01"
+# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
+azure_ad_token: Optional[str] = None
+azure_ad_token_provider: Optional[AzureADTokenProvider] = None
+⋮----
+# enable auto-loading of env vars with AZURE_OPENAI_ prefix
+env_prefix = "AZURE_OPENAI_"
+⋮----
+class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "sentence-transformer"
+model_name: str = "BAAI/bge-large-en-v1.5"
+context_length: int = 512
+data_parallel: bool = False
+# Select device (e.g. "cuda", "cpu") when data parallel is disabled
+device: Optional[str] = None
+# Select devices when data parallel is enabled
+devices: Optional[list[str]] = None
+⋮----
+class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+"""Config for qdrant/fastembed embeddings,
+    see here: https://github.com/qdrant/fastembed
+    """
+⋮----
+model_type: str = "fastembed"
+model_name: str = "BAAI/bge-small-en-v1.5"
+batch_size: int = 256
+cache_dir: Optional[str] = None
+threads: Optional[int] = None
+parallel: Optional[int] = None
+additional_kwargs: Dict[str, Any] = {}
+⋮----
+class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+context_length: int = 2048
+batch_size: int = 2048
+⋮----
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "gemini"
+model_name: str = "models/text-embedding-004"
+⋮----
+dims: int = 768
+batch_size: int = 512
+⋮----
+class EmbeddingFunctionCallable
+⋮----
+"""
+    A callable class designed to generate embeddings for a list of texts using
+    the OpenAI or Azure OpenAI API, with automatic retries on failure.
+
+    Attributes:
+        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
+               configuration and utilities for generating embeddings.
+
+    Methods:
+        __call__(input: List[str]) -> Embeddings: Generate embeddings for
+                                a list of input texts.
+    """
+⋮----
+def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
+⋮----
+"""
+        Initialize the EmbeddingFunctionCallable with a specific model.
+
+        Args:
+            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
+                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
+                            generating embeddings.
+            batch_size (int): Batch size
+        """
+⋮----
+def __call__(self, input: List[str]) -> Embeddings
+⋮----
+"""
+        Generate embeddings for a given list of input texts using the OpenAI API,
+        with retries on failure.
+
+        This method:
+        - Truncates each text in the input list to the model's maximum context length.
+        - Processes the texts in batches to generate embeddings efficiently.
+        - Automatically retries the embedding generation process with exponential
+        backoff in case of failures.
+
+        Args:
+            input (List[str]): A list of input texts to generate embeddings for.
+
+        Returns:
+            Embeddings: A list of embedding vectors corresponding to the input texts.
+        """
+embeds = []
+⋮----
+# Truncate texts to context length while preserving text format
+truncated_texts = self.embed_model.truncate_texts(input)
+⋮----
+# Process in batches
+⋮----
+result = self.embed_model.client.embeddings.create(
+⋮----
+input=batch, model=self.embed_model.config.model_name  # type: ignore
+⋮----
+batch_embeds = [d.embedding for d in result.data]
+⋮----
+embeds = self.embed_model.model.encode_multi_process(
+⋮----
+batch_embeds = self.embed_model.model.encode(
+⋮----
+).tolist()  # type: ignore
+⋮----
+embeddings = self.embed_model.model.embed(
+⋮----
+embeds = [embedding.tolist() for embedding in embeddings]
+⋮----
+tokenized_text = self.embed_model.tokenize_string(input_string)
+⋮----
+gen_embedding = self.embed_model.generate_embedding(
+⋮----
+embeds = self.embed_model.generate_embeddings(input)
+⋮----
+class OpenAIEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
+⋮----
+# Check if using LangDB
+⋮----
+project_id = self.config.langdb_params.project_id
+⋮----
+model_for_tokenizer = self.config.model_name
+⋮----
+def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
+⋮----
+"""
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+truncated_tokens = [
+⋮----
+# LangDB embedding endpt only works with strings, not tokens
+⋮----
+def embedding_fn(self) -> Callable[[List[str]], Embeddings]
+⋮----
+@property
+    def embedding_dims(self) -> int
+⋮----
+class AzureOpenAIEmbeddings(EmbeddingModel)
+⋮----
+"""
+    Azure OpenAI embeddings model implementation.
+    """
+⋮----
+"""
+        Initializes Azure OpenAI embeddings model.
+
+        Args:
+            config: Configuration for Azure OpenAI embeddings model.
+        Raises:
+            ValueError: If required Azure config values are not set.
+        """
+⋮----
+"""Get the embedding function for Azure OpenAI.
+
+        Returns:
+            Callable that generates embeddings for input texts.
+        """
+⋮----
+STEC = SentenceTransformerEmbeddingsConfig
+⋮----
+class SentenceTransformerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: STEC = STEC())
+⋮----
+# this is an "extra" optional dependency, so we import it here
+⋮----
+self.config.devices  # type: ignore
+⋮----
+dims = self.model.get_sentence_embedding_dimension()
+⋮----
+return dims  # type: ignore
+⋮----
+class FastEmbedEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
+⋮----
+@cached_property
+    def embedding_dims(self) -> int
+⋮----
+embed_func = self.embedding_fn()
+⋮----
+LCSEC = LlamaCppServerEmbeddingsConfig
+⋮----
+class LlamaCppServerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: LCSEC = LCSEC())
+⋮----
+def tokenize_string(self, text: str) -> List[int]
+⋮----
+data = {"content": text, "add_special": False, "with_pieces": False}
+response = requests.post(self.tokenize_url, json=data)
+⋮----
+tokens = response.json()["tokens"]
+⋮----
+# not all(isinstance(token, (int, float)) for token in tokens):
+⋮----
+def detokenize_string(self, tokens: List[int]) -> str
+⋮----
+data = {"tokens": tokens}
+response = requests.post(self.detokenize_url, json=data)
+⋮----
+text = response.json()["content"]
+⋮----
+def truncate_string_to_context_size(self, text: str) -> str
+⋮----
+tokens = self.tokenize_string(text)
+tokens = tokens[: self.config.context_length]
+⋮----
+def generate_embedding(self, text: str) -> List[int | float]
+⋮----
+data = {"content": text}
+response = requests.post(self.embedding_url, json=data)
+⋮----
+embeddings = response.json()["embedding"]
+⋮----
+class GeminiEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
+⋮----
+def generate_embeddings(self, texts: List[str]) -> List[List[float]]
+⋮----
+"""Generates embeddings for a list of input texts."""
+all_embeddings: List[List[float]] = []
+⋮----
+result = self.client.models.embed_content(  # type: ignore[attr-defined]
+⋮----
+contents=batch,  # type: ignore
+⋮----
+# Extract .values from ContentEmbedding objects
+⋮----
+[emb.values for emb in result.embeddings]  # type: ignore
+⋮----
+def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
+⋮----
+"""
+    Args:
+        embedding_fn_type: Type of embedding model to use. Options are:
+         - "openai",
+         - "azure-openai",
+         - "sentencetransformer", or
+         - "fastembed".
+            (others may be added in the future)
+    Returns:
+        EmbeddingModel: The corresponding embedding model class.
+    """
+⋮----
+return OpenAIEmbeddings  # type: ignore
+⋮----
+return AzureOpenAIEmbeddings  # type: ignore
+⋮----
+return FastEmbedEmbeddings  # type: ignore
+⋮----
+return LlamaCppServerEmbeddings  # type: ignore
+⋮----
+return GeminiEmbeddings  # type: ignore
+else:  # default sentence transformer
+return SentenceTransformerEmbeddings  # type: ignore
+</file>
+
 <file path="langroid/language_models/client_cache.py">
 """
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
@@ -23571,301 +23866,6 @@ token_upper = token.upper()
     Returns:
         List of DoneSequence objects
     """
-</file>
-
-<file path="langroid/embedding_models/models.py">
-AzureADTokenProvider = Callable[[], str]
-⋮----
-class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "openai"
-model_name: str = "text-embedding-3-small"
-api_key: str = ""
-api_base: Optional[str] = None
-organization: str = ""
-dims: int = 1536
-context_length: int = 8192
-langdb_params: LangDBParams = LangDBParams()
-⋮----
-class Config
-⋮----
-# enable auto-loading of env vars with OPENAI_ prefix, e.g.
-# api_base is set from OPENAI_API_BASE env var, in .env or system env
-env_prefix = "OPENAI_"
-⋮----
-class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "azure-openai"
-⋮----
-api_base: str = ""
-deployment_name: Optional[str] = None
-# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
-# change this to required  supported version
-api_version: Optional[str] = "2024-06-01"
-# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
-azure_ad_token: Optional[str] = None
-azure_ad_token_provider: Optional[AzureADTokenProvider] = None
-⋮----
-# enable auto-loading of env vars with AZURE_OPENAI_ prefix
-env_prefix = "AZURE_OPENAI_"
-⋮----
-class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "sentence-transformer"
-model_name: str = "BAAI/bge-large-en-v1.5"
-context_length: int = 512
-data_parallel: bool = False
-# Select device (e.g. "cuda", "cpu") when data parallel is disabled
-device: Optional[str] = None
-# Select devices when data parallel is enabled
-devices: Optional[list[str]] = None
-⋮----
-class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-"""Config for qdrant/fastembed embeddings,
-    see here: https://github.com/qdrant/fastembed
-    """
-⋮----
-model_type: str = "fastembed"
-model_name: str = "BAAI/bge-small-en-v1.5"
-batch_size: int = 256
-cache_dir: Optional[str] = None
-threads: Optional[int] = None
-parallel: Optional[int] = None
-additional_kwargs: Dict[str, Any] = {}
-⋮----
-class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-context_length: int = 2048
-batch_size: int = 2048
-⋮----
-class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "gemini"
-model_name: str = "models/text-embedding-004"
-⋮----
-dims: int = 768
-batch_size: int = 512
-⋮----
-class EmbeddingFunctionCallable
-⋮----
-"""
-    A callable class designed to generate embeddings for a list of texts using
-    the OpenAI or Azure OpenAI API, with automatic retries on failure.
-
-    Attributes:
-        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
-               configuration and utilities for generating embeddings.
-
-    Methods:
-        __call__(input: List[str]) -> Embeddings: Generate embeddings for
-                                a list of input texts.
-    """
-⋮----
-def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
-⋮----
-"""
-        Initialize the EmbeddingFunctionCallable with a specific model.
-
-        Args:
-            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
-                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
-                            generating embeddings.
-            batch_size (int): Batch size
-        """
-⋮----
-def __call__(self, input: List[str]) -> Embeddings
-⋮----
-"""
-        Generate embeddings for a given list of input texts using the OpenAI API,
-        with retries on failure.
-
-        This method:
-        - Truncates each text in the input list to the model's maximum context length.
-        - Processes the texts in batches to generate embeddings efficiently.
-        - Automatically retries the embedding generation process with exponential
-        backoff in case of failures.
-
-        Args:
-            input (List[str]): A list of input texts to generate embeddings for.
-
-        Returns:
-            Embeddings: A list of embedding vectors corresponding to the input texts.
-        """
-embeds = []
-⋮----
-# Truncate texts to context length while preserving text format
-truncated_texts = self.embed_model.truncate_texts(input)
-⋮----
-# Process in batches
-⋮----
-result = self.embed_model.client.embeddings.create(
-⋮----
-input=batch, model=self.embed_model.config.model_name  # type: ignore
-⋮----
-batch_embeds = [d.embedding for d in result.data]
-⋮----
-embeds = self.embed_model.model.encode_multi_process(
-⋮----
-batch_embeds = self.embed_model.model.encode(
-⋮----
-).tolist()  # type: ignore
-⋮----
-embeddings = self.embed_model.model.embed(
-⋮----
-embeds = [embedding.tolist() for embedding in embeddings]
-⋮----
-tokenized_text = self.embed_model.tokenize_string(input_string)
-⋮----
-gen_embedding = self.embed_model.generate_embedding(
-⋮----
-embeds = self.embed_model.generate_embeddings(input)
-⋮----
-class OpenAIEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
-⋮----
-# Check if using LangDB
-⋮----
-project_id = self.config.langdb_params.project_id
-⋮----
-model_for_tokenizer = self.config.model_name
-⋮----
-def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
-⋮----
-"""
-        Truncate texts to the embedding model's context length.
-        TODO: Maybe we should show warning, and consider doing T5 summarization?
-        """
-truncated_tokens = [
-⋮----
-# LangDB embedding endpt only works with strings, not tokens
-⋮----
-def embedding_fn(self) -> Callable[[List[str]], Embeddings]
-⋮----
-@property
-    def embedding_dims(self) -> int
-⋮----
-class AzureOpenAIEmbeddings(EmbeddingModel)
-⋮----
-"""
-    Azure OpenAI embeddings model implementation.
-    """
-⋮----
-"""
-        Initializes Azure OpenAI embeddings model.
-
-        Args:
-            config: Configuration for Azure OpenAI embeddings model.
-        Raises:
-            ValueError: If required Azure config values are not set.
-        """
-⋮----
-"""Get the embedding function for Azure OpenAI.
-
-        Returns:
-            Callable that generates embeddings for input texts.
-        """
-⋮----
-STEC = SentenceTransformerEmbeddingsConfig
-⋮----
-class SentenceTransformerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: STEC = STEC())
-⋮----
-# this is an "extra" optional dependency, so we import it here
-⋮----
-self.config.devices  # type: ignore
-⋮----
-dims = self.model.get_sentence_embedding_dimension()
-⋮----
-return dims  # type: ignore
-⋮----
-class FastEmbedEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
-⋮----
-@cached_property
-    def embedding_dims(self) -> int
-⋮----
-embed_func = self.embedding_fn()
-⋮----
-LCSEC = LlamaCppServerEmbeddingsConfig
-⋮----
-class LlamaCppServerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: LCSEC = LCSEC())
-⋮----
-def tokenize_string(self, text: str) -> List[int]
-⋮----
-data = {"content": text, "add_special": False, "with_pieces": False}
-response = requests.post(self.tokenize_url, json=data)
-⋮----
-tokens = response.json()["tokens"]
-⋮----
-# not all(isinstance(token, (int, float)) for token in tokens):
-⋮----
-def detokenize_string(self, tokens: List[int]) -> str
-⋮----
-data = {"tokens": tokens}
-response = requests.post(self.detokenize_url, json=data)
-⋮----
-text = response.json()["content"]
-⋮----
-def truncate_string_to_context_size(self, text: str) -> str
-⋮----
-tokens = self.tokenize_string(text)
-tokens = tokens[: self.config.context_length]
-⋮----
-def generate_embedding(self, text: str) -> List[int | float]
-⋮----
-data = {"content": text}
-response = requests.post(self.embedding_url, json=data)
-⋮----
-embeddings = response.json()["embedding"]
-⋮----
-class GeminiEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
-⋮----
-def generate_embeddings(self, texts: List[str]) -> List[List[float]]
-⋮----
-"""Generates embeddings for a list of input texts."""
-all_embeddings: List[List[float]] = []
-⋮----
-result = self.client.models.embed_content(  # type: ignore[attr-defined]
-⋮----
-contents=batch,  # type: ignore
-⋮----
-# Extract .values from ContentEmbedding objects
-⋮----
-[emb.values for emb in result.embeddings]  # type: ignore
-⋮----
-def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
-⋮----
-"""
-    Args:
-        embedding_fn_type: Type of embedding model to use. Options are:
-         - "openai",
-         - "azure-openai",
-         - "sentencetransformer", or
-         - "fastembed".
-            (others may be added in the future)
-    Returns:
-        EmbeddingModel: The corresponding embedding model class.
-    """
-⋮----
-return OpenAIEmbeddings  # type: ignore
-⋮----
-return AzureOpenAIEmbeddings  # type: ignore
-⋮----
-return FastEmbedEmbeddings  # type: ignore
-⋮----
-return LlamaCppServerEmbeddings  # type: ignore
-⋮----
-return GeminiEmbeddings  # type: ignore
-else:  # default sentence transformer
-return SentenceTransformerEmbeddings  # type: ignore
 </file>
 
 <file path="langroid/language_models/base.py">
@@ -30801,7 +30801,7 @@ completion_tokens = 0
 usage = response.get("usage")
 ⋮----
 prompt_tokens = usage.get("prompt_tokens") or 0
-prompt_tokens_details = usage.get("prompt_tokens_details", {})
+prompt_tokens_details = usage.get("prompt_tokens_details", {}) or {}
 cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
 completion_tokens = usage.get("completion_tokens") or 0
 cost = self._cost_chat_model(
@@ -32340,7 +32340,7 @@ answer = agent.llm_response(request)
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.56.17"
+version = "0.56.18"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

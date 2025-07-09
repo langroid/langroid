@@ -224,7 +224,7 @@ def main(
         # "ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=8000,  # adjust based on model
+        chat_context_length=16_000,  # adjust based on model
     )
 
     config = DocChatAgentConfig(
