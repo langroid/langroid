@@ -73,7 +73,7 @@ def main(
     # NOTE: when using Azure, change this to `lm.AzureConfig`
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
-        chat_context_length=4096,
+        chat_context_length=16_000,  # set based on model
         timeout=45,
     )
 

@@ -203,8 +203,8 @@ class OpenAICallParams(BaseModel):
     https://platform.openai.com/docs/api-reference/chat
     """
 
-    max_tokens: int = 1024
-    temperature: float = 0.2
+    max_tokens: int | None = None
+    temperature: float | None = None
     frequency_penalty: float | None = None  # between -2 and 2
     presence_penalty: float | None = None  # between -2 and 2
     response_format: Dict[str, str] | None = None
@@ -1455,13 +1455,13 @@ class OpenAIGPT(LanguageModel):
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
                 function_call=function_call if has_function else None,
                 usage=LLMTokenUsage(
-                    prompt_tokens=prompt_tokens,
-                    cached_tokens=cached_tokens,
-                    completion_tokens=completion_tokens,
+                    prompt_tokens=prompt_tokens or 0,
+                    cached_tokens=cached_tokens or 0,
+                    completion_tokens=completion_tokens or 0,
                     cost=self._cost_chat_model(
-                        prompt_tokens,
-                        cached_tokens,
-                        completion_tokens,
+                        prompt_tokens or 0,
+                        cached_tokens or 0,
+                        completion_tokens or 0,
                     ),
                 ),
             ),
@@ -1526,11 +1526,13 @@ class OpenAIGPT(LanguageModel):
         usage = response.get("usage")
         if not cached and not self.get_stream() and usage is not None:
             prompt_tokens = usage.get("prompt_tokens") or 0
-            prompt_tokens_details = usage.get("prompt_tokens_details", {})
+            prompt_tokens_details = usage.get("prompt_tokens_details", {}) or {}
             cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
             completion_tokens = usage.get("completion_tokens") or 0
             cost = self._cost_chat_model(
-                prompt_tokens, cached_tokens, completion_tokens
+                prompt_tokens or 0,
+                cached_tokens or 0,
+                completion_tokens or 0,
             )
 
         return LLMTokenUsage(
