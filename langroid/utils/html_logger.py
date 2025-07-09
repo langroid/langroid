@@ -56,6 +56,7 @@ class HTMLLogger:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="2">
     <title>{self.filename} - Langroid Task Log</title>
     <style>
         body {{
@@ -132,6 +133,14 @@ class HTMLLogger:
         .entry {{
             margin-bottom: 15px;
             padding-left: 10px;
+        }}
+        
+        .entry.faded {{
+            opacity: 0.4;
+        }}
+        
+        .entry.important {{
+            opacity: 1.0;
         }}
         
         .entry.user .entity-header {{
@@ -264,12 +273,6 @@ class HTMLLogger:
             margin-left: 25px;
         }}
         
-        .mark-indicator {{
-            color: #ffd700;
-            font-weight: bold;
-            margin-right: 5px;
-            display: inline;
-        }}
         
         pre {{
             margin: 0;
@@ -289,9 +292,13 @@ class HTMLLogger:
             if (contentElement.classList.contains('collapsed')) {{
                 contentElement.classList.remove('collapsed');
                 toggleElement.textContent = '[-]';
+                // Save expanded state
+                localStorage.setItem('expanded_' + entryId, 'true');
             }} else {{
                 contentElement.classList.add('collapsed');
                 toggleElement.textContent = '[+]';
+                // Save collapsed state
+                localStorage.setItem('expanded_' + entryId, 'false');
             }}
         }}
         
@@ -305,6 +312,11 @@ class HTMLLogger:
                 toggle.textContent = element.classList.contains('collapsed') 
                     ? '[+]' : '[-]';
             }}
+            
+            // Save collapsed state for collapsible sections
+            localStorage.setItem(
+                'collapsed_' + id, element.classList.contains('collapsed')
+            );
         }}
         
         let allExpanded = false;
@@ -386,11 +398,14 @@ class HTMLLogger:
             const checkbox = document.getElementById('filterCheckbox');
             const entries = document.querySelectorAll('.entry');
             
+            // Save checkbox state to localStorage
+            localStorage.setItem('filterImportant', checkbox.checked);
+            
             if (checkbox.checked) {{
-                // Show only entries with asterisk
+                // Show only important entries
                 entries.forEach(entry => {{
-                    const hasAsterisk = entry.querySelector('.mark-indicator');
-                    if (hasAsterisk) {{
+                    const isImportant = entry.classList.contains('important');
+                    if (isImportant) {{
                         entry.classList.remove('hidden');
                     }} else {{
                         entry.classList.add('hidden');
@@ -411,6 +426,45 @@ class HTMLLogger:
         // Initialize all as collapsed on load
         document.addEventListener('DOMContentLoaded', function() {{
             collapseAll();
+            
+            // Restore checkbox state from localStorage
+            const checkbox = document.getElementById('filterCheckbox');
+            const savedState = localStorage.getItem('filterImportant');
+            if (savedState === 'true') {{
+                checkbox.checked = true;
+                filterEntries(); // Apply the filter
+            }}
+            
+            // Restore expanded states from localStorage
+            const entries = document.querySelectorAll('.entry');
+            entries.forEach(entry => {{
+                const entryId = entry.id;
+                const expandedState = localStorage.getItem('expanded_' + entryId);
+                if (expandedState === 'true') {{
+                    const contentElement = document.getElementById(
+                        entryId + '_content'
+                    );
+                    const toggleElement = entry.querySelector('.entity-header .toggle');
+                    if (contentElement && toggleElement) {{
+                        contentElement.classList.remove('collapsed');
+                        toggleElement.textContent = '[-]';
+                    }}
+                }}
+            }});
+            
+            // Restore collapsible section states
+            const collapsibles = document.querySelectorAll('.collapsible');
+            collapsibles.forEach(collapsible => {{
+                const id = collapsible.id;
+                const collapsedState = localStorage.getItem('collapsed_' + id);
+                if (collapsedState === 'false') {{
+                    collapsible.classList.remove('collapsed');
+                    const toggle = collapsible.querySelector('.toggle');
+                    if (toggle) {{
+                        toggle.textContent = '[-]';
+                    }}
+                }}
+            }});
         }});
     </script>
 </head>
@@ -428,7 +482,7 @@ class HTMLLogger:
         <button id="toggleAllBtn" onclick="toggleAll()">Expand All</button>
         <label style="margin-left: 20px;">
             <input type="checkbox" id="filterCheckbox" onchange="filterEntries()">
-            Show only valid responses (*)
+            Show only important responses
         </label>
     </div>
     
@@ -488,8 +542,14 @@ class HTMLLogger:
         else:
             css_class = "other"
 
+        # Determine opacity class based on mark
+        mark = getattr(fields, "mark", "")
+        opacity_class = "important" if mark == "*" else "faded"
+
         # Start building the entry
-        html_parts = [f'<div class="entry {css_class}" id="{entry_id}">']
+        html_parts = [
+            f'<div class="entry {css_class} {opacity_class}" id="{entry_id}">'
+        ]
 
         # Build smart header
         entity_parts = []  # Main header line with entity info
@@ -578,10 +638,7 @@ class HTMLLogger:
         # Build the header HTML with toggle, mark, and main content on same line
         header_html = '<span class="toggle">[+]</span> '
 
-        # Add mark indicator if present
-        mark = getattr(fields, "mark", "")
-        if mark == "*":
-            header_html += '<span class="mark-indicator">*</span>'
+        # Note: opacity_class already determined above
 
         # Add the main header content
         header_html += f'<span class="header-main">{html.escape(header_main)}</span>'
@@ -736,6 +793,7 @@ class HTMLLogger:
         try:
             with open(self.file_path, "a", encoding="utf-8") as f:
                 f.write(content + "\n")
+                f.flush()
         except Exception as e:
             self.logger.error(f"Failed to append to file: {e}")
 
