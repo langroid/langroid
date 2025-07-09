@@ -19153,225 +19153,6 @@ instance = cls.get_instance()
         """
 </file>
 
-<file path="langroid/utils/html_logger.py">
-"""HTML Logger for Langroid Task System.
-
-This module provides an HTML logger that creates self-contained HTML files
-with collapsible log entries for better visualization of agent interactions.
-"""
-⋮----
-class HTMLLogger
-⋮----
-"""Logger that outputs task logs as interactive HTML files."""
-⋮----
-"""Initialize the HTML logger.
-
-        Args:
-            filename: Base name for the log file (without extension)
-            log_dir: Directory to store log files
-            model_info: Information about the model being used
-            append: Whether to append to existing file
-        """
-⋮----
-# Logger for errors
-⋮----
-def _write_header(self) -> None
-⋮----
-"""Write the HTML header with CSS and JavaScript."""
-timestamp = datetime.now().strftime("%m/%d/%Y, %I:%M:%S %p")
-⋮----
-html_content = f"""<!DOCTYPE html>
-⋮----
-def log(self, fields: BaseModel) -> None
-⋮----
-"""Log a message entry.
-
-        Args:
-            fields: ChatDocLoggerFields containing all log information
-        """
-⋮----
-entry_html = self._format_entry(fields)
-⋮----
-def _format_entry(self, fields: BaseModel) -> str
-⋮----
-"""Format a log entry as HTML.
-
-        Args:
-            fields: ChatDocLoggerFields containing all log information
-
-        Returns:
-            HTML string for the entry
-        """
-entry_id = f"entry_{self.entry_counter}"
-⋮----
-# Get all relevant fields
-responder = str(getattr(fields, "responder", "UNKNOWN"))
-task_name = getattr(fields, "task_name", "root")
-# TODO (CLAUDE) display sender_entity in parens right after responder,
-# other than LLM, e.g. AGENT (USER)
-sender_entity = str(getattr(fields, "sender_entity", ""))
-tool = getattr(fields, "tool", "")
-tool_type = getattr(fields, "tool_type", "")
-content = getattr(fields, "content", "")
-recipient = getattr(fields, "recipient", "")
-⋮----
-# Determine CSS class based on responder
-responder_upper = responder.upper()
-⋮----
-css_class = "user"
-⋮----
-css_class = "llm"
-⋮----
-css_class = "agent"
-⋮----
-css_class = "system"
-⋮----
-css_class = "other"
-⋮----
-# Start building the entry
-html_parts = [f'<div class="entry {css_class}" id="{entry_id}">']
-⋮----
-# Build smart header
-header_parts = []
-⋮----
-# Add task name if not root
-⋮----
-# Handle different responder types
-⋮----
-# Add responder with sender_entity in parens if different
-⋮----
-# Show user input preview
-⋮----
-preview = content.replace("\n", " ")[:60]
-⋮----
-# Get model info from instance
-model_label = "LLM"
-⋮----
-model_label = f"LLM ({self.model_info})"
-⋮----
-# LLM making a tool call
-⋮----
-# LLM generating plain text response
-⋮----
-# Show first line or first 60 chars
-first_line = content.split("\n")[0].strip()
-⋮----
-preview = first_line[:60]
-⋮----
-agent_label = "AGENT"
-⋮----
-agent_label = f"AGENT ({sender_entity})"
-⋮----
-# Agent responding (usually tool handling)
-⋮----
-# Show tool result preview if available
-⋮----
-preview = content.replace("\n", " ")[:40]
-⋮----
-preview = content[:50]
-⋮----
-# Other responder types (like Task)
-⋮----
-# Add recipient info if present
-⋮----
-header = " ".join(header_parts)
-⋮----
-# Add mark indicator if present
-mark = getattr(fields, "mark", "")
-⋮----
-header = f'<span class="mark-indicator">*</span>{header}'
-⋮----
-# Add expandable header with toggle button
-⋮----
-# Add collapsible sections
-⋮----
-# System messages (if any)
-system_content = self._extract_system_content(fields)
-⋮----
-section_id = f"{entry_id}_system_{idx}"
-⋮----
-# Tool information
-tool = getattr(fields, "tool", None)
-⋮----
-tool_html = self._format_tool_section(fields, entry_id)
-⋮----
-# Main content
-⋮----
-if content and not tool:  # Don't duplicate content if it's a tool
-⋮----
-# Metadata (recipient, blocked)
-metadata_parts = []
-recipient = getattr(fields, "recipient", None)
-⋮----
-block = getattr(fields, "block", None)
-⋮----
-# Close entry content div
-html_parts.append("</div>")  # Close entry-content
-html_parts.append("</div>")  # Close entry
-⋮----
-def _extract_system_content(self, fields: BaseModel) -> List[tuple[str, str]]
-⋮----
-"""Extract system-related content from fields.
-
-        Returns:
-            List of (label, content) tuples
-        """
-system_content = []
-⋮----
-# Check for common system message patterns in content
-⋮----
-# Look for patterns like "[System Prompt]" or "System Reminder:"
-⋮----
-"""Create a collapsible section.
-
-        Args:
-            section_id: Unique ID for the section
-            label: Label to display
-            content: Content to show when expanded
-
-        Returns:
-            HTML string for the collapsible section
-        """
-⋮----
-def _format_tool_section(self, fields: BaseModel, entry_id: str) -> str
-⋮----
-"""Format tool-related information.
-
-        Args:
-            fields: ChatDocLoggerFields containing tool information
-            entry_id: Parent entry ID
-
-        Returns:
-            HTML string for the tool section
-        """
-⋮----
-tool_id = f"{entry_id}_tool_{self.tool_counter}"
-⋮----
-# Try to parse content as JSON for better formatting
-⋮----
-content_dict = json.loads(content)
-formatted_content = json.dumps(content_dict, indent=2)
-content_html = (
-⋮----
-content_html = html.escape(content)
-⋮----
-# Build tool section
-tool_name = f"{tool_type}({tool})" if tool_type else tool
-⋮----
-def _append_to_file(self, content: str) -> None
-⋮----
-"""Append content to the HTML file.
-
-        Args:
-            content: HTML content to append
-        """
-⋮----
-def close(self) -> None
-⋮----
-"""Close the HTML file with footer."""
-footer = """
-</file>
-
 <file path="langroid/utils/object_registry.py">
 # any derivative of BaseModel that has an id() method or an id attribute
 ObjWithId: TypeAlias = ChatDocument | ChatAgent | Agent
@@ -41423,6 +41204,10 @@ def log_fields(self) -> ChatDocLoggerFields
         """
 tool_type = ""  # FUNC or TOOL
 tool = ""  # tool name or function name
+⋮----
+# Skip tool detection for system messages - they contain tool instructions,
+# not actual tool calls
+⋮----
 oai_tools = (
 ⋮----
 tool_type = "FUNC"
@@ -41488,6 +41273,22 @@ message = ""
 # check if any top level json specifies a 'recipient'
 recipient = top_level_json_field(msg, "recipient")
 message = msg  # retain the whole msg in this case
+⋮----
+"""
+        Convert LLMMessage to ChatDocument.
+
+        Args:
+            message (LLMMessage): LLMMessage to convert.
+            sender_name (str): Name of the sender. Defaults to "".
+            recipient (str): Name of the recipient. Defaults to "".
+
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMMessage.
+        """
+# Map LLMMessage Role to ChatDocument Entity
+role_to_entity = {
+⋮----
+sender_entity = role_to_entity.get(message.role, Entity.USER)
 ⋮----
 """
         Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
@@ -42263,6 +42064,237 @@ model = model_string.replace("portkey/", "")
 env_patterns = [
 ⋮----
 key = os.getenv(pattern, "")
+</file>
+
+<file path="langroid/utils/html_logger.py">
+"""HTML Logger for Langroid Task System.
+
+This module provides an HTML logger that creates self-contained HTML files
+with collapsible log entries for better visualization of agent interactions.
+"""
+⋮----
+class HTMLLogger
+⋮----
+"""Logger that outputs task logs as interactive HTML files."""
+⋮----
+"""Initialize the HTML logger.
+
+        Args:
+            filename: Base name for the log file (without extension)
+            log_dir: Directory to store log files
+            model_info: Information about the model being used
+            append: Whether to append to existing file
+        """
+⋮----
+# Logger for errors
+⋮----
+def _write_header(self) -> None
+⋮----
+"""Write the HTML header with CSS and JavaScript."""
+timestamp = datetime.now().strftime("%m/%d/%Y, %I:%M:%S %p")
+⋮----
+html_content = f"""<!DOCTYPE html>
+⋮----
+def log(self, fields: BaseModel) -> None
+⋮----
+"""Log a message entry.
+
+        Args:
+            fields: ChatDocLoggerFields containing all log information
+        """
+⋮----
+entry_html = self._format_entry(fields)
+⋮----
+def _format_entry(self, fields: BaseModel) -> str
+⋮----
+"""Format a log entry as HTML.
+
+        Args:
+            fields: ChatDocLoggerFields containing all log information
+
+        Returns:
+            HTML string for the entry
+        """
+entry_id = f"entry_{self.entry_counter}"
+⋮----
+# Get all relevant fields
+responder = str(getattr(fields, "responder", "UNKNOWN"))
+task_name = getattr(fields, "task_name", "root")
+# TODO (CLAUDE) display sender_entity in parens right after responder,
+# other than LLM, e.g. AGENT (USER)
+sender_entity = str(getattr(fields, "sender_entity", ""))
+tool = getattr(fields, "tool", "")
+tool_type = getattr(fields, "tool_type", "")
+content = getattr(fields, "content", "")
+recipient = getattr(fields, "recipient", "")
+⋮----
+# Determine CSS class based on responder
+responder_upper = responder.upper()
+⋮----
+css_class = "user"
+⋮----
+css_class = "llm"
+⋮----
+css_class = "agent"
+⋮----
+css_class = "system"
+⋮----
+css_class = "other"
+⋮----
+# Start building the entry
+html_parts = [f'<div class="entry {css_class}" id="{entry_id}">']
+⋮----
+# Build smart header
+entity_parts = []  # Main header line with entity info
+content_preview = ""  # Second line with content preview
+⋮----
+# Add task name if not root
+⋮----
+# Handle different responder types
+⋮----
+# Add responder with sender_entity in parens if different
+⋮----
+# Show user input preview on second line
+⋮----
+preview = content.replace("\n", " ")[:60]
+⋮----
+content_preview = f'"{preview}"'
+⋮----
+# Get model info from instance - don't uppercase it
+model_label = "LLM"
+⋮----
+model_label = f"LLM ({self.model_info})"
+⋮----
+# LLM making a tool call - don't uppercase tool names
+⋮----
+# LLM generating plain text response
+⋮----
+# Show first line or first 60 chars on second line
+first_line = content.split("\n")[0].strip()
+⋮----
+preview = first_line[:60]
+⋮----
+agent_label = "AGENT"
+⋮----
+agent_label = f"AGENT ({sender_entity})"
+⋮----
+# Agent responding (usually tool handling)
+⋮----
+# Show tool result preview on second line if available
+⋮----
+preview = content.replace("\n", " ")[:40]
+⋮----
+content_preview = f"→ {preview}"
+⋮----
+preview = content[:50]
+⋮----
+# Other responder types (like Task)
+⋮----
+# Add recipient info if present
+⋮----
+# Construct the two-line header
+header_main = " ".join(entity_parts)
+⋮----
+# Build the header HTML with toggle, mark, and main content on same line
+header_html = '<span class="toggle">[+]</span> '
+⋮----
+# Add mark indicator if present
+mark = getattr(fields, "mark", "")
+⋮----
+# Add the main header content
+⋮----
+# Add preview on second line if present
+⋮----
+# Add expandable header
+⋮----
+# Add collapsible sections
+⋮----
+# System messages (if any)
+system_content = self._extract_system_content(fields)
+⋮----
+section_id = f"{entry_id}_system_{idx}"
+⋮----
+# Tool information
+tool = getattr(fields, "tool", None)
+# Only add tool section if tool exists and is not empty
+⋮----
+tool_html = self._format_tool_section(fields, entry_id)
+⋮----
+# Main content
+⋮----
+):  # Don't duplicate content if it's a tool
+⋮----
+# Metadata (recipient, blocked)
+metadata_parts = []
+recipient = getattr(fields, "recipient", None)
+⋮----
+block = getattr(fields, "block", None)
+⋮----
+# Close entry content div
+html_parts.append("</div>")  # Close entry-content
+html_parts.append("</div>")  # Close entry
+⋮----
+def _extract_system_content(self, fields: BaseModel) -> List[tuple[str, str]]
+⋮----
+"""Extract system-related content from fields.
+
+        Returns:
+            List of (label, content) tuples
+        """
+system_content = []
+⋮----
+# Check for common system message patterns in content
+⋮----
+# Look for patterns like "[System Prompt]" or "System Reminder:"
+⋮----
+"""Create a collapsible section.
+
+        Args:
+            section_id: Unique ID for the section
+            label: Label to display
+            content: Content to show when expanded
+
+        Returns:
+            HTML string for the collapsible section
+        """
+⋮----
+def _format_tool_section(self, fields: BaseModel, entry_id: str) -> str
+⋮----
+"""Format tool-related information.
+
+        Args:
+            fields: ChatDocLoggerFields containing tool information
+            entry_id: Parent entry ID
+
+        Returns:
+            HTML string for the tool section
+        """
+⋮----
+tool_id = f"{entry_id}_tool_{self.tool_counter}"
+⋮----
+# Try to parse content as JSON for better formatting
+⋮----
+content_dict = json.loads(content)
+formatted_content = json.dumps(content_dict, indent=2)
+content_html = (
+⋮----
+content_html = html.escape(content)
+⋮----
+# Build tool section
+tool_name = f"{tool_type}({tool})" if tool_type else tool
+⋮----
+def _append_to_file(self, content: str) -> None
+⋮----
+"""Append content to the HTML file.
+
+        Args:
+            content: HTML content to append
+        """
+⋮----
+def close(self) -> None
+⋮----
+"""Close the HTML file with footer."""
+footer = """
 </file>
 
 <file path="langroid/vector_store/qdrantdb.py">
@@ -56361,16 +56393,11 @@ original_parent_id = msg.metadata.parent_id
 # Only override parent_id if it wasn't already set in the
 # original message. This preserves parent chains from TaskTool
 ⋮----
-# TODO(CLAUDE) take agent's first message, and if it has system role,
-# then construct a ChatDocument from it. In ChatDocument class we need
-# to write a .from_LLMMessage() method that takes an LLMMessage
-# and returns a ChatDocument. I am showing skeleton code here, but
-# you have to get it to work.
-# system_message_chat_doc  = ChatDocument.from_LLMMessagese(
-#     self.agent.message_history[0]
-# )
-# # log the system message
-# self.log_message(Entity.SYSTEM, system_message_chat_doc, mark=True)
+# Log system message if it exists
+⋮----
+system_msg = self.agent._create_system_and_tools_message()
+system_message_chat_doc = ChatDocument.from_LLMMessage(
+# log the system message
 ⋮----
 def init_loggers(self) -> None
 ⋮----
@@ -56385,6 +56412,9 @@ header = ChatDocLoggerFields().tsv_header()
 model_info = ""
 ⋮----
 model_info = getattr(self.agent.config.llm, "chat_model", "")
+⋮----
+# Print clickable file:// link to the HTML log
+html_log_path = self.html_logger.file_path.resolve()
 ⋮----
 def reset_all_sub_tasks(self) -> None
 ⋮----

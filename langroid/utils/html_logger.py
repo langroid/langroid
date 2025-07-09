@@ -161,12 +161,24 @@ class HTMLLogger:
         .entity-header {{
             font-weight: bold;
             margin-bottom: 5px;
-            text-transform: uppercase;
             cursor: pointer;
         }}
         
         .entity-header:hover {{
             opacity: 0.8;
+        }}
+        
+        .header-main {{
+            /* Removed text-transform to preserve tool name casing */
+            display: inline;
+        }}
+        
+        .header-content {{
+            margin-left: 30px;
+            opacity: 0.7;
+            font-weight: normal;
+            font-style: italic;
+            display: block;
         }}
         
         .entry-content {{
@@ -256,6 +268,7 @@ class HTMLLogger:
             color: #ffd700;
             font-weight: bold;
             margin-right: 5px;
+            display: inline;
         }}
         
         pre {{
@@ -404,7 +417,7 @@ class HTMLLogger:
 <body>
     <div class="header">
         <div class="header-line">
-            <div>{self.model_info or self.filename}</div>
+            <div>{self.filename}</div>
             <div id="timestamp">{timestamp}</div>
         </div>
     </div>
@@ -479,46 +492,47 @@ class HTMLLogger:
         html_parts = [f'<div class="entry {css_class}" id="{entry_id}">']
 
         # Build smart header
-        header_parts = []
+        entity_parts = []  # Main header line with entity info
+        content_preview = ""  # Second line with content preview
 
         # Add task name if not root
         if task_name and task_name != "root":
-            header_parts.append(task_name)
+            entity_parts.append(task_name)
 
         # Handle different responder types
         if "USER" in responder_upper:
             # Add responder with sender_entity in parens if different
             if sender_entity and sender_entity != responder:
-                header_parts.append(f"USER ({sender_entity})")
+                entity_parts.append(f"USER ({sender_entity})")
             else:
-                header_parts.append("USER")
-            # Show user input preview
+                entity_parts.append("USER")
+            # Show user input preview on second line
             if content:
                 preview = content.replace("\n", " ")[:60]
                 if len(content) > 60:
                     preview += "..."
-                header_parts.append(f'"{preview}"')
+                content_preview = f'"{preview}"'
 
         elif "LLM" in responder_upper:
-            # Get model info from instance
+            # Get model info from instance - don't uppercase it
             model_label = "LLM"
             if self.model_info:
                 model_label = f"LLM ({self.model_info})"
 
             if tool and tool_type:
-                # LLM making a tool call
-                header_parts.append(f"{model_label} → {tool_type}[{tool}]")
+                # LLM making a tool call - don't uppercase tool names
+                entity_parts.append(f"{model_label} → {tool_type}[{tool}]")
             else:
                 # LLM generating plain text response
-                header_parts.append(model_label)
+                entity_parts.append(model_label)
                 if content:
-                    # Show first line or first 60 chars
+                    # Show first line or first 60 chars on second line
                     first_line = content.split("\n")[0].strip()
                     if first_line:
                         preview = first_line[:60]
                         if len(first_line) > 60:
                             preview += "..."
-                        header_parts.append(f'"{preview}"')
+                        content_preview = f'"{preview}"'
 
         elif "AGENT" in responder_upper:
             # Add responder with sender_entity in parens if different
@@ -528,49 +542,62 @@ class HTMLLogger:
 
             # Agent responding (usually tool handling)
             if tool:
-                header_parts.append(f"{agent_label}[{tool}]")
-                # Show tool result preview if available
+                entity_parts.append(f"{agent_label}[{tool}]")
+                # Show tool result preview on second line if available
                 if content:
                     preview = content.replace("\n", " ")[:40]
                     if len(content) > 40:
                         preview += "..."
-                    header_parts.append(f"→ {preview}")
+                    content_preview = f"→ {preview}"
             else:
-                header_parts.append(agent_label)
+                entity_parts.append(agent_label)
                 if content:
                     preview = content[:50]
                     if len(content) > 50:
                         preview += "..."
-                    header_parts.append(f'"{preview}"')
+                    content_preview = f'"{preview}"'
 
         elif "SYSTEM" in responder_upper:
-            header_parts.append("SYSTEM")
+            entity_parts.append("SYSTEM")
             if content:
                 preview = content[:50]
                 if len(content) > 50:
                     preview += "..."
-                header_parts.append(f'"{preview}"')
+                content_preview = f'"{preview}"'
         else:
             # Other responder types (like Task)
-            header_parts.append(responder)
+            entity_parts.append(responder)
 
         # Add recipient info if present
         if recipient:
-            header_parts.append(f"→ {recipient}")
+            entity_parts.append(f"→ {recipient}")
 
-        header = " ".join(header_parts)
+        # Construct the two-line header
+        header_main = " ".join(entity_parts)
+
+        # Build the header HTML with toggle, mark, and main content on same line
+        header_html = '<span class="toggle">[+]</span> '
 
         # Add mark indicator if present
         mark = getattr(fields, "mark", "")
         if mark == "*":
-            header = f'<span class="mark-indicator">*</span>{header}'
+            header_html += '<span class="mark-indicator">*</span>'
 
-        # Add expandable header with toggle button
+        # Add the main header content
+        header_html += f'<span class="header-main">{html.escape(header_main)}</span>'
+
+        # Add preview on second line if present
+        if content_preview:
+            header_html += (
+                f'\n    <div class="header-content">'
+                f"{html.escape(content_preview)}</div>"
+            )
+
+        # Add expandable header
         html_parts.append(
             f"""
-<div class="entity-header">
-    <span class="toggle" onclick="toggleEntry('{entry_id}')">[+]</span>
-    {header}
+<div class="entity-header" onclick="toggleEntry('{entry_id}')">
+    {header_html}
 </div>
 <div id="{entry_id}_content" class="entry-content collapsed">"""
         )
@@ -588,13 +615,16 @@ class HTMLLogger:
 
         # Tool information
         tool = getattr(fields, "tool", None)
-        if tool:
+        # Only add tool section if tool exists and is not empty
+        if tool and tool.strip():
             tool_html = self._format_tool_section(fields, entry_id)
             html_parts.append(tool_html)
 
         # Main content
         content = getattr(fields, "content", "")
-        if content and not tool:  # Don't duplicate content if it's a tool
+        if content and not (
+            tool and tool.strip()
+        ):  # Don't duplicate content if it's a tool
             html_parts.append(f'<div class="main-content">{html.escape(content)}</div>')
 
         # Metadata (recipient, blocked)

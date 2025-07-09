@@ -640,16 +640,19 @@ class Task:
 
         self._show_pending_message_if_debug()
         self.init_loggers()
-        # TODO(CLAUDE) take agent's first message, and if it has system role,
-        # then construct a ChatDocument from it. In ChatDocument class we need
-        # to write a .from_LLMMessage() method that takes an LLMMessage
-        # and returns a ChatDocument. I am showing skeleton code here, but
-        # you have to get it to work.
-        # system_message_chat_doc  = ChatDocument.from_LLMMessagese(
-        #     self.agent.message_history[0]
-        # )
-        # # log the system message
-        # self.log_message(Entity.SYSTEM, system_message_chat_doc, mark=True)
+        # Log system message if it exists
+        if (
+            hasattr(self.agent, "_create_system_and_tools_message")
+            and hasattr(self.agent, "system_message")
+            and self.agent.system_message
+        ):
+            system_msg = self.agent._create_system_and_tools_message()
+            system_message_chat_doc = ChatDocument.from_LLMMessage(
+                system_msg,
+                sender_name=self.name or "system",
+            )
+            # log the system message
+            self.log_message(Entity.SYSTEM, system_message_chat_doc, mark=True)
         self.log_message(Entity.USER, self.pending_message, mark=True)
         return self.pending_message
 
@@ -702,8 +705,11 @@ class Task:
                     filename=self.name,
                     log_dir=self.config.logs_dir,
                     model_info=model_info,
-                    append=True,
+                    append=False,
                 )
+                # Print clickable file:// link to the HTML log
+                html_log_path = self.html_logger.file_path.resolve()
+                print(f"\n📊 HTML Log: file://{html_log_path}\n")
 
     def reset_all_sub_tasks(self) -> None:
         """
