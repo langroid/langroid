@@ -430,9 +430,13 @@ class HTMLLogger:
             // Restore checkbox state from localStorage
             const checkbox = document.getElementById('filterCheckbox');
             const savedState = localStorage.getItem('filterImportant');
-            if (savedState === 'true') {{
-                checkbox.checked = true;
-                filterEntries(); // Apply the filter
+            if (savedState !== null) {{
+                // Use saved state if it exists
+                checkbox.checked = savedState === 'true';
+            }}
+            // Apply filter based on checkbox state (default is checked)
+            if (checkbox.checked) {{
+                filterEntries();
             }}
             
             // Restore expanded states from localStorage
@@ -481,7 +485,8 @@ class HTMLLogger:
     <div class="controls">
         <button id="toggleAllBtn" onclick="toggleAll()">Expand All</button>
         <label style="margin-left: 20px;">
-            <input type="checkbox" id="filterCheckbox" onchange="filterEntries()">
+            <input type="checkbox" id="filterCheckbox" 
+                   onchange="filterEntries()" checked>
             Show only important responses
         </label>
     </div>
