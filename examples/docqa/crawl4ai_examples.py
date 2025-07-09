@@ -377,7 +377,7 @@ def llm_content_filter_example():
 
     llm_filter = LLMContentFilter(
         llm_config=LLMConfig(
-            provider="gemini/gemini-2.0-flash-lite",
+            provider="gemini/gemini-2.0-flash",
             api_token=os.getenv("GEMINI_API_KEY"),
         ),
         instruction="""
