@@ -217,25 +217,29 @@ class ChatDocument(Document):
         """
         tool_type = ""  # FUNC or TOOL
         tool = ""  # tool name or function name
-        oai_tools = (
-            []
-            if self.oai_tool_calls is None
-            else [t for t in self.oai_tool_calls if t.function is not None]
-        )
-        if self.function_call is not None:
-            tool_type = "FUNC"
-            tool = self.function_call.name
-        elif len(oai_tools) > 0:
-            tool_type = "OAI_TOOL"
-            tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
-        else:
-            try:
-                json_tools = self.get_tool_names()
-            except Exception:
-                json_tools = []
-            if json_tools != []:
-                tool_type = "TOOL"
-                tool = json_tools[0]
+
+        # Skip tool detection for system messages - they contain tool instructions,
+        # not actual tool calls
+        if self.metadata.sender != Entity.SYSTEM:
+            oai_tools = (
+                []
+                if self.oai_tool_calls is None
+                else [t for t in self.oai_tool_calls if t.function is not None]
+            )
+            if self.function_call is not None:
+                tool_type = "FUNC"
+                tool = self.function_call.name
+            elif len(oai_tools) > 0:
+                tool_type = "OAI_TOOL"
+                tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
+            else:
+                try:
+                    json_tools = self.get_tool_names()
+                except Exception:
+                    json_tools = []
+                if json_tools != []:
+                    tool_type = "TOOL"
+                    tool = json_tools[0]
         recipient = self.metadata.recipient
         content = self.content
         sender_entity = self.metadata.sender
@@ -337,6 +341,50 @@ class ChatDocument(Document):
                 source=Entity.USER,
                 sender=Entity.USER,
                 recipient=recipient,
+            ),
+        )
+
+    @staticmethod
+    def from_LLMMessage(
+        message: LLMMessage,
+        sender_name: str = "",
+        recipient: str = "",
+    ) -> "ChatDocument":
+        """
+        Convert LLMMessage to ChatDocument.
+
+        Args:
+            message (LLMMessage): LLMMessage to convert.
+            sender_name (str): Name of the sender. Defaults to "".
+            recipient (str): Name of the recipient. Defaults to "".
+
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMMessage.
+        """
+        # Map LLMMessage Role to ChatDocument Entity
+        role_to_entity = {
+            Role.USER: Entity.USER,
+            Role.SYSTEM: Entity.SYSTEM,
+            Role.ASSISTANT: Entity.LLM,
+            Role.FUNCTION: Entity.LLM,
+            Role.TOOL: Entity.LLM,
+        }
+
+        sender_entity = role_to_entity.get(message.role, Entity.USER)
+
+        return ChatDocument(
+            content=message.content or "",
+            content_any=message.content,
+            files=message.files,
+            function_call=message.function_call,
+            oai_tool_calls=message.tool_calls,
+            metadata=ChatDocMetaData(
+                source=sender_entity,
+                sender=sender_entity,
+                sender_name=sender_name,
+                recipient=recipient,
+                oai_tool_id=message.tool_call_id,
+                tool_ids=[message.tool_id] if message.tool_id else [],
             ),
         )
 
