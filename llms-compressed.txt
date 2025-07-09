@@ -495,6 +495,7 @@ langroid/
     constants.py
     git_utils.py
     globals.py
+    html_logger.py
     logging.py
     object_registry.py
     pandas_utils.py
@@ -19150,6 +19151,225 @@ instance = cls.get_instance()
         Returns:
             str: The value of the specified field.
         """
+</file>
+
+<file path="langroid/utils/html_logger.py">
+"""HTML Logger for Langroid Task System.
+
+This module provides an HTML logger that creates self-contained HTML files
+with collapsible log entries for better visualization of agent interactions.
+"""
+⋮----
+class HTMLLogger
+⋮----
+"""Logger that outputs task logs as interactive HTML files."""
+⋮----
+"""Initialize the HTML logger.
+
+        Args:
+            filename: Base name for the log file (without extension)
+            log_dir: Directory to store log files
+            model_info: Information about the model being used
+            append: Whether to append to existing file
+        """
+⋮----
+# Logger for errors
+⋮----
+def _write_header(self) -> None
+⋮----
+"""Write the HTML header with CSS and JavaScript."""
+timestamp = datetime.now().strftime("%m/%d/%Y, %I:%M:%S %p")
+⋮----
+html_content = f"""<!DOCTYPE html>
+⋮----
+def log(self, fields: BaseModel) -> None
+⋮----
+"""Log a message entry.
+
+        Args:
+            fields: ChatDocLoggerFields containing all log information
+        """
+⋮----
+entry_html = self._format_entry(fields)
+⋮----
+def _format_entry(self, fields: BaseModel) -> str
+⋮----
+"""Format a log entry as HTML.
+
+        Args:
+            fields: ChatDocLoggerFields containing all log information
+
+        Returns:
+            HTML string for the entry
+        """
+entry_id = f"entry_{self.entry_counter}"
+⋮----
+# Get all relevant fields
+responder = str(getattr(fields, "responder", "UNKNOWN"))
+task_name = getattr(fields, "task_name", "root")
+# TODO (CLAUDE) display sender_entity in parens right after responder,
+# other than LLM, e.g. AGENT (USER)
+sender_entity = str(getattr(fields, "sender_entity", ""))
+tool = getattr(fields, "tool", "")
+tool_type = getattr(fields, "tool_type", "")
+content = getattr(fields, "content", "")
+recipient = getattr(fields, "recipient", "")
+⋮----
+# Determine CSS class based on responder
+responder_upper = responder.upper()
+⋮----
+css_class = "user"
+⋮----
+css_class = "llm"
+⋮----
+css_class = "agent"
+⋮----
+css_class = "system"
+⋮----
+css_class = "other"
+⋮----
+# Start building the entry
+html_parts = [f'<div class="entry {css_class}" id="{entry_id}">']
+⋮----
+# Build smart header
+header_parts = []
+⋮----
+# Add task name if not root
+⋮----
+# Handle different responder types
+⋮----
+# Add responder with sender_entity in parens if different
+⋮----
+# Show user input preview
+⋮----
+preview = content.replace("\n", " ")[:60]
+⋮----
+# Get model info from instance
+model_label = "LLM"
+⋮----
+model_label = f"LLM ({self.model_info})"
+⋮----
+# LLM making a tool call
+⋮----
+# LLM generating plain text response
+⋮----
+# Show first line or first 60 chars
+first_line = content.split("\n")[0].strip()
+⋮----
+preview = first_line[:60]
+⋮----
+agent_label = "AGENT"
+⋮----
+agent_label = f"AGENT ({sender_entity})"
+⋮----
+# Agent responding (usually tool handling)
+⋮----
+# Show tool result preview if available
+⋮----
+preview = content.replace("\n", " ")[:40]
+⋮----
+preview = content[:50]
+⋮----
+# Other responder types (like Task)
+⋮----
+# Add recipient info if present
+⋮----
+header = " ".join(header_parts)
+⋮----
+# Add mark indicator if present
+mark = getattr(fields, "mark", "")
+⋮----
+header = f'<span class="mark-indicator">*</span>{header}'
+⋮----
+# Add expandable header with toggle button
+⋮----
+# Add collapsible sections
+⋮----
+# System messages (if any)
+system_content = self._extract_system_content(fields)
+⋮----
+section_id = f"{entry_id}_system_{idx}"
+⋮----
+# Tool information
+tool = getattr(fields, "tool", None)
+⋮----
+tool_html = self._format_tool_section(fields, entry_id)
+⋮----
+# Main content
+⋮----
+if content and not tool:  # Don't duplicate content if it's a tool
+⋮----
+# Metadata (recipient, blocked)
+metadata_parts = []
+recipient = getattr(fields, "recipient", None)
+⋮----
+block = getattr(fields, "block", None)
+⋮----
+# Close entry content div
+html_parts.append("</div>")  # Close entry-content
+html_parts.append("</div>")  # Close entry
+⋮----
+def _extract_system_content(self, fields: BaseModel) -> List[tuple[str, str]]
+⋮----
+"""Extract system-related content from fields.
+
+        Returns:
+            List of (label, content) tuples
+        """
+system_content = []
+⋮----
+# Check for common system message patterns in content
+⋮----
+# Look for patterns like "[System Prompt]" or "System Reminder:"
+⋮----
+"""Create a collapsible section.
+
+        Args:
+            section_id: Unique ID for the section
+            label: Label to display
+            content: Content to show when expanded
+
+        Returns:
+            HTML string for the collapsible section
+        """
+⋮----
+def _format_tool_section(self, fields: BaseModel, entry_id: str) -> str
+⋮----
+"""Format tool-related information.
+
+        Args:
+            fields: ChatDocLoggerFields containing tool information
+            entry_id: Parent entry ID
+
+        Returns:
+            HTML string for the tool section
+        """
+⋮----
+tool_id = f"{entry_id}_tool_{self.tool_counter}"
+⋮----
+# Try to parse content as JSON for better formatting
+⋮----
+content_dict = json.loads(content)
+formatted_content = json.dumps(content_dict, indent=2)
+content_html = (
+⋮----
+content_html = html.escape(content)
+⋮----
+# Build tool section
+tool_name = f"{tool_type}({tool})" if tool_type else tool
+⋮----
+def _append_to_file(self, content: str) -> None
+⋮----
+"""Append content to the HTML file.
+
+        Args:
+            content: HTML content to append
+        """
+⋮----
+def close(self) -> None
+⋮----
+"""Close the HTML file with footer."""
+footer = """
 </file>
 
 <file path="langroid/utils/object_registry.py">
@@ -41335,6 +41555,301 @@ sender_role = Role.ASSISTANT
 tool_id=tool_id,  # for OpenAI Assistant
 </file>
 
+<file path="langroid/embedding_models/models.py">
+AzureADTokenProvider = Callable[[], str]
+⋮----
+class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "openai"
+model_name: str = "text-embedding-3-small"
+api_key: str = ""
+api_base: Optional[str] = None
+organization: str = ""
+dims: int = 1536
+context_length: int = 8192
+langdb_params: LangDBParams = LangDBParams()
+⋮----
+class Config
+⋮----
+# enable auto-loading of env vars with OPENAI_ prefix, e.g.
+# api_base is set from OPENAI_API_BASE env var, in .env or system env
+env_prefix = "OPENAI_"
+⋮----
+class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "azure-openai"
+⋮----
+api_base: str = ""
+deployment_name: Optional[str] = None
+# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
+# change this to required  supported version
+api_version: Optional[str] = "2024-06-01"
+# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
+azure_ad_token: Optional[str] = None
+azure_ad_token_provider: Optional[AzureADTokenProvider] = None
+⋮----
+# enable auto-loading of env vars with AZURE_OPENAI_ prefix
+env_prefix = "AZURE_OPENAI_"
+⋮----
+class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "sentence-transformer"
+model_name: str = "BAAI/bge-large-en-v1.5"
+context_length: int = 512
+data_parallel: bool = False
+# Select device (e.g. "cuda", "cpu") when data parallel is disabled
+device: Optional[str] = None
+# Select devices when data parallel is enabled
+devices: Optional[list[str]] = None
+⋮----
+class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+"""Config for qdrant/fastembed embeddings,
+    see here: https://github.com/qdrant/fastembed
+    """
+⋮----
+model_type: str = "fastembed"
+model_name: str = "BAAI/bge-small-en-v1.5"
+batch_size: int = 256
+cache_dir: Optional[str] = None
+threads: Optional[int] = None
+parallel: Optional[int] = None
+additional_kwargs: Dict[str, Any] = {}
+⋮----
+class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+context_length: int = 2048
+batch_size: int = 2048
+⋮----
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "gemini"
+model_name: str = "models/text-embedding-004"
+⋮----
+dims: int = 768
+batch_size: int = 512
+⋮----
+class EmbeddingFunctionCallable
+⋮----
+"""
+    A callable class designed to generate embeddings for a list of texts using
+    the OpenAI or Azure OpenAI API, with automatic retries on failure.
+
+    Attributes:
+        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
+               configuration and utilities for generating embeddings.
+
+    Methods:
+        __call__(input: List[str]) -> Embeddings: Generate embeddings for
+                                a list of input texts.
+    """
+⋮----
+def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
+⋮----
+"""
+        Initialize the EmbeddingFunctionCallable with a specific model.
+
+        Args:
+            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
+                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
+                            generating embeddings.
+            batch_size (int): Batch size
+        """
+⋮----
+def __call__(self, input: List[str]) -> Embeddings
+⋮----
+"""
+        Generate embeddings for a given list of input texts using the OpenAI API,
+        with retries on failure.
+
+        This method:
+        - Truncates each text in the input list to the model's maximum context length.
+        - Processes the texts in batches to generate embeddings efficiently.
+        - Automatically retries the embedding generation process with exponential
+        backoff in case of failures.
+
+        Args:
+            input (List[str]): A list of input texts to generate embeddings for.
+
+        Returns:
+            Embeddings: A list of embedding vectors corresponding to the input texts.
+        """
+embeds = []
+⋮----
+# Truncate texts to context length while preserving text format
+truncated_texts = self.embed_model.truncate_texts(input)
+⋮----
+# Process in batches
+⋮----
+result = self.embed_model.client.embeddings.create(
+⋮----
+input=batch, model=self.embed_model.config.model_name  # type: ignore
+⋮----
+batch_embeds = [d.embedding for d in result.data]
+⋮----
+embeds = self.embed_model.model.encode_multi_process(
+⋮----
+batch_embeds = self.embed_model.model.encode(
+⋮----
+).tolist()  # type: ignore
+⋮----
+embeddings = self.embed_model.model.embed(
+⋮----
+embeds = [embedding.tolist() for embedding in embeddings]
+⋮----
+tokenized_text = self.embed_model.tokenize_string(input_string)
+⋮----
+gen_embedding = self.embed_model.generate_embedding(
+⋮----
+embeds = self.embed_model.generate_embeddings(input)
+⋮----
+class OpenAIEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
+⋮----
+# Check if using LangDB
+⋮----
+project_id = self.config.langdb_params.project_id
+⋮----
+model_for_tokenizer = self.config.model_name
+⋮----
+def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
+⋮----
+"""
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+truncated_tokens = [
+⋮----
+# LangDB embedding endpt only works with strings, not tokens
+⋮----
+def embedding_fn(self) -> Callable[[List[str]], Embeddings]
+⋮----
+@property
+    def embedding_dims(self) -> int
+⋮----
+class AzureOpenAIEmbeddings(EmbeddingModel)
+⋮----
+"""
+    Azure OpenAI embeddings model implementation.
+    """
+⋮----
+"""
+        Initializes Azure OpenAI embeddings model.
+
+        Args:
+            config: Configuration for Azure OpenAI embeddings model.
+        Raises:
+            ValueError: If required Azure config values are not set.
+        """
+⋮----
+"""Get the embedding function for Azure OpenAI.
+
+        Returns:
+            Callable that generates embeddings for input texts.
+        """
+⋮----
+STEC = SentenceTransformerEmbeddingsConfig
+⋮----
+class SentenceTransformerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: STEC = STEC())
+⋮----
+# this is an "extra" optional dependency, so we import it here
+⋮----
+self.config.devices  # type: ignore
+⋮----
+dims = self.model.get_sentence_embedding_dimension()
+⋮----
+return dims  # type: ignore
+⋮----
+class FastEmbedEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
+⋮----
+@cached_property
+    def embedding_dims(self) -> int
+⋮----
+embed_func = self.embedding_fn()
+⋮----
+LCSEC = LlamaCppServerEmbeddingsConfig
+⋮----
+class LlamaCppServerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: LCSEC = LCSEC())
+⋮----
+def tokenize_string(self, text: str) -> List[int]
+⋮----
+data = {"content": text, "add_special": False, "with_pieces": False}
+response = requests.post(self.tokenize_url, json=data)
+⋮----
+tokens = response.json()["tokens"]
+⋮----
+# not all(isinstance(token, (int, float)) for token in tokens):
+⋮----
+def detokenize_string(self, tokens: List[int]) -> str
+⋮----
+data = {"tokens": tokens}
+response = requests.post(self.detokenize_url, json=data)
+⋮----
+text = response.json()["content"]
+⋮----
+def truncate_string_to_context_size(self, text: str) -> str
+⋮----
+tokens = self.tokenize_string(text)
+tokens = tokens[: self.config.context_length]
+⋮----
+def generate_embedding(self, text: str) -> List[int | float]
+⋮----
+data = {"content": text}
+response = requests.post(self.embedding_url, json=data)
+⋮----
+embeddings = response.json()["embedding"]
+⋮----
+class GeminiEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
+⋮----
+def generate_embeddings(self, texts: List[str]) -> List[List[float]]
+⋮----
+"""Generates embeddings for a list of input texts."""
+all_embeddings: List[List[float]] = []
+⋮----
+result = self.client.models.embed_content(  # type: ignore[attr-defined]
+⋮----
+contents=batch,  # type: ignore
+⋮----
+# Extract .values from ContentEmbedding objects
+⋮----
+[emb.values for emb in result.embeddings]  # type: ignore
+⋮----
+def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
+⋮----
+"""
+    Args:
+        embedding_fn_type: Type of embedding model to use. Options are:
+         - "openai",
+         - "azure-openai",
+         - "sentencetransformer", or
+         - "fastembed".
+            (others may be added in the future)
+    Returns:
+        EmbeddingModel: The corresponding embedding model class.
+    """
+⋮----
+return OpenAIEmbeddings  # type: ignore
+⋮----
+return AzureOpenAIEmbeddings  # type: ignore
+⋮----
+return FastEmbedEmbeddings  # type: ignore
+⋮----
+return LlamaCppServerEmbeddings  # type: ignore
+⋮----
+return GeminiEmbeddings  # type: ignore
+else:  # default sentence transformer
+return SentenceTransformerEmbeddings  # type: ignore
+</file>
+
 <file path="langroid/language_models/client_cache.py">
 """
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
@@ -44470,6 +44985,57 @@ agent = RetrieverAgent(agent_cfg)
 ⋮----
 response = agent.llm_response(
 # Check that the ENTIRE description is returned
+</file>
+
+<file path="tests/main/test_rich_file_logger.py">
+def _make(path: str, n: int) -> List[RichFileLogger]
+⋮----
+def _stress(start: threading.Event, errs: list[BaseException], path: str) -> None
+⋮----
+log = RichFileLogger(path, append=True, color=False)
+⋮----
+except BaseException as exc:  # noqa: BLE001
+⋮----
+@pytest.mark.parametrize("n", [1, 5, 50])
+def test_singleton_and_fd(tmp_path: Path, n: int) -> None
+⋮----
+file_path = tmp_path / "shared.log"
+loggers = _make(str(file_path), n)
+⋮----
+first = loggers[0]
+⋮----
+fd = first.file.fileno()
+⋮----
+# close once per acquisition ➜ final close closes fd
+⋮----
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="posix only")
+def test_fd_limit(tmp_path: Path) -> None
+⋮----
+import resource  # type: ignore
+⋮----
+path = str(tmp_path / "stress.log")
+errs: list[BaseException] = []
+start = threading.Event()
+ths = [
+⋮----
+def test_write_after_peer_close(tmp_path: Path) -> None
+⋮----
+"""
+    Scenario that used to raise `ValueError: I/O operation on closed file`.
+
+    Two RichFileLogger handles are created for the same path. One is closed,
+    the other continues to write. The test passes if no exception is raised.
+    """
+log_path = tmp_path / "late_write.log"
+⋮----
+logger1 = RichFileLogger(str(log_path), append=True, color=False)
+logger2 = RichFileLogger(str(log_path), append=True, color=False)
+⋮----
+# Close the first handle
+⋮----
+# Second handle must still be functional
+⋮----
+# Clean up
 </file>
 
 <file path="tests/main/test_token_usage.py">
@@ -47699,6 +48265,52 @@ task = lr.Task(agent)
 # Set up settings
 </file>
 
+<file path="examples/mcp/any-mcp.py">
+"""
+Generic script to connect to any MCP Server.
+
+Steps:
+- from the MCP server page, determine what type of transport is need to connect.
+- import the appropriate transport
+- set up the `transport` variable in the first line
+
+Run like this (omitting the `--model` argument will use the default GPT-4.1-Mini):
+
+    uv run examples/mcp/any-mcp.py --model ollama/qwen2.5-coder:32b
+
+See docs on various types of transports that are available:
+https://langroid.github.io/langroid/notes/mcp-tools/
+"""
+⋮----
+# trying to connect to openmemory
+⋮----
+URL = "http://localhost:8765"
+# set userid to my own, got from os: $USER
+userid = os.getenv("USER")
+⋮----
+async def main(model: str = "")
+⋮----
+transport = SSETransport(
+⋮----
+# Additional headers might be needed
+⋮----
+# command="...",
+# args=[],
+# env=dict(MY_VAR="blah"),
+⋮----
+all_tools = await get_tools_async(transport)
+⋮----
+agent = lr.ChatAgent(
+⋮----
+# forward to user when LLM doesn't use a tool
+⋮----
+# enable the agent to use all tools
+⋮----
+# make task with interactive=False =>
+# waits for user only when LLM doesn't use a tool
+task = lr.Task(agent, interactive=False)
+</file>
+
 <file path="examples/mcp/chainlit-mcp.py">
 """
 Variant of gitmcp.py that works via the Chainlit UI library,
@@ -48300,301 +48912,6 @@ token_upper = token.upper()
     Returns:
         List of DoneSequence objects
     """
-</file>
-
-<file path="langroid/embedding_models/models.py">
-AzureADTokenProvider = Callable[[], str]
-⋮----
-class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "openai"
-model_name: str = "text-embedding-3-small"
-api_key: str = ""
-api_base: Optional[str] = None
-organization: str = ""
-dims: int = 1536
-context_length: int = 8192
-langdb_params: LangDBParams = LangDBParams()
-⋮----
-class Config
-⋮----
-# enable auto-loading of env vars with OPENAI_ prefix, e.g.
-# api_base is set from OPENAI_API_BASE env var, in .env or system env
-env_prefix = "OPENAI_"
-⋮----
-class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "azure-openai"
-⋮----
-api_base: str = ""
-deployment_name: Optional[str] = None
-# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
-# change this to required  supported version
-api_version: Optional[str] = "2024-06-01"
-# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
-azure_ad_token: Optional[str] = None
-azure_ad_token_provider: Optional[AzureADTokenProvider] = None
-⋮----
-# enable auto-loading of env vars with AZURE_OPENAI_ prefix
-env_prefix = "AZURE_OPENAI_"
-⋮----
-class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "sentence-transformer"
-model_name: str = "BAAI/bge-large-en-v1.5"
-context_length: int = 512
-data_parallel: bool = False
-# Select device (e.g. "cuda", "cpu") when data parallel is disabled
-device: Optional[str] = None
-# Select devices when data parallel is enabled
-devices: Optional[list[str]] = None
-⋮----
-class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-"""Config for qdrant/fastembed embeddings,
-    see here: https://github.com/qdrant/fastembed
-    """
-⋮----
-model_type: str = "fastembed"
-model_name: str = "BAAI/bge-small-en-v1.5"
-batch_size: int = 256
-cache_dir: Optional[str] = None
-threads: Optional[int] = None
-parallel: Optional[int] = None
-additional_kwargs: Dict[str, Any] = {}
-⋮----
-class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-context_length: int = 2048
-batch_size: int = 2048
-⋮----
-class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "gemini"
-model_name: str = "models/text-embedding-004"
-⋮----
-dims: int = 768
-batch_size: int = 512
-⋮----
-class EmbeddingFunctionCallable
-⋮----
-"""
-    A callable class designed to generate embeddings for a list of texts using
-    the OpenAI or Azure OpenAI API, with automatic retries on failure.
-
-    Attributes:
-        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
-               configuration and utilities for generating embeddings.
-
-    Methods:
-        __call__(input: List[str]) -> Embeddings: Generate embeddings for
-                                a list of input texts.
-    """
-⋮----
-def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
-⋮----
-"""
-        Initialize the EmbeddingFunctionCallable with a specific model.
-
-        Args:
-            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
-                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
-                            generating embeddings.
-            batch_size (int): Batch size
-        """
-⋮----
-def __call__(self, input: List[str]) -> Embeddings
-⋮----
-"""
-        Generate embeddings for a given list of input texts using the OpenAI API,
-        with retries on failure.
-
-        This method:
-        - Truncates each text in the input list to the model's maximum context length.
-        - Processes the texts in batches to generate embeddings efficiently.
-        - Automatically retries the embedding generation process with exponential
-        backoff in case of failures.
-
-        Args:
-            input (List[str]): A list of input texts to generate embeddings for.
-
-        Returns:
-            Embeddings: A list of embedding vectors corresponding to the input texts.
-        """
-embeds = []
-⋮----
-# Truncate texts to context length while preserving text format
-truncated_texts = self.embed_model.truncate_texts(input)
-⋮----
-# Process in batches
-⋮----
-result = self.embed_model.client.embeddings.create(
-⋮----
-input=batch, model=self.embed_model.config.model_name  # type: ignore
-⋮----
-batch_embeds = [d.embedding for d in result.data]
-⋮----
-embeds = self.embed_model.model.encode_multi_process(
-⋮----
-batch_embeds = self.embed_model.model.encode(
-⋮----
-).tolist()  # type: ignore
-⋮----
-embeddings = self.embed_model.model.embed(
-⋮----
-embeds = [embedding.tolist() for embedding in embeddings]
-⋮----
-tokenized_text = self.embed_model.tokenize_string(input_string)
-⋮----
-gen_embedding = self.embed_model.generate_embedding(
-⋮----
-embeds = self.embed_model.generate_embeddings(input)
-⋮----
-class OpenAIEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
-⋮----
-# Check if using LangDB
-⋮----
-project_id = self.config.langdb_params.project_id
-⋮----
-model_for_tokenizer = self.config.model_name
-⋮----
-def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
-⋮----
-"""
-        Truncate texts to the embedding model's context length.
-        TODO: Maybe we should show warning, and consider doing T5 summarization?
-        """
-truncated_tokens = [
-⋮----
-# LangDB embedding endpt only works with strings, not tokens
-⋮----
-def embedding_fn(self) -> Callable[[List[str]], Embeddings]
-⋮----
-@property
-    def embedding_dims(self) -> int
-⋮----
-class AzureOpenAIEmbeddings(EmbeddingModel)
-⋮----
-"""
-    Azure OpenAI embeddings model implementation.
-    """
-⋮----
-"""
-        Initializes Azure OpenAI embeddings model.
-
-        Args:
-            config: Configuration for Azure OpenAI embeddings model.
-        Raises:
-            ValueError: If required Azure config values are not set.
-        """
-⋮----
-"""Get the embedding function for Azure OpenAI.
-
-        Returns:
-            Callable that generates embeddings for input texts.
-        """
-⋮----
-STEC = SentenceTransformerEmbeddingsConfig
-⋮----
-class SentenceTransformerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: STEC = STEC())
-⋮----
-# this is an "extra" optional dependency, so we import it here
-⋮----
-self.config.devices  # type: ignore
-⋮----
-dims = self.model.get_sentence_embedding_dimension()
-⋮----
-return dims  # type: ignore
-⋮----
-class FastEmbedEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
-⋮----
-@cached_property
-    def embedding_dims(self) -> int
-⋮----
-embed_func = self.embedding_fn()
-⋮----
-LCSEC = LlamaCppServerEmbeddingsConfig
-⋮----
-class LlamaCppServerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: LCSEC = LCSEC())
-⋮----
-def tokenize_string(self, text: str) -> List[int]
-⋮----
-data = {"content": text, "add_special": False, "with_pieces": False}
-response = requests.post(self.tokenize_url, json=data)
-⋮----
-tokens = response.json()["tokens"]
-⋮----
-# not all(isinstance(token, (int, float)) for token in tokens):
-⋮----
-def detokenize_string(self, tokens: List[int]) -> str
-⋮----
-data = {"tokens": tokens}
-response = requests.post(self.detokenize_url, json=data)
-⋮----
-text = response.json()["content"]
-⋮----
-def truncate_string_to_context_size(self, text: str) -> str
-⋮----
-tokens = self.tokenize_string(text)
-tokens = tokens[: self.config.context_length]
-⋮----
-def generate_embedding(self, text: str) -> List[int | float]
-⋮----
-data = {"content": text}
-response = requests.post(self.embedding_url, json=data)
-⋮----
-embeddings = response.json()["embedding"]
-⋮----
-class GeminiEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
-⋮----
-def generate_embeddings(self, texts: List[str]) -> List[List[float]]
-⋮----
-"""Generates embeddings for a list of input texts."""
-all_embeddings: List[List[float]] = []
-⋮----
-result = self.client.models.embed_content(  # type: ignore[attr-defined]
-⋮----
-contents=batch,  # type: ignore
-⋮----
-# Extract .values from ContentEmbedding objects
-⋮----
-[emb.values for emb in result.embeddings]  # type: ignore
-⋮----
-def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
-⋮----
-"""
-    Args:
-        embedding_fn_type: Type of embedding model to use. Options are:
-         - "openai",
-         - "azure-openai",
-         - "sentencetransformer", or
-         - "fastembed".
-            (others may be added in the future)
-    Returns:
-        EmbeddingModel: The corresponding embedding model class.
-    """
-⋮----
-return OpenAIEmbeddings  # type: ignore
-⋮----
-return AzureOpenAIEmbeddings  # type: ignore
-⋮----
-return FastEmbedEmbeddings  # type: ignore
-⋮----
-return LlamaCppServerEmbeddings  # type: ignore
-⋮----
-return GeminiEmbeddings  # type: ignore
-else:  # default sentence transformer
-return SentenceTransformerEmbeddings  # type: ignore
 </file>
 
 <file path="langroid/language_models/base.py">
@@ -50641,57 +50958,6 @@ result = task.run(
 # check there is non-empty response content
 </file>
 
-<file path="tests/main/test_rich_file_logger.py">
-def _make(path: str, n: int) -> List[RichFileLogger]
-⋮----
-def _stress(start: threading.Event, errs: list[BaseException], path: str) -> None
-⋮----
-log = RichFileLogger(path, append=True, color=False)
-⋮----
-except BaseException as exc:  # noqa: BLE001
-⋮----
-@pytest.mark.parametrize("n", [1, 5, 50])
-def test_singleton_and_fd(tmp_path: Path, n: int) -> None
-⋮----
-file_path = tmp_path / "shared.log"
-loggers = _make(str(file_path), n)
-⋮----
-first = loggers[0]
-⋮----
-fd = first.file.fileno()
-⋮----
-# close once per acquisition ➜ final close closes fd
-⋮----
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="posix only")
-def test_fd_limit(tmp_path: Path) -> None
-⋮----
-import resource  # type: ignore
-⋮----
-path = str(tmp_path / "stress.log")
-errs: list[BaseException] = []
-start = threading.Event()
-ths = [
-⋮----
-def test_write_after_peer_close(tmp_path: Path) -> None
-⋮----
-"""
-    Scenario that used to raise `ValueError: I/O operation on closed file`.
-
-    Two RichFileLogger handles are created for the same path. One is closed,
-    the other continues to write. The test passes if no exception is raised.
-    """
-log_path = tmp_path / "late_write.log"
-⋮----
-logger1 = RichFileLogger(str(log_path), append=True, color=False)
-logger2 = RichFileLogger(str(log_path), append=True, color=False)
-⋮----
-# Close the first handle
-⋮----
-# Second handle must still be functional
-⋮----
-# Clean up
-</file>
-
 <file path="tests/main/test_table_chat_agent.py">
 DATA_STRING = """age,gender,income,state,,,,
 ⋮----
@@ -51837,52 +52103,6 @@ planner = lr.ChatAgent(PlannerConfig())
 planner_task = lr.Task(planner, interactive=False)
 ⋮----
 result = await planner_task.run_async("Process this number: 3")
-</file>
-
-<file path="examples/mcp/any-mcp.py">
-"""
-Generic script to connect to any MCP Server.
-
-Steps:
-- from the MCP server page, determine what type of transport is need to connect.
-- import the appropriate transport
-- set up the `transport` variable in the first line
-
-Run like this (omitting the `--model` argument will use the default GPT-4.1-Mini):
-
-    uv run examples/mcp/any-mcp.py --model ollama/qwen2.5-coder:32b
-
-See docs on various types of transports that are available:
-https://langroid.github.io/langroid/notes/mcp-tools/
-"""
-⋮----
-# trying to connect to openmemory
-⋮----
-URL = "http://localhost:8765"
-# set userid to my own, got from os: $USER
-userid = os.getenv("USER")
-⋮----
-async def main(model: str = "")
-⋮----
-transport = SSETransport(
-⋮----
-# Additional headers might be needed
-⋮----
-# command="...",
-# args=[],
-# env=dict(MY_VAR="blah"),
-⋮----
-all_tools = await get_tools_async(transport)
-⋮----
-agent = lr.ChatAgent(
-⋮----
-# forward to user when LLM doesn't use a tool
-⋮----
-# enable the agent to use all tools
-⋮----
-# make task with interactive=False =>
-# waits for user only when LLM doesn't use a tool
-task = lr.Task(agent, interactive=False)
 </file>
 
 <file path="examples/mcp/claude-code-mcp.py">
@@ -55831,6 +56051,7 @@ inf_loop_wait_factor: int = 5
 restart_as_subtask: bool = False
 logs_dir: str = "logs"
 enable_loggers: bool = True
+enable_html_logging: bool = True
 addressing_prefix: str = ""
 allow_subtask_multi_oai_tools: bool = True
 recognize_string_signals: bool = True
@@ -56140,6 +56361,17 @@ original_parent_id = msg.metadata.parent_id
 # Only override parent_id if it wasn't already set in the
 # original message. This preserves parent chains from TaskTool
 ⋮----
+# TODO(CLAUDE) take agent's first message, and if it has system role,
+# then construct a ChatDocument from it. In ChatDocument class we need
+# to write a .from_LLMMessage() method that takes an LLMMessage
+# and returns a ChatDocument. I am showing skeleton code here, but
+# you have to get it to work.
+# system_message_chat_doc  = ChatDocument.from_LLMMessagese(
+#     self.agent.message_history[0]
+# )
+# # log the system message
+# self.log_message(Entity.SYSTEM, system_message_chat_doc, mark=True)
+⋮----
 def init_loggers(self) -> None
 ⋮----
 """Initialise per-task Rich and TSV loggers."""
@@ -56147,6 +56379,12 @@ def init_loggers(self) -> None
 # unique logger name ensures a distinct `logging.Logger` object
 ⋮----
 header = ChatDocLoggerFields().tsv_header()
+⋮----
+# HTML logger
+⋮----
+model_info = ""
+⋮----
+model_info = getattr(self.agent.config.llm, "chat_model", "")
 ⋮----
 def reset_all_sub_tasks(self) -> None
 ⋮----
@@ -56745,6 +56983,7 @@ or (  # current task is addressing message to caller task
             mark (bool, optional): Whether to mark the message as the final result of
                 a `task.step()` call. Defaults to False.
         """
+⋮----
 default_values = ChatDocLoggerFields().dict().values()
 msg_str_tsv = "\t".join(str(v) for v in default_values)
 ⋮----
@@ -56770,6 +57009,26 @@ content = f"[{color}]{f.content}[/{color}]"
 msg_str = (
 ⋮----
 resp_str = str(resp)
+⋮----
+# Create a minimal fields object for None messages
+⋮----
+fields_dict = {
+⋮----
+# Get fields from the message
+fields = msg.log_fields()
+fields_dict = fields.dict()
+⋮----
+# Create a ChatDocLoggerFields-like object for the HTML logger
+# Create a simple BaseModel subclass dynamically
+⋮----
+class LogFields(BaseModel)
+⋮----
+class Config
+⋮----
+extra = "allow"  # Allow extra fields
+⋮----
+# Create instance with the fields from fields_dict
+log_obj = LogFields(**fields_dict)
 ⋮----
 def _valid_recipient(self, recipient: str) -> bool
 ⋮----
@@ -56926,6 +57185,10 @@ seq_idx = 0
 expected = sequence.events[seq_idx]
 ⋮----
 # Check if we matched the entire sequence
+⋮----
+def close_loggers(self) -> None
+⋮----
+"""Close all loggers to ensure clean shutdown."""
 ⋮----
 """Check if the message chain plus current message matches a done sequence.
 
@@ -59163,7 +59426,7 @@ answer = agent.llm_response(request)
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.56.17"
+version = "0.56.18"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
