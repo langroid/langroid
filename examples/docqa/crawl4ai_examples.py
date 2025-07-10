@@ -21,36 +21,14 @@ from typing import List
 from langroid.mytypes import Document
 
 
-from langroid.parsing.url_loader import Crawl4aiConfig, URLLoader
-from crawl4ai.async_configs import LLMConfig
-from crawl4ai.extraction_strategy import (
-    JsonCssExtractionStrategy,
-    LLMExtractionStrategy,
-)
-from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.content_filter_strategy import (
-    PruningContentFilter,
-    LLMContentFilter,
-)
-from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
-
-# Helper for pydantic models if LLMExtractionStrategy is used with schema
-from langroid.pydantic_v1 import BaseModel, Field
-from typing import List
-from langroid.mytypes import Document
-
-
 from rich.console import Console
 from rich.prompt import IntPrompt
 
 console = Console()
 
 import sys
-import os
 
 sys.path.append(os.path.dirname(__file__))
-
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
 
 
 def simple_crawler_example():
@@ -364,12 +342,12 @@ def llm_content_filter_example():
     """
     Demonstrates using LLMContentFilter within DefaultMarkdownGenerator
     to intelligently filter and format content.
-    Requires OPENAI_API_KEY environment variable.
+    Requires GEMINI_API_KEY environment variable.
     """
     print("\n--- Running llm_content_filter_example ---")
 
     if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not found. Skipping llm_extraction_example.")
+        print("GEMINI_API_KEY not found. Skipping llm_content_filter_example.")
         print("Please set the GEMINI_API_KEY environment variable to run this example.")
         return
 
@@ -433,9 +411,7 @@ def main_menu():
     while True:
         try:
             choice = IntPrompt.ask("\nChoose an example to run", default=0)
-
-            for i, (name, _) in example_functions.items():
-                console.print(f"[cyan]{i}.[/cyan] {name}")
+            
             if choice == 0:
                 console.print("[bold red]Exiting. Goodbye![/bold red]")
                 break

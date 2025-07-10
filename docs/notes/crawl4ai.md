@@ -4,13 +4,13 @@
 
 The `Crawl4aiCrawler` is a highly advanced and flexible web crawler integrated into Langroid, built on the powerful `crawl4ai` library. It uses a real browser engine (Playwright) to render web pages, making it exceptionally effective at handling modern, JavaScript-heavy websites. This crawler provides a rich set of features for simple page scraping, deep-site crawling, and sophisticated data extraction, making it the most powerful crawling option available in Langroid.
 
-It is local crawler, so no need for API keys.
+It is a local crawler, so no need for API keys.
 
 ## Installation
 
 To use `Crawl4aiCrawler`, you must install the `crawl-4-ai` extra dependencies.
 
-To install and prepare crawl4ai
+To install and prepare crawl4ai:
 
 ```bash
 # Install langroid with crawl4ai support
@@ -19,6 +19,8 @@ crawl4ai setup
 crawl4ai doctor
 
 ```
+
+> **Note**: The `crawl4ai setup` command will download Playwright browsers (Chromium, Firefox, WebKit) on first run. This is a one-time download that can be several hundred MB in size. The browsers are stored locally and used for rendering web pages.
 
 ## Key Features
 
@@ -84,7 +86,7 @@ config = Crawl4aiConfig(
 
 ## Usage Examples
 
-These are representative example for runnable examples check the script [`examples/url_loader/crawl4ai_examples.py`](https://github.com/langroid/langroid/blob/main/examples/url_loader/cralw4ai_examples.py)
+These are representative examples. For runnable examples check the script [`examples/docqa/crawl4ai_examples.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/crawl4ai_examples.py)
 
 ### 1. Simple Crawling (Default Markdown)
 
@@ -243,7 +245,6 @@ from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
 deep_crawl_strategy = BestFirstCrawlingStrategy(
     max_depth=2,
     include_external=False,
-    url_scorer=scorer,
     max_pages=25,              # Maximum number of pages to crawl (optional)
     filter_chain=FilterChain([URLPatternFilter(patterns=["*core*"])]) # Pattern matching for granular control (optional)
 )
