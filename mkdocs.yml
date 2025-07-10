@@ -123,6 +123,7 @@ nav:
       - Tavily Search Tool: notes/tavily_search.md
       - Marker Pdf Parser: notes/marker-pdf.md
       - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
       - LangDB AI Gateway: notes/langdb.md
       - Portkey AI Gateway: notes/portkey.md
       - Markitdown Parsers: notes/markitdown.md

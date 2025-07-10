@@ -17,7 +17,7 @@ Optional args:
     -m <model_name>:  run with a specific LLM
     (defaults to GPT4-Turbo if blank)
     -c <crawler_name>: specify a crawler to use for web search. Options are:
-         "trafilatura" (default), "firecrawl"
+         "trafilatura" (default), "firecrawl", "exa", "crawl4ai"
 
 See here for guide to using local LLMs with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
@@ -27,7 +27,6 @@ import logging
 import re
 from typing import Any, List, Optional
 
-import typer
 from fire import Fire
 from rich import print
 from rich.prompt import Prompt
@@ -46,6 +45,7 @@ from langroid.parsing.url_loader import (
     ExaCrawlerConfig,
     FirecrawlConfig,
     TrafilaturaConfig,
+    Crawl4aiConfig,
 )
 from langroid.parsing.web_search import exa_search
 from langroid.utils.configuration import Settings, set_global
@@ -106,15 +106,17 @@ class SearchDocChatAgent(DocChatAgent):
 
     def update_crawler_config(self, crawler: Optional[str]):
         """Updates the crawler config based on the crawler argument."""
-        if crawler == "firecrawl":
-            self.config.crawler_config = FirecrawlConfig()
-        elif crawler == "trafilatura" or crawler is None:
+        if crawler == "trafilatura" or crawler is None:
             self.config.crawler_config = TrafilaturaConfig()
+        elif crawler == "firecrawl":
+            self.config.crawler_config = FirecrawlConfig()
         elif crawler == "exa":
             self.config.crawler_config = ExaCrawlerConfig()
+        elif crawler == "crawl4ai":
+            self.config.crawler_config = Crawl4aiConfig()
         else:
             raise ValueError(
-                f"Unsupported crawler {crawler}. Options are: 'trafilatura', 'firecrawl'"
+                f"Unsupported crawler {crawler}. Options are: 'trafilatura', 'firecrawl', 'exa', 'crawl4ai'"
             )
 
     def llm_response(
@@ -158,25 +160,12 @@ class SearchDocChatAgent(DocChatAgent):
         return "\n".join(str(e) for e in extracts)
 
 
-def cli():
-    Fire(main)
-
-
-app = typer.Typer()
-
-
-@app.command()
 def main(
     debug: bool = False,
     nocache: bool = False,
     model: str = "",
     fn_api: bool = True,
-    crawler: Optional[str] = typer.Option(
-        None,
-        "--crawler",
-        "-c",
-        help="Specify a crawler to use (trafilatura, firecrawl)",
-    ),
+    crawler: Optional[str] = None,
 ) -> None:
     """
     Main function to run the chatbot.
@@ -186,7 +175,8 @@ def main(
         nocache (bool): Disable caching.
         model (str): Specify the LLM model to use.
         fn_api (bool): Use OpenAI functions API instead of tools.
-        crawler (str): Specify the crawler to use for web search.
+        crawler (Optional[str]): Specify the crawler to use for web search.
+                                Options are: trafilatura (default), firecrawl, exa, crawl4ai.
     """
 
     set_global(
@@ -290,4 +280,4 @@ def main(
 
 
 if __name__ == "__main__":
-    app()
+    Fire(main)
