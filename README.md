@@ -143,6 +143,9 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Jul 2025:**
+  - [0.57.0](https://github.com/langroid/langroid/releases/tag/0.57.0) HTML Logger for interactive task visualization - 
+    self-contained HTML logs with collapsible entries, auto-refresh, and persistent UI state.
 - **Jun 2025:**
   - [0.56.0](https://github.com/langroid/langroid/releases/tag/0.56.0) `TaskTool` for delegating tasks to sub-agents - 
     enables agents to spawn sub-agents with specific tools and configurations.

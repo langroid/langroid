@@ -55,6 +55,7 @@ from langroid.utils.constants import (
     SEND_TO,
     USER_QUIT_STRINGS,
 )
+from langroid.utils.html_logger import HTMLLogger
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 from langroid.utils.object_registry import scheduled_cleanup
 from langroid.utils.system import hash
@@ -154,6 +155,7 @@ class TaskConfig(BaseModel):
     restart_as_subtask: bool = False
     logs_dir: str = "logs"
     enable_loggers: bool = True
+    enable_html_logging: bool = True
     addressing_prefix: str = ""
     allow_subtask_multi_oai_tools: bool = True
     recognize_string_signals: bool = True
@@ -343,6 +345,7 @@ class Task:
         self.session_id: str = ""
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
+        self.html_logger: Optional[HTMLLogger] = None
         self.color_log: bool = False if settings.notebook else True
 
         self.n_stalled_steps = 0  # how many consecutive steps with no progress?
@@ -637,7 +640,20 @@ class Task:
 
         self._show_pending_message_if_debug()
         self.init_loggers()
-        self.log_message(Entity.USER, self.pending_message)
+        # Log system message if it exists
+        if (
+            hasattr(self.agent, "_create_system_and_tools_message")
+            and hasattr(self.agent, "system_message")
+            and self.agent.system_message
+        ):
+            system_msg = self.agent._create_system_and_tools_message()
+            system_message_chat_doc = ChatDocument.from_LLMMessage(
+                system_msg,
+                sender_name=self.name or "system",
+            )
+            # log the system message
+            self.log_message(Entity.SYSTEM, system_message_chat_doc, mark=True)
+        self.log_message(Entity.USER, self.pending_message, mark=True)
         return self.pending_message
 
     def init_loggers(self) -> None:
@@ -666,6 +682,34 @@ class Task:
             )
             header = ChatDocLoggerFields().tsv_header()
             self.tsv_logger.info(f" \tTask\tResponder\t{header}")
+
+        # HTML logger
+        if self.config.enable_html_logging:
+            if (
+                self.caller is not None
+                and hasattr(self.caller, "html_logger")
+                and self.caller.html_logger is not None
+            ):
+                self.html_logger = self.caller.html_logger
+            elif not hasattr(self, "html_logger") or self.html_logger is None:
+                from langroid.utils.html_logger import HTMLLogger
+
+                model_info = ""
+                if (
+                    hasattr(self, "agent")
+                    and hasattr(self.agent, "config")
+                    and hasattr(self.agent.config, "llm")
+                ):
+                    model_info = getattr(self.agent.config.llm, "chat_model", "")
+                self.html_logger = HTMLLogger(
+                    filename=self.name,
+                    log_dir=self.config.logs_dir,
+                    model_info=model_info,
+                    append=False,
+                )
+                # Log clickable file:// link to the HTML log
+                html_log_path = self.html_logger.file_path.resolve()
+                logger.warning(f"📊 HTML Log: file://{html_log_path}")
 
     def reset_all_sub_tasks(self) -> None:
         """
@@ -2037,6 +2081,8 @@ class Task:
             mark (bool, optional): Whether to mark the message as the final result of
                 a `task.step()` call. Defaults to False.
         """
+        from langroid.agent.chat_document import ChatDocLoggerFields
+
         default_values = ChatDocLoggerFields().dict().values()
         msg_str_tsv = "\t".join(str(v) for v in default_values)
         if msg is not None:
@@ -2076,6 +2122,48 @@ class Task:
         if self.tsv_logger is not None:
             resp_str = str(resp)
             self.tsv_logger.info(f"{mark_str}\t{task_name}\t{resp_str}\t{msg_str_tsv}")
+
+        # HTML logger
+        if self.html_logger is not None:
+            if msg is None:
+                # Create a minimal fields object for None messages
+                from langroid.agent.chat_document import ChatDocLoggerFields
+
+                fields_dict = {
+                    "responder": str(resp),
+                    "mark": "*" if mark else "",
+                    "task_name": self.name or "root",
+                    "content": "",
+                    "sender_entity": str(resp),
+                    "sender_name": "",
+                    "recipient": "",
+                    "block": None,
+                    "tool_type": "",
+                    "tool": "",
+                }
+            else:
+                # Get fields from the message
+                fields = msg.log_fields()
+                fields_dict = fields.dict()
+                fields_dict.update(
+                    {
+                        "responder": str(resp),
+                        "mark": "*" if mark else "",
+                        "task_name": self.name or "root",
+                    }
+                )
+
+            # Create a ChatDocLoggerFields-like object for the HTML logger
+            # Create a simple BaseModel subclass dynamically
+            from langroid.pydantic_v1 import BaseModel
+
+            class LogFields(BaseModel):
+                class Config:
+                    extra = "allow"  # Allow extra fields
+
+            # Create instance with the fields from fields_dict
+            log_obj = LogFields(**fields_dict)
+            self.html_logger.log(log_obj)
 
     def _valid_recipient(self, recipient: str) -> bool:
         """
@@ -2334,6 +2422,13 @@ class Task:
 
         # Check if we matched the entire sequence
         return seq_idx == len(sequence.events)
+
+    def close_loggers(self) -> None:
+        """Close all loggers to ensure clean shutdown."""
+        if hasattr(self, "logger") and self.logger is not None:
+            self.logger.close()
+        if hasattr(self, "html_logger") and self.html_logger is not None:
+            self.html_logger.close()
 
     def _matches_sequence_with_current(
         self,
