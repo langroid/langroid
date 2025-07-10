@@ -28,6 +28,7 @@ Langroid creates three types of log files in the `logs/` directory:
 3. **TSV Log**: `<name>.tsv` - Tab-separated values for data analysis
 
 The `<name>` is determined by:
+
 - The task name (if specified)
 - Otherwise, the agent name
 - Falls back to "root" if neither is specified
@@ -41,6 +42,7 @@ WARNING - 📊 HTML Log: file:///path/to/logs/task-name.html
 
 ### Collapsible Entries
 Each log entry can be expanded/collapsed to show different levels of detail:
+
 - **Collapsed**: Shows only the entity type (USER, LLM, AGENT) and preview
 - **Expanded**: Shows full message content, tools, and sub-sections
 
@@ -51,6 +53,7 @@ Each log entry can be expanded/collapsed to show different levels of detail:
 
 ### Tool Visibility
 Tools are clearly displayed with:
+
 - Tool name and parameters
 - Collapsible sections showing raw tool calls
 - Visual indicators for tool results
@@ -60,6 +63,7 @@ The HTML page automatically refreshes every 2 seconds to show new log entries as
 
 ### Persistent UI State
 Your view preferences are preserved across refreshes:
+
 - Expanded/collapsed entries remain in their state
 - Filter settings are remembered
 
@@ -70,6 +74,7 @@ Here's what the HTML logger looks like for a planner workflow:
 ![HTML Logger Screenshot](../screenshots/planner-workflow-html-logs.png)
 
 In this example from `examples/basic/planner-workflow-simple.py`, you can see:
+
 - The planner agent orchestrating multiple tool calls
 - Clear visibility of `IncrementTool` and `DoublingTool` usage
 - The filtered view showing only important responses

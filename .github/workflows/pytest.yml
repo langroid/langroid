@@ -162,7 +162,8 @@ jobs:
           --extra exa \
           --extra tavily \
           --extra firecrawl \
-          --extra fastembed
+          --extra fastembed \
+          --extra crawl4ai
         
       
     
