@@ -46,6 +46,7 @@ from langroid.parsing.url_loader import (
     ExaCrawlerConfig,
     FirecrawlConfig,
     TrafilaturaConfig,
+    Crawl4aiConfig,
 )
 from langroid.parsing.web_search import exa_search
 from langroid.utils.configuration import Settings, set_global
@@ -106,12 +107,14 @@ class SearchDocChatAgent(DocChatAgent):
 
     def update_crawler_config(self, crawler: Optional[str]):
         """Updates the crawler config based on the crawler argument."""
-        if crawler == "firecrawl":
-            self.config.crawler_config = FirecrawlConfig()
-        elif crawler == "trafilatura" or crawler is None:
+        if crawler == "trafilatura" or crawler is None:
             self.config.crawler_config = TrafilaturaConfig()
+        elif crawler == "firecrawl":
+            self.config.crawler_config = FirecrawlConfig()
         elif crawler == "exa":
             self.config.crawler_config = ExaCrawlerConfig()
+        elif crawler == "crawl4ai":
+            self.config.crawler_config = Crawl4aiConfig()
         else:
             raise ValueError(
                 f"Unsupported crawler {crawler}. Options are: 'trafilatura', 'firecrawl'"
