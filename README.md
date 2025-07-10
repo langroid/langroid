@@ -144,6 +144,8 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Jul 2025:**
+  - [0.58.0](https://github.com/langroid/langroid/releases/tag/0.58.0) Crawl4AI integration - 
+    browser-based web crawling with Playwright for JavaScript-heavy sites, no API key required (thank you @abab-dev!).
   - [0.57.0](https://github.com/langroid/langroid/releases/tag/0.57.0) HTML Logger for interactive task visualization - 
     self-contained HTML logs with collapsible entries, auto-refresh, and persistent UI state.
 - **Jun 2025:**
