@@ -70,47 +70,57 @@ class ExaCrawlerConfig(BaseCrawlerConfig):
         env_prefix = "EXA_"
 
 
-def _resolve_crawl4ai_forward_refs(cls: Any) -> Any:
-    """
-    A class decorator that resolves forward references for fields in a Pydantic
-    model that depend on the optional 'crawl4ai' library.
-    """
-    try:
-        from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig  # noqa: F401
-        from crawl4ai.content_scraping_strategy import (  # noqa: F401
-            ContentScrapingStrategy,
-        )
-        from crawl4ai.deep_crawling import DeepCrawlStrategy  # noqa: F401
-        from crawl4ai.extraction_strategy import ExtractionStrategy  # noqa: F401
-        from crawl4ai.markdown_generation_strategy import (  # noqa: F401
-            MarkdownGenerationStrategy,
-        )
-
-        #  Create a namespace dictionary from locals() but exclude 'cls'.
-        # This prevents the TypeError.
-        namespace = {name: value for name, value in locals().items() if name != "cls"}
-        cls.update_forward_refs(**namespace)
-
-    except ImportError:
-        # If crawl4ai is not installed, do nothing.
-        pass
-    return cls
-
-
-@_resolve_crawl4ai_forward_refs
 class Crawl4aiConfig(BaseCrawlerConfig):
-    """
-    Configuration for the Crawl4aiCrawler.
-    """
+    """Configuration for the Crawl4aiCrawler."""
 
     crawl_mode: Literal["simple", "deep"] = "simple"
     extraction_strategy: Optional["ExtractionStrategy"] = None
     markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
     deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
     scraping_strategy: Optional["ContentScrapingStrategy"] = None
-
     browser_config: Optional["BrowserConfig"] = None
     run_config: Optional["CrawlerRunConfig"] = None
+
+    _refs_resolved: bool = False
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Resolve forward references when class is first subclassed or instantiated."""
+        super().__init_subclass__(**kwargs)
+        cls._resolve_forward_refs()
+
+    @classmethod
+    def _resolve_forward_refs(cls) -> None:
+        """Resolve forward references only when needed."""
+        if not cls._refs_resolved:
+            try:
+                from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
+                from crawl4ai.content_scraping_strategy import ContentScrapingStrategy
+                from crawl4ai.deep_crawling import DeepCrawlStrategy
+                from crawl4ai.extraction_strategy import ExtractionStrategy
+                from crawl4ai.markdown_generation_strategy import (
+                    MarkdownGenerationStrategy,
+                )
+
+                # Create namespace for update_forward_refs
+                namespace = {
+                    "BrowserConfig": BrowserConfig,
+                    "CrawlerRunConfig": CrawlerRunConfig,
+                    "ContentScrapingStrategy": ContentScrapingStrategy,
+                    "DeepCrawlStrategy": DeepCrawlStrategy,
+                    "ExtractionStrategy": ExtractionStrategy,
+                    "MarkdownGenerationStrategy": MarkdownGenerationStrategy,
+                }
+
+                cls.update_forward_refs(**namespace)
+                cls._refs_resolved = True
+            except ImportError:
+                # If crawl4ai is not installed, leave forward refs as strings
+                pass
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize and ensure forward refs are resolved."""
+        self._resolve_forward_refs()
+        super().__init__(**kwargs)
 
     class Config:
         arbitrary_types_allowed = True
