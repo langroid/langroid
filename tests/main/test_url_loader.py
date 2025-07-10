@@ -75,7 +75,7 @@ def test_crawl4ai_mocked(mock_crawler_class):
 
 
 @pytest.mark.skipif(
-    os.getenv("CI"), # Skip on CI to avoid install of playwright
+    os.getenv("CI"),  # Skip on CI to avoid install of playwright
     reason="Crawl4ai integration test skipped by default. Set TEST_CRAWL4AI=1 to run.",
 )
 def test_crawl4ai_integration():

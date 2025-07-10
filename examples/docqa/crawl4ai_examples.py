@@ -411,7 +411,7 @@ def main_menu():
     while True:
         try:
             choice = IntPrompt.ask("\nChoose an example to run", default=0)
-            
+
             if choice == 0:
                 console.print("[bold red]Exiting. Goodbye![/bold red]")
                 break
