@@ -126,10 +126,6 @@ class Crawl4aiConfig(BaseCrawlerConfig):
         arbitrary_types_allowed = True
 
 
-# Also remove the old decorator function completely:
-# def _resolve_crawl4ai_forward_refs(cls: Any) -> Any:  # DELETE THIS ENTIRE FUNCTION
-
-
 class BaseCrawler(ABC):
     """Abstract base class for web crawlers."""
 
