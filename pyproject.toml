@@ -270,7 +270,7 @@ asyncio = [
 firecrawl = [
     "firecrawl-py>=1.13.5",
 ]
-crawl-4-ai = [
+crawl4ai = [
     "crawl4ai>=0.6.3",
 ]
 

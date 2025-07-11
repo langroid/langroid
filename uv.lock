@@ -2878,7 +2878,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.57.0"
+version = "0.58.1"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -2981,7 +2981,7 @@ chainlit = [
 chromadb = [
     { name = "chromadb" },
 ]
-crawl-4-ai = [
+crawl4ai = [
     { name = "crawl4ai" },
 ]
 db = [
@@ -3180,7 +3180,7 @@ requires-dist = [
     { name = "chromadb", marker = "extra == 'chromadb'", specifier = ">=0.4.21,<=0.4.23" },
     { name = "chromadb", marker = "extra == 'vecdbs'", specifier = ">=0.4.21,<=0.4.23" },
     { name = "colorlog", specifier = ">=6.7.0,<7.0.0" },
-    { name = "crawl4ai", marker = "extra == 'crawl-4-ai'", specifier = ">=0.6.3" },
+    { name = "crawl4ai", marker = "extra == 'crawl4ai'", specifier = ">=0.6.3" },
     { name = "docling", marker = "extra == 'all'", specifier = ">=2.16.0,<3.0.0" },
     { name = "docling", marker = "extra == 'doc-chat'", specifier = ">=2.20.0,<3.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.16.0,<3.0.0" },

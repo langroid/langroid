@@ -25,7 +25,7 @@ if TYPE_CHECKING:
         from crawl4ai.extraction_strategy import ExtractionStrategy
         from crawl4ai.markdown_generation_strategy import MarkdownGenerationStrategy
     except ImportError:
-        raise LangroidImportError("crawl4ai", "crawl-4-ai")
+        raise LangroidImportError("crawl4ai", "crawl4ai")
 
 load_dotenv()
 

@@ -163,7 +163,7 @@ jobs:
           --extra tavily \
           --extra firecrawl \
           --extra fastembed \
-          --extra crawl-4-ai
+          --extra crawl4ai
         
       
     

@@ -19,7 +19,7 @@ We're excited to introduce **Crawl4AI** as a new web crawling option in Langroid
 
 #### Installation:
 ```bash
-pip install "langroid[crawl-4-ai]"
+pip install "langroid[crawl4ai]"
 crawl4ai setup  # Note: Downloads Playwright browsers (~300MB, one-time)
 crawl4ai doctor
 ```
@@ -91,7 +91,7 @@ See the [full documentation](https://langroid.github.io/langroid/notes/crawl4ai/
 ## 🚀 Migration Guide
 No breaking changes. To use the new Crawl4AI crawler:
 
-1. Install the extra: `pip install "langroid[crawl-4-ai]"`
+1. Install the extra: `pip install "langroid[crawl4ai]"`
 2. Run setup: `crawl4ai setup` (one-time Playwright download)
 3. Use `Crawl4aiConfig()` instead of other crawler configs
 

@@ -8,13 +8,13 @@ It is a local crawler, so no need for API keys.
 
 ## Installation
 
-To use `Crawl4aiCrawler`, you must install the `crawl-4-ai` extra dependencies.
+To use `Crawl4aiCrawler`, you must install the `crawl4ai` extra dependencies.
 
 To install and prepare crawl4ai:
 
 ```bash
 # Install langroid with crawl4ai support
-pip install "langroid[crawl-4-ai]"
+pip install "langroid[crawl4ai]"
 crawl4ai setup
 crawl4ai doctor
 
@@ -80,7 +80,7 @@ config = Crawl4aiConfig(
 
 - `scraping_strategy` (`ContentScrapingStrategy`): Specifies the underlying HTML parsing engine. Useful for performance tuning.
 
-- `browser_config` & `run_config`: For advanced users to pass detailed `BrowserConfig` and `CrawlerRunConfig` objects directly from the `crawl-4-ai` library.
+- `browser_config` & `run_config`: For advanced users to pass detailed `BrowserConfig` and `CrawlerRunConfig` objects directly from the `crawl4ai` library.
 
 ---
 
