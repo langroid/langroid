@@ -1,5 +1,6 @@
 # Contributing to Langroid
 
+
 Thank you for your interest in contributing to Langroid!
 We want to fundamentally change how LLM applications are built, 
 using Langroid's principled multi-agent framework. 
@@ -31,6 +32,11 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
 
 ## Implementation Ideas
 
+> **⚠️ Warning: The list of contribution ideas is not updated frequently
+> and may be out of date.**  
+> Please see the github issues for more up-to-date possibilities.
+
+
 **INTEGRATIONS**
 
 - Vector databases, e.g.:
@@ -42,10 +48,18 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
     - [x] Weaviate
     - [ ] Milvus 
     - [ ] Marqo 
-- Other LLM APIs, e.g.: Claude, Cohere, ... (see below)
-- Local LLMs, e.g.: llama2
-- Data Sources: SQL DBs, NoSQL DBs, Neo4j (Graph DBs), ...
-- Query languages: SQL, GraphQL, Cypher, ...
+    
+- Other LLM APIs, e.g.: 
+  - [ ] Anthropic 
+  - [ ] Google 
+  - [ ] Cohere
+  
+- Data Sources: 
+  - [x] SQL DBs, 
+  - [x] Neo4j knowledge-graph
+  - [x] ArangoDB knowledge-graph
+  - [ ] NoSQL DBs
+- Query languages: GraphQL, ...
 
 
 **SPECIALIZED AGENTS**
