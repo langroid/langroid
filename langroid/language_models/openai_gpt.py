@@ -287,6 +287,9 @@ class OpenAIGPTConfig(LLMConfig):
     langdb_params: LangDBParams = LangDBParams()
     portkey_params: PortkeyParams = PortkeyParams()
     headers: Dict[str, str] = {}
+    http_client_factory: Optional[Callable[[], Any]] = None  # Factory for httpx.Client
+    http_verify_ssl: bool = True  # Simple flag for SSL verification
+    http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
@@ -631,6 +634,32 @@ class OpenAIGPT(LanguageModel):
                 # Add Portkey-specific headers
                 self.config.headers.update(self.config.portkey_params.get_headers())
 
+            # Create http_client if needed - Priority order:
+            # 1. http_client_factory (most flexibility, not cacheable)
+            # 2. http_client_config (cacheable, moderate flexibility)
+            # 3. http_verify_ssl=False (cacheable, simple SSL bypass)
+            http_client = None
+            async_http_client = None
+            http_client_config_used = None
+
+            if self.config.http_client_factory is not None:
+                # Use the factory to create http_client (not cacheable)
+                http_client = self.config.http_client_factory()
+                # Don't set async_http_client from sync client - create separately
+                # This avoids type mismatch issues
+                async_http_client = None
+            elif self.config.http_client_config is not None:
+                # Use config dict (cacheable)
+                http_client_config_used = self.config.http_client_config
+            elif not self.config.http_verify_ssl:
+                # Simple SSL bypass (cacheable)
+                http_client_config_used = {"verify": False}
+                logging.warning(
+                    "SSL verification has been disabled. This is insecure and "
+                    "should only be used in trusted environments (e.g., "
+                    "corporate networks with self-signed certificates)."
+                )
+
             if self.config.use_cached_client:
                 self.client = get_openai_client(
                     api_key=self.api_key,
@@ -638,6 +667,8 @@ class OpenAIGPT(LanguageModel):
                     organization=self.config.organization,
                     timeout=Timeout(self.config.timeout),
                     default_headers=self.config.headers,
+                    http_client=http_client,
+                    http_client_config=http_client_config_used,
                 )
                 self.async_client = get_async_openai_client(
                     api_key=self.api_key,
@@ -645,23 +676,56 @@ class OpenAIGPT(LanguageModel):
                     organization=self.config.organization,
                     timeout=Timeout(self.config.timeout),
                     default_headers=self.config.headers,
+                    http_client=async_http_client,
+                    http_client_config=http_client_config_used,
                 )
             else:
                 # Create new clients without caching
-                self.client = OpenAI(
+                client_kwargs: Dict[str, Any] = dict(
                     api_key=self.api_key,
                     base_url=self.api_base,
                     organization=self.config.organization,
                     timeout=Timeout(self.config.timeout),
                     default_headers=self.config.headers,
                 )
-                self.async_client = AsyncOpenAI(
+                if http_client is not None:
+                    client_kwargs["http_client"] = http_client
+                elif http_client_config_used is not None:
+                    # Create http_client from config for non-cached scenario
+                    try:
+                        from httpx import Client
+
+                        client_kwargs["http_client"] = Client(**http_client_config_used)
+                    except ImportError:
+                        raise ValueError(
+                            "httpx is required to use http_client_config. "
+                            "Install it with: pip install httpx"
+                        )
+                self.client = OpenAI(**client_kwargs)
+
+                async_client_kwargs: Dict[str, Any] = dict(
                     api_key=self.api_key,
                     base_url=self.api_base,
                     organization=self.config.organization,
                     timeout=Timeout(self.config.timeout),
                     default_headers=self.config.headers,
                 )
+                if async_http_client is not None:
+                    async_client_kwargs["http_client"] = async_http_client
+                elif http_client_config_used is not None:
+                    # Create async http_client from config for non-cached scenario
+                    try:
+                        from httpx import AsyncClient
+
+                        async_client_kwargs["http_client"] = AsyncClient(
+                            **http_client_config_used
+                        )
+                    except ImportError:
+                        raise ValueError(
+                            "httpx is required to use http_client_config. "
+                            "Install it with: pip install httpx"
+                        )
+                self.async_client = AsyncOpenAI(**async_client_kwargs)
 
         self.cache: CacheDB | None = None
         use_cache = self.config.cache_config is not None
