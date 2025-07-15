@@ -142,14 +142,6 @@ config = lm.OpenAIGPTConfig(
 )
 ```
 
-## Requirements
-
-- For `http_verify_ssl=False` or `http_client_config`: Install httpx
-  ```bash
-  pip install httpx
-  ```
-
-- For `http_client_factory`: You can use any httpx-compatible client
 
 ## Best Practices
 
@@ -177,11 +169,6 @@ ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED]
 ```
 **Solution**: Use one of the three configuration options above.
 
-### ImportError for httpx
-```
-ValueError: httpx is required to disable SSL verification
-```
-**Solution**: Install httpx: `pip install httpx`
 
 ### Proxy Connection Issues
 - Verify proxy URL format: `http://proxy:port` or `https://proxy:port`

@@ -25,10 +25,6 @@ llm_config = lm.OpenAIGPTConfig(
 agent = lr.ChatAgent(lr.ChatAgentConfig(llm=llm_config))
 ```
 
-This option requires the `httpx` package:
-```bash
-pip install httpx
-```
 
 ### Option 2: HTTP Client Configuration (Moderate Control, Cacheable)
 
@@ -172,17 +168,6 @@ Try these solutions in order:
 2. Use a custom CA bundle with your corporate certificates
 3. As a last resort, use `http_verify_ssl=False`
 
-### ImportError: httpx required
-
-If you get an error about httpx not being installed:
-```
-ValueError: httpx is required to disable SSL verification. Install it with: pip install httpx
-```
-
-Install httpx:
-```bash
-pip install httpx
-```
 
 ### Proxy Connection Issues
 
