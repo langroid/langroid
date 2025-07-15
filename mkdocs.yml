@@ -150,6 +150,7 @@ nav:
     - Non-OpenAI LLMs: tutorials/non-openai-llms.md
     - SQLChatAgent: tutorials/postgresql-agent.md
     - LLM Usage Options: tutorials/llm-usage-options.md
+    - SSL Configuration: tutorials/ssl-configuration.md
   - Code/API Docs: reference/
 #  - API Documentation:
 #    - language_models: api/language_models_base.md
