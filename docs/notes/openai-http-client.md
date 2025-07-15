@@ -177,5 +177,4 @@ ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED]
 
 ## See Also
 
-- [SSL Configuration Tutorial](../tutorials/ssl-configuration.md) - Detailed tutorial with more examples
 - [OpenAI API Reference](https://platform.openai.com/docs/api-reference) - Official OpenAI documentation
