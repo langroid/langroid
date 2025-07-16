@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
 import tiktoken
+from pydantic_settings import BaseSettings
 
 from langroid.mytypes import Document
 from langroid.parsing.md_parser import (
@@ -12,7 +13,7 @@ from langroid.parsing.md_parser import (
     count_words,
 )
 from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
-from langroid.pydantic_v1 import BaseSettings, root_validator
+from langroid.pydantic_v1 import ConfigDict, model_validator
 from langroid.utils.object_registry import ObjectRegistry
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,7 @@ class BaseParsingConfig(BaseSettings):
 
     library: str
 
-    class Config:
-        extra = "ignore"  # Ignore unknown settings
+    model_config = ConfigDict(extra="ignore")  # Ignore unknown settings
 
 
 class LLMPdfParserConfig(BaseSettings):
@@ -69,7 +69,8 @@ class PdfParsingConfig(BaseParsingConfig):
     llm_parser_config: Optional[LLMPdfParserConfig] = None
     marker_config: Optional[MarkerConfig] = None
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
+    @classmethod
     def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Ensure correct config is set based on library selection."""
         library = values.get("library")
@@ -203,7 +204,8 @@ class Parser:
             # add_window_ids)
             chunk_docs = [
                 Document(
-                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
                 )
                 for c in chunks
                 if c.strip() != ""
@@ -238,7 +240,7 @@ class Parser:
                         """
                     )
                 break  # we won't be able to shorten them with current settings
-            chunks = split_chunks.copy()
+            chunks = split_chunks.model_copy()
 
         self.add_window_ids(chunks)
         return chunks
@@ -255,7 +257,8 @@ class Parser:
             # add_window_ids)
             chunk_docs = [
                 Document(
-                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
                 )
                 for c in chunks
                 if c.strip() != ""
@@ -287,7 +290,8 @@ class Parser:
             # add_window_ids)
             chunk_docs = [
                 Document(
-                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
                 )
                 for c in chunks
                 if c.strip() != ""

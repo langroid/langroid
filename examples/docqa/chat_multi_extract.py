@@ -119,7 +119,7 @@ class LeaseExtractorAgent(ChatAgent):
         {message.terms}
         """
         )
-        return "DONE " + json.dumps(message.terms.dict())
+        return "DONE " + json.dumps(message.terms.model_dump())
 
 
 @app.command()

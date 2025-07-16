@@ -844,7 +844,7 @@ class ChatAgent(Agent):
                 use_functions_api,
                 use_tools,
             ) = self.saved_requests_and_tool_setings
-            self.config = self.config.copy()
+            self.config = self.config.model_copy()
             self.enabled_requests_for_inference = requests_for_inference
             self.config.use_functions_api = use_functions_api
             self.config.use_tools = use_tools
@@ -884,14 +884,18 @@ class ChatAgent(Agent):
                         if use:
                             # We must copy `llm_tools_usable` so the base agent
                             # is unmodified
-                            self.llm_tools_usable = copy.copy(self.llm_tools_usable)
-                            self.llm_functions_usable = copy.copy(
+                            self.llm_tools_usable = copy.model_copy(
+                                self.llm_tools_usable
+                            )
+                            self.llm_functions_usable = copy.model_copy(
                                 self.llm_functions_usable
                             )
                         if handle:
                             # If handling the tool, do the same for `llm_tools_handled`
-                            self.llm_tools_handled = copy.copy(self.llm_tools_handled)
-                            self.llm_functions_handled = copy.copy(
+                            self.llm_tools_handled = copy.model_copy(
+                                self.llm_tools_handled
+                            )
+                            self.llm_functions_handled = copy.model_copy(
                                 self.llm_functions_handled
                             )
                     # Enable `output_type`
@@ -941,7 +945,7 @@ class ChatAgent(Agent):
                             defaults=self.config.output_format_include_defaults,
                         ).parameters
                     else:
-                        output_format_schema = output_type.schema()
+                        output_format_schema = output_type.model_json_schema()
 
                     format_schema_for_strict(output_format_schema)
 
@@ -960,7 +964,7 @@ class ChatAgent(Agent):
                         output_type.default_value("request")
                     }
                 if self.config.use_functions_api:
-                    self.config = self.config.copy()
+                    self.config = self.config.model_copy()
                     self.config.use_functions_api = False
                     self.config.use_tools = True
 
@@ -968,7 +972,7 @@ class ChatAgent(Agent):
         """
         Returns a (shallow) copy of `self` with a forced output type.
         """
-        clone = copy.copy(self)
+        clone = copy.model_copy(self)
         clone.set_output_format(output_type, is_copy=True)
         return clone
 
@@ -1054,7 +1058,7 @@ class ChatAgent(Agent):
 
                         content = attempt.arguments
 
-                    content_any = self.output_format.parse_obj(content)
+                    content_any = self.output_format.model_validate(content)
 
                     if issubclass(self.output_format, PydanticWrapper):
                         message.content_any = content_any.value  # type: ignore
@@ -1168,7 +1172,9 @@ class ChatAgent(Agent):
                 request = self.tool.request
                 if request not in agent.llm_tools_map:
                     return None
-                tool = agent.llm_tools_map[request].parse_raw(self.tool.to_json())
+                tool = agent.llm_tools_map[request].model_validate_json(
+                    self.tool.to_json()
+                )
 
                 return agent.handle_tool_message(tool)
 
@@ -1187,7 +1193,9 @@ class ChatAgent(Agent):
                 request = self.tool.request
                 if request not in agent.llm_tools_map:
                     return None
-                tool = agent.llm_tools_map[request].parse_raw(self.tool.to_json())
+                tool = agent.llm_tools_map[request].model_validate_json(
+                    self.tool.to_json()
+                )
 
                 return await agent.handle_tool_message_async(tool)
 
@@ -1743,7 +1751,7 @@ class ChatAgent(Agent):
                     function=spec,
                 )
             elif issubclass(self.output_format, BaseModel):
-                param_spec = self.output_format.schema()
+                param_spec = self.output_format.model_json_schema()
                 format_schema_for_strict(param_spec)
 
                 output_format = OpenAIJsonSchemaSpec(
@@ -1825,8 +1833,8 @@ class ChatAgent(Agent):
         )
         chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
         self.oai_tool_calls = response.oai_tool_calls or []
-        self.oai_tool_id2call.update(
-            {t.id: t for t in self.oai_tool_calls if t.id is not None}
+        self.oai_tool_id2call.model_copy(
+            update={t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
 
         # If using strict output format, parse the output JSON
@@ -1882,8 +1890,8 @@ class ChatAgent(Agent):
         )
         chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
         self.oai_tool_calls = response.oai_tool_calls or []
-        self.oai_tool_id2call.update(
-            {t.id: t for t in self.oai_tool_calls if t.id is not None}
+        self.oai_tool_id2call.model_copy(
+            update={t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
 
         # If using strict output format, parse the output JSON

@@ -1213,7 +1213,7 @@ def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
     ]
 
     # Test case 1: List of metadata dicts
-    docs_copy = [d.copy() for d in docs]
+    docs_copy = [d.model_copy() for d in docs]
     meta_list = [
         {"category": "A", "source": "new1"},
         {"category": "B", "source": "new2"},
@@ -1230,7 +1230,7 @@ def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
     agent.clear()
 
     # Test case 2: Single metadata dict for all docs
-    docs_copy = [d.copy() for d in docs]
+    docs_copy = [d.model_copy() for d in docs]
     meta_dict = {"category": "common", "source": "new"}
     agent.ingest_docs(docs_copy, metadata=meta_dict)
     stored = agent.vecdb.get_all_documents()
@@ -1243,7 +1243,7 @@ def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
     agent.clear()
 
     # Test case 3: List of DocMetaData
-    docs_copy = [d.copy() for d in docs]
+    docs_copy = [d.model_copy() for d in docs]
     meta_docs = [
         DocMetaData(category="X", source="new1"),
         DocMetaData(category="Y", source="new2"),
@@ -1259,7 +1259,7 @@ def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
     agent.clear()
 
     # Test case 4: Single DocMetaData for all docs
-    docs_copy = [d.copy() for d in docs]
+    docs_copy = [d.model_copy() for d in docs]
     meta_doc = DocMetaData(category="shared", source="new")
     agent.ingest_docs(docs_copy, metadata=meta_doc)
     stored = agent.vecdb.get_all_documents()

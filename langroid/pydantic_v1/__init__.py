@@ -1,10 +1,30 @@
 """
-If we're on Pydantic v2, use the v1 namespace, else just use the main namespace.
+Compatibility layer for Pydantic v2 migration.
 
-This allows compatibility with both Pydantic v1 and v2
+This module now imports directly from Pydantic v2 since all internal code
+has been migrated to use Pydantic v2 patterns.
 """
 
-try:
-    from pydantic.v1 import *  # noqa: F403, F401
-except ImportError:
-    from pydantic import *  # type: ignore # noqa: F403, F401
+# Import everything from pydantic v2
+from langroid.pydantic_v1 import *  # noqa: F403, F401
+
+# Import BaseSettings from pydantic-settings v2
+from pydantic_settings import BaseSettings  # noqa: F401
+
+# Explicitly re-export commonly used items for better IDE support and type checking
+from langroid.pydantic_v1 import (  # noqa: F401
+    BaseModel,
+    Field,
+    ConfigDict,
+    ValidationError,
+    field_validator,
+    model_validator,
+    create_model,
+    HttpUrl,
+    AnyUrl,
+    parse_obj_as,
+)
+
+# Legacy names that map to v2 equivalents
+validator = field_validator  # noqa: F401
+root_validator = model_validator  # noqa: F401

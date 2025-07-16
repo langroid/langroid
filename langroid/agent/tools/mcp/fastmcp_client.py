@@ -253,8 +253,8 @@ class FastMCPClient:
             from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
 
             # pack up the payload
-            payload = itself.dict(
-                exclude=itself.Config.schema_extra["exclude"].union(
+            payload = itself.model_dump(
+                exclude=itself.model_config["json_schema_extra"]["exclude"].union(
                     ["request", "purpose"]
                 ),
             )

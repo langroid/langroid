@@ -184,7 +184,7 @@ class SQLChatAgent(ChatAgent):
         if self.config.use_helper:
             # helper_config.system_message is now the fully-populated sys msg of
             # the main SQLAgent.
-            self.helper_config = self.config.copy()
+            self.helper_config = self.config.model_copy()
             self.helper_config.is_helper = True
             self.helper_config.use_helper = False
             self.helper_config.chat_mode = False

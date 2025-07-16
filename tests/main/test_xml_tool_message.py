@@ -214,7 +214,7 @@ def test_roundtrip():
     )
     formatted = original.format_example()
     parsed = CodeTool.parse(formatted)
-    assert original.dict() == parsed.dict()
+    assert original.model_dump() == parsed.model_dump()
 
 
 def test_tolerant_parsing():
@@ -539,11 +539,11 @@ def test_roundtrip_complex_nested(complex_nested_xml_tool):
 
     formatted = original.format_example()
     parsed = ComplexNestedXMLTool.parse(formatted)
-    assert original.dict() == parsed.dict()
+    assert original.model_dump() == parsed.model_dump()
 
     # Additional checks for nested structures
-    assert original.person.dict() == parsed.person.dict()
-    assert original.person.address.dict() == parsed.person.address.dict()
+    assert original.person.model_dump() == parsed.person.model_dump()
+    assert original.person.address.model_dump() == parsed.person.address.model_dump()
     assert original.hobbies == parsed.hobbies
     assert original.phones == parsed.phones
 
@@ -569,9 +569,9 @@ def test_roundtrip_complex_nested_tolerant():
 
     parsed = ComplexNestedXMLTool.parse(formatted_with_whitespace)
 
-    assert original.dict() == parsed.dict()
-    assert original.person.dict() == parsed.person.dict()
-    assert original.person.address.dict() == parsed.person.address.dict()
+    assert original.model_dump() == parsed.model_dump()
+    assert original.person.model_dump() == parsed.person.model_dump()
+    assert original.person.address.model_dump() == parsed.person.address.model_dump()
     assert original.hobbies == parsed.hobbies
     assert original.phones == parsed.phones
 

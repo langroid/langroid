@@ -71,7 +71,7 @@ class LeaseMessage(ToolMessage):
         as a method with name `lease_info`.
         """
         print(f"DONE! Successfully extracted Lease Info:" f"{self.terms}")
-        return DONE + " " + json.dumps(self.terms.dict())
+        return DONE + " " + json.dumps(self.terms.model_dump())
 
 
 @app.command()

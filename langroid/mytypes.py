@@ -3,7 +3,7 @@ from textwrap import dedent
 from typing import Any, Callable, Dict, List, Union
 from uuid import uuid4
 
-from langroid.pydantic_v1 import BaseModel, Extra, Field
+from langroid.pydantic_v1 import BaseModel, ConfigDict, Field
 
 Number = Union[int, float]
 Embedding = List[Number]
@@ -57,7 +57,7 @@ class DocMetaData(BaseModel):
         downstream libraries,  e.g. Chroma which complains about bool fields in
         metadata.
         """
-        original_dict = super().dict(*args, **kwargs)
+        original_dict = super().model_dump(*args, **kwargs)
 
         for key, value in original_dict.items():
             if isinstance(value, bool):
@@ -92,8 +92,7 @@ class DocMetaData(BaseModel):
         )
         return ", ".join(components)
 
-    class Config:
-        extra = Extra.allow
+    model_config = ConfigDict(extra="allow")
 
 
 class Document(BaseModel):

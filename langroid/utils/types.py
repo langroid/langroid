@@ -55,7 +55,7 @@ def to_string(msg: Any) -> str:
     if isinstance(msg, str):
         return msg
     if isinstance(msg, BaseModel):
-        return msg.json()
+        return msg.model_dump_json()
     # last resort: use json.dumps() or str() to make it a str
     try:
         return json.dumps(msg)

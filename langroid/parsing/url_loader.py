@@ -7,12 +7,13 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 import markdownify as md
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_parser import DocumentParser, ImagePdfParser
 from langroid.parsing.parser import Parser, ParsingConfig
-from langroid.pydantic_v1 import BaseSettings
+from langroid.pydantic_v1 import ConfigDict
 
 if TYPE_CHECKING:
     from firecrawl import FirecrawlApp
@@ -54,20 +55,13 @@ class FirecrawlConfig(BaseCrawlerConfig):
     params: Dict[str, Any] = {}
     timeout: Optional[int] = None
 
-    class Config:
-        # Leverage Pydantic's BaseSettings to
-        # allow setting of fields via env vars,
-        # e.g. FIRECRAWL_MODE=scrape and FIRECRAWL_API_KEY=...
-        env_prefix = "FIRECRAWL_"
+    model_config = ConfigDict(env_prefix="FIRECRAWL_")
 
 
 class ExaCrawlerConfig(BaseCrawlerConfig):
     api_key: str = ""
 
-    class Config:
-        # Allow setting of fields via env vars with prefix EXA_
-        # e.g., EXA_API_KEY=your_api_key
-        env_prefix = "EXA_"
+    model_config = ConfigDict(env_prefix="EXA_")
 
 
 class Crawl4aiConfig(BaseCrawlerConfig):
@@ -122,8 +116,7 @@ class Crawl4aiConfig(BaseCrawlerConfig):
         self._resolve_forward_refs()
         super().__init__(**kwargs)
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class BaseCrawler(ABC):
@@ -347,7 +340,7 @@ class FirecrawlCrawler(BaseCrawler):
                     )
                     processed_urls.add(url)
                     new_pages += 1
-            pbar.update(new_pages)  # Update progress bar with new pages
+            pbar.model_copy(update=new_pages)  # Update progress bar with new pages
 
             # Break if crawl is complete
             if status["status"] == "completed":
@@ -367,7 +360,7 @@ class FirecrawlCrawler(BaseCrawler):
 
         app = FirecrawlApp(api_key=self.config.api_key)
         docs = []
-        params = self.config.params.copy()  # Create a copy of the existing params
+        params = self.config.params.model_copy()  # Create a copy of the existing params
 
         if self.config.timeout is not None:
             params["timeout"] = self.config.timeout  # Add/override timeout in params

@@ -21,7 +21,7 @@ from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import extract_top_level_json, top_level_json_field
-from langroid.pydantic_v1 import BaseModel, Extra
+from langroid.pydantic_v1 import BaseModel, ConfigDict
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output.printing import shorten_text
 from langroid.utils.types import to_string
@@ -29,8 +29,7 @@ from langroid.utils.types import to_string
 
 class ChatDocAttachment(BaseModel):
     # any additional data that should be attached to the document
-    class Config:
-        extra = Extra.allow
+    model_config = ConfigDict(extra="allow")
 
 
 class StatusCode(str, Enum):
@@ -89,7 +88,7 @@ class ChatDocLoggerFields(BaseModel):
 
     @classmethod
     def tsv_header(cls) -> str:
-        field_names = cls().dict().keys()
+        field_names = cls().model_dump().keys()
         return "\t".join(field_names)
 
 
@@ -259,7 +258,7 @@ class ChatDocument(Document):
     def tsv_str(self) -> str:
         fields = self.log_fields()
         fields.content = shorten_text(fields.content, 80)
-        field_values = fields.dict().values()
+        field_values = fields.model_dump().values()
         return "\t".join(str(v) for v in field_values)
 
     def pop_tool_ids(self) -> None:
@@ -510,5 +509,5 @@ class ChatDocument(Document):
         ]
 
 
-LLMMessage.update_forward_refs()
-ChatDocMetaData.update_forward_refs()
+LLMMessage.model_rebuild()
+ChatDocMetaData.model_rebuild()

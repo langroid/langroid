@@ -17,6 +17,8 @@ from typing import (
     cast,
 )
 
+from pydantic_settings import BaseSettings
+
 from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.model_info import ModelInfo, get_model_info
@@ -24,7 +26,7 @@ from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
-from langroid.pydantic_v1 import BaseModel, BaseSettings, Field
+from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import show_if_debug
 
@@ -140,7 +142,7 @@ class LLMFunctionCall(BaseModel):
         return fun_call
 
     def __str__(self) -> str:
-        return "FUNC: " + json.dumps(self.dict(), indent=2)
+        return "FUNC: " + json.dumps(self.model_dump(), indent=2)
 
 
 class LLMFunctionSpec(BaseModel):
@@ -186,7 +188,7 @@ class OpenAIToolCall(BaseModel):
     def __str__(self) -> str:
         if self.function is None:
             return ""
-        return "OAI-TOOL: " + json.dumps(self.function.dict(), indent=2)
+        return "OAI-TOOL: " + json.dumps(self.function.model_dump(), indent=2)
 
 
 class OpenAIToolSpec(BaseModel):
@@ -292,7 +294,7 @@ class LLMMessage(BaseModel):
         Returns:
             dict: dictionary representation of LLM message
         """
-        d = self.dict()
+        d = self.model_dump()
         files: List[FileAttachment] = d.pop("files")
         if len(files) > 0 and self.role == Role.USER:
             # In there are files, then content is an array of

@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 from docstring_parser import parse
 
 from langroid.language_models.base import LLMFunctionSpec
-from langroid.pydantic_v1 import BaseModel, Extra
+from langroid.pydantic_v1 import BaseModel, ConfigDict
 from langroid.utils.pydantic_utils import (
     _recursive_purge_dict_key,
     generate_simple_schema,
@@ -111,14 +111,15 @@ class ToolMessage(ABC, BaseModel):
     # Optional param to limit number of tokens in the result of the tool.
     _max_result_tokens: int | None = None
 
-    class Config:
-        extra = Extra.allow
-        arbitrary_types_allowed = False
-        validate_all = True
-        validate_assignment = True
+    model_config = ConfigDict(
+        extra="allow",
+        arbitrary_types_allowed=False,
+        validate_default=True,
+        validate_assignment=True,
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id"}}
+        json_schema_extra={"exclude": ["purpose", "id"]},
+    )
 
     @classmethod
     def name(cls) -> str:
@@ -196,18 +197,26 @@ class ToolMessage(ABC, BaseModel):
         return "\n\n".join(formatted_examples)
 
     def to_json(self) -> str:
-        return self.json(indent=4, exclude=self.Config.schema_extra["exclude"])
+        return self.model_dump_json(
+            indent=4, exclude=self.model_config["json_schema_extra"]["exclude"]
+        )
 
     def format_example(self) -> str:
-        return self.json(indent=4, exclude=self.Config.schema_extra["exclude"])
+        return self.model_dump_json(
+            indent=4, exclude=self.model_config["json_schema_extra"]["exclude"]
+        )
 
     def dict_example(self) -> Dict[str, Any]:
-        return self.dict(exclude=self.Config.schema_extra["exclude"])
+        return self.model_dump(
+            exclude=self.model_config["json_schema_extra"]["exclude"]
+        )
 
     def get_value_of_type(self, target_type: Type[Any]) -> Any:
         """Try to find a value of a desired type in the fields of the ToolMessage."""
-        ignore_fields = self.Config.schema_extra["exclude"].union(["request"])
-        for field_name in set(self.dict().keys()) - ignore_fields:
+        ignore_fields = set(self.model_config["json_schema_extra"]["exclude"]).union(
+            ["request"]
+        )
+        for field_name in set(self.model_dump().keys()) - ignore_fields:
             value = getattr(self, field_name)
             if is_instance_of(value, target_type):
                 return value
@@ -224,7 +233,7 @@ class ToolMessage(ABC, BaseModel):
             Any: default value of the field, or None if not set or if the
                 field does not exist.
         """
-        schema = cls.schema()
+        schema = cls.model_json_schema()
         properties = schema["properties"]
         return properties.get(f, {}).get("default", None)
 
@@ -304,7 +313,7 @@ class ToolMessage(ABC, BaseModel):
             LLMFunctionSpec: the schema as an LLMFunctionSpec
 
         """
-        schema = copy.deepcopy(cls.schema())
+        schema = copy.deepcopy(cls.model_json_schema())
         docstring = parse(cls.__doc__ or "")
         parameters = {
             k: v for k, v in schema.items() if k not in ("title", "description")
@@ -316,7 +325,7 @@ class ToolMessage(ABC, BaseModel):
                 if "description" not in parameters["properties"][name]:
                     parameters["properties"][name]["description"] = description
 
-        excludes = cls.Config.schema_extra["exclude"]
+        excludes = set(cls.model_config["json_schema_extra"]["exclude"])
         if not request:
             excludes = excludes.union({"request"})
         # exclude 'excludes' from parameters["properties"]:
@@ -388,6 +397,6 @@ class ToolMessage(ABC, BaseModel):
         """
         schema = generate_simple_schema(
             cls,
-            exclude=list(cls.Config.schema_extra["exclude"]),
+            exclude=list(cls.model_config["json_schema_extra"]["exclude"]),
         )
         return schema

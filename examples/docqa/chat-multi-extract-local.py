@@ -176,7 +176,7 @@ class LeaseMessage(ToolMessage):
         {self.terms}
         """
         )
-        return DONE + " " + json.dumps(self.terms.dict())
+        return DONE + " " + json.dumps(self.terms.model_dump())
 
     @classmethod
     def examples(cls) -> List["LeaseMessage"]:

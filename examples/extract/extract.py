@@ -69,7 +69,7 @@ class ExtractorAgent(ChatAgent):
         {message.methods}
         """
         )
-        return "\n".join(json.dumps(m.dict()) for m in message.methods)
+        return "\n".join(json.dumps(m.model_dump()) for m in message.methods)
 
 
 class ExtractorConfig(ChatAgentConfig):

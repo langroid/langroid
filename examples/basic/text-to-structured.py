@@ -75,7 +75,7 @@ class HomeAutomationTool(lr.agent.ToolMessage):
         print(
             f"""
             SUCCESS! Got Valid Home Automation Settings:
-            {json.dumps(self.home_settings.dict(), indent=2)}
+            {json.dumps(self.home_settings.model_dump(), indent=2)}
             """
         )
         return ResultTool(settings=self.home_settings)

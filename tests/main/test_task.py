@@ -862,7 +862,7 @@ def test_task_output_format_sequence():
             return f"{DONE} {message.x ** message.y}"
 
     def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage:
-        return tool.parse_obj(json.loads(message.content))
+        return tool.model_validate(json.loads(message.content))
 
     def test_sequence(x: int) -> None:
         agent = CompositionAgent(
@@ -952,7 +952,7 @@ async def test_task_output_format_sequence_async():
             return f"{DONE} {message.x ** message.y}"
 
     def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage:
-        return tool.parse_obj(json.loads(message.content))
+        return tool.model_validate(json.loads(message.content))
 
     async def test_sequence(x: int) -> None:
         agent = CompositionAgent(

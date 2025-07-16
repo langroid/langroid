@@ -246,7 +246,7 @@ class PineconeDB(VectorStore):
             return
 
         super().maybe_add_ids(documents)
-        document_dicts = [doc.dict() for doc in documents]
+        document_dicts = [doc.model_dump() for doc in documents]
         document_ids = [doc.id() for doc in documents]
         embedding_vectors = self.embedding_fn([doc.content for doc in documents])
         vectors = [

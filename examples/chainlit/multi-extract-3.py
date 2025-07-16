@@ -94,7 +94,7 @@ class LeaseMessage(ToolMessage):
         {self.terms}
         """
         )
-        return "DONE " + json.dumps(self.terms.dict())
+        return "DONE " + json.dumps(self.terms.model_dump())
 
     @classmethod
     def format_instructions(cls, tool: bool = False) -> str:

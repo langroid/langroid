@@ -5,11 +5,11 @@ from typing import Dict, List, Optional, Sequence, Tuple, Type
 
 import numpy as np
 import pandas as pd
+from pydantic_settings import BaseSettings
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document, EmbeddingFunction
-from langroid.pydantic_v1 import BaseSettings
 from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
@@ -160,7 +160,7 @@ class VectorStore(ABC):
         If full_eval is True, sanitization is bypassed - use only with trusted input!
         """
         # convert each doc to a dict, using dotted paths for nested fields
-        dicts = [flatten_dict(doc.dict(by_alias=True)) for doc in docs]
+        dicts = [flatten_dict(doc.model_dump(by_alias=True)) for doc in docs]
         df = pd.DataFrame(dicts)
 
         try:

@@ -25,6 +25,7 @@ from typing import (
     no_type_check,
 )
 
+from pydantic_settings import BaseSettings
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -52,10 +53,9 @@ from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.pydantic_v1 import (
-    BaseSettings,
     Field,
     ValidationError,
-    validator,
+    field_validator,
 )
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
@@ -100,7 +100,8 @@ class AgentConfig(BaseSettings):
         "Human (respond or q, x to exit current level, " "or hit enter to continue)"
     )
 
-    @validator("name")
+    @field_validator("name")
+    @classmethod
     def check_name_alphanum(cls, v: str) -> str:
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
             raise ValueError(
@@ -1450,7 +1451,7 @@ class Agent(ABC):
             return None
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
-        tool = tool_class.parse_obj(tool_msg)
+        tool = tool_class.model_validate(tool_msg)
         return tool
 
     def get_oai_tool_calls_classes(self, msg: ChatDocument) -> List[ToolMessage]:
@@ -1483,7 +1484,7 @@ class Agent(ABC):
             all_errors = False
             tool_class = self.llm_tools_map[tool_name]
             tool_msg.update(dict(request=tool_name))
-            tool = tool_class.parse_obj(tool_msg)
+            tool = tool_class.model_validate(tool_msg)
             tool.id = tc.id or ""
             tools.append(tool)
         # When no tool is valid and the message was produced
@@ -1778,11 +1779,11 @@ class Agent(ABC):
                 )
                 possible = [self.llm_tools_map[r] for r in allowable]
 
-            default_keys = set(ToolMessage.__fields__.keys())
+            default_keys = set(ToolMessage.model_fields.keys())
             request_keys = set(maybe_tool_dict.keys())
 
             def maybe_parse(tool: type[ToolMessage]) -> Optional[ToolMessage]:
-                all_keys = set(tool.__fields__.keys())
+                all_keys = set(tool.model_fields.keys())
                 non_inherited_keys = all_keys.difference(default_keys)
                 # If the request has any keys not valid for the tool and
                 # does not specify some key specific to the type
@@ -1794,7 +1795,7 @@ class Agent(ABC):
                     return None
 
                 try:
-                    return tool.parse_obj(maybe_tool_dict)
+                    return tool.model_validate(maybe_tool_dict)
                 except ValidationError:
                     return None
 
@@ -1824,7 +1825,7 @@ class Agent(ABC):
             return None
 
         try:
-            message = message_class.parse_obj(maybe_tool_dict)
+            message = message_class.model_validate(maybe_tool_dict)
         except ValidationError as ve:
             self.tool_error = from_llm
             raise ve

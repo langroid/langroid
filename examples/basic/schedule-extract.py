@@ -111,7 +111,7 @@ class AvailabilityTool(lr.ToolMessage):
         # Here, we would implement the logic to extract availability information
         # from the input text. For this example, we'll just return a placeholder.
         print("Successfully extracted availability information.")
-        print(self.availabilities.json(indent=2))
+        print(self.availabilities.model_dump_json(indent=2))
         return FinalResultTool(avails=self.availabilities)
 
 

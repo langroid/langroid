@@ -54,8 +54,7 @@ class JsonData(BaseModel):
 
     """
 
-    class Config:
-        extra = "allow"  # Allow any extra fields
+    model_config = ConfigDict(extra="allow")  # Allow any extra fields
 
 
 class FinalResult(ResultTool):

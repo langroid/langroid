@@ -24,8 +24,8 @@ class Node(BaseModel):
     # Forward references will be resolved with the update_forward_refs call below.
 
 
-# Resolve forward references for Node (required for recursive models in Pydantic v1)
-Node.update_forward_refs()
+# Resolve forward references for Node (required for recursive models in Pydantic)
+Node.model_rebuild()
 
 
 def _cleanup_text(text: str) -> str:

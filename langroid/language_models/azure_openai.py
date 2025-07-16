@@ -9,6 +9,7 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPT,
     OpenAIGPTConfig,
 )
+from langroid.pydantic_v1 import ConfigDict
 
 azureStructuredOutputList = [
     "2024-08-06",
@@ -56,8 +57,7 @@ class AzureConfig(OpenAIGPTConfig):
     # AZURE_OPENAI_API_VERSION=2023-05-15
     # This is either done in the .env file, or via an explicit
     # `export AZURE_OPENAI_API_VERSION=...`
-    class Config:
-        env_prefix = "AZURE_OPENAI_"
+    model_config = ConfigDict(env_prefix="AZURE_OPENAI_")
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         if "model_name" in kwargs and "chat_model" not in kwargs:

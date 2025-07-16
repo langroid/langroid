@@ -13,6 +13,7 @@ from langroid.exceptions import LangroidImportError
 from langroid.language_models.provider_params import LangDBParams
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
+from langroid.pydantic_v1 import ConfigDict
 
 AzureADTokenProvider = Callable[[], str]
 
@@ -27,10 +28,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     context_length: int = 8192
     langdb_params: LangDBParams = LangDBParams()
 
-    class Config:
-        # enable auto-loading of env vars with OPENAI_ prefix, e.g.
-        # api_base is set from OPENAI_API_BASE env var, in .env or system env
-        env_prefix = "OPENAI_"
+    model_config = ConfigDict(env_prefix="OPENAI_")
 
 
 class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
@@ -48,9 +46,7 @@ class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     dims: int = 1536
     context_length: int = 8192
 
-    class Config:
-        # enable auto-loading of env vars with AZURE_OPENAI_ prefix
-        env_prefix = "AZURE_OPENAI_"
+    model_config = ConfigDict(env_prefix="AZURE_OPENAI_")
 
 
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
@@ -421,7 +417,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.tokenize_url, json=data)
 
         if response.status_code == 200:
-            tokens = response.json()["tokens"]
+            tokens = response.model_dump_json()["tokens"]
             if not (isinstance(tokens, list) and isinstance(tokens[0], (int, float))):
                 # not all(isinstance(token, (int, float)) for token in tokens):
                 raise ValueError(
@@ -442,7 +438,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.detokenize_url, json=data)
 
         if response.status_code == 200:
-            text = response.json()["content"]
+            text = response.model_dump_json()["content"]
             if not isinstance(text, str):
                 raise ValueError(
                     """Deokenizer endpoint has not returned the correct format. 
@@ -467,7 +463,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.embedding_url, json=data)
 
         if response.status_code == 200:
-            embeddings = response.json()["embedding"]
+            embeddings = response.model_dump_json()["embedding"]
             if not (
                 isinstance(embeddings, list) and isinstance(embeddings[0], (int, float))
             ):

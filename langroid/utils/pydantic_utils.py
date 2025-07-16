@@ -218,7 +218,7 @@ def flatten_pydantic_instance(
 
     """
     flat_data: Dict[str, Any] = {}
-    for name, value in instance.dict().items():
+    for name, value in instance.model_dump().items():
         # Assuming nested pydantic model will be a dict here
         if isinstance(value, dict):
             nested_flat_data = flatten_pydantic_instance(
@@ -226,7 +226,7 @@ def flatten_pydantic_instance(
                 prefix=f"{prefix}{name}__",
                 force_str=force_str,
             )
-            flat_data.update(nested_flat_data)
+            flat_data.model_copy(update=nested_flat_data)
         else:
             flat_data[f"{prefix}{name}"] = str(value) if force_str else value
     return flat_data
@@ -531,7 +531,7 @@ def extra_metadata(document: Document, doc_cls: Type[Document] = Document) -> Li
         in the document's metadata.
     """
     # Convert metadata to dict, including extra fields.
-    metadata_fields = set(document.metadata.dict().keys())
+    metadata_fields = set(document.metadata.model_dump().keys())
 
     # Get defined fields in the metadata of doc_cls
     defined_fields = set(doc_cls.__fields__["metadata"].type_.__fields__.keys())

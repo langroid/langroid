@@ -388,14 +388,14 @@ class DocChatAgent(ChatAgent):
                     p: (
                         m
                         if isinstance(m, dict)
-                        else (isinstance(m, DocMetaData) and m.dict())
+                        else (isinstance(m, DocMetaData) and m.model_dump())
                     )  # appease mypy
                     for p, m in zip(idxs, metadata)
                 }
             elif isinstance(metadata, dict):
                 idx2meta = {p: metadata for p in idxs}
             else:
-                idx2meta = {p: metadata.dict() for p in idxs}
+                idx2meta = {p: metadata.model_dump() for p in idxs}
             urls_meta = {u: idx2meta[u] for u in url_idxs}
             paths_meta = {p: idx2meta[p] for p in path_idxs}
         docs: List[Document] = []
@@ -412,7 +412,7 @@ class DocChatAgent(ChatAgent):
                 # update metadata of each doc with meta
                 for d in url_docs:
                     orig_source = d.metadata.source
-                    d.metadata = d.metadata.copy(update=meta)
+                    d.metadata = d.metadata.model_copy(update=meta)
                     d.metadata.source = _append_metadata_source(
                         orig_source, meta.get("source", "")
                     )
@@ -429,7 +429,7 @@ class DocChatAgent(ChatAgent):
                 # update metadata of each doc with meta
                 for d in path_docs:
                     orig_source = d.metadata.source
-                    d.metadata = d.metadata.copy(update=meta)
+                    d.metadata = d.metadata.model_copy(update=meta)
                     d.metadata.source = _append_metadata_source(
                         orig_source, meta.get("source", "")
                     )
@@ -474,22 +474,22 @@ class DocChatAgent(ChatAgent):
         if isinstance(metadata, list) and len(metadata) > 0:
             for d, m in zip(docs, metadata):
                 orig_source = d.metadata.source
-                m_dict = m if isinstance(m, dict) else m.dict()  # type: ignore
-                d.metadata = d.metadata.copy(update=m_dict)  # type: ignore
+                m_dict = m if isinstance(m, dict) else m.model_dump()  # type: ignore
+                d.metadata = d.metadata.model_copy(update=m_dict)  # type: ignore
                 d.metadata.source = _append_metadata_source(
                     orig_source, m_dict.get("source", "")
                 )
         elif isinstance(metadata, dict):
             for d in docs:
                 orig_source = d.metadata.source
-                d.metadata = d.metadata.copy(update=metadata)
+                d.metadata = d.metadata.model_copy(update=metadata)
                 d.metadata.source = _append_metadata_source(
                     orig_source, metadata.get("source", "")
                 )
         elif isinstance(metadata, DocMetaData):
             for d in docs:
                 orig_source = d.metadata.source
-                d.metadata = d.metadata.copy(update=metadata.dict())
+                d.metadata = d.metadata.model_copy(update=metadata.model_dump())
                 d.metadata.source = _append_metadata_source(
                     orig_source, metadata.source
                 )
@@ -584,7 +584,7 @@ class DocChatAgent(ChatAgent):
             # rename content column to "content", leave existing column intact
             df = df.rename(columns={content: "content"}, inplace=False)
 
-        actual_metadata = metadata.copy()
+        actual_metadata = metadata.model_copy()
         if "id" not in df.columns:
             docs = dataframe_to_documents(df, content="content", metadata=metadata)
             ids = [str(d.id()) for d in docs]
@@ -1025,10 +1025,12 @@ class DocChatAgent(ChatAgent):
                     f"{doc.content}{enrichment_config.delimiter}{enrichment}"
                 )
 
-                new_doc = doc.copy(
+                new_doc = doc.model_copy(
                     update={
                         "content": combined_content,
-                        "metadata": doc.metadata.copy(update={"has_enrichment": True}),
+                        "metadata": doc.metadata.model_copy(
+                            update={"has_enrichment": True}
+                        ),
                     }
                 )
                 augmented_docs.append(new_doc)
@@ -1322,7 +1324,7 @@ class DocChatAgent(ChatAgent):
         if self.config.use_bm25_search:
             # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
-            id2doc.update({d.id(): d for d, _ in docs_scores})
+            id2doc.model_copy(update={d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,
                 # instead of accumulating the bm25 results into passages,
@@ -1348,7 +1350,7 @@ class DocChatAgent(ChatAgent):
                 id2_rank_fuzzy = {
                     d.id(): i for i, (d, _) in enumerate(fuzzy_match_doc_scores)
                 }
-                id2doc.update({d.id(): d for d, _ in fuzzy_match_doc_scores})
+                id2doc.model_copy(update={d.id(): d for d, _ in fuzzy_match_doc_scores})
             else:
                 passages += [d for (d, _) in fuzzy_match_doc_scores]
                 # eliminate duplicate ids
@@ -1515,7 +1517,7 @@ class DocChatAgent(ChatAgent):
         delimiter = self.config.chunk_enrichment_config.delimiter
         return [
             (
-                doc.copy(update={"content": doc.content.split(delimiter)[0]})
+                doc.model_copy(update={"content": doc.content.split(delimiter)[0]})
                 if doc.content and getattr(doc.metadata, "has_enrichment", False)
                 else doc
             )
@@ -1572,7 +1574,7 @@ class DocChatAgent(ChatAgent):
         for p, e in zip(passages, extracts):
             if e == NO_ANSWER or len(e) == 0:
                 continue
-            p_copy = p.copy()
+            p_copy = p.model_copy()
             p_copy.content = e
             passage_extracts.append(p_copy)
 
@@ -1607,7 +1609,7 @@ class DocChatAgent(ChatAgent):
                 sender=Entity.LLM,
             )
             # copy metadata from first doc, unclear what to do here.
-            meta.update(extracts[0].metadata)
+            meta.model_copy(update=extracts[0].metadata)
             return ChatDocument(
                 content="\n\n".join([e.content for e in extracts]),
                 metadata=ChatDocMetaData(**meta),  # type: ignore

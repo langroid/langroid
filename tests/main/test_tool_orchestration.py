@@ -198,7 +198,8 @@ def test_agent_done_tool(test_settings: Settings):
         lr.ChatAgentConfig(
             name="MyAgent",
             llm=MockLMConfig(
-                # note: response need not be str; will be converted to str via .json()
+                # note: response need not be str;
+                # will be converted to str via .model_dump_json()
                 response_fn=lambda x: XTool(x=int(x) + 1)
             ),
         )

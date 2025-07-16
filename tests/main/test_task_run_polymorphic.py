@@ -125,7 +125,7 @@ def test_task_in_out_types(
         case "GenPair":
             msg = GenPairTool(x=3)  # agent handler generates a Pair obj, list, etc.
         case "Pair":
-            msg = Pair(x=2, y=4)  # gets converted to str via .json()
+            msg = Pair(x=2, y=4)  # gets converted to str via .model_dump_json()
 
     if final_result_type == "agent_done_tool":
         # Run twice: ensure default is not overriden

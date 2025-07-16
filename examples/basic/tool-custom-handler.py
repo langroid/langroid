@@ -44,7 +44,7 @@ class AssistantAgent(lr.ChatAgent):
             return "invalid country name"
 
         try:
-            data = response.json()[0]
+            data = response.model_dump_json()[0]
         except (ValueError, IndexError):
             return "invalid response"
 

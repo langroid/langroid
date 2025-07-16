@@ -227,7 +227,7 @@ class LanceDB(VectorStore):
                     dict(
                         id=ids[i + j],
                         vector=embedding_vecs[i + j],
-                        **doc.dict(),
+                        **doc.model_dump(),
                     )
                     for j, doc in enumerate(documents[i : i + b])
                 ]
@@ -273,7 +273,7 @@ class LanceDB(VectorStore):
                 metadata to be stored in the database. Defaults to [].
         """
         self.is_from_dataframe = True
-        actual_metadata = metadata.copy()
+        actual_metadata = metadata.model_copy()
         self.df_metadata_columns = actual_metadata  # could be updated below
         # get content column
         content_values = df[content].values.tolist()

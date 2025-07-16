@@ -4,7 +4,9 @@ Provider-specific parameter configurations for various LLM providers.
 
 from typing import Any, Dict, Optional
 
-from langroid.pydantic_v1 import BaseSettings
+from pydantic_settings import BaseSettings
+
+from langroid.pydantic_v1 import ConfigDict
 
 # Constants
 LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
@@ -24,10 +26,7 @@ class LangDBParams(BaseSettings):
     thread_id: Optional[str] = None
     base_url: str = LANGDB_BASE_URL
 
-    class Config:
-        # allow setting of fields via env vars,
-        # e.g. LANGDB_PROJECT_ID=1234
-        env_prefix = "LANGDB_"
+    model_config = ConfigDict(env_prefix="LANGDB_")
 
 
 class PortkeyParams(BaseSettings):
@@ -61,10 +60,7 @@ class PortkeyParams(BaseSettings):
     custom_headers: Optional[Dict[str, str]] = None  # Optional: additional headers
     base_url: str = PORTKEY_BASE_URL
 
-    class Config:
-        # allow setting of fields via env vars,
-        # e.g. PORTKEY_API_KEY=xxx, PORTKEY_PROVIDER=anthropic
-        env_prefix = "PORTKEY_"
+    model_config = ConfigDict(env_prefix="PORTKEY_")
 
     def get_headers(self) -> Dict[str, str]:
         """Generate Portkey-specific headers from parameters."""
@@ -73,7 +69,6 @@ class PortkeyParams(BaseSettings):
 
         headers = {}
 
-        # API key - from params or environment
         if self.api_key and self.api_key != DUMMY_API_KEY:
             headers["x-portkey-api-key"] = self.api_key
         else:
@@ -81,45 +76,35 @@ class PortkeyParams(BaseSettings):
             if portkey_key:
                 headers["x-portkey-api-key"] = portkey_key
 
-        # Provider
         if self.provider:
             headers["x-portkey-provider"] = self.provider
 
-        # Virtual key
         if self.virtual_key:
             headers["x-portkey-virtual-key"] = self.virtual_key
 
-        # Trace ID
         if self.trace_id:
             headers["x-portkey-trace-id"] = self.trace_id
 
-        # Metadata
         if self.metadata:
             headers["x-portkey-metadata"] = json.dumps(self.metadata)
 
-        # Retry configuration
         if self.retry:
             headers["x-portkey-retry"] = json.dumps(self.retry)
 
-        # Cache configuration
         if self.cache:
             headers["x-portkey-cache"] = json.dumps(self.cache)
 
-        # Cache force refresh
         if self.cache_force_refresh is not None:
             headers["x-portkey-cache-force-refresh"] = str(
                 self.cache_force_refresh
             ).lower()
 
-        # User identifier
         if self.user:
             headers["x-portkey-user"] = self.user
 
-        # Organization identifier
         if self.organization:
             headers["x-portkey-organization"] = self.organization
 
-        # Add any custom headers
         if self.custom_headers:
             headers.update(self.custom_headers)
 
@@ -138,7 +123,6 @@ class PortkeyParams(BaseSettings):
             _, provider, model = parts
             return provider, model
         else:
-            # Fallback: just remove "portkey/" prefix and return empty provider
             model = model_string.replace("portkey/", "")
             return "", model
 
@@ -157,7 +141,6 @@ class PortkeyParams(BaseSettings):
         """
         import os
 
-        # Common environment variable patterns for different providers
         env_patterns = [
             f"{provider.upper()}_API_KEY",
             f"{provider.upper()}_KEY",

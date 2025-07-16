@@ -939,7 +939,9 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             llm=MockLMConfig(
                 # mock LLM generating a CoolTool variant
                 response_fn=lambda x: (
-                    tool_class(x=int(x)).json() if tool_class is not None else x
+                    tool_class(x=int(x)).model_dump_json()
+                    if tool_class is not None
+                    else x
                 ),
             ),
         )
@@ -1213,7 +1215,9 @@ def test_agent_respond_only_tools(tool: str):
             name="Main",
             llm=MockLMConfig(
                 response_fn=lambda x: (
-                    tool_class(num=int(x)).json() if tool_class is not None else x
+                    tool_class(num=int(x)).model_dump_json()
+                    if tool_class is not None
+                    else x
                 ),
             ),
         )
@@ -1541,7 +1545,7 @@ def test_strict_fallback(
                         function=spec,
                     )
                 elif issubclass(self.output_format, BaseModel):
-                    param_spec = self.output_format.schema()
+                    param_spec = self.output_format.model_json_schema()
 
                     output_format = OpenAIJsonSchemaSpec(
                         strict=True,
@@ -1839,7 +1843,7 @@ def test_handle_llm_no_tool(handle_no_tool: Any):
     def mock_llm_response(x: str) -> str:
         match x:
             case "1":
-                return SumTool(x=1, y=2).json()
+                return SumTool(x=1, y=2).model_dump_json()
             case "3":
                 return "4"
             case "are you finished?":
