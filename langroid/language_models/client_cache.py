@@ -49,6 +49,8 @@ def get_openai_client(
     organization: Optional[str] = None,
     timeout: Union[float, Timeout] = 120.0,
     default_headers: Optional[Dict[str, str]] = None,
+    http_client: Optional[Any] = None,
+    http_client_config: Optional[Dict[str, Any]] = None,
 ) -> OpenAI:
     """
     Get or create a singleton OpenAI client with the given configuration.
@@ -59,12 +61,40 @@ def get_openai_client(
         organization: Optional organization ID
         timeout: Request timeout
         default_headers: Optional default headers
+        http_client: Optional httpx.Client instance
+        http_client_config: Optional config dict for creating httpx.Client
 
     Returns:
         OpenAI client instance
     """
     if isinstance(timeout, (int, float)):
         timeout = Timeout(timeout)
+
+    # If http_client is provided directly, don't cache (complex object)
+    if http_client is not None:
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=http_client,
+        )
+        _all_clients.add(client)
+        return client
+
+    # If http_client_config is provided, create client from config and cache
+    created_http_client = None
+    if http_client_config is not None:
+        try:
+            from httpx import Client
+
+            created_http_client = Client(**http_client_config)
+        except ImportError:
+            raise ValueError(
+                "httpx is required to use http_client_config. "
+                "Install it with: pip install httpx"
+            )
 
     cache_key = _get_cache_key(
         "openai",
@@ -73,6 +103,7 @@ def get_openai_client(
         organization=organization,
         timeout=timeout,
         default_headers=default_headers,
+        http_client_config=http_client_config,  # Include config in cache key
     )
 
     if cache_key in _client_cache:
@@ -84,6 +115,7 @@ def get_openai_client(
         organization=organization,
         timeout=timeout,
         default_headers=default_headers,
+        http_client=created_http_client,  # Use the client created from config
     )
 
     _client_cache[cache_key] = client
@@ -97,6 +129,8 @@ def get_async_openai_client(
     organization: Optional[str] = None,
     timeout: Union[float, Timeout] = 120.0,
     default_headers: Optional[Dict[str, str]] = None,
+    http_client: Optional[Any] = None,
+    http_client_config: Optional[Dict[str, Any]] = None,
 ) -> AsyncOpenAI:
     """
     Get or create a singleton AsyncOpenAI client with the given configuration.
@@ -107,12 +141,40 @@ def get_async_openai_client(
         organization: Optional organization ID
         timeout: Request timeout
         default_headers: Optional default headers
+        http_client: Optional httpx.AsyncClient instance
+        http_client_config: Optional config dict for creating httpx.AsyncClient
 
     Returns:
         AsyncOpenAI client instance
     """
     if isinstance(timeout, (int, float)):
         timeout = Timeout(timeout)
+
+    # If http_client is provided directly, don't cache (complex object)
+    if http_client is not None:
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=http_client,
+        )
+        _all_clients.add(client)
+        return client
+
+    # If http_client_config is provided, create async client from config and cache
+    created_http_client = None
+    if http_client_config is not None:
+        try:
+            from httpx import AsyncClient
+
+            created_http_client = AsyncClient(**http_client_config)
+        except ImportError:
+            raise ValueError(
+                "httpx is required to use http_client_config. "
+                "Install it with: pip install httpx"
+            )
 
     cache_key = _get_cache_key(
         "async_openai",
@@ -121,6 +183,7 @@ def get_async_openai_client(
         organization=organization,
         timeout=timeout,
         default_headers=default_headers,
+        http_client_config=http_client_config,  # Include config in cache key
     )
 
     if cache_key in _client_cache:
@@ -132,6 +195,7 @@ def get_async_openai_client(
         organization=organization,
         timeout=timeout,
         default_headers=default_headers,
+        http_client=created_http_client,  # Use the client created from config
     )
 
     _client_cache[cache_key] = client

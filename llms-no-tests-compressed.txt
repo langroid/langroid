@@ -9499,6 +9499,63 @@ langroid
 python-dotenv
 </file>
 
+<file path="examples/mcp/openmemory.py">
+"""
+OpenMemory Example - Langroid integration with mem0's OpenMemory knowledge graph system
+
+This example demonstrates how to use Langroid with OpenMemory's MCP (Model Control Protocol)
+tools to create an agent with persistent memory and knowledge graph capabilities.
+
+What this example shows:
+- Integration with OpenMemory's MCP server for persistent knowledge storage
+- How to connect to and use OpenMemory's knowledge graph tools within a Langroid agent
+- Creation of a contextually-aware agent that can access and store information in a knowledge graph
+
+What is mem0/OpenMemory?
+- OpenMemory is an open-source knowledge graph system for LLM applications
+- It allows LLMs to store and retrieve information across conversations as a connected graph
+- The MCP server provides tools for knowledge operations (create, retrieve, search)
+- This example demonstrates using these knowledge graph capabilities within a Langroid agent
+
+References:
+https://mem0.ai/blog/how-to-make-your-clients-more-context-aware-with-openmemory-mcp/
+https://docs.mem0.ai/openmemory/quickstart
+https://github.com/mem0ai/mem0/tree/main/openmemory
+
+Steps to create and connect to openmemory mcp server:
+
+- git clone <https://github.com/mem0ai/mem0.git>
+- cd mem0/openmemory
+- cp api/.env.example api/.env
+- add your OPENAI_API_KEY
+- make build # builds the mcp server and ui
+- make up  # runs openmemory mcp server and ui
+
+You can check ui for your memories at
+localhost:3000
+"""
+⋮----
+# trying to connect to openmemory
+URL = "http://localhost:8765/mcp/openmemory/sse/"
+# set userid to my own, got from os: $USER
+userid = os.getenv("USER")
+⋮----
+async def main(model: str = "")
+⋮----
+transport = SSETransport(
+all_tools = await get_tools_async(transport)
+⋮----
+agent = lr.ChatAgent(
+⋮----
+# forward to user when LLM doesn't use a tool
+⋮----
+# enable the agent to use all tools
+⋮----
+# make task with interactive=False =>
+# waits for user only when LLM doesn't use a tool
+task = lr.Task(agent, interactive=False)
+</file>
+
 <file path="examples/multi-agent-debate/README.md">
 Debate System Using LLM Agents
 ==============================
@@ -21597,267 +21654,6 @@ https://www.contributor-covenant.org/faq. Translations are available at
 https://www.contributor-covenant.org/translations.
 </file>
 
-<file path="CONTRIBUTING.md">
-# Contributing to Langroid
-
-Thank you for your interest in contributing to Langroid!
-We want to fundamentally change how LLM applications are built, 
-using Langroid's principled multi-agent framework. 
-Together, let us build the future of LLM-apps!
-We welcome contributions from everyone.
-
-Below you will find guidelines and suggestions for contributing.
-We explicitly designed Langroid with a transparent, flexible architecture to 
-make it easier to build LLM-powered applications, as well as 
-to make it easier to contribute to Langroid itself.
-Feel free to join us on [Discord](https://discord.gg/ZU36McDgDs) 
-for any questions or discussions.
-
-# How can I Contribute?
-
-There are many ways to contribute to Langroid. Here are some areas where you can help:
-
-- Bug Reports
-- Code Fixes
-- Feature Requests
-- Feature Implementations
-- Documentation
-- Testing
-- UI/UX Improvements
-- Translations
-- Outreach
-
-You are welcome to take on un-assigned open [issues](https://github.com/langroid/langroid/issues).
-
-## Implementation Ideas
-
-**INTEGRATIONS**
-
-- Vector databases, e.g.:
-    - [x] Qdrant
-    - [x] Chroma
-    - [x] LanceDB
-    - [x] Pinecone 
-    - [x] PostgresML (pgvector)
-    - [x] Weaviate
-    - [ ] Milvus 
-    - [ ] Marqo 
-- Other LLM APIs, e.g.: Claude, Cohere, ... (see below)
-- Local LLMs, e.g.: llama2
-- Data Sources: SQL DBs, NoSQL DBs, Neo4j (Graph DBs), ...
-- Query languages: SQL, GraphQL, Cypher, ...
-
-
-**SPECIALIZED AGENTS**
-
-- [x] `SQLChatAgent`, analogous to `DocChatAgent`: adds ability to chat with SQL databases
-- [x] `TableChatAgent`: adds ability to chat with a tabular dataset in a file. 
-   This can derive from `RetrieverAgent`
-
-**CORE LANGROID**
-
-- [ ] **Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
-  launched from a single script. Extend this so agents can run in different
-  processes, machines, or envs or cloud, and communicate via message queues.
-- [ ] **Improve observability:** we currently log all agent interactions into structured
-  and unstructured forms. Add features on top, to improve inspection and
-  diagnosis of issues.
-- [ ] Implement a way to **backtrack** 1 step in a multi-agent task. 
-For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
-when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
-the previous step is re-done and the LLM gets another chance to respond.
-- [x] **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
-    and https://github.com/philschmid/easyllm. It would be useful to have Langroid work with these APIs.
-- [ ] Implement Agents that communicate via REST APIs: Currently, all agents within 
-the multi-agent system are created in a single script. 
-We can remove this limitation, and add the ability to have agents running and 
-listening to an end-point (e.g. a flask server). For example the LLM may 
-generate a function-call or Langroid-tool-message, which the agent’s 
-tool-handling method interprets and makes a corresponding request to an API endpoint. 
-This request can be handled by an agent listening to requests at this endpoint, 
-and the tool-handling method gets the result and returns it as the result of the handling method. 
-This is roughly the mechanism behind OpenAI plugins, e.g. https://github.com/openai/chatgpt-retrieval-plugin
-
-**DEMOS, POC, Use-cases**
-
-- [ ] **Text labeling/classification:** Specifically do what this repo does: https://github.com/refuel-ai/autolabel, 
-  but using Langroid instead of Langchain (which that repo uses).
-- [ ] Data Analyst Demo: A multi-agent system that automates a data analysis workflow, e.g. 
-feature-exploration, visualization, ML model training.
-- [ ] Document classification based on rules in an unstructured “policy” document. 
-    This is an actual use-case from a large US bank. The task is to classify 
-    documents into categories “Public” or “Sensitive”. The classification must be 
-    informed by a “policy” document which has various criteria. 
-    Normally, someone would have to read the policy doc, and apply that to 
-    classify the documents, and maybe go back and forth and look up the policy repeatedly. 
-    This would be a perfect use-case for Langroid’s multi-agent system. 
-    One agent would read the policy, perhaps extract the info into some structured form. 
-    Another agent would apply the various criteria from the policy to the document in question, 
-    and (possibly with other helper agents) classify the document, along with a detailed justification.
-
-- [ ] Document classification and tagging: Given a collection of already labeled/tagged docs, 
-which have been ingested into a vecdb (to allow semantic search), 
-when given a new document to label/tag, we retrieve the most similar docs 
-from multiple categories/tags from the vecdb and present these (with the labels/tags) 
-as few-shot examples to the LLM, and have the LLM classify/tag the retrieved document.
-
-- [ ] Implement the CAMEL multi-agent debate system : https://lablab.ai/t/camel-tutorial-building-communicative-agents-for-large-scale-language-model-exploration
-
-- [ ] Implement Stanford’s Simulacra paper with Langroid.
-Generative Agents: Interactive Simulacra of Human Behavior https://arxiv.org/abs/2304.03442
-
-- [ ] Implement CMU's paper with Langroid.
-Emergent autonomous scientific research capabilities of large language models https://arxiv.org/pdf/2304.05332.pdf
-
----
-
-# Contribution Guidelines
-
-## Set up dev env
-
-We use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
-to manage dependencies, and `python 3.11` for development.
-
-First install `uv`, then create virtual env and install dependencies:
-
-```bash
-# clone this repo and cd into repo root
-git clone ...
-cd <repo_root>
-# create a virtual env under project root, .venv directory
-uv venv --python 3.11
-
-# activate the virtual env
-. .venv/bin/activate
-
-
-# use uv to install dependencies (these go into .venv dir)
-uv sync --dev 
-```
-
-Important note about dependencies management:
-> As of version 0.33.0, we are starting to include the `uv.lock` file as part of 
-> the repo. This ensures that all contributors are using the same versions of 
-> dependencies. If you add a new dependency, `uv add` will automatically update 
-> the `uv.lock` file. This will also update the `pyproject.toml` file.
-
-To add packages, use `uv add <package-name>`. This will automatically
-find the latest compatible version of the package and add it to `pyproject.
-toml`. _Do not manually edit `pyproject.toml` to add packages._
-
-## Set up environment variables (API keys, etc)
-
-Copy the `.env-template` file to a new file `.env` and
-insert secrets such as API keys, etc:
-- OpenAI API key, Anthropic API key, etc.
-- [Optional] GitHub Personal Access Token (needed by  PyGithub to analyze git repos;
-  token-based API calls are less rate-limited).
-- [Optional] Cache Configs
-  - Redis : Password, Host, Port <br>
-- Qdrant API key for the vector database.
-
-```bash
-cp .env-template .env
-# now edit the .env file, insert your secrets as above
-``` 
-
-Currently only OpenAI models are supported. 
-You are welcome to submit a PR to support other API-based or local models. 
-
-## Run tests
-To verify your env is correctly setup, run all tests using `make tests`.
-
-## IMPORTANT: Please include tests, docs and possibly examples.
-
-For any new features, please include:
-- Tests in the `tests` directory (first check if there is a suitable test file to add to).
-  _If fixing a bug, please add a regression test, i.e., 
-   one which would have failed without your fix_
-- A note in `docs/notes` folder, e.g. `docs/notes/weaviate.md` that is a
-  (relatively) self-contained guide to using the feature, including any instructions
-  on how to set up the environment or keys if needed. 
-  See the [weaviate](https://langroid.github.io/langroid/notes/weaviate/) note as an example. Make sure you link to this note in the `mkdocs.yml` file under the `nav` section.
-- Where possible and meaningful, add a simple example in the `examples` directory.
-
-## Generate docs
-
-Generate docs: `make docs`, then go to the IP address shown at the end, like
-`http://127.0.0.1:8000/`
-Note this runs a docs server in the background.
-To stop it, run `make nodocs`. Also, running `make docs` next time will kill
-any previously running `mkdocs` server.
-
-
-## Coding guidelines
-
-In this Python repository, we prioritize code readability and maintainability.
-To ensure this, please adhere to the following guidelines when contributing:
-
-1. **Type-Annotate Code:** Add type annotations to function signatures and
-   variables to make the code more self-explanatory and to help catch potential
-   issues early. For example, `def greet(name: str) -> str:`. We use [`mypy`](https://mypy.readthedocs.io/en/stable/) for
-   type-checking, so please ensure your code passes `mypy` checks. 
-
-2. **Google-Style Docstrings:** Use Google-style docstrings to clearly describe
-   the purpose, arguments, and return values of functions. For example:
-
-   ```python
-   def greet(name: str) -> str:
-       """Generate a greeting message.
-
-       Args:
-           name (str): The name of the person to greet.
-
-       Returns:
-           str: The greeting message.
-       """
-       return f"Hello, {name}!"
-   ```
-
-3. **PEP8-Compliant 80-Char Max per Line:** Follow the PEP8 style guide and keep
-   lines to a maximum of 80 characters. This improves readability and ensures
-   consistency across the codebase.
-
-If you are using an LLM to write code for you, adding these
-instructions will usually get you code compliant with the above:
-```
-use type-annotations, google-style docstrings, and pep8 compliant max 80 
-     chars per line.
-```     
-
-
-By following these practices, we can create a clean, consistent, and
-easy-to-understand codebase for all contributors. Thank you for your
-cooperation!
-
-## Submitting a PR
-
-To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
-and type-checker `mypy`. It also installs a pre-commit hook, 
-so that commits are blocked if there are style/type issues. The linting attempts to
-auto-fix issues, and warns about those it can't fix.
-(There is a separate `make lint` you could do, but that is already part of `make check`).
-The `make check` command also looks through the codebase to see if there are any
-direct imports from pydantic, and replaces them with importing from `langroid.pydantic_v1`
-(this is needed to enable dual-compatibility with Pydantic v1 and v2).
-
-So, typically when submitting a PR, you would do this sequence:
-- run `make tests` or `pytest -xvs tests/main/my-specific-test.py` 
-  - if needed use `-nc` means "no cache", i.e. to prevent using cached LLM API call responses
-  - the `-xvs` option means "exit on first failure, verbose, show output"
-- fix things so tests pass, then proceed to lint/style/type checks below.
-- `make check` to see what issues there are (typically lints and mypy)
-- manually fix any lint or type issues
-- `make check` again to see what issues remain
-- repeat if needed, until all clean.
-
-When done with these, commit and push to github and submit the PR. If this
-is an ongoing PR, just push to github again and the PR will be updated.
-
-It is strongly recommended to use the `gh` command-line utility when working with git.
-Read more [here](docs/development/github-cli.md).
-</file>
-
 <file path="Dockerfile">
 FROM --platform=$TARGETPLATFORM python:3.11
 
@@ -22368,348 +22164,6 @@ After generating all variants, here are the actual token counts:
 - `repomix-no-tests.config.json` - Permanent config file for generating no-tests versions
 - `llms-no-tests.txt` - Full version without tests (652K tokens)
 - `llms-no-tests-compressed.txt` - Compressed version without tests (400K tokens)
-</file>
-
-<file path="docs/notes/crawl4ai.md">
-# Crawl4ai Crawler Documentation
-
-## Overview
-
-The `Crawl4aiCrawler` is a highly advanced and flexible web crawler integrated into Langroid, built on the powerful `crawl4ai` library. It uses a real browser engine (Playwright) to render web pages, making it exceptionally effective at handling modern, JavaScript-heavy websites. This crawler provides a rich set of features for simple page scraping, deep-site crawling, and sophisticated data extraction, making it the most powerful crawling option available in Langroid.
-
-It is a local crawler, so no need for API keys.
-
-## Installation
-
-To use `Crawl4aiCrawler`, you must install the `crawl4ai` extra dependencies.
-
-To install and prepare crawl4ai:
-
-```bash
-# Install langroid with crawl4ai support
-pip install "langroid[crawl4ai]"
-crawl4ai setup
-crawl4ai doctor
-
-```
-
-> **Note**: The `crawl4ai setup` command will download Playwright browsers (Chromium, Firefox, WebKit) on first run. This is a one-time download that can be several hundred MB in size. The browsers are stored locally and used for rendering web pages.
-
-## Key Features
-
-- **Real Browser Rendering**: Accurately processes dynamic content, single-page applications (SPAs), and sites that require JavaScript execution.
-
-- **Simple and Deep Crawling**: Can scrape a list of individual URLs (`simple` mode) or perform a recursive, deep crawl of a website starting from a seed URL (`deep` mode).
-
-- **Powerful Extraction Strategies**:
-
-  - **Structured JSON (No LLM)**: Extract data into a predefined JSON structure using CSS selectors, XPath, or Regex patterns. This is extremely fast, reliable, and cost-effective.
-
-  - **LLM-Based Extraction**: Leverage Large Language Models (like GPT or Gemini) to extract data from unstructured content based on natural language instructions and a Pydantic schema.
-
-- **Advanced Markdown Generation**: Go beyond basic HTML-to-markdown conversion. Apply content filters to prune irrelevant sections (sidebars, ads, footers) or use an LLM to intelligently reformat content for maximum relevance, perfect for RAG pipelines.
-
-- **High-Performance Scraping**: Optionally use an LXML-based scraping strategy for a significant speed boost on large HTML documents.
-
-- **Fine-Grained Configuration**: Offers detailed control over browser behavior (`BrowserConfig`) and individual crawl runs (`CrawlerRunConfig`) for advanced use cases.
-
-## Configuration (`Crawl4aiConfig`)
-
-The `Crawl4aiCrawler` is configured via the `Crawl4aiConfig` object. This class acts as a high-level interface to the underlying `crawl4ai` library's settings.
-
-All of the strategies are optional.
-Learn more about these strategies , browser_config and run_config at [Crawl4AI docs](https://docs.crawl4ai.com/)
-
-```python
-from langroid.parsing.url_loader import Crawl4aiConfig
-
-# All parameters are optional and have sensible defaults
-config = Crawl4aiConfig(
-    crawl_mode="simple",  # or "deep"
-    extraction_strategy=...,
-    markdown_strategy=...,
-    deep_crawl_strategy=...,
-    scraping_strategy=...,
-    browser_config=...,  # For advanced browser settings
-    run_config=...,      # For advanced crawl-run settings
-)
-```
-
-**Main Parameters:**
-
-- `crawl_mode` (str):
-
-  - `"simple"` (default): Crawls each URL in the provided list individually.
-
-  - `"deep"`: Starts from the first URL in the list and recursively crawls linked pages based on the `deep_crawl_strategy`.
-
-  - Make sure you are setting `"crawl_mode=deep"` whenever you are deep crawling this is crucial for smooth functioning.
-
-- `extraction_strategy` (`ExtractionStrategy`): Defines how to extract structured data from a page. If set, the `Document.content` will be a **JSON string** containing the extracted data.
-
-- `markdown_strategy` (`MarkdownGenerationStrategy`): Defines how to convert HTML to markdown. This is used when `extraction_strategy` is not set. The `Document.content` will be a **markdown string**.
-
-- `deep_crawl_strategy` (`DeepCrawlStrategy`): Configuration for deep crawling, such as `max_depth`, `max_pages`, and URL filters. Only used when `crawl_mode` is `"deep"`.
-
-- `scraping_strategy` (`ContentScrapingStrategy`): Specifies the underlying HTML parsing engine. Useful for performance tuning.
-
-- `browser_config` & `run_config`: For advanced users to pass detailed `BrowserConfig` and `CrawlerRunConfig` objects directly from the `crawl4ai` library.
-
----
-
-## Usage Examples
-
-These are representative examples. For runnable examples check the script [`examples/docqa/crawl4ai_examples.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/crawl4ai_examples.py)
-
-### 1. Simple Crawling (Default Markdown)
-
-This is the most basic usage. It will fetch the content of each URL and convert it to clean markdown.
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-
-urls = [
-    "https://pytorch.org/",
-    "https://techcrunch.com/",
-]
-
-# Use default settings
-crawler_config = Crawl4aiConfig()
-loader = URLLoader(urls=urls, crawler_config=crawler_config)
-
-docs = loader.load()
-for doc in docs:
-    print(f"URL: {doc.metadata.source}")
-    print(f"Content (first 200 chars): {doc.content[:200]}")
-```
-
-### 2. Structured JSON Extraction (No LLM)
-
-When you need to extract specific, repeated data fields from a page, schema-based extraction is the best choice. It's fast, precise, and free of LLM costs. The result in `Document.content` is a JSON string.
-
-#### a. Using CSS Selectors (`JsonCssExtractionStrategy`)
-
-This example scrapes titles and links from the Hacker News front page.
-
-```python
-import json
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
-
-HACKER_NEWS_URL = "https://news.ycombinator.com"
-HACKER_NEWS_SCHEMA = {
-    "name": "HackerNewsArticles",
-    "baseSelector": "tr.athing",
-    "fields": [
-        {"name": "title", "selector": "span.titleline > a", "type": "text"},
-        {"name": "link", "selector": "span.titleline > a", "type": "attribute", "attribute": "href"},
-    ],
-}
-
-# Create the strategy and pass it to the config
-css_strategy = JsonCssExtractionStrategy(schema=HACKER_NEWS_SCHEMA)
-crawler_config = Crawl4aiConfig(extraction_strategy=css_strategy)
-
-loader = URLLoader(urls=[HACKER_NEWS_URL], crawler_config=crawler_config)
-documents = loader.load()
-
-# The Document.content will contain the JSON string
-extracted_data = json.loads(documents[0].content)
-print(json.dumps(extracted_data[:3], indent=2))
-```
-
-#### b. Using Regex (`RegexExtractionStrategy`)
-
-This is ideal for finding common patterns like emails, URLs, or phone numbers.
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.extraction_strategy import RegexExtractionStrategy
-
-url = "https://www.scrapethissite.com/pages/forms/"
-
-# Combine multiple built-in patterns
-regex_strategy = RegexExtractionStrategy(
-    pattern=(
-        RegexExtractionStrategy.Email
-        | RegexExtractionStrategy.Url
-        | RegexExtractionStrategy.PhoneUS
-    )
-)
-
-crawler_config = Crawl4aiConfig(extraction_strategy=regex_strategy)
-loader = URLLoader(urls=[url], crawler_config=crawler_config)
-documents = loader.load()
-
-print(documents[0].content)
-```
-
-### 3. Advanced Markdown Generation
-
-For RAG applications, the quality of the markdown is crucial. These strategies produce highly relevant, clean text. The result in `Document.content` is the filtered markdown (`fit_markdown`).
-
-#### a. Pruning Filter (`PruningContentFilter`)
-
-This filter heuristically removes boilerplate content based on text density, link density, and common noisy tags.
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.content_filter_strategy import PruningContentFilter
-
-prune_filter = PruningContentFilter(threshold=0.6, min_word_threshold=10)
-md_generator = DefaultMarkdownGenerator(
-    content_filter=prune_filter,
-    options={"ignore_links": True}
-)
-
-crawler_config = Crawl4aiConfig(markdown_strategy=md_generator)
-loader = URLLoader(urls=["https://news.ycombinator.com"], crawler_config=crawler_config)
-docs = loader.load()
-
-print(docs[0].content[:500])
-```
-
-#### b. LLM Filter (`LLMContentFilter`)
-
-Use an LLM to semantically understand the content and extract only the relevant parts based on your instructions. This is extremely powerful for creating topic-focused documents.
-
-```python
-import os
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.async_configs import LLMConfig
-from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.content_filter_strategy import LLMContentFilter
-
-# Requires an API key, e.g., OPENAI_API_KEY
-llm_filter = LLMContentFilter(
-    llm_config=LLMConfig(
-        provider="openai/gpt-4o-mini",
-        api_token=os.getenv("OPENAI_API_KEY"),
-    ),
-    instruction="""
-    Extract only the main article content.
-    Exclude all navigation, sidebars, comments, and footer content.
-    Format the output as clean, readable markdown.
-    """,
-    chunk_token_threshold=4096,
-)
-
-md_generator = DefaultMarkdownGenerator(content_filter=llm_filter)
-crawler_config = Crawl4aiConfig(markdown_strategy=md_generator)
-loader = URLLoader(urls=["https://www.theverge.com/tech"], crawler_config=crawler_config)
-docs = loader.load()
-
-print(docs[0].content)
-```
-
-### 4. Deep Crawling
-
-To crawl an entire website or a specific section, use `deep` mode.
-
-Recommended setting is BestFirstCrawlingStrategy
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.deep_crawling import BestFirstCrawlingStrategy
-from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
-
-
-deep_crawl_strategy = BestFirstCrawlingStrategy(
-    max_depth=2,
-    include_external=False,
-    max_pages=25,              # Maximum number of pages to crawl (optional)
-    filter_chain=FilterChain([URLPatternFilter(patterns=["*core*"])]) # Pattern matching for granular control (optional)
-)
-
-crawler_config = Crawl4aiConfig(
-    crawl_mode="deep",
-    deep_crawl_strategy=deep_crawl_strategy
-)
-
-loader = URLLoader(urls=["https://docs.crawl4ai.com/"], crawler_config=crawler_config)
-docs = loader.load()
-
-print(f"Crawled {len(docs)} pages.")
-for doc in docs:
-    print(f"- {doc.metadata.source}")
-```
-
-### 5. High-Performance Scraping (`LXMLWebScrapingStrategy`)
-
-For a performance boost, especially on very large, static HTML pages, switch the scraping strategy to LXML.
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
-
-crawler_config = Crawl4aiConfig(
-    scraping_strategy=LXMLWebScrapingStrategy()
-)
-
-loader = URLLoader(urls=["https://www.nbcnews.com/business"], crawler_config=crawler_config)
-docs = loader.load()
-print(f"Content Length: {len(docs[0].content)}")
-```
-
-### 6. LLM-Based JSON Extraction (`LLMExtractionStrategy`)
-
-When data is unstructured or requires semantic interpretation, use an LLM for extraction. This is slower and more expensive but incredibly flexible. The result in `Document.content` is a JSON string.
-
-```python
-import os
-import json
-from langroid.pydantic_v1 import BaseModel, Field
-from typing import Optional
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.async_configs import LLMConfig
-from crawl4ai.extraction_strategy import LLMExtractionStrategy
-
-# Define the data structure you want to extract
-class ArticleData(BaseModel):
-    headline: str
-    summary: str = Field(description="A short summary of the article")
-    author: Optional[str] = None
-
-# Configure the LLM strategy
-llm_strategy = LLMExtractionStrategy(
-    llm_config=LLMConfig(
-        provider="openai/gpt-4o-mini",
-        api_token=os.getenv("OPENAI_API_KEY"),
-    ),
-    schema=ArticleData.schema_json(),
-    extraction_type="schema",
-    instruction="Extract the headline, summary, and author of the main article.",
-)
-
-crawler_config = Crawl4aiConfig(extraction_strategy=llm_strategy)
-loader = URLLoader(urls=["https://news.ycombinator.com"], crawler_config=crawler_config)
-docs = loader.load()
-
-extracted_data = json.loads(docs[0].content)
-print(json.dumps(extracted_data, indent=2))
-```
-
-## How It Handles Different Content Types
-
-The `Crawl4aiCrawler` is smart about handling different types of URLs:
-
-- **Web Pages** (e.g., `http://...`, `https://...`): These are processed by the `crawl4ai` browser engine. The output format (`markdown` or `JSON`) depends on the strategy you configure in `Crawl4aiConfig`.
-- **Local and Remote Documents** (e.g., URLs ending in `.pdf`, `.docx`): These are automatically detected and delegated to Langroid's internal `DocumentParser`. This ensures that documents are properly parsed and chunked according to your `ParsingConfig`, just like with other Langroid tools.
-
-## Conclusion
-
-The `Crawl4aiCrawler` is a feature-rich, powerful tool for any web-based data extraction task.
-
-- For **simple, clean text**, use the default `Crawl4aiConfig`.
-
-- For **structured data from consistent sites**, use `JsonCssExtractionStrategy` or `RegexExtractionStrategy` for unbeatable speed and reliability.
-
-- To create **high-quality, focused content for RAG**, use `PruningContentFilter` or the `LLMContentFilter` with the `DefaultMarkdownGenerator`.
-
-- To scrape an **entire website**, use `deep_crawl_strategy` with `crawl_mode="deep"`.
-
-- For **complex or unstructured data** that needs AI interpretation, `LLMExtractionStrategy` provides a flexible solution.
 </file>
 
 <file path="docs/notes/gemini.md">
@@ -35359,6 +34813,8 @@ hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
         organization: Optional organization ID
         timeout: Request timeout
         default_headers: Optional default headers
+        http_client: Optional httpx.Client instance
+        http_client_config: Optional config dict for creating httpx.Client
 
     Returns:
         OpenAI client instance
@@ -35366,9 +34822,20 @@ hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
 ⋮----
 timeout = Timeout(timeout)
 ⋮----
-cache_key = _get_cache_key(
+# If http_client is provided directly, don't cache (complex object)
 ⋮----
 client = OpenAI(
+⋮----
+# If http_client_config is provided, create client from config and cache
+created_http_client = None
+⋮----
+created_http_client = Client(**http_client_config)
+⋮----
+cache_key = _get_cache_key(
+⋮----
+http_client_config=http_client_config,  # Include config in cache key
+⋮----
+http_client=created_http_client,  # Use the client created from config
 ⋮----
 """
     Get or create a singleton AsyncOpenAI client with the given configuration.
@@ -35379,12 +34846,18 @@ client = OpenAI(
         organization: Optional organization ID
         timeout: Request timeout
         default_headers: Optional default headers
+        http_client: Optional httpx.AsyncClient instance
+        http_client_config: Optional config dict for creating httpx.AsyncClient
 
     Returns:
         AsyncOpenAI client instance
     """
 ⋮----
 client = AsyncOpenAI(
+⋮----
+# If http_client_config is provided, create async client from config and cache
+⋮----
+created_http_client = AsyncClient(**http_client_config)
 ⋮----
 def get_groq_client(api_key: str) -> Groq
 ⋮----
@@ -36936,112 +36409,6 @@ rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank)
 - Updated warning message for better clarity when both options are configured
 </file>
 
-<file path="release-notes/v0-58-0-crawl4ai-integration.md">
-# Langroid Release 0.58.0
-
-## 🎉 Major Features
-
-### 🕷️ Crawl4AI Integration - Advanced Web Crawling with Browser Rendering
-
-We're excited to introduce **Crawl4AI** as a new web crawling option in Langroid! This powerful crawler uses Playwright to render JavaScript-heavy websites, making it ideal for modern web applications.
-
-#### Key Features:
-- **Real Browser Rendering**: Handles dynamic content, SPAs, and JavaScript-heavy sites
-- **No API Key Required**: Works locally without external dependencies
-- **Multiple Extraction Strategies**:
-  - CSS selector-based extraction for structured data
-  - LLM-based extraction for unstructured content
-  - Regex extraction for pattern matching
-- **Advanced Markdown Generation**: Apply content filters to remove ads, sidebars, and irrelevant content
-- **Deep Crawling**: Recursively crawl entire websites with customizable depth and filters
-- **High Performance**: Optional LXML-based scraping for speed optimization
-
-#### Installation:
-```bash
-pip install "langroid[crawl4ai]"
-crawl4ai setup  # Note: Downloads Playwright browsers (~300MB, one-time)
-crawl4ai doctor
-```
-
-#### Quick Example:
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-
-# Simple usage
-config = Crawl4aiConfig()
-loader = URLLoader(urls=["https://example.com"], crawler_config=config)
-docs = loader.load()
-
-# With extraction strategy
-from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
-
-css_strategy = JsonCssExtractionStrategy(schema={
-    "name": "Articles",
-    "baseSelector": "article",
-    "fields": [
-        {"name": "title", "selector": "h2", "type": "text"},
-        {"name": "content", "selector": "p", "type": "text"}
-    ]
-})
-
-config = Crawl4aiConfig(extraction_strategy=css_strategy)
-loader = URLLoader(urls=["https://news.site.com"], crawler_config=config)
-docs = loader.load()  # Returns structured JSON data
-```
-
-#### Using with DocChatAgent:
-```python
-# In chat_search.py or similar applications
-python examples/docqa/chat_search.py -c crawl4ai
-```
-
-See the [full documentation](https://langroid.github.io/langroid/notes/crawl4ai/) for advanced usage including deep crawling, LLM-based extraction, and content filtering.
-
-## 🔧 Improvements
-
-### Enhanced URL Loader Framework
-- Added `Crawl4aiConfig` to the URL loader configuration options
-- Improved factory pattern to support multiple crawler backends
-- Better separation between document URLs (PDF, DOCX) and web pages
-
-### CLI Improvements
-- `chat_search.py` now uses Fire instead of Typer for simpler CLI interface
-- Updated help text to list all available crawlers: trafilatura, firecrawl, exa, crawl4ai
-
-## 📚 Documentation
-- Added comprehensive Crawl4AI documentation with examples
-- Updated navigation in mkdocs.yml
-- Added detailed examples in `examples/docqa/crawl4ai_examples.py`
-
-## 🧪 Testing
-- Added mocked tests for Crawl4AI functionality
-- Added optional integration tests (skipped in CI to avoid Playwright download)
-- Run integration tests locally with: `TEST_CRAWL4AI=1 pytest tests/main/test_url_loader.py::test_crawl4ai_integration`
-
-## 🐛 Bug Fixes
-- Fixed metadata extraction in crawl4ai implementation
-- Improved error handling for missing crawl4ai dependencies
-- Fixed import issues and duplicate code in examples
-
-## 📦 Dependencies
-- Added optional `crawl4ai>=0.6.3` dependency group
-- No changes to core dependencies
-
-## 🚀 Migration Guide
-No breaking changes. To use the new Crawl4AI crawler:
-
-1. Install the extra: `pip install "langroid[crawl4ai]"`
-2. Run setup: `crawl4ai setup` (one-time Playwright download)
-3. Use `Crawl4aiConfig()` instead of other crawler configs
-
-## 🙏 Acknowledgments
-Thanks to the contributors who helped improve this release, especially the integration of the powerful crawl4ai library for advanced web scraping capabilities.
-
----
-
-**Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
-</file>
-
 <file path="release-notes/v0.57.0-html-logger.md">
 # HTML Logger for Langroid Task System
 
@@ -37118,6 +36485,281 @@ replace_and_log() {
 
 # Call the function to perform the replacements and logging
 replace_and_log
+</file>
+
+<file path="CONTRIBUTING.md">
+# Contributing to Langroid
+
+
+Thank you for your interest in contributing to Langroid!
+We want to fundamentally change how LLM applications are built, 
+using Langroid's principled multi-agent framework. 
+Together, let us build the future of LLM-apps!
+We welcome contributions from everyone.
+
+Below you will find guidelines and suggestions for contributing.
+We explicitly designed Langroid with a transparent, flexible architecture to 
+make it easier to build LLM-powered applications, as well as 
+to make it easier to contribute to Langroid itself.
+Feel free to join us on [Discord](https://discord.gg/ZU36McDgDs) 
+for any questions or discussions.
+
+# How can I Contribute?
+
+There are many ways to contribute to Langroid. Here are some areas where you can help:
+
+- Bug Reports
+- Code Fixes
+- Feature Requests
+- Feature Implementations
+- Documentation
+- Testing
+- UI/UX Improvements
+- Translations
+- Outreach
+
+You are welcome to take on un-assigned open [issues](https://github.com/langroid/langroid/issues).
+
+## Implementation Ideas
+
+> **⚠️ Warning: The list of contribution ideas is not updated frequently
+> and may be out of date.**  
+> Please see the github issues for more up-to-date possibilities.
+
+
+**INTEGRATIONS**
+
+- Vector databases, e.g.:
+    - [x] Qdrant
+    - [x] Chroma
+    - [x] LanceDB
+    - [x] Pinecone 
+    - [x] PostgresML (pgvector)
+    - [x] Weaviate
+    - [ ] Milvus 
+    - [ ] Marqo 
+    
+- Other LLM APIs, e.g.: 
+  - [ ] Anthropic 
+  - [ ] Google 
+  - [ ] Cohere
+  
+- Data Sources: 
+  - [x] SQL DBs, 
+  - [x] Neo4j knowledge-graph
+  - [x] ArangoDB knowledge-graph
+  - [ ] NoSQL DBs
+- Query languages: GraphQL, ...
+
+
+**SPECIALIZED AGENTS**
+
+- [x] `SQLChatAgent`, analogous to `DocChatAgent`: adds ability to chat with SQL databases
+- [x] `TableChatAgent`: adds ability to chat with a tabular dataset in a file. 
+   This can derive from `RetrieverAgent`
+
+**CORE LANGROID**
+
+- [ ] **Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
+  launched from a single script. Extend this so agents can run in different
+  processes, machines, or envs or cloud, and communicate via message queues.
+- [ ] **Improve observability:** we currently log all agent interactions into structured
+  and unstructured forms. Add features on top, to improve inspection and
+  diagnosis of issues.
+- [ ] Implement a way to **backtrack** 1 step in a multi-agent task. 
+For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
+when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
+the previous step is re-done and the LLM gets another chance to respond.
+- [x] **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
+    and https://github.com/philschmid/easyllm. It would be useful to have Langroid work with these APIs.
+- [ ] Implement Agents that communicate via REST APIs: Currently, all agents within 
+the multi-agent system are created in a single script. 
+We can remove this limitation, and add the ability to have agents running and 
+listening to an end-point (e.g. a flask server). For example the LLM may 
+generate a function-call or Langroid-tool-message, which the agent’s 
+tool-handling method interprets and makes a corresponding request to an API endpoint. 
+This request can be handled by an agent listening to requests at this endpoint, 
+and the tool-handling method gets the result and returns it as the result of the handling method. 
+This is roughly the mechanism behind OpenAI plugins, e.g. https://github.com/openai/chatgpt-retrieval-plugin
+
+**DEMOS, POC, Use-cases**
+
+- [ ] **Text labeling/classification:** Specifically do what this repo does: https://github.com/refuel-ai/autolabel, 
+  but using Langroid instead of Langchain (which that repo uses).
+- [ ] Data Analyst Demo: A multi-agent system that automates a data analysis workflow, e.g. 
+feature-exploration, visualization, ML model training.
+- [ ] Document classification based on rules in an unstructured “policy” document. 
+    This is an actual use-case from a large US bank. The task is to classify 
+    documents into categories “Public” or “Sensitive”. The classification must be 
+    informed by a “policy” document which has various criteria. 
+    Normally, someone would have to read the policy doc, and apply that to 
+    classify the documents, and maybe go back and forth and look up the policy repeatedly. 
+    This would be a perfect use-case for Langroid’s multi-agent system. 
+    One agent would read the policy, perhaps extract the info into some structured form. 
+    Another agent would apply the various criteria from the policy to the document in question, 
+    and (possibly with other helper agents) classify the document, along with a detailed justification.
+
+- [ ] Document classification and tagging: Given a collection of already labeled/tagged docs, 
+which have been ingested into a vecdb (to allow semantic search), 
+when given a new document to label/tag, we retrieve the most similar docs 
+from multiple categories/tags from the vecdb and present these (with the labels/tags) 
+as few-shot examples to the LLM, and have the LLM classify/tag the retrieved document.
+
+- [ ] Implement the CAMEL multi-agent debate system : https://lablab.ai/t/camel-tutorial-building-communicative-agents-for-large-scale-language-model-exploration
+
+- [ ] Implement Stanford’s Simulacra paper with Langroid.
+Generative Agents: Interactive Simulacra of Human Behavior https://arxiv.org/abs/2304.03442
+
+- [ ] Implement CMU's paper with Langroid.
+Emergent autonomous scientific research capabilities of large language models https://arxiv.org/pdf/2304.05332.pdf
+
+---
+
+# Contribution Guidelines
+
+## Set up dev env
+
+We use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+to manage dependencies, and `python 3.11` for development.
+
+First install `uv`, then create virtual env and install dependencies:
+
+```bash
+# clone this repo and cd into repo root
+git clone ...
+cd <repo_root>
+# create a virtual env under project root, .venv directory
+uv venv --python 3.11
+
+# activate the virtual env
+. .venv/bin/activate
+
+
+# use uv to install dependencies (these go into .venv dir)
+uv sync --dev 
+```
+
+Important note about dependencies management:
+> As of version 0.33.0, we are starting to include the `uv.lock` file as part of 
+> the repo. This ensures that all contributors are using the same versions of 
+> dependencies. If you add a new dependency, `uv add` will automatically update 
+> the `uv.lock` file. This will also update the `pyproject.toml` file.
+
+To add packages, use `uv add <package-name>`. This will automatically
+find the latest compatible version of the package and add it to `pyproject.
+toml`. _Do not manually edit `pyproject.toml` to add packages._
+
+## Set up environment variables (API keys, etc)
+
+Copy the `.env-template` file to a new file `.env` and
+insert secrets such as API keys, etc:
+- OpenAI API key, Anthropic API key, etc.
+- [Optional] GitHub Personal Access Token (needed by  PyGithub to analyze git repos;
+  token-based API calls are less rate-limited).
+- [Optional] Cache Configs
+  - Redis : Password, Host, Port <br>
+- Qdrant API key for the vector database.
+
+```bash
+cp .env-template .env
+# now edit the .env file, insert your secrets as above
+``` 
+
+Currently only OpenAI models are supported. 
+You are welcome to submit a PR to support other API-based or local models. 
+
+## Run tests
+To verify your env is correctly setup, run all tests using `make tests`.
+
+## IMPORTANT: Please include tests, docs and possibly examples.
+
+For any new features, please include:
+- Tests in the `tests` directory (first check if there is a suitable test file to add to).
+  _If fixing a bug, please add a regression test, i.e., 
+   one which would have failed without your fix_
+- A note in `docs/notes` folder, e.g. `docs/notes/weaviate.md` that is a
+  (relatively) self-contained guide to using the feature, including any instructions
+  on how to set up the environment or keys if needed. 
+  See the [weaviate](https://langroid.github.io/langroid/notes/weaviate/) note as an example. Make sure you link to this note in the `mkdocs.yml` file under the `nav` section.
+- Where possible and meaningful, add a simple example in the `examples` directory.
+
+## Generate docs
+
+Generate docs: `make docs`, then go to the IP address shown at the end, like
+`http://127.0.0.1:8000/`
+Note this runs a docs server in the background.
+To stop it, run `make nodocs`. Also, running `make docs` next time will kill
+any previously running `mkdocs` server.
+
+
+## Coding guidelines
+
+In this Python repository, we prioritize code readability and maintainability.
+To ensure this, please adhere to the following guidelines when contributing:
+
+1. **Type-Annotate Code:** Add type annotations to function signatures and
+   variables to make the code more self-explanatory and to help catch potential
+   issues early. For example, `def greet(name: str) -> str:`. We use [`mypy`](https://mypy.readthedocs.io/en/stable/) for
+   type-checking, so please ensure your code passes `mypy` checks. 
+
+2. **Google-Style Docstrings:** Use Google-style docstrings to clearly describe
+   the purpose, arguments, and return values of functions. For example:
+
+   ```python
+   def greet(name: str) -> str:
+       """Generate a greeting message.
+
+       Args:
+           name (str): The name of the person to greet.
+
+       Returns:
+           str: The greeting message.
+       """
+       return f"Hello, {name}!"
+   ```
+
+3. **PEP8-Compliant 80-Char Max per Line:** Follow the PEP8 style guide and keep
+   lines to a maximum of 80 characters. This improves readability and ensures
+   consistency across the codebase.
+
+If you are using an LLM to write code for you, adding these
+instructions will usually get you code compliant with the above:
+```
+use type-annotations, google-style docstrings, and pep8 compliant max 80 
+     chars per line.
+```     
+
+
+By following these practices, we can create a clean, consistent, and
+easy-to-understand codebase for all contributors. Thank you for your
+cooperation!
+
+## Submitting a PR
+
+To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
+and type-checker `mypy`. It also installs a pre-commit hook, 
+so that commits are blocked if there are style/type issues. The linting attempts to
+auto-fix issues, and warns about those it can't fix.
+(There is a separate `make lint` you could do, but that is already part of `make check`).
+The `make check` command also looks through the codebase to see if there are any
+direct imports from pydantic, and replaces them with importing from `langroid.pydantic_v1`
+(this is needed to enable dual-compatibility with Pydantic v1 and v2).
+
+So, typically when submitting a PR, you would do this sequence:
+- run `make tests` or `pytest -xvs tests/main/my-specific-test.py` 
+  - if needed use `-nc` means "no cache", i.e. to prevent using cached LLM API call responses
+  - the `-xvs` option means "exit on first failure, verbose, show output"
+- fix things so tests pass, then proceed to lint/style/type checks below.
+- `make check` to see what issues there are (typically lints and mypy)
+- manually fix any lint or type issues
+- `make check` again to see what issues remain
+- repeat if needed, until all clean.
+
+When done with these, commit and push to github and submit the PR. If this
+is an ongoing PR, just push to github again and the PR will be updated.
+
+It is strongly recommended to use the `gh` command-line utility when working with git.
+Read more [here](docs/development/github-cli.md).
 </file>
 
 <file path="ai-instructions/claude-repomix-instructions.md">
@@ -37288,6 +36930,348 @@ The method was enhanced to support direct type checking of handler parameters:
 
 ## Related PR
 This investigation was prompted by PR #861 "MCP updates" which made changes to how `FastMCPServer` forwards image context and resources, and added optional persistence for MCP server connections. The handler parameter analysis improvements were made to support more robust type checking for MCP tool handlers.
+</file>
+
+<file path="docs/notes/crawl4ai.md">
+# Crawl4ai Crawler Documentation
+
+## Overview
+
+The `Crawl4aiCrawler` is a highly advanced and flexible web crawler integrated into Langroid, built on the powerful `crawl4ai` library. It uses a real browser engine (Playwright) to render web pages, making it exceptionally effective at handling modern, JavaScript-heavy websites. This crawler provides a rich set of features for simple page scraping, deep-site crawling, and sophisticated data extraction, making it the most powerful crawling option available in Langroid.
+
+It is a local crawler, so no need for API keys.
+
+## Installation
+
+To use `Crawl4aiCrawler`, you must install the `crawl4ai` extra dependencies.
+
+To install and prepare crawl4ai:
+
+```bash
+# Install langroid with crawl4ai support
+pip install "langroid[crawl4ai]"
+crawl4ai setup
+crawl4ai doctor
+
+```
+
+> **Note**: The `crawl4ai setup` command will download Playwright browsers (Chromium, Firefox, WebKit) on first run. This is a one-time download that can be several hundred MB in size. The browsers are stored locally and used for rendering web pages.
+
+## Key Features
+
+- **Real Browser Rendering**: Accurately processes dynamic content, single-page applications (SPAs), and sites that require JavaScript execution.
+
+- **Simple and Deep Crawling**: Can scrape a list of individual URLs (`simple` mode) or perform a recursive, deep crawl of a website starting from a seed URL (`deep` mode).
+
+- **Powerful Extraction Strategies**:
+
+  - **Structured JSON (No LLM)**: Extract data into a predefined JSON structure using CSS selectors, XPath, or Regex patterns. This is extremely fast, reliable, and cost-effective.
+
+  - **LLM-Based Extraction**: Leverage Large Language Models (like GPT or Gemini) to extract data from unstructured content based on natural language instructions and a Pydantic schema.
+
+- **Advanced Markdown Generation**: Go beyond basic HTML-to-markdown conversion. Apply content filters to prune irrelevant sections (sidebars, ads, footers) or use an LLM to intelligently reformat content for maximum relevance, perfect for RAG pipelines.
+
+- **High-Performance Scraping**: Optionally use an LXML-based scraping strategy for a significant speed boost on large HTML documents.
+
+- **Fine-Grained Configuration**: Offers detailed control over browser behavior (`BrowserConfig`) and individual crawl runs (`CrawlerRunConfig`) for advanced use cases.
+
+## Configuration (`Crawl4aiConfig`)
+
+The `Crawl4aiCrawler` is configured via the `Crawl4aiConfig` object. This class acts as a high-level interface to the underlying `crawl4ai` library's settings.
+
+All of the strategies are optional.
+Learn more about these strategies , browser_config and run_config at [Crawl4AI docs](https://docs.crawl4ai.com/)
+
+```python
+from langroid.parsing.url_loader import Crawl4aiConfig
+
+# All parameters are optional and have sensible defaults
+config = Crawl4aiConfig(
+    crawl_mode="simple",  # or "deep"
+    extraction_strategy=...,
+    markdown_strategy=...,
+    deep_crawl_strategy=...,
+    scraping_strategy=...,
+    browser_config=...,  # For advanced browser settings
+    run_config=...,      # For advanced crawl-run settings
+)
+```
+
+**Main Parameters:**
+
+- `crawl_mode` (str):
+
+  - `"simple"` (default): Crawls each URL in the provided list individually.
+
+  - `"deep"`: Starts from the first URL in the list and recursively crawls linked pages based on the `deep_crawl_strategy`.
+
+  - Make sure you are setting `"crawl_mode=deep"` whenever you are deep crawling this is crucial for smooth functioning.
+
+- `extraction_strategy` (`ExtractionStrategy`): Defines how to extract structured data from a page. If set, the `Document.content` will be a **JSON string** containing the extracted data.
+
+- `markdown_strategy` (`MarkdownGenerationStrategy`): Defines how to convert HTML to markdown. This is used when `extraction_strategy` is not set. The `Document.content` will be a **markdown string**.
+
+- `deep_crawl_strategy` (`DeepCrawlStrategy`): Configuration for deep crawling, such as `max_depth`, `max_pages`, and URL filters. Only used when `crawl_mode` is `"deep"`.
+
+- `scraping_strategy` (`ContentScrapingStrategy`): Specifies the underlying HTML parsing engine. Useful for performance tuning.
+
+- `browser_config` & `run_config`: For advanced users to pass detailed `BrowserConfig` and `CrawlerRunConfig` objects directly from the `crawl4ai` library.
+
+---
+
+## Usage Examples
+
+These are representative examples. For runnable examples check the script [`examples/docqa/crawl4ai_examples.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/crawl4ai_examples.py)
+
+### 1. Simple Crawling (Default Markdown)
+
+This is the most basic usage. It will fetch the content of each URL and convert it to clean markdown.
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+
+urls = [
+    "https://pytorch.org/",
+    "https://techcrunch.com/",
+]
+
+# Use default settings
+crawler_config = Crawl4aiConfig()
+loader = URLLoader(urls=urls, crawler_config=crawler_config)
+
+docs = loader.load()
+for doc in docs:
+    print(f"URL: {doc.metadata.source}")
+    print(f"Content (first 200 chars): {doc.content[:200]}")
+```
+
+### 2. Structured JSON Extraction (No LLM)
+
+When you need to extract specific, repeated data fields from a page, schema-based extraction is the best choice. It's fast, precise, and free of LLM costs. The result in `Document.content` is a JSON string.
+
+#### a. Using CSS Selectors (`JsonCssExtractionStrategy`)
+
+This example scrapes titles and links from the Hacker News front page.
+
+```python
+import json
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
+
+HACKER_NEWS_URL = "https://news.ycombinator.com"
+HACKER_NEWS_SCHEMA = {
+    "name": "HackerNewsArticles",
+    "baseSelector": "tr.athing",
+    "fields": [
+        {"name": "title", "selector": "span.titleline > a", "type": "text"},
+        {"name": "link", "selector": "span.titleline > a", "type": "attribute", "attribute": "href"},
+    ],
+}
+
+# Create the strategy and pass it to the config
+css_strategy = JsonCssExtractionStrategy(schema=HACKER_NEWS_SCHEMA)
+crawler_config = Crawl4aiConfig(extraction_strategy=css_strategy)
+
+loader = URLLoader(urls=[HACKER_NEWS_URL], crawler_config=crawler_config)
+documents = loader.load()
+
+# The Document.content will contain the JSON string
+extracted_data = json.loads(documents[0].content)
+print(json.dumps(extracted_data[:3], indent=2))
+```
+
+#### b. Using Regex (`RegexExtractionStrategy`)
+
+This is ideal for finding common patterns like emails, URLs, or phone numbers.
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.extraction_strategy import RegexExtractionStrategy
+
+url = "https://www.scrapethissite.com/pages/forms/"
+
+# Combine multiple built-in patterns
+regex_strategy = RegexExtractionStrategy(
+    pattern=(
+        RegexExtractionStrategy.Email
+        | RegexExtractionStrategy.Url
+        | RegexExtractionStrategy.PhoneUS
+    )
+)
+
+crawler_config = Crawl4aiConfig(extraction_strategy=regex_strategy)
+loader = URLLoader(urls=[url], crawler_config=crawler_config)
+documents = loader.load()
+
+print(documents[0].content)
+```
+
+### 3. Advanced Markdown Generation
+
+For RAG applications, the quality of the markdown is crucial. These strategies produce highly relevant, clean text. The result in `Document.content` is the filtered markdown (`fit_markdown`).
+
+#### a. Pruning Filter (`PruningContentFilter`)
+
+This filter heuristically removes boilerplate content based on text density, link density, and common noisy tags.
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from crawl4ai.content_filter_strategy import PruningContentFilter
+
+prune_filter = PruningContentFilter(threshold=0.6, min_word_threshold=10)
+md_generator = DefaultMarkdownGenerator(
+    content_filter=prune_filter,
+    options={"ignore_links": True}
+)
+
+crawler_config = Crawl4aiConfig(markdown_strategy=md_generator)
+loader = URLLoader(urls=["https://news.ycombinator.com"], crawler_config=crawler_config)
+docs = loader.load()
+
+print(docs[0].content[:500])
+```
+
+#### b. LLM Filter (`LLMContentFilter`)
+
+Use an LLM to semantically understand the content and extract only the relevant parts based on your instructions. This is extremely powerful for creating topic-focused documents.
+
+```python
+import os
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.async_configs import LLMConfig
+from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from crawl4ai.content_filter_strategy import LLMContentFilter
+
+# Requires an API key, e.g., OPENAI_API_KEY
+llm_filter = LLMContentFilter(
+    llm_config=LLMConfig(
+        provider="openai/gpt-4o-mini",
+        api_token=os.getenv("OPENAI_API_KEY"),
+    ),
+    instruction="""
+    Extract only the main article content.
+    Exclude all navigation, sidebars, comments, and footer content.
+    Format the output as clean, readable markdown.
+    """,
+    chunk_token_threshold=4096,
+)
+
+md_generator = DefaultMarkdownGenerator(content_filter=llm_filter)
+crawler_config = Crawl4aiConfig(markdown_strategy=md_generator)
+loader = URLLoader(urls=["https://www.theverge.com/tech"], crawler_config=crawler_config)
+docs = loader.load()
+
+print(docs[0].content)
+```
+
+### 4. Deep Crawling
+
+To crawl an entire website or a specific section, use `deep` mode.
+
+Recommended setting is BestFirstCrawlingStrategy
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.deep_crawling import BestFirstCrawlingStrategy
+from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
+
+
+deep_crawl_strategy = BestFirstCrawlingStrategy(
+    max_depth=2,
+    include_external=False,
+    max_pages=25,              # Maximum number of pages to crawl (optional)
+    filter_chain=FilterChain([URLPatternFilter(patterns=["*core*"])]) # Pattern matching for granular control (optional)
+)
+
+crawler_config = Crawl4aiConfig(
+    crawl_mode="deep",
+    deep_crawl_strategy=deep_crawl_strategy
+)
+
+loader = URLLoader(urls=["https://docs.crawl4ai.com/"], crawler_config=crawler_config)
+docs = loader.load()
+
+print(f"Crawled {len(docs)} pages.")
+for doc in docs:
+    print(f"- {doc.metadata.source}")
+```
+
+### 5. High-Performance Scraping (`LXMLWebScrapingStrategy`)
+
+For a performance boost, especially on very large, static HTML pages, switch the scraping strategy to LXML.
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
+
+crawler_config = Crawl4aiConfig(
+    scraping_strategy=LXMLWebScrapingStrategy()
+)
+
+loader = URLLoader(urls=["https://www.nbcnews.com/business"], crawler_config=crawler_config)
+docs = loader.load()
+print(f"Content Length: {len(docs[0].content)}")
+```
+
+### 6. LLM-Based JSON Extraction (`LLMExtractionStrategy`)
+
+When data is unstructured or requires semantic interpretation, use an LLM for extraction. This is slower and more expensive but incredibly flexible. The result in `Document.content` is a JSON string.
+
+```python
+import os
+import json
+from langroid.pydantic_v1 import BaseModel, Field
+from typing import Optional
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.async_configs import LLMConfig
+from crawl4ai.extraction_strategy import LLMExtractionStrategy
+
+# Define the data structure you want to extract
+class ArticleData(BaseModel):
+    headline: str
+    summary: str = Field(description="A short summary of the article")
+    author: Optional[str] = None
+
+# Configure the LLM strategy
+llm_strategy = LLMExtractionStrategy(
+    llm_config=LLMConfig(
+        provider="openai/gpt-4o-mini",
+        api_token=os.getenv("OPENAI_API_KEY"),
+    ),
+    schema=ArticleData.schema_json(),
+    extraction_type="schema",
+    instruction="Extract the headline, summary, and author of the main article.",
+)
+
+crawler_config = Crawl4aiConfig(extraction_strategy=llm_strategy)
+loader = URLLoader(urls=["https://news.ycombinator.com"], crawler_config=crawler_config)
+docs = loader.load()
+
+extracted_data = json.loads(docs[0].content)
+print(json.dumps(extracted_data, indent=2))
+```
+
+## How It Handles Different Content Types
+
+The `Crawl4aiCrawler` is smart about handling different types of URLs:
+
+- **Web Pages** (e.g., `http://...`, `https://...`): These are processed by the `crawl4ai` browser engine. The output format (`markdown` or `JSON`) depends on the strategy you configure in `Crawl4aiConfig`.
+- **Local and Remote Documents** (e.g., URLs ending in `.pdf`, `.docx`): These are automatically detected and delegated to Langroid's internal `DocumentParser`. This ensures that documents are properly parsed and chunked according to your `ParsingConfig`, just like with other Langroid tools.
+
+## Conclusion
+
+The `Crawl4aiCrawler` is a feature-rich, powerful tool for any web-based data extraction task.
+
+- For **simple, clean text**, use the default `Crawl4aiConfig`.
+
+- For **structured data from consistent sites**, use `JsonCssExtractionStrategy` or `RegexExtractionStrategy` for unbeatable speed and reliability.
+
+- To create **high-quality, focused content for RAG**, use `PruningContentFilter` or the `LLMContentFilter` with the `DefaultMarkdownGenerator`.
+
+- To scrape an **entire website**, use `deep_crawl_strategy` with `crawl_mode="deep"`.
+
+- For **complex or unstructured data** that needs AI interpretation, `LLMExtractionStrategy` provides a flexible solution.
 </file>
 
 <file path="docs/notes/html-logger.md">
@@ -40165,50 +40149,21 @@ task_cfg = lr.TaskConfig(recognize_string_signals=False)
 task = lr.Task(agent, config=task_cfg, interactive=False)
 </file>
 
-<file path="examples/mcp/openmemory.py">
+<file path="examples/mcp/claude-code-mcp.py">
 """
-OpenMemory Example - Langroid integration with mem0's OpenMemory knowledge graph system
+Interact with Claude Code's MCP server.
 
-This example demonstrates how to use Langroid with OpenMemory's MCP (Model Control Protocol)
-tools to create an agent with persistent memory and knowledge graph capabilities.
 
-What this example shows:
-- Integration with OpenMemory's MCP server for persistent knowledge storage
-- How to connect to and use OpenMemory's knowledge graph tools within a Langroid agent
-- Creation of a contextually-aware agent that can access and store information in a knowledge graph
+Run like this (omitting the `--model` argument will use the default GPT-4.1-Mini):
 
-What is mem0/OpenMemory?
-- OpenMemory is an open-source knowledge graph system for LLM applications
-- It allows LLMs to store and retrieve information across conversations as a connected graph
-- The MCP server provides tools for knowledge operations (create, retrieve, search)
-- This example demonstrates using these knowledge graph capabilities within a Langroid agent
+    uv run examples/mcp/claude-code-mcp.py --model gpt-4.1-mini
 
-References:
-https://mem0.ai/blog/how-to-make-your-clients-more-context-aware-with-openmemory-mcp/
-https://docs.mem0.ai/openmemory/quickstart
-https://github.com/mem0ai/mem0/tree/main/openmemory
 
-Steps to create and connect to openmemory mcp server:
-
-- git clone <https://github.com/mem0ai/mem0.git>
-- cd mem0/openmemory
-- cp api/.env.example api/.env
-- add your OPENAI_API_KEY
-- make build # builds the mcp server and ui
-- make up  # runs openmemory mcp server and ui
-
-You can check ui for your memories at
-localhost:3000
 """
-⋮----
-# trying to connect to openmemory
-URL = "http://localhost:8765/mcp/openmemory/sse/"
-# set userid to my own, got from os: $USER
-userid = os.getenv("USER")
 ⋮----
 async def main(model: str = "")
 ⋮----
-transport = SSETransport(
+transport = StdioTransport(
 all_tools = await get_tools_async(transport)
 ⋮----
 agent = lr.ChatAgent(
@@ -42732,367 +42687,110 @@ big_doc_chunks = self.split_para_sentence(big_docs)
 big_doc_chunks = self.split_simple(big_docs)
 </file>
 
-<file path="langroid/parsing/url_loader.py">
-# Base crawler config and specific configurations
-class BaseCrawlerConfig(BaseSettings)
-⋮----
-"""Base configuration for web crawlers."""
-⋮----
-parser: Optional[Parser] = None
-⋮----
-class TrafilaturaConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for Trafilatura crawler."""
-⋮----
-threads: int = 4
-format: str = "markdown"  # or "xml" or "txt"
-⋮----
-class FirecrawlConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for Firecrawl crawler."""
-⋮----
-api_key: str = ""
-mode: str = "scrape"
-params: Dict[str, Any] = {}
-timeout: Optional[int] = None
-⋮----
-class Config
-⋮----
-# Leverage Pydantic's BaseSettings to
-# allow setting of fields via env vars,
-# e.g. FIRECRAWL_MODE=scrape and FIRECRAWL_API_KEY=...
-env_prefix = "FIRECRAWL_"
-⋮----
-class ExaCrawlerConfig(BaseCrawlerConfig)
-⋮----
-# Allow setting of fields via env vars with prefix EXA_
-# e.g., EXA_API_KEY=your_api_key
-env_prefix = "EXA_"
-⋮----
-class Crawl4aiConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for the Crawl4aiCrawler."""
-⋮----
-crawl_mode: Literal["simple", "deep"] = "simple"
-extraction_strategy: Optional["ExtractionStrategy"] = None
-markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
-deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
-scraping_strategy: Optional["ContentScrapingStrategy"] = None
-browser_config: Optional["BrowserConfig"] = None
-run_config: Optional["CrawlerRunConfig"] = None
-⋮----
-_refs_resolved: bool = False
-⋮----
-def __init_subclass__(cls, **kwargs: Any) -> None
-⋮----
-"""Resolve forward references when class is first subclassed or instantiated."""
-⋮----
-@classmethod
-    def _resolve_forward_refs(cls) -> None
-⋮----
-"""Resolve forward references only when needed."""
-⋮----
-# Create namespace for update_forward_refs
-namespace = {
-⋮----
-# If crawl4ai is not installed, leave forward refs as strings
-⋮----
-def __init__(self, **kwargs: Any) -> None
-⋮----
-"""Initialize and ensure forward refs are resolved."""
-⋮----
-arbitrary_types_allowed = True
-⋮----
-class BaseCrawler(ABC)
-⋮----
-"""Abstract base class for web crawlers."""
-⋮----
-def __init__(self, config: BaseCrawlerConfig)
-⋮----
-"""Initialize the base crawler.
+<file path="release-notes/v0-58-0-crawl4ai-integration.md">
+# Langroid Release 0.58.0
 
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-@property
-@abstractmethod
-    def needs_parser(self) -> bool
-⋮----
-"""Indicates whether the crawler requires a parser."""
-⋮----
-@abstractmethod
-    def crawl(self, urls: List[str]) -> List[Document]
-⋮----
-def _process_document(self, url: str) -> List[Document]
-⋮----
-doc_parser = DocumentParser.create(url, self.parser.config)
-new_chunks = doc_parser.get_doc_chunks()
-⋮----
-# If the document is empty, try to extract images
-img_parser = ImagePdfParser(url, self.parser.config)
-new_chunks = img_parser.get_doc_chunks()
-⋮----
-headers = requests.head(url).headers
-⋮----
-headers = CaseInsensitiveDict()
-⋮----
-content_type = headers.get("Content-Type", "").lower()
-temp_file_suffix = None
-⋮----
-temp_file_suffix = ".pdf"
-⋮----
-temp_file_suffix = ".docx"
-⋮----
-temp_file_suffix = ".doc"
-⋮----
-response = requests.get(url)
-⋮----
-temp_file_path = temp_file.name
-doc_parser = DocumentParser.create(
-docs = doc_parser.get_doc_chunks()
-⋮----
-def _is_document_url(self, url: str) -> bool
-⋮----
-class CrawlerFactory
-⋮----
-"""Factory for creating web crawlers."""
-⋮----
-@staticmethod
-    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler
-⋮----
-"""Create a crawler instance based on configuration type.
+## 🎉 Major Features
 
-        Args:
-            config: Configuration for the crawler
+### 🕷️ Crawl4AI Integration - Advanced Web Crawling with Browser Rendering
 
-        Returns:
-            A BaseCrawler instance
+We're excited to introduce **Crawl4AI** as a new web crawling option in Langroid! This powerful crawler uses Playwright to render JavaScript-heavy websites, making it ideal for modern web applications.
 
-        Raises:
-            ValueError: If config type is not supported
-        """
-⋮----
-class TrafilaturaCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Trafilatura."""
-⋮----
-def __init__(self, config: TrafilaturaConfig)
-⋮----
-"""Initialize the Trafilatura crawler.
+#### Key Features:
+- **Real Browser Rendering**: Handles dynamic content, SPAs, and JavaScript-heavy sites
+- **No API Key Required**: Works locally without external dependencies
+- **Multiple Extraction Strategies**:
+  - CSS selector-based extraction for structured data
+  - LLM-based extraction for unstructured content
+  - Regex extraction for pattern matching
+- **Advanced Markdown Generation**: Apply content filters to remove ads, sidebars, and irrelevant content
+- **Deep Crawling**: Recursively crawl entire websites with customizable depth and filters
+- **High Performance**: Optional LXML-based scraping for speed optimization
 
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-@property
-    def needs_parser(self) -> bool
-⋮----
-def crawl(self, urls: List[str]) -> List[Document]
-⋮----
-docs = []
-dl_dict = add_to_compressed_dict(urls)
-⋮----
-parsed_doc = self._process_document(url)
-⋮----
-text = trafilatura.extract(
-⋮----
-with_metadata=True,  # Title, date, author... at start of text
-⋮----
-# heading_style="ATX" for markdown headings, i.e. #, ##, etc.
-text = md.markdownify(text, heading_style="ATX")
-⋮----
-text = result
-⋮----
-class FirecrawlCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Firecrawl."""
-⋮----
-def __init__(self, config: FirecrawlConfig) -> None
-⋮----
-"""Initialize the Firecrawl crawler.
+#### Installation:
+```bash
+pip install "langroid[crawl4ai]"
+crawl4ai setup  # Note: Downloads Playwright browsers (~300MB, one-time)
+crawl4ai doctor
+```
 
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-# Code used verbatim from firecrawl blog with few modifications
-# https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
-⋮----
-pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
-⋮----
-processed_urls: set[str] = set()
-⋮----
-# Check current status
-status = app.check_crawl_status(crawl_id)
-new_pages = 0
-⋮----
-# Save new pages
-⋮----
-url = page["metadata"]["url"]
-⋮----
-content = page.get("markdown", "")
-filename = f"{output_dir}/{len(processed_urls)}.md"
-⋮----
-pbar.update(new_pages)  # Update progress bar with new pages
-⋮----
-# Break if crawl is complete
-⋮----
-time.sleep(5)  # Wait before checking again
-⋮----
-app = FirecrawlApp(api_key=self.config.api_key)
-⋮----
-params = self.config.params.copy()  # Create a copy of the existing params
-⋮----
-params["timeout"] = self.config.timeout  # Add/override timeout in params
-⋮----
-result = app.scrape_url(url, params=params)
-metadata = result.get(
-⋮----
-)  # Default to empty dict if missing
-status_code = metadata.get("statusCode")
-⋮----
-# Start the crawl
-crawl_status = app.async_crawl_url(url=urls[0], params=params)
-⋮----
-# Save results incrementally
-docs = self._return_save_incremental_results(app, crawl_status["id"])
-⋮----
-class ExaCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Exa API."""
-⋮----
-def __init__(self, config: ExaCrawlerConfig) -> None
-⋮----
-"""Initialize the Exa crawler.
+#### Quick Example:
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
 
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-"""Crawl the given URLs using Exa SDK.
+# Simple usage
+config = Crawl4aiConfig()
+loader = URLLoader(urls=["https://example.com"], crawler_config=config)
+docs = loader.load()
 
-        Args:
-            urls: List of URLs to crawl
+# With extraction strategy
+from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
 
-        Returns:
-            List of Documents with content extracted from the URLs
+css_strategy = JsonCssExtractionStrategy(schema={
+    "name": "Articles",
+    "baseSelector": "article",
+    "fields": [
+        {"name": "title", "selector": "h2", "type": "text"},
+        {"name": "content", "selector": "p", "type": "text"}
+    ]
+})
 
-        Raises:
-            LangroidImportError: If the exa package is not installed
-            ValueError: If the Exa API key is not set
-        """
-⋮----
-exa = Exa(self.config.api_key)
-⋮----
-parsed_doc_chunks = self._process_document(url)
-⋮----
-results = exa.get_contents(
-result = results.results[0]
-⋮----
-md_text = md.markdownify(result.text, heading_style="ATX")
-# append a NON-chunked document
-# (metadata.is_chunk = False, so will be chunked downstream)
-⋮----
-class Crawl4aiCrawler(BaseCrawler)
-⋮----
-"""
-    Crawler implementation using the crawl4ai library.
+config = Crawl4aiConfig(extraction_strategy=css_strategy)
+loader = URLLoader(urls=["https://news.site.com"], crawler_config=config)
+docs = loader.load()  # Returns structured JSON data
+```
 
-    This crawler intelligently dispatches URLs. Standard web pages are rendered
-    and scraped using the crawl4ai browser engine. Direct links to documents
-    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
-    """
-⋮----
-def __init__(self, config: Crawl4aiConfig) -> None
-⋮----
-"""Initialize the Crawl4ai crawler."""
-⋮----
-"""
-        Indicates that this crawler relies on the framework's DocumentParser
-        for handling specific file types like PDF, DOCX, etc., which
-        the browser engine cannot parse directly.
-        """
-⋮----
-"""
-        Executes the crawl by separating document URLs from web page URLs.
+#### Using with DocChatAgent:
+```python
+# In chat_search.py or similar applications
+python examples/docqa/chat_search.py -c crawl4ai
+```
 
-        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
-        - Web page URLs are handled using the async crawl4ai engine.
-        """
-all_documents: List[Document] = []
-webpage_urls: List[str] = []
-⋮----
-# Step 1: Separate URLs into documents and web pages
-⋮----
-# Step 2: Process web page URLs asynchronously
-⋮----
-loop = asyncio.get_running_loop()
-⋮----
-web_docs = asyncio.run(self._async_crawl(webpage_urls))
-⋮----
-"""Converts a crawl4ai CrawlResult into the framework's Document format."""
-⋮----
-content = ""
-⋮----
-content = result.extracted_content
-⋮----
-content = result.markdown.fit_markdown
-⋮----
-content = result.markdown.raw_markdown
-⋮----
-content = str(result.markdown)
-⋮----
-# Extract metadata safely
-title = "Unknown Title"
-published_date = "Unknown Date"
-⋮----
-title = result.metadata.get("title", "Unknown Title")
-# Try common date field names
-⋮----
-published_date = result.metadata.get(date_field)
-⋮----
-meta = DocMetaData(
-⋮----
-# Note: source_content is meant for reference content, not metadata
-# Keeping it minimal as other crawlers don't populate it
-⋮----
-async def _async_crawl(self, urls: List[str]) -> List[Document]
-⋮----
-# Import configs here for lazy loading
-⋮----
-# CHANGE 2: Handle the new optional config fields.
-# Use the user-provided config if it exists, otherwise create a default one.
-browser_config = self.config.browser_config or BrowserConfig()
-run_config = self.config.run_config or CrawlerRunConfig()
-⋮----
-crawled_documents: List[Document] = []
-⋮----
-result = await crawler.arun(url, config=run_config)
-doc = self._translate_result_to_document(result)
-⋮----
-# In deep crawl mode, `crawl4ai` will discover and crawl pages
-# starting from the seed URL. It will not process direct document links
-# found during the deep crawl; it is designed to follow hyperlinks.
-crawl_results = await crawler.arun(urls[0], config=run_config)
-⋮----
-class URLLoader
-⋮----
-"""Loads URLs and extracts text using a specified crawler."""
-⋮----
-"""Initialize the URL loader.
+See the [full documentation](https://langroid.github.io/langroid/notes/crawl4ai/) for advanced usage including deep crawling, LLM-based extraction, and content filtering.
 
-        Args:
-            urls: List of URLs to load
-            parsing_config: Configuration for parsing
-            crawler_config: Configuration for the crawler
-        """
-⋮----
-crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
-⋮----
-def load(self) -> List[Document]
-⋮----
-"""Load the URLs using the specified crawler."""
+## 🔧 Improvements
+
+### Enhanced URL Loader Framework
+- Added `Crawl4aiConfig` to the URL loader configuration options
+- Improved factory pattern to support multiple crawler backends
+- Better separation between document URLs (PDF, DOCX) and web pages
+
+### CLI Improvements
+- `chat_search.py` now uses Fire instead of Typer for simpler CLI interface
+- Updated help text to list all available crawlers: trafilatura, firecrawl, exa, crawl4ai
+
+## 📚 Documentation
+- Added comprehensive Crawl4AI documentation with examples
+- Updated navigation in mkdocs.yml
+- Added detailed examples in `examples/docqa/crawl4ai_examples.py`
+
+## 🧪 Testing
+- Added mocked tests for Crawl4AI functionality
+- Added optional integration tests (skipped in CI to avoid Playwright download)
+- Run integration tests locally with: `TEST_CRAWL4AI=1 pytest tests/main/test_url_loader.py::test_crawl4ai_integration`
+
+## 🐛 Bug Fixes
+- Fixed metadata extraction in crawl4ai implementation
+- Improved error handling for missing crawl4ai dependencies
+- Fixed import issues and duplicate code in examples
+
+## 📦 Dependencies
+- Added optional `crawl4ai>=0.6.3` dependency group
+- No changes to core dependencies
+
+## 🚀 Migration Guide
+No breaking changes. To use the new Crawl4AI crawler:
+
+1. Install the extra: `pip install "langroid[crawl4ai]"`
+2. Run setup: `crawl4ai setup` (one-time Playwright download)
+3. Use `Crawl4aiConfig()` instead of other crawler configs
+
+## 🙏 Acknowledgments
+Thanks to the contributors who helped improve this release, especially the integration of the powerful crawl4ai library for advanced web scraping capabilities.
+
+---
+
+**Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
 </file>
 
 <file path=".gitignore">
@@ -44197,32 +43895,367 @@ replace = (
 task = Task(agent, interactive=False)
 </file>
 
-<file path="examples/mcp/claude-code-mcp.py">
+<file path="langroid/parsing/url_loader.py">
+# Base crawler config and specific configurations
+class BaseCrawlerConfig(BaseSettings)
+⋮----
+"""Base configuration for web crawlers."""
+⋮----
+parser: Optional[Parser] = None
+⋮----
+class TrafilaturaConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for Trafilatura crawler."""
+⋮----
+threads: int = 4
+format: str = "markdown"  # or "xml" or "txt"
+⋮----
+class FirecrawlConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for Firecrawl crawler."""
+⋮----
+api_key: str = ""
+mode: str = "scrape"
+params: Dict[str, Any] = {}
+timeout: Optional[int] = None
+⋮----
+class Config
+⋮----
+# Leverage Pydantic's BaseSettings to
+# allow setting of fields via env vars,
+# e.g. FIRECRAWL_MODE=scrape and FIRECRAWL_API_KEY=...
+env_prefix = "FIRECRAWL_"
+⋮----
+class ExaCrawlerConfig(BaseCrawlerConfig)
+⋮----
+# Allow setting of fields via env vars with prefix EXA_
+# e.g., EXA_API_KEY=your_api_key
+env_prefix = "EXA_"
+⋮----
+class Crawl4aiConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for the Crawl4aiCrawler."""
+⋮----
+crawl_mode: Literal["simple", "deep"] = "simple"
+extraction_strategy: Optional["ExtractionStrategy"] = None
+markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
+deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
+scraping_strategy: Optional["ContentScrapingStrategy"] = None
+browser_config: Optional["BrowserConfig"] = None
+run_config: Optional["CrawlerRunConfig"] = None
+⋮----
+_refs_resolved: bool = False
+⋮----
+def __init_subclass__(cls, **kwargs: Any) -> None
+⋮----
+"""Resolve forward references when class is first subclassed or instantiated."""
+⋮----
+@classmethod
+    def _resolve_forward_refs(cls) -> None
+⋮----
+"""Resolve forward references only when needed."""
+⋮----
+# Create namespace for update_forward_refs
+namespace = {
+⋮----
+# If crawl4ai is not installed, leave forward refs as strings
+⋮----
+def __init__(self, **kwargs: Any) -> None
+⋮----
+"""Initialize and ensure forward refs are resolved."""
+⋮----
+arbitrary_types_allowed = True
+⋮----
+class BaseCrawler(ABC)
+⋮----
+"""Abstract base class for web crawlers."""
+⋮----
+def __init__(self, config: BaseCrawlerConfig)
+⋮----
+"""Initialize the base crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+@property
+@abstractmethod
+    def needs_parser(self) -> bool
+⋮----
+"""Indicates whether the crawler requires a parser."""
+⋮----
+@abstractmethod
+    def crawl(self, urls: List[str]) -> List[Document]
+⋮----
+def _process_document(self, url: str) -> List[Document]
+⋮----
+doc_parser = DocumentParser.create(url, self.parser.config)
+new_chunks = doc_parser.get_doc_chunks()
+⋮----
+# If the document is empty, try to extract images
+img_parser = ImagePdfParser(url, self.parser.config)
+new_chunks = img_parser.get_doc_chunks()
+⋮----
+headers = requests.head(url).headers
+⋮----
+headers = CaseInsensitiveDict()
+⋮----
+content_type = headers.get("Content-Type", "").lower()
+temp_file_suffix = None
+⋮----
+temp_file_suffix = ".pdf"
+⋮----
+temp_file_suffix = ".docx"
+⋮----
+temp_file_suffix = ".doc"
+⋮----
+response = requests.get(url)
+⋮----
+temp_file_path = temp_file.name
+doc_parser = DocumentParser.create(
+docs = doc_parser.get_doc_chunks()
+⋮----
+def _is_document_url(self, url: str) -> bool
+⋮----
+class CrawlerFactory
+⋮----
+"""Factory for creating web crawlers."""
+⋮----
+@staticmethod
+    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler
+⋮----
+"""Create a crawler instance based on configuration type.
+
+        Args:
+            config: Configuration for the crawler
+
+        Returns:
+            A BaseCrawler instance
+
+        Raises:
+            ValueError: If config type is not supported
+        """
+⋮----
+class TrafilaturaCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Trafilatura."""
+⋮----
+def __init__(self, config: TrafilaturaConfig)
+⋮----
+"""Initialize the Trafilatura crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+@property
+    def needs_parser(self) -> bool
+⋮----
+def crawl(self, urls: List[str]) -> List[Document]
+⋮----
+docs = []
+dl_dict = add_to_compressed_dict(urls)
+⋮----
+parsed_doc = self._process_document(url)
+⋮----
+text = trafilatura.extract(
+⋮----
+with_metadata=True,  # Title, date, author... at start of text
+⋮----
+# heading_style="ATX" for markdown headings, i.e. #, ##, etc.
+text = md.markdownify(text, heading_style="ATX")
+⋮----
+text = result
+⋮----
+class FirecrawlCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Firecrawl."""
+⋮----
+def __init__(self, config: FirecrawlConfig) -> None
+⋮----
+"""Initialize the Firecrawl crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+# Code used verbatim from firecrawl blog with few modifications
+# https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
+⋮----
+pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
+⋮----
+processed_urls: set[str] = set()
+⋮----
+# Check current status
+status = app.check_crawl_status(crawl_id)
+new_pages = 0
+⋮----
+# Save new pages
+⋮----
+url = page["metadata"]["url"]
+⋮----
+content = page.get("markdown", "")
+filename = f"{output_dir}/{len(processed_urls)}.md"
+⋮----
+pbar.update(new_pages)  # Update progress bar with new pages
+⋮----
+# Break if crawl is complete
+⋮----
+time.sleep(5)  # Wait before checking again
+⋮----
+app = FirecrawlApp(api_key=self.config.api_key)
+⋮----
+params = self.config.params.copy()  # Create a copy of the existing params
+⋮----
+params["timeout"] = self.config.timeout  # Add/override timeout in params
+⋮----
+result = app.scrape_url(url, params=params)
+metadata = result.get(
+⋮----
+)  # Default to empty dict if missing
+status_code = metadata.get("statusCode")
+⋮----
+# Start the crawl
+crawl_status = app.async_crawl_url(url=urls[0], params=params)
+⋮----
+# Save results incrementally
+docs = self._return_save_incremental_results(app, crawl_status["id"])
+⋮----
+class ExaCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Exa API."""
+⋮----
+def __init__(self, config: ExaCrawlerConfig) -> None
+⋮----
+"""Initialize the Exa crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+"""Crawl the given URLs using Exa SDK.
+
+        Args:
+            urls: List of URLs to crawl
+
+        Returns:
+            List of Documents with content extracted from the URLs
+
+        Raises:
+            LangroidImportError: If the exa package is not installed
+            ValueError: If the Exa API key is not set
+        """
+⋮----
+exa = Exa(self.config.api_key)
+⋮----
+parsed_doc_chunks = self._process_document(url)
+⋮----
+results = exa.get_contents(
+result = results.results[0]
+⋮----
+md_text = md.markdownify(result.text, heading_style="ATX")
+# append a NON-chunked document
+# (metadata.is_chunk = False, so will be chunked downstream)
+⋮----
+class Crawl4aiCrawler(BaseCrawler)
+⋮----
 """
-Interact with Claude Code's MCP server.
+    Crawler implementation using the crawl4ai library.
 
-
-Run like this (omitting the `--model` argument will use the default GPT-4.1-Mini):
-
-    uv run examples/mcp/claude-code-mcp.py --model gpt-4.1-mini
-
-
+    This crawler intelligently dispatches URLs. Standard web pages are rendered
+    and scraped using the crawl4ai browser engine. Direct links to documents
+    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
+    """
+⋮----
+def __init__(self, config: Crawl4aiConfig) -> None
+⋮----
+"""Initialize the Crawl4ai crawler."""
+⋮----
 """
+        Indicates that this crawler relies on the framework's DocumentParser
+        for handling specific file types like PDF, DOCX, etc., which
+        the browser engine cannot parse directly.
+        """
 ⋮----
-async def main(model: str = "")
+"""
+        Executes the crawl by separating document URLs from web page URLs.
+
+        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
+        - Web page URLs are handled using the async crawl4ai engine.
+        """
+all_documents: List[Document] = []
+webpage_urls: List[str] = []
 ⋮----
-transport = StdioTransport(
-all_tools = await get_tools_async(transport)
+# Step 1: Separate URLs into documents and web pages
 ⋮----
-agent = lr.ChatAgent(
+# Step 2: Process web page URLs asynchronously
 ⋮----
-# forward to user when LLM doesn't use a tool
+loop = asyncio.get_running_loop()
 ⋮----
-# enable the agent to use all tools
+web_docs = asyncio.run(self._async_crawl(webpage_urls))
 ⋮----
-# make task with interactive=False =>
-# waits for user only when LLM doesn't use a tool
-task = lr.Task(agent, interactive=False)
+"""Converts a crawl4ai CrawlResult into the framework's Document format."""
+⋮----
+content = ""
+⋮----
+content = result.extracted_content
+⋮----
+content = result.markdown.fit_markdown
+⋮----
+content = result.markdown.raw_markdown
+⋮----
+content = str(result.markdown)
+⋮----
+# Extract metadata safely
+title = "Unknown Title"
+published_date = "Unknown Date"
+⋮----
+title = result.metadata.get("title", "Unknown Title")
+# Try common date field names
+⋮----
+published_date = result.metadata.get(date_field)
+⋮----
+meta = DocMetaData(
+⋮----
+# Note: source_content is meant for reference content, not metadata
+# Keeping it minimal as other crawlers don't populate it
+⋮----
+async def _async_crawl(self, urls: List[str]) -> List[Document]
+⋮----
+# Import configs here for lazy loading
+⋮----
+# CHANGE 2: Handle the new optional config fields.
+# Use the user-provided config if it exists, otherwise create a default one.
+browser_config = self.config.browser_config or BrowserConfig()
+run_config = self.config.run_config or CrawlerRunConfig()
+⋮----
+crawled_documents: List[Document] = []
+⋮----
+result = await crawler.arun(url, config=run_config)
+doc = self._translate_result_to_document(result)
+⋮----
+# In deep crawl mode, `crawl4ai` will discover and crawl pages
+# starting from the seed URL. It will not process direct document links
+# found during the deep crawl; it is designed to follow hyperlinks.
+crawl_results = await crawler.arun(urls[0], config=run_config)
+⋮----
+class URLLoader
+⋮----
+"""Loads URLs and extracts text using a specified crawler."""
+⋮----
+"""Initialize the URL loader.
+
+        Args:
+            urls: List of URLs to load
+            parsing_config: Configuration for parsing
+            crawler_config: Configuration for the crawler
+        """
+⋮----
+crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
+⋮----
+def load(self) -> List[Document]
+⋮----
+"""Load the URLs using the specified crawler."""
 </file>
 
 <file path="CLAUDE.md">
@@ -47079,7 +47112,7 @@ matched = True
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.12.2
+  rev: v0.12.3
   hooks:
     - id: ruff
 </file>
@@ -49308,6 +49341,9 @@ hf_formatter: HFFormatter | None = None
 langdb_params: LangDBParams = LangDBParams()
 portkey_params: PortkeyParams = PortkeyParams()
 headers: Dict[str, str] = {}
+http_client_factory: Optional[Callable[[], Any]] = None  # Factory for httpx.Client
+http_verify_ssl: bool = True  # Simple flag for SSL verification
+http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
 ⋮----
 def __init__(self, **kwargs) -> None:  # type: ignore
 ⋮----
@@ -49465,6 +49501,34 @@ params = self.config.langdb_params
 # Set API key - use provider's API key from env if available
 ⋮----
 # Add Portkey-specific headers
+⋮----
+# Create http_client if needed - Priority order:
+# 1. http_client_factory (most flexibility, not cacheable)
+# 2. http_client_config (cacheable, moderate flexibility)
+# 3. http_verify_ssl=False (cacheable, simple SSL bypass)
+http_client = None
+async_http_client = None
+http_client_config_used = None
+⋮----
+# Use the factory to create http_client (not cacheable)
+http_client = self.config.http_client_factory()
+# For async, we'll need the user to provide an async client
+# via the factory if they need async support
+async_http_client = http_client  # Assume it works for both
+⋮----
+# Use config dict (cacheable)
+http_client_config_used = self.config.http_client_config
+⋮----
+# Simple SSL bypass (cacheable)
+http_client_config_used = {"verify": False}
+⋮----
+client_kwargs: Dict[str, Any] = dict(
+⋮----
+# Create http_client from config for non-cached scenario
+⋮----
+async_client_kwargs: Dict[str, Any] = dict(
+⋮----
+# Create async http_client from config for non-cached scenario
 ⋮----
 use_cache = self.config.cache_config is not None
 ⋮----
@@ -50293,7 +50357,7 @@ extra_javascript:
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.58.1"
+version = "0.58.2"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
