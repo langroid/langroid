@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/langroid-langroid-badge.png)](https://mseep.ai/app/langroid-langroid)
+
 <div align="center">
   <img src="docs/assets/langroid-card-lambda-ossem-rust-1200-630.png" alt="Logo" 
         width="400" align="center">
