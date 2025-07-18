@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -13,7 +15,7 @@ MAX_OUTPUT_TOKENS = 30
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
-    vecdb: VectorStoreConfig = None
+    vecdb: Optional[VectorStoreConfig] = None
     parsing: ParsingConfig = ParsingConfig()
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=200,
@@ -21,8 +23,8 @@ class _TestChatAgentConfig(ChatAgentConfig):
 
 
 class CapitalTool(ToolMessage):
-    request = "capital"
-    purpose = "To present the <capital> of an <entity> (state or country)"
+    request: str = "capital"
+    purpose: str = "To present the <capital> of an <entity> (state or country)"
     entity: str
     capital: str
 
