@@ -223,7 +223,7 @@ With all dependencies installed, the following tests now pass or have non-Pydant
 
 ### Tests Run: ALL 83 test files in tests/main/ + 11 in extras + example scripts examined + root test files
 
-### Pydantic V2 Issues Found and Fixed: 6
+### Pydantic V2 Issues Found and Fixed: 7
 
 1. **Missing type annotations for private attributes** - Fixed in 6 locations
 2. **DoneTool content field type strictness** - Added field validator
@@ -262,6 +262,15 @@ With all dependencies installed, the following tests now pass or have non-Pydant
 
 **Fix Applied:** Changed line 325 from using `Document(` to `MyDocument(` when creating test documents. This ensures the custom metadata schema is preserved throughout storage and retrieval.
 
+## Issue #7: Pinecone Vector Store Import (Fixed 2025-01-19)
+
+**Date:** 2025-01-19
+**File:** `langroid/vector_store/pineconedb.py`
+
+**Problem:** The Pinecone vector store was importing `BaseModel` directly from `pydantic` instead of from `langroid.pydantic_v1`, which is inconsistent with the project's import structure.
+
+**Fix Applied:** Changed line 21 from `from pydantic import BaseModel` to `from langroid.pydantic_v1 import BaseModel`. This ensures consistency across the codebase and prevents potential issues with the fallback `ServerlessSpec` class.
+
 ### Key Takeaways:
 - Pydantic V2's stricter type validation caught legitimate issues (missing type annotations, type coercion)
 - The compatibility layer (`langroid.pydantic_v1`) works well but needs consistent usage
@@ -275,7 +284,7 @@ With all dependencies installed, the following tests now pass or have non-Pydant
 
 ### Summary:
 - **All Pydantic V2 related issues have been resolved** ✅
-- **Total of 6 Pydantic V2 issues found and fixed**
+- **Total of 7 Pydantic V2 issues found and fixed**
 - **No new Pydantic V2 issues discovered after dependency installation**
 
 ### Outstanding Test Failures (All Non-Pydantic):
