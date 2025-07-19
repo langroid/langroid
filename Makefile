@@ -136,6 +136,18 @@ clean:
 release:
 	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
 
+.PHONY: bump-rc
+bump-rc:
+	@cz bump --prerelease rc
+
+.PHONY: bump-beta
+bump-beta:
+	@cz bump --prerelease beta
+
+.PHONY: bump-alpha
+bump-alpha:
+	@cz bump --prerelease alpha
+
 .PHONY: all-patch
 all-patch: bump-patch clean build push release
 
@@ -144,6 +156,15 @@ all-minor: bump-minor clean build push release
 
 .PHONY: all-major
 all-major: bump-major clean build push release
+
+.PHONY: all-rc
+all-rc: bump-rc clean build push release
+
+.PHONY: all-beta
+all-beta: bump-beta clean build push release
+
+.PHONY: all-alpha
+all-alpha: bump-alpha clean build push release
 
 .PHONY: publish
 publish:
