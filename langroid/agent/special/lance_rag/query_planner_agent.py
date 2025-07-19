@@ -37,11 +37,11 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     critic_name: str = "QueryPlanCritic"
     doc_agent_name: str = "LanceRAG"
     doc_schema: str = ""
-    use_tools = False
+    use_tools: bool = False
     max_retries: int = 5  # max number of retries for query plan
-    use_functions_api = True
+    use_functions_api: bool = True
 
-    system_message = """
+    system_message: str = """
     You will receive a QUERY, to be answered based on an EXTREMELY LARGE collection
     of documents you DO NOT have access to, but your ASSISTANT does.
     You only know that these documents have a special `content` field
@@ -174,7 +174,7 @@ class LanceQueryPlanAgent(ChatAgent):
 
         # (a) insert `recipient` in the QueryPlanTool:
         # QPWithRecipient = QueryPlanTool.require_recipient()
-        # qp = QPWithRecipient(**msg.dict(), recipient=self.config.doc_agent_name)
+        # qp = QPWithRecipient(**msg.model_dump(), recipient=self.config.doc_agent_name)
         # return qp
         #
         # OR

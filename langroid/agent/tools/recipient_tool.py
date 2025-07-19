@@ -17,7 +17,7 @@ especially with weaker LLMs.
 
 """
 
-from typing import List, Type
+from typing import ClassVar, List, Type
 
 from rich import print
 
@@ -106,8 +106,8 @@ class RecipientTool(ToolMessage):
         only allows certain recipients, and possibly sets a default recipient."""
 
         class RecipientToolRestricted(cls):  # type: ignore
-            allowed_recipients = recipients
-            default_recipient = default
+            allowed_recipients: ClassVar[List[str]] = recipients
+            default_recipient: ClassVar[str] = default
 
         return RecipientToolRestricted
 

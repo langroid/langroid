@@ -148,3 +148,11 @@ dmypy.json
 sessions/
 commands/
 .claude/
+
+# Temporary files
+to-be-deleted.md
+test_debug.py
+test_minimal.py
+test_debug_full.py
+test_agent_difference.py
+test_isolated.py

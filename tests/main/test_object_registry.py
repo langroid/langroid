@@ -2,13 +2,13 @@ from typing import Optional
 from uuid import uuid4
 
 import pytest
+from pydantic import BaseModel, Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.language_models.base import LLMMessage
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.mytypes import Entity
-from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.object_registry import ObjectRegistry
 
 register_object = ObjectRegistry.register_object

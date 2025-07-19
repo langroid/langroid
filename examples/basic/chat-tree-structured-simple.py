@@ -105,8 +105,8 @@ def chat() -> int:
         to_adder = apply_transformation(num, "3n+1 where the number is n.")
 
     class AddNumTool(ToolMessage):
-        request = "add_num"
-        purpose = "Add <number> to the original number, return the result"
+        request: str = "add_num"
+        purpose: str = "Add <number> to the original number, return the result"
         number: int
 
         def handle(self) -> str:

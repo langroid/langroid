@@ -2,9 +2,9 @@ import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
+from pydantic_settings import BaseSettings
 
 from langroid.mytypes import EmbeddingFunction
-from langroid.pydantic_v1 import BaseSettings
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
@@ -57,7 +57,7 @@ class EmbeddingModel(ABC):
         elif isinstance(config, GeminiEmbeddingsConfig):
             return GeminiEmbeddings(config)
         else:
-            raise ValueError(f"Unknown embedding config: {config.__repr_name__}")
+            raise ValueError(f"Unknown embedding config: {config.__class__.__name__}")
 
     @abstractmethod
     def embedding_fn(self) -> EmbeddingFunction:

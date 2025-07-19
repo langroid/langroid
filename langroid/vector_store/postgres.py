@@ -341,7 +341,7 @@ class PostgresDB(VectorStore):
                         "id": doc.metadata.id,
                         "embedding": embedding,
                         "document": doc.content,
-                        "cmetadata": doc.metadata.dict(),
+                        "cmetadata": doc.metadata.model_dump(),
                     }
                     for doc, embedding in zip(batch_docs, batch_embeddings)
                 ]

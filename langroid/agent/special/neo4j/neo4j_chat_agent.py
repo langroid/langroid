@@ -1,10 +1,10 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.console import Console
-
-from langroid.pydantic_v1 import BaseModel, BaseSettings
 
 if TYPE_CHECKING:
     import neo4j
@@ -47,11 +47,7 @@ class Neo4jSettings(BaseSettings):
     password: str = ""
     database: str = ""
 
-    class Config:
-        # This enables the use of environment variables to set the settings,
-        # e.g. NEO4J_URI, NEO4J_USERNAME, etc.,
-        # which can either be set in a .env file or in the shell via export cmds.
-        env_prefix = "NEO4J_"
+    model_config = SettingsConfigDict(env_prefix="NEO4J_")
 
 
 class QueryResult(BaseModel):

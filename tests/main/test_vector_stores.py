@@ -322,7 +322,7 @@ def test_vector_stores_access(vecdb):
 
     # Generate a random string of 10 characters
     ingested_docs = [
-        Document(
+        MyDocument(
             content=random.choice(["cow", "goat", "mouse"]),
             metadata=MyDocMeta(id=str(i), category=random.choice(["a", "b"])),
         )

@@ -38,7 +38,7 @@ class TestHTMLLogger:
             logger = HTMLLogger(filename="test_entries", log_dir=temp_dir)
 
             # Create a user message
-            from langroid.pydantic_v1 import create_model
+            from pydantic import create_model
 
             # Simulate what task.py does
             fields_dict1 = {
@@ -127,7 +127,7 @@ class TestHTMLLogger:
             logger = HTMLLogger(filename="test_escape", log_dir=temp_dir)
 
             # Log message with HTML special characters
-            from langroid.pydantic_v1 import create_model
+            from pydantic import create_model
 
             fields_dict = {
                 "responder": "USER",

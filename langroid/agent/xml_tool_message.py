@@ -1,11 +1,20 @@
 import re
 from collections.abc import Mapping
-from typing import Any, Dict, List, Optional, get_args, get_origin
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
 from lxml import etree
+from pydantic import BaseModel, ConfigDict
 
 from langroid.agent.tool_message import ToolMessage
-from langroid.pydantic_v1 import BaseModel
+
+# For Union type handling - check if we have Python 3.10+ UnionType
+HAS_UNION_TYPE = False
+try:
+    from types import UnionType  # noqa: F401 # Used conditionally
+
+    HAS_UNION_TYPE = True
+except ImportError:
+    pass
 
 
 class XMLToolMessage(ToolMessage):
@@ -27,10 +36,27 @@ class XMLToolMessage(ToolMessage):
     request: str
     purpose: str
 
-    _allow_llm_use = True
+    _allow_llm_use: bool = True
 
-    class Config(ToolMessage.Config):
-        root_element = "tool"
+    model_config = ConfigDict(
+        # Inherit settings from ToolMessage
+        extra="allow",
+        arbitrary_types_allowed=False,
+        validate_default=True,
+        validate_assignment=True,
+        json_schema_extra={"exclude": ["purpose", "id"]},
+    )
+
+    # XMLToolMessage-specific settings as class methods to avoid Pydantic
+    # treating them as model fields
+    @classmethod
+    def _get_excluded_fields(cls) -> set[str]:
+        return {"purpose", "id"}
+
+    # Root element for XML formatting
+    @classmethod
+    def _get_root_element(cls) -> str:
+        return "tool"
 
     @classmethod
     def extract_field_values(cls, formatted_string: str) -> Optional[Dict[str, Any]]:
@@ -67,9 +93,13 @@ class XMLToolMessage(ToolMessage):
             if element.tag.startswith("_"):
                 return {}
 
-            field_info = cls.__fields__.get(element.tag)
-            is_verbatim = field_info and field_info.field_info.extra.get(
-                "verbatim", False
+            field_info = cls.model_fields.get(element.tag)
+            is_verbatim = (
+                field_info
+                and hasattr(field_info, "json_schema_extra")
+                and field_info.json_schema_extra is not None
+                and isinstance(field_info.json_schema_extra, dict)
+                and field_info.json_schema_extra.get("verbatim", False)
             )
 
             if is_verbatim:
@@ -96,8 +126,12 @@ class XMLToolMessage(ToolMessage):
                     # Otherwise, treat as a dictionary
                     result = {child.tag: parse_element(child) for child in element}
                     # Check if this corresponds to a nested Pydantic model
-                    if field_info and issubclass(field_info.type_, BaseModel):
-                        return field_info.type_(**result)
+                    if (
+                        field_info
+                        and isinstance(field_info.annotation, type)
+                        and issubclass(field_info.annotation, BaseModel)
+                    ):
+                        return field_info.annotation(**result)
                     return result
 
         result = parse_element(root)
@@ -124,7 +158,7 @@ class XMLToolMessage(ToolMessage):
                 return None
 
             # Use Pydantic's parse_obj to create and validate the instance
-            return cls.parse_obj(parsed_data)
+            return cls.model_validate(parsed_data)
         except Exception as e:
             from langroid.exceptions import XMLException
 
@@ -132,28 +166,30 @@ class XMLToolMessage(ToolMessage):
 
     @classmethod
     def find_verbatim_fields(
-        cls, prefix: str = "", parent_cls: Optional["BaseModel"] = None
+        cls, prefix: str = "", parent_cls: Optional[type[BaseModel]] = None
     ) -> List[str]:
         verbatim_fields = []
-        for field_name, field_info in (parent_cls or cls).__fields__.items():
+        for field_name, field_info in (parent_cls or cls).model_fields.items():
             full_name = f"{prefix}.{field_name}" if prefix else field_name
             if (
-                field_info.field_info.extra.get("verbatim", False)
-                or field_name == "code"
-            ):
+                hasattr(field_info, "json_schema_extra")
+                and field_info.json_schema_extra is not None
+                and isinstance(field_info.json_schema_extra, dict)
+                and field_info.json_schema_extra.get("verbatim", False)
+            ) or field_name == "code":
                 verbatim_fields.append(full_name)
-            if issubclass(field_info.type_, BaseModel):
+            if isinstance(field_info.annotation, type) and issubclass(
+                field_info.annotation, BaseModel
+            ):
                 verbatim_fields.extend(
-                    cls.find_verbatim_fields(full_name, field_info.type_)
+                    cls.find_verbatim_fields(full_name, field_info.annotation)
                 )
         return verbatim_fields
 
     @classmethod
     def format_instructions(cls, tool: bool = False) -> str:
         fields = [
-            f
-            for f in cls.__fields__.keys()
-            if f not in cls.Config.schema_extra.get("exclude", set())
+            f for f in cls.model_fields.keys() if f not in cls._get_excluded_fields()
         ]
 
         instructions = """
@@ -162,11 +198,11 @@ class XMLToolMessage(ToolMessage):
         """
 
         preamble = "Placeholders:\n"
-        xml_format = f"Formatting example:\n\n<{cls.Config.root_element}>\n"
+        xml_format = f"Formatting example:\n\n<{cls._get_root_element()}>\n"
 
         def format_field(
             field_name: str,
-            field_type: type,
+            field_type: Any,
             indent: str = "",
             path: str = "",
         ) -> None:
@@ -175,6 +211,24 @@ class XMLToolMessage(ToolMessage):
 
             origin = get_origin(field_type)
             args = get_args(field_type)
+
+            # Handle Union types (including Optional types like List[Person] | None)
+            # Support both typing.Union and types.UnionType (Python 3.10+ | syntax)
+            is_union = origin is Union
+            if HAS_UNION_TYPE:
+                from types import UnionType as _UnionType
+
+                is_union = is_union or origin is _UnionType
+
+            if is_union:
+                # Filter out None type for Optional types
+                non_none_args = [arg for arg in args if arg is not type(None)]
+                if len(non_none_args) == 1:
+                    # This is an Optional type, process the non-None type
+                    field_type = non_none_args[0]
+                    origin = get_origin(field_type)
+                    args = get_args(field_type)
+                # If there are multiple non-None types, fall through to default handling
 
             if (
                 origin is None
@@ -185,10 +239,10 @@ class XMLToolMessage(ToolMessage):
                     f"{field_name.upper()} = [nested structure for {field_name}]\n"
                 )
                 xml_format += f"{indent}<{field_name}>\n"
-                for sub_field, sub_field_info in field_type.__fields__.items():
+                for sub_field, sub_field_info in field_type.model_fields.items():
                     format_field(
                         sub_field,
-                        sub_field_info.outer_type_,
+                        sub_field_info.annotation,
                         indent + "  ",
                         current_path,
                     )
@@ -248,13 +302,14 @@ class XMLToolMessage(ToolMessage):
         verbatim_fields = cls.find_verbatim_fields()
 
         for field in fields:
-            field_info = cls.__fields__[field]
-            field_type = (
-                field_info.outer_type_
-            )  # Use outer_type_ to get the actual type including List, etc.
+            field_info = cls.model_fields[field]
+            field_type = field_info.annotation
+            # Ensure we have a valid type
+            if field_type is None:
+                continue
             format_field(field, field_type)
 
-        xml_format += f"</{cls.Config.root_element}>"
+        xml_format += f"</{cls._get_root_element()}>"
 
         verbatim_alert = ""
         if len(verbatim_fields) > 0:
@@ -312,7 +367,7 @@ class XMLToolMessage(ToolMessage):
                     create_element(elem, k, v, current_path)
             elif isinstance(value, BaseModel):
                 # Handle nested Pydantic models
-                for field_name, field_value in value.dict().items():
+                for field_name, field_value in value.model_dump().items():
                     create_element(elem, field_name, field_value, current_path)
             else:
                 if current_path in self.__class__.find_verbatim_fields():
@@ -320,9 +375,9 @@ class XMLToolMessage(ToolMessage):
                 else:
                     elem.text = str(value)
 
-        root = etree.Element(self.Config.root_element)
-        exclude_fields = self.Config.schema_extra.get("exclude", set())
-        for name, value in self.dict().items():
+        root = etree.Element(self._get_root_element())
+        exclude_fields: set[str] = self._get_excluded_fields()
+        for name, value in self.model_dump().items():
             if name not in exclude_fields:
                 create_element(root, name, value)
 
@@ -349,7 +404,7 @@ class XMLToolMessage(ToolMessage):
             Returns: ["<tool><field1>data</field1></tool>"]
         """
 
-        root_tag = cls.Config.root_element
+        root_tag = cls._get_root_element()
         opening_tag = f"<{root_tag}>"
         closing_tag = f"</{root_tag}>"
 

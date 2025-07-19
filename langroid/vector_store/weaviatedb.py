@@ -185,7 +185,7 @@ class WeaviateDB(VectorStore):
         if len(documents) == 0:
             return
 
-        document_dicts = [doc.dict() for doc in documents]
+        document_dicts = [doc.model_dump() for doc in documents]
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot ingest docs")

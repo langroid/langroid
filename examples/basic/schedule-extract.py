@@ -19,7 +19,7 @@ from rich.prompt import Prompt
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import FinalResultTool
-from langroid.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 
 
 class Slot(BaseModel):
@@ -111,7 +111,7 @@ class AvailabilityTool(lr.ToolMessage):
         # Here, we would implement the logic to extract availability information
         # from the input text. For this example, we'll just return a placeholder.
         print("Successfully extracted availability information.")
-        print(self.availabilities.json(indent=2))
+        print(self.availabilities.model_dump_json(indent=2))
         return FinalResultTool(avails=self.availabilities)
 
 

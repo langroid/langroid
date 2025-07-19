@@ -49,8 +49,10 @@ app = typer.Typer()
 
 
 class RelevantExtractsTool(ToolMessage):
-    request = "relevant_extracts"
-    purpose = "Get docs/extracts relevant to the <query>, from prior search results"
+    request: str = "relevant_extracts"
+    purpose: str = (
+        "Get docs/extracts relevant to the <query>, from prior search results"
+    )
     query: str
 
     @classmethod
@@ -67,8 +69,8 @@ class RelevantExtractsTool(ToolMessage):
 
 
 class RelevantSearchExtractsTool(ToolMessage):
-    request = "relevant_search_extracts"
-    purpose = (
+    request: str = "relevant_search_extracts"
+    purpose: str = (
         "Perform an internet search for up to <num_results> results "
         "relevant to the <query>"
     )

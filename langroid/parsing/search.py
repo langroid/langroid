@@ -64,7 +64,7 @@ def find_fuzzy_matches_in_docs(
         return orig_doc_matches
     if len(orig_doc_matches) == 0:
         return []
-    if set(orig_doc_matches[0][0].__fields__) != {"content", "metadata"}:
+    if set(orig_doc_matches[0][0].model_fields) != {"content", "metadata"}:
         # If there are fields beyond just content and metadata,
         # we do NOT want to create new document objects with content fields
         # based on words_before and words_after, since we don't know how to

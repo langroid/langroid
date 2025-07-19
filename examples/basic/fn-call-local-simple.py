@@ -28,7 +28,7 @@ import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import FinalResultTool
-from langroid.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langroid.utils.configuration import settings
 
 # for best results:

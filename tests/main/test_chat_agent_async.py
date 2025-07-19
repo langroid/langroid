@@ -1,4 +1,5 @@
 import asyncio
+from typing import Optional
 
 import pytest
 
@@ -13,7 +14,7 @@ from langroid.vector_store.base import VectorStoreConfig
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
-    vecdb: VectorStoreConfig = None
+    vecdb: Optional[VectorStoreConfig] = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         cache_config=RedisCacheConfig(fake=False),
         use_chat_for_completion=True,

@@ -18,7 +18,7 @@ async def make_nws_request(url: str) -> dict[str, Any] | None:
         try:
             response = await client.get(url, headers=headers, timeout=30.0)
             response.raise_for_status()
-            return response.json()
+            return response.model_dump_json()
         except Exception:
             return None
 
@@ -40,7 +40,7 @@ def make_nws_request_sync(url: str) -> Optional[Dict[str, Any]]:
         with httpx.Client(timeout=30.0) as client:
             response = client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return response.model_dump_json()
     except Exception:
         return None
 

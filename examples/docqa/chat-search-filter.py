@@ -43,7 +43,7 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import ForwardTool
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.parsing.web_search import metaphor_search
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 

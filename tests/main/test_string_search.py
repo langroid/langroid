@@ -20,10 +20,12 @@ def original_docs():
             And here another sample document.
             Lions are the second largest cat species in the world.
             """,
-            metadata=DocMetaData(id=1),
+            metadata=DocMetaData(id="1"),
         ),
-        Document(content="Another legal document.", metadata=DocMetaData(id=2)),
-        Document(content="Yet a another document sample.", metadata=DocMetaData(id=3)),
+        Document(content="Another legal document.", metadata=DocMetaData(id="2")),
+        Document(
+            content="Yet a another document sample.", metadata=DocMetaData(id="3")
+        ),
     ]
 
 
@@ -31,9 +33,9 @@ def original_docs():
 @pytest.fixture
 def sample_docs():
     return [
-        Document(content="This is sample document.", metadata=DocMetaData(id=1)),
-        Document(content="Another legal document.", metadata=DocMetaData(id=2)),
-        Document(content="Yet another document sample.", metadata=DocMetaData(id=3)),
+        Document(content="This is sample document.", metadata=DocMetaData(id="1")),
+        Document(content="Another legal document.", metadata=DocMetaData(id="2")),
+        Document(content="Yet another document sample.", metadata=DocMetaData(id="3")),
     ]
 
 

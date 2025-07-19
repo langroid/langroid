@@ -4,6 +4,8 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
 import tiktoken
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from langroid.mytypes import Document
 from langroid.parsing.md_parser import (
@@ -12,7 +14,6 @@ from langroid.parsing.md_parser import (
     count_words,
 )
 from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
-from langroid.pydantic_v1 import BaseSettings, root_validator
 from langroid.utils.object_registry import ObjectRegistry
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,7 @@ class BaseParsingConfig(BaseSettings):
 
     library: str
 
-    class Config:
-        extra = "ignore"  # Ignore unknown settings
+    model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
 
 
 class LLMPdfParserConfig(BaseSettings):
@@ -69,7 +69,8 @@ class PdfParsingConfig(BaseParsingConfig):
     llm_parser_config: Optional[LLMPdfParserConfig] = None
     marker_config: Optional[MarkerConfig] = None
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
+    @classmethod
     def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Ensure correct config is set based on library selection."""
         library = values.get("library")
@@ -114,6 +115,17 @@ class ParsingConfig(BaseSettings):
     chunk_size_variation: float = 0.30  # max variation from chunk_size
     overlap: int = 50  # overlap between chunks
     max_chunks: int = 10_000
+
+    @field_validator("chunk_size", mode="before")
+    @classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int:
+        """Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+        if isinstance(v, float):
+            return int(v)
+        return int(v)
+
     # offset to subtract from page numbers:
     # e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
     page_number_offset: int = 0
@@ -203,7 +215,8 @@ class Parser:
             # add_window_ids)
             chunk_docs = [
                 Document(
-                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
                 )
                 for c in chunks
                 if c.strip() != ""
@@ -255,7 +268,8 @@ class Parser:
             # add_window_ids)
             chunk_docs = [
                 Document(
-                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
                 )
                 for c in chunks
                 if c.strip() != ""
@@ -287,7 +301,8 @@ class Parser:
             # add_window_ids)
             chunk_docs = [
                 Document(
-                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
                 )
                 for c in chunks
                 if c.strip() != ""

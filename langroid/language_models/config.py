@@ -1,12 +1,10 @@
-from langroid.pydantic_v1 import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class PromptFormatterConfig(BaseSettings):
     type: str = "llama2"
 
-    class Config:
-        env_prefix = "FORMAT_"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_prefix="FORMAT_", case_sensitive=False)
 
 
 class Llama2FormatterConfig(PromptFormatterConfig):

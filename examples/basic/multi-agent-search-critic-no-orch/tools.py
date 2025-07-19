@@ -21,8 +21,8 @@ class QuestionTool(lr.ToolMessage):
 
 
 class AnswerTool(lr.ToolMessage):
-    request = "answer_tool"
-    purpose = "Present the <answer> to a web-search question"
+    request: str = "answer_tool"
+    purpose: str = "Present the <answer> to a web-search question"
     answer: str
 
 

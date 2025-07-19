@@ -295,7 +295,7 @@ class TestToolHandler:
         # When using a handler that expects both agent and chat_doc,
         # we need to provide the tool message within a ChatDocument
         # so that chat_doc is available
-        chat_doc = agent.create_agent_response(content=tool_msg.json())
+        chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
         response = agent.agent_response(chat_doc)
         assert response is not None
         assert isinstance(response, ChatDocument)
@@ -310,7 +310,7 @@ class TestToolHandler:
         tool_msg = HandleChatDocAgentMsg(data="chat doc test")
 
         # Create a ChatDocument with the tool message
-        chat_doc = agent.create_agent_response(content=tool_msg.json())
+        chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
 
         # Process through agent_response
         response = agent.agent_response(chat_doc)
@@ -330,7 +330,7 @@ class TestToolHandler:
 
         # Since the handler expects both agent and chat_doc,
         # we need to provide it within a ChatDocument
-        chat_doc = agent.create_agent_response(content=tool_msg.json())
+        chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
         response = agent.agent_response(chat_doc)
         assert response is not None
         assert isinstance(response, ChatDocument)
@@ -346,7 +346,7 @@ class TestToolHandler:
         tool_msg = HandleAgentMsg()
 
         # Test with tool message as JSON string
-        json_msg = tool_msg.json()
+        json_msg = tool_msg.model_dump_json()
         response = agent.agent_response(json_msg)
         assert response is not None
         assert isinstance(response, ChatDocument)
@@ -361,7 +361,7 @@ class TestToolHandler:
         tool_msg = HandleChatDocMsg(data="chat doc only test")
 
         # For handlers that only need chat_doc, we can pass as ChatDocument
-        chat_doc = agent.create_agent_response(content=tool_msg.json())
+        chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
         response = agent.agent_response(chat_doc)
         assert response is not None
         assert isinstance(response, ChatDocument)
@@ -380,7 +380,7 @@ class TestToolHandler:
 
         # Since the handler expects both agent and chat_doc,
         # we need to provide it within a ChatDocument
-        chat_doc = agent.create_agent_response(content=tool_msg.json())
+        chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
         response = agent.agent_response(chat_doc)
         assert response is not None
         assert isinstance(response, ChatDocument)
@@ -402,7 +402,7 @@ class TestToolHandler:
 
         # Since the handler expects both agent and chat_doc,
         # we need to provide it within a ChatDocument
-        chat_doc = agent.create_agent_response(content=tool_msg.json())
+        chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
         response = agent.agent_response(chat_doc)
         assert response is not None
         assert isinstance(response, ChatDocument)

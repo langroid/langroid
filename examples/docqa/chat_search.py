@@ -55,8 +55,8 @@ logger = logging.getLogger(__name__)
 
 
 class RelevantExtractsTool(ToolMessage):
-    request = "relevant_extracts"
-    purpose = "Get docs/extracts relevant to the <query>"
+    request: str = "relevant_extracts"
+    purpose: str = "Get docs/extracts relevant to the <query>"
     query: str
 
     @classmethod
@@ -73,8 +73,8 @@ class RelevantExtractsTool(ToolMessage):
 
 
 class RelevantSearchExtractsTool(ToolMessage):
-    request = "relevant_search_extracts"
-    purpose = "Get docs/extracts relevant to the <query> from a web search"
+    request: str = "relevant_search_extracts"
+    purpose: str = "Get docs/extracts relevant to the <query> from a web search"
     query: str
     num_results: int = 3
 

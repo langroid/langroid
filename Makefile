@@ -36,15 +36,6 @@ stubs:
 	@uv run stubgen -p langroid -o stubs
 	@echo "Stubs generated in the 'stubs' directory"
 
-.PHONY: fix-pydantic
-
-# Entry to replace pydantic imports in specified directories
-fix-pydantic:
-	@echo "Fixing pydantic imports..."
-	@chmod +x scripts/fix-pydantic-imports.sh
-	@./scripts/fix-pydantic-imports.sh
-
-
 .PHONY: tests
 tests:
 	pytest tests/main --basetemp=/tmp/pytest
@@ -96,7 +87,7 @@ repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (exclude
 repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
 
 .PHONY: check
-check: fix-pydantic lint type-check repomix-all
+check: lint type-check repomix-all
 
 .PHONY: revert-tag
 revert-tag:
@@ -145,6 +136,18 @@ clean:
 release:
 	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
 
+.PHONY: bump-rc
+bump-rc:
+	@cz bump --prerelease rc
+
+.PHONY: bump-beta
+bump-beta:
+	@cz bump --prerelease beta
+
+.PHONY: bump-alpha
+bump-alpha:
+	@cz bump --prerelease alpha
+
 .PHONY: all-patch
 all-patch: bump-patch clean build push release
 
@@ -153,6 +156,15 @@ all-minor: bump-minor clean build push release
 
 .PHONY: all-major
 all-major: bump-major clean build push release
+
+.PHONY: all-rc
+all-rc: bump-rc clean build push release
+
+.PHONY: all-beta
+all-beta: bump-beta clean build push release
+
+.PHONY: all-alpha
+all-alpha: bump-alpha clean build push release
 
 .PHONY: publish
 publish:

@@ -26,7 +26,7 @@ import langroid.language_models as lm
 from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
 from langroid.agent.tools.orchestration import SendTool
 from langroid.mytypes import NonToolAction
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 
 
 class SendUserTool(SendTool):

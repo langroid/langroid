@@ -4,10 +4,10 @@ from textwrap import dedent
 from typing import Callable, List, Tuple, Type
 
 import git
+from pydantic import Field
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
-from langroid.pydantic_v1 import Field
 from langroid.utils.git_utils import git_commit_file
 from langroid.utils.system import create_file, list_dir, read_file
 
@@ -91,7 +91,9 @@ class WriteFileTool(XMLToolMessage):
     content: str = Field(
         ...,
         description="The content to write to the file",
-        verbatim=True,  # preserve the content as is; uses CDATA section in XML
+        json_schema_extra={
+            "verbatim": True
+        },  # preserve the content as is; uses CDATA section in XML
     )
     _curr_dir: Callable[[], str] | None = None
     _git_repo: Callable[[], git.Repo] | None = None

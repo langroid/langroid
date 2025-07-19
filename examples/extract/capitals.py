@@ -11,7 +11,7 @@ from typing import List
 from rich import print
 
 import langroid as lr
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 
 
 class City(BaseModel):

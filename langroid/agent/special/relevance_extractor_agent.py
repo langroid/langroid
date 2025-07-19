@@ -26,7 +26,7 @@ class RelevanceExtractorAgentConfig(ChatAgentConfig):
     llm: LLMConfig | None = OpenAIGPTConfig()
     segment_length: int = 1  # number of sentences per segment
     query: str = ""  # query for relevance extraction
-    system_message = """
+    system_message: str = """
     The user will give you a PASSAGE containing segments numbered as  
     <#1#>, <#2#>, <#3#>, etc.,
     followed by a QUERY. Extract ONLY the segment-numbers from 

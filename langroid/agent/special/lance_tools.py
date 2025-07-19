@@ -1,7 +1,8 @@
 import logging
 
+from pydantic import BaseModel, Field
+
 from langroid.agent.tool_message import ToolMessage
-from langroid.pydantic_v1 import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,8 @@ class QueryPlan(BaseModel):
 
 
 class QueryPlanTool(ToolMessage):
-    request = "query_plan"  # the agent method name that handles this tool
-    purpose = """
+    request: str = "query_plan"  # the agent method name that handles this tool
+    purpose: str = """
     Given a user's query, generate a query <plan> consisting of:
     - <original_query> - the original query for reference
     - <filter> condition if needed (or empty string if no filter is needed)
@@ -52,8 +53,8 @@ class QueryPlanAnswerTool(ToolMessage):
 
 
 class QueryPlanFeedbackTool(ToolMessage):
-    request = "query_plan_feedback"
-    purpose = """
+    request: str = "query_plan_feedback"
+    purpose: str = """
     To give <feedback> regarding the query plan, 
     along with a <suggested_fix> if any (empty string if no fix is suggested).
     """

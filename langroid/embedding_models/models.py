@@ -7,6 +7,7 @@ import requests
 import tiktoken
 from dotenv import load_dotenv
 from openai import AzureOpenAI, OpenAI
+from pydantic_settings import SettingsConfigDict
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.exceptions import LangroidImportError
@@ -27,10 +28,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     context_length: int = 8192
     langdb_params: LangDBParams = LangDBParams()
 
-    class Config:
-        # enable auto-loading of env vars with OPENAI_ prefix, e.g.
-        # api_base is set from OPENAI_API_BASE env var, in .env or system env
-        env_prefix = "OPENAI_"
+    model_config = SettingsConfigDict(env_prefix="OPENAI_")
 
 
 class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
@@ -48,9 +46,7 @@ class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     dims: int = 1536
     context_length: int = 8192
 
-    class Config:
-        # enable auto-loading of env vars with AZURE_OPENAI_ prefix
-        env_prefix = "AZURE_OPENAI_"
+    model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
 
 
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):

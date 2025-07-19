@@ -41,7 +41,7 @@ def test_task_tool_mock_main_agent():
                 model="gpt-4.1-mini",
                 tools=["multiplier_tool"],
                 max_iterations=5,
-            ).json()
+            ).model_dump_json()
         ),
         name="MainAgent",
     )
@@ -199,7 +199,7 @@ def test_task_tool_all_tools():
                 model="gpt-4o-mini",
                 tools=["ALL"],  # Enable all tools
                 max_iterations=20,
-            ).json()
+            ).model_dump_json()
         ),
         name="MainAgent",
     )
@@ -286,7 +286,7 @@ def test_task_tool_none_tools():
                 model="gpt-4o-mini",
                 tools=["NONE"],  # Disable all tools except DoneTool
                 max_iterations=20,
-            ).json()
+            ).model_dump_json()
         ),
         name="MainAgent",
     )

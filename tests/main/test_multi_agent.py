@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -16,7 +18,7 @@ from langroid.vector_store.base import VectorStoreConfig
 
 class _TestChatAgentConfig(ChatAgentConfig):
     max_tokens: int = 200
-    vecdb: VectorStoreConfig = None
+    vecdb: Optional[VectorStoreConfig] = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         cache_config=RedisCacheConfig(fake=False),
         use_chat_for_completion=True,

@@ -13,8 +13,8 @@ class AQLRetrievalTool(ToolMessage):
     """
     aql_query: str
 
-    _max_result_tokens = 500
-    _max_retained_tokens = 200
+    _max_result_tokens: int = 500
+    _max_retained_tokens: int = 200
 
     @classmethod
     def examples(cls) -> List[ToolMessage | Tuple[str, ToolMessage]]:
@@ -101,7 +101,7 @@ class ArangoSchemaTool(ToolMessage):
     properties: bool = True
     collections: List[str] | None = None
 
-    _max_result_tokens = 500
+    _max_result_tokens: int = 500
 
 
 arango_schema_tool_name = ArangoSchemaTool.default_value("request")

@@ -32,7 +32,7 @@ from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 from langroid.utils.configuration import Settings, set_global
 from langroid.vector_store.lancedb import LanceDBConfig
 

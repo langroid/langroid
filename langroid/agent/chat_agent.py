@@ -8,6 +8,8 @@ from inspect import isclass
 from typing import Any, Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
 import openai
+from pydantic import BaseModel, ValidationError
+from pydantic.fields import ModelPrivateAttr
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -32,7 +34,6 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.mytypes import Entity, NonToolAction
-from langroid.pydantic_v1 import BaseModel, ValidationError
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
@@ -730,7 +731,10 @@ class ChatAgent(Agent):
 
             if use:
                 tool_class = self.llm_tools_map[t]
-                if tool_class._allow_llm_use:
+                allow_llm_use = tool_class._allow_llm_use
+                if isinstance(allow_llm_use, ModelPrivateAttr):
+                    allow_llm_use = allow_llm_use.default
+                if allow_llm_use:
                     self.llm_tools_usable.add(t)
                     self.llm_functions_usable.add(t)
                 else:
@@ -844,7 +848,7 @@ class ChatAgent(Agent):
                 use_functions_api,
                 use_tools,
             ) = self.saved_requests_and_tool_setings
-            self.config = self.config.copy()
+            self.config = self.config.model_copy()
             self.enabled_requests_for_inference = requests_for_inference
             self.config.use_functions_api = use_functions_api
             self.config.use_tools = use_tools
@@ -884,15 +888,13 @@ class ChatAgent(Agent):
                         if use:
                             # We must copy `llm_tools_usable` so the base agent
                             # is unmodified
-                            self.llm_tools_usable = copy.copy(self.llm_tools_usable)
-                            self.llm_functions_usable = copy.copy(
-                                self.llm_functions_usable
-                            )
+                            self.llm_tools_usable = self.llm_tools_usable.copy()
+                            self.llm_functions_usable = self.llm_functions_usable.copy()
                         if handle:
                             # If handling the tool, do the same for `llm_tools_handled`
-                            self.llm_tools_handled = copy.copy(self.llm_tools_handled)
-                            self.llm_functions_handled = copy.copy(
-                                self.llm_functions_handled
+                            self.llm_tools_handled = self.llm_tools_handled.copy()
+                            self.llm_functions_handled = (
+                                self.llm_functions_handled.copy()
                             )
                     # Enable `output_type`
                     self.enable_message(
@@ -941,7 +943,7 @@ class ChatAgent(Agent):
                             defaults=self.config.output_format_include_defaults,
                         ).parameters
                     else:
-                        output_format_schema = output_type.schema()
+                        output_format_schema = output_type.model_json_schema()
 
                     format_schema_for_strict(output_format_schema)
 
@@ -960,7 +962,7 @@ class ChatAgent(Agent):
                         output_type.default_value("request")
                     }
                 if self.config.use_functions_api:
-                    self.config = self.config.copy()
+                    self.config = self.config.model_copy()
                     self.config.use_functions_api = False
                     self.config.use_tools = True
 
@@ -1010,7 +1012,7 @@ class ChatAgent(Agent):
         Args:
             message_class: The only ToolMessage class to allow
         """
-        request = message_class.__fields__["request"].default
+        request = message_class.model_fields["request"].default
         to_remove = [r for r in self.llm_tools_usable if r != request]
         for r in to_remove:
             self.llm_tools_usable.discard(r)
@@ -1054,7 +1056,7 @@ class ChatAgent(Agent):
 
                         content = attempt.arguments
 
-                    content_any = self.output_format.parse_obj(content)
+                    content_any = self.output_format.model_validate(content)
 
                     if issubclass(self.output_format, PydanticWrapper):
                         message.content_any = content_any.value  # type: ignore
@@ -1094,34 +1096,36 @@ class ChatAgent(Agent):
         try:
             tools = super().get_tool_messages(msg, all_tools)
         except ValidationError as ve:
-            tool_class = ve.model
-            if issubclass(tool_class, ToolMessage):
-                was_strict = (
-                    self.config.use_functions_api
-                    and self.config.use_tools_api
-                    and self._strict_mode_for_tool(tool_class)
-                )
-                # If the result of strict output for a tool using the
-                # OpenAI tools API fails to parse, we infer that the
-                # schema edits necessary for compatibility prevented
-                # adherence to the underlying `ToolMessage` schema and
-                # disable strict output for the tool
-                if was_strict:
-                    name = tool_class.default_value("request")
-                    self.disable_strict_tools_set.add(name)
-                    logging.warning(
-                        f"""
-                        Validation error occured with strict tool format.
-                        Disabling strict mode for the {name} tool.
-                        """
+            # Check if tool class was attached to the exception
+            if hasattr(ve, "tool_class") and ve.tool_class:
+                tool_class = ve.tool_class  # type: ignore
+                if issubclass(tool_class, ToolMessage):
+                    was_strict = (
+                        self.config.use_functions_api
+                        and self.config.use_tools_api
+                        and self._strict_mode_for_tool(tool_class)
                     )
-                else:
-                    # We will trigger the strict recovery mechanism to force
-                    # the LLM to correct its output, allowing us to parse
-                    if isinstance(msg, ChatDocument):
-                        self.tool_error = msg.metadata.sender == Entity.LLM
+                    # If the result of strict output for a tool using the
+                    # OpenAI tools API fails to parse, we infer that the
+                    # schema edits necessary for compatibility prevented
+                    # adherence to the underlying `ToolMessage` schema and
+                    # disable strict output for the tool
+                    if was_strict:
+                        name = tool_class.default_value("request")
+                        self.disable_strict_tools_set.add(name)
+                        logging.warning(
+                            f"""
+                            Validation error occured with strict tool format.
+                            Disabling strict mode for the {name} tool.
+                            """
+                        )
                     else:
-                        self.tool_error = most_recent_sent_by_llm
+                        # We will trigger the strict recovery mechanism to force
+                        # the LLM to correct its output, allowing us to parse
+                        if isinstance(msg, ChatDocument):
+                            self.tool_error = msg.metadata.sender == Entity.LLM
+                        else:
+                            self.tool_error = most_recent_sent_by_llm
 
             if was_llm:
                 raise ve
@@ -1168,7 +1172,9 @@ class ChatAgent(Agent):
                 request = self.tool.request
                 if request not in agent.llm_tools_map:
                     return None
-                tool = agent.llm_tools_map[request].parse_raw(self.tool.to_json())
+                tool = agent.llm_tools_map[request].model_validate_json(
+                    self.tool.to_json()
+                )
 
                 return agent.handle_tool_message(tool)
 
@@ -1187,7 +1193,9 @@ class ChatAgent(Agent):
                 request = self.tool.request
                 if request not in agent.llm_tools_map:
                     return None
-                tool = agent.llm_tools_map[request].parse_raw(self.tool.to_json())
+                tool = agent.llm_tools_map[request].model_validate_json(
+                    self.tool.to_json()
+                )
 
                 return await agent.handle_tool_message_async(tool)
 
@@ -1269,19 +1277,29 @@ class ChatAgent(Agent):
         """
         parent_message: ChatDocument | None = message.parent
         tools = [] if parent_message is None else parent_message.tool_messages
-        truncate_tools = [t for t in tools if t._max_retained_tokens is not None]
+        truncate_tools = []
+        for t in tools:
+            max_retained_tokens = t._max_retained_tokens
+            if isinstance(max_retained_tokens, ModelPrivateAttr):
+                max_retained_tokens = max_retained_tokens.default
+            if max_retained_tokens is not None:
+                truncate_tools.append(t)
         limiting_tool = truncate_tools[0] if len(truncate_tools) > 0 else None
-        if limiting_tool is not None and limiting_tool._max_retained_tokens is not None:
-            tool_name = limiting_tool.default_value("request")
-            max_tokens: int = limiting_tool._max_retained_tokens
-            truncation_warning = f"""
-                The result of the {tool_name} tool were too large, 
-                and has been truncated to {max_tokens} tokens.
-                To obtain the full result, the tool needs to be re-used.
-            """
-            self.truncate_message(
-                message.metadata.msg_idx, max_tokens, truncation_warning
-            )
+        if limiting_tool is not None:
+            max_retained_tokens = limiting_tool._max_retained_tokens
+            if isinstance(max_retained_tokens, ModelPrivateAttr):
+                max_retained_tokens = max_retained_tokens.default
+            if max_retained_tokens is not None:
+                tool_name = limiting_tool.default_value("request")
+                max_tokens: int = max_retained_tokens
+                truncation_warning = f"""
+                    The result of the {tool_name} tool were too large, 
+                    and has been truncated to {max_tokens} tokens.
+                    To obtain the full result, the tool needs to be re-used.
+                """
+                self.truncate_message(
+                    message.metadata.msg_idx, max_tokens, truncation_warning
+                )
 
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
@@ -1743,7 +1761,7 @@ class ChatAgent(Agent):
                     function=spec,
                 )
             elif issubclass(self.output_format, BaseModel):
-                param_spec = self.output_format.schema()
+                param_spec = self.output_format.model_json_schema()
                 format_schema_for_strict(param_spec)
 
                 output_format = OpenAIJsonSchemaSpec(

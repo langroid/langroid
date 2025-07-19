@@ -27,7 +27,7 @@ async def echo_response_async(x: str) -> str:
 
 
 class _TestAsyncToolHandlerConfig(ChatAgentConfig):
-    llm = MockLMConfig(
+    llm: MockLMConfig = MockLMConfig(
         response_dict={
             "sleep 1": 'TOOL sleep: {"seconds": "0"}',
             "sleep 2": 'TOOL sleep: {"seconds": "1"}',
@@ -159,7 +159,9 @@ async def test_async_tool_handler(
 
 
 class _TestAsyncUserResponseConfig(ChatAgentConfig):
-    llm = MockLMConfig(response_fn=echo_response, response_fn_async=echo_response_async)
+    llm: MockLMConfig = MockLMConfig(
+        response_fn=echo_response, response_fn_async=echo_response_async
+    )
 
 
 async def get_user_response_async(prompt: str) -> str:

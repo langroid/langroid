@@ -16,7 +16,7 @@ from crawl4ai.content_filter_strategy import (
 from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
 
 # Helper for pydantic models if LLMExtractionStrategy is used with schema
-from langroid.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from typing import List
 from langroid.mytypes import Document
 
