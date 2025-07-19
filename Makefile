@@ -192,96 +192,74 @@ pre-release-beta: ## Create beta release from current branch
 pre-release-alpha: ## Create alpha release from current branch
 	@PRERELEASE_TYPE=alpha make pre-release-branch
 
-.PHONY: pre-release-rc-patch
-pre-release-rc-patch: ## Create release candidate with patch bump
+.PHONY: pre-release-push
+pre-release-push: ## Push current branch and tags (for pre-releases)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot push pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	git push origin "$$CURRENT_BRANCH" --tags
+
+.PHONY: pre-release-release
+pre-release-release: ## Create GitHub pre-release (requires VERSION env var)
 	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
 	if [ "$$CURRENT_BRANCH" = "main" ]; then \
 		echo "Error: Cannot create pre-release from main branch"; \
 		exit 1; \
 	fi && \
-	cz bump --increment PATCH --prerelease rc && \
 	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating rc patch pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "RC patch pre-release from $$CURRENT_BRANCH"
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: bump-rc-patch
+bump-rc-patch: ## Bump to release candidate patch
+	@cz bump --increment PATCH --prerelease rc
+
+.PHONY: bump-rc-minor
+bump-rc-minor: ## Bump to release candidate minor
+	@cz bump --increment MINOR --prerelease rc
+
+.PHONY: bump-rc-major
+bump-rc-major: ## Bump to release candidate major
+	@cz bump --increment MAJOR --prerelease rc
+
+.PHONY: bump-beta-patch
+bump-beta-patch: ## Bump to beta patch
+	@cz bump --increment PATCH --prerelease beta
+
+.PHONY: bump-beta-minor
+bump-beta-minor: ## Bump to beta minor
+	@cz bump --increment MINOR --prerelease beta
+
+.PHONY: bump-alpha-patch
+bump-alpha-patch: ## Bump to alpha patch
+	@cz bump --increment PATCH --prerelease alpha
+
+.PHONY: bump-alpha-minor
+bump-alpha-minor: ## Bump to alpha minor
+	@cz bump --increment MINOR --prerelease alpha
+
+.PHONY: pre-release-rc-patch
+pre-release-rc-patch: bump-rc-patch clean build pre-release-push pre-release-release
 
 .PHONY: pre-release-rc-minor
-pre-release-rc-minor: ## Create release candidate with minor bump
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	cz bump --increment MINOR --prerelease rc && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating rc minor pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "RC minor pre-release from $$CURRENT_BRANCH"
+pre-release-rc-minor: bump-rc-minor clean build pre-release-push pre-release-release
 
 .PHONY: pre-release-rc-major
-pre-release-rc-major: ## Create release candidate with major bump
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	cz bump --increment MAJOR --prerelease rc && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating rc major pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "RC major pre-release from $$CURRENT_BRANCH"
+pre-release-rc-major: bump-rc-major clean build pre-release-push pre-release-release
 
 .PHONY: pre-release-beta-patch
-pre-release-beta-patch: ## Create beta release with patch bump
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	cz bump --increment PATCH --prerelease beta && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating beta patch pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Beta patch pre-release from $$CURRENT_BRANCH"
+pre-release-beta-patch: bump-beta-patch clean build pre-release-push pre-release-release
 
 .PHONY: pre-release-beta-minor
-pre-release-beta-minor: ## Create beta release with minor bump
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	cz bump --increment MINOR --prerelease beta && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating beta minor pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Beta minor pre-release from $$CURRENT_BRANCH"
+pre-release-beta-minor: bump-beta-minor clean build pre-release-push pre-release-release
 
 .PHONY: pre-release-alpha-patch
-pre-release-alpha-patch: ## Create alpha release with patch bump
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	cz bump --increment PATCH --prerelease alpha && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating alpha patch pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Alpha patch pre-release from $$CURRENT_BRANCH"
+pre-release-alpha-patch: bump-alpha-patch clean build pre-release-push pre-release-release
 
 .PHONY: pre-release-alpha-minor
-pre-release-alpha-minor: ## Create alpha release with minor bump
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	cz bump --increment MINOR --prerelease alpha && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating alpha minor pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Alpha minor pre-release from $$CURRENT_BRANCH"
+pre-release-alpha-minor: bump-alpha-minor clean build pre-release-push pre-release-release
 
 .PHONY: publish
 publish:
