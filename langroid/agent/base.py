@@ -25,6 +25,8 @@ from typing import (
     no_type_check,
 )
 
+from pydantic import Field, ValidationError, field_validator
+from pydantic_settings import BaseSettings
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -51,12 +53,6 @@ from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.pydantic_v1 import (
-    BaseSettings,
-    Field,
-    ValidationError,
-    field_validator,
-)
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
     DONE,

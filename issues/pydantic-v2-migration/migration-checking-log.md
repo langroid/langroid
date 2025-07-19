@@ -262,14 +262,24 @@ With all dependencies installed, the following tests now pass or have non-Pydant
 
 **Fix Applied:** Changed line 325 from using `Document(` to `MyDocument(` when creating test documents. This ensures the custom metadata schema is preserved throughout storage and retrieval.
 
-## Issue #7: Pinecone Vector Store Import (Fixed 2025-01-19)
+## Issue #7: Eliminate langroid.pydantic_v1 Imports from Core Code (Fixed 2025-01-19)
 
 **Date:** 2025-01-19
-**File:** `langroid/vector_store/pineconedb.py`
+**Files:** 
+- `langroid/vector_store/pineconedb.py`
+- `langroid/agent/tool_message.py`
+- `langroid/agent/base.py`
+- `langroid/agent/tools/task_tool.py`
+- `langroid/agent/chat_agent.py`
 
-**Problem:** The Pinecone vector store was importing `BaseModel` directly from `pydantic` instead of from `langroid.pydantic_v1`, which is inconsistent with the project's import structure.
+**Problem:** Core code was still importing from the `langroid.pydantic_v1` compatibility layer, which defeats the purpose of the Pydantic V2 migration. The goal is to use direct Pydantic V2 imports throughout the internal codebase.
 
-**Fix Applied:** Changed line 21 from `from pydantic import BaseModel` to `from langroid.pydantic_v1 import BaseModel`. This ensures consistency across the codebase and prevents potential issues with the fallback `ServerlessSpec` class.
+**Fix Applied:** Changed all imports from `langroid.pydantic_v1` to direct imports:
+- `from langroid.pydantic_v1 import BaseModel` → `from pydantic import BaseModel`
+- `from langroid.pydantic_v1 import BaseSettings` → `from pydantic_settings import BaseSettings`
+- And similar for Field, ValidationError, ConfigDict, field_validator
+
+This completes the migration by eliminating the compatibility layer from internal code while maintaining it for external users.
 
 ### Key Takeaways:
 - Pydantic V2's stricter type validation caught legitimate issues (missing type annotations, type coercion)

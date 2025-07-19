@@ -6,6 +6,7 @@ TaskTool: A tool that allows agents to delegate a task to a sub-agent with
 import uuid
 from typing import List, Optional
 
+from pydantic import Field
 from pydantic.fields import ModelPrivateAttr
 
 import langroid.language_models as lm
@@ -14,7 +15,6 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import DoneTool
-from langroid.pydantic_v1 import Field
 
 
 class TaskTool(ToolMessage):

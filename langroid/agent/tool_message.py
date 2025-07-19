@@ -14,9 +14,9 @@ from random import choice
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 
 from docstring_parser import parse
+from pydantic import BaseModel, ConfigDict
 
 from langroid.language_models.base import LLMFunctionSpec
-from langroid.pydantic_v1 import BaseModel, ConfigDict
 from langroid.utils.pydantic_utils import (
     _recursive_purge_dict_key,
     generate_simple_schema,

@@ -8,6 +8,7 @@ from inspect import isclass
 from typing import Any, Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
 import openai
+from pydantic import BaseModel, ValidationError
 from pydantic.fields import ModelPrivateAttr
 from rich import print
 from rich.console import Console
@@ -33,7 +34,6 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.mytypes import Entity, NonToolAction
-from langroid.pydantic_v1 import BaseModel, ValidationError
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
