@@ -223,7 +223,7 @@ With all dependencies installed, the following tests now pass or have non-Pydant
 
 ### Tests Run: ALL 83 test files in tests/main/ + 11 in extras + example scripts examined + root test files
 
-### Pydantic V2 Issues Found and Fixed: 5
+### Pydantic V2 Issues Found and Fixed: 6
 
 1. **Missing type annotations for private attributes** - Fixed in 6 locations
 2. **DoneTool content field type strictness** - Added field validator
@@ -252,10 +252,21 @@ With all dependencies installed, the following tests now pass or have non-Pydant
 3. **Test File Cleanup**: Move migration verification test files from root to proper test directory
 4. **Documentation**: Consider adding migration guide for users who might have similar patterns in their code
 
+## Issue #6: Vector Store Test Custom Document Class (Fixed 2025-01-19)
+
+**Date:** 2025-01-19
+**File:** `tests/main/test_vector_stores.py` 
+**Test:** `test_vector_stores_access`
+
+**Problem:** When using custom document classes with additional required fields in metadata, Pydantic V2's stricter validation caused failures when retrieving documents from vector stores. The test was creating documents with the base `Document` class instead of the custom `MyDocument` class, causing the custom metadata fields to be lost.
+
+**Fix Applied:** Changed line 325 from using `Document(` to `MyDocument(` when creating test documents. This ensures the custom metadata schema is preserved throughout storage and retrieval.
+
 ### Key Takeaways:
 - Pydantic V2's stricter type validation caught legitimate issues (missing type annotations, type coercion)
 - The compatibility layer (`langroid.pydantic_v1`) works well but needs consistent usage
 - Private attribute handling with `ModelPrivateAttr` was the most complex migration challenge
+- Pydantic V2 is stricter about preserving custom model schemas - must use the exact model class defined
 - Overall, the migration demonstrates that Langroid's architecture was already well-aligned with Pydantic V2 principles
 
 ---
@@ -264,7 +275,7 @@ With all dependencies installed, the following tests now pass or have non-Pydant
 
 ### Summary:
 - **All Pydantic V2 related issues have been resolved** ✅
-- **Total of 5 Pydantic V2 issues found and fixed**
+- **Total of 6 Pydantic V2 issues found and fixed**
 - **No new Pydantic V2 issues discovered after dependency installation**
 
 ### Outstanding Test Failures (All Non-Pydantic):
