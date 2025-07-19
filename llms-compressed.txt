@@ -17621,7 +17621,6 @@ llm = lm.OpenAIGPT(config)
 </file>
 
 <file path="tests/main/test_llm_pdf_parser.py">
-@pytest.mark.asyncio
 @pytest.mark.parametrize("split_on_page", [True, False])
 @pytest.mark.parametrize("pdf_file", ["imagenet.pdf"])
 async def test_llm_pdf_parser(pdf_file, split_on_page)
@@ -55712,157 +55711,1024 @@ def test_agent_response_class_annotations_reversed(self)
 tool_msg = HandleClassAnnotationsReversed(
 </file>
 
-<file path="Makefile">
-.PHONY: setup check lint tests docs nodocs loc
+<file path="README.md">
+<div align="center">
+  <img src="docs/assets/langroid-card-lambda-ossem-rust-1200-630.png" alt="Logo" 
+        width="400" align="center">
+</div>
 
-SHELL := /bin/bash
+<div align="center">
 
-.PHONY: setup update
+[![PyPI - Version](https://img.shields.io/pypi/v/langroid)](https://pypi.org/project/langroid/)
+[![Downloads](https://img.shields.io/pypi/dm/langroid)](https://pypi.org/project/langroid/)
+[![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
+[![codecov](https://codecov.io/gh/langroid/langroid/graph/badge.svg)](https://codecov.io/gh/langroid/langroid)
+[![Multi-Architecture DockerHub](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml)
 
-setup: ## Setup the git pre-commit hooks
-	uv run pre-commit install
+[![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=flat&logo=discord&logoColor=white)](https://discord.gg/ZU36McDgDs)
+[![Substack](https://img.shields.io/badge/Substack-%23006f5c.svg?style=flat&logo=substack&logoColor=FF6719)](https://langroid.substack.com/p/langroid-harness-llms-with-multi-agent-programming)
 
-update: ## Update the git pre-commit hooks
-	uv run pre-commit autoupdate
+[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/OWNER/REPO)](https://gitmcp.io/langroid/langroid)
+</div>
 
-.PHONY: type-check
-type-check:
-	@uv run pre-commit install
-	@uv run pre-commit autoupdate
-	@uv run pre-commit run --all-files
-	@echo "Running black..."
-	@uv run black --check .
-	@echo "Running ruff check (without fix)..."
-	@uv run ruff check .
-	@echo "Running mypy...";
-	@uv run mypy -p langroid
-	@echo "All checks passed!"
+<h3 align="center">
+  <a target="_blank" 
+    href="https://langroid.github.io/langroid/" rel="dofollow">
+      <strong>Documentation</strong></a>
+  &middot;
+  <a target="_blank" href="https://github.com/langroid/langroid-examples" rel="dofollow">
+      <strong>Examples Repo</strong></a>
+  &middot;
+  <a target="_blank" href="https://discord.gg/ZU36McDgDs" rel="dofollow">
+      <strong>Discord</strong></a>
+  &middot;
+  <a target="_blank" href="./CONTRIBUTING.md" rel="dofollow">
+      <strong>Contributing</strong></a>
 
-.PHONY: lint
-lint:
-	uv run black .
-	uv run ruff check . --fix
-	@echo "Auto-fixing issues in examples folder..."
-	@uv run ruff check examples/ --fix-only --no-force-exclude
+  <br />
+</h3>
 
-.PHONY: stubs
-stubs:
-	@echo "Generating Python stubs for the langroid package..."
-	@uv run stubgen -p langroid -o stubs
-	@echo "Stubs generated in the 'stubs' directory"
+`Langroid` is an intuitive, lightweight, extensible and principled
+Python framework to easily build LLM-powered applications, from CMU and UW-Madison researchers. 
+You set up Agents, equip them with optional components (LLM, 
+vector-store and tools/functions), assign them tasks, and have them 
+collaboratively solve a problem by exchanging messages. 
+This Multi-Agent paradigm is inspired by the
+[Actor Framework](https://en.wikipedia.org/wiki/Actor_model)
+(but you do not need to know anything about this!). 
 
-.PHONY: tests
-tests:
-	pytest tests/main --basetemp=/tmp/pytest
+`Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
+into simplifying the developer experience; 
+it does not use `Langchain`, or any other LLM framework, 
+and works with [practically any LLM](https://langroid.github.io/langroid/tutorials/supported-models/).
 
+:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/), 
+ and a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/).
 
-docs:
-	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || true
-	@# Build the documentation.
-	mkdocs build
-	@# Serve the documentation in the background.
-	mkdocs serve &
-	@echo "Documentation is being served in the background."
-	@echo "You can access the documentation at http://127.0.0.1:8000/"
+:fire: MCP Support: Allow any LLM-Agent to leverage MCP Servers via Langroid's simple
+[MCP tool adapter](https://langroid.github.io/langroid/notes/mcp-tools/) that converts 
+the server's tools into Langroid's `ToolMessage` instances.
 
-nodocs:
-	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
-	@echo "Stopped serving documentation."
+📢 Companies are using/adapting Langroid in **production**. Here is a quote:
+
+>[Nullify](https://www.nullify.ai) uses AI Agents for secure software development. 
+> It finds, prioritizes and fixes vulnerabilities. We have internally adapted Langroid's multi-agent orchestration framework in production, after evaluating CrewAI, Autogen, LangChain, Langflow, etc. We found Langroid to be far superior to those frameworks in terms of ease of setup and flexibility. Langroid's Agent and Task abstractions are intuitive, well thought out, and provide a great developer  experience. We wanted the quickest way to get something in production. With other frameworks it would have taken us weeks, but with Langroid we got to good results in minutes. Highly recommended! <br> -- Jacky Wong, Head of AI at Nullify.
 
 
-loc:
-	@echo "Lines in git-tracked files python files:"
-	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
+:fire: See this [Intro to Langroid](https://lancedb.substack.com/p/langoid-multi-agent-programming-framework)
+blog post from the LanceDB team
 
-.PHONY: repomix repomix-no-tests repomix-all
+:fire: Just published in ML for Healthcare (2024): a Langroid-based Multi-Agent RAG system for 
+pharmacovigilance, see [blog post](https://langroid.github.io/langroid/blog/2024/08/12/malade-multi-agent-architecture-for-pharmacovigilance/)
 
-repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
-	@echo "Generating llms.txt (with tests)..."
-	@git ls-files | repomix --stdin
-	@echo "Generating llms-compressed.txt..."
-	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
-	@echo "Generated llms.txt and llms-compressed.txt"
 
-repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
-	@echo "Generating llms-no-tests.txt (without tests)..."
-	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
-	@echo "Generating llms-no-tests-compressed.txt..."
-	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
-	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
+We welcome contributions: See the [contributions](./CONTRIBUTING.md) document
+for ideas on what to contribute.
 
-repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
-	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
-	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
-	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
-	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
-	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
+Are you building LLM Applications, or want help with Langroid for your company, 
+or want to prioritize Langroid features for your company use-cases? 
+[Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) is available for consulting
+(advisory/development): pchalasani at gmail dot com.
 
-repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
+Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/langroid)
 
-.PHONY: check
-check: lint type-check repomix-all
+**Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/ZU36McDgDs)!**
 
-.PHONY: revert-tag
-revert-tag:
-	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
-	echo "Deleting tag: $$LATEST_TAG" && \
-	git tag -d $$LATEST_TAG
+# Quick glimpse of coding with Langroid
+This is just a teaser; there's much more, like function-calling/tools, 
+Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent 
+(RAG), SQLChatAgent, non-OpenAI local/remote LLMs, etc. Scroll down or see docs for more.
+See the Langroid Quick-Start [Colab](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
+that builds up to a 2-agent information-extraction example using the OpenAI ChatCompletion API. 
+See also this [version](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) that uses the OpenAI Assistants API instead.
 
-.PHONY: revert-bump
-revert-bump:
-	@if git log -1 --pretty=%B | grep -q "bump"; then \
-		git reset --hard HEAD~1; \
-		echo "Reverted last commit (bump commit)"; \
-	else \
-		echo "Last commit was not a bump commit"; \
-	fi
+:fire: just released! [Example](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-multi-extract-local.py) 
+script showing how you can use Langroid multi-agents and tools
+to extract structured information from a document using **only a local LLM**
+(Mistral-7b-instruct-v0.2).
 
-.PHONY: revert
-revert: revert-bump revert-tag
-	
-.PHONY: bump-patch
-bump-patch:
-	@cz bump --increment PATCH
+```python
+import langroid as lr
+import langroid.language_models as lm
 
-.PHONY: bump-minor
-bump-minor:
-	@cz bump --increment MINOR 
+# set up LLM
+llm_cfg = lm.OpenAIGPTConfig( # or OpenAIAssistant to use Assistant API 
+  # any model served via an OpenAI-compatible API
+  chat_model=lm.OpenAIChatModel.GPT4o, # or, e.g., "ollama/mistral"
+)
+# use LLM directly
+mdl = lm.OpenAIGPT(llm_cfg)
+response = mdl.chat("What is the capital of Ontario?", max_tokens=10)
 
-.PHONY: bump-major
-bump-major:
-	@cz bump --increment MAJOR 
+# use LLM in an Agent
+agent_cfg = lr.ChatAgentConfig(llm=llm_cfg)
+agent = lr.ChatAgent(agent_cfg)
+agent.llm_response("What is the capital of China?") 
+response = agent.llm_response("And India?") # maintains conversation state 
 
-.PHONY: build
-build:
-	@uv build
+# wrap Agent in a Task to run interactive loop with user (or other agents)
+task = lr.Task(agent, name="Bot", system_message="You are a helpful assistant")
+task.run("Hello") # kick off with user saying "Hello"
 
-.PHONY: push
-push:
-	@git push origin main
-	@git push origin --tags
+# 2-Agent chat loop: Teacher Agent asks questions to Student Agent
+teacher_agent = lr.ChatAgent(agent_cfg)
+teacher_task = lr.Task(
+  teacher_agent, name="Teacher",
+  system_message="""
+    Ask your student concise numbers questions, and give feedback. 
+    Start with a question.
+    """
+)
+student_agent = lr.ChatAgent(agent_cfg)
+student_task = lr.Task(
+  student_agent, name="Student",
+  system_message="Concisely answer the teacher's questions.",
+  single_round=True,
+)
 
-.PHONY: clean
-clean:
-	-rm -rf dist/*
+teacher_task.add_sub_task(student_task)
+teacher_task.run()
+```
 
-.PHONY: release
-release:
-	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+# :fire: Updates/Releases
 
-.PHONY: all-patch
-all-patch: bump-patch clean build push release
+<details>
+<summary> <b>Click to expand</b></summary>
 
-.PHONY: all-minor
-all-minor: bump-minor clean build push release
+- **Jul 2025:**
+  - [0.58.0](https://github.com/langroid/langroid/releases/tag/0.58.0) Crawl4AI integration - 
+    browser-based web crawling with Playwright for JavaScript-heavy sites, no API key required (thank you @abab-dev!).
+  - [0.57.0](https://github.com/langroid/langroid/releases/tag/0.57.0) HTML Logger for interactive task visualization - 
+    self-contained HTML logs with collapsible entries, auto-refresh, and persistent UI state.
+- **Jun 2025:**
+  - [0.56.0](https://github.com/langroid/langroid/releases/tag/0.56.0) `TaskTool` for delegating tasks to sub-agents - 
+    enables agents to spawn sub-agents with specific tools and configurations.
+  - [0.55.0](https://github.com/langroid/langroid/releases/tag/0.55.0) Event-based task termination with `done_sequences` - 
+    declarative task completion using event patterns.
+  - [0.54.0](https://github.com/langroid/langroid/releases/tag/0.54.0) Portkey AI Gateway support - access 200+ models 
+    across providers through unified API with caching, retries, observability.
+- **Mar-Apr 2025:**
+  - [0.53.0](https://github.com/langroid/langroid/releases/tag/0.53.0) MCP Tools Support.
+  - [0.52.0](https://github.com/langroid/langroid/releases/tag/0.52.0) Multimodal support, i.e. allow PDF, image 
+    inputs to LLM.
+  - [0.51.0](https://github.com/langroid/langroid/releases/tag/0.51.0) `LLMPdfParser`, generalizing 
+    `GeminiPdfParser` to parse documents directly with LLM.
+  - [0.50.0](https://github.com/langroid/langroid/releases/tag/0.50.0) Structure-aware Markdown chunking with chunks 
+    enriched by section headers.
+  - [0.49.0](https://github.com/langroid/langroid/releases/tag/0.49.0) Enable easy switch to LiteLLM Proxy-server 
+  - [0.48.0](https://github.com/langroid/langroid/releases/tag/0.48.0) Exa Crawler, Markitdown Parser
+  - [0.47.0](https://github.com/langroid/langroid/releases/tag/0.47.0) Support Firecrawl URL scraper/crawler - 
+    thanks @abab-dev
+  - [0.46.0](https://github.com/langroid/langroid/releases/tag/0.46.0) Support LangDB LLM Gateway - thanks @MrunmayS.
+  - [0.45.0](https://github.com/langroid/langroid/releases/tag/0.45.0) Markdown parsing with `Marker` - thanks @abab-dev
+  - [0.44.0](https://github.com/langroid/langroid/releases/tag/0.44.0) Late imports to reduce startup time. Thanks 
+    @abab-dev
+- **Feb 2025:**
+  - [0.43.0](https://github.com/langroid/langroid/releases/tag/0.43.0): `GeminiPdfParser` for parsing PDF using 
+    Gemini LLMs - Thanks @abab-dev.
+  - [0.42.0](https://github.com/langroid/langroid/releases/tag/0.42.0): `markitdown` parser for `pptx,xlsx,xls` files 
+    Thanks @abab-dev.
+  - [0.41.0](https://github.com/langroid/langroid/releases/tag/0.41.0): `pinecone` vector-db (Thanks @coretado), 
+    `Tavily` web-search (Thanks @Sozhan308), `Exa` web-search (Thanks @MuddyHope).
+  - [0.40.0](https://github.com/langroid/langroid/releases/tag/0.40.0): `pgvector` vector-db. Thanks @abab-dev.
+  - [0.39.0](https://github.com/langroid/langroid/releases/tag/0.39.0): `ChatAgentConfig.handle_llm_no_tool` for 
+    handling LLM "forgetting" to use a tool.
+  - [0.38.0](https://github.com/langroid/langroid/releases/tag/0.38.0): Gemini embeddings - Thanks @abab-dev)
+  - [0.37.0](https://github.com/langroid/langroid/releases/tag/0.37.0): New PDF Parsers: `docling`, `pymupdf4llm`
+- **Jan 2025:**
+  - [0.36.0](https://github.com/langroid/langroid/releases/tag/0.36.0): Weaviate vector-db support (thanks @abab-dev).
+  - [0.35.0](https://github.com/langroid/langroid/releases/tag/0.35.0): Capture/Stream reasoning content from 
+    Reasoning LLMs (e.g. DeepSeek-R1, OpenAI o1) in addition to final answer.
+  - [0.34.0](https://github.com/langroid/langroid/releases/tag/0.34.0): DocChatAgent 
+    chunk enrichment to improve retrieval. (collaboration with @dfm88). 
+  - [0.33.0](https://github.com/langroid/langroid/releases/tag/0.33.3) Move from Poetry to uv! (thanks @abab-dev).
+  - [0.32.0](https://github.com/langroid/langroid/releases/tag/0.32.0) DeepSeek v3 support.
+- **Dec 2024:**
+  - [0.31.0](https://github.com/langroid/langroid/releases/tag/0.31.0) Azure OpenAI Embeddings
+  - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings (thanks @Kwigg).
+  - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client (thanks 
+    @johannestang).
+  - [0.28.0](https://github.com/langroid/langroid/releases/tag/0.28.0) `ToolMessage`: `_handler` field to override 
+default handler method name in `request` field (thanks @alexagr).
+  - [0.27.0](https://github.com/langroid/langroid/releases/tag/0.27.0) OpenRouter Support.
+  - [0.26.0](https://github.com/langroid/langroid/releases/tag/0.26.0) Update to latest Chainlit.
+  - [0.25.0](https://github.com/langroid/langroid/releases/tag/0.25.0) True Async Methods for agent and 
+    user-response (thanks @alexagr).
+- **Nov 2024:**
+  - **[0.24.0](https://langroid.github.io/langroid/notes/structured-output/)**: 
+     Enables support for `Agent`s with strict JSON schema output format on compatible LLMs and strict mode for the OpenAI tools API.
+    (thanks @nilspalumbo).
+  - **[0.23.0](https://langroid.github.io/langroid/tutorials/local-llm-setup/#local-llms-hosted-on-glhfchat)**: 
+      support for LLMs (e.g. `Qwen2.5-Coder-32b-Instruct`) hosted on glhf.chat 
+  - **[0.22.0](https://langroid.github.io/langroid/notes/large-tool-results/)**: 
+     Optional parameters to truncate large tool results.
+  - **[0.21.0](https://langroid.github.io/langroid/notes/gemini/)** Direct support for Gemini models via OpenAI client instead of using LiteLLM.
+  - **[0.20.0](https://github.com/langroid/langroid/releases/tag/0.20.0)** Support for 
+    ArangoDB Knowledge Graphs.
+- **Oct 2024:**
+  - **[0.18.0]** [LLMConfig.async_stream_quiet](https://langroid.github.io/langroid/notes/async-streaming/) flag to 
+    turn off LLM output in async + stream mode.
+  - **[0.17.0]** XML-based tools, see [docs](https://langroid.github.io/langroid/notes/xml-tools/).
+- **Sep 2024:**
+  - **[0.16.0](https://github.com/langroid/langroid/releases/tag/0.16.0)**  Support for OpenAI `o1-mini` and `o1-preview` models.
+  - **[0.15.0](https://github.com/langroid/langroid/releases/tag/0.15.0)** Cerebras API support -- run llama-3.1 models hosted on Cerebras Cloud (very fast inference).
+  - **[0.14.0](https://github.com/langroid/langroid/releases/tag/0.14.0)** `DocChatAgent` uses Reciprocal Rank Fusion (RRF) to rank chunks retrieved by different methods.
+  - **[0.12.0](https://github.com/langroid/langroid/releases/tag/0.12.0)** `run_batch_task` new option -- `stop_on_first_result` - allows termination of batch as soon as any task returns a result.  
+- **Aug 2024:**
+  - **[0.11.0](https://github.com/langroid/langroid/releases/tag/0.11.0)** Polymorphic `Task.run(), Task.run_async`.
+  - **[0.10.0](https://github.com/langroid/langroid/releases/tag/0.10.0)** Allow tool handlers to return arbitrary result type, including other tools.
+  - **[0.9.0](https://github.com/langroid/langroid/releases/tag/0.9.0)** Orchestration Tools, to signal various task statuses, and to pass messages between agents.
+  - **[0.7.0](https://github.com/langroid/langroid/releases/tag/0.7.0)** OpenAI tools API support, including multi-tools.
+- **Jul 2024:**
+  - **[0.3.0](https://github.com/langroid/langroid/releases/tag/0.3.0)**: Added [FastEmbed](https://qdrant.github.io/fastembed/qdrant/Usage_With_Qdrant/) embeddings from Qdrant
+- **Jun 2024:**
+  - **0.2.0:** Improved lineage tracking, granular sub-task configs, and a new tool, `RewindTool`, 
+    that lets an agent "rewind and redo" a past message (and all dependent messages are cleared out 
+    thanks to the lineage tracking). Read notes [here](https://github.com/langroid/langroid/releases/tag/0.2.0).
+- **May 2024:** 
+  - **Slimmer langroid**: All document-parsers (i.e. pdf, doc, docx) and most 
+    vector-databases (except qdrant) 
+    are now optional/extra dependencies, which helps reduce build size, script 
+    start-up time, and install time. For convenience various grouping of "extras" are 
+    provided, e.g. `doc-chat`, `db` (for database-related dependencies). See updated 
+    install instructions below and in the docs.
+  - **Few-shot examples** for tools: when defining a [ToolMessage](https://langroid.github.io/langroid/quick-start/chat-agent-tool/#example-find-the-smallest-number-in-a-list), previously you were able to include a classmethod named `examples`,
+    and a random example from this list would be used to generate a 1-shot example 
+    for the LLM. This has been improved so you can now supply a list of examples 
+    where each example is either a tool instance, or a tuple of (description, 
+    tool instance), where the description is a "thought" that leads the LLM to use 
+    the tool (see example in the [docs](https://langroid.github.io/langroid/quick-start/chat-agent-tool/#example-find-the-smallest-number-in-a-list)). In some scenarios this can improve LLM tool 
+    generation accuracy. Also, now instead of a random example, ALL examples are used to generate few-shot 
+    examples.     
+  - [Infinite loop detection](https://github.com/langroid/langroid/blob/0ed30eb467b00d5eaf2933b577a4b2cc37de1aa1/langroid/agent/task.py#L1121) for task loops of cycle-length <= 10 (configurable 
+    in [`TaskConfig`](https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig). Only detects _exact_ loops, rather than _approximate_ loops where the entities are saying essentially similar (but not exactly the same) things repeatedly.
+  - "@"-addressing: any entity can address any other by name, which can be the name 
+    of an agent's responder ("llm", "user", "agent") or a sub-task name. This is a 
+    simpler alternative to the `RecipientTool` mechanism, with the tradeoff that 
+    since it's not a tool, there's no way to enforce/remind the LLM to explicitly 
+    specify an addressee (in scenarios where this is important).
+  - [Much-Improved Citation](https://github.com/langroid/langroid/issues/477) 
+    generation and display when using `DocChatAgent`.
+  - `gpt-4o` is now the default LLM throughout; Update tests and examples to work 
+    with this LLM; use tokenizer corresponding to the LLM.
+  - `gemini 1.5 pro` support via `litellm`
+  - `QdrantDB:` update to support learned sparse embeddings.
+- **Apr 2024:**
+  - **0.1.236**: Support for open LLMs hosted on Groq, e.g. specify 
+    `chat_model="groq/llama3-8b-8192"`.
+      See [tutorial](https://langroid.github.io/langroid/tutorials/local-llm-setup/).
+  - **0.1.235**: `Task.run(), Task.run_async(), run_batch_tasks` have `max_cost` 
+    and `max_tokens` params to exit when tokens or cost exceed a limit. The result 
+    `ChatDocument.metadata` now includes a `status` field which is a code indicating a 
+     task completion reason code. Also `task.run()` etc can be invoked with an explicit
+     `session_id` field which is used as a key to look up various settings in Redis cache.
+    Currently only used to look up "kill status" - this allows killing a running task, either by `task.kill()`
+    or by the classmethod `Task.kill_session(session_id)`.
+    For example usage, see the `test_task_kill` in [tests/main/test_task.py](https://github.com/langroid/langroid/blob/main/tests/main/test_task.py)
+  
+- **Mar 2024:**
+  - **0.1.216:** Improvements to allow concurrent runs of `DocChatAgent`, see the
+    [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py)
+    in particular the `test_doc_chat_batch()`;
+    New task run utility: [`run_batch_task_gen`](https://github.com/langroid/langroid/blob/main/langroid/agent/batch.py) 
+    where a task generator can be specified, to generate one task per input. 
+  - **0.1.212:** ImagePdfParser: support for extracting text from image-based PDFs.
+    (this means `DocChatAgent` will now work with image-pdfs).
+  - **0.1.194 - 0.1.211:** Misc fixes, improvements, and features:
+    - Big enhancement in RAG performance (mainly, recall) due to a [fix in Relevance 
+      Extractor](https://github.com/langroid/langroid/releases/tag/0.1.209)
+    - `DocChatAgent` [context-window fixes](https://github.com/langroid/langroid/releases/tag/0.1.208)
+    - Anthropic/Claude3 support via Litellm
+    - `URLLoader`: detect file time from header when URL doesn't end with a 
+      recognizable suffix like `.pdf`, `.docx`, etc.
+    - Misc lancedb integration fixes
+    - Auto-select embedding config based on whether `sentence_transformer` module is available.
+    - Slim down dependencies, make some heavy ones optional, e.g. `unstructured`, 
+      `haystack`, `chromadb`, `mkdocs`, `huggingface-hub`, `sentence-transformers`.
+    - Easier top-level imports from `import langroid as lr`
+    - Improve JSON detection, esp from weak LLMs
+- **Feb 2024:** 
+  - **0.1.193:** Support local LLMs using Ollama's new OpenAI-Compatible server: 
+     simply specify `chat_model="ollama/mistral"`. See [release notes](https://github.com/langroid/langroid/releases/tag/0.1.193).
+  - **0.1.183:** Added Chainlit support via [callbacks](https://github.com/langroid/langroid/blob/main/langroid/agent/callbacks/chainlit.py). 
+   See [examples](https://github.com/langroid/langroid/tree/main/examples/chainlit).
+- **Jan 2024:**
+  - **0.1.175** 
+    - [Neo4jChatAgent](https://github.com/langroid/langroid/tree/main/langroid/agent/special/neo4j) to chat with a neo4j knowledge-graph.
+      (Thanks to [Mohannad](https://github.com/Mohannadcse)!). The agent uses tools to query the Neo4j schema and translate user queries to Cypher queries,
+      and the tool handler executes these queries, returning them to the LLM to compose
+      a natural language response (analogous to how `SQLChatAgent` works).
+      See example [script](https://github.com/langroid/langroid/tree/main/examples/kg-chat) using this Agent to answer questions about Python pkg dependencies.
+    - Support for `.doc` file parsing (in addition to `.docx`)
+    - Specify optional [`formatter` param](https://github.com/langroid/langroid/releases/tag/0.1.171) 
+      in `OpenAIGPTConfig` to ensure accurate chat formatting for local LLMs. 
+  - **[0.1.157](https://github.com/langroid/langroid/releases/tag/0.1.157):** `DocChatAgentConfig` 
+     has a new param: `add_fields_to_content`, to specify additional document fields to insert into 
+     the main `content` field, to help improve retrieval.
+  - **[0.1.156](https://github.com/langroid/langroid/releases/tag/0.1.156):** New Task control signals
+     PASS_TO, SEND_TO; VectorStore: Compute Pandas expression on documents; LanceRAGTaskCreator creates 3-agent RAG system with Query Planner, Critic and RAG Agent.
+- **Dec 2023:**
+  - **0.1.154:** (For details see release notes of [0.1.149](https://github.com/langroid/langroid/releases/tag/0.1.149)
+      and [0.1.154](https://github.com/langroid/langroid/releases/tag/0.1.154)). 
+    - `DocChatAgent`: Ingest Pandas dataframes and filtering.
+    - `LanceDocChatAgent` leverages `LanceDB` vector-db for efficient vector search
+     and full-text search and filtering.
+    - Improved task and multi-agent control mechanisms
+    - `LanceRAGTaskCreator` to create a 2-agent system consisting of a `LanceFilterAgent` that
+      decides a filter and rephrase query to send to a RAG agent.
+  - **[0.1.141](https://github.com/langroid/langroid/releases/tag/0.1.141):**
+    API Simplifications to reduce boilerplate:
+    auto-select an available OpenAI model (preferring gpt-4o), simplifies defaults.
+    Simpler `Task` initialization with default `ChatAgent`.
+- **Nov 2023:**
+  - **[0.1.126](https://github.com/langroid/langroid/releases/tag/0.1.126):**
+     OpenAIAssistant agent: Caching Support. 
+  - **0.1.117:** Support for OpenAI Assistant API tools: Function-calling, 
+    Code-intepreter, and Retriever (RAG), file uploads. These work seamlessly 
+    with Langroid's task-orchestration.
+    Until docs are ready, it's best to see these usage examples:
+    
+    - **Tests:**
+      - [test_openai_assistant.py](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant.py)
+      - [test_openai_assistant_async.py](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant_async.py)
 
-.PHONY: all-major
-all-major: bump-major clean build push release
+    - **Example scripts:**
+      - [The most basic chat app](https://github.com/langroid/langroid/blob/main/examples/basic/oai-asst-chat.py)
+      - [Chat with code interpreter](https://github.com/langroid/langroid/blob/main/examples/basic/oai-code-chat.py)
+      - [Chat with retrieval (RAG)](https://github.com/langroid/langroid/blob/main/examples/docqa/oai-retrieval-assistant.py)
+      - [2-agent RAG chat](https://github.com/langroid/langroid/blob/main/examples/docqa/oai-retrieval-2.py)
+  - **0.1.112:** [`OpenAIAssistant`](https://github.com/langroid/langroid/blob/main/langroid/agent/openai_assistant.py) is a subclass of `ChatAgent` that 
+    leverages the new OpenAI Assistant API. It can be used as a drop-in 
+    replacement for `ChatAgent`, and relies on the Assistant API to
+    maintain conversation state, and leverages persistent threads and 
+    assistants to reconnect to them if needed. Examples: 
+    [`test_openai_assistant.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant.py),
+    [`test_openai_assistant_async.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant_async.py)
+  - **0.1.111:** Support latest OpenAI model: `GPT4_TURBO`
+(see [test_llm.py](tests/main/test_llm.py) for example usage)
+  - **0.1.110:** Upgrade from OpenAI v0.x to v1.1.1 (in preparation for 
+    Assistants API and more); (`litellm` temporarily disabled due to OpenAI 
+    version conflict).
+- **Oct 2023:**
+  - **0.1.107:** `DocChatAgent` re-rankers: `rank_with_diversity`, `rank_to_periphery` (lost in middle).
+  - **0.1.102:** `DocChatAgentConfig.n_neighbor_chunks > 0` allows returning context chunks around match.
+  - **0.1.101:** `DocChatAgent` uses `RelevanceExtractorAgent` to have 
+    the LLM extract relevant portions of a chunk using 
+    sentence-numbering, resulting in huge speed up and cost reduction 
+    compared to the naive "sentence-parroting" approach (writing out full 
+    sentences out relevant whole sentences) which `LangChain` uses in their 
+    `LLMChainExtractor`.
+  - **0.1.100:** API update: all of Langroid is accessible with a single import, i.e. `import langroid as lr`. See the [documentation]("https://langroid.github.io/langroid/") for usage.
+  - **0.1.99:** Convenience batch functions to run tasks, agent methods on a list of inputs concurrently in async mode. See examples in [test_batch.py](https://github.com/langroid/langroid/blob/main/tests/main/test_batch.py).
+  - **0.1.95:** Added support for [Momento Serverless Vector Index](https://docs.momentohq.com/vector-index)
+  - **0.1.94:** Added support for [LanceDB](https://lancedb.github.io/lancedb/) vector-store -- allows vector, Full-text, SQL search.
+  - **0.1.84:** Added [LiteLLM](https://docs.litellm.ai/docs/providers), so now Langroid can be used with over 100 LLM providers (remote or local)! 
+     See guide [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
+- **Sep 2023:**
+  - **0.1.78:** Async versions of several Task, Agent and LLM methods; 
+      Nested Pydantic classes are now supported for LLM Function-calling, Tools, Structured Output.    
+  - **0.1.76:** DocChatAgent: support for loading `docx` files (preliminary).
+  - **0.1.72:** Many improvements to DocChatAgent: better embedding model, 
+          hybrid search to improve retrieval, better pdf parsing, re-ranking retrieved results with cross-encoders. 
+  - **Use with local LLama Models:** see tutorial [here](https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/)
+  - **Langroid Blog/Newsletter Launched!**: First post is [here](https://substack.com/notes/post/p-136704592) -- Please subscribe to stay updated. 
+  - **0.1.56:** Support Azure OpenAI. 
+  - **0.1.55:** Improved [`SQLChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/sql/sql_chat_agent.py) that efficiently retrieves relevant schema info when translating natural language to SQL.  
+- **Aug 2023:**
+  - **[Hierarchical computation](https://langroid.github.io/langroid/examples/agent-tree/)** example using Langroid agents and task orchestration.
+  - **0.1.51:** Support for global state, see [test_global_state.py](tests/main/test_global_state.py).
+  - **:whale: Langroid Docker image**, available, see instructions below.
+  - [**RecipientTool**](langroid/agent/tools/recipient_tool.py) enables (+ enforces) LLM to 
+specify an intended recipient when talking to 2 or more agents. 
+See [this test](tests/main/test_recipient_tool.py) for example usage.
+  - **Example:** [Answer questions](examples/docqa/chat-search.py) using Google Search + vecdb-retrieval from URL contents. 
+  - **0.1.39:** [`GoogleSearchTool`](langroid/agent/tools/google_search_tool.py) to enable Agents (their LLM) to do Google searches via function-calling/tools.
+    See [this chat example](examples/basic/chat-search.py) for how easy it is to add this tool to an agent.
+  - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
+  - **0.1.37:** Added [`SQLChatAgent`](langroid/agent/special/sql_chat_agent.py) -- thanks to our latest contributor [Rithwik Babu](https://github.com/rithwikbabu)!
+  - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
+- **July 2023:** 
+  - **0.1.30:** Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
+    [chat](examples/data-qa/table_chat.py) with tabular datasets (dataframes, files, URLs): LLM generates Pandas code,
+    and code is executed using Langroid's tool/function-call mechanism. 
+  - **Demo:** 3-agent system for Audience [Targeting](https://langroid.github.io/langroid/demos/targeting/audience-targeting/).
+  - **0.1.27**: Added [support](langroid/cachedb/momento_cachedb.py) 
+    for [Momento Serverless Cache](https://www.gomomento.com/) as an alternative to Redis.
+  - **0.1.24**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
+    now [accepts](langroid/parsing/document_parser.py) PDF files or URLs.
 
-.PHONY: publish
-publish:
-	uv publish
+</details>
+
+# :rocket: Demo
+Suppose you want to extract structured information about the key terms 
+of a commercial lease document. You can easily do this with Langroid using a two-agent system,
+as we show in the [langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
+(See [this script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-multi-extract-local.py)
+for a version with the same functionality using a local Mistral-7b model.)
+The demo showcases just a few of the many features of Langroid, such as:
+- Multi-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
+to be answered by the `DocAgent`.
+- Retrieval augmented question-answering, with **source-citation**: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
+answer the `LeaseExtractor`'s questions, cites the specific excerpt supporting the answer. 
+- Function-calling (also known as tool/plugin): When it has all the information it 
+needs, the `LeaseExtractor` LLM presents the information in a structured 
+format using a Function-call. 
+
+Here is what it looks like in action 
+(a pausable mp4 video is [here](https://vimeo.com/871429249)).
+
+![Demo](docs/assets/demos/lease-extractor-demo.gif)
+
+
+# :zap: Highlights
+(For a more up-to-date list see the 
+[Updates/Releases](https://github.com/langroid/langroid?tab=readme-ov-file#fire-updatesreleases) 
+section above)
+- **Agents as first-class citizens:** The [Agent](https://langroid.github.io/langroid/reference/agent/base/#langroid.agent.base.Agent) class encapsulates LLM conversation state,
+  and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
+  Agents act as _message transformers_, and by default provide 3 _responder_ methods, one corresponding to each entity: LLM, Agent, User.
+- **Tasks:** A [Task](https://langroid.github.io/langroid/reference/agent/task/) class wraps an Agent, and gives the agent instructions (or roles, or goals), 
+  manages iteration over an Agent's responder methods, 
+  and orchestrates multi-agent interactions via hierarchical, recursive
+  task-delegation. The `Task.run()` method has the same 
+  type-signature as an Agent's responder's methods, and this is key to how 
+  a task of an agent can delegate to other sub-tasks: from the point of view of a Task,
+  sub-tasks are simply additional responders, to be used in a round-robin fashion 
+  after the agent's own responders.
+- **Modularity, Reusability, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
+  Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
+- **LLM Support**: Langroid supports OpenAI LLMs as well as LLMs from hundreds of 
+providers ([local/open](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial](https://langroid.github.io/langroid/tutorials/non-openai-llms/)) via proxy libraries and local model servers
+such as [ollama](https://github.com/ollama), [oobabooga](https://github.com/oobabooga/text-generation-webui), 
+  [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. See the [supported LLMs](https://langroid.github.io/langroid/tutorials/supported-models/). 
+- **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) to cache LLM responses.
+- **Vector-stores**: [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/), LanceDB, Pinecone, PostgresDB (PGVector), Weaviate are currently supported.
+  Vector stores allow for Retrieval-Augmented-Generation (RAG).
+- **Grounding and source-citation:** Access to external documents via vector-stores 
+   allows for grounding and source-citation.
+- **Observability, Logging, Lineage:** Langroid generates detailed logs of multi-agent interactions and
+  maintains provenance/lineage of messages, so that you can trace back
+  the origin of a message.
+- **[Tools/Plugins/Function-calling](https://langroid.github.io/langroid/quick-start/chat-agent-tool/)**:
+  Langroid supports OpenAI's [function calling](https://platform.openai.com/docs/guides/gpt/function-calling), as
+  well as an equivalent `ToolMessage` mechanism which works with
+  any LLM, not just OpenAI's.
+  Function calling and tools have the same developer-facing interface, implemented
+  using [Pydantic](https://docs.pydantic.dev/latest/),
+  which makes it very easy to define tools/functions and enable agents
+  to use them. Benefits of using Pydantic are that you never have to write
+  complex JSON specs for function calling, and when the LLM
+  hallucinates malformed JSON, the Pydantic error message is sent back to
+  the LLM so it can fix it.
+
+--- 
+
+# :gear: Installation and Setup
+
+### Install `langroid`
+Langroid requires Python 3.11+. We recommend using a virtual environment.
+Use `pip` to install a bare-bones slim version of `langroid` (from PyPi) to your virtual 
+environment:
+```bash
+pip install langroid
+```
+The core Langroid package lets you use OpenAI Embeddings models via their API. 
+If you instead want to use the `sentence-transformers` embedding models from HuggingFace, 
+install Langroid like this: 
+```bash
+pip install "langroid[hf-embeddings]"
+```
+For many practical scenarios, you may need additional optional dependencies:
+- To use various document-parsers, install langroid with the `doc-chat` extra:
+    ```bash
+    pip install "langroid[doc-chat]"
+    ```
+- For "chat with databases", use the `db` extra:
+    ```bash
+    pip install "langroid[db]"
+    ```
+- You can specify multiple extras by separating them with commas, e.g.:
+    ```bash
+    pip install "langroid[doc-chat,db]"
+    ```
+- To simply install _all_ optional dependencies, use the `all` extra (but note that this will result in longer load/startup times and a larger install size):
+    ```bash
+    pip install "langroid[all]"
+    ```
+<details>
+<summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>
+
+If you are using `SQLChatAgent` 
+(e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](examples/data-qa/sql-chat/sql_chat.py)),
+with a postgres db, you will need to:
+
+- Install PostgreSQL dev libraries for your platform, e.g.
+  - `sudo apt-get install libpq-dev` on Ubuntu,
+  - `brew install postgresql` on Mac, etc.
+- Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
+  or `poetry add "langroid[postgres]"` or `poetry install -E postgres`,
+  (or the corresponding `uv` versions, e.g. `uv add "langroid[postgres]"`
+  or `uv pip install langroid[postgres]`).
+  If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
+</details>
+
+:memo: If you get strange errors involving `mysqlclient`, try doing `pip uninstall mysqlclient` followed by `pip install mysqlclient`.
+
+### Set up environment variables (API keys, etc)
+
+To get started, all you need is an OpenAI API Key.
+If you don't have one, see [this OpenAI Page](https://platform.openai.com/docs/quickstart).
+(Note that while this is the simplest way to get started, Langroid works with practically any LLM, not just those from OpenAI. 
+See the guides to using [Open/Local LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/), 
+and other [non-OpenAI](https://langroid.github.io/langroid/tutorials/non-openai-llms/) proprietary LLMs.) 
+
+In the root of the repo, copy the `.env-template` file to a new file `.env`: 
+```bash
+cp .env-template .env
+```
+Then insert your OpenAI API Key. 
+Your `.env` file should look like this (the organization is optional 
+but may be required in some scenarios).
+```bash
+OPENAI_API_KEY=your-key-here-without-quotes
+OPENAI_ORGANIZATION=optionally-your-organization-id
+````
+
+Alternatively, you can set this as an environment variable in your shell
+(you will need to do this every time you open a new shell):
+```bash
+export OPENAI_API_KEY=your-key-here-without-quotes
+```
+
+
+<details>
+<summary><b>Optional Setup Instructions (click to expand) </b></summary>
+
+All of the following environment variable settings are optional, and some are only needed 
+to use specific features (as noted below).
+
+- **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
+  Alternatively [Chroma](https://docs.trychroma.com/) or [LanceDB](https://lancedb.com/) are also currently supported. 
+  We use the local-storage version of Chroma, so there is no need for an API key.
+- **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
+  using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
+  which is more than sufficient to try out Langroid and even beyond.
+  If you don't set up these, Langroid will use a pure-python 
+  Redis in-memory cache via the [Fakeredis](https://fakeredis.readthedocs.io/en/latest/) library.
+- **Momento** Serverless Caching of LLM API responses (as an alternative to Redis). 
+   To use Momento instead of Redis:
+  - enter your Momento Token in the `.env` file, as the value of `MOMENTO_AUTH_TOKEN` (see example file below),
+  - in the `.env` file set `CACHE_TYPE=momento` (instead of `CACHE_TYPE=redis` which is the default).
+- **GitHub** Personal Access Token (required for apps that need to analyze git
+  repos; token-based API calls are less rate-limited). See this
+  [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+- **Google Custom Search API Credentials:** Only needed to enable an Agent to use the `GoogleSearchTool`.
+  To use Google Search as an LLM Tool/Plugin/function-call, 
+  you'll need to set up 
+  [a Google API key](https://developers.google.com/custom-search/v1/introduction#identify_your_application_to_google_with_api_key),
+  then [setup a Google Custom Search Engine (CSE) and get the CSE ID](https://developers.google.com/custom-search/docs/tutorial/creatingcse).
+  (Documentation for these can be challenging, we suggest asking GPT4 for a step-by-step guide.)
+  After obtaining these credentials, store them as values of 
+  `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in your `.env` file. 
+  Full documentation on using this (and other such "stateless" tools) is coming soon, but 
+  in the meantime take a peek at this [chat example](examples/basic/chat-search.py), which 
+  shows how you can easily equip an Agent with a `GoogleSearchtool`.
+  
+
+
+If you add all of these optional variables, your `.env` file should look like this:
+```bash
+OPENAI_API_KEY=your-key-here-without-quotes
+GITHUB_ACCESS_TOKEN=your-personal-access-token-no-quotes
+CACHE_TYPE=redis # or momento
+REDIS_PASSWORD=your-redis-password-no-quotes
+REDIS_HOST=your-redis-hostname-no-quotes
+REDIS_PORT=your-redis-port-no-quotes
+MOMENTO_AUTH_TOKEN=your-momento-token-no-quotes # instead of REDIS* variables
+QDRANT_API_KEY=your-key
+QDRANT_API_URL=https://your.url.here:6333 # note port number must be included
+GOOGLE_API_KEY=your-key
+GOOGLE_CSE_ID=your-cse-id
+```
+</details>
+
+<details>
+<summary><b>Optional setup instructions for Microsoft Azure OpenAI(click to expand)</b></summary> 
+
+When using Azure OpenAI, additional environment variables are required in the 
+`.env` file.
+This page [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line&pivots=programming-language-python#environment-variables)
+provides more information, and you can set each environment variable as follows:
+
+- `AZURE_OPENAI_API_KEY`, from the value of `API_KEY`
+- `AZURE_OPENAI_API_BASE` from the value of `ENDPOINT`, typically looks like `https://your.domain.azure.com`.
+- For `AZURE_OPENAI_API_VERSION`, you can use the default value in `.env-template`, and latest version can be found [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/whats-new#azure-openai-chat-completion-general-availability-ga)
+- `AZURE_OPENAI_DEPLOYMENT_NAME` is the name of the deployed model, which is defined by the user during the model setup 
+- `AZURE_OPENAI_MODEL_NAME` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisly the exact model name that was selected. For example, GPT-4 (should be `gpt-4-32k` or `gpt-4`).
+- `AZURE_OPENAI_MODEL_VERSION` is required if `AZURE_OPENAI_MODEL_NAME = gpt=4`, which will assist Langroid to determine the cost of the model  
+</details>
+
+---
+
+# :whale: Docker Instructions
+
+We provide a containerized version of the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
+repository via this [Docker Image](https://hub.docker.com/r/langroid/langroid).
+All you need to do is set up environment variables in the `.env` file.
+Please follow these steps to setup the container:
+
+```bash
+# get the .env file template from `langroid` repo
+wget -O .env https://raw.githubusercontent.com/langroid/langroid/main/.env-template
+
+# Edit the .env file with your favorite editor (here nano), and remove any un-used settings. E.g. there are "dummy" values like "your-redis-port" etc -- if you are not using them, you MUST remove them.
+nano .env
+
+# launch the container (the appropriate image for your architecture will be pulled automatically)
+docker run -it --rm  -v ./.env:/langroid/.env langroid/langroid:latest
+
+# Use this command to run any of the scripts in the `examples` directory
+python examples/<Path/To/Example.py> 
+``` 
+
+
+
+# :tada: Usage Examples
+
+These are quick teasers to give a glimpse of what you can do with Langroid
+and how your code would look. 
+
+:warning: The code snippets below are intended to give a flavor of the code
+and they are **not** complete runnable examples! For that we encourage you to 
+consult the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
+repository.
+
+:information_source:
+The various LLM prompts and instructions in Langroid
+have been tested to work well with GPT-4 (and to some extent GPT-4o).
+Switching to other LLMs (local/open and proprietary) is easy (see guides mentioned above),
+and may suffice for some applications, but in general you may see inferior results
+unless you adjust the prompts and/or the multi-agent setup.
+
+
+:book: Also see the
+[`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
+for a detailed tutorial.
+
+
+
+Click to expand any of the code examples below.
+All of these can be run in a Colab notebook:
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
+
+<details>
+<summary> <b> Direct interaction with LLM </b> </summary>
+
+```python
+import langroid.language_models as lm
+
+mdl = lm.OpenAIGPT(
+    lm.OpenAIGPTConfig(
+        chat_model=lm.OpenAIChatModel.GPT4o, # or, e.g.  "ollama/qwen2.5"
+    ),
+)
+
+messages = [
+  lm.LLMMessage(content="You are a helpful assistant",  role=lm.Role.SYSTEM), 
+  lm.LLMMessage(content="What is the capital of Ontario?",  role=lm.Role.USER),
+]
+
+response = mdl.chat(messages, max_tokens=200)
+print(response.message)
+```
+See the guides to use
+([local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/)).
+</details>
+
+<details>
+<summary> <b> Interaction with non-OpenAI LLM (local or remote) </b> </summary>
+Local model: if model is served at `http://localhost:8000`:
+
+```python
+cfg = lm.OpenAIGPTConfig(
+  chat_model="local/localhost:8000", 
+  chat_context_length=4096
+)
+mdl = lm.OpenAIGPT(cfg)
+# now interact with it as above, or create an Agent + Task as shown below.
+```
+</details>
+
+<details>
+<summary> <b> Define an agent, set up a task, and run it </b> </summary>
+
+```python
+import langroid as lr
+
+agent = lr.ChatAgent()
+
+# get response from agent's LLM, and put this in an interactive loop...
+# answer = agent.llm_response("What is the capital of Ontario?")
+  # ... OR instead, set up a task (which has a built-in loop) and run it
+task = lr.Task(agent, name="Bot") 
+task.run() # ... a loop seeking response from LLM or User at each turn
+```
+</details>
+
+<details>
+<summary><b> Three communicating agents </b></summary>
+
+A toy numbers game, where when given a number `n`:
+- `repeater_task`'s LLM simply returns `n`,
+- `even_task`'s LLM returns `n/2` if `n` is even, else says "DO-NOT-KNOW"
+- `odd_task`'s LLM returns `3*n+1` if `n` is odd, else says "DO-NOT-KNOW"
+
+Each of these `Task`s automatically configures a default `ChatAgent`.
+
+```python
+import langroid as lr
+from langroid.utils.constants import NO_ANSWER
+
+repeater_task = lr.Task(
+    name = "Repeater",
+    system_message="""
+    Your job is to repeat whatever number you receive.
+    """,
+    llm_delegate=True, # LLM takes charge of task
+    single_round=False, 
+)
+
+even_task = lr.Task(
+    name = "EvenHandler",
+    system_message=f"""
+    You will be given a number. 
+    If it is even, divide by 2 and say the result, nothing else.
+    If it is odd, say {NO_ANSWER}
+    """,
+    single_round=True,  # task done after 1 step() with valid response
+)
+
+odd_task = lr.Task(
+    name = "OddHandler",
+    system_message=f"""
+    You will be given a number n. 
+    If it is odd, return (n*3+1), say nothing else. 
+    If it is even, say {NO_ANSWER}
+    """,
+    single_round=True,  # task done after 1 step() with valid response
+)
+```
+Then add the `even_task` and `odd_task` as sub-tasks of `repeater_task`, 
+and run the `repeater_task`, kicking it off with a number as input:
+```python
+repeater_task.add_sub_task([even_task, odd_task])
+repeater_task.run("3")
+```
+
+</details>
+
+<details>
+<summary><b> Simple Tool/Function-calling example </b></summary>
+
+Langroid leverages Pydantic to support OpenAI's
+[Function-calling API](https://platform.openai.com/docs/guides/gpt/function-calling)
+as well as its own native tools. The benefits are that you don't have to write
+any JSON to specify the schema, and also if the LLM hallucinates a malformed
+tool syntax, Langroid sends the Pydantic validation error (suitably sanitized) 
+to the LLM so it can fix it!
+
+Simple example: Say the agent has a secret list of numbers, 
+and we want the LLM to find the smallest number in the list. 
+We want to give the LLM a `probe` tool/function which takes a
+single number `n` as argument. The tool handler method in the agent
+returns how many numbers in its list are at most `n`.
+
+First define the tool using Langroid's `ToolMessage` class:
+
+
+```python
+import langroid as lr
+
+class ProbeTool(lr.agent.ToolMessage):
+  request: str = "probe" # specifies which agent method handles this tool
+  purpose: str = """
+        To find how many numbers in my list are less than or equal to  
+        the <number> you specify.
+        """ # description used to instruct the LLM on when/how to use the tool
+  number: int  # required argument to the tool
+```
+
+Then define a `SpyGameAgent` as a subclass of `ChatAgent`, 
+with a method `probe` that handles this tool:
+
+```python
+class SpyGameAgent(lr.ChatAgent):
+  def __init__(self, config: lr.ChatAgentConfig):
+    super().__init__(config)
+    self.numbers = [3, 4, 8, 11, 15, 25, 40, 80, 90]
+
+  def probe(self, msg: ProbeTool) -> str:
+    # return how many numbers in self.numbers are less or equal to msg.number
+    return str(len([n for n in self.numbers if n <= msg.number]))
+```
+
+We then instantiate the agent and enable it to use and respond to the tool:
+
+```python
+spy_game_agent = SpyGameAgent(
+    lr.ChatAgentConfig(
+        name="Spy",
+        vecdb=None,
+        use_tools=False, #  don't use Langroid native tool
+        use_functions_api=True, # use OpenAI function-call API
+    )
+)
+spy_game_agent.enable_message(ProbeTool)
+```
+
+For a full working example see the
+[chat-agent-tool.py](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-tool.py)
+script in the `langroid-examples` repo.
+</details>
+
+<details>
+<summary> <b>Tool/Function-calling to extract structured information from text </b> </summary>
+
+Suppose you want an agent to extract 
+the key terms of a lease, from a lease document, as a nested JSON structure.
+First define the desired structure via Pydantic models:
+
+```python
+from pydantic import BaseModel
+class LeasePeriod(BaseModel):
+    start_date: str
+    end_date: str
+
+
+class LeaseFinancials(BaseModel):
+    monthly_rent: str
+    deposit: str
+
+class Lease(BaseModel):
+    period: LeasePeriod
+    financials: LeaseFinancials
+    address: str
+```
+
+Then define the `LeaseMessage` tool as a subclass of Langroid's `ToolMessage`.
+Note the tool has a required argument `terms` of type `Lease`:
+
+```python
+import langroid as lr
+
+class LeaseMessage(lr.agent.ToolMessage):
+    request: str = "lease_info"
+    purpose: str = """
+        Collect information about a Commercial Lease.
+        """
+    terms: Lease
+```
+
+Then define a `LeaseExtractorAgent` with a method `lease_info` that handles this tool,
+instantiate the agent, and enable it to use and respond to this tool:
+
+```python
+class LeaseExtractorAgent(lr.ChatAgent):
+    def lease_info(self, message: LeaseMessage) -> str:
+        print(
+            f"""
+        DONE! Successfully extracted Lease Info:
+        {message.terms}
+        """
+        )
+        return json.dumps(message.terms.dict())
+    
+lease_extractor_agent = LeaseExtractorAgent()
+lease_extractor_agent.enable_message(LeaseMessage)
+```
+
+See the [`chat_multi_extract.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py)
+script in the `langroid-examples` repo for a full working example.
+</details>
+
+<details>
+<summary><b> Chat with documents (file paths, URLs, etc) </b></summary>
+
+Langroid provides a specialized agent class `DocChatAgent` for this purpose.
+It incorporates document sharding, embedding, storage in a vector-DB, 
+and retrieval-augmented query-answer generation.
+Using this class to chat with a collection of documents is easy.
+First create a `DocChatAgentConfig` instance, with a 
+`doc_paths` field that specifies the documents to chat with.
+
+```python
+import langroid as lr
+from langroid.agent.special import DocChatAgentConfig, DocChatAgent
+
+config = DocChatAgentConfig(
+  doc_paths = [
+    "https://en.wikipedia.org/wiki/Language_model",
+    "https://en.wikipedia.org/wiki/N-gram_language_model",
+    "/path/to/my/notes-on-language-models.txt",
+  ],
+  vecdb=lr.vector_store.QdrantDBConfig(),
+)
+```
+
+Then instantiate the `DocChatAgent` (this ingests the docs into the vector-store):
+
+```python
+agent = DocChatAgent(config)
+```
+Then we can either ask the agent one-off questions,
+```python
+agent.llm_response("What is a language model?")
+```
+or wrap it in a `Task` and run an interactive loop with the user:
+```python
+task = lr.Task(agent)
+task.run()
+```
+
+See full working scripts in the 
+[`docqa`](https://github.com/langroid/langroid-examples/tree/main/examples/docqa)
+folder of the `langroid-examples` repo.
+</details>
+
+<details>
+<summary><b> :fire: Chat with tabular data (file paths, URLs, dataframes) </b></summary>
+
+Using Langroid you can set up a `TableChatAgent` with a dataset (file path, URL or dataframe),
+and query it. The Agent's LLM generates Pandas code to answer the query, 
+via function-calling (or tool/plugin), and the Agent's function-handling method
+executes the code and returns the answer.
+
+Here is how you can do this:
+
+```python
+import langroid as lr
+from langroid.agent.special import TableChatAgent, TableChatAgentConfig
+```
+
+Set up a `TableChatAgent` for a data file, URL or dataframe
+(Ensure the data table has a header row; the delimiter/separator is auto-detected):
+```python
+dataset =  "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv"
+# or dataset = "/path/to/my/data.csv"
+# or dataset = pd.read_csv("/path/to/my/data.csv")
+agent = TableChatAgent(
+    config=TableChatAgentConfig(
+        data=dataset,
+    )
+)
+```
+Set up a task, and ask one-off questions like this: 
+
+```python
+task = lr.Task(
+  agent, 
+  name = "DataAssistant",
+  default_human_response="", # to avoid waiting for user input
+)
+result = task.run(
+  "What is the average alcohol content of wines with a quality rating above 7?",
+  turns=2 # return after user question, LLM fun-call/tool response, Agent code-exec result
+) 
+print(result.content)
+```
+Or alternatively, set up a task and run it in an interactive loop with the user:
+
+```python
+task = lr.Task(agent, name="DataAssistant")
+task.run()
+``` 
+
+For a full working example see the 
+[`table_chat.py`](https://github.com/langroid/langroid-examples/tree/main/examples/data-qa/table_chat.py)
+script in the `langroid-examples` repo.
+
+
+</details>
+
+---
+
+# :heart: Thank you to our [supporters](https://github.com/langroid/langroid/stargazers)
+
+If you like this project, please give it a star ⭐ and 📢 spread the word in your network or social media:
+
+[![Share on Twitter](https://img.shields.io/twitter/url?style=social&url=https://github.com/langroid/langroid)](https://twitter.com/intent/tweet?text=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.%20https://github.com/langroid/langroid)
+[![Share on LinkedIn](https://img.shields.io/badge/Share%20on-LinkedIn-blue)](https://www.linkedin.com/shareArticle?mini=true&url=https://github.com/langroid/langroid&title=Langroid:%20A%20Powerful,%20Elegant%20Framework&summary=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.)
+[![Share on Hacker News](https://img.shields.io/badge/-Share%20on%20Hacker%20News-orange)](https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fgithub.com%2Flangroid%2Flangroid&t=Harness%20LLMs%20with%20Multi-Agent%20Programming)
+[![Share on Reddit](https://img.shields.io/badge/-Share%20on%20Reddit-blue)](https://www.reddit.com/submit?url=https%3A%2F%2Fgithub.com%2Flangroid%2Flangroid&title=Harness%20LLMs%20with%20Multi-Agent%20Programming)
+
+Your support will help build Langroid's momentum and community.
+
+# Langroid Co-Founders
+
+- [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
+- [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
 </file>
 
 <file path="docs/notes/task-tool.md">
@@ -57495,1024 +58361,610 @@ result = task.run(msg="Test no tools")
 # Verify that the task completed (sub-agent can still use DoneTool)
 </file>
 
-<file path="README.md">
-<div align="center">
-  <img src="docs/assets/langroid-card-lambda-ossem-rust-1200-630.png" alt="Logo" 
-        width="400" align="center">
-</div>
+<file path="tests/main/test_task.py">
+"""
+Other tests for Task are in test_chat_agent.py
+"""
+⋮----
+def test_task_cost(test_settings: Settings)
+⋮----
+"""Test that max_cost, max_tokens are respected by Task.run()"""
+⋮----
+agent = ChatAgent(ChatAgentConfig(name="Test"))
+⋮----
+task = Task(
+sub_agent = ChatAgent(ChatAgentConfig(name="Sub"))
+⋮----
+sub = Task(
+⋮----
+response = task.run("4", turns=10, max_cost=0.0005, max_tokens=100)
+⋮----
+@pytest.mark.parametrize("restart", [True, False])
+def test_task_restart(test_settings: Settings, restart: bool)
+⋮----
+"""Test whether the `restart` option works as expected"""
+⋮----
+agent = ChatAgent(
+⋮----
+llm=MockLMConfig(response_fn=lambda x: int(x) + 1),  # increment
+⋮----
+task.run("4", turns=1)  # msg hist = sys, user=4, asst=5
+# if restart, erases agent history => msg hist = sys, user=10, asst=11
+# otherwise, adds to msg history => msg hist = sys, user=4, asst=5, user=10, asst=11
+⋮----
+@pytest.mark.asyncio
+async def test_task_kill(test_settings: Settings)
+⋮----
+"""Test that Task.run() can be killed"""
+⋮----
+class MockAgent(ChatAgent)
+⋮----
+# dummy deterministic response; no need for real LLM here!
+⋮----
+agent = MockAgent(ChatAgentConfig(name="Test"))
+⋮----
+config=lr.TaskConfig(inf_loop_cycle_len=0),  # turn off cycle detection
+⋮----
+# start task
+async_task = asyncio.create_task(
+# sleep a bit then kill it
+⋮----
+result: lr.ChatDocument = await async_task
+⋮----
+# test killing via static method:
+# Run it for a potentially very large number of turns...
+⋮----
+# ...sleep a bit then kill it
+⋮----
+def test_task_empty_response(test_settings: Settings)
+⋮----
+response = task.run("4")
+⋮----
+response = task.run("3")
+⋮----
+# test done_if_response, done_if_no_response
+⋮----
+response = task.run(input)
+⋮----
+"""
+    Test loop within single agent, where this cycle repeats:
+        [ LLM --Tool--> Agent[Tool] ---> (User) ]*
 
-<div align="center">
-
-[![PyPI - Version](https://img.shields.io/pypi/v/langroid)](https://pypi.org/project/langroid/)
-[![Downloads](https://img.shields.io/pypi/dm/langroid)](https://pypi.org/project/langroid/)
-[![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
-[![codecov](https://codecov.io/gh/langroid/langroid/graph/badge.svg)](https://codecov.io/gh/langroid/langroid)
-[![Multi-Architecture DockerHub](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml)
-
-[![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=flat&logo=discord&logoColor=white)](https://discord.gg/ZU36McDgDs)
-[![Substack](https://img.shields.io/badge/Substack-%23006f5c.svg?style=flat&logo=substack&logoColor=FF6719)](https://langroid.substack.com/p/langroid-harness-llms-with-multi-agent-programming)
-
-[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/OWNER/REPO)](https://gitmcp.io/langroid/langroid)
-</div>
-
-<h3 align="center">
-  <a target="_blank" 
-    href="https://langroid.github.io/langroid/" rel="dofollow">
-      <strong>Documentation</strong></a>
-  &middot;
-  <a target="_blank" href="https://github.com/langroid/langroid-examples" rel="dofollow">
-      <strong>Examples Repo</strong></a>
-  &middot;
-  <a target="_blank" href="https://discord.gg/ZU36McDgDs" rel="dofollow">
-      <strong>Discord</strong></a>
-  &middot;
-  <a target="_blank" href="./CONTRIBUTING.md" rel="dofollow">
-      <strong>Contributing</strong></a>
-
-  <br />
-</h3>
-
-`Langroid` is an intuitive, lightweight, extensible and principled
-Python framework to easily build LLM-powered applications, from CMU and UW-Madison researchers. 
-You set up Agents, equip them with optional components (LLM, 
-vector-store and tools/functions), assign them tasks, and have them 
-collaboratively solve a problem by exchanging messages. 
-This Multi-Agent paradigm is inspired by the
-[Actor Framework](https://en.wikipedia.org/wiki/Actor_model)
-(but you do not need to know anything about this!). 
-
-`Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
-into simplifying the developer experience; 
-it does not use `Langchain`, or any other LLM framework, 
-and works with [practically any LLM](https://langroid.github.io/langroid/tutorials/supported-models/).
-
-:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/), 
- and a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/).
-
-:fire: MCP Support: Allow any LLM-Agent to leverage MCP Servers via Langroid's simple
-[MCP tool adapter](https://langroid.github.io/langroid/notes/mcp-tools/) that converts 
-the server's tools into Langroid's `ToolMessage` instances.
-
-📢 Companies are using/adapting Langroid in **production**. Here is a quote:
-
->[Nullify](https://www.nullify.ai) uses AI Agents for secure software development. 
-> It finds, prioritizes and fixes vulnerabilities. We have internally adapted Langroid's multi-agent orchestration framework in production, after evaluating CrewAI, Autogen, LangChain, Langflow, etc. We found Langroid to be far superior to those frameworks in terms of ease of setup and flexibility. Langroid's Agent and Task abstractions are intuitive, well thought out, and provide a great developer  experience. We wanted the quickest way to get something in production. With other frameworks it would have taken us weeks, but with Langroid we got to good results in minutes. Highly recommended! <br> -- Jacky Wong, Head of AI at Nullify.
-
-
-:fire: See this [Intro to Langroid](https://lancedb.substack.com/p/langoid-multi-agent-programming-framework)
-blog post from the LanceDB team
-
-:fire: Just published in ML for Healthcare (2024): a Langroid-based Multi-Agent RAG system for 
-pharmacovigilance, see [blog post](https://langroid.github.io/langroid/blog/2024/08/12/malade-multi-agent-architecture-for-pharmacovigilance/)
-
-
-We welcome contributions: See the [contributions](./CONTRIBUTING.md) document
-for ideas on what to contribute.
-
-Are you building LLM Applications, or want help with Langroid for your company, 
-or want to prioritize Langroid features for your company use-cases? 
-[Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) is available for consulting
-(advisory/development): pchalasani at gmail dot com.
-
-Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/langroid)
-
-**Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/ZU36McDgDs)!**
-
-# Quick glimpse of coding with Langroid
-This is just a teaser; there's much more, like function-calling/tools, 
-Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent 
-(RAG), SQLChatAgent, non-OpenAI local/remote LLMs, etc. Scroll down or see docs for more.
-See the Langroid Quick-Start [Colab](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
-that builds up to a 2-agent information-extraction example using the OpenAI ChatCompletion API. 
-See also this [version](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) that uses the OpenAI Assistants API instead.
-
-:fire: just released! [Example](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-multi-extract-local.py) 
-script showing how you can use Langroid multi-agents and tools
-to extract structured information from a document using **only a local LLM**
-(Mistral-7b-instruct-v0.2).
-
-```python
-import langroid as lr
-import langroid.language_models as lm
-
-# set up LLM
-llm_cfg = lm.OpenAIGPTConfig( # or OpenAIAssistant to use Assistant API 
-  # any model served via an OpenAI-compatible API
-  chat_model=lm.OpenAIChatModel.GPT4o, # or, e.g., "ollama/mistral"
-)
-# use LLM directly
-mdl = lm.OpenAIGPT(llm_cfg)
-response = mdl.chat("What is the capital of Ontario?", max_tokens=10)
-
-# use LLM in an Agent
-agent_cfg = lr.ChatAgentConfig(llm=llm_cfg)
-agent = lr.ChatAgent(agent_cfg)
-agent.llm_response("What is the capital of China?") 
-response = agent.llm_response("And India?") # maintains conversation state 
-
-# wrap Agent in a Task to run interactive loop with user (or other agents)
-task = lr.Task(agent, name="Bot", system_message="You are a helpful assistant")
-task.run("Hello") # kick off with user saying "Hello"
-
-# 2-Agent chat loop: Teacher Agent asks questions to Student Agent
-teacher_agent = lr.ChatAgent(agent_cfg)
-teacher_task = lr.Task(
-  teacher_agent, name="Teacher",
-  system_message="""
-    Ask your student concise numbers questions, and give feedback. 
-    Start with a question.
+    Test expected behavior for various Agent-tool-handler responses.
     """
-)
-student_agent = lr.ChatAgent(agent_cfg)
-student_task = lr.Task(
-  student_agent, name="Student",
-  system_message="Concisely answer the teacher's questions.",
-  single_round=True,
-)
-
-teacher_task.add_sub_task(student_task)
-teacher_task.run()
-```
-
-# :fire: Updates/Releases
-
-<details>
-<summary> <b>Click to expand</b></summary>
-
-- **Jul 2025:**
-  - [0.58.0](https://github.com/langroid/langroid/releases/tag/0.58.0) Crawl4AI integration - 
-    browser-based web crawling with Playwright for JavaScript-heavy sites, no API key required (thank you @abab-dev!).
-  - [0.57.0](https://github.com/langroid/langroid/releases/tag/0.57.0) HTML Logger for interactive task visualization - 
-    self-contained HTML logs with collapsible entries, auto-refresh, and persistent UI state.
-- **Jun 2025:**
-  - [0.56.0](https://github.com/langroid/langroid/releases/tag/0.56.0) `TaskTool` for delegating tasks to sub-agents - 
-    enables agents to spawn sub-agents with specific tools and configurations.
-  - [0.55.0](https://github.com/langroid/langroid/releases/tag/0.55.0) Event-based task termination with `done_sequences` - 
-    declarative task completion using event patterns.
-  - [0.54.0](https://github.com/langroid/langroid/releases/tag/0.54.0) Portkey AI Gateway support - access 200+ models 
-    across providers through unified API with caching, retries, observability.
-- **Mar-Apr 2025:**
-  - [0.53.0](https://github.com/langroid/langroid/releases/tag/0.53.0) MCP Tools Support.
-  - [0.52.0](https://github.com/langroid/langroid/releases/tag/0.52.0) Multimodal support, i.e. allow PDF, image 
-    inputs to LLM.
-  - [0.51.0](https://github.com/langroid/langroid/releases/tag/0.51.0) `LLMPdfParser`, generalizing 
-    `GeminiPdfParser` to parse documents directly with LLM.
-  - [0.50.0](https://github.com/langroid/langroid/releases/tag/0.50.0) Structure-aware Markdown chunking with chunks 
-    enriched by section headers.
-  - [0.49.0](https://github.com/langroid/langroid/releases/tag/0.49.0) Enable easy switch to LiteLLM Proxy-server 
-  - [0.48.0](https://github.com/langroid/langroid/releases/tag/0.48.0) Exa Crawler, Markitdown Parser
-  - [0.47.0](https://github.com/langroid/langroid/releases/tag/0.47.0) Support Firecrawl URL scraper/crawler - 
-    thanks @abab-dev
-  - [0.46.0](https://github.com/langroid/langroid/releases/tag/0.46.0) Support LangDB LLM Gateway - thanks @MrunmayS.
-  - [0.45.0](https://github.com/langroid/langroid/releases/tag/0.45.0) Markdown parsing with `Marker` - thanks @abab-dev
-  - [0.44.0](https://github.com/langroid/langroid/releases/tag/0.44.0) Late imports to reduce startup time. Thanks 
-    @abab-dev
-- **Feb 2025:**
-  - [0.43.0](https://github.com/langroid/langroid/releases/tag/0.43.0): `GeminiPdfParser` for parsing PDF using 
-    Gemini LLMs - Thanks @abab-dev.
-  - [0.42.0](https://github.com/langroid/langroid/releases/tag/0.42.0): `markitdown` parser for `pptx,xlsx,xls` files 
-    Thanks @abab-dev.
-  - [0.41.0](https://github.com/langroid/langroid/releases/tag/0.41.0): `pinecone` vector-db (Thanks @coretado), 
-    `Tavily` web-search (Thanks @Sozhan308), `Exa` web-search (Thanks @MuddyHope).
-  - [0.40.0](https://github.com/langroid/langroid/releases/tag/0.40.0): `pgvector` vector-db. Thanks @abab-dev.
-  - [0.39.0](https://github.com/langroid/langroid/releases/tag/0.39.0): `ChatAgentConfig.handle_llm_no_tool` for 
-    handling LLM "forgetting" to use a tool.
-  - [0.38.0](https://github.com/langroid/langroid/releases/tag/0.38.0): Gemini embeddings - Thanks @abab-dev)
-  - [0.37.0](https://github.com/langroid/langroid/releases/tag/0.37.0): New PDF Parsers: `docling`, `pymupdf4llm`
-- **Jan 2025:**
-  - [0.36.0](https://github.com/langroid/langroid/releases/tag/0.36.0): Weaviate vector-db support (thanks @abab-dev).
-  - [0.35.0](https://github.com/langroid/langroid/releases/tag/0.35.0): Capture/Stream reasoning content from 
-    Reasoning LLMs (e.g. DeepSeek-R1, OpenAI o1) in addition to final answer.
-  - [0.34.0](https://github.com/langroid/langroid/releases/tag/0.34.0): DocChatAgent 
-    chunk enrichment to improve retrieval. (collaboration with @dfm88). 
-  - [0.33.0](https://github.com/langroid/langroid/releases/tag/0.33.3) Move from Poetry to uv! (thanks @abab-dev).
-  - [0.32.0](https://github.com/langroid/langroid/releases/tag/0.32.0) DeepSeek v3 support.
-- **Dec 2024:**
-  - [0.31.0](https://github.com/langroid/langroid/releases/tag/0.31.0) Azure OpenAI Embeddings
-  - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings (thanks @Kwigg).
-  - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client (thanks 
-    @johannestang).
-  - [0.28.0](https://github.com/langroid/langroid/releases/tag/0.28.0) `ToolMessage`: `_handler` field to override 
-default handler method name in `request` field (thanks @alexagr).
-  - [0.27.0](https://github.com/langroid/langroid/releases/tag/0.27.0) OpenRouter Support.
-  - [0.26.0](https://github.com/langroid/langroid/releases/tag/0.26.0) Update to latest Chainlit.
-  - [0.25.0](https://github.com/langroid/langroid/releases/tag/0.25.0) True Async Methods for agent and 
-    user-response (thanks @alexagr).
-- **Nov 2024:**
-  - **[0.24.0](https://langroid.github.io/langroid/notes/structured-output/)**: 
-     Enables support for `Agent`s with strict JSON schema output format on compatible LLMs and strict mode for the OpenAI tools API.
-    (thanks @nilspalumbo).
-  - **[0.23.0](https://langroid.github.io/langroid/tutorials/local-llm-setup/#local-llms-hosted-on-glhfchat)**: 
-      support for LLMs (e.g. `Qwen2.5-Coder-32b-Instruct`) hosted on glhf.chat 
-  - **[0.22.0](https://langroid.github.io/langroid/notes/large-tool-results/)**: 
-     Optional parameters to truncate large tool results.
-  - **[0.21.0](https://langroid.github.io/langroid/notes/gemini/)** Direct support for Gemini models via OpenAI client instead of using LiteLLM.
-  - **[0.20.0](https://github.com/langroid/langroid/releases/tag/0.20.0)** Support for 
-    ArangoDB Knowledge Graphs.
-- **Oct 2024:**
-  - **[0.18.0]** [LLMConfig.async_stream_quiet](https://langroid.github.io/langroid/notes/async-streaming/) flag to 
-    turn off LLM output in async + stream mode.
-  - **[0.17.0]** XML-based tools, see [docs](https://langroid.github.io/langroid/notes/xml-tools/).
-- **Sep 2024:**
-  - **[0.16.0](https://github.com/langroid/langroid/releases/tag/0.16.0)**  Support for OpenAI `o1-mini` and `o1-preview` models.
-  - **[0.15.0](https://github.com/langroid/langroid/releases/tag/0.15.0)** Cerebras API support -- run llama-3.1 models hosted on Cerebras Cloud (very fast inference).
-  - **[0.14.0](https://github.com/langroid/langroid/releases/tag/0.14.0)** `DocChatAgent` uses Reciprocal Rank Fusion (RRF) to rank chunks retrieved by different methods.
-  - **[0.12.0](https://github.com/langroid/langroid/releases/tag/0.12.0)** `run_batch_task` new option -- `stop_on_first_result` - allows termination of batch as soon as any task returns a result.  
-- **Aug 2024:**
-  - **[0.11.0](https://github.com/langroid/langroid/releases/tag/0.11.0)** Polymorphic `Task.run(), Task.run_async`.
-  - **[0.10.0](https://github.com/langroid/langroid/releases/tag/0.10.0)** Allow tool handlers to return arbitrary result type, including other tools.
-  - **[0.9.0](https://github.com/langroid/langroid/releases/tag/0.9.0)** Orchestration Tools, to signal various task statuses, and to pass messages between agents.
-  - **[0.7.0](https://github.com/langroid/langroid/releases/tag/0.7.0)** OpenAI tools API support, including multi-tools.
-- **Jul 2024:**
-  - **[0.3.0](https://github.com/langroid/langroid/releases/tag/0.3.0)**: Added [FastEmbed](https://qdrant.github.io/fastembed/qdrant/Usage_With_Qdrant/) embeddings from Qdrant
-- **Jun 2024:**
-  - **0.2.0:** Improved lineage tracking, granular sub-task configs, and a new tool, `RewindTool`, 
-    that lets an agent "rewind and redo" a past message (and all dependent messages are cleared out 
-    thanks to the lineage tracking). Read notes [here](https://github.com/langroid/langroid/releases/tag/0.2.0).
-- **May 2024:** 
-  - **Slimmer langroid**: All document-parsers (i.e. pdf, doc, docx) and most 
-    vector-databases (except qdrant) 
-    are now optional/extra dependencies, which helps reduce build size, script 
-    start-up time, and install time. For convenience various grouping of "extras" are 
-    provided, e.g. `doc-chat`, `db` (for database-related dependencies). See updated 
-    install instructions below and in the docs.
-  - **Few-shot examples** for tools: when defining a [ToolMessage](https://langroid.github.io/langroid/quick-start/chat-agent-tool/#example-find-the-smallest-number-in-a-list), previously you were able to include a classmethod named `examples`,
-    and a random example from this list would be used to generate a 1-shot example 
-    for the LLM. This has been improved so you can now supply a list of examples 
-    where each example is either a tool instance, or a tuple of (description, 
-    tool instance), where the description is a "thought" that leads the LLM to use 
-    the tool (see example in the [docs](https://langroid.github.io/langroid/quick-start/chat-agent-tool/#example-find-the-smallest-number-in-a-list)). In some scenarios this can improve LLM tool 
-    generation accuracy. Also, now instead of a random example, ALL examples are used to generate few-shot 
-    examples.     
-  - [Infinite loop detection](https://github.com/langroid/langroid/blob/0ed30eb467b00d5eaf2933b577a4b2cc37de1aa1/langroid/agent/task.py#L1121) for task loops of cycle-length <= 10 (configurable 
-    in [`TaskConfig`](https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig). Only detects _exact_ loops, rather than _approximate_ loops where the entities are saying essentially similar (but not exactly the same) things repeatedly.
-  - "@"-addressing: any entity can address any other by name, which can be the name 
-    of an agent's responder ("llm", "user", "agent") or a sub-task name. This is a 
-    simpler alternative to the `RecipientTool` mechanism, with the tradeoff that 
-    since it's not a tool, there's no way to enforce/remind the LLM to explicitly 
-    specify an addressee (in scenarios where this is important).
-  - [Much-Improved Citation](https://github.com/langroid/langroid/issues/477) 
-    generation and display when using `DocChatAgent`.
-  - `gpt-4o` is now the default LLM throughout; Update tests and examples to work 
-    with this LLM; use tokenizer corresponding to the LLM.
-  - `gemini 1.5 pro` support via `litellm`
-  - `QdrantDB:` update to support learned sparse embeddings.
-- **Apr 2024:**
-  - **0.1.236**: Support for open LLMs hosted on Groq, e.g. specify 
-    `chat_model="groq/llama3-8b-8192"`.
-      See [tutorial](https://langroid.github.io/langroid/tutorials/local-llm-setup/).
-  - **0.1.235**: `Task.run(), Task.run_async(), run_batch_tasks` have `max_cost` 
-    and `max_tokens` params to exit when tokens or cost exceed a limit. The result 
-    `ChatDocument.metadata` now includes a `status` field which is a code indicating a 
-     task completion reason code. Also `task.run()` etc can be invoked with an explicit
-     `session_id` field which is used as a key to look up various settings in Redis cache.
-    Currently only used to look up "kill status" - this allows killing a running task, either by `task.kill()`
-    or by the classmethod `Task.kill_session(session_id)`.
-    For example usage, see the `test_task_kill` in [tests/main/test_task.py](https://github.com/langroid/langroid/blob/main/tests/main/test_task.py)
-  
-- **Mar 2024:**
-  - **0.1.216:** Improvements to allow concurrent runs of `DocChatAgent`, see the
-    [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py)
-    in particular the `test_doc_chat_batch()`;
-    New task run utility: [`run_batch_task_gen`](https://github.com/langroid/langroid/blob/main/langroid/agent/batch.py) 
-    where a task generator can be specified, to generate one task per input. 
-  - **0.1.212:** ImagePdfParser: support for extracting text from image-based PDFs.
-    (this means `DocChatAgent` will now work with image-pdfs).
-  - **0.1.194 - 0.1.211:** Misc fixes, improvements, and features:
-    - Big enhancement in RAG performance (mainly, recall) due to a [fix in Relevance 
-      Extractor](https://github.com/langroid/langroid/releases/tag/0.1.209)
-    - `DocChatAgent` [context-window fixes](https://github.com/langroid/langroid/releases/tag/0.1.208)
-    - Anthropic/Claude3 support via Litellm
-    - `URLLoader`: detect file time from header when URL doesn't end with a 
-      recognizable suffix like `.pdf`, `.docx`, etc.
-    - Misc lancedb integration fixes
-    - Auto-select embedding config based on whether `sentence_transformer` module is available.
-    - Slim down dependencies, make some heavy ones optional, e.g. `unstructured`, 
-      `haystack`, `chromadb`, `mkdocs`, `huggingface-hub`, `sentence-transformers`.
-    - Easier top-level imports from `import langroid as lr`
-    - Improve JSON detection, esp from weak LLMs
-- **Feb 2024:** 
-  - **0.1.193:** Support local LLMs using Ollama's new OpenAI-Compatible server: 
-     simply specify `chat_model="ollama/mistral"`. See [release notes](https://github.com/langroid/langroid/releases/tag/0.1.193).
-  - **0.1.183:** Added Chainlit support via [callbacks](https://github.com/langroid/langroid/blob/main/langroid/agent/callbacks/chainlit.py). 
-   See [examples](https://github.com/langroid/langroid/tree/main/examples/chainlit).
-- **Jan 2024:**
-  - **0.1.175** 
-    - [Neo4jChatAgent](https://github.com/langroid/langroid/tree/main/langroid/agent/special/neo4j) to chat with a neo4j knowledge-graph.
-      (Thanks to [Mohannad](https://github.com/Mohannadcse)!). The agent uses tools to query the Neo4j schema and translate user queries to Cypher queries,
-      and the tool handler executes these queries, returning them to the LLM to compose
-      a natural language response (analogous to how `SQLChatAgent` works).
-      See example [script](https://github.com/langroid/langroid/tree/main/examples/kg-chat) using this Agent to answer questions about Python pkg dependencies.
-    - Support for `.doc` file parsing (in addition to `.docx`)
-    - Specify optional [`formatter` param](https://github.com/langroid/langroid/releases/tag/0.1.171) 
-      in `OpenAIGPTConfig` to ensure accurate chat formatting for local LLMs. 
-  - **[0.1.157](https://github.com/langroid/langroid/releases/tag/0.1.157):** `DocChatAgentConfig` 
-     has a new param: `add_fields_to_content`, to specify additional document fields to insert into 
-     the main `content` field, to help improve retrieval.
-  - **[0.1.156](https://github.com/langroid/langroid/releases/tag/0.1.156):** New Task control signals
-     PASS_TO, SEND_TO; VectorStore: Compute Pandas expression on documents; LanceRAGTaskCreator creates 3-agent RAG system with Query Planner, Critic and RAG Agent.
-- **Dec 2023:**
-  - **0.1.154:** (For details see release notes of [0.1.149](https://github.com/langroid/langroid/releases/tag/0.1.149)
-      and [0.1.154](https://github.com/langroid/langroid/releases/tag/0.1.154)). 
-    - `DocChatAgent`: Ingest Pandas dataframes and filtering.
-    - `LanceDocChatAgent` leverages `LanceDB` vector-db for efficient vector search
-     and full-text search and filtering.
-    - Improved task and multi-agent control mechanisms
-    - `LanceRAGTaskCreator` to create a 2-agent system consisting of a `LanceFilterAgent` that
-      decides a filter and rephrase query to send to a RAG agent.
-  - **[0.1.141](https://github.com/langroid/langroid/releases/tag/0.1.141):**
-    API Simplifications to reduce boilerplate:
-    auto-select an available OpenAI model (preferring gpt-4o), simplifies defaults.
-    Simpler `Task` initialization with default `ChatAgent`.
-- **Nov 2023:**
-  - **[0.1.126](https://github.com/langroid/langroid/releases/tag/0.1.126):**
-     OpenAIAssistant agent: Caching Support. 
-  - **0.1.117:** Support for OpenAI Assistant API tools: Function-calling, 
-    Code-intepreter, and Retriever (RAG), file uploads. These work seamlessly 
-    with Langroid's task-orchestration.
-    Until docs are ready, it's best to see these usage examples:
-    
-    - **Tests:**
-      - [test_openai_assistant.py](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant.py)
-      - [test_openai_assistant_async.py](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant_async.py)
-
-    - **Example scripts:**
-      - [The most basic chat app](https://github.com/langroid/langroid/blob/main/examples/basic/oai-asst-chat.py)
-      - [Chat with code interpreter](https://github.com/langroid/langroid/blob/main/examples/basic/oai-code-chat.py)
-      - [Chat with retrieval (RAG)](https://github.com/langroid/langroid/blob/main/examples/docqa/oai-retrieval-assistant.py)
-      - [2-agent RAG chat](https://github.com/langroid/langroid/blob/main/examples/docqa/oai-retrieval-2.py)
-  - **0.1.112:** [`OpenAIAssistant`](https://github.com/langroid/langroid/blob/main/langroid/agent/openai_assistant.py) is a subclass of `ChatAgent` that 
-    leverages the new OpenAI Assistant API. It can be used as a drop-in 
-    replacement for `ChatAgent`, and relies on the Assistant API to
-    maintain conversation state, and leverages persistent threads and 
-    assistants to reconnect to them if needed. Examples: 
-    [`test_openai_assistant.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant.py),
-    [`test_openai_assistant_async.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant_async.py)
-  - **0.1.111:** Support latest OpenAI model: `GPT4_TURBO`
-(see [test_llm.py](tests/main/test_llm.py) for example usage)
-  - **0.1.110:** Upgrade from OpenAI v0.x to v1.1.1 (in preparation for 
-    Assistants API and more); (`litellm` temporarily disabled due to OpenAI 
-    version conflict).
-- **Oct 2023:**
-  - **0.1.107:** `DocChatAgent` re-rankers: `rank_with_diversity`, `rank_to_periphery` (lost in middle).
-  - **0.1.102:** `DocChatAgentConfig.n_neighbor_chunks > 0` allows returning context chunks around match.
-  - **0.1.101:** `DocChatAgent` uses `RelevanceExtractorAgent` to have 
-    the LLM extract relevant portions of a chunk using 
-    sentence-numbering, resulting in huge speed up and cost reduction 
-    compared to the naive "sentence-parroting" approach (writing out full 
-    sentences out relevant whole sentences) which `LangChain` uses in their 
-    `LLMChainExtractor`.
-  - **0.1.100:** API update: all of Langroid is accessible with a single import, i.e. `import langroid as lr`. See the [documentation]("https://langroid.github.io/langroid/") for usage.
-  - **0.1.99:** Convenience batch functions to run tasks, agent methods on a list of inputs concurrently in async mode. See examples in [test_batch.py](https://github.com/langroid/langroid/blob/main/tests/main/test_batch.py).
-  - **0.1.95:** Added support for [Momento Serverless Vector Index](https://docs.momentohq.com/vector-index)
-  - **0.1.94:** Added support for [LanceDB](https://lancedb.github.io/lancedb/) vector-store -- allows vector, Full-text, SQL search.
-  - **0.1.84:** Added [LiteLLM](https://docs.litellm.ai/docs/providers), so now Langroid can be used with over 100 LLM providers (remote or local)! 
-     See guide [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
-- **Sep 2023:**
-  - **0.1.78:** Async versions of several Task, Agent and LLM methods; 
-      Nested Pydantic classes are now supported for LLM Function-calling, Tools, Structured Output.    
-  - **0.1.76:** DocChatAgent: support for loading `docx` files (preliminary).
-  - **0.1.72:** Many improvements to DocChatAgent: better embedding model, 
-          hybrid search to improve retrieval, better pdf parsing, re-ranking retrieved results with cross-encoders. 
-  - **Use with local LLama Models:** see tutorial [here](https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/)
-  - **Langroid Blog/Newsletter Launched!**: First post is [here](https://substack.com/notes/post/p-136704592) -- Please subscribe to stay updated. 
-  - **0.1.56:** Support Azure OpenAI. 
-  - **0.1.55:** Improved [`SQLChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/sql/sql_chat_agent.py) that efficiently retrieves relevant schema info when translating natural language to SQL.  
-- **Aug 2023:**
-  - **[Hierarchical computation](https://langroid.github.io/langroid/examples/agent-tree/)** example using Langroid agents and task orchestration.
-  - **0.1.51:** Support for global state, see [test_global_state.py](tests/main/test_global_state.py).
-  - **:whale: Langroid Docker image**, available, see instructions below.
-  - [**RecipientTool**](langroid/agent/tools/recipient_tool.py) enables (+ enforces) LLM to 
-specify an intended recipient when talking to 2 or more agents. 
-See [this test](tests/main/test_recipient_tool.py) for example usage.
-  - **Example:** [Answer questions](examples/docqa/chat-search.py) using Google Search + vecdb-retrieval from URL contents. 
-  - **0.1.39:** [`GoogleSearchTool`](langroid/agent/tools/google_search_tool.py) to enable Agents (their LLM) to do Google searches via function-calling/tools.
-    See [this chat example](examples/basic/chat-search.py) for how easy it is to add this tool to an agent.
-  - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
-  - **0.1.37:** Added [`SQLChatAgent`](langroid/agent/special/sql_chat_agent.py) -- thanks to our latest contributor [Rithwik Babu](https://github.com/rithwikbabu)!
-  - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
-- **July 2023:** 
-  - **0.1.30:** Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
-    [chat](examples/data-qa/table_chat.py) with tabular datasets (dataframes, files, URLs): LLM generates Pandas code,
-    and code is executed using Langroid's tool/function-call mechanism. 
-  - **Demo:** 3-agent system for Audience [Targeting](https://langroid.github.io/langroid/demos/targeting/audience-targeting/).
-  - **0.1.27**: Added [support](langroid/cachedb/momento_cachedb.py) 
-    for [Momento Serverless Cache](https://www.gomomento.com/) as an alternative to Redis.
-  - **0.1.24**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
-    now [accepts](langroid/parsing/document_parser.py) PDF files or URLs.
-
-</details>
-
-# :rocket: Demo
-Suppose you want to extract structured information about the key terms 
-of a commercial lease document. You can easily do this with Langroid using a two-agent system,
-as we show in the [langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
-(See [this script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-multi-extract-local.py)
-for a version with the same functionality using a local Mistral-7b model.)
-The demo showcases just a few of the many features of Langroid, such as:
-- Multi-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
-to be answered by the `DocAgent`.
-- Retrieval augmented question-answering, with **source-citation**: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
-answer the `LeaseExtractor`'s questions, cites the specific excerpt supporting the answer. 
-- Function-calling (also known as tool/plugin): When it has all the information it 
-needs, the `LeaseExtractor` LLM presents the information in a structured 
-format using a Function-call. 
-
-Here is what it looks like in action 
-(a pausable mp4 video is [here](https://vimeo.com/871429249)).
-
-![Demo](docs/assets/demos/lease-extractor-demo.gif)
-
-
-# :zap: Highlights
-(For a more up-to-date list see the 
-[Updates/Releases](https://github.com/langroid/langroid?tab=readme-ov-file#fire-updatesreleases) 
-section above)
-- **Agents as first-class citizens:** The [Agent](https://langroid.github.io/langroid/reference/agent/base/#langroid.agent.base.Agent) class encapsulates LLM conversation state,
-  and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
-  Agents act as _message transformers_, and by default provide 3 _responder_ methods, one corresponding to each entity: LLM, Agent, User.
-- **Tasks:** A [Task](https://langroid.github.io/langroid/reference/agent/task/) class wraps an Agent, and gives the agent instructions (or roles, or goals), 
-  manages iteration over an Agent's responder methods, 
-  and orchestrates multi-agent interactions via hierarchical, recursive
-  task-delegation. The `Task.run()` method has the same 
-  type-signature as an Agent's responder's methods, and this is key to how 
-  a task of an agent can delegate to other sub-tasks: from the point of view of a Task,
-  sub-tasks are simply additional responders, to be used in a round-robin fashion 
-  after the agent's own responders.
-- **Modularity, Reusability, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
-  Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
-- **LLM Support**: Langroid supports OpenAI LLMs as well as LLMs from hundreds of 
-providers ([local/open](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial](https://langroid.github.io/langroid/tutorials/non-openai-llms/)) via proxy libraries and local model servers
-such as [ollama](https://github.com/ollama), [oobabooga](https://github.com/oobabooga/text-generation-webui), 
-  [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. See the [supported LLMs](https://langroid.github.io/langroid/tutorials/supported-models/). 
-- **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) to cache LLM responses.
-- **Vector-stores**: [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/), LanceDB, Pinecone, PostgresDB (PGVector), Weaviate are currently supported.
-  Vector stores allow for Retrieval-Augmented-Generation (RAG).
-- **Grounding and source-citation:** Access to external documents via vector-stores 
-   allows for grounding and source-citation.
-- **Observability, Logging, Lineage:** Langroid generates detailed logs of multi-agent interactions and
-  maintains provenance/lineage of messages, so that you can trace back
-  the origin of a message.
-- **[Tools/Plugins/Function-calling](https://langroid.github.io/langroid/quick-start/chat-agent-tool/)**:
-  Langroid supports OpenAI's [function calling](https://platform.openai.com/docs/guides/gpt/function-calling), as
-  well as an equivalent `ToolMessage` mechanism which works with
-  any LLM, not just OpenAI's.
-  Function calling and tools have the same developer-facing interface, implemented
-  using [Pydantic](https://docs.pydantic.dev/latest/),
-  which makes it very easy to define tools/functions and enable agents
-  to use them. Benefits of using Pydantic are that you never have to write
-  complex JSON specs for function calling, and when the LLM
-  hallucinates malformed JSON, the Pydantic error message is sent back to
-  the LLM so it can fix it.
-
---- 
-
-# :gear: Installation and Setup
-
-### Install `langroid`
-Langroid requires Python 3.11+. We recommend using a virtual environment.
-Use `pip` to install a bare-bones slim version of `langroid` (from PyPi) to your virtual 
-environment:
-```bash
-pip install langroid
-```
-The core Langroid package lets you use OpenAI Embeddings models via their API. 
-If you instead want to use the `sentence-transformers` embedding models from HuggingFace, 
-install Langroid like this: 
-```bash
-pip install "langroid[hf-embeddings]"
-```
-For many practical scenarios, you may need additional optional dependencies:
-- To use various document-parsers, install langroid with the `doc-chat` extra:
-    ```bash
-    pip install "langroid[doc-chat]"
-    ```
-- For "chat with databases", use the `db` extra:
-    ```bash
-    pip install "langroid[db]"
-    ```
-- You can specify multiple extras by separating them with commas, e.g.:
-    ```bash
-    pip install "langroid[doc-chat,db]"
-    ```
-- To simply install _all_ optional dependencies, use the `all` extra (but note that this will result in longer load/startup times and a larger install size):
-    ```bash
-    pip install "langroid[all]"
-    ```
-<details>
-<summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>
-
-If you are using `SQLChatAgent` 
-(e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](examples/data-qa/sql-chat/sql_chat.py)),
-with a postgres db, you will need to:
-
-- Install PostgreSQL dev libraries for your platform, e.g.
-  - `sudo apt-get install libpq-dev` on Ubuntu,
-  - `brew install postgresql` on Mac, etc.
-- Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
-  or `poetry add "langroid[postgres]"` or `poetry install -E postgres`,
-  (or the corresponding `uv` versions, e.g. `uv add "langroid[postgres]"`
-  or `uv pip install langroid[postgres]`).
-  If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
-</details>
-
-:memo: If you get strange errors involving `mysqlclient`, try doing `pip uninstall mysqlclient` followed by `pip install mysqlclient`.
-
-### Set up environment variables (API keys, etc)
-
-To get started, all you need is an OpenAI API Key.
-If you don't have one, see [this OpenAI Page](https://platform.openai.com/docs/quickstart).
-(Note that while this is the simplest way to get started, Langroid works with practically any LLM, not just those from OpenAI. 
-See the guides to using [Open/Local LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/), 
-and other [non-OpenAI](https://langroid.github.io/langroid/tutorials/non-openai-llms/) proprietary LLMs.) 
-
-In the root of the repo, copy the `.env-template` file to a new file `.env`: 
-```bash
-cp .env-template .env
-```
-Then insert your OpenAI API Key. 
-Your `.env` file should look like this (the organization is optional 
-but may be required in some scenarios).
-```bash
-OPENAI_API_KEY=your-key-here-without-quotes
-OPENAI_ORGANIZATION=optionally-your-organization-id
-````
-
-Alternatively, you can set this as an environment variable in your shell
-(you will need to do this every time you open a new shell):
-```bash
-export OPENAI_API_KEY=your-key-here-without-quotes
-```
-
-
-<details>
-<summary><b>Optional Setup Instructions (click to expand) </b></summary>
-
-All of the following environment variable settings are optional, and some are only needed 
-to use specific features (as noted below).
-
-- **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
-  Alternatively [Chroma](https://docs.trychroma.com/) or [LanceDB](https://lancedb.com/) are also currently supported. 
-  We use the local-storage version of Chroma, so there is no need for an API key.
-- **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
-  using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
-  which is more than sufficient to try out Langroid and even beyond.
-  If you don't set up these, Langroid will use a pure-python 
-  Redis in-memory cache via the [Fakeredis](https://fakeredis.readthedocs.io/en/latest/) library.
-- **Momento** Serverless Caching of LLM API responses (as an alternative to Redis). 
-   To use Momento instead of Redis:
-  - enter your Momento Token in the `.env` file, as the value of `MOMENTO_AUTH_TOKEN` (see example file below),
-  - in the `.env` file set `CACHE_TYPE=momento` (instead of `CACHE_TYPE=redis` which is the default).
-- **GitHub** Personal Access Token (required for apps that need to analyze git
-  repos; token-based API calls are less rate-limited). See this
-  [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
-- **Google Custom Search API Credentials:** Only needed to enable an Agent to use the `GoogleSearchTool`.
-  To use Google Search as an LLM Tool/Plugin/function-call, 
-  you'll need to set up 
-  [a Google API key](https://developers.google.com/custom-search/v1/introduction#identify_your_application_to_google_with_api_key),
-  then [setup a Google Custom Search Engine (CSE) and get the CSE ID](https://developers.google.com/custom-search/docs/tutorial/creatingcse).
-  (Documentation for these can be challenging, we suggest asking GPT4 for a step-by-step guide.)
-  After obtaining these credentials, store them as values of 
-  `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in your `.env` file. 
-  Full documentation on using this (and other such "stateless" tools) is coming soon, but 
-  in the meantime take a peek at this [chat example](examples/basic/chat-search.py), which 
-  shows how you can easily equip an Agent with a `GoogleSearchtool`.
-  
-
-
-If you add all of these optional variables, your `.env` file should look like this:
-```bash
-OPENAI_API_KEY=your-key-here-without-quotes
-GITHUB_ACCESS_TOKEN=your-personal-access-token-no-quotes
-CACHE_TYPE=redis # or momento
-REDIS_PASSWORD=your-redis-password-no-quotes
-REDIS_HOST=your-redis-hostname-no-quotes
-REDIS_PORT=your-redis-port-no-quotes
-MOMENTO_AUTH_TOKEN=your-momento-token-no-quotes # instead of REDIS* variables
-QDRANT_API_KEY=your-key
-QDRANT_API_URL=https://your.url.here:6333 # note port number must be included
-GOOGLE_API_KEY=your-key
-GOOGLE_CSE_ID=your-cse-id
-```
-</details>
-
-<details>
-<summary><b>Optional setup instructions for Microsoft Azure OpenAI(click to expand)</b></summary> 
-
-When using Azure OpenAI, additional environment variables are required in the 
-`.env` file.
-This page [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line&pivots=programming-language-python#environment-variables)
-provides more information, and you can set each environment variable as follows:
-
-- `AZURE_OPENAI_API_KEY`, from the value of `API_KEY`
-- `AZURE_OPENAI_API_BASE` from the value of `ENDPOINT`, typically looks like `https://your.domain.azure.com`.
-- For `AZURE_OPENAI_API_VERSION`, you can use the default value in `.env-template`, and latest version can be found [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/whats-new#azure-openai-chat-completion-general-availability-ga)
-- `AZURE_OPENAI_DEPLOYMENT_NAME` is the name of the deployed model, which is defined by the user during the model setup 
-- `AZURE_OPENAI_MODEL_NAME` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisly the exact model name that was selected. For example, GPT-4 (should be `gpt-4-32k` or `gpt-4`).
-- `AZURE_OPENAI_MODEL_VERSION` is required if `AZURE_OPENAI_MODEL_NAME = gpt=4`, which will assist Langroid to determine the cost of the model  
-</details>
-
----
-
-# :whale: Docker Instructions
-
-We provide a containerized version of the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
-repository via this [Docker Image](https://hub.docker.com/r/langroid/langroid).
-All you need to do is set up environment variables in the `.env` file.
-Please follow these steps to setup the container:
-
-```bash
-# get the .env file template from `langroid` repo
-wget -O .env https://raw.githubusercontent.com/langroid/langroid/main/.env-template
-
-# Edit the .env file with your favorite editor (here nano), and remove any un-used settings. E.g. there are "dummy" values like "your-redis-port" etc -- if you are not using them, you MUST remove them.
-nano .env
-
-# launch the container (the appropriate image for your architecture will be pulled automatically)
-docker run -it --rm  -v ./.env:/langroid/.env langroid/langroid:latest
-
-# Use this command to run any of the scripts in the `examples` directory
-python examples/<Path/To/Example.py> 
-``` 
-
-
-
-# :tada: Usage Examples
-
-These are quick teasers to give a glimpse of what you can do with Langroid
-and how your code would look. 
-
-:warning: The code snippets below are intended to give a flavor of the code
-and they are **not** complete runnable examples! For that we encourage you to 
-consult the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
-repository.
-
-:information_source:
-The various LLM prompts and instructions in Langroid
-have been tested to work well with GPT-4 (and to some extent GPT-4o).
-Switching to other LLMs (local/open and proprietary) is easy (see guides mentioned above),
-and may suffice for some applications, but in general you may see inferior results
-unless you adjust the prompts and/or the multi-agent setup.
-
-
-:book: Also see the
-[`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
-for a detailed tutorial.
-
-
-
-Click to expand any of the code examples below.
-All of these can be run in a Colab notebook:
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
-
-<details>
-<summary> <b> Direct interaction with LLM </b> </summary>
-
-```python
-import langroid.language_models as lm
-
-mdl = lm.OpenAIGPT(
-    lm.OpenAIGPTConfig(
-        chat_model=lm.OpenAIChatModel.GPT4o, # or, e.g.  "ollama/qwen2.5"
-    ),
-)
-
-messages = [
-  lm.LLMMessage(content="You are a helpful assistant",  role=lm.Role.SYSTEM), 
-  lm.LLMMessage(content="What is the capital of Ontario?",  role=lm.Role.USER),
-]
-
-response = mdl.chat(messages, max_tokens=200)
-print(response.message)
-```
-See the guides to use
-([local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/)).
-</details>
-
-<details>
-<summary> <b> Interaction with non-OpenAI LLM (local or remote) </b> </summary>
-Local model: if model is served at `http://localhost:8000`:
-
-```python
-cfg = lm.OpenAIGPTConfig(
-  chat_model="local/localhost:8000", 
-  chat_context_length=4096
-)
-mdl = lm.OpenAIGPT(cfg)
-# now interact with it as above, or create an Agent + Task as shown below.
-```
-</details>
-
-<details>
-<summary> <b> Define an agent, set up a task, and run it </b> </summary>
-
-```python
-import langroid as lr
-
-agent = lr.ChatAgent()
-
-# get response from agent's LLM, and put this in an interactive loop...
-# answer = agent.llm_response("What is the capital of Ontario?")
-  # ... OR instead, set up a task (which has a built-in loop) and run it
-task = lr.Task(agent, name="Bot") 
-task.run() # ... a loop seeking response from LLM or User at each turn
-```
-</details>
-
-<details>
-<summary><b> Three communicating agents </b></summary>
-
-A toy numbers game, where when given a number `n`:
-- `repeater_task`'s LLM simply returns `n`,
-- `even_task`'s LLM returns `n/2` if `n` is even, else says "DO-NOT-KNOW"
-- `odd_task`'s LLM returns `3*n+1` if `n` is odd, else says "DO-NOT-KNOW"
-
-Each of these `Task`s automatically configures a default `ChatAgent`.
-
-```python
-import langroid as lr
-from langroid.utils.constants import NO_ANSWER
-
-repeater_task = lr.Task(
-    name = "Repeater",
-    system_message="""
-    Your job is to repeat whatever number you receive.
-    """,
-    llm_delegate=True, # LLM takes charge of task
-    single_round=False, 
-)
-
-even_task = lr.Task(
-    name = "EvenHandler",
-    system_message=f"""
-    You will be given a number. 
-    If it is even, divide by 2 and say the result, nothing else.
-    If it is odd, say {NO_ANSWER}
-    """,
-    single_round=True,  # task done after 1 step() with valid response
-)
-
-odd_task = lr.Task(
-    name = "OddHandler",
-    system_message=f"""
-    You will be given a number n. 
-    If it is odd, return (n*3+1), say nothing else. 
-    If it is even, say {NO_ANSWER}
-    """,
-    single_round=True,  # task done after 1 step() with valid response
-)
-```
-Then add the `even_task` and `odd_task` as sub-tasks of `repeater_task`, 
-and run the `repeater_task`, kicking it off with a number as input:
-```python
-repeater_task.add_sub_task([even_task, odd_task])
-repeater_task.run("3")
-```
-
-</details>
-
-<details>
-<summary><b> Simple Tool/Function-calling example </b></summary>
-
-Langroid leverages Pydantic to support OpenAI's
-[Function-calling API](https://platform.openai.com/docs/guides/gpt/function-calling)
-as well as its own native tools. The benefits are that you don't have to write
-any JSON to specify the schema, and also if the LLM hallucinates a malformed
-tool syntax, Langroid sends the Pydantic validation error (suitably sanitized) 
-to the LLM so it can fix it!
-
-Simple example: Say the agent has a secret list of numbers, 
-and we want the LLM to find the smallest number in the list. 
-We want to give the LLM a `probe` tool/function which takes a
-single number `n` as argument. The tool handler method in the agent
-returns how many numbers in its list are at most `n`.
-
-First define the tool using Langroid's `ToolMessage` class:
-
-
-```python
-import langroid as lr
-
-class ProbeTool(lr.agent.ToolMessage):
-  request: str = "probe" # specifies which agent method handles this tool
-  purpose: str = """
-        To find how many numbers in my list are less than or equal to  
-        the <number> you specify.
-        """ # description used to instruct the LLM on when/how to use the tool
-  number: int  # required argument to the tool
-```
-
-Then define a `SpyGameAgent` as a subclass of `ChatAgent`, 
-with a method `probe` that handles this tool:
-
-```python
-class SpyGameAgent(lr.ChatAgent):
-  def __init__(self, config: lr.ChatAgentConfig):
-    super().__init__(config)
-    self.numbers = [3, 4, 8, 11, 15, 25, 40, 80, 90]
-
-  def probe(self, msg: ProbeTool) -> str:
-    # return how many numbers in self.numbers are less or equal to msg.number
-    return str(len([n for n in self.numbers if n <= msg.number]))
-```
-
-We then instantiate the agent and enable it to use and respond to the tool:
-
-```python
-spy_game_agent = SpyGameAgent(
-    lr.ChatAgentConfig(
-        name="Spy",
-        vecdb=None,
-        use_tools=False, #  don't use Langroid native tool
-        use_functions_api=True, # use OpenAI function-call API
-    )
-)
-spy_game_agent.enable_message(ProbeTool)
-```
-
-For a full working example see the
-[chat-agent-tool.py](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-tool.py)
-script in the `langroid-examples` repo.
-</details>
-
-<details>
-<summary> <b>Tool/Function-calling to extract structured information from text </b> </summary>
-
-Suppose you want an agent to extract 
-the key terms of a lease, from a lease document, as a nested JSON structure.
-First define the desired structure via Pydantic models:
-
-```python
-from pydantic import BaseModel
-class LeasePeriod(BaseModel):
-    start_date: str
-    end_date: str
-
-
-class LeaseFinancials(BaseModel):
-    monthly_rent: str
-    deposit: str
-
-class Lease(BaseModel):
-    period: LeasePeriod
-    financials: LeaseFinancials
-    address: str
-```
-
-Then define the `LeaseMessage` tool as a subclass of Langroid's `ToolMessage`.
-Note the tool has a required argument `terms` of type `Lease`:
-
-```python
-import langroid as lr
-
-class LeaseMessage(lr.agent.ToolMessage):
-    request: str = "lease_info"
-    purpose: str = """
-        Collect information about a Commercial Lease.
-        """
-    terms: Lease
-```
-
-Then define a `LeaseExtractorAgent` with a method `lease_info` that handles this tool,
-instantiate the agent, and enable it to use and respond to this tool:
-
-```python
-class LeaseExtractorAgent(lr.ChatAgent):
-    def lease_info(self, message: LeaseMessage) -> str:
-        print(
-            f"""
-        DONE! Successfully extracted Lease Info:
-        {message.terms}
-        """
-        )
-        return json.dumps(message.terms.dict())
-    
-lease_extractor_agent = LeaseExtractorAgent()
-lease_extractor_agent.enable_message(LeaseMessage)
-```
-
-See the [`chat_multi_extract.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py)
-script in the `langroid-examples` repo for a full working example.
-</details>
-
-<details>
-<summary><b> Chat with documents (file paths, URLs, etc) </b></summary>
-
-Langroid provides a specialized agent class `DocChatAgent` for this purpose.
-It incorporates document sharding, embedding, storage in a vector-DB, 
-and retrieval-augmented query-answer generation.
-Using this class to chat with a collection of documents is easy.
-First create a `DocChatAgentConfig` instance, with a 
-`doc_paths` field that specifies the documents to chat with.
-
-```python
-import langroid as lr
-from langroid.agent.special import DocChatAgentConfig, DocChatAgent
-
-config = DocChatAgentConfig(
-  doc_paths = [
-    "https://en.wikipedia.org/wiki/Language_model",
-    "https://en.wikipedia.org/wiki/N-gram_language_model",
-    "/path/to/my/notes-on-language-models.txt",
-  ],
-  vecdb=lr.vector_store.QdrantDBConfig(),
-)
-```
-
-Then instantiate the `DocChatAgent` (this ingests the docs into the vector-store):
-
-```python
-agent = DocChatAgent(config)
-```
-Then we can either ask the agent one-off questions,
-```python
-agent.llm_response("What is a language model?")
-```
-or wrap it in a `Task` and run an interactive loop with the user:
-```python
-task = lr.Task(agent)
-task.run()
-```
-
-See full working scripts in the 
-[`docqa`](https://github.com/langroid/langroid-examples/tree/main/examples/docqa)
-folder of the `langroid-examples` repo.
-</details>
-
-<details>
-<summary><b> :fire: Chat with tabular data (file paths, URLs, dataframes) </b></summary>
-
-Using Langroid you can set up a `TableChatAgent` with a dataset (file path, URL or dataframe),
-and query it. The Agent's LLM generates Pandas code to answer the query, 
-via function-calling (or tool/plugin), and the Agent's function-handling method
-executes the code and returns the answer.
-
-Here is how you can do this:
-
-```python
-import langroid as lr
-from langroid.agent.special import TableChatAgent, TableChatAgentConfig
-```
-
-Set up a `TableChatAgent` for a data file, URL or dataframe
-(Ensure the data table has a header row; the delimiter/separator is auto-detected):
-```python
-dataset =  "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv"
-# or dataset = "/path/to/my/data.csv"
-# or dataset = pd.read_csv("/path/to/my/data.csv")
-agent = TableChatAgent(
-    config=TableChatAgentConfig(
-        data=dataset,
-    )
-)
-```
-Set up a task, and ask one-off questions like this: 
-
-```python
+⋮----
+class AugmentTool(ToolMessage)
+⋮----
+request: str = "next_num"
+purpose: str = """
+number: int
+successor: int
+⋮----
+def handle(self) -> str | ToolMessage
+⋮----
+@classmethod
+        def examples(cls) -> List["ToolMessage"]
+⋮----
+task = Task(agent, interactive=False)
+⋮----
+response = task.run("100")
+⋮----
+def content_empty()
+⋮----
+def fn_call_valid()
+⋮----
+def tool_valid()
+⋮----
+def fn_or_tool_valid()
+⋮----
+"""
+    Test loop within single agent, where this cycle repeats:
+        [ LLM --Tool--> Agent[Tool] ---> (User) ]*
+
+    The Agent responds to the tool with a number.
+    """
+⋮----
+def handle(self) -> str | DoneTool
+⋮----
+tool_name = AugmentTool.default_value("request")
+done_pass_tool_name = DonePassTool.default_value("request")
+⋮----
+done_response = f"use the TOOL: `{done_pass_tool_name}`"
+⋮----
+done_response = f"say {DONE} {PASS}"
+⋮----
+task_config = TaskConfig(recognize_string_signals=string_signals)
+⋮----
+response = task.run("100", turns=10)
+⋮----
+# no orch tool, and string signals ignored, so task doesn't terminate,
+# and is limited by "turns" parameter
+⋮----
+"""
+    Test task loop where Agent B's task is a subtask of Agent A's task, and:
+    - LLM(A) generates Tool
+    - Agent(A) validates Tool, if error, LLM(A) needs to fix, else pass to Agent(B)
+    - Agent(B) handles Tool, generates a query for LLM(B) to respond to
+    - LLM(B) responds, result should be sent back to Agent(A)
+    """
+⋮----
+class PolinskyTool(ToolMessage)
+⋮----
+request: str = "polinsky"
+⋮----
+class Requestor(ChatAgent)
+⋮----
+def __init__(self, config: ChatAgentConfig)
+⋮----
+def polinsky(self, msg: PolinskyTool) -> str | PassTool
+⋮----
+# No validation err, so pass it on
+⋮----
+requestor_agent = Requestor(
+⋮----
+requestor_task = Task(
+⋮----
+class PolinskyAgent(ChatAgent)
+⋮----
+def polinsky(self, msg: PolinskyTool) -> str
+⋮----
+# Pass on the number so LLM can respond
+# On the first try, flip the sign of the number,
+# to force the Requestor to try again
+response = str(-msg.number) if self.n_tries == 0 else str(msg.number)
+⋮----
+polinsky_agent = PolinskyAgent(
+polinsky_task = Task(
+⋮----
+# below ensure that task returns to requestor_task when LLM responds
+⋮----
+# connect the two agents
+⋮----
+response = requestor_task.run("100")
+⋮----
+"""
+    QueryTool: Task A uses and handles (validates), Task B handles but doesn't use
+    FeedbackTool: Task B uses and handles (validates), Task A handles but doesn't use
+    """
+⋮----
+class QueryTool(ToolMessage)
+⋮----
+request: str = "polinsky_query"
+⋮----
+value: int
+⋮----
+class FeedbackTool(ToolMessage)
+⋮----
+request: str = "polinsky_feedback"
+⋮----
+feedback: str
+⋮----
+def polinsky_query(self, msg: QueryTool) -> str | PassTool
+⋮----
+# No validation err, so pass it on so other agent can respond
+⋮----
+def polinsky_feedback(self, msg: FeedbackTool) -> str
+⋮----
+"""Transmit feedback received from other agent, to this agent's LLM"""
+⋮----
+def handle_message_fallback(self, msg: str | ChatDocument) -> Any
+⋮----
+done_tool_name = DoneTool.default_value("request")
+⋮----
+class Critic(ChatAgent)
+⋮----
+def polinsky_query(self, msg: QueryTool) -> str
+⋮----
+# pass on the number so LLM can respond
+⋮----
+def polinsky_feedback(self, msg: FeedbackTool) -> str | DonePassTool
+⋮----
+"""Pass on the feedback to the Requestor"""
+⋮----
+critic_agent = Critic(
+⋮----
+critic_task = Task(
+⋮----
+response = requestor_task.run()
+strings = "100 200 500 1000".split()
+⋮----
+"""Test that returning ToolMessage from an entity-responder or a Task.run() are
+    handled correctly"""
+⋮----
+class IncrementTool(ToolMessage)
+⋮----
+request: str = "increment"
+purpose: str = "To increment a number"
+x: int
+⋮----
+def handle(self) -> str
+⋮----
+class AnswerTool(ToolMessage)
+⋮----
+request: str = "answer"
+purpose: str = "To provide the final answer"
+answer: int
+⋮----
+class DoubleTool(ToolMessage)
+⋮----
+request: str = "double"
+purpose: str = "To double a number"
+⋮----
+# return this as the double_task's answer
+⋮----
+class HalveTool(ToolMessage)
+⋮----
+request: str = "halve"
+purpose: str = "To halve a number"
+⋮----
+return DoneTool(content=self.x // 2)  # note: content can be any type
+⋮----
+class ProcessTool(ToolMessage)
+⋮----
+request: str = "process"
+purpose: str = "To process a number"
+⋮----
+def handle(self) -> ToolMessage
+⋮----
+class ProcessorAgent(lr.ChatAgent)
+⋮----
+def init_state(self)
+⋮----
+# return a ToolMessage rather than ChatDocument
+msg_str = message.content if isinstance(message, ChatDocument) else message
+⋮----
+# must be AnswerTool
+answer_tool: AnswerTool = message.tool_messages[0]
+⋮----
+x = int(msg_str)
+⋮----
+processor_agent = ProcessorAgent(lr.ChatAgentConfig(name="Processor"))
+⋮----
+processor_task = Task(processor_agent, interactive=False, restart=True)
+⋮----
+halve_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Halver", llm=None))
+⋮----
+halve_task = Task(halve_agent, interactive=False)
+⋮----
+double_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Doubler", llm=None))
+⋮----
+double_task = Task(double_agent, interactive=False)
+⋮----
+increment_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Incrementer", llm=None))
+⋮----
+increment_task = Task(increment_agent, interactive=False)
+⋮----
+result = processor_task.run(str(3))
+⋮----
+# note: processor_agent state gets reset each time we run the task
+result = processor_task.run(str(16))
+⋮----
+result = processor_task[int].run(10)
+⋮----
+def test_task_output_format_sequence()
+⋮----
+"""
+    Test that `Task`s correctly execute a sequence of steps
+    controlled by the agent's `output_format`, and that `output_format`
+    is handled by default without `enable_message`.
+    """
+⋮----
+class MultiplyTool(ToolMessage)
+⋮----
+request: str = "multiply"
+purpose: str = "To multiply two integers."
+a: int
+b: int
+⋮----
+purpose: str = "To increment an integer."
+⋮----
+class PowerTool(ToolMessage)
+⋮----
+request: str = "power"
+purpose: str = "To compute `x` ** `y`."
+⋮----
+y: int
+⋮----
+class CompositionAgent(ChatAgent)
+⋮----
+def __init__(self, config: ChatAgentConfig = ChatAgentConfig())
+⋮----
+def multiply(self, message: MultiplyTool) -> str
+⋮----
+def increment(self, message: IncrementTool) -> str
+⋮----
+def power(self, message: PowerTool) -> str
+⋮----
+def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage
+⋮----
+def test_sequence(x: int) -> None
+⋮----
+agent = CompositionAgent(
 task = lr.Task(
-  agent, 
-  name = "DataAssistant",
-  default_human_response="", # to avoid waiting for user input
-)
-result = task.run(
-  "What is the average alcohol content of wines with a quality rating above 7?",
-  turns=2 # return after user question, LLM fun-call/tool response, Agent code-exec result
-) 
-print(result.content)
-```
-Or alternatively, set up a task and run it in an interactive loop with the user:
+output = task.run(x)
+⋮----
+# check steps
+messages = agent.message_history
+⋮----
+multiply_message: MultiplyTool = to_tool(messages[2], MultiplyTool)  # type: ignore
+⋮----
+increment_message: IncrementTool = to_tool(messages[4], IncrementTool)  # type: ignore
+⋮----
+power_message: PowerTool = to_tool(messages[6], PowerTool)  # type: ignore
+⋮----
+@pytest.mark.asyncio
+async def test_task_output_format_sequence_async()
+⋮----
+"""
+    Test that async `Task`s correctly execute a sequence of steps
+    controlled by the agent's `output_format`, and that `output_format`
+    is handled by default without `enable_message`.
+    """
+⋮----
+async def test_sequence(x: int) -> None
+⋮----
+output = await task.run_async(x)
+⋮----
+def test_done_if_tool(test_settings: Settings)
+⋮----
+"""Test that task terminates when LLM generates a tool and done_if_tool=True"""
+⋮----
+class SimpleTool(ToolMessage)
+⋮----
+request: str = "simple_tool"
+purpose: str = "A simple tool for testing"
+value: str = "test"
+⋮----
+# Create a mock LLM that always responds with a tool in JSON format
+tool_response = SimpleTool(value="hello").to_json()
+⋮----
+mock_lm_config = MockLMConfig(default_response=tool_response)
+⋮----
+# Create agent with mock LLM
+⋮----
+# Enable the tool but don't handle it
+# (the `use` doesn't matter here since we're hard-coding the MockLM response
+# to always be the tool-call)
+⋮----
+# Test 1: With done_if_tool=False (default), task should not terminate on tool
+⋮----
+result = task.run("Process this message", turns=3)
+# Task should run for all 3 turns since done_if_tool=False
+⋮----
+assert len(agent.message_history) >= 3  # At least: system, user, assistant
+⋮----
+# Reset agent for next test
+⋮----
+# Test 2: With done_if_tool=True, task should terminate when tool is generated
+task_with_done = Task(
+⋮----
+result = task_with_done.run("Do something else", turns=10)
+# Task should terminate after first LLM response containing tool
+⋮----
+# Should have exactly 3 messages: system, user, assistant (with tool)
+⋮----
+# Verify the last message contains the tool
+last_msg = agent.message_history[-1]
+⋮----
+# Test 3: With done_if_tool=True and return type specified
+task_with_return_type = Task(
+⋮----
+result_typed = task_with_return_type.run("Process with type", turns=10)
+# Task should terminate and return the SimpleTool instance
+⋮----
+def test_task_init_preserves_parent_id()
+⋮----
+"""Test that task.init() preserves parent_id when deep copying ChatDocument"""
+⋮----
+# Create an agent
+agent = ChatAgent(ChatAgentConfig(name="TestAgent"))
+⋮----
+# Test 1: Basic parent_id preservation
+parent_doc = ChatDocument(
+child_doc = ChatDocument(
+⋮----
+# The pending message should preserve the parent_id
+⋮----
+# Test 2: With caller (subtask scenario)
+caller_task = Task(agent, interactive=False, name="CallerTask")
+sub_task = Task(agent, interactive=False, name="SubTask")
+⋮----
+# When message already has parent_id, it should be preserved
+msg_with_parent = ChatDocument(
+⋮----
+# Set caller to simulate subtask scenario
+⋮----
+# Parent_id should still be preserved (not overridden to msg.id)
+⋮----
+# Test 3: With caller but no original parent_id
+msg_no_parent = ChatDocument(
+⋮----
+sub_task2 = Task(agent, interactive=False, name="SubTask2")
+⋮----
+# Since original had no parent_id, it should be set to msg.id
+</file>
 
-```python
-task = lr.Task(agent, name="DataAssistant")
-task.run()
-``` 
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.12.4
+  hooks:
+    - id: ruff
+</file>
 
-For a full working example see the 
-[`table_chat.py`](https://github.com/langroid/langroid-examples/tree/main/examples/data-qa/table_chat.py)
-script in the `langroid-examples` repo.
+<file path="Makefile">
+.PHONY: setup check lint tests docs nodocs loc
+
+SHELL := /bin/bash
+
+.PHONY: setup update
+
+setup: ## Setup the git pre-commit hooks
+	uv run pre-commit install
+
+update: ## Update the git pre-commit hooks
+	uv run pre-commit autoupdate
+
+.PHONY: type-check
+type-check:
+	@uv run pre-commit install
+	@uv run pre-commit autoupdate
+	@uv run pre-commit run --all-files
+	@echo "Running black..."
+	@uv run black --check .
+	@echo "Running ruff check (without fix)..."
+	@uv run ruff check .
+	@echo "Running mypy...";
+	@uv run mypy -p langroid
+	@echo "All checks passed!"
+
+.PHONY: lint
+lint:
+	uv run black .
+	uv run ruff check . --fix
+	@echo "Auto-fixing issues in examples folder..."
+	@uv run ruff check examples/ --fix-only --no-force-exclude
+
+.PHONY: stubs
+stubs:
+	@echo "Generating Python stubs for the langroid package..."
+	@uv run stubgen -p langroid -o stubs
+	@echo "Stubs generated in the 'stubs' directory"
+
+.PHONY: tests
+tests:
+	pytest tests/main --basetemp=/tmp/pytest
 
 
-</details>
+docs:
+	@# Kill any existing 'mkdocs serve' processes.
+	@pkill -f "mkdocs serve" 2>/dev/null || true
+	@# Build the documentation.
+	mkdocs build
+	@# Serve the documentation in the background.
+	mkdocs serve &
+	@echo "Documentation is being served in the background."
+	@echo "You can access the documentation at http://127.0.0.1:8000/"
 
----
+nodocs:
+	@# Kill any existing 'mkdocs serve' processes.
+	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
+	@echo "Stopped serving documentation."
 
-# :heart: Thank you to our [supporters](https://github.com/langroid/langroid/stargazers)
 
-If you like this project, please give it a star ⭐ and 📢 spread the word in your network or social media:
+loc:
+	@echo "Lines in git-tracked files python files:"
+	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
 
-[![Share on Twitter](https://img.shields.io/twitter/url?style=social&url=https://github.com/langroid/langroid)](https://twitter.com/intent/tweet?text=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.%20https://github.com/langroid/langroid)
-[![Share on LinkedIn](https://img.shields.io/badge/Share%20on-LinkedIn-blue)](https://www.linkedin.com/shareArticle?mini=true&url=https://github.com/langroid/langroid&title=Langroid:%20A%20Powerful,%20Elegant%20Framework&summary=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.)
-[![Share on Hacker News](https://img.shields.io/badge/-Share%20on%20Hacker%20News-orange)](https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fgithub.com%2Flangroid%2Flangroid&t=Harness%20LLMs%20with%20Multi-Agent%20Programming)
-[![Share on Reddit](https://img.shields.io/badge/-Share%20on%20Reddit-blue)](https://www.reddit.com/submit?url=https%3A%2F%2Fgithub.com%2Flangroid%2Flangroid&title=Harness%20LLMs%20with%20Multi-Agent%20Programming)
+.PHONY: repomix repomix-no-tests repomix-all
 
-Your support will help build Langroid's momentum and community.
+repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
+	@echo "Generating llms.txt (with tests)..."
+	@git ls-files | repomix --stdin
+	@echo "Generating llms-compressed.txt..."
+	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
+	@echo "Generated llms.txt and llms-compressed.txt"
 
-# Langroid Co-Founders
+repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
+	@echo "Generating llms-no-tests.txt (without tests)..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
+	@echo "Generating llms-no-tests-compressed.txt..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
+	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
 
-- [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
-- [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
+repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
+	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
+	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
+	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
+
+repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
+
+.PHONY: check
+check: lint type-check repomix-all
+
+.PHONY: revert-tag
+revert-tag:
+	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
+	echo "Deleting tag: $$LATEST_TAG" && \
+	git tag -d $$LATEST_TAG
+
+.PHONY: revert-bump
+revert-bump:
+	@if git log -1 --pretty=%B | grep -q "bump"; then \
+		git reset --hard HEAD~1; \
+		echo "Reverted last commit (bump commit)"; \
+	else \
+		echo "Last commit was not a bump commit"; \
+	fi
+
+.PHONY: revert
+revert: revert-bump revert-tag
+	
+.PHONY: bump-patch
+bump-patch:
+	@cz bump --increment PATCH
+
+.PHONY: bump-minor
+bump-minor:
+	@cz bump --increment MINOR 
+
+.PHONY: bump-major
+bump-major:
+	@cz bump --increment MAJOR 
+
+.PHONY: build
+build:
+	@uv build
+
+.PHONY: push
+push:
+	@git push origin main
+	@git push origin --tags
+
+.PHONY: clean
+clean:
+	-rm -rf dist/*
+
+.PHONY: release
+release:
+	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+
+.PHONY: bump-rc
+bump-rc:
+	@cz bump --prerelease rc
+
+.PHONY: bump-beta
+bump-beta:
+	@cz bump --prerelease beta
+
+.PHONY: bump-alpha
+bump-alpha:
+	@cz bump --prerelease alpha
+
+.PHONY: all-patch
+all-patch: bump-patch clean build push release
+
+.PHONY: all-minor
+all-minor: bump-minor clean build push release
+
+.PHONY: all-major
+all-major: bump-major clean build push release
+
+.PHONY: all-rc
+all-rc: bump-rc clean build push release
+
+.PHONY: all-beta
+all-beta: bump-beta clean build push release
+
+.PHONY: all-alpha
+all-alpha: bump-alpha clean build push release
+
+.PHONY: publish
+publish:
+	uv publish
 </file>
 
 <file path="langroid/agent/special/doc_chat_agent.py">
@@ -59396,438 +59848,6 @@ def justify_response(self) -> ChatDocument | None
 """Show evidence for last response"""
 ⋮----
 source = self.response.metadata.source
-</file>
-
-<file path="tests/main/test_task.py">
-"""
-Other tests for Task are in test_chat_agent.py
-"""
-⋮----
-def test_task_cost(test_settings: Settings)
-⋮----
-"""Test that max_cost, max_tokens are respected by Task.run()"""
-⋮----
-agent = ChatAgent(ChatAgentConfig(name="Test"))
-⋮----
-task = Task(
-sub_agent = ChatAgent(ChatAgentConfig(name="Sub"))
-⋮----
-sub = Task(
-⋮----
-response = task.run("4", turns=10, max_cost=0.0005, max_tokens=100)
-⋮----
-@pytest.mark.parametrize("restart", [True, False])
-def test_task_restart(test_settings: Settings, restart: bool)
-⋮----
-"""Test whether the `restart` option works as expected"""
-⋮----
-agent = ChatAgent(
-⋮----
-llm=MockLMConfig(response_fn=lambda x: int(x) + 1),  # increment
-⋮----
-task.run("4", turns=1)  # msg hist = sys, user=4, asst=5
-# if restart, erases agent history => msg hist = sys, user=10, asst=11
-# otherwise, adds to msg history => msg hist = sys, user=4, asst=5, user=10, asst=11
-⋮----
-@pytest.mark.asyncio
-async def test_task_kill(test_settings: Settings)
-⋮----
-"""Test that Task.run() can be killed"""
-⋮----
-class MockAgent(ChatAgent)
-⋮----
-# dummy deterministic response; no need for real LLM here!
-⋮----
-agent = MockAgent(ChatAgentConfig(name="Test"))
-⋮----
-config=lr.TaskConfig(inf_loop_cycle_len=0),  # turn off cycle detection
-⋮----
-# start task
-async_task = asyncio.create_task(
-# sleep a bit then kill it
-⋮----
-result: lr.ChatDocument = await async_task
-⋮----
-# test killing via static method:
-# Run it for a potentially very large number of turns...
-⋮----
-# ...sleep a bit then kill it
-⋮----
-def test_task_empty_response(test_settings: Settings)
-⋮----
-response = task.run("4")
-⋮----
-response = task.run("3")
-⋮----
-# test done_if_response, done_if_no_response
-⋮----
-response = task.run(input)
-⋮----
-"""
-    Test loop within single agent, where this cycle repeats:
-        [ LLM --Tool--> Agent[Tool] ---> (User) ]*
-
-    Test expected behavior for various Agent-tool-handler responses.
-    """
-⋮----
-class AugmentTool(ToolMessage)
-⋮----
-request: str = "next_num"
-purpose: str = """
-number: int
-successor: int
-⋮----
-def handle(self) -> str | ToolMessage
-⋮----
-@classmethod
-        def examples(cls) -> List["ToolMessage"]
-⋮----
-task = Task(agent, interactive=False)
-⋮----
-response = task.run("100")
-⋮----
-def content_empty()
-⋮----
-def fn_call_valid()
-⋮----
-def tool_valid()
-⋮----
-def fn_or_tool_valid()
-⋮----
-"""
-    Test loop within single agent, where this cycle repeats:
-        [ LLM --Tool--> Agent[Tool] ---> (User) ]*
-
-    The Agent responds to the tool with a number.
-    """
-⋮----
-def handle(self) -> str | DoneTool
-⋮----
-tool_name = AugmentTool.default_value("request")
-done_pass_tool_name = DonePassTool.default_value("request")
-⋮----
-done_response = f"use the TOOL: `{done_pass_tool_name}`"
-⋮----
-done_response = f"say {DONE} {PASS}"
-⋮----
-task_config = TaskConfig(recognize_string_signals=string_signals)
-⋮----
-response = task.run("100", turns=10)
-⋮----
-# no orch tool, and string signals ignored, so task doesn't terminate,
-# and is limited by "turns" parameter
-⋮----
-"""
-    Test task loop where Agent B's task is a subtask of Agent A's task, and:
-    - LLM(A) generates Tool
-    - Agent(A) validates Tool, if error, LLM(A) needs to fix, else pass to Agent(B)
-    - Agent(B) handles Tool, generates a query for LLM(B) to respond to
-    - LLM(B) responds, result should be sent back to Agent(A)
-    """
-⋮----
-class PolinskyTool(ToolMessage)
-⋮----
-request: str = "polinsky"
-⋮----
-class Requestor(ChatAgent)
-⋮----
-def __init__(self, config: ChatAgentConfig)
-⋮----
-def polinsky(self, msg: PolinskyTool) -> str | PassTool
-⋮----
-# No validation err, so pass it on
-⋮----
-requestor_agent = Requestor(
-⋮----
-requestor_task = Task(
-⋮----
-class PolinskyAgent(ChatAgent)
-⋮----
-def polinsky(self, msg: PolinskyTool) -> str
-⋮----
-# Pass on the number so LLM can respond
-# On the first try, flip the sign of the number,
-# to force the Requestor to try again
-response = str(-msg.number) if self.n_tries == 0 else str(msg.number)
-⋮----
-polinsky_agent = PolinskyAgent(
-polinsky_task = Task(
-⋮----
-# below ensure that task returns to requestor_task when LLM responds
-⋮----
-# connect the two agents
-⋮----
-response = requestor_task.run("100")
-⋮----
-"""
-    QueryTool: Task A uses and handles (validates), Task B handles but doesn't use
-    FeedbackTool: Task B uses and handles (validates), Task A handles but doesn't use
-    """
-⋮----
-class QueryTool(ToolMessage)
-⋮----
-request: str = "polinsky_query"
-⋮----
-value: int
-⋮----
-class FeedbackTool(ToolMessage)
-⋮----
-request: str = "polinsky_feedback"
-⋮----
-feedback: str
-⋮----
-def polinsky_query(self, msg: QueryTool) -> str | PassTool
-⋮----
-# No validation err, so pass it on so other agent can respond
-⋮----
-def polinsky_feedback(self, msg: FeedbackTool) -> str
-⋮----
-"""Transmit feedback received from other agent, to this agent's LLM"""
-⋮----
-def handle_message_fallback(self, msg: str | ChatDocument) -> Any
-⋮----
-done_tool_name = DoneTool.default_value("request")
-⋮----
-class Critic(ChatAgent)
-⋮----
-def polinsky_query(self, msg: QueryTool) -> str
-⋮----
-# pass on the number so LLM can respond
-⋮----
-def polinsky_feedback(self, msg: FeedbackTool) -> str | DonePassTool
-⋮----
-"""Pass on the feedback to the Requestor"""
-⋮----
-critic_agent = Critic(
-⋮----
-critic_task = Task(
-⋮----
-response = requestor_task.run()
-strings = "100 200 500 1000".split()
-⋮----
-"""Test that returning ToolMessage from an entity-responder or a Task.run() are
-    handled correctly"""
-⋮----
-class IncrementTool(ToolMessage)
-⋮----
-request: str = "increment"
-purpose: str = "To increment a number"
-x: int
-⋮----
-def handle(self) -> str
-⋮----
-class AnswerTool(ToolMessage)
-⋮----
-request: str = "answer"
-purpose: str = "To provide the final answer"
-answer: int
-⋮----
-class DoubleTool(ToolMessage)
-⋮----
-request: str = "double"
-purpose: str = "To double a number"
-⋮----
-# return this as the double_task's answer
-⋮----
-class HalveTool(ToolMessage)
-⋮----
-request: str = "halve"
-purpose: str = "To halve a number"
-⋮----
-return DoneTool(content=self.x // 2)  # note: content can be any type
-⋮----
-class ProcessTool(ToolMessage)
-⋮----
-request: str = "process"
-purpose: str = "To process a number"
-⋮----
-def handle(self) -> ToolMessage
-⋮----
-class ProcessorAgent(lr.ChatAgent)
-⋮----
-def init_state(self)
-⋮----
-# return a ToolMessage rather than ChatDocument
-msg_str = message.content if isinstance(message, ChatDocument) else message
-⋮----
-# must be AnswerTool
-answer_tool: AnswerTool = message.tool_messages[0]
-⋮----
-x = int(msg_str)
-⋮----
-processor_agent = ProcessorAgent(lr.ChatAgentConfig(name="Processor"))
-⋮----
-processor_task = Task(processor_agent, interactive=False, restart=True)
-⋮----
-halve_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Halver", llm=None))
-⋮----
-halve_task = Task(halve_agent, interactive=False)
-⋮----
-double_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Doubler", llm=None))
-⋮----
-double_task = Task(double_agent, interactive=False)
-⋮----
-increment_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Incrementer", llm=None))
-⋮----
-increment_task = Task(increment_agent, interactive=False)
-⋮----
-result = processor_task.run(str(3))
-⋮----
-# note: processor_agent state gets reset each time we run the task
-result = processor_task.run(str(16))
-⋮----
-result = processor_task[int].run(10)
-⋮----
-def test_task_output_format_sequence()
-⋮----
-"""
-    Test that `Task`s correctly execute a sequence of steps
-    controlled by the agent's `output_format`, and that `output_format`
-    is handled by default without `enable_message`.
-    """
-⋮----
-class MultiplyTool(ToolMessage)
-⋮----
-request: str = "multiply"
-purpose: str = "To multiply two integers."
-a: int
-b: int
-⋮----
-purpose: str = "To increment an integer."
-⋮----
-class PowerTool(ToolMessage)
-⋮----
-request: str = "power"
-purpose: str = "To compute `x` ** `y`."
-⋮----
-y: int
-⋮----
-class CompositionAgent(ChatAgent)
-⋮----
-def __init__(self, config: ChatAgentConfig = ChatAgentConfig())
-⋮----
-def multiply(self, message: MultiplyTool) -> str
-⋮----
-def increment(self, message: IncrementTool) -> str
-⋮----
-def power(self, message: PowerTool) -> str
-⋮----
-def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage
-⋮----
-def test_sequence(x: int) -> None
-⋮----
-agent = CompositionAgent(
-task = lr.Task(
-output = task.run(x)
-⋮----
-# check steps
-messages = agent.message_history
-⋮----
-multiply_message: MultiplyTool = to_tool(messages[2], MultiplyTool)  # type: ignore
-⋮----
-increment_message: IncrementTool = to_tool(messages[4], IncrementTool)  # type: ignore
-⋮----
-power_message: PowerTool = to_tool(messages[6], PowerTool)  # type: ignore
-⋮----
-@pytest.mark.asyncio
-async def test_task_output_format_sequence_async()
-⋮----
-"""
-    Test that async `Task`s correctly execute a sequence of steps
-    controlled by the agent's `output_format`, and that `output_format`
-    is handled by default without `enable_message`.
-    """
-⋮----
-async def test_sequence(x: int) -> None
-⋮----
-output = await task.run_async(x)
-⋮----
-def test_done_if_tool(test_settings: Settings)
-⋮----
-"""Test that task terminates when LLM generates a tool and done_if_tool=True"""
-⋮----
-class SimpleTool(ToolMessage)
-⋮----
-request: str = "simple_tool"
-purpose: str = "A simple tool for testing"
-value: str = "test"
-⋮----
-# Create a mock LLM that always responds with a tool in JSON format
-tool_response = SimpleTool(value="hello").to_json()
-⋮----
-mock_lm_config = MockLMConfig(default_response=tool_response)
-⋮----
-# Create agent with mock LLM
-⋮----
-# Enable the tool but don't handle it
-# (the `use` doesn't matter here since we're hard-coding the MockLM response
-# to always be the tool-call)
-⋮----
-# Test 1: With done_if_tool=False (default), task should not terminate on tool
-⋮----
-result = task.run("Process this message", turns=3)
-# Task should run for all 3 turns since done_if_tool=False
-⋮----
-assert len(agent.message_history) >= 3  # At least: system, user, assistant
-⋮----
-# Reset agent for next test
-⋮----
-# Test 2: With done_if_tool=True, task should terminate when tool is generated
-task_with_done = Task(
-⋮----
-result = task_with_done.run("Do something else", turns=10)
-# Task should terminate after first LLM response containing tool
-⋮----
-# Should have exactly 3 messages: system, user, assistant (with tool)
-⋮----
-# Verify the last message contains the tool
-last_msg = agent.message_history[-1]
-⋮----
-# Test 3: With done_if_tool=True and return type specified
-task_with_return_type = Task(
-⋮----
-result_typed = task_with_return_type.run("Process with type", turns=10)
-# Task should terminate and return the SimpleTool instance
-⋮----
-def test_task_init_preserves_parent_id()
-⋮----
-"""Test that task.init() preserves parent_id when deep copying ChatDocument"""
-⋮----
-# Create an agent
-agent = ChatAgent(ChatAgentConfig(name="TestAgent"))
-⋮----
-# Test 1: Basic parent_id preservation
-parent_doc = ChatDocument(
-child_doc = ChatDocument(
-⋮----
-# The pending message should preserve the parent_id
-⋮----
-# Test 2: With caller (subtask scenario)
-caller_task = Task(agent, interactive=False, name="CallerTask")
-sub_task = Task(agent, interactive=False, name="SubTask")
-⋮----
-# When message already has parent_id, it should be preserved
-msg_with_parent = ChatDocument(
-⋮----
-# Set caller to simulate subtask scenario
-⋮----
-# Parent_id should still be preserved (not overridden to msg.id)
-⋮----
-# Test 3: With caller but no original parent_id
-msg_no_parent = ChatDocument(
-⋮----
-sub_task2 = Task(agent, interactive=False, name="SubTask2")
-⋮----
-# Since original had no parent_id, it should be set to msg.id
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.12.4
-  hooks:
-    - id: ruff
 </file>
 
 <file path="langroid/agent/tools/task_tool.py">
