@@ -7,13 +7,13 @@ import requests
 import tiktoken
 from dotenv import load_dotenv
 from openai import AzureOpenAI, OpenAI
+from pydantic_settings import SettingsConfigDict
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.exceptions import LangroidImportError
 from langroid.language_models.provider_params import LangDBParams
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
-from langroid.pydantic_v1 import ConfigDict
 
 AzureADTokenProvider = Callable[[], str]
 
@@ -28,7 +28,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     context_length: int = 8192
     langdb_params: LangDBParams = LangDBParams()
 
-    model_config = ConfigDict(env_prefix="OPENAI_")
+    model_config = SettingsConfigDict(env_prefix="OPENAI_")
 
 
 class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
@@ -46,7 +46,7 @@ class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     dims: int = 1536
     context_length: int = 8192
 
-    model_config = ConfigDict(env_prefix="AZURE_OPENAI_")
+    model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
 
 
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
@@ -417,7 +417,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.tokenize_url, json=data)
 
         if response.status_code == 200:
-            tokens = response.model_dump_json()["tokens"]
+            tokens = response.json()["tokens"]
             if not (isinstance(tokens, list) and isinstance(tokens[0], (int, float))):
                 # not all(isinstance(token, (int, float)) for token in tokens):
                 raise ValueError(
@@ -438,7 +438,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.detokenize_url, json=data)
 
         if response.status_code == 200:
-            text = response.model_dump_json()["content"]
+            text = response.json()["content"]
             if not isinstance(text, str):
                 raise ValueError(
                     """Deokenizer endpoint has not returned the correct format. 
@@ -463,7 +463,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.embedding_url, json=data)
 
         if response.status_code == 200:
-            embeddings = response.model_dump_json()["embedding"]
+            embeddings = response.json()["embedding"]
             if not (
                 isinstance(embeddings, list) and isinstance(embeddings[0], (int, float))
             ):

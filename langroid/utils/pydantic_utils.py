@@ -15,9 +15,9 @@ from typing import (
 
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel, ValidationError, create_model
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.pydantic_v1 import BaseModel, ValidationError, create_model
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def flatten_dict(
 
 def has_field(model_class: Type[BaseModel], field_name: str) -> bool:
     """Check if a Pydantic model class has a field with the given name."""
-    return field_name in model_class.__fields__
+    return field_name in model_class.model_fields
 
 
 def _recursive_purge_dict_key(d: Dict[str, Any], k: str) -> None:
@@ -125,29 +125,31 @@ def flatten_pydantic_model(
     while models_to_process:
         current_model, current_prefix = models_to_process.pop()
 
-        for name, field in current_model.__fields__.items():
-            if isinstance(field.outer_type_, type) and issubclass(
-                field.outer_type_, BaseModel
-            ):
+        for name, field in current_model.model_fields.items():
+            field_type = field.annotation if hasattr(field, "annotation") else field
+            if isinstance(field_type, type) and issubclass(field_type, BaseModel):
                 new_prefix = (
                     f"{current_prefix}{name}__" if current_prefix else f"{name}__"
                 )
-                models_to_process.append((field.outer_type_, new_prefix))
+                models_to_process.append((field_type, new_prefix))
             else:
                 flattened_name = f"{current_prefix}{name}"
 
-                if field.default_factory is not field.default_factory:
+                if (
+                    hasattr(field, "default_factory")
+                    and field.default_factory is not None
+                ):
                     flattened_fields[flattened_name] = (
-                        field.outer_type_,
+                        field_type,
                         field.default_factory,
                     )
-                elif field.default is not field.default:
+                elif hasattr(field, "default") and field.default is not ...:
                     flattened_fields[flattened_name] = (
-                        field.outer_type_,
+                        field_type,
                         field.default,
                     )
                 else:
-                    flattened_fields[flattened_name] = (field.outer_type_, ...)
+                    flattened_fields[flattened_name] = (field_type, ...)
 
     return create_model("FlatModel", __base__=base_model, **flattened_fields)
 
@@ -155,7 +157,7 @@ def flatten_pydantic_model(
 def get_field_names(model: Type[BaseModel]) -> List[str]:
     """Get all field names from a possibly nested Pydantic model."""
     mdl = flatten_pydantic_model(model)
-    fields = list(mdl.__fields__.keys())
+    fields = list(mdl.model_fields.keys())
     # fields may be like a__b__c , so we only want the last part
     return [f.split("__")[-1] for f in fields]
 
@@ -180,19 +182,22 @@ def generate_simple_schema(
         Dict[str, Any]: A dictionary representing the JSON schema of the provided model,
                         with specified fields excluded.
     """
-    if hasattr(model, "__fields__"):
+    if hasattr(model, "model_fields"):
         output: Dict[str, Any] = {}
-        for field_name, field in model.__fields__.items():
+        for field_name, field in model.model_fields.items():
             if field_name in exclude:
                 continue  # Skip excluded fields
 
-            field_type = field.type_
-            if issubclass(field_type, BaseModel):
+            field_type = field.annotation if hasattr(field, "annotation") else field
+            if isinstance(field_type, type) and issubclass(field_type, BaseModel):
                 # Recursively generate schema for nested models
                 output[field_name] = generate_simple_schema(field_type, exclude)
-            else:
+            elif field_type is not None and hasattr(field_type, "__name__"):
                 # Represent the type as a string here
                 output[field_name] = {"type": field_type.__name__}
+            else:
+                # Fallback for complex types
+                output[field_name] = {"type": str(field_type)}
         return output
     else:
         # Non-model type, return a simplified representation
@@ -221,12 +226,26 @@ def flatten_pydantic_instance(
     for name, value in instance.model_dump().items():
         # Assuming nested pydantic model will be a dict here
         if isinstance(value, dict):
-            nested_flat_data = flatten_pydantic_instance(
-                instance.__fields__[name].type_(**value),
-                prefix=f"{prefix}{name}__",
-                force_str=force_str,
+            # Get field info from model_fields
+            field_info = instance.model_fields[name]
+            # Try to get the nested model type from field annotation
+            field_type = (
+                field_info.annotation if hasattr(field_info, "annotation") else None
             )
-            flat_data.model_copy(update=nested_flat_data)
+            if (
+                field_type
+                and isinstance(field_type, type)
+                and issubclass(field_type, BaseModel)
+            ):
+                nested_flat_data = flatten_pydantic_instance(
+                    field_type(**value),
+                    prefix=f"{prefix}{name}__",
+                    force_str=force_str,
+                )
+            else:
+                # Skip non-Pydantic nested fields for safety
+                continue
+            flat_data.update(nested_flat_data)
         else:
             flat_data[f"{prefix}{name}"] = str(value) if force_str else value
     return flat_data
@@ -534,7 +553,16 @@ def extra_metadata(document: Document, doc_cls: Type[Document] = Document) -> Li
     metadata_fields = set(document.metadata.model_dump().keys())
 
     # Get defined fields in the metadata of doc_cls
-    defined_fields = set(doc_cls.__fields__["metadata"].type_.__fields__.keys())
+    metadata_field = doc_cls.model_fields["metadata"]
+    metadata_type = (
+        metadata_field.annotation
+        if hasattr(metadata_field, "annotation")
+        else metadata_field
+    )
+    if isinstance(metadata_type, type) and hasattr(metadata_type, "model_fields"):
+        defined_fields = set(metadata_type.model_fields.keys())
+    else:
+        defined_fields = set()
 
     # Identify extra fields not in defined fields.
     extra_fields = list(metadata_fields - defined_fields)
@@ -561,14 +589,13 @@ def extend_document_class(d: Document) -> Type[Document]:
     # Extract the fields from the original metadata class, including types,
     # correctly handling special types like List[str].
     original_metadata_fields = {
-        k: (v.outer_type_ if v.shape != 1 else v.type_, ...)
-        for k, v in DocMetaData.__fields__.items()
+        k: (v.annotation, ...) for k, v in DocMetaData.model_fields.items()
     }
     # Extract extra fields from the metadata instance with their types
     extra_fields = {
         k: (type(v), ...)
         for k, v in d.metadata.__dict__.items()
-        if k not in DocMetaData.__fields__
+        if k not in DocMetaData.model_fields
     }
 
     # Combine original and extra fields for the new metadata class

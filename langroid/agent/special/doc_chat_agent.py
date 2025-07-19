@@ -584,7 +584,7 @@ class DocChatAgent(ChatAgent):
             # rename content column to "content", leave existing column intact
             df = df.rename(columns={content: "content"}, inplace=False)
 
-        actual_metadata = metadata.model_copy()
+        actual_metadata = metadata.copy()
         if "id" not in df.columns:
             docs = dataframe_to_documents(df, content="content", metadata=metadata)
             ids = [str(d.id()) for d in docs]
@@ -1214,7 +1214,7 @@ class DocChatAgent(ChatAgent):
             return docs_scores
         if len(docs_scores) == 0:
             return []
-        if set(docs_scores[0][0].__fields__) != {"content", "metadata"}:
+        if set(docs_scores[0][0].model_fields) != {"content", "metadata"}:
             # Do not add context window when there are other fields besides just
             # content and metadata, since we do not know how to set those other fields
             # for newly created docs with combined content.
@@ -1324,7 +1324,7 @@ class DocChatAgent(ChatAgent):
         if self.config.use_bm25_search:
             # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
-            id2doc.model_copy(update={d.id(): d for d, _ in docs_scores})
+            id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,
                 # instead of accumulating the bm25 results into passages,
@@ -1350,7 +1350,7 @@ class DocChatAgent(ChatAgent):
                 id2_rank_fuzzy = {
                     d.id(): i for i, (d, _) in enumerate(fuzzy_match_doc_scores)
                 }
-                id2doc.model_copy(update={d.id(): d for d, _ in fuzzy_match_doc_scores})
+                id2doc.update({d.id(): d for d, _ in fuzzy_match_doc_scores})
             else:
                 passages += [d for (d, _) in fuzzy_match_doc_scores]
                 # eliminate duplicate ids
@@ -1609,7 +1609,7 @@ class DocChatAgent(ChatAgent):
                 sender=Entity.LLM,
             )
             # copy metadata from first doc, unclear what to do here.
-            meta.model_copy(update=extracts[0].metadata)
+            meta.update(extracts[0].metadata.model_dump())
             return ChatDocument(
                 content="\n\n".join([e.content for e in extracts]),
                 metadata=ChatDocMetaData(**meta),  # type: ignore

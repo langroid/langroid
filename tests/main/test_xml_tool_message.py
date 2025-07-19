@@ -1,12 +1,12 @@
 from typing import Dict, List, Tuple
 
 import pytest
+from pydantic import BaseModel, Field
 
 import langroid as lr
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.exceptions import XMLException
-from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -19,7 +19,11 @@ class CodeTool(XMLToolMessage):
     # NOTE: we are setting a custom attrib verbatim to True to indicate that
     # parsing/formatting should be verbatim, and to ensure that LLM is instructed
     # to enclose the content in a CDATA section
-    code: str = Field(..., description="The code to write to the file", verbatim=True)
+    code: str = Field(
+        ...,
+        description="The code to write to the file",
+        json_schema_extra={"verbatim": True},
+    )
 
     @classmethod
     def examples(cls) -> List[XMLToolMessage | Tuple[str, XMLToolMessage]]:
@@ -48,7 +52,7 @@ class CodeTool(XMLToolMessage):
 
 
 def test_find_candidates():
-    root_tag = CodeTool.Config.root_element
+    root_tag = CodeTool._get_root_element()
     text = f"""
     Some text before
     <{root_tag}>
@@ -76,7 +80,7 @@ print("Hello, World!")
 
 
 def test_find_candidates_missing_closing_tag():
-    root_tag = CodeTool.Config.root_element
+    root_tag = CodeTool._get_root_element()
     text = f"""
     Some text before
     <{root_tag}>
@@ -130,7 +134,7 @@ def test_find_candidates_tolerant(input_text, expected):
 
 
 def test_parse():
-    root_tag = CodeTool.Config.root_element
+    root_tag = CodeTool._get_root_element()
     xml_string = f"""
     <{root_tag}>
         <request>code_tool</request>
@@ -152,7 +156,7 @@ print("Hello, World!")
 
 
 def test_parse_bad_format():
-    root_tag = CodeTool.Config.root_element
+    root_tag = CodeTool._get_root_element()
     # test with missing closing tag
     bad_xml_string = f"""
     <{root_tag}>
@@ -191,7 +195,7 @@ def test_parse_bad_format():
 
 
 def test_format():
-    root_tag = CodeTool.Config.root_element
+    root_tag = CodeTool._get_root_element()
     code_tool = CodeTool(
         filepath="/path/to/file.py",
         version=1,
@@ -218,7 +222,7 @@ def test_roundtrip():
 
 
 def test_tolerant_parsing():
-    root_tag = CodeTool.Config.root_element
+    root_tag = CodeTool._get_root_element()
     messy_xml_string = f"""
     <{root_tag}>
         <request>
@@ -256,7 +260,7 @@ hello()
 
 def test_instructions():
     instructions = CodeTool.format_instructions()
-    root_tag = CodeTool.Config.root_element
+    root_tag = CodeTool._get_root_element()
 
     assert "Placeholders:" in instructions
     assert "FILEPATH = [value for filepath]" in instructions
@@ -319,7 +323,9 @@ def test_llm_xml_tool_message(
 class Address(BaseModel):
     # declare street as verbatim, to test that the formatting encloses
     # the value in a CDATA block
-    street: str = Field(..., description="The street address", verbatim=True)
+    street: str = Field(
+        ..., description="The street address", json_schema_extra={"verbatim": True}
+    )
     city: str
     country: str
 
@@ -494,7 +500,7 @@ def test_parse_complex_nested():
 
 def test_instructions_complex_nested():
     instructions = ComplexNestedXMLTool.format_instructions()
-    root_tag = ComplexNestedXMLTool.Config.root_element
+    root_tag = ComplexNestedXMLTool._get_root_element()
 
     assert "Placeholders:" in instructions
     assert "REQUEST = [value for request]" in instructions

@@ -11,7 +11,7 @@ python3 examples/basic/tool-custom-handler.py
 import requests
 
 import langroid as lr
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 
 
 class CountryLanguageTool(lr.agent.ToolMessage):

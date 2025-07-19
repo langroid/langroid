@@ -57,7 +57,7 @@ class EmbeddingModel(ABC):
         elif isinstance(config, GeminiEmbeddingsConfig):
             return GeminiEmbeddings(config)
         else:
-            raise ValueError(f"Unknown embedding config: {config.__repr_name__}")
+            raise ValueError(f"Unknown embedding config: {config.__class__.__name__}")
 
     @abstractmethod
     def embedding_fn(self) -> EmbeddingFunction:

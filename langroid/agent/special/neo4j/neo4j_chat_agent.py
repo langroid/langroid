@@ -1,11 +1,10 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.console import Console
-
-from langroid.pydantic_v1 import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     import neo4j
@@ -48,7 +47,7 @@ class Neo4jSettings(BaseSettings):
     password: str = ""
     database: str = ""
 
-    model_config = ConfigDict(env_prefix="NEO4J_")
+    model_config = SettingsConfigDict(env_prefix="NEO4J_")
 
 
 class QueryResult(BaseModel):

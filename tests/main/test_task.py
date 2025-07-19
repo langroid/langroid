@@ -279,8 +279,8 @@ def test_task_tool_agent_response(
     set_global(test_settings)
 
     class AugmentTool(ToolMessage):
-        request = "next_num"
-        purpose = """
+        request: str = "next_num"
+        purpose: str = """
         To augment the given <number> with its <successor> = <number> + 1
         """
         number: int
@@ -369,8 +369,8 @@ def test_task_tool_num(
     set_global(test_settings)
 
     class AugmentTool(ToolMessage):
-        request = "next_num"
-        purpose = """
+        request: str = "next_num"
+        purpose: str = """
         To augment the given <number> with its <successor> = <number> + 1
         """
         number: int
@@ -451,8 +451,8 @@ def test_task_2_agent_tool(
     set_global(test_settings)
 
     class PolinskyTool(ToolMessage):
-        request = "polinsky"
-        purpose = """
+        request: str = "polinsky"
+        purpose: str = """
             Given a <number>, request its Polinsky transform.
             """
         number: int
@@ -557,16 +557,16 @@ def test_task_2_agent_2_tool(
     set_global(test_settings)
 
     class QueryTool(ToolMessage):
-        request = "polinsky_query"
-        purpose = """
+        request: str = "polinsky_query"
+        purpose: str = """
             Ask whether the Polinsky transform of a <number> equals <value>.
             """
         number: int
         value: int
 
     class FeedbackTool(ToolMessage):
-        request = "polinsky_feedback"
-        purpose = """
+        request: str = "polinsky_feedback"
+        purpose: str = """
             Given a <number>, respond with the Polinsky transform of the number.
             """
         feedback: str
@@ -716,21 +716,21 @@ def test_task_tool_responses(
     set_global(test_settings)
 
     class IncrementTool(ToolMessage):
-        request = "increment"
-        purpose = "To increment a number"
+        request: str = "increment"
+        purpose: str = "To increment a number"
         x: int
 
         def handle(self) -> str:
             return DoneTool(content=str(self.x + 1))
 
     class AnswerTool(ToolMessage):
-        request = "answer"
-        purpose = "To provide the final answer"
+        request: str = "answer"
+        purpose: str = "To provide the final answer"
         answer: int
 
     class DoubleTool(ToolMessage):
-        request = "double"
-        purpose = "To double a number"
+        request: str = "double"
+        purpose: str = "To double a number"
         x: int
 
         def handle(self) -> str:
@@ -738,16 +738,16 @@ def test_task_tool_responses(
             return AgentDoneTool(tools=[AnswerTool(answer=2 * self.x)])
 
     class HalveTool(ToolMessage):
-        request = "halve"
-        purpose = "To halve a number"
+        request: str = "halve"
+        purpose: str = "To halve a number"
         x: int
 
         def handle(self) -> str:
             return DoneTool(content=self.x // 2)  # note: content can be any type
 
     class ProcessTool(ToolMessage):
-        request = "process"
-        purpose = "To process a number"
+        request: str = "process"
+        purpose: str = "To process a number"
         x: int
 
         def handle(self) -> ToolMessage:

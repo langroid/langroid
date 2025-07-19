@@ -32,7 +32,7 @@ import langroid.language_models as lm
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 

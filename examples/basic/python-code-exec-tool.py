@@ -20,7 +20,7 @@ from rich.prompt import Prompt
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import ResultTool
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 
 
 def execute_code(code_string):

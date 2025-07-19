@@ -4,9 +4,7 @@ from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Literal, cast
 
 from dotenv import find_dotenv, load_dotenv
-from pydantic_settings import BaseSettings
-
-from langroid.pydantic_v1 import ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Global reentrant lock to serialize any modifications to the global settings.
 _global_lock = threading.RLock()
@@ -23,7 +21,7 @@ class Settings(BaseSettings):
     quiet: bool = False  # quiet mode (i.e. suppress all output)?
     notebook: bool = False  # running in a notebook?
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = SettingsConfigDict(extra="forbid")
 
 
 # Load environment variables from .env file.
@@ -136,6 +134,6 @@ def set_env(settings_instance: BaseSettings) -> None:
 
     Each field in the settings is written to os.environ.
     """
-    for field_name, field in settings_instance.__class__.__fields__.items():
-        env_var_name = field.field_info.extra.get("env", field_name).upper()
+    for field_name, field in settings_instance.__class__.model_fields.items():
+        env_var_name = field.alias or field_name.upper()
         os.environ[env_var_name] = str(settings_instance.model_dump()[field_name])

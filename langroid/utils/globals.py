@@ -1,6 +1,8 @@
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, Dict, Optional, Type, TypeVar, cast
 
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
+from pydantic.fields import ModelPrivateAttr
+from pydantic_core import PydanticUndefined
 
 T = TypeVar("T", bound="GlobalState")
 
@@ -18,9 +20,23 @@ class GlobalState(BaseModel):
         Returns:
             The global instance of the subclass.
         """
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+        # Get the actual value from ModelPrivateAttr when accessing on class
+        instance_attr = getattr(cls, "_instance", None)
+        actual_instance: Optional["GlobalState"]
+        if isinstance(instance_attr, ModelPrivateAttr):
+            default_value = instance_attr.default
+            if default_value is PydanticUndefined:
+                actual_instance = None
+            else:
+                actual_instance = cast(Optional["GlobalState"], default_value)
+        else:
+            actual_instance = instance_attr
+
+        if actual_instance is None:
+            new_instance = cls()
+            cls._instance = new_instance
+            return new_instance
+        return actual_instance  # type: ignore
 
     @classmethod
     def set_values(cls: Type[T], **kwargs: Dict[str, Any]) -> None:

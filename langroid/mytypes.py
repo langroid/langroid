@@ -3,7 +3,7 @@ from textwrap import dedent
 from typing import Any, Callable, Dict, List, Union
 from uuid import uuid4
 
-from langroid.pydantic_v1 import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Number = Union[int, float]
 Embedding = List[Number]
@@ -50,6 +50,14 @@ class DocMetaData(BaseModel):
     is_chunk: bool = False  # if it is a chunk, don't split
     id: str = Field(default_factory=lambda: str(uuid4()))
     window_ids: List[str] = []  # for RAG: ids of chunks around this one
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_id_to_string(cls, v: Any) -> str:
+        """Convert id to string if it's not already."""
+        if v is None:
+            return str(uuid4())
+        return str(v)
 
     def dict_bool_int(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """

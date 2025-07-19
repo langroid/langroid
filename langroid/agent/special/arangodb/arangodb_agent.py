@@ -8,7 +8,8 @@ from arango.client import ArangoClient
 from arango.database import StandardDatabase
 from arango.exceptions import ArangoError, ServerConnectionError
 from numpy import ceil
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.console import Console
 
@@ -32,7 +33,6 @@ from langroid.agent.special.arangodb.utils import count_fields, trim_schema
 from langroid.agent.tools.orchestration import DoneTool, ForwardTool
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Entity
-from langroid.pydantic_v1 import BaseModel, ConfigDict
 from langroid.utils.constants import SEND_TO
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class ArangoSettings(BaseSettings):
     password: str = ""
     database: str = ""
 
-    model_config = ConfigDict(env_prefix="ARANGO_")
+    model_config = SettingsConfigDict(env_prefix="ARANGO_")
 
 
 class QueryResult(BaseModel):

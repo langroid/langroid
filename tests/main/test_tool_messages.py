@@ -4,6 +4,7 @@ import random
 from typing import Any, List, Literal, Optional
 
 import pytest
+from pydantic import BaseModel, Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
@@ -32,7 +33,6 @@ from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
 from langroid.utils.types import is_callable
@@ -83,6 +83,38 @@ class PythonVersionMessage(ToolMessage):
         return [
             cls(),
         ]
+
+
+class PresidentInfo(BaseModel):
+    name: str = Field(..., description="Name of the president")
+    elected: bool = Field(..., description="Whether the president is elected")
+
+
+class CountryInfo(BaseModel):
+    name: str = Field(..., description="Name of the country")
+    capital: str = Field(..., description="Capital city of the country")
+    president: PresidentInfo = Field(..., description="President of the country")
+
+
+class CountryPresidentTool(ToolMessage):
+    request: str = "country_president"
+    purpose: str = "To present info on a country and its president."
+
+    country_info: CountryInfo = Field(
+        ..., description="Information about the country and its president"
+    )
+    country_type: Literal["island", "landlocked", "coastal"] = Field(
+        ..., description="Type of the country, e.g. island, landlocked, coastal"
+    )
+
+    def handle(self) -> str:
+        # Return a simple sentence with all the info.
+        return (
+            f"{self.country_info.name} is a {self.country_type} country. "
+            f"The capital is {self.country_info.capital}. "
+            f"The president is {self.country_info.president.name} "
+            f"({'elected' if self.country_info.president.elected else 'not elected'})."
+        )
 
 
 DEFAULT_PY_VERSION = "3.9"
@@ -325,6 +357,17 @@ def test_handle_bad_tool_message(as_string: bool):
             "You have to check whether Paris is the capital of France",
             "yes",
         ),
+        (
+            CountryPresidentTool,  # test nested tool
+            """
+            Present this info about France and its president, in a structured format:
+            - Country: France
+            - Capital: Paris
+            - President: Emmanuel Macron (elected)
+            - Country Type: coastal
+            """,
+            "elected",
+        ),
     ],
 )
 def test_llm_tool_message(
@@ -359,6 +402,7 @@ def test_llm_tool_message(
             FileExistsMessage,
             PythonVersionMessage,
             CountryCapitalMessage,
+            CountryPresidentTool,
         ]
     )
 
@@ -1736,8 +1780,8 @@ def test_reduce_raw_tool_result():
         request: str = "my_tool"
         purpose: str = "to present a number <num>"
         num: int
-        _max_result_tokens = 10
-        _max_retained_tokens = 2
+        _max_result_tokens: int = 10
+        _max_retained_tokens: int = 2
 
         def handle(self) -> str:
             return BIG_RESULT
@@ -1758,7 +1802,11 @@ def test_reduce_raw_tool_result():
 
     # create dummy agent first, just to get small_result with truncation
     agent = MyAgent(ChatAgentConfig())
-    small_result = agent._maybe_truncate_result(BIG_RESULT, MyTool._max_result_tokens)
+    # Handle ModelPrivateAttr for _max_result_tokens
+    max_result_tokens = MyTool._max_result_tokens
+    if hasattr(max_result_tokens, "default"):
+        max_result_tokens = max_result_tokens.default
+    small_result = agent._maybe_truncate_result(BIG_RESULT, max_result_tokens)
 
     # now create the actual agent
     agent = MyAgent(
@@ -1792,7 +1840,11 @@ def test_reduce_raw_tool_result():
     assert result.content == "Finished"
     assert len(agent.message_history) == 7
     tool_result = agent.message_history[3].content
-    assert "my_tool" in tool_result and str(MyTool._max_retained_tokens) in tool_result
+    # Handle ModelPrivateAttr for _max_retained_tokens
+    max_retained = MyTool._max_retained_tokens
+    if hasattr(max_retained, "default"):
+        max_retained = max_retained.default
+    assert "my_tool" in tool_result and str(max_retained) in tool_result
 
 
 def test_valid_structured_recovery():

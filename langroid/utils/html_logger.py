@@ -10,7 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
+
 from langroid.utils.logging import setup_logger
 
 

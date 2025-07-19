@@ -15,6 +15,7 @@ from openai.types.beta.assistant_update_params import (
 )
 from openai.types.beta.threads import Message, Run
 from openai.types.beta.threads.runs import RunStep
+from pydantic import BaseModel
 from rich import print
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -26,7 +27,6 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPT,
     OpenAIGPTConfig,
 )
-from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.system import generate_user_id, update_hash
 

@@ -1,7 +1,8 @@
 import logging
 
+from pydantic import BaseModel, Field
+
 from langroid.agent.tool_message import ToolMessage
-from langroid.pydantic_v1 import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 

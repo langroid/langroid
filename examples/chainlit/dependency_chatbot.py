@@ -46,8 +46,8 @@ app = typer.Typer()
 
 
 class DepGraphTool(ToolMessage):
-    request = "construct_dependency_graph"
-    purpose = f"""Get package <package_version>, <package_type>, and <package_name>.
+    request: str = "construct_dependency_graph"
+    purpose: str = f"""Get package <package_version>, <package_type>, and <package_name>.
     For the <package_version>, obtain the recent version, it should be a number. 
     For the <package_type>, return if the package is PyPI or not.
       Otherwise, return {NO_ANSWER}.
@@ -60,8 +60,8 @@ class DepGraphTool(ToolMessage):
 
 
 class VisualizeGraph(ToolMessage):
-    request = "visualize_dependency_graph"
-    purpose = """
+    request: str = "visualize_dependency_graph"
+    purpose: str = """
       Use this tool/function to display the dependency graph.
       """
     package_version: str

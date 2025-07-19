@@ -4,9 +4,7 @@ Provider-specific parameter configurations for various LLM providers.
 
 from typing import Any, Dict, Optional
 
-from pydantic_settings import BaseSettings
-
-from langroid.pydantic_v1 import ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Constants
 LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
@@ -26,7 +24,7 @@ class LangDBParams(BaseSettings):
     thread_id: Optional[str] = None
     base_url: str = LANGDB_BASE_URL
 
-    model_config = ConfigDict(env_prefix="LANGDB_")
+    model_config = SettingsConfigDict(env_prefix="LANGDB_")
 
 
 class PortkeyParams(BaseSettings):
@@ -60,7 +58,7 @@ class PortkeyParams(BaseSettings):
     custom_headers: Optional[Dict[str, str]] = None  # Optional: additional headers
     base_url: str = PORTKEY_BASE_URL
 
-    model_config = ConfigDict(env_prefix="PORTKEY_")
+    model_config = SettingsConfigDict(env_prefix="PORTKEY_")
 
     def get_headers(self) -> Dict[str, str]:
         """Generate Portkey-specific headers from parameters."""

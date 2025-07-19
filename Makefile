@@ -36,15 +36,6 @@ stubs:
 	@uv run stubgen -p langroid -o stubs
 	@echo "Stubs generated in the 'stubs' directory"
 
-.PHONY: fix-pydantic
-
-# Entry to replace pydantic imports in specified directories
-fix-pydantic:
-	@echo "Fixing pydantic imports..."
-	@chmod +x scripts/fix-pydantic-imports.sh
-	@./scripts/fix-pydantic-imports.sh
-
-
 .PHONY: tests
 tests:
 	pytest tests/main --basetemp=/tmp/pytest
@@ -96,7 +87,7 @@ repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (exclude
 repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
 
 .PHONY: check
-check: fix-pydantic lint type-check repomix-all
+check: lint type-check repomix-all
 
 .PHONY: revert-tag
 revert-tag:

@@ -68,14 +68,14 @@ def test_agent_done_interactive(xtool: bool, only_user_quits: bool):
     AgentDoneTool = lr.agent.tools.orchestration.AgentDoneTool
 
     class OtherTool(lr.ToolMessage):
-        purpose = "a tool not enabled for agent"
-        request = "other_tool"
+        purpose: str = "a tool not enabled for agent"
+        request: str = "other_tool"
 
         z: int
 
     class XTool(lr.ToolMessage):
-        purpose = "to show x"
-        request = "x_tool"
+        purpose: str = "to show x"
+        request: str = "x_tool"
         x: int
 
         def handle(self) -> AgentDoneTool:
@@ -143,13 +143,13 @@ def test_agent_done_tool(test_settings: Settings):
     ResultTool = lr.agent.tools.orchestration.ResultTool
 
     class XTool(lr.ToolMessage):
-        purpose = "to show x"
-        request = "x_tool"
+        purpose: str = "to show x"
+        request: str = "x_tool"
         x: int
 
     class XYTool(lr.ToolMessage):
-        purpose = "to show x, y"
-        request = "x_y_tool"
+        purpose: str = "to show x, y"
+        request: str = "x_y_tool"
         x: int
         y: int
 
@@ -255,8 +255,8 @@ def test_orch_tools(
     forward_tool_name = ForwardTool.default_value("request")
 
     class ReduceTool(lr.ToolMessage):
-        purpose = "to remove last zero from a number ending in 0"
-        request = "reduce_tool"
+        purpose: str = "to remove last zero from a number ending in 0"
+        request: str = "reduce_tool"
         number: int
 
         def handle(self) -> int:
@@ -365,8 +365,8 @@ async def test_orch_tools_async(
     forward_tool_name = ForwardTool.default_value("request")
 
     class ReduceTool(lr.ToolMessage):
-        purpose = "to remove last zero from a number ending in 0"
-        request = "reduce_tool"
+        purpose: str = "to remove last zero from a number ending in 0"
+        request: str = "reduce_tool"
         number: int
 
         def handle(self) -> int:
@@ -465,13 +465,13 @@ def test_send_tools(
     done_tool_name = DoneTool.default_value("request")
 
     class ThreeTool(lr.ToolMessage):
-        purpose = "to handle a <number> that is a MULTIPLE of 3"
-        request = "three_tool"
+        purpose: str = "to handle a <number> that is a MULTIPLE of 3"
+        request: str = "three_tool"
         number: int
 
     class SubThreeTool(lr.ToolMessage):
-        purpose = "to subtract 3 from a number, and if result is zero, add 1 again"
-        request = "sub_three_tool"
+        purpose: str = "to subtract 3 from a number, and if result is zero, add 1 again"
+        request: str = "sub_three_tool"
         number: int
 
         def handle(self) -> int:

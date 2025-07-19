@@ -48,8 +48,8 @@ main = MainChatAgent(
 
 
 class PolinskyTool(lr.ToolMessage):
-    request = "polinsky"
-    purpose = "To compute the polinsky transform of a <number>"
+    request: str = "polinsky"
+    purpose: str = "To compute the polinsky transform of a <number>"
     number: int
 
     def handle(self) -> AgentDoneTool:
@@ -58,8 +58,8 @@ class PolinskyTool(lr.ToolMessage):
 
 
 class ChichikovTool(lr.ToolMessage):
-    request = "chichikov"
-    purpose = "To compute the Chichikov transform of a <number>"
+    request: str = "chichikov"
+    purpose: str = "To compute the Chichikov transform of a <number>"
     number: int
 
     def handle(self) -> AgentDoneTool:

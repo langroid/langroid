@@ -5,11 +5,11 @@ Other tests for Task are in test_chat_agent.py
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
 import langroid as lr
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import AgentDoneTool, ResultTool
-from langroid.pydantic_v1 import BaseModel
 from langroid.utils.constants import DONE
 
 

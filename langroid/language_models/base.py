@@ -17,6 +17,7 @@ from typing import (
     cast,
 )
 
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
 from langroid.cachedb.base import CacheDBConfig
@@ -26,7 +27,6 @@ from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
-from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import show_if_debug
 

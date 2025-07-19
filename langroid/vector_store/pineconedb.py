@@ -17,11 +17,11 @@ from typing import (
 
 from dotenv import load_dotenv
 
+# import dataclass
+from pydantic import BaseModel
+
 from langroid import LangroidImportError
 from langroid.mytypes import Document
-
-# import dataclass
-from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 

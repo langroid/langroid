@@ -6,6 +6,8 @@ TaskTool: A tool that allows agents to delegate a task to a sub-agent with
 import uuid
 from typing import List, Optional
 
+from pydantic.fields import ModelPrivateAttr
+
 import langroid.language_models as lm
 from langroid import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -83,7 +85,7 @@ class TaskTool(ToolMessage):
         """,
     )
     # TODO: ensure valid model name
-    model: str = Field(
+    model: Optional[str] = Field(
         default=None,
         description="""
             Optional name of the LLM model to use for the sub-agent, e.g. 'gpt-4.1'
@@ -148,25 +150,29 @@ class TaskTool(ToolMessage):
         if self.tools == ["ALL"]:
             # Enable all tools from the parent agent:
             # This is the list of all tools KNOWN (whether usable or handle-able or not)
-            tool_classes = [
-                agent.llm_tools_map[t]
-                for t in agent.llm_tools_known
-                if t in agent.llm_tools_map
-                and t != self.request
-                and agent.llm_tools_map[t]._allow_llm_use
-                # Exclude the TaskTool itself!
-            ]
+            tool_classes = []
+            for t in agent.llm_tools_known:
+                if t in agent.llm_tools_map and t != self.request:
+                    tool_class = agent.llm_tools_map[t]
+                    allow_llm_use = tool_class._allow_llm_use
+                    if isinstance(allow_llm_use, ModelPrivateAttr):
+                        allow_llm_use = allow_llm_use.default
+                    if allow_llm_use:
+                        tool_classes.append(tool_class)
         elif self.tools == ["NONE"]:
             # No tools enabled
             tool_classes = []
         else:
             # Enable only specified tools
-            tool_classes = [
-                agent.llm_tools_map[tool_name]
-                for tool_name in self.tools
-                if tool_name in agent.llm_tools_map
-                and agent.llm_tools_map[tool_name]._allow_llm_use
-            ]
+            tool_classes = []
+            for tool_name in self.tools:
+                if tool_name in agent.llm_tools_map:
+                    tool_class = agent.llm_tools_map[tool_name]
+                    allow_llm_use = tool_class._allow_llm_use
+                    if isinstance(allow_llm_use, ModelPrivateAttr):
+                        allow_llm_use = allow_llm_use.default
+                    if allow_llm_use:
+                        tool_classes.append(tool_class)
 
         # always enable the DoneTool to signal task completion
         sub_agent.enable_message(tool_classes + [DoneTool], use=True, handle=True)

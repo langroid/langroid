@@ -60,9 +60,9 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> list[VectorStore]:
 )
 def test_vector_stores(vecdb: Union[ChromaDB, QdrantDB]):
     docs = [
-        Document(content="hello", metadata=DocMetaData(id=1)),
-        Document(content="world", metadata=DocMetaData(id=2)),
-        Document(content="hi there", metadata=DocMetaData(id=3)),
+        Document(content="hello", metadata=DocMetaData(id="1")),
+        Document(content="world", metadata=DocMetaData(id="2")),
+        Document(content="hi there", metadata=DocMetaData(id="3")),
     ]
     vecdb.add_documents(docs)
     docs_and_scores = vecdb.similar_texts_with_scores("hello", k=2)

@@ -4,7 +4,8 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
 import tiktoken
-from pydantic_settings import BaseSettings
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from langroid.mytypes import Document
 from langroid.parsing.md_parser import (
@@ -13,7 +14,6 @@ from langroid.parsing.md_parser import (
     count_words,
 )
 from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
-from langroid.pydantic_v1 import ConfigDict, model_validator
 from langroid.utils.object_registry import ObjectRegistry
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class BaseParsingConfig(BaseSettings):
 
     library: str
 
-    model_config = ConfigDict(extra="ignore")  # Ignore unknown settings
+    model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
 
 
 class LLMPdfParserConfig(BaseSettings):
@@ -115,6 +115,17 @@ class ParsingConfig(BaseSettings):
     chunk_size_variation: float = 0.30  # max variation from chunk_size
     overlap: int = 50  # overlap between chunks
     max_chunks: int = 10_000
+
+    @field_validator("chunk_size", mode="before")
+    @classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int:
+        """Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+        if isinstance(v, float):
+            return int(v)
+        return int(v)
+
     # offset to subtract from page numbers:
     # e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
     page_number_offset: int = 0
@@ -240,7 +251,7 @@ class Parser:
                         """
                     )
                 break  # we won't be able to shorten them with current settings
-            chunks = split_chunks.model_copy()
+            chunks = split_chunks.copy()
 
         self.add_window_ids(chunks)
         return chunks

@@ -27,6 +27,7 @@ from typing import (
 )
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 from rich import print
 from rich.markup import escape
 
@@ -45,7 +46,6 @@ from langroid.exceptions import InfiniteLoopException
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.routing import parse_addressed_message
-from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
     DONE,
@@ -483,7 +483,7 @@ class Task:
         self.message_counter.clear()
         # create a unique string that will not likely be in any message,
         # so we always have a message with count=1
-        self.message_counter.model_copy(update=[hash("___NO_MESSAGE___")])
+        self.message_counter.update([str(hash("___NO_MESSAGE___"))])
 
     def _cache_session_store(self, key: str, value: str) -> None:
         """
@@ -722,7 +722,7 @@ class Task:
 
     def __getitem__(self, return_type: type) -> Self:
         """Returns a (shallow) copy of `self` with a default return type."""
-        clone = copy.model_copy(self)
+        clone = copy.copy(self)
         clone.default_return_type = return_type
         return clone
 
@@ -1187,7 +1187,7 @@ class Task:
             self._process_valid_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
-        responders: List[Responder] = self.non_human_responders.model_copy()
+        responders: List[Responder] = self.non_human_responders.copy()
 
         if (
             Entity.USER in self.responders
@@ -1299,7 +1299,7 @@ class Task:
             self._process_valid_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
-        responders: List[Responder] = self.non_human_responders_async.model_copy()
+        responders: List[Responder] = self.non_human_responders_async.copy()
 
         if (
             Entity.USER in self.responders
@@ -1438,7 +1438,7 @@ class Task:
                 ]
             # update counters for infinite loop detection
             hashed_msg = hash(str(self.pending_message))
-            self.message_counter.model_copy(update=[hashed_msg])
+            self.message_counter.update([hashed_msg])
             self.history.append(hashed_msg)
 
     def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
@@ -2145,8 +2145,8 @@ class Task:
                 # Get fields from the message
                 fields = msg.log_fields()
                 fields_dict = fields.model_dump()
-                fields_dict.model_copy(
-                    update={
+                fields_dict.update(
+                    {
                         "responder": str(resp),
                         "mark": "*" if mark else "",
                         "task_name": self.name or "root",

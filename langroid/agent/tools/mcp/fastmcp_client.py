@@ -27,12 +27,12 @@ from mcp.types import (
     TextResourceContents,
     Tool,
 )
+from pydantic import AnyUrl, BaseModel, Field, create_model
 
 from langroid.agent.base import Agent
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.parsing.file_attachment import FileAttachment
-from langroid.pydantic_v1 import AnyUrl, BaseModel, Field, create_model
 
 load_dotenv()  # load environment variables from .env
 
@@ -253,11 +253,24 @@ class FastMCPClient:
             from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
 
             # pack up the payload
-            payload = itself.model_dump(
-                exclude=itself.model_config["json_schema_extra"]["exclude"].union(
-                    ["request", "purpose"]
-                ),
-            )
+            # Get exclude fields from model config with proper type checking
+            exclude_fields = set()
+            model_config = getattr(itself, "model_config", {})
+            if (
+                isinstance(model_config, dict)
+                and "json_schema_extra" in model_config
+                and model_config["json_schema_extra"] is not None
+                and isinstance(model_config["json_schema_extra"], dict)
+                and "exclude" in model_config["json_schema_extra"]
+            ):
+                exclude_list = model_config["json_schema_extra"]["exclude"]
+                if isinstance(exclude_list, (list, set, tuple)):
+                    exclude_fields = set(exclude_list)
+
+            # Add standard excluded fields
+            exclude_fields.update(["request", "purpose"])
+
+            payload = itself.model_dump(exclude=exclude_fields)
 
             # restore any renamed fields
             for orig, new in itself.__class__._renamed_fields.items():  # type: ignore

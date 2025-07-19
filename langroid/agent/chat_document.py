@@ -6,6 +6,8 @@ from collections import OrderedDict
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union, cast
 
+from pydantic import BaseModel, ConfigDict
+
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
@@ -21,7 +23,6 @@ from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.file_attachment import FileAttachment
 from langroid.parsing.parse_json import extract_top_level_json, top_level_json_field
-from langroid.pydantic_v1 import BaseModel, ConfigDict
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output.printing import shorten_text
 from langroid.utils.types import to_string

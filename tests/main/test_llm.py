@@ -7,6 +7,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 import openai
 import pytest
+from pydantic_settings import SettingsConfigDict
 
 import langroid as lr
 import langroid.language_models as lm
@@ -694,8 +695,7 @@ def test_litellm_model_key():
         """OpenAI config that doesn't auto-load from environment variables."""
 
         # Disable environment prefix to prevent auto-loading
-        class Config:
-            env_prefix = ""
+        model_config = SettingsConfigDict(env_prefix="")
 
     llm_config = CustomOpenAIGPTConfig(
         chat_model=model,

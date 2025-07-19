@@ -3,7 +3,7 @@ import logging
 from inspect import signature
 from typing import Any, Optional, Type, TypeVar, Union, get_args, get_origin
 
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 PrimitiveType = Union[int, float, bool, str]

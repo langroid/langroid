@@ -82,7 +82,7 @@ class VectorStore(ABC):
         else:
             logger.warning(
                 f"""
-                Unknown vector store config: {config.__repr_name__()},
+                Unknown vector store config: {config.__class__.__name__},
                 so skipping vector store creation!
                 If you intended to use a vector-store, please set a specific 
                 vector-store in your script, typically in the `vecdb` field of a 

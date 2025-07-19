@@ -33,7 +33,7 @@ import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import ResultTool
-from langroid.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langroid.utils.configuration import settings
 
 # for best results:

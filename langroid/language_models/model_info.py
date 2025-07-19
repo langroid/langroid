@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Dict, List, Optional
 
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 
 
 class ModelProvider(str, Enum):
@@ -173,6 +173,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
     OpenAIChatModel.GPT4_1_NANO.value: ModelInfo(
         name=OpenAIChatModel.GPT4_1_NANO.value,
         provider=ModelProvider.OPENAI,
+        has_structured_output=True,
         context_length=1_047_576,
         max_output_tokens=32_768,
         input_cost_per_million=0.10,
@@ -183,6 +184,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
     OpenAIChatModel.GPT4_1_MINI.value: ModelInfo(
         name=OpenAIChatModel.GPT4_1_MINI.value,
         provider=ModelProvider.OPENAI,
+        has_structured_output=True,
         context_length=1_047_576,
         max_output_tokens=32_768,
         input_cost_per_million=0.40,
@@ -193,6 +195,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
     OpenAIChatModel.GPT4_1.value: ModelInfo(
         name=OpenAIChatModel.GPT4_1.value,
         provider=ModelProvider.OPENAI,
+        has_structured_output=True,
         context_length=1_047_576,
         max_output_tokens=32_768,
         input_cost_per_million=2.00,
@@ -232,6 +235,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=60.0,
         allows_streaming=True,
         allows_system_message=False,
+        has_structured_output=True,
         unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
@@ -247,6 +251,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=8.0,
         allows_streaming=True,
         allows_system_message=False,
+        has_structured_output=True,
         unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
@@ -262,6 +267,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=4.4,
         allows_streaming=False,
         allows_system_message=False,
+        has_structured_output=True,
         unsupported_params=["temperature", "stream"],
         rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
@@ -277,6 +283,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=4.4,
         allows_streaming=False,
         allows_system_message=False,
+        has_structured_output=True,
         unsupported_params=["temperature", "stream"],
         rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
@@ -292,6 +299,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=4.40,
         allows_streaming=False,
         allows_system_message=False,
+        has_structured_output=True,
         unsupported_params=["temperature", "stream"],
         rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,

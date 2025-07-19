@@ -1,7 +1,7 @@
 import re
-from typing import List
+from typing import Any, List
 
-from langroid.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 HEADER_CONTEXT_SEP = "\n...\n"
 
@@ -179,6 +179,16 @@ class MarkdownChunkConfig(BaseModel):
     variation_percent: float = 0.3  # allowed variation
     rollup: bool = True  # whether to roll up chunks
     header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
+
+    @field_validator("chunk_size", mode="before")
+    @classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int:
+        """Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+        if isinstance(v, float):
+            return int(v)
+        return int(v)
 
 
 # A simple tokenizer that counts tokens as whitespace-separated words.

@@ -5,11 +5,12 @@ termination, routing to another agent, etc.
 
 from typing import Any, List, Tuple
 
+from pydantic import ConfigDict, field_validator
+
 from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
-from langroid.pydantic_v1 import ConfigDict
 from langroid.utils.types import to_string
 
 
@@ -47,6 +48,12 @@ class DoneTool(ToolMessage):
     """
     request: str = "done_tool"
     content: str = ""
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def convert_content_to_string(cls, v: Any) -> str:
+        """Convert content to string if it's not already."""
+        return str(v) if v is not None else ""
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         return agent.create_agent_response(
@@ -95,7 +102,7 @@ class ResultTool(ToolMessage):
         arbitrary_types_allowed=False,
         validate_default=True,
         validate_assignment=True,
-        json_schema_extra={"exclude": {"purpose", "id", "strict"}},
+        json_schema_extra={"exclude": ["purpose", "id", "strict"]},
     )
 
     def handle(self) -> AgentDoneTool:
@@ -136,7 +143,7 @@ class FinalResultTool(ToolMessage):
         arbitrary_types_allowed=False,
         validate_default=True,
         validate_assignment=True,
-        json_schema_extra={"exclude": {"purpose", "id", "strict"}},
+        json_schema_extra={"exclude": ["purpose", "id", "strict"]},
     )
 
 

@@ -19,7 +19,7 @@ from rich.prompt import Prompt
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import FinalResultTool
-from langroid.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 
 
 class Slot(BaseModel):

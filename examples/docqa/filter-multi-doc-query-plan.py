@@ -22,7 +22,7 @@ from langroid import ChatDocument
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.pydantic_utils import temp_update
 from langroid.vector_store.lancedb import LanceDBConfig

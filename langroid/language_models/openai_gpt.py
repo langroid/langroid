@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Mapping,
     Optional,
     Tuple,
     Type,
@@ -24,7 +25,8 @@ from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.markup import escape
 
@@ -79,7 +81,6 @@ from langroid.language_models.utils import (
     retry_with_exponential_backoff,
 )
 from langroid.parsing.parse_json import parse_imperfect_json
-from langroid.pydantic_v1 import BaseModel, ConfigDict
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
@@ -230,7 +231,7 @@ class LiteLLMProxyConfig(BaseSettings):
     api_key: str = ""  # read from env var LITELLM_API_KEY if set
     api_base: str = ""  # read from env var LITELLM_API_BASE if set
 
-    model_config = ConfigDict(env_prefix="LITELLM_")
+    model_config = SettingsConfigDict(env_prefix="LITELLM_")
 
 
 class OpenAIGPTConfig(LLMConfig):
@@ -316,7 +317,43 @@ class OpenAIGPTConfig(LLMConfig):
 
         super().__init__(**kwargs)
 
-    model_config = ConfigDict(env_prefix="OPENAI_")
+    model_config = SettingsConfigDict(env_prefix="OPENAI_")
+
+    def model_copy(
+        self, *, update: Mapping[str, Any] | None = None, deep: bool = False
+    ) -> "OpenAIGPTConfig":
+        """
+        Override model_copy to handle unpicklable fields properly.
+
+        This preserves fields like http_client_factory during normal copying
+        while still allowing exclusion for pickling operations.
+        """
+        # Save references to unpicklable fields
+        http_client_factory = self.http_client_factory
+        streamer = self.streamer
+        streamer_async = self.streamer_async
+
+        # Get the current model data, excluding problematic fields
+        data = self.model_dump(
+            exclude={"http_client_factory", "streamer", "streamer_async"}
+        )
+
+        # Apply any updates
+        if update:
+            data.update(update)
+
+        # Create a new instance with the copied data
+        new_instance = self.__class__(**data)
+
+        # Restore the unpicklable fields if they weren't overridden by update
+        if "http_client_factory" not in (update or {}):
+            new_instance.http_client_factory = http_client_factory
+        if "streamer" not in (update or {}):
+            new_instance.streamer = streamer
+        if "streamer_async" not in (update or {}):
+            new_instance.streamer_async = streamer_async
+
+        return new_instance
 
     def _validate_litellm(self) -> None:
         """
@@ -364,7 +401,7 @@ class OpenAIGPTConfig(LLMConfig):
         class DynamicConfig(OpenAIGPTConfig):
             pass
 
-        DynamicConfig.model_config = ConfigDict(env_prefix=prefix.upper() + "_")
+        DynamicConfig.model_config = SettingsConfigDict(env_prefix=prefix.upper() + "_")
         return DynamicConfig
 
 
