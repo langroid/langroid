@@ -29,7 +29,28 @@ from pydantic import BaseModel, Field
 
 ## Key Changes to Update
 
-### 1. Model Serialization Methods
+### 1. All Fields Must Have Type Annotations
+
+!!! danger "Critical Change"
+    In Pydantic v2, fields without type annotations are completely ignored!
+
+```python
+# WRONG - Fields without annotations are ignored in v2
+class MyModel(BaseModel):
+    name = "John"          # ❌ This field is IGNORED!
+    age = 25               # ❌ This field is IGNORED!
+    role: str = "user"     # ✅ This field works
+
+# CORRECT - All fields must have type annotations
+class MyModel(BaseModel):
+    name: str = "John"     # ✅ Type annotation required
+    age: int = 25          # ✅ Type annotation required
+    role: str = "user"     # ✅ Already correct
+```
+
+This is one of the most common issues when migrating to v2. Always ensure every field has an explicit type annotation, even if it has a default value.
+
+### 2. Model Serialization Methods
 
 ```python
 # OLD (Pydantic v1)
@@ -45,7 +66,7 @@ new_model = MyModel.model_validate(data)
 new_model = MyModel.model_validate_json(json_str)
 ```
 
-### 2. Model Configuration
+### 3. Model Configuration
 
 ```python
 # OLD (Pydantic v1)
@@ -68,7 +89,7 @@ class MyModel(BaseModel):
     name: str
 ```
 
-### 3. Field Validators
+### 4. Field Validators
 
 ```python
 # OLD (Pydantic v1)
@@ -96,7 +117,7 @@ class MyModel(BaseModel):
         return v
 ```
 
-### 4. Custom Types and Validation
+### 5. Custom Types and Validation
 
 ```python
 # OLD (Pydantic v1)
