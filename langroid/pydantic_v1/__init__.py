@@ -1,33 +1,44 @@
 """
-Compatibility layer for Pydantic v2 migration.
+Compatibility layer for Langroid's Pydantic migration.
 
-This module now imports directly from Pydantic v2 since all internal code
-has been migrated to use Pydantic v2 patterns.
+IMPORTANT: You are importing from langroid.pydantic_v1 but getting Pydantic v2 classes!
+Langroid has fully migrated to Pydantic v2, and this compatibility layer is deprecated.
 """
 
-# Import everything from pydantic v2
-from pydantic import *  # noqa: F403, F401
+import warnings
+import logging
 
-# Import BaseSettings and SettingsConfigDict from pydantic-settings v2
-from pydantic_settings import BaseSettings, SettingsConfigDict  # noqa: F401
+logger = logging.getLogger(__name__)
 
-# Explicitly re-export commonly used items for better IDE support and type checking
-from pydantic import (  # noqa: F401
-    BaseModel,
-    Field,
-    ConfigDict,
-    ValidationError,
-    field_validator,
-    model_validator,
-    create_model,
-    HttpUrl,
-    AnyUrl,
-    TypeAdapter,
-    parse_obj_as,
+# Only show the visual warning, not the standard deprecation warning
+# The standard warning is too noisy and shows the import line
+logger.warning(
+    """
+╔════════════════════════════════════════════════════════════════════════╗
+║                    ⚠️  DEPRECATION WARNING ⚠️                          ║
+╠════════════════════════════════════════════════════════════════════════╣
+║                                                                        ║
+║  You are importing from langroid.pydantic_v1, but you're actually      ║
+║  getting Pydantic v2 classes. Langroid has fully migrated to v2.       ║
+║                                                                        ║
+║  Please update your imports:                                           ║
+║    OLD: from langroid.pydantic_v1 import BaseModel, Field              ║
+║    NEW: from pydantic import BaseModel, Field                          ║
+║                                                                        ║
+║  Also ensure your code uses Pydantic v2 patterns:                      ║
+║    • Use model_dump() instead of dict()                                ║
+║    • Use model_dump_json() instead of json()                           ║
+║    • Use ConfigDict instead of class Config                            ║
+║    • Use model_validate() instead of parse_obj()                       ║
+║                                                                        ║
+║  This compatibility layer will be removed in a future version.         ║
+╚════════════════════════════════════════════════════════════════════════╝
+"""
 )
 
-# Legacy names are already provided by pydantic v2 for backward compatibility
-# No need to redefine validator and root_validator as they are already imported above
+# Import from pydantic v2 directly (not from pydantic.v1)
+# This allows existing code to continue working if it's already v2-compatible
+from pydantic import *  # noqa: F403, F401
 
 # Explicitly export all items for mypy
 __all__ = [
