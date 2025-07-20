@@ -316,12 +316,6 @@ def main(
     )
 
     agent = HNAgent(cfg)
-    # urls = [
-    #     "https://news.ycombinator.com/item?id=42157556",
-    #     "https://news.ycombinator.com/item?id=44594475",
-    #     "https://news.ycombinator.com/item?id=44492290",
-    # ]
-    #
     # Create a task for the agent
 
     agent.enable_message(
