@@ -50,6 +50,40 @@ class MyModel(BaseModel):
 
 This is one of the most common issues when migrating to v2. Always ensure every field has an explicit type annotation, even if it has a default value.
 
+#### Special Case: Overriding Fields in Subclasses
+
+!!! danger "Can Cause Errors"
+    When overriding fields from parent classes without type annotations, you may get 
+    actual errors, not just ignored fields!
+
+This is particularly important when creating custom Langroid agent configurations:
+
+```python
+# WRONG - This can cause errors!
+from langroid import ChatAgentConfig
+from langroid.language_models import OpenAIGPTConfig
+
+class MyAgentConfig(ChatAgentConfig):
+    # ❌ ERROR: Missing type annotation when overriding parent field
+    llm = OpenAIGPTConfig(chat_model="gpt-4")
+    
+    # ❌ ERROR: Even with Field, still needs type annotation
+    system_message = Field(default="You are a helpful assistant")
+
+# CORRECT - Always include type annotations when overriding
+class MyAgentConfig(ChatAgentConfig):
+    # ✅ Type annotation required when overriding
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(chat_model="gpt-4")
+    
+    # ✅ Type annotation with Field
+    system_message: str = Field(default="You are a helpful assistant")
+```
+
+Without type annotations on overridden fields, you may see errors like:
+- `ValueError: Field 'llm' requires a type annotation`
+- `TypeError: Field definitions should be annotated`
+- Validation errors when the model tries to use the parent's field definition
+
 ### 2. Model Serialization Methods
 
 ```python
