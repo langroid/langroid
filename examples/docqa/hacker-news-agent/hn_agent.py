@@ -8,7 +8,6 @@ import logging
 import re
 import json
 from typing import Any, List, Optional, Dict, Union
-from langroid.pydantic_v1 import Field, BaseModel
 from langroid.utils.configuration import Settings, set_global
 from fire import Fire
 from rich import print
@@ -101,8 +100,8 @@ def exa_search(
 
 
 class RelevantExtractsTool(ToolMessage):
-    request = "relevant_extracts"
-    purpose = "Get docs/extracts relevant to the <query>"
+    request: str = "relevant_extracts"
+    purpose: str = "Get docs/extracts relevant to the <query>"
     query: str
 
     @classmethod
@@ -119,8 +118,8 @@ class RelevantExtractsTool(ToolMessage):
 
 
 class RelevantSearchExtractsTool(ToolMessage):
-    request = "relevant_search_extracts"
-    purpose = "Get docs/extracts relevant to the <query> from a web search"
+    request: str = "relevant_search_extracts"
+    purpose: str = "Get docs/extracts relevant to the <query> from a web search"
     query: str
     num_results: int = 3
     start_crawl_date: Optional[str] = None
