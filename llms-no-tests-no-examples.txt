@@ -16529,6 +16529,70 @@ max-line-length = 88
 ignore = W291, W293, E501, E203, W503
 </file>
 
+<file path="ai-instructions/claude-repomix-instructions.md">
+# AI Instructions for Setting Up Repomix
+
+## Task Overview
+Set up [repomix](https://github.com/yamadashy/repomix) to generate LLM-friendly repository exports. This creates text files that can be uploaded to AI models for code analysis.
+
+## Steps to Complete
+
+### 1. Install Repomix
+```bash
+npm install -g repomix
+```
+
+### 2. Create repomix.config.json
+Create a configuration file in the repository root with:
+- **Include patterns**: Source code files (*.py, *.js, *.md, *.yaml, *.yml, *.toml)
+- **Exclude patterns**: Data directories, logs, node_modules, JSON files, generated files
+- **Security check**: Enable to prevent sensitive data inclusion
+
+### 3. Configure Include/Exclude Patterns
+- Include only source code directories and documentation
+- Exclude data/, logs/, build artifacts, dependencies
+- Add `llms*.txt` to exclusions to prevent recursive inclusion
+
+### 4. Test Configuration (Optional)
+```bash
+# Generate file list only for inspection
+repomix --no-files -o file-list.txt
+```
+This allows you to review which files will be included before generating the full output.
+
+### 5. Generate Output Versions
+
+Use the Makefile targets to generate repomix files:
+
+```bash
+# Generate all variants (recommended)
+make repomix-all
+
+# Or generate specific versions:
+make repomix                      # llms.txt and llms-compressed.txt (includes tests)
+make repomix-no-tests             # llms-no-tests.txt and llms-no-tests-compressed.txt
+make repomix-no-tests-no-examples # llms-no-tests-no-examples.txt and compressed version
+```
+
+All commands use `git ls-files` to ensure only git-tracked files are included.
+
+### 6. Verify Results
+- Check file sizes and token counts in repomix output
+- Ensure no sensitive data is included
+- Confirm only relevant source files are packaged
+
+## Expected Outcome
+Six text files optimized for different LLM contexts:
+- `llms.txt`: Full version with tests and examples (870K tokens)
+- `llms-compressed.txt`: Compressed version with tests and examples (513K tokens)
+- `llms-no-tests.txt`: Full version without tests (677K tokens)
+- `llms-no-tests-compressed.txt`: Compressed version without tests (433K tokens)
+- `llms-no-tests-no-examples.txt`: Core library code only (no tests/examples)
+- `llms-no-tests-no-examples-compressed.txt`: Compressed core library code (285K tokens)
+
+The files contain only git-tracked source code with proper exclusions for clean, focused LLM consumption.
+</file>
+
 <file path="ai-notes/Langroid-repo-docs.md">
 # CLAUDE.md
 
@@ -27241,70 +27305,6 @@ It is strongly recommended to use the `gh` command-line utility when working wit
 Read more [here](docs/development/github-cli.md).
 </file>
 
-<file path="ai-instructions/claude-repomix-instructions.md">
-# AI Instructions for Setting Up Repomix
-
-## Task Overview
-Set up [repomix](https://github.com/yamadashy/repomix) to generate LLM-friendly repository exports. This creates text files that can be uploaded to AI models for code analysis.
-
-## Steps to Complete
-
-### 1. Install Repomix
-```bash
-npm install -g repomix
-```
-
-### 2. Create repomix.config.json
-Create a configuration file in the repository root with:
-- **Include patterns**: Source code files (*.py, *.js, *.md, *.yaml, *.yml, *.toml)
-- **Exclude patterns**: Data directories, logs, node_modules, JSON files, generated files
-- **Security check**: Enable to prevent sensitive data inclusion
-
-### 3. Configure Include/Exclude Patterns
-- Include only source code directories and documentation
-- Exclude data/, logs/, build artifacts, dependencies
-- Add `llms*.txt` to exclusions to prevent recursive inclusion
-
-### 4. Test Configuration (Optional)
-```bash
-# Generate file list only for inspection
-repomix --no-files -o file-list.txt
-```
-This allows you to review which files will be included before generating the full output.
-
-### 5. Generate Output Versions
-
-Use the Makefile targets to generate repomix files:
-
-```bash
-# Generate all variants (recommended)
-make repomix-all
-
-# Or generate specific versions:
-make repomix                      # llms.txt and llms-compressed.txt (includes tests)
-make repomix-no-tests             # llms-no-tests.txt and llms-no-tests-compressed.txt
-make repomix-no-tests-no-examples # llms-no-tests-no-examples.txt and compressed version
-```
-
-All commands use `git ls-files` to ensure only git-tracked files are included.
-
-### 6. Verify Results
-- Check file sizes and token counts in repomix output
-- Ensure no sensitive data is included
-- Confirm only relevant source files are packaged
-
-## Expected Outcome
-Six text files optimized for different LLM contexts:
-- `llms.txt`: Full version with tests and examples (870K tokens)
-- `llms-compressed.txt`: Compressed version with tests and examples (513K tokens)
-- `llms-no-tests.txt`: Full version without tests (677K tokens)
-- `llms-no-tests-compressed.txt`: Compressed version without tests (433K tokens)
-- `llms-no-tests-no-examples.txt`: Core library code only (no tests/examples)
-- `llms-no-tests-no-examples-compressed.txt`: Compressed core library code (285K tokens)
-
-The files contain only git-tracked source code with proper exclusions for clean, focused LLM consumption.
-</file>
-
 <file path="ai-notes/handler-parameter-analysis-notes.md">
 # Handler Parameter Analysis Notes
 
@@ -37977,6 +37977,305 @@ Thanks to the contributors who helped improve this release, especially the integ
 **Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
 </file>
 
+<file path="CLAUDE.md">
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+### Development
+- Install core dependencies: `pip install -e .`
+- Install dev dependencies: `pip install -e ".[dev]"`
+- Install specific feature groups:
+  - Document chat features: `pip install -e ".[doc-chat]"`
+  - Database features: `pip install -e ".[db]"`
+  - HuggingFace embeddings: `pip install -e ".[hf-embeddings]"`
+  - All features: `pip install -e ".[all]"`
+- Run linting and type checking: `make check`
+- Format code: `make lint`
+
+### Testing
+- Run all tests: `pytest tests/`
+- Run specific test: `pytest tests/main/test_file.py::test_function`
+- Run tests with coverage: `pytest --cov=langroid tests/`
+- Run only main tests: `make tests` (uses `pytest tests/main`)
+
+### Linting and Type Checking
+- Lint code: `make check` (runs black, ruff check, mypy)
+- Format only: `make lint` (runs black and ruff fix)
+- Type check only: `make type-check`
+- Always use `make check` to run lints + mypy before trying to commit changes
+
+### Version and Release Management
+- Bump version: `./bump_version.sh [patch|minor|major]`
+- Or use make commands:
+  - `make all-patch` - Bump patch version, build, push, release
+  - `make all-minor` - Bump minor version, build, push, release
+  - `make all-major` - Bump major version, build, push, release
+
+## Architecture
+
+Langroid is a framework for building LLM-powered agents that can use tools and collaborate with each other.
+
+### Core Components:
+
+1. **Agents** (`langroid/agent/`):
+   - `chat_agent.py` - Base ChatAgent that can converse and use tools
+   - `task.py` - Handles execution flow for agents
+   - `special/` - Domain-specific agents (doc chat, table chat, SQL chat, etc.)
+   - `openai_assistant.py` - Integration with OpenAI Assistant API
+
+2. **Tools** (`langroid/agent/tools/`):
+   - Tool system for agents to interact with external systems
+   - `tool_message.py` - Protocol for tool messages
+   - Various search tools (Google, DuckDuckGo, Tavily, Exa, etc.)
+
+3. **Language Models** (`langroid/language_models/`):
+   - Abstract interfaces for different LLM providers
+   - Implementations for OpenAI, Azure, local models, etc.
+   - Support for hundreds of LLMs via LiteLLM
+
+4. **Vector Stores** (`langroid/vector_store/`):
+   - Abstract interface and implementations for different vector databases
+   - Includes support for Qdrant, Chroma, LanceDB, Pinecone, PGVector, Weaviate
+
+5. **Document Processing** (`langroid/parsing/`):
+   - Parse and process documents from various formats
+   - Chunk text for embedding and retrieval
+   - Support for PDF, DOCX, images, and more
+
+6. **Embedding Models** (`langroid/embedding_models/`):
+   - Abstract interface for embedding generation
+   - Support for OpenAI, HuggingFace, and custom embeddings
+
+### Key Multi-Agent Patterns:
+
+- **Task Delegation**: Agents can delegate tasks to other agents through hierarchical task structures
+- **Message Passing**: Agents communicate by transforming and passing messages
+- **Collaboration**: Multiple agents can work together on complex tasks
+
+### Key Security Features:
+
+- The `full_eval` flag in both `TableChatAgentConfig` and `VectorStoreConfig` controls code injection protection
+- Defaults to `False` for security, set to `True` only in trusted environments
+
+## Documentation
+
+- Main documentation is in the `docs/` directory
+- Examples in the `examples/` directory demonstrate usage patterns
+- Quick start examples available in `examples/quick-start/`
+
+## MCP (Model Context Protocol) Tools Integration
+
+Langroid provides comprehensive support for MCP tools through the `langroid.agent.tools.mcp` module. Here are the key patterns and approaches:
+
+### MCP Tool Creation Methods
+
+#### 1. Using the `@mcp_tool` Decorator (Module Level)
+```python
+from langroid.agent.tools.mcp import mcp_tool
+from fastmcp.client.transports import StdioTransport
+
+transport = StdioTransport(command="...", args=[...])
+
+@mcp_tool(transport, "tool_name")
+class MyTool(lr.ToolMessage):
+    async def handle_async(self):
+        result = await self.call_tool_async()
+        # custom processing
+        return result
+```
+
+**Important**: The decorator creates the transport connection at module import time, so it must be used at module level (not inside async functions).
+
+#### 2. Using `get_tool_async` (Inside Async Functions)
+```python
+from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
+
+async def main():
+    transport = StdioTransport(command="...", args=[...])
+    BaseTool = await get_tool_async(transport, "tool_name")
+    
+    class MyTool(BaseTool):
+        async def handle_async(self):
+            result = await self.call_tool_async()
+            # custom processing
+            return result
+```
+
+**Use this approach when**:
+- Creating tools inside async functions
+- Need to avoid event loop conflicts
+- Want to delay transport creation until runtime
+
+### Transport Types and Event Loop Considerations
+
+- **StdioTransport**: Creates subprocess immediately, can cause "event loop closed" errors if created at module level in certain contexts
+- **SSETransport**: HTTP-based, generally safer for module-level creation
+- **Best Practice**: Create transports inside async functions when possible, use `asyncio.run()` wrapper for Fire CLI integration
+
+### Tool Message Request Field and Agent Handlers
+
+When you get an MCP tool named "my_tool", Langroid automatically:
+
+1. **Sets the `request` field**: The dynamically created ToolMessage subclass has `request = "my_tool"`
+2. **Enables custom agent handlers**: Agents can define these methods:
+   - `my_tool()` - synchronous handler
+   - `my_tool_async()` - async handler
+
+The agent's message routing system automatically calls these handlers when the tool is used.
+
+### Custom `handle_async` Method Override
+
+Both decorator and non-decorator approaches support overriding `handle_async`:
+
+```python
+class MyTool(BaseTool):  # or use @mcp_tool decorator
+    async def handle_async(self):
+        # Get raw result from MCP server
+        result = await self.call_tool_async()
+        
+        # Option 1: Return processed result to LLM (continues conversation)
+        return f"<ProcessedResult>{result}</ProcessedResult>"
+        
+        # Option 2: Return ResultTool to terminate task
+        return MyResultTool(answer=result)
+```
+
+### Common Async Issues and Solutions
+
+**Problem**: "RuntimeError: asyncio.run() cannot be called from a running event loop"
+**Solution**: Use `get_tool_async` instead of `@mcp_tool` decorator when already in async context
+
+**Problem**: "RuntimeError: Event loop is closed"
+**Solution**: 
+- Move transport creation inside async functions
+- Use `asyncio.run()` wrapper for Fire CLI integration:
+```python
+if __name__ == "__main__":
+    import asyncio
+    def run_main(**kwargs):
+        asyncio.run(main(**kwargs))
+    Fire(run_main)
+```
+
+### MCP Tool Integration Examples
+
+See `examples/mcp/` for working examples:
+- `gitmcp.py` - HTTP-based SSE transport
+- `pyodide_code_executor.py` - Subprocess-based stdio transport with proper async handling
+
+## Testing and Tool Message Patterns
+
+### MockLM for Testing Tool Generation
+- Use `MockLM` with `response_dict` to simulate LLM responses that include tool messages
+- Set `tools=[ToolClass]` or `enable_message=[ToolClass]` on the agent to enable tool handling
+- The `try_get_tool_messages()` method can extract tool messages from LLM responses with `all_tools=True`
+
+### Task Termination Control
+- `TaskConfig` has `done_if_tool` parameter to terminate tasks when any tool is generated
+- `Task.done()` method checks `result.agent_response` for tool content when this flag is set
+- Useful for workflows where tool generation signals task completion
+
+### Testing Tool-Based Task Flows
+```python
+# Example: Test task termination on tool generation
+config = TaskConfig(done_if_tool=True)
+task = Task(agent, config=config)
+response_dict = {"content": '{"request": "my_tool", "param": "value"}'}
+```
+
+## Multi-Agent System Development
+
+### Important Patterns and Best Practices
+
+#### 1. Pydantic Imports
+**ALWAYS import Pydantic classes from `langroid.pydantic_v1`**, not from `pydantic` directly:
+```python
+# CORRECT
+from langroid.pydantic_v1 import Field, BaseModel
+
+# WRONG - will cause issues
+from pydantic import Field, BaseModel
+```
+
+#### 2. Tool Name References in System Messages
+When referencing tool names in f-strings within system messages, use the `.name()` method:
+```python
+system_message: str = f"""
+Use {MyTool.name()} to perform the action.
+"""
+```
+This works at module level in configs, but be aware that complex initialization at module level can sometimes cause issues.
+
+#### 3. Agent Configuration with LLM
+Always specify the LLM configuration explicitly in agent configs:
+```python
+class MyAgentConfig(lr.ChatAgentConfig):
+    name: str = "MyAgent"
+    llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
+        chat_model="gpt-4",  # or "gpt-4.1" etc.
+    )
+    system_message: str = "..."
+```
+
+#### 4. Tool Organization in Multi-Agent Systems
+When tools delegate to agents:
+- Define agent configs and agents BEFORE the tools that use them
+- Tools can directly instantiate agents in their `handle()` methods:
+```python
+class MyTool(lr.ToolMessage):
+    def handle(self) -> str:
+        agent = MyAgent(MyAgentConfig())
+        task = lr.Task(agent, interactive=False)
+        result = task.run(prompt)
+        return result.content
+```
+
+#### 5. Task Termination with Done Sequences
+Use `done_sequences` for precise task termination control:
+```python
+# For a task that should complete after: Tool -> Agent handles -> LLM responds
+task = lr.Task(
+    agent,
+    interactive=False,
+    config=lr.TaskConfig(done_sequences=["T,A,L"]),
+)
+```
+
+Common patterns:
+- `"T,A"` - Tool used and handled by agent
+- `"T,A,L"` - Tool used, handled, then LLM responds
+- `"T[specific_tool],A"` - Specific tool used and handled
+
+See `docs/notes/task-termination.md` for comprehensive documentation.
+
+#### 6. Handling Non-Tool LLM Responses
+Use `handle_llm_no_tool` in agent configs to handle cases where the LLM forgets to use a tool:
+```python
+class MyAgentConfig(lr.ChatAgentConfig):
+    handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
+```
+
+#### 7. Agent Method Parameters
+Note that `ChatAgentConfig` does not have a `use_tools` parameter. Instead, enable tools on the agent after creation:
+```python
+agent = MyAgent(config)
+agent.enable_message([Tool1, Tool2, Tool3])  # Pass list of tool classes
+```
+
+## Commit and Pull Request Guidelines
+
+- Never include "co-authored by Claude Code" or "created by Claude" in commit messages or pull request descriptions
+
+## Codecov Badge Fix (June 2025)
+
+- Fixed broken Codecov badge in README by removing the token parameter from the URL
+- Changed from `https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE` to `https://codecov.io/gh/langroid/langroid/graph/badge.svg`
+- Tokens are not needed for public repositories and can cause GitHub rendering issues
+</file>
+
 <file path="docs/notes/task-termination.md">
 # Task Termination in Langroid
 
@@ -39542,305 +39841,6 @@ test_minimal.py
 test_debug_full.py
 test_agent_difference.py
 test_isolated.py
-</file>
-
-<file path="CLAUDE.md">
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Commands
-
-### Development
-- Install core dependencies: `pip install -e .`
-- Install dev dependencies: `pip install -e ".[dev]"`
-- Install specific feature groups:
-  - Document chat features: `pip install -e ".[doc-chat]"`
-  - Database features: `pip install -e ".[db]"`
-  - HuggingFace embeddings: `pip install -e ".[hf-embeddings]"`
-  - All features: `pip install -e ".[all]"`
-- Run linting and type checking: `make check`
-- Format code: `make lint`
-
-### Testing
-- Run all tests: `pytest tests/`
-- Run specific test: `pytest tests/main/test_file.py::test_function`
-- Run tests with coverage: `pytest --cov=langroid tests/`
-- Run only main tests: `make tests` (uses `pytest tests/main`)
-
-### Linting and Type Checking
-- Lint code: `make check` (runs black, ruff check, mypy)
-- Format only: `make lint` (runs black and ruff fix)
-- Type check only: `make type-check`
-- Always use `make check` to run lints + mypy before trying to commit changes
-
-### Version and Release Management
-- Bump version: `./bump_version.sh [patch|minor|major]`
-- Or use make commands:
-  - `make all-patch` - Bump patch version, build, push, release
-  - `make all-minor` - Bump minor version, build, push, release
-  - `make all-major` - Bump major version, build, push, release
-
-## Architecture
-
-Langroid is a framework for building LLM-powered agents that can use tools and collaborate with each other.
-
-### Core Components:
-
-1. **Agents** (`langroid/agent/`):
-   - `chat_agent.py` - Base ChatAgent that can converse and use tools
-   - `task.py` - Handles execution flow for agents
-   - `special/` - Domain-specific agents (doc chat, table chat, SQL chat, etc.)
-   - `openai_assistant.py` - Integration with OpenAI Assistant API
-
-2. **Tools** (`langroid/agent/tools/`):
-   - Tool system for agents to interact with external systems
-   - `tool_message.py` - Protocol for tool messages
-   - Various search tools (Google, DuckDuckGo, Tavily, Exa, etc.)
-
-3. **Language Models** (`langroid/language_models/`):
-   - Abstract interfaces for different LLM providers
-   - Implementations for OpenAI, Azure, local models, etc.
-   - Support for hundreds of LLMs via LiteLLM
-
-4. **Vector Stores** (`langroid/vector_store/`):
-   - Abstract interface and implementations for different vector databases
-   - Includes support for Qdrant, Chroma, LanceDB, Pinecone, PGVector, Weaviate
-
-5. **Document Processing** (`langroid/parsing/`):
-   - Parse and process documents from various formats
-   - Chunk text for embedding and retrieval
-   - Support for PDF, DOCX, images, and more
-
-6. **Embedding Models** (`langroid/embedding_models/`):
-   - Abstract interface for embedding generation
-   - Support for OpenAI, HuggingFace, and custom embeddings
-
-### Key Multi-Agent Patterns:
-
-- **Task Delegation**: Agents can delegate tasks to other agents through hierarchical task structures
-- **Message Passing**: Agents communicate by transforming and passing messages
-- **Collaboration**: Multiple agents can work together on complex tasks
-
-### Key Security Features:
-
-- The `full_eval` flag in both `TableChatAgentConfig` and `VectorStoreConfig` controls code injection protection
-- Defaults to `False` for security, set to `True` only in trusted environments
-
-## Documentation
-
-- Main documentation is in the `docs/` directory
-- Examples in the `examples/` directory demonstrate usage patterns
-- Quick start examples available in `examples/quick-start/`
-
-## MCP (Model Context Protocol) Tools Integration
-
-Langroid provides comprehensive support for MCP tools through the `langroid.agent.tools.mcp` module. Here are the key patterns and approaches:
-
-### MCP Tool Creation Methods
-
-#### 1. Using the `@mcp_tool` Decorator (Module Level)
-```python
-from langroid.agent.tools.mcp import mcp_tool
-from fastmcp.client.transports import StdioTransport
-
-transport = StdioTransport(command="...", args=[...])
-
-@mcp_tool(transport, "tool_name")
-class MyTool(lr.ToolMessage):
-    async def handle_async(self):
-        result = await self.call_tool_async()
-        # custom processing
-        return result
-```
-
-**Important**: The decorator creates the transport connection at module import time, so it must be used at module level (not inside async functions).
-
-#### 2. Using `get_tool_async` (Inside Async Functions)
-```python
-from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
-
-async def main():
-    transport = StdioTransport(command="...", args=[...])
-    BaseTool = await get_tool_async(transport, "tool_name")
-    
-    class MyTool(BaseTool):
-        async def handle_async(self):
-            result = await self.call_tool_async()
-            # custom processing
-            return result
-```
-
-**Use this approach when**:
-- Creating tools inside async functions
-- Need to avoid event loop conflicts
-- Want to delay transport creation until runtime
-
-### Transport Types and Event Loop Considerations
-
-- **StdioTransport**: Creates subprocess immediately, can cause "event loop closed" errors if created at module level in certain contexts
-- **SSETransport**: HTTP-based, generally safer for module-level creation
-- **Best Practice**: Create transports inside async functions when possible, use `asyncio.run()` wrapper for Fire CLI integration
-
-### Tool Message Request Field and Agent Handlers
-
-When you get an MCP tool named "my_tool", Langroid automatically:
-
-1. **Sets the `request` field**: The dynamically created ToolMessage subclass has `request = "my_tool"`
-2. **Enables custom agent handlers**: Agents can define these methods:
-   - `my_tool()` - synchronous handler
-   - `my_tool_async()` - async handler
-
-The agent's message routing system automatically calls these handlers when the tool is used.
-
-### Custom `handle_async` Method Override
-
-Both decorator and non-decorator approaches support overriding `handle_async`:
-
-```python
-class MyTool(BaseTool):  # or use @mcp_tool decorator
-    async def handle_async(self):
-        # Get raw result from MCP server
-        result = await self.call_tool_async()
-        
-        # Option 1: Return processed result to LLM (continues conversation)
-        return f"<ProcessedResult>{result}</ProcessedResult>"
-        
-        # Option 2: Return ResultTool to terminate task
-        return MyResultTool(answer=result)
-```
-
-### Common Async Issues and Solutions
-
-**Problem**: "RuntimeError: asyncio.run() cannot be called from a running event loop"
-**Solution**: Use `get_tool_async` instead of `@mcp_tool` decorator when already in async context
-
-**Problem**: "RuntimeError: Event loop is closed"
-**Solution**: 
-- Move transport creation inside async functions
-- Use `asyncio.run()` wrapper for Fire CLI integration:
-```python
-if __name__ == "__main__":
-    import asyncio
-    def run_main(**kwargs):
-        asyncio.run(main(**kwargs))
-    Fire(run_main)
-```
-
-### MCP Tool Integration Examples
-
-See `examples/mcp/` for working examples:
-- `gitmcp.py` - HTTP-based SSE transport
-- `pyodide_code_executor.py` - Subprocess-based stdio transport with proper async handling
-
-## Testing and Tool Message Patterns
-
-### MockLM for Testing Tool Generation
-- Use `MockLM` with `response_dict` to simulate LLM responses that include tool messages
-- Set `tools=[ToolClass]` or `enable_message=[ToolClass]` on the agent to enable tool handling
-- The `try_get_tool_messages()` method can extract tool messages from LLM responses with `all_tools=True`
-
-### Task Termination Control
-- `TaskConfig` has `done_if_tool` parameter to terminate tasks when any tool is generated
-- `Task.done()` method checks `result.agent_response` for tool content when this flag is set
-- Useful for workflows where tool generation signals task completion
-
-### Testing Tool-Based Task Flows
-```python
-# Example: Test task termination on tool generation
-config = TaskConfig(done_if_tool=True)
-task = Task(agent, config=config)
-response_dict = {"content": '{"request": "my_tool", "param": "value"}'}
-```
-
-## Multi-Agent System Development
-
-### Important Patterns and Best Practices
-
-#### 1. Pydantic Imports
-**ALWAYS import Pydantic classes from `langroid.pydantic_v1`**, not from `pydantic` directly:
-```python
-# CORRECT
-from langroid.pydantic_v1 import Field, BaseModel
-
-# WRONG - will cause issues
-from pydantic import Field, BaseModel
-```
-
-#### 2. Tool Name References in System Messages
-When referencing tool names in f-strings within system messages, use the `.name()` method:
-```python
-system_message: str = f"""
-Use {MyTool.name()} to perform the action.
-"""
-```
-This works at module level in configs, but be aware that complex initialization at module level can sometimes cause issues.
-
-#### 3. Agent Configuration with LLM
-Always specify the LLM configuration explicitly in agent configs:
-```python
-class MyAgentConfig(lr.ChatAgentConfig):
-    name: str = "MyAgent"
-    llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
-        chat_model="gpt-4",  # or "gpt-4.1" etc.
-    )
-    system_message: str = "..."
-```
-
-#### 4. Tool Organization in Multi-Agent Systems
-When tools delegate to agents:
-- Define agent configs and agents BEFORE the tools that use them
-- Tools can directly instantiate agents in their `handle()` methods:
-```python
-class MyTool(lr.ToolMessage):
-    def handle(self) -> str:
-        agent = MyAgent(MyAgentConfig())
-        task = lr.Task(agent, interactive=False)
-        result = task.run(prompt)
-        return result.content
-```
-
-#### 5. Task Termination with Done Sequences
-Use `done_sequences` for precise task termination control:
-```python
-# For a task that should complete after: Tool -> Agent handles -> LLM responds
-task = lr.Task(
-    agent,
-    interactive=False,
-    config=lr.TaskConfig(done_sequences=["T,A,L"]),
-)
-```
-
-Common patterns:
-- `"T,A"` - Tool used and handled by agent
-- `"T,A,L"` - Tool used, handled, then LLM responds
-- `"T[specific_tool],A"` - Specific tool used and handled
-
-See `docs/notes/task-termination.md` for comprehensive documentation.
-
-#### 6. Handling Non-Tool LLM Responses
-Use `handle_llm_no_tool` in agent configs to handle cases where the LLM forgets to use a tool:
-```python
-class MyAgentConfig(lr.ChatAgentConfig):
-    handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
-```
-
-#### 7. Agent Method Parameters
-Note that `ChatAgentConfig` does not have a `use_tools` parameter. Instead, enable tools on the agent after creation:
-```python
-agent = MyAgent(config)
-agent.enable_message([Tool1, Tool2, Tool3])  # Pass list of tool classes
-```
-
-## Commit and Pull Request Guidelines
-
-- Never include "co-authored by Claude Code" or "created by Claude" in commit messages or pull request descriptions
-
-## Codecov Badge Fix (June 2025)
-
-- Fixed broken Codecov badge in README by removing the token parameter from the URL
-- Changed from `https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE` to `https://codecov.io/gh/langroid/langroid/graph/badge.svg`
-- Tokens are not needed for public repositories and can cause GitHub rendering issues
 </file>
 
 <file path="issues/pydantic-v2-migration/migration-checking-log.md">
@@ -46295,180 +46295,6 @@ repos:
     - id: ruff
 </file>
 
-<file path="Makefile">
-.PHONY: setup check lint tests docs nodocs loc
-
-SHELL := /bin/bash
-
-.PHONY: setup update
-
-setup: ## Setup the git pre-commit hooks
-	uv run pre-commit install
-
-update: ## Update the git pre-commit hooks
-	uv run pre-commit autoupdate
-
-.PHONY: type-check
-type-check:
-	@uv run pre-commit install
-	@uv run pre-commit autoupdate
-	@uv run pre-commit run --all-files
-	@echo "Running black..."
-	@uv run black --check .
-	@echo "Running ruff check (without fix)..."
-	@uv run ruff check .
-	@echo "Running mypy...";
-	@uv run mypy -p langroid
-	@echo "All checks passed!"
-
-.PHONY: lint
-lint:
-	uv run black .
-	uv run ruff check . --fix
-	@echo "Auto-fixing issues in examples folder..."
-	@uv run ruff check examples/ --fix-only --no-force-exclude
-
-.PHONY: stubs
-stubs:
-	@echo "Generating Python stubs for the langroid package..."
-	@uv run stubgen -p langroid -o stubs
-	@echo "Stubs generated in the 'stubs' directory"
-
-.PHONY: tests
-tests:
-	pytest tests/main --basetemp=/tmp/pytest
-
-
-docs:
-	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || true
-	@# Build the documentation.
-	mkdocs build
-	@# Serve the documentation in the background.
-	mkdocs serve &
-	@echo "Documentation is being served in the background."
-	@echo "You can access the documentation at http://127.0.0.1:8000/"
-
-nodocs:
-	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
-	@echo "Stopped serving documentation."
-
-
-loc:
-	@echo "Lines in git-tracked files python files:"
-	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
-
-.PHONY: repomix repomix-no-tests repomix-all
-
-repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
-	@echo "Generating llms.txt (with tests)..."
-	@git ls-files | repomix --stdin
-	@echo "Generating llms-compressed.txt..."
-	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
-	@echo "Generated llms.txt and llms-compressed.txt"
-
-repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
-	@echo "Generating llms-no-tests.txt (without tests)..."
-	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
-	@echo "Generating llms-no-tests-compressed.txt..."
-	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
-	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
-
-repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
-	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
-	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
-	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
-	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
-	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
-
-repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
-
-.PHONY: check
-check: lint type-check repomix-all
-
-.PHONY: revert-tag
-revert-tag:
-	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
-	echo "Deleting tag: $$LATEST_TAG" && \
-	git tag -d $$LATEST_TAG
-
-.PHONY: revert-bump
-revert-bump:
-	@if git log -1 --pretty=%B | grep -q "bump"; then \
-		git reset --hard HEAD~1; \
-		echo "Reverted last commit (bump commit)"; \
-	else \
-		echo "Last commit was not a bump commit"; \
-	fi
-
-.PHONY: revert
-revert: revert-bump revert-tag
-	
-.PHONY: bump-patch
-bump-patch:
-	@cz bump --increment PATCH
-
-.PHONY: bump-minor
-bump-minor:
-	@cz bump --increment MINOR 
-
-.PHONY: bump-major
-bump-major:
-	@cz bump --increment MAJOR 
-
-.PHONY: build
-build:
-	@uv build
-
-.PHONY: push
-push:
-	@git push origin main
-	@git push origin --tags
-
-.PHONY: clean
-clean:
-	-rm -rf dist/*
-
-.PHONY: release
-release:
-	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
-
-.PHONY: bump-rc
-bump-rc:
-	@cz bump --prerelease rc
-
-.PHONY: bump-beta
-bump-beta:
-	@cz bump --prerelease beta
-
-.PHONY: bump-alpha
-bump-alpha:
-	@cz bump --prerelease alpha
-
-.PHONY: all-patch
-all-patch: bump-patch clean build push release
-
-.PHONY: all-minor
-all-minor: bump-minor clean build push release
-
-.PHONY: all-major
-all-major: bump-major clean build push release
-
-.PHONY: all-rc
-all-rc: bump-rc clean build push release
-
-.PHONY: all-beta
-all-beta: bump-beta clean build push release
-
-.PHONY: all-alpha
-all-alpha: bump-alpha clean build push release
-
-.PHONY: publish
-publish:
-	uv publish
-</file>
-
 <file path="langroid/agent/special/doc_chat_agent.py">
 # # langroid/agent/special/doc_chat_agent.py
 """
@@ -50826,6 +50652,275 @@ class Task:
                 seq_idx -= 1
                 msg_idx -= 1
         return seq_idx < 0
+</file>
+
+<file path="Makefile">
+.PHONY: setup check lint tests docs nodocs loc
+
+SHELL := /bin/bash
+
+.PHONY: setup update
+
+setup: ## Setup the git pre-commit hooks
+	uv run pre-commit install
+
+update: ## Update the git pre-commit hooks
+	uv run pre-commit autoupdate
+
+.PHONY: type-check
+type-check:
+	@uv run pre-commit install
+	@uv run pre-commit autoupdate
+	@uv run pre-commit run --all-files
+	@echo "Running black..."
+	@uv run black --check .
+	@echo "Running ruff check (without fix)..."
+	@uv run ruff check .
+	@echo "Running mypy...";
+	@uv run mypy -p langroid
+	@echo "All checks passed!"
+
+.PHONY: lint
+lint:
+	uv run black .
+	uv run ruff check . --fix
+	@echo "Auto-fixing issues in examples folder..."
+	@uv run ruff check examples/ --fix-only --no-force-exclude
+
+.PHONY: stubs
+stubs:
+	@echo "Generating Python stubs for the langroid package..."
+	@uv run stubgen -p langroid -o stubs
+	@echo "Stubs generated in the 'stubs' directory"
+
+.PHONY: tests
+tests:
+	pytest tests/main --basetemp=/tmp/pytest
+
+
+docs:
+	@# Kill any existing 'mkdocs serve' processes.
+	@pkill -f "mkdocs serve" 2>/dev/null || true
+	@# Build the documentation.
+	mkdocs build
+	@# Serve the documentation in the background.
+	mkdocs serve &
+	@echo "Documentation is being served in the background."
+	@echo "You can access the documentation at http://127.0.0.1:8000/"
+
+nodocs:
+	@# Kill any existing 'mkdocs serve' processes.
+	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
+	@echo "Stopped serving documentation."
+
+
+loc:
+	@echo "Lines in git-tracked files python files:"
+	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
+
+.PHONY: repomix repomix-no-tests repomix-all
+
+repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
+	@echo "Generating llms.txt (with tests)..."
+	@git ls-files | repomix --stdin
+	@echo "Generating llms-compressed.txt..."
+	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
+	@echo "Generated llms.txt and llms-compressed.txt"
+
+repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
+	@echo "Generating llms-no-tests.txt (without tests)..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
+	@echo "Generating llms-no-tests-compressed.txt..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
+	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
+
+repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
+	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
+	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
+	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
+
+repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
+
+.PHONY: check
+check: lint type-check repomix-all
+
+.PHONY: revert-tag
+revert-tag:
+	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
+	echo "Deleting tag: $$LATEST_TAG" && \
+	git tag -d $$LATEST_TAG
+
+.PHONY: revert-bump
+revert-bump:
+	@if git log -1 --pretty=%B | grep -q "bump"; then \
+		git reset --hard HEAD~1; \
+		echo "Reverted last commit (bump commit)"; \
+	else \
+		echo "Last commit was not a bump commit"; \
+	fi
+
+.PHONY: revert
+revert: revert-bump revert-tag
+	
+.PHONY: bump-patch
+bump-patch:
+	@cz bump --increment PATCH
+
+.PHONY: bump-minor
+bump-minor:
+	@cz bump --increment MINOR 
+
+.PHONY: bump-major
+bump-major:
+	@cz bump --increment MAJOR 
+
+.PHONY: build
+build:
+	@uv build
+
+.PHONY: push
+push:
+	@git push origin main
+	@git push origin --tags
+
+.PHONY: clean
+clean:
+	-rm -rf dist/*
+
+.PHONY: release
+release:
+	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+
+.PHONY: bump-rc
+bump-rc:
+	@cz bump --prerelease rc
+
+.PHONY: bump-beta
+bump-beta:
+	@cz bump --prerelease beta
+
+.PHONY: bump-alpha
+bump-alpha:
+	@cz bump --prerelease alpha
+
+.PHONY: all-patch
+all-patch: bump-patch clean build push release
+
+.PHONY: all-minor
+all-minor: bump-minor clean build push release
+
+.PHONY: all-major
+all-major: bump-major clean build push release
+
+.PHONY: all-rc
+all-rc: bump-rc clean build push release
+
+.PHONY: all-beta
+all-beta: bump-beta clean build push release
+
+.PHONY: all-alpha
+all-alpha: bump-alpha clean build push release
+
+.PHONY: pre-release-branch
+pre-release-branch: ## Create and push pre-release from current branch
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot create pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	PRERELEASE_TYPE=$${PRERELEASE_TYPE:-rc} && \
+	cz bump --prerelease "$$PRERELEASE_TYPE" && \
+	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	git push origin "$$CURRENT_BRANCH" --tags && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: pre-release-rc
+pre-release-rc: ## Create release candidate from current branch
+	@PRERELEASE_TYPE=rc make pre-release-branch
+
+.PHONY: pre-release-beta
+pre-release-beta: ## Create beta release from current branch
+	@PRERELEASE_TYPE=beta make pre-release-branch
+
+.PHONY: pre-release-alpha
+pre-release-alpha: ## Create alpha release from current branch
+	@PRERELEASE_TYPE=alpha make pre-release-branch
+
+.PHONY: pre-release-push
+pre-release-push: ## Push current branch and tags (for pre-releases)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot push pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	git push origin "$$CURRENT_BRANCH" --tags
+
+.PHONY: pre-release-release
+pre-release-release: ## Create GitHub pre-release (requires VERSION env var)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot create pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: bump-rc-patch
+bump-rc-patch: ## Bump to release candidate patch
+	@cz bump --increment PATCH --prerelease rc
+
+.PHONY: bump-rc-minor
+bump-rc-minor: ## Bump to release candidate minor
+	@cz bump --increment MINOR --prerelease rc
+
+.PHONY: bump-rc-major
+bump-rc-major: ## Bump to release candidate major
+	@cz bump --increment MAJOR --prerelease rc
+
+.PHONY: bump-beta-patch
+bump-beta-patch: ## Bump to beta patch
+	@cz bump --increment PATCH --prerelease beta
+
+.PHONY: bump-beta-minor
+bump-beta-minor: ## Bump to beta minor
+	@cz bump --increment MINOR --prerelease beta
+
+.PHONY: bump-alpha-patch
+bump-alpha-patch: ## Bump to alpha patch
+	@cz bump --increment PATCH --prerelease alpha
+
+.PHONY: bump-alpha-minor
+bump-alpha-minor: ## Bump to alpha minor
+	@cz bump --increment MINOR --prerelease alpha
+
+.PHONY: pre-release-rc-patch
+pre-release-rc-patch: bump-rc-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-rc-minor
+pre-release-rc-minor: bump-rc-minor clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-rc-major
+pre-release-rc-major: bump-rc-major clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-beta-patch
+pre-release-beta-patch: bump-beta-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-beta-minor
+pre-release-beta-minor: bump-beta-minor clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-alpha-patch
+pre-release-alpha-patch: bump-alpha-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-alpha-minor
+pre-release-alpha-minor: bump-alpha-minor clean build pre-release-push pre-release-release
+
+.PHONY: publish
+publish:
+	uv publish
 </file>
 
 <file path="mkdocs.yml">
@@ -55577,7 +55672,7 @@ class Agent(ABC):
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.58.3"
+version = "0.59.0-b1"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

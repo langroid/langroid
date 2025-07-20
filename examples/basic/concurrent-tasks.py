@@ -114,7 +114,7 @@ def chat(model: str = "", sentence: str = None) -> None:
     task = lr.Task(agent, interactive=False, single_round=False)
 
     sentence = sentence or "Satoshi will meet Alice in New York and Bob in London"
-    
+
     result = task.run(sentence)
 
     print(
