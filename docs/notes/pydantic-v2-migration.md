@@ -89,7 +89,42 @@ Without type annotations on overridden fields, you may see errors like:
 - `TypeError: Field definitions should be annotated`
 - Validation errors when the model tries to use the parent's field definition
 
-### 2. Model Serialization Methods
+### 2. Stricter Type Validation for Optional Fields
+
+!!! danger "Breaking Change"
+    Pydantic v2 is much stricter about type validation. Fields that could accept `None` 
+    in v1 now require explicit `Optional` type annotations.
+
+```python
+# WRONG - This worked in v1 but fails in v2
+class CloudSettings(BaseSettings):
+    private_key: str = None      # ❌ ValidationError: expects string, got None
+    api_host: str = None         # ❌ ValidationError: expects string, got None
+
+# CORRECT - Explicitly mark fields as optional
+from typing import Optional
+
+class CloudSettings(BaseSettings):
+    private_key: Optional[str] = None    # ✅ Explicitly optional
+    api_host: Optional[str] = None       # ✅ Explicitly optional
+    
+    # Or using Python 3.10+ union syntax
+    client_email: str | None = None      # ✅ Also works
+```
+
+This commonly affects:
+- Configuration classes using `BaseSettings`
+- Fields with `None` as default value
+- Environment variable loading where the var might not be set
+
+If you see errors like:
+```
+ValidationError: Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+```
+
+The fix is to add `Optional[]` or `| None` to the type annotation.
+
+### 3. Model Serialization Methods
 
 ```python
 # OLD (Pydantic v1)
@@ -105,7 +140,7 @@ new_model = MyModel.model_validate(data)
 new_model = MyModel.model_validate_json(json_str)
 ```
 
-### 3. Model Configuration
+### 4. Model Configuration
 
 ```python
 # OLD (Pydantic v1)
@@ -128,7 +163,7 @@ class MyModel(BaseModel):
     name: str
 ```
 
-### 4. Field Validators
+### 5. Field Validators
 
 ```python
 # OLD (Pydantic v1)
@@ -156,7 +191,7 @@ class MyModel(BaseModel):
         return v
 ```
 
-### 5. Custom Types and Validation
+### 6. Custom Types and Validation
 
 ```python
 # OLD (Pydantic v1)
