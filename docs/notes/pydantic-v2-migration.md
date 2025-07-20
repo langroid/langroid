@@ -12,7 +12,7 @@ If your code currently imports from `langroid.pydantic_v1`:
 
 ```python
 # OLD - Deprecated
-from langroid.pydantic_v1 import BaseModel, Field
+from langroid.pydantic_v1 import BaseModel, Field, BaseSettings
 ```
 
 You'll see a deprecation warning. This compatibility layer now imports from Pydantic v2 
@@ -21,7 +21,12 @@ directly, so your code may continue to work, but you should update your imports:
 ```python
 # NEW - Correct
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings  # Note: BaseSettings moved to pydantic_settings in v2
 ```
+
+!!! note "BaseSettings Location Change"
+    In Pydantic v2, `BaseSettings` has moved to a separate `pydantic_settings` package.
+    You'll need to install it separately: `pip install pydantic-settings`
 
 !!! warning "Compatibility Layer Removal"
     The `langroid.pydantic_v1` module will be removed in a future version. 

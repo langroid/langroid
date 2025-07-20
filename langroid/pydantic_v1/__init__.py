@@ -40,6 +40,13 @@ logger.warning(
 # This allows existing code to continue working if it's already v2-compatible
 from pydantic import *  # noqa: F403, F401
 
+# BaseSettings has moved in v2, import it explicitly
+try:
+    from pydantic_settings import BaseSettings  # noqa: F401
+except ImportError:
+    # Fallback for older pydantic versions
+    from pydantic import BaseSettings  # noqa: F401
+
 # Explicitly export all items for mypy
 __all__ = [
     "BaseModel",
