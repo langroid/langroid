@@ -10,8 +10,6 @@ Toy example showing how to combine results from multiple tasks running concurren
 from typing import Dict
 
 from fire import Fire
-from rich.prompt import Prompt
-
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.batch import run_batch_task_gen
@@ -53,7 +51,7 @@ class MultiTaskTool(lr.ToolMessage):
         return AgentDoneTool(content=output)
 
 
-def chat(model: str = "") -> None:
+def chat(model: str = "", sentence: str = None) -> None:
 
     cities_agent = lr.ChatAgent(
         lr.ChatAgentConfig(
@@ -115,11 +113,8 @@ def chat(model: str = "") -> None:
 
     task = lr.Task(agent, interactive=False, single_round=False)
 
-    sentence = Prompt.ask(
-        "Enter a sentence, to extract cities and names from",
-        default="Satoshi will meet Alice in New York and Bob in London",
-    )
-
+    sentence = sentence or "Satoshi will meet Alice in New York and Bob in London"
+    
     result = task.run(sentence)
 
     print(

@@ -40,7 +40,7 @@ async def main(model: str = ""):
     class PlannerConfig(lr.ChatAgentConfig):
         name: str = "Planner"
         handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
-        llm = lm.OpenAIGPTConfig(
+        llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
             chat_model=model or MODEL,
         )
         system_message: str = f""" 

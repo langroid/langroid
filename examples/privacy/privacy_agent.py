@@ -14,9 +14,9 @@ setup_colored_logging()
 
 
 class PrivacyAgentConfig(ChatAgentConfig):
-    name = "PrivacyAgent"
+    name: str = "PrivacyAgent"
     sensitive_categories: List[str] = ["Medical", "CreditCard", "SSN", "Name"]
-    system_message = textwrap.dedent(
+    system_message: str = textwrap.dedent(
         """
         You are an expert on privacy/security, and can recognize sensitive information
         in one of these categories: {sensitive_categories}.

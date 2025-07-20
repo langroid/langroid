@@ -19,7 +19,7 @@ from rich.prompt import Prompt
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import ResultTool
-from pydantic import BaseModel, Field
+from langroid.pydantic_v1 import BaseModel, Field
 
 
 # desired output structure

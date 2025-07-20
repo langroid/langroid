@@ -73,15 +73,15 @@ class ExtractorAgent(ChatAgent):
 
 
 class ExtractorConfig(ChatAgentConfig):
-    name = "Extractor"
+    name: str = "Extractor"
     debug: bool = False
-    conversation_mode = True
+    conversation_mode: bool = True
     cache: bool = True  # cache results
     gpt4: bool = False  # use GPT-4?
     stream: bool = True  # allow streaming where needed
     max_tokens: int = 10000
-    use_tools = False
-    use_functions_api = True
+    use_tools: bool = False
+    use_functions_api: bool = True
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4o,
