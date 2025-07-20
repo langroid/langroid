@@ -1,30 +1,34 @@
 from typing import Any, List, Optional, Dict
-from langroid.pydantic_v1 import Field
 from langroid.mytypes import DocMetaData, Document
+from pydantic import Field, BaseModel
 
 
 class ThreadMetadata(DocMetaData):
     """Metadata for HN thread documents"""
 
-    post_id: str = Field(..., description="The unique ID of the HN post")
-    title: str = Field(..., description="The title of the HN post")
-    post_url: str = Field(..., description="The URL of the original post")
-    author: str = Field(..., description="The author of the post")
-    points: str = Field(..., description="Number of points/upvotes")
-    age: str = Field(..., description="How long ago the post was made")
-    comment_count: str = Field(..., description="Number of comments")
+    post_id: str = Field(description="The unique ID of the HN post")
+    title: str = Field(description="The title of the HN post")
+    post_url: str = Field(description="The URL of the original post")
+    author: str = Field(description="The author of the post")
+    points: str = Field(description="Number of points/upvotes")
+    age: str = Field(description="How long ago the post was made")
+    comment_count: str = Field(description="Number of comments")
     thread_id: Optional[str] = Field(
-        None, description="Thread ID if this is a comment thread"
+        default=None, description="Thread ID if this is a comment thread"
     )
-    total_comments: int = Field(0, description="Total number of comments in the thread")
-    max_nesting_level: int = Field(0, description="Maximum nesting level of comments")
+    total_comments: int = Field(
+        default=0, description="Total number of comments in the thread"
+    )
+    max_nesting_level: int = Field(
+        default=0, description="Maximum nesting level of comments"
+    )
 
 
-class ThreadDoc(Document):
+class ThreadDoc(BaseModel):  # or ThreadDoc(Document) if Document is a BaseModel
     """Document representing an HN thread"""
 
     content: str = Field(
-        ..., description="The full content of the thread including post and comments"
+        description="The full content of the thread including post and comments"
     )
     metadata: ThreadMetadata
 
