@@ -1,7 +1,10 @@
 import atexit
 import os
 from functools import cached_property
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
+import base64
+import mimetypes
+from pathlib import Path
 
 import requests
 import tiktoken
@@ -92,6 +95,20 @@ class GeminiEmbeddingsConfig(EmbeddingModelsConfig):
     batch_size: int = 512
 
 
+class JinaEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "jina"
+    model_name: str = "jina-embeddings-v3"
+    api_key: str = ""
+    api_base: str = "https://api.jina.ai/v1"
+    dims: int = 1024
+    context_length: int = 8192
+    batch_size: int = 512
+    task: str = "text-matching"
+
+    class Config:
+        env_prefix = "JINA_AI_"
+
+
 class EmbeddingFunctionCallable:
     """
     A callable class designed to generate embeddings for a list of texts using
@@ -178,6 +195,8 @@ class EmbeddingFunctionCallable:
                     )
                     embeds.append(gen_embedding)
         elif isinstance(self.embed_model, GeminiEmbeddings):
+            embeds = self.embed_model.generate_embeddings(input)
+        elif isinstance(self.embed_model, JinaEmbeddings):
             embeds = self.embed_model.generate_embeddings(input)
         return embeds
 
@@ -543,14 +562,157 @@ class GeminiEmbeddings(EmbeddingModel):
         return self.config.dims
 
 
+class JinaEmbeddings(EmbeddingModel):
+    def __init__(self, config: JinaEmbeddingsConfig = JinaEmbeddingsConfig()):
+        super().__init__()
+        self.config = config
+        load_dotenv()
+
+        if not self.config.api_key:
+            self.config.api_key = os.getenv("JINA_AI_API_KEY", "")
+
+        if self.config.api_key == "":
+            raise ValueError(
+                """
+                JINA_AI_API_KEY must be set in .env or your environment 
+                to use JinaEmbeddings.
+                """
+            )
+
+        self.embedding_url = f"{self.config.api_base}/embeddings"
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.api_key}",
+        }
+
+    def _format_input_item(self, item: Union[str, Dict[str, str]]) -> Dict[str, str]:
+        """Format a single input item for the Jina API.
+
+        Args:
+            item: Can be:
+                - String (text content, image URL, or file path)
+                - Dict with 'text' or 'image' key (pre-formatted)
+
+        Returns:
+            Dict with either 'text' or 'image' key formatted for Jina API
+        """
+        if isinstance(item, dict):
+            # Already formatted
+            return item
+
+        if isinstance(item, str):
+            # Check if it's a URL
+            if item.startswith(("http://", "https://")):
+                return {"image": item}
+
+            # Check if it's a file path to an image
+            if Path(item).exists():
+                path = Path(item)
+                mime_type, _ = mimetypes.guess_type(str(path))
+                if mime_type and mime_type.startswith("image/"):
+                    # Read and encode as base64
+                    with open(path, "rb") as f:
+                        image_data = base64.b64encode(f.read()).decode("utf-8")
+                    return {"image": image_data}
+
+            # Check if it's base64 encoded data (heuristic for images)
+            try:
+                # If it's a long string with mostly base64 chars, try to decode
+                b64_chars = (
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+                )
+                valid_chars = len([c for c in item if c in b64_chars])
+                if len(item) > 100 and valid_chars / len(item) > 0.9:
+                    base64.b64decode(item)  # Validate it's valid base64
+                    return {"image": item}
+            except Exception:
+                pass
+
+            # Default to text
+            return {"text": item}
+
+        # Fallback - convert to string and treat as text
+        return {"text": str(item)}
+
+    def generate_embeddings(
+        self, inputs: List[Union[str, Dict[str, str]]]
+    ) -> List[List[float]]:
+        """Generate embeddings for inputs (text, images, or mixed) using Jina AI API.
+
+        Args:
+            inputs: List of inputs, each can be:
+                - String: text content, image URL, or image file path
+                - Dict: pre-formatted with 'text' or 'image' key
+
+        Returns:
+            List of embedding vectors corresponding to the inputs.
+        """
+        all_embeddings: List[List[float]] = []
+
+        for batch in batched(inputs, self.config.batch_size):
+            # Format input based on model version
+            if self.config.model_name.endswith("-v4"):
+                # v4 requires objects with 'text' or 'image' keys
+                formatted_input = [self._format_input_item(item) for item in batch]
+            else:
+                # v3 and earlier accept raw strings directly
+                formatted_input = [
+                    item if isinstance(item, str) else str(item) for item in batch
+                ]
+
+            payload = {
+                "model": self.config.model_name,
+                "input": formatted_input,
+            }
+
+            # Add optional parameters based on API schema
+            if hasattr(self.config, "task") and self.config.task:
+                payload["task"] = self.config.task
+            if self.config.dims > 0:
+                payload["dimensions"] = self.config.dims
+
+            response = requests.post(
+                self.embedding_url, json=payload, headers=self.headers, timeout=60
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if "data" not in result:
+                    raise ValueError("Unexpected response format from Jina AI API")
+
+                batch_embeddings = [item["embedding"] for item in result["data"]]
+                all_embeddings.extend(batch_embeddings)
+            else:
+                try:
+                    error_msg = response.json().get("detail", "Unknown error")
+                except Exception:  # noqa: BLE001
+                    error_msg = response.text or "Unknown error"
+                raise requests.HTTPError(
+                    f"Jina AI API request failed with status "
+                    f"{response.status_code}: {error_msg}"
+                )
+
+        return all_embeddings
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
         embedding_fn_type: Type of embedding model to use. Options are:
          - "openai",
          - "azure-openai",
-         - "sentencetransformer", or
-         - "fastembed".
+         - "sentencetransformer",
+         - "fastembed",
+         - "llamacppserver",
+         - "gemini",
+         - "jina".
             (others may be added in the future)
     Returns:
         EmbeddingModel: The corresponding embedding model class.
@@ -565,5 +727,7 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         return LlamaCppServerEmbeddings  # type: ignore
     elif embedding_fn_type == "gemini":
         return GeminiEmbeddings  # type: ignore
+    elif embedding_fn_type == "jina":
+        return JinaEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore

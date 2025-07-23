@@ -30,6 +30,8 @@ class EmbeddingModel(ABC):
             FastEmbedEmbeddingsConfig,
             GeminiEmbeddings,
             GeminiEmbeddingsConfig,
+            JinaEmbeddings,
+            JinaEmbeddingsConfig,
             LlamaCppServerEmbeddings,
             LlamaCppServerEmbeddingsConfig,
             OpenAIEmbeddings,
@@ -56,6 +58,8 @@ class EmbeddingModel(ABC):
             return LlamaCppServerEmbeddings(config)
         elif isinstance(config, GeminiEmbeddingsConfig):
             return GeminiEmbeddings(config)
+        elif isinstance(config, JinaEmbeddingsConfig):
+            return JinaEmbeddings(config)
         else:
             raise ValueError(f"Unknown embedding config: {config.__repr_name__}")
 
