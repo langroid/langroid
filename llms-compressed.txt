@@ -13419,116 +13419,6 @@ results = asyncio.run(_do_all(items))
 batches = batched(items, batch_size)
 </file>
 
-<file path="langroid/agent/done_sequence_parser.py">
-"""Parser for done sequence DSL (Domain Specific Language).
-
-Converts string patterns into DoneSequence objects for convenient task completion
-configuration.
-
-Examples:
-    "T, A" -> Tool followed by Agent response
-    "T[calculator], A" -> Specific tool 'calculator' followed by Agent response
-    "L, T, A, L" -> LLM, Tool, Agent, LLM sequence
-    "C[quit|exit]" -> Content matching regex pattern
-"""
-⋮----
-"""Parse a string pattern or return existing DoneSequence unchanged.
-
-    Args:
-        sequence: Either a DoneSequence object or a string pattern to parse
-        tools_map: Optional dict mapping tool names to tool classes
-            (e.g., agent.llm_tools_map)
-
-    Returns:
-        DoneSequence object
-
-    Raises:
-        ValueError: If the string pattern is invalid
-    """
-⋮----
-events = _parse_string_pattern(sequence, tools_map)
-⋮----
-"""Parse a string pattern into a list of AgentEvent objects.
-
-    Pattern format:
-        - Single letter codes: T, A, L, U, N, C
-        - Specific tools: T[tool_name] or T[ToolClass]
-        - Content match: C[regex_pattern]
-        - Separated by commas, spaces allowed
-
-    Args:
-        pattern: String pattern to parse
-        tools_map: Optional dict mapping tool names to tool classes
-            (e.g., agent.llm_tools_map)
-
-    Returns:
-        List of AgentEvent objects
-
-    Raises:
-        ValueError: If pattern is invalid
-    """
-events = []
-⋮----
-# Split by comma and strip whitespace
-parts = [p.strip() for p in pattern.split(",")]
-⋮----
-event = _parse_event_token(part, tools_map)
-⋮----
-"""Parse a single event token into an AgentEvent.
-
-    Args:
-        token: Single event token (e.g., "T", "T[calc]", "C[quit|exit]")
-        tools_map: Optional dict mapping tool names to tool classes
-            (e.g., agent.llm_tools_map)
-
-    Returns:
-        AgentEvent object
-
-    Raises:
-        ValueError: If token is invalid
-    """
-# Check for bracket notation
-bracket_match = re.match(r"^([A-Z])\[([^\]]+)\]$", token)
-⋮----
-event_code = bracket_match.group(1)
-param = bracket_match.group(2)
-⋮----
-# Specific tool: T[tool_name] or T[ToolClass]
-tool_class = None
-tool_name = param
-⋮----
-# First try direct lookup in tools_map by the param (tool name)
-⋮----
-tool_class = tools_map[param]
-⋮----
-# If not found, loop through tools_map to find a tool class
-# whose __name__ matches param
-⋮----
-tool_class = cls
-tool_name = name
-⋮----
-# Content match: C[regex_pattern]
-⋮----
-# Simple single-letter codes
-event_map = {
-⋮----
-"C": EventType.CONTENT_MATCH,  # C without brackets matches any content
-⋮----
-# If not a single letter, could be a full event type name
-token_upper = token.upper()
-⋮----
-"""Parse a list of mixed string patterns and DoneSequence objects.
-
-    Args:
-        sequences: List containing strings and/or DoneSequence objects
-        tools_map: Optional dict mapping tool names to tool classes
-            (e.g., agent.llm_tools_map)
-
-    Returns:
-        List of DoneSequence objects
-    """
-</file>
-
 <file path="langroid/cachedb/__init__.py">
 __all__ = [
 </file>
@@ -17820,212 +17710,6 @@ def test_dsl_word_tokens(test_settings: Settings)
 ⋮----
 # Full word tokens
 config = TaskConfig(done_sequences=["TOOL, AGENT"])
-</file>
-
-<file path="tests/main/test_done_sequences.py">
-"""
-Tests for the done_sequences feature in Task.
-"""
-⋮----
-class SimpleTool(ToolMessage)
-⋮----
-request: str = "simple_tool"
-purpose: str = "A simple tool for testing"
-value: str
-⋮----
-def handle(self) -> str
-⋮----
-"""Handle the tool and return a response"""
-⋮----
-class CalculatorTool(ToolMessage)
-⋮----
-request: str = "calculator"
-purpose: str = "Calculate math expressions"
-expression: str = Field(..., description="Math expression")
-⋮----
-def test_done_sequence_tool_then_agent(test_settings: Settings)
-⋮----
-"""Test that task terminates after tool followed by agent response"""
-⋮----
-# Mock LLM that always generates a tool
-agent = ChatAgent(
-⋮----
-# Configure task to be done after tool -> agent response
-config = TaskConfig(
-⋮----
-task = Task(agent, config=config, interactive=False)
-result = task.run("Generate a tool", turns=10)
-⋮----
-# Task should complete after tool generation and agent response
-⋮----
-# Should have: system, user, llm (with tool)
-# Note: agent response is not added to message history
-⋮----
-def test_done_sequence_specific_tool(test_settings: Settings)
-⋮----
-"""Test that task terminates only after specific tool"""
-⋮----
-class AnotherTool(ToolMessage)
-⋮----
-request: str = "another_tool"
-purpose: str = "Another tool"
-data: str
-⋮----
-def handle(self) -> str
-⋮----
-# Mock LLM that alternates between tools
-call_count = 0
-⋮----
-def mock_response(x)
-⋮----
-# Configure to be done only after simple_tool
-⋮----
-result = task.run("Generate tools", turns=10)
-⋮----
-# Verify simple_tool was generated (it's in the last assistant message)
-last_assistant_msg = agent.message_history[-1]
-⋮----
-def test_done_sequence_llm_agent_llm(test_settings: Settings)
-⋮----
-"""Test sequence: LLM -> Agent -> LLM"""
-⋮----
-# Mock LLM: first plain text, then tool, then plain text again
-responses = [
-response_idx = 0
-⋮----
-resp = responses[response_idx % len(responses)]
-⋮----
-# Done after: Tool -> Agent -> LLM (plain)
-# The first LLM response becomes a USER message in the conversation
-⋮----
-task = Task(
-⋮----
-allow_null_result=True,  # Allow conversation to continue
-⋮----
-result = task.run("Process data", turns=10)
-⋮----
-def test_done_sequence_no_match(test_settings: Settings)
-⋮----
-"""Test that task continues when sequence doesn't match"""
-⋮----
-# Mock LLM that only generates plain text
-⋮----
-# Configure sequence that won't match (looking for tools)
-⋮----
-task = Task(agent, config=config, interactive=False, allow_null_result=True)
-result = task.run("Say something", turns=3)
-⋮----
-# Task should run for all 3 turns since sequence doesn't match
-⋮----
-# Should have at least: system, user, assistant, user, assistant (2 turns minimum)
-⋮----
-def test_done_sequence_multiple_sequences(test_settings: Settings)
-⋮----
-"""Test multiple done sequences"""
-⋮----
-# Mock LLM that responds based on input
-⋮----
-# Multiple ways to be done
-⋮----
-# Quick exit on "quit"
-⋮----
-# Normal tool completion
-⋮----
-# Test quick exit
-task1 = Task(agent, config=config, interactive=False)
-result1 = task1.run("This is urgent!", turns=5)
-⋮----
-history_len_1 = len(agent.message_history)
-⋮----
-# Test tool completion
-⋮----
-task2 = Task(agent, config=config, interactive=False)
-result2 = task2.run("Do something normal", turns=5)
-⋮----
-history_len_2 = len(agent.message_history)
-⋮----
-# Both should complete but potentially with different message counts
-assert history_len_1 == 3  # Quick exit: system, user, assistant
-assert history_len_2 == 3  # Tool completion: system, user, assistant (with tool)
-⋮----
-def test_done_sequence_with_done_if_tool(test_settings: Settings)
-⋮----
-"""Test that done_sequences works alongside done_if_tool"""
-⋮----
-# First response is plain text, second is tool
-response_count = 0
-⋮----
-# Both done_if_tool and done_sequences
-⋮----
-done_if_tool=True,  # Should trigger first
-⋮----
-result = task.run("Do something", turns=10)
-⋮----
-# Should terminate after second LLM response (which has tool)
-# System, user, llm (plain), user (DO-NOT-KNOW), llm (tool)
-⋮----
-def test_done_sequence_simulates_done_if_tool(test_settings: Settings)
-⋮----
-"""Test that done_if_tool behavior can be approximated with a done sequence"""
-⋮----
-# Mock LLM that generates a tool immediately
-⋮----
-# Create two identical agents
-agent1 = ChatAgent(
-⋮----
-agent2 = ChatAgent(
-⋮----
-# Task 1: Using done_if_tool
-config1 = TaskConfig(done_if_tool=True)
-task1 = Task(agent1, config=config1, interactive=False)
-⋮----
-# Task 2: Using done_sequences to simulate done_if_tool
-config2 = TaskConfig(
-task2 = Task(agent2, config=config2, interactive=False)
-⋮----
-# Run both tasks
-result1 = task1.run("Calculate something", turns=10)
-result2 = task2.run("Calculate something", turns=10)
-⋮----
-# Both should complete successfully
-⋮----
-# Both approaches are equivalent - they check done conditions at the same point
-# in the task execution flow (in the done() method), so they produce identical
-# message histories
-assert len(agent1.message_history) == 3  # system, user, llm (with tool)
-⋮----
-# Both should have the tool in their final LLM message
-⋮----
-# Verify they are truly equivalent by checking the exact same number of messages
-⋮----
-def test_done_sequence_tool_class_reference(test_settings: Settings)
-⋮----
-"""Test using tool class names in done sequences"""
-⋮----
-# Mock LLM that generates calculator tool
-⋮----
-# Use tool class name in done sequence
-config = TaskConfig(done_sequences=["T[CalculatorTool], A"])  # Using class name
-⋮----
-# The sequence is: LLM generates calculator tool -> Agent handles it -> done
-# Check that tool was generated and handled
-⋮----
-# Task should complete after calculator tool is handled
-# The result itself is from the task, not used for done checking
-⋮----
-def test_done_sequence_tool_name_vs_class(test_settings: Settings)
-⋮----
-"""Test that both tool name and class name work"""
-⋮----
-# Test with tool name
-config1 = TaskConfig(done_sequences=["T[calculator], A"])
-task1 = Task(agent, config=config1, interactive=False)
-⋮----
-# Just verify tool was used
-⋮----
-# Test with class name
-⋮----
-config2 = TaskConfig(done_sequences=["T[CalculatorTool], A"])
 </file>
 
 <file path="tests/main/test_embeddings.py">
@@ -22604,457 +22288,6 @@ This is especially important in scenarios where:
 
 This only affects local storage (`cloud=False`). When using Qdrant cloud service,
 the lock file mechanism is not used.
-</file>
-
-<file path="docs/notes/task-termination.md">
-# Task Termination in Langroid
-
-## Why Task Termination Matters
-
-When building agent-based systems, one of the most critical yet challenging aspects is determining when a task should complete. Unlike traditional programs with clear exit points, agent conversations can meander, loop, or continue indefinitely. Getting termination wrong leads to two equally problematic scenarios:
-
-**Terminating too early** means missing crucial information or cutting off an agent mid-process. Imagine an agent that searches for information, finds it, but terminates before it can process or summarize the results. The task completes "successfully" but fails to deliver value.
-
-**Terminating too late** wastes computational resources, frustrates users, and can lead to repetitive loops where agents keep responding without making progress. We've all experienced chatbots that won't stop talking or systems that keep asking "Is there anything else?" long after the conversation should have ended. Even worse, agents can fall into infinite loops—repeatedly exchanging the same messages, calling the same tools, or cycling through states without making progress. These loops not only waste resources but can rack up significant costs when using paid LLM APIs.
-
-The challenge is that the "right" termination point depends entirely on context. A customer service task might complete after resolving an issue and confirming satisfaction. A research task might need to gather multiple sources, synthesize them, and present findings. A calculation task should end after computing and presenting the result. Each scenario requires different termination logic.
-
-Traditionally, developers would subclass `Task` and override the `done()` method with custom logic. While flexible, this approach scattered termination logic across multiple subclasses, making systems harder to understand and maintain. It also meant that common patterns—like "complete after tool use" or "stop when the user says goodbye"—had to be reimplemented repeatedly.
-
-This guide introduces Langroid's declarative approach to task termination, culminating in the powerful `done_sequences` feature. Instead of writing imperative code, you can now describe *what* patterns should trigger completion, and Langroid handles the *how*. This makes your agent systems more predictable, maintainable, and easier to reason about.
-
-## Table of Contents
-- [Overview](#overview)
-- [Basic Termination Methods](#basic-termination-methods)
-- [Done Sequences: Event-Based Termination](#done-sequences-event-based-termination)
-  - [Concept](#concept)
-  - [DSL Syntax (Recommended)](#dsl-syntax-recommended)
-  - [Full Object Syntax](#full-object-syntax)
-  - [Event Types](#event-types)
-  - [Examples](#examples)
-- [Implementation Details](#implementation-details)
-- [Best Practices](#best-practices)
-- [Reference](#reference)
-
-## Overview
-
-In Langroid, a `Task` wraps an `Agent` and manages the conversation flow. Controlling when a task terminates is crucial for building reliable agent systems. Langroid provides several methods for task termination, from simple flags to sophisticated event sequence matching.
-
-## Basic Termination Methods
-
-### 1. Turn Limits
-```python
-# Task runs for exactly 5 turns
-result = task.run("Start conversation", turns=5)
-```
-
-### 2. Single Round Mode
-```python
-# Task completes after one exchange
-config = TaskConfig(single_round=True)
-task = Task(agent, config=config)
-```
-
-### 3. Done If Tool
-```python
-# Task completes when any tool is generated
-config = TaskConfig(done_if_tool=True)
-task = Task(agent, config=config)
-```
-
-### 4. Done If Response/No Response
-```python
-# Task completes based on response from specific entities
-config = TaskConfig(
-    done_if_response=[Entity.LLM],      # Done if LLM responds
-    done_if_no_response=[Entity.USER]   # Done if USER doesn't respond
-)
-```
-
-### 5. String Signals
-```python
-# Task completes when special strings like "DONE" are detected
-# (enabled by default with recognize_string_signals=True)
-```
-
-### 6. Orchestration Tools
-```python
-# Using DoneTool, FinalResultTool, etc.
-from langroid.agent.tools.orchestration import DoneTool
-agent.enable_message(DoneTool)
-```
-
-## Done Sequences: Event-Based Termination
-
-### Concept
-
-The `done_sequences` feature allows you to specify sequences of events that trigger task completion. This provides fine-grained control over task termination based on conversation patterns.
-
-**Key Features:**
-
-- Specify multiple termination sequences
-- Use convenient DSL syntax or full object syntax
-- Strict consecutive matching (no skipping events)
-- Efficient implementation using message parent pointers
-
-### DSL Syntax (Recommended)
-
-The DSL (Domain Specific Language) provides a concise way to specify sequences:
-
-```python
-from langroid.agent.task import Task, TaskConfig
-
-config = TaskConfig(
-    done_sequences=[
-        "T, A",                    # Tool followed by agent response
-        "T[calculator], A",        # Specific calculator tool by name
-        "T[CalculatorTool], A",    # Specific tool by class reference (NEW!)
-        "L, T, A, L",              # LLM, tool, agent, LLM sequence
-        "C[quit|exit|bye]",        # Content matching regex
-        "U, L, A",                 # User, LLM, agent sequence
-    ]
-)
-task = Task(agent, config=config)
-```
-
-#### DSL Pattern Reference
-
-| Pattern | Description | Event Type |
-|---------|-------------|------------|
-| `T` | Any tool | `TOOL` |
-| `T[name]` | Specific tool by name | `SPECIFIC_TOOL` |
-| `T[ToolClass]` | Specific tool by class (NEW!) | `SPECIFIC_TOOL` |
-| `A` | Agent response | `AGENT_RESPONSE` |
-| `L` | LLM response | `LLM_RESPONSE` |
-| `U` | User response | `USER_RESPONSE` |
-| `N` | No response | `NO_RESPONSE` |
-| `C[pattern]` | Content matching regex | `CONTENT_MATCH` |
-
-**Examples:**
-
-- `"T, A"` - Any tool followed by agent handling
-- `"T[search], A, T[calculator], A"` - Search tool, then calculator tool
-- `"T[CalculatorTool], A"` - Specific tool class followed by agent handling (NEW!)
-- `"L, C[complete|done|finished]"` - LLM response containing completion words
-- `"TOOL, AGENT"` - Full words also supported
-
-### Full Object Syntax
-
-For more control, use the full object syntax:
-
-```python
-from langroid.agent.task import (
-    Task, TaskConfig, DoneSequence, AgentEvent, EventType
-)
-
-config = TaskConfig(
-    done_sequences=[
-        DoneSequence(
-            name="tool_handled",
-            events=[
-                AgentEvent(event_type=EventType.TOOL),
-                AgentEvent(event_type=EventType.AGENT_RESPONSE),
-            ]
-        ),
-        DoneSequence(
-            name="specific_tool_pattern",
-            events=[
-                AgentEvent(
-                    event_type=EventType.SPECIFIC_TOOL,
-                    tool_name="calculator",
-                    # Can also use tool_class for type-safe references (NEW!):
-                    # tool_class=CalculatorTool
-                ),
-                AgentEvent(event_type=EventType.AGENT_RESPONSE),
-            ]
-        ),
-    ]
-)
-```
-
-### Event Types
-
-The following event types are available:
-
-| EventType | Description | Additional Parameters |
-|-----------|-------------|----------------------|
-| `TOOL` | Any tool message generated | - |
-| `SPECIFIC_TOOL` | Specific tool by name or class | `tool_name`, `tool_class` (NEW!) |
-| `LLM_RESPONSE` | LLM generates a response | - |
-| `AGENT_RESPONSE` | Agent responds (e.g., handles tool) | - |
-| `USER_RESPONSE` | User provides input | - |
-| `CONTENT_MATCH` | Response matches regex pattern | `content_pattern` |
-| `NO_RESPONSE` | No valid response from entity | - |
-
-### Examples
-
-#### Example 1: Tool Completion
-Task completes after any tool is used and handled:
-
-```python
-config = TaskConfig(done_sequences=["T, A"])
-```
-
-This is equivalent to `done_if_tool=True` but happens after the agent handles the tool.
-
-#### Example 2: Multi-Step Process
-Task completes after a specific conversation pattern:
-
-```python
-config = TaskConfig(
-    done_sequences=["L, T[calculator], A, L"]
-)
-# Completes after: LLM response → calculator tool → agent handles → LLM summary
-```
-
-#### Example 3: Multiple Exit Conditions
-Different ways to complete the task:
-
-```python
-config = TaskConfig(
-    done_sequences=[
-        "C[quit|exit|bye]",           # User says quit
-        "T[calculator], A",           # Calculator used
-        "T[search], A, T[search], A", # Two searches performed
-    ]
-)
-```
-
-#### Example 4: Tool Class References (NEW!)
-Use actual tool classes instead of string names for type safety:
-
-```python
-from langroid.agent.tool_message import ToolMessage
-
-class CalculatorTool(ToolMessage):
-    request: str = "calculator"
-    # ... tool implementation
-
-class SearchTool(ToolMessage):
-    request: str = "search"
-    # ... tool implementation
-
-# Enable tools on the agent
-agent.enable_message([CalculatorTool, SearchTool])
-
-# Use tool classes in done sequences
-config = TaskConfig(
-    done_sequences=[
-        "T[CalculatorTool], A",  # Using class name
-        "T[SearchTool], A, T[CalculatorTool], A",  # Multiple tools
-    ]
-)
-```
-
-**Benefits of tool class references:**
-- **Type-safe**: IDE can validate tool class names
-- **Refactoring-friendly**: Renaming tool classes automatically updates references
-- **No string typos**: Compiler/linter catches invalid class names
-- **Better IDE support**: Autocomplete and go-to-definition work
-
-#### Example 5: Mixed Syntax
-Combine DSL strings and full objects:
-
-```python
-config = TaskConfig(
-    done_sequences=[
-        "T, A",  # Simple DSL
-        "T[CalculatorTool], A",  # Tool class reference (NEW!)
-        DoneSequence(  # Full control
-            name="complex_check",
-            events=[
-                AgentEvent(
-                    event_type=EventType.SPECIFIC_TOOL,
-                    tool_name="database_query",
-                    tool_class=DatabaseQueryTool,  # Can use class directly (NEW!)
-                    responder="DatabaseAgent"
-                ),
-                AgentEvent(event_type=EventType.AGENT_RESPONSE),
-            ]
-        ),
-    ]
-)
-```
-
-## Implementation Details
-
-### How Done Sequences Work
-
-Done sequences operate at the **task level** and are based on the **sequence of valid responses** generated during a task's execution. When a task runs, it maintains a `response_sequence` that tracks each message (ChatDocument) as it's processed.
-
-**Key points:**
-- Done sequences are checked only within a single task's scope
-- They track the temporal order of responses within that task
-- The response sequence is built incrementally as the task processes each step
-- Only messages that represent valid responses are added to the sequence
-
-### Response Sequence Building
-The task builds its response sequence during execution:
-
-```python
-# In task.run(), after each step:
-if self.pending_message is not None:
-    if (not self.response_sequence or 
-        self.pending_message.id() != self.response_sequence[-1].id()):
-        self.response_sequence.append(self.pending_message)
-```
-
-### Message Chain Retrieval
-Done sequences are checked against the response sequence:
-
-```python
-def _get_message_chain(self, msg: ChatDocument, max_depth: Optional[int] = None):
-    """Get the chain of messages from response sequence"""
-    if max_depth is None:
-        max_depth = 50  # default
-        if self._parsed_done_sequences:
-            max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
-    
-    # Simply return the last max_depth elements from response_sequence
-    return self.response_sequence[-max_depth:]
-```
-
-**Note:** The response sequence used for done sequences is separate from the parent-child pointer system. Parent pointers track causal relationships and lineage across agent boundaries (important for debugging and understanding delegation patterns), while response sequences track temporal order within a single task for termination checking.
-
-### Strict Matching
-Events must occur consecutively without intervening messages:
-
-```python
-# This sequence: [TOOL, AGENT_RESPONSE]
-# Matches: USER → LLM(tool) → AGENT
-# Does NOT match: USER → LLM(tool) → USER → AGENT
-```
-
-### Performance
-
-- Efficient O(n) traversal where n is sequence length
-- No full history scan needed
-- Early termination on first matching sequence
-
-## Best Practices
-
-1. **Use DSL for Simple Cases**
-   ```python
-   # Good: Clear and concise
-   done_sequences=["T, A"]
-   
-   # Avoid: Verbose for simple patterns
-   done_sequences=[DoneSequence(events=[...])]
-   ```
-
-2. **Name Your Sequences**
-   ```python
-   DoneSequence(
-       name="calculation_complete",  # Helps with debugging
-       events=[...]
-   )
-   ```
-
-3. **Order Matters**
-   - Put more specific sequences first
-   - General patterns at the end
-
-4. **Test Your Sequences**
-   ```python
-   # Use MockLM for testing
-   agent = ChatAgent(
-       ChatAgentConfig(
-           llm=MockLMConfig(response_fn=lambda x: "test response")
-       )
-   )
-   ```
-
-5. **Combine with Other Methods**
-   ```python
-   config = TaskConfig(
-       done_if_tool=True,      # Quick exit on any tool
-       done_sequences=["L, L, L"],  # Or after 3 LLM responses
-       max_turns=10,           # Hard limit
-   )
-   ```
-
-## Reference
-
-### Code Examples
-- **Basic example**: [`examples/basic/done_sequences_example.py`](../../examples/basic/done_sequences_example.py)
-- **Test cases**: [`tests/main/test_done_sequences.py`](../../tests/main/test_done_sequences.py) (includes tool class tests)
-- **DSL tests**: [`tests/main/test_done_sequences_dsl.py`](../../tests/main/test_done_sequences_dsl.py)
-- **Parser tests**: [`tests/main/test_done_sequence_parser.py`](../../tests/main/test_done_sequence_parser.py)
-
-### Core Classes
-- `TaskConfig` - Configuration including `done_sequences`
-- `DoneSequence` - Container for event sequences
-- `AgentEvent` - Individual event in a sequence
-- `EventType` - Enumeration of event types
-
-### Parser Module
-- `langroid.agent.done_sequence_parser` - DSL parsing functionality
-
-### Task Methods
-- `Task.done()` - Main method that checks sequences
-- `Task._matches_sequence_with_current()` - Sequence matching logic
-- `Task._classify_event()` - Event classification
-- `Task._get_message_chain()` - Message traversal
-
-## Migration Guide
-
-If you're currently overriding `Task.done()`:
-
-```python
-# Before: Custom done() method
-class MyTask(Task):
-    def done(self, result=None, r=None):
-        if some_complex_logic(result):
-            return (True, StatusCode.DONE)
-        return super().done(result, r)
-
-# After: Use done_sequences
-config = TaskConfig(
-    done_sequences=["T[my_tool], A, L"]  # Express as sequence
-)
-task = Task(agent, config=config)  # No subclassing needed
-```
-
-**NEW: Using Tool Classes Instead of Strings**
-
-If you have tool classes defined, you can now reference them directly:
-
-```python
-# Before: Using string names (still works)
-config = TaskConfig(
-    done_sequences=["T[calculator], A"]  # String name
-)
-
-# After: Using tool class references (recommended)
-config = TaskConfig(
-    done_sequences=["T[CalculatorTool], A"]  # Class name
-)
-```
-
-This provides better type safety and makes refactoring easier.
-
-## Troubleshooting
-
-**Sequence not matching?**
-
-- Check that events are truly consecutive (no intervening messages)
-- Use logging to see the actual message chain
-- Verify tool names match exactly
-
-**Type errors with DSL?**
-
-- Ensure you're using strings for DSL patterns
-- Check that tool names in `T[name]` don't contain special characters
-
-**Performance concerns?**
-
-- Sequences only traverse as deep as needed
-- Consider shorter sequences for better performance
-- Use specific tool names to avoid unnecessary checks
-
-## Summary
-
-The `done_sequences` feature provides a powerful, declarative way to control task termination based on conversation patterns. The DSL syntax makes common cases simple while the full object syntax provides complete control when needed. This approach eliminates the need to subclass `Task` and override `done()` for most use cases, leading to cleaner, more maintainable code.
 </file>
 
 <file path="docs/notes/weaviate.md">
@@ -33830,6 +33063,116 @@ content = msg if isinstance(msg, str) else msg.content
 # This avoids having to re-generate the entire message, saving time + cost.
 </file>
 
+<file path="langroid/agent/done_sequence_parser.py">
+"""Parser for done sequence DSL (Domain Specific Language).
+
+Converts string patterns into DoneSequence objects for convenient task completion
+configuration.
+
+Examples:
+    "T, A" -> Tool followed by Agent response
+    "T[calculator], A" -> Specific tool 'calculator' followed by Agent response
+    "L, T, A, L" -> LLM, Tool, Agent, LLM sequence
+    "C[quit|exit]" -> Content matching regex pattern
+"""
+⋮----
+"""Parse a string pattern or return existing DoneSequence unchanged.
+
+    Args:
+        sequence: Either a DoneSequence object or a string pattern to parse
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
+
+    Returns:
+        DoneSequence object
+
+    Raises:
+        ValueError: If the string pattern is invalid
+    """
+⋮----
+events = _parse_string_pattern(sequence, tools_map)
+⋮----
+"""Parse a string pattern into a list of AgentEvent objects.
+
+    Pattern format:
+        - Single letter codes: T, A, L, U, N, C
+        - Specific tools: T[tool_name] or T[ToolClass]
+        - Content match: C[regex_pattern]
+        - Separated by commas, spaces allowed
+
+    Args:
+        pattern: String pattern to parse
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
+
+    Returns:
+        List of AgentEvent objects
+
+    Raises:
+        ValueError: If pattern is invalid
+    """
+events = []
+⋮----
+# Split by comma and strip whitespace
+parts = [p.strip() for p in pattern.split(",")]
+⋮----
+event = _parse_event_token(part, tools_map)
+⋮----
+"""Parse a single event token into an AgentEvent.
+
+    Args:
+        token: Single event token (e.g., "T", "T[calc]", "C[quit|exit]")
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
+
+    Returns:
+        AgentEvent object
+
+    Raises:
+        ValueError: If token is invalid
+    """
+# Check for bracket notation
+bracket_match = re.match(r"^([A-Z])\[([^\]]+)\]$", token)
+⋮----
+event_code = bracket_match.group(1)
+param = bracket_match.group(2)
+⋮----
+# Specific tool: T[tool_name] or T[ToolClass]
+tool_class = None
+tool_name = param
+⋮----
+# First try direct lookup in tools_map by the param (tool name)
+⋮----
+tool_class = tools_map[param]
+⋮----
+# If not found, loop through tools_map to find a tool class
+# whose __name__ matches param
+⋮----
+tool_class = cls
+tool_name = name
+⋮----
+# Content match: C[regex_pattern]
+⋮----
+# Simple single-letter codes
+event_map = {
+⋮----
+"C": EventType.CONTENT_MATCH,  # C without brackets matches any content
+⋮----
+# If not a single letter, could be a full event type name
+token_upper = token.upper()
+⋮----
+"""Parse a list of mixed string patterns and DoneSequence objects.
+
+    Args:
+        sequences: List containing strings and/or DoneSequence objects
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
+
+    Returns:
+        List of DoneSequence objects
+    """
+</file>
+
 <file path="langroid/cachedb/base.py">
 class CacheDBConfig(BaseSettings)
 ⋮----
@@ -39713,6 +39056,457 @@ In this example from `examples/basic/planner-workflow-simple.py`, you can see:
 2. **Tool Clarity**: See exactly which tools were called with what parameters
 3. **Real-time Updates**: Watch logs update automatically as your task runs
 4. **Filtered Views**: Use "Show only important responses" to hide intermediate steps
+</file>
+
+<file path="docs/notes/task-termination.md">
+# Task Termination in Langroid
+
+## Why Task Termination Matters
+
+When building agent-based systems, one of the most critical yet challenging aspects is determining when a task should complete. Unlike traditional programs with clear exit points, agent conversations can meander, loop, or continue indefinitely. Getting termination wrong leads to two equally problematic scenarios:
+
+**Terminating too early** means missing crucial information or cutting off an agent mid-process. Imagine an agent that searches for information, finds it, but terminates before it can process or summarize the results. The task completes "successfully" but fails to deliver value.
+
+**Terminating too late** wastes computational resources, frustrates users, and can lead to repetitive loops where agents keep responding without making progress. We've all experienced chatbots that won't stop talking or systems that keep asking "Is there anything else?" long after the conversation should have ended. Even worse, agents can fall into infinite loops—repeatedly exchanging the same messages, calling the same tools, or cycling through states without making progress. These loops not only waste resources but can rack up significant costs when using paid LLM APIs.
+
+The challenge is that the "right" termination point depends entirely on context. A customer service task might complete after resolving an issue and confirming satisfaction. A research task might need to gather multiple sources, synthesize them, and present findings. A calculation task should end after computing and presenting the result. Each scenario requires different termination logic.
+
+Traditionally, developers would subclass `Task` and override the `done()` method with custom logic. While flexible, this approach scattered termination logic across multiple subclasses, making systems harder to understand and maintain. It also meant that common patterns—like "complete after tool use" or "stop when the user says goodbye"—had to be reimplemented repeatedly.
+
+This guide introduces Langroid's declarative approach to task termination, culminating in the powerful `done_sequences` feature. Instead of writing imperative code, you can now describe *what* patterns should trigger completion, and Langroid handles the *how*. This makes your agent systems more predictable, maintainable, and easier to reason about.
+
+## Table of Contents
+- [Overview](#overview)
+- [Basic Termination Methods](#basic-termination-methods)
+- [Done Sequences: Event-Based Termination](#done-sequences-event-based-termination)
+  - [Concept](#concept)
+  - [DSL Syntax (Recommended)](#dsl-syntax-recommended)
+  - [Full Object Syntax](#full-object-syntax)
+  - [Event Types](#event-types)
+  - [Examples](#examples)
+- [Implementation Details](#implementation-details)
+- [Best Practices](#best-practices)
+- [Reference](#reference)
+
+## Overview
+
+In Langroid, a `Task` wraps an `Agent` and manages the conversation flow. Controlling when a task terminates is crucial for building reliable agent systems. Langroid provides several methods for task termination, from simple flags to sophisticated event sequence matching.
+
+## Basic Termination Methods
+
+### 1. Turn Limits
+```python
+# Task runs for exactly 5 turns
+result = task.run("Start conversation", turns=5)
+```
+
+### 2. Single Round Mode
+```python
+# Task completes after one exchange
+config = TaskConfig(single_round=True)
+task = Task(agent, config=config)
+```
+
+### 3. Done If Tool
+```python
+# Task completes when any tool is generated
+config = TaskConfig(done_if_tool=True)
+task = Task(agent, config=config)
+```
+
+### 4. Done If Response/No Response
+```python
+# Task completes based on response from specific entities
+config = TaskConfig(
+    done_if_response=[Entity.LLM],      # Done if LLM responds
+    done_if_no_response=[Entity.USER]   # Done if USER doesn't respond
+)
+```
+
+### 5. String Signals
+```python
+# Task completes when special strings like "DONE" are detected
+# (enabled by default with recognize_string_signals=True)
+```
+
+### 6. Orchestration Tools
+```python
+# Using DoneTool, FinalResultTool, etc.
+from langroid.agent.tools.orchestration import DoneTool
+agent.enable_message(DoneTool)
+```
+
+## Done Sequences: Event-Based Termination
+
+### Concept
+
+The `done_sequences` feature allows you to specify sequences of events that trigger task completion. This provides fine-grained control over task termination based on conversation patterns.
+
+**Key Features:**
+
+- Specify multiple termination sequences
+- Use convenient DSL syntax or full object syntax
+- Strict consecutive matching (no skipping events)
+- Efficient implementation using message parent pointers
+
+### DSL Syntax (Recommended)
+
+The DSL (Domain Specific Language) provides a concise way to specify sequences:
+
+```python
+from langroid.agent.task import Task, TaskConfig
+
+config = TaskConfig(
+    done_sequences=[
+        "T, A",                    # Tool followed by agent response
+        "T[calculator], A",        # Specific calculator tool by name
+        "T[CalculatorTool], A",    # Specific tool by class reference (NEW!)
+        "L, T, A, L",              # LLM, tool, agent, LLM sequence
+        "C[quit|exit|bye]",        # Content matching regex
+        "U, L, A",                 # User, LLM, agent sequence
+    ]
+)
+task = Task(agent, config=config)
+```
+
+#### DSL Pattern Reference
+
+| Pattern | Description | Event Type |
+|---------|-------------|------------|
+| `T` | Any tool | `TOOL` |
+| `T[name]` | Specific tool by name | `SPECIFIC_TOOL` |
+| `T[ToolClass]` | Specific tool by class (NEW!) | `SPECIFIC_TOOL` |
+| `A` | Agent response | `AGENT_RESPONSE` |
+| `L` | LLM response | `LLM_RESPONSE` |
+| `U` | User response | `USER_RESPONSE` |
+| `N` | No response | `NO_RESPONSE` |
+| `C[pattern]` | Content matching regex | `CONTENT_MATCH` |
+
+**Examples:**
+
+- `"T, A"` - Any tool followed by agent handling
+- `"T[search], A, T[calculator], A"` - Search tool, then calculator tool
+- `"T[CalculatorTool], A"` - Specific tool class followed by agent handling (NEW!)
+- `"L, C[complete|done|finished]"` - LLM response containing completion words
+- `"TOOL, AGENT"` - Full words also supported
+
+### Full Object Syntax
+
+For more control, use the full object syntax:
+
+```python
+from langroid.agent.task import (
+    Task, TaskConfig, DoneSequence, AgentEvent, EventType
+)
+
+config = TaskConfig(
+    done_sequences=[
+        DoneSequence(
+            name="tool_handled",
+            events=[
+                AgentEvent(event_type=EventType.TOOL),
+                AgentEvent(event_type=EventType.AGENT_RESPONSE),
+            ]
+        ),
+        DoneSequence(
+            name="specific_tool_pattern",
+            events=[
+                AgentEvent(
+                    event_type=EventType.SPECIFIC_TOOL,
+                    tool_name="calculator",
+                    # Can also use tool_class for type-safe references (NEW!):
+                    # tool_class=CalculatorTool
+                ),
+                AgentEvent(event_type=EventType.AGENT_RESPONSE),
+            ]
+        ),
+    ]
+)
+```
+
+### Event Types
+
+The following event types are available:
+
+| EventType | Description | Additional Parameters |
+|-----------|-------------|----------------------|
+| `TOOL` | Any tool message generated | - |
+| `SPECIFIC_TOOL` | Specific tool by name or class | `tool_name`, `tool_class` (NEW!) |
+| `LLM_RESPONSE` | LLM generates a response | - |
+| `AGENT_RESPONSE` | Agent responds (e.g., handles tool) | - |
+| `USER_RESPONSE` | User provides input | - |
+| `CONTENT_MATCH` | Response matches regex pattern | `content_pattern` |
+| `NO_RESPONSE` | No valid response from entity | - |
+
+### Examples
+
+#### Example 1: Tool Completion
+Task completes after any tool is used and handled:
+
+```python
+config = TaskConfig(done_sequences=["T, A"])
+```
+
+This is equivalent to `done_if_tool=True` but happens after the agent handles the tool.
+
+#### Example 2: Multi-Step Process
+Task completes after a specific conversation pattern:
+
+```python
+config = TaskConfig(
+    done_sequences=["L, T[calculator], A, L"]
+)
+# Completes after: LLM response → calculator tool → agent handles → LLM summary
+```
+
+#### Example 3: Multiple Exit Conditions
+Different ways to complete the task:
+
+```python
+config = TaskConfig(
+    done_sequences=[
+        "C[quit|exit|bye]",           # User says quit
+        "T[calculator], A",           # Calculator used
+        "T[search], A, T[search], A", # Two searches performed
+    ]
+)
+```
+
+#### Example 4: Tool Class References (NEW!)
+Use actual tool classes instead of string names for type safety:
+
+```python
+from langroid.agent.tool_message import ToolMessage
+
+class CalculatorTool(ToolMessage):
+    request: str = "calculator"
+    # ... tool implementation
+
+class SearchTool(ToolMessage):
+    request: str = "search"
+    # ... tool implementation
+
+# Enable tools on the agent
+agent.enable_message([CalculatorTool, SearchTool])
+
+# Use tool classes in done sequences
+config = TaskConfig(
+    done_sequences=[
+        "T[CalculatorTool], A",  # Using class name
+        "T[SearchTool], A, T[CalculatorTool], A",  # Multiple tools
+    ]
+)
+```
+
+**Benefits of tool class references:**
+- **Type-safe**: IDE can validate tool class names
+- **Refactoring-friendly**: Renaming tool classes automatically updates references
+- **No string typos**: Compiler/linter catches invalid class names
+- **Better IDE support**: Autocomplete and go-to-definition work
+
+#### Example 5: Mixed Syntax
+Combine DSL strings and full objects:
+
+```python
+config = TaskConfig(
+    done_sequences=[
+        "T, A",  # Simple DSL
+        "T[CalculatorTool], A",  # Tool class reference (NEW!)
+        DoneSequence(  # Full control
+            name="complex_check",
+            events=[
+                AgentEvent(
+                    event_type=EventType.SPECIFIC_TOOL,
+                    tool_name="database_query",
+                    tool_class=DatabaseQueryTool,  # Can use class directly (NEW!)
+                    responder="DatabaseAgent"
+                ),
+                AgentEvent(event_type=EventType.AGENT_RESPONSE),
+            ]
+        ),
+    ]
+)
+```
+
+## Implementation Details
+
+### How Done Sequences Work
+
+Done sequences operate at the **task level** and are based on the **sequence of valid responses** generated during a task's execution. When a task runs, it maintains a `response_sequence` that tracks each message (ChatDocument) as it's processed.
+
+**Key points:**
+- Done sequences are checked only within a single task's scope
+- They track the temporal order of responses within that task
+- The response sequence is built incrementally as the task processes each step
+- Only messages that represent valid responses are added to the sequence
+
+### Response Sequence Building
+The task builds its response sequence during execution:
+
+```python
+# In task.run(), after each step:
+if self.pending_message is not None:
+    if (not self.response_sequence or 
+        self.pending_message.id() != self.response_sequence[-1].id()):
+        self.response_sequence.append(self.pending_message)
+```
+
+### Message Chain Retrieval
+Done sequences are checked against the response sequence:
+
+```python
+def _get_message_chain(self, msg: ChatDocument, max_depth: Optional[int] = None):
+    """Get the chain of messages from response sequence"""
+    if max_depth is None:
+        max_depth = 50  # default
+        if self._parsed_done_sequences:
+            max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
+    
+    # Simply return the last max_depth elements from response_sequence
+    return self.response_sequence[-max_depth:]
+```
+
+**Note:** The response sequence used for done sequences is separate from the parent-child pointer system. Parent pointers track causal relationships and lineage across agent boundaries (important for debugging and understanding delegation patterns), while response sequences track temporal order within a single task for termination checking.
+
+### Strict Matching
+Events must occur consecutively without intervening messages:
+
+```python
+# This sequence: [TOOL, AGENT_RESPONSE]
+# Matches: USER → LLM(tool) → AGENT
+# Does NOT match: USER → LLM(tool) → USER → AGENT
+```
+
+### Performance
+
+- Efficient O(n) traversal where n is sequence length
+- No full history scan needed
+- Early termination on first matching sequence
+
+## Best Practices
+
+1. **Use DSL for Simple Cases**
+   ```python
+   # Good: Clear and concise
+   done_sequences=["T, A"]
+   
+   # Avoid: Verbose for simple patterns
+   done_sequences=[DoneSequence(events=[...])]
+   ```
+
+2. **Name Your Sequences**
+   ```python
+   DoneSequence(
+       name="calculation_complete",  # Helps with debugging
+       events=[...]
+   )
+   ```
+
+3. **Order Matters**
+   - Put more specific sequences first
+   - General patterns at the end
+
+4. **Test Your Sequences**
+   ```python
+   # Use MockLM for testing
+   agent = ChatAgent(
+       ChatAgentConfig(
+           llm=MockLMConfig(response_fn=lambda x: "test response")
+       )
+   )
+   ```
+
+5. **Combine with Other Methods**
+   ```python
+   config = TaskConfig(
+       done_if_tool=True,      # Quick exit on any tool
+       done_sequences=["L, L, L"],  # Or after 3 LLM responses
+       max_turns=10,           # Hard limit
+   )
+   ```
+
+## Reference
+
+### Code Examples
+- **Basic example**: [`examples/basic/done_sequences_example.py`](../../examples/basic/done_sequences_example.py)
+- **Test cases**: [`tests/main/test_done_sequences.py`](../../tests/main/test_done_sequences.py) (includes tool class tests)
+- **DSL tests**: [`tests/main/test_done_sequences_dsl.py`](../../tests/main/test_done_sequences_dsl.py)
+- **Parser tests**: [`tests/main/test_done_sequence_parser.py`](../../tests/main/test_done_sequence_parser.py)
+
+### Core Classes
+- `TaskConfig` - Configuration including `done_sequences`
+- `DoneSequence` - Container for event sequences
+- `AgentEvent` - Individual event in a sequence
+- `EventType` - Enumeration of event types
+
+### Parser Module
+- `langroid.agent.done_sequence_parser` - DSL parsing functionality
+
+### Task Methods
+- `Task.done()` - Main method that checks sequences
+- `Task._matches_sequence_with_current()` - Sequence matching logic
+- `Task._classify_event()` - Event classification
+- `Task._get_message_chain()` - Message traversal
+
+## Migration Guide
+
+If you're currently overriding `Task.done()`:
+
+```python
+# Before: Custom done() method
+class MyTask(Task):
+    def done(self, result=None, r=None):
+        if some_complex_logic(result):
+            return (True, StatusCode.DONE)
+        return super().done(result, r)
+
+# After: Use done_sequences
+config = TaskConfig(
+    done_sequences=["T[my_tool], A, L"]  # Express as sequence
+)
+task = Task(agent, config=config)  # No subclassing needed
+```
+
+**NEW: Using Tool Classes Instead of Strings**
+
+If you have tool classes defined, you can now reference them directly:
+
+```python
+# Before: Using string names (still works)
+config = TaskConfig(
+    done_sequences=["T[calculator], A"]  # String name
+)
+
+# After: Using tool class references (recommended)
+config = TaskConfig(
+    done_sequences=["T[CalculatorTool], A"]  # Class name
+)
+```
+
+This provides better type safety and makes refactoring easier.
+
+## Troubleshooting
+
+**Sequence not matching?**
+
+- Check that events are truly consecutive (no intervening messages)
+- Use logging to see the actual message chain
+- Verify tool names match exactly
+
+**Type errors with DSL?**
+
+- Ensure you're using strings for DSL patterns
+- Check that tool names in `T[name]` don't contain special characters
+
+**Performance concerns?**
+
+- Sequences only traverse as deep as needed
+- Consider shorter sequences for better performance
+- Use specific tool names to avoid unnecessary checks
+
+## Summary
+
+The `done_sequences` feature provides a powerful, declarative way to control task termination based on conversation patterns. The DSL syntax makes common cases simple while the full object syntax provides complete control when needed. This approach eliminates the need to subclass `Task` and override `done()` for most use cases, leading to cleaner, more maintainable code.
 </file>
 
 <file path="examples/basic/multi-agent-search-critic-no-orch/main.py">
@@ -48733,6 +48527,215 @@ reranked = agent.rerank_to_periphery(docs)
 numbers = [int(d.content) for d in reranked]
 </file>
 
+<file path="tests/main/test_done_sequences.py">
+"""
+Tests for the done_sequences feature in Task.
+"""
+⋮----
+class SimpleTool(ToolMessage)
+⋮----
+request: str = "simple_tool"
+purpose: str = "A simple tool for testing"
+value: str
+⋮----
+def handle(self) -> str
+⋮----
+"""Handle the tool and return a response"""
+⋮----
+class CalculatorTool(ToolMessage)
+⋮----
+request: str = "calculator"
+purpose: str = "Calculate math expressions"
+expression: str = Field(..., description="Math expression")
+⋮----
+def test_done_sequence_tool_then_agent(test_settings: Settings)
+⋮----
+"""Test that task terminates after tool followed by agent response"""
+⋮----
+# Mock LLM that always generates a tool
+agent = ChatAgent(
+⋮----
+# Configure task to be done after tool -> agent response
+config = TaskConfig(
+⋮----
+task = Task(agent, config=config, interactive=False)
+result = task.run("Generate a tool", turns=10)
+⋮----
+# Task should complete after tool generation and agent response
+⋮----
+# Should have: system, user, llm (with tool)
+# Note: agent response is not added to message history
+⋮----
+def test_done_sequence_specific_tool(test_settings: Settings)
+⋮----
+"""Test that task terminates only after specific tool"""
+⋮----
+class AnotherTool(ToolMessage)
+⋮----
+request: str = "another_tool"
+purpose: str = "Another tool"
+data: str
+⋮----
+def handle(self) -> str
+⋮----
+# Mock LLM that alternates between tools
+call_count = 0
+⋮----
+def mock_response(x)
+⋮----
+# Configure to be done only after simple_tool
+⋮----
+result = task.run("Generate tools", turns=10)
+⋮----
+# Verify simple_tool was generated (it's in the last assistant message)
+last_assistant_msg = agent.message_history[-1]
+⋮----
+def test_done_sequence_llm_agent_llm(test_settings: Settings)
+⋮----
+"""Test sequence: LLM -> Agent -> LLM"""
+⋮----
+# Mock LLM: first plain text, then tool, then plain text again
+responses = [
+response_idx = 0
+⋮----
+resp = responses[response_idx % len(responses)]
+⋮----
+# Done after: Tool -> Agent -> LLM (plain)
+# The first LLM response becomes a USER message in the conversation
+⋮----
+task = Task(
+⋮----
+allow_null_result=True,  # Allow conversation to continue
+⋮----
+result = task.run("Process data", turns=10)
+⋮----
+def test_done_sequence_no_match(test_settings: Settings)
+⋮----
+"""Test that task continues when sequence doesn't match"""
+⋮----
+# Mock LLM that only generates plain text
+⋮----
+# Configure sequence that won't match (looking for tools)
+⋮----
+task = Task(agent, config=config, interactive=False, allow_null_result=True)
+result = task.run("Say something", turns=3)
+⋮----
+# Task should run for all 3 turns since sequence doesn't match
+⋮----
+# Should have at least: system, user, assistant, user, assistant (2 turns minimum)
+⋮----
+def test_done_sequence_multiple_sequences(test_settings: Settings)
+⋮----
+"""Test multiple done sequences"""
+⋮----
+# Mock LLM that responds based on input
+⋮----
+# Multiple ways to be done
+⋮----
+# Quick exit on "quit"
+⋮----
+# Normal tool completion
+⋮----
+# Test quick exit
+task1 = Task(agent, config=config, interactive=False)
+result1 = task1.run("This is urgent!", turns=5)
+⋮----
+history_len_1 = len(agent.message_history)
+⋮----
+# Test tool completion
+⋮----
+task2 = Task(agent, config=config, interactive=False)
+result2 = task2.run("Do something normal", turns=5)
+⋮----
+history_len_2 = len(agent.message_history)
+⋮----
+# Both should complete but potentially with different message counts
+assert history_len_1 == 3  # Quick exit: system, user, assistant
+assert history_len_2 == 3  # Tool completion: system, user, assistant (with tool)
+⋮----
+def test_done_sequence_with_done_if_tool(test_settings: Settings)
+⋮----
+"""Test that done_sequences works alongside done_if_tool"""
+⋮----
+# First response is plain text, second is tool
+response_count = 0
+⋮----
+# Both done_if_tool and done_sequences
+⋮----
+done_if_tool=True,  # Should trigger first
+⋮----
+result = task.run("Do something", turns=10)
+⋮----
+# Should terminate after second LLM response (which has tool)
+# System, user, llm (plain), user (DO-NOT-KNOW), llm (tool)
+⋮----
+def test_done_sequence_simulates_done_if_tool(test_settings: Settings)
+⋮----
+"""Test that done_if_tool behavior can be approximated with a done sequence"""
+⋮----
+# Mock LLM that generates a tool immediately
+⋮----
+# Create two identical agents
+agent1 = ChatAgent(
+⋮----
+agent2 = ChatAgent(
+⋮----
+# Task 1: Using done_if_tool
+config1 = TaskConfig(done_if_tool=True)
+task1 = Task(agent1, config=config1, interactive=False)
+⋮----
+# Task 2: Using done_sequences to simulate done_if_tool
+config2 = TaskConfig(
+task2 = Task(agent2, config=config2, interactive=False)
+⋮----
+# Run both tasks
+result1 = task1.run("Calculate something", turns=10)
+result2 = task2.run("Calculate something", turns=10)
+⋮----
+# Both should complete successfully
+⋮----
+# Both approaches are equivalent - they check done conditions at the same point
+# in the task execution flow (in the done() method), so they produce identical
+# message histories
+assert len(agent1.message_history) == 3  # system, user, llm (with tool)
+⋮----
+# Both should have the tool in their final LLM message
+⋮----
+# Verify they are truly equivalent by checking the exact same number of messages
+⋮----
+def test_done_sequence_tool_class_reference(test_settings: Settings)
+⋮----
+"""Test using tool class names in done sequences"""
+⋮----
+# Mock LLM that generates calculator tool
+⋮----
+# Use tool class name in done sequence
+config = TaskConfig(done_sequences=["T[CalculatorTool], A"])  # Using class name
+⋮----
+result = task.run("Calculate something")
+⋮----
+# The sequence is: LLM generates calculator tool -> Agent handles it -> done
+# Check that result contains the calculated result,  from handling the tool
+⋮----
+# Test with tool name
+config1 = TaskConfig(done_sequences=["T[calculator], A"])
+task1 = Task(agent, config=config1, interactive=False)
+result = task1.run("Calculate")
+# Result should contain the calculator tool's result
+⋮----
+# Test with class name
+⋮----
+config2 = TaskConfig(done_sequences=["T[CalculatorTool], A"])
+⋮----
+result2 = task2.run("Calculate")
+⋮----
+# set up task to end as soon as the tool is generated, using the class name
+config3 = TaskConfig(done_sequences=["T[CalculatorTool]"])
+# ... and specialize the task to return the tool itself
+task3 = Task(agent2, config=config3, interactive=False)[CalculatorTool]
+result3: CalculatorTool | None = task3.run("Calculate")
+</file>
+
 <file path="tests/main/test_html_logger.py">
 """Tests for HTML logger functionality."""
 ⋮----
@@ -50963,6 +50966,136 @@ test_agent_difference.py
 test_isolated.py
 </file>
 
+<file path="docs/notes/task-tool.md">
+# TaskTool: Spawning Sub-Agents for Task Delegation
+
+## Overview
+
+`TaskTool` allows agents to **spawn sub-agents** to handle specific tasks. When an agent encounters a task that requires specialized tools or isolated execution, it can spawn a new sub-agent with exactly the capabilities needed for that task.
+
+This enables agents to dynamically create a hierarchy of specialized workers, each focused on their specific subtask with only the tools they need.
+
+## When to Use TaskTool
+
+TaskTool is useful when:
+- Different parts of a task require different specialized tools
+- You want to isolate tool access for specific operations  
+- A task involves recursive or nested operations
+- You need different LLM models for different subtasks
+
+## How It Works
+
+1. The parent agent decides to spawn a sub-agent and specifies:
+   - A system message defining the sub-agent's role
+   - A prompt for the sub-agent to process
+   - Which tools the sub-agent should have access to
+   - Optional model and iteration limits
+
+2. TaskTool spawns the new sub-agent, runs the task, and returns the result to the parent.
+
+## Async Support
+
+TaskTool fully supports both synchronous and asynchronous execution. The tool automatically handles async contexts when the parent task is running asynchronously.
+
+## Usage Example
+
+```python
+from langroid.agent.tools.task_tool import TaskTool
+
+# Enable TaskTool for your agent
+agent.enable_message([TaskTool, YourCustomTool], use=True, handle=True)
+
+# Agent can now spawn sub-agents for tasks when the LLM generates a task_tool request:
+
+response = {
+    "request": "task_tool",
+    "system_message": "You are a calculator. Use the multiply_tool to compute products.",
+    "prompt": "Calculate 5 * 7",
+    "tools": ["multiply_tool"],
+    "model": "gpt-4o-mini",   # optional
+    "max_iterations": 5,      # optional
+    "agent_name": "calculator-agent"  # optional
+}
+```
+
+## Field Reference
+
+**Required fields:**
+- `system_message`: Instructions for the sub-agent's role and behavior
+- `prompt`: The specific task/question for the sub-agent
+- `tools`: List of tool names. Special values: `["ALL"]` or `["NONE"]`
+
+**Optional fields:**
+- `model`: LLM model name (default: "gpt-4o-mini")
+- `max_iterations`: Task iteration limit (default: 10)
+- `agent_name`: Name for the sub-agent (default: auto-generated as "agent-{uuid}")
+
+## Example: Nested Operations
+
+Consider computing `Nebrowski(10, Nebrowski(3, 2))` where Nebrowski is a custom operation. The main agent spawns sub-agents to handle each operation:
+
+```python
+# Main agent spawns first sub-agent for inner operation:
+{
+    "request": "task_tool",
+    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
+    "prompt": "Compute Nebrowski(3, 2)",
+    "tools": ["nebrowski_tool"]
+}
+
+# Then spawns another sub-agent for outer operation:
+{
+    "request": "task_tool",
+    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
+    "prompt": "Compute Nebrowski(10, 11)",  # where 11 is the previous result
+    "tools": ["nebrowski_tool"]
+}
+```
+
+## Working Examples
+
+See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py) for complete examples including:
+- Basic task delegation with mock agents
+- Nested operations with custom tools
+- Both sync and async usage patterns
+
+## Important Notes
+
+- Spawned sub-agents run non-interactively (no human input)
+- `DoneTool` is automatically enabled for all sub-agents
+- Results are returned as `ChatDocument` objects. The Langroid framework takes care
+  of converting them to a suitable format for the parent agent's LLM to consume and 
+  respond to.
+- Sub-agents can be given custom names via the `agent_name` parameter, which helps with 
+  logging and debugging. If not specified, a unique name is auto-generated in the format 
+  "agent-{uuid}"
+- Only tools "known" to the parent agent can be enabled for sub-agents. This is an 
+  important aspect of the current mechanism. The `TaskTool` handler method in
+  the sub-agent only has access to tools that are known to the parent agent.
+  If there are tools that are only relevant to the sub-agent but not the parent,
+  you must still enable them in the parent agent, but you can set `use=False`
+  and `handle=False` when you enable them, e.g.:
+
+```python
+agent.enable_message(MySubAgentTool, use=False, handle=False)
+```
+  Since we are letting the main agent's LLM "decide" when to spawn a sub-agent,
+  your system message of the main agent should contain instructions clarifying that
+  it can decide which tools to enable for the sub-agent, as well as a list of 
+  all tools that might possibly be relevant to the sub-agent. This is particularly
+  important for tools that have been enabled with `use=False`, since instructions for
+  such tools would not be auto-inserted into the agent's system message. 
+
+
+
+## Best Practices
+
+1. **Clear Instructions**: Provide specific system messages that explain the sub-agent's role and tool usage
+2. **Tool Availability**: Ensure delegated tools are enabled for the parent agent
+3. **Appropriate Models**: Use simpler/faster models for simple subtasks
+4. **Iteration Limits**: Set reasonable limits based on task complexity
+</file>
+
 <file path="examples/basic/concurrent-tasks.py">
 """
 Toy example showing how to combine results from multiple tasks running concurrently.
@@ -52721,6 +52854,160 @@ excludes = excludes.union({"request"})
 schema = generate_simple_schema(
 </file>
 
+<file path="tests/main/test_task_tool.py">
+class MultiplierTool(ToolMessage)
+⋮----
+"""A simple calculator tool for testing."""
+⋮----
+request: str = "multiplier_tool"
+purpose: str = "To calculate the product of two numbers."
+a: int
+b: int
+⋮----
+def handle(self) -> str
+⋮----
+def test_task_tool_mock_main_agent()
+⋮----
+"""
+    Test that when MockAgent uses TaskTool, it  properly spawns a sub-agent
+    that can use tools and complete tasks.
+    """
+⋮----
+# Configure the main agent to use TaskTool:
+# The MockLM has a fixed response, which is the TaskTool request
+main_config = ChatAgentConfig(
+main_agent = ChatAgent(main_config)
+⋮----
+# Enable TaskTool and MultiplierTool for the main agent.
+# The MultiplierTool must be enabled for the main agent,
+# since the TaskTool handler will create a sub-agent that uses it,
+# and the handler only has access to tools enabled for the main agent.
+⋮----
+# Create main task that stops after handling the task_tool
+task = Task(
+⋮----
+done_sequences=["T,A"],  # LLM (Tool (TaskTool)), Agent(Handled) -> done
+⋮----
+# Run the task
+result = task.run(msg="Please calculate something")
+⋮----
+# The result should be from the sub-agent's execution
+⋮----
+class NebrowskiTool(ToolMessage)
+⋮----
+"""A tool that computes the exotic Nebrowski operation."""
+⋮----
+request: str = "nebrowski_tool"
+purpose: str = """
+⋮----
+# The Nebrowski operation: 3a + b
+result = 3 * self.a + self.b
+⋮----
+def _create_nebrowski_task()
+⋮----
+"""
+    Helper function to create a Nebrowski task for both sync and async tests.
+    Returns a configured Task ready to run.
+    """
+# Configure the main agent with a real LLM
+⋮----
+llm=OpenAIGPTConfig(),  # Uses default model
+⋮----
+# Enable TaskTool and NebrowskiTool
+⋮----
+# Create task with appropriate configuration
+⋮----
+def test_task_tool_real_llm_nebrowski()
+⋮----
+"""
+    Test that a real LLM agent can compute nested Nebrowski operations
+    by using TaskTool to delegate each Nebrowski computation to sub-agents.
+    """
+task = _create_nebrowski_task()
+⋮----
+# Run the task - compute Nebrowski(10, Nebrowski(3, 2))
+# Expected: Nebrowski(3, 2) = 11, then Nebrowski(10, 11) = 41
+result = task.run("Compute Nebrowski(10, Nebrowski(3, 2))", turns=15)
+⋮----
+# Verify the result
+⋮----
+@pytest.mark.asyncio
+async def test_task_tool_real_llm_nebrowski_async()
+⋮----
+"""
+    Async version: Test that a real LLM agent can compute nested Nebrowski operations
+    by using TaskTool to delegate each Nebrowski computation to sub-agents.
+    """
+⋮----
+# Run the task asynchronously - compute Nebrowski(10, Nebrowski(3, 2))
+⋮----
+result = await task.run_async("Compute Nebrowski(10, Nebrowski(3, 2))", turns=15)
+⋮----
+def test_task_tool_all_tools()
+⋮----
+"""
+    Test that tools="all" enables all available tools for the sub-agent.
+    """
+# Create a main agent with multiple tools available
+⋮----
+tools=["ALL"],  # Enable all tools
+⋮----
+# Set up multiple tools for the main agent
+⋮----
+# Create task
+⋮----
+done_sequences=["T,A"],  # LLM (Tool), Agent(Handled) -> done
+⋮----
+# Run the task: input text is immaterial since the
+# MockLM is hard-coded to return the TaskTool request
+result = task.run(msg="Test all tools")
+⋮----
+# Verify that the sub-agent had access to all tools
+# Expected: Multiply 4 and 6 = 24, Nebrowski(3, 5) = 14
+⋮----
+# Verify that parent chain is maintained through TaskTool
+# When TaskTool creates a prompt ChatDocument with parent_id pointing to the
+# TaskTool message, and passes it to the subtask, the subtask's init() method
+# should preserve that parent_id even though it deep copies the message.
+# This ensures the parent chain is not broken.
+⋮----
+# Traverse up the parent chain to find the TaskTool message
+current = result
+task_tool_found = False
+depth = 0
+# Prevent infinite loops, and allow enough look-back
+# to accommodate tool-forgetting retries that may occur.
+max_depth = 40
+⋮----
+# Check if current message is from TaskTool
+⋮----
+task_tool_found = True
+⋮----
+# Also check if it's a tool message with TaskTool request
+⋮----
+tool_messages = main_agent.try_get_tool_messages(current.content)
+⋮----
+pass  # Not a tool message
+⋮----
+current = current.parent
+⋮----
+def test_task_tool_none_tools()
+⋮----
+"""
+    Test that tools="none" disables all tools except DoneTool for the sub-agent.
+    """
+# Create a main agent that delegates with no tools
+⋮----
+tools=["NONE"],  # Disable all tools except DoneTool
+⋮----
+# Enable TaskTool and other tools for the main agent
+# (sub-agent won't have access to these)
+⋮----
+result = task.run(msg="Test no tools")
+⋮----
+# Verify that the task completed (sub-agent can still use DoneTool)
+</file>
+
 <file path="tests/main/test_task.py">
 """
 Other tests for Task are in test_chat_agent.py
@@ -54449,136 +54736,6 @@ Your support will help build Langroid's momentum and community.
 
 - [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
 - [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
-</file>
-
-<file path="docs/notes/task-tool.md">
-# TaskTool: Spawning Sub-Agents for Task Delegation
-
-## Overview
-
-`TaskTool` allows agents to **spawn sub-agents** to handle specific tasks. When an agent encounters a task that requires specialized tools or isolated execution, it can spawn a new sub-agent with exactly the capabilities needed for that task.
-
-This enables agents to dynamically create a hierarchy of specialized workers, each focused on their specific subtask with only the tools they need.
-
-## When to Use TaskTool
-
-TaskTool is useful when:
-- Different parts of a task require different specialized tools
-- You want to isolate tool access for specific operations  
-- A task involves recursive or nested operations
-- You need different LLM models for different subtasks
-
-## How It Works
-
-1. The parent agent decides to spawn a sub-agent and specifies:
-   - A system message defining the sub-agent's role
-   - A prompt for the sub-agent to process
-   - Which tools the sub-agent should have access to
-   - Optional model and iteration limits
-
-2. TaskTool spawns the new sub-agent, runs the task, and returns the result to the parent.
-
-## Async Support
-
-TaskTool fully supports both synchronous and asynchronous execution. The tool automatically handles async contexts when the parent task is running asynchronously.
-
-## Usage Example
-
-```python
-from langroid.agent.tools.task_tool import TaskTool
-
-# Enable TaskTool for your agent
-agent.enable_message([TaskTool, YourCustomTool], use=True, handle=True)
-
-# Agent can now spawn sub-agents for tasks when the LLM generates a task_tool request:
-
-response = {
-    "request": "task_tool",
-    "system_message": "You are a calculator. Use the multiply_tool to compute products.",
-    "prompt": "Calculate 5 * 7",
-    "tools": ["multiply_tool"],
-    "model": "gpt-4o-mini",   # optional
-    "max_iterations": 5,      # optional
-    "agent_name": "calculator-agent"  # optional
-}
-```
-
-## Field Reference
-
-**Required fields:**
-- `system_message`: Instructions for the sub-agent's role and behavior
-- `prompt`: The specific task/question for the sub-agent
-- `tools`: List of tool names. Special values: `["ALL"]` or `["NONE"]`
-
-**Optional fields:**
-- `model`: LLM model name (default: "gpt-4o-mini")
-- `max_iterations`: Task iteration limit (default: 10)
-- `agent_name`: Name for the sub-agent (default: auto-generated as "agent-{uuid}")
-
-## Example: Nested Operations
-
-Consider computing `Nebrowski(10, Nebrowski(3, 2))` where Nebrowski is a custom operation. The main agent spawns sub-agents to handle each operation:
-
-```python
-# Main agent spawns first sub-agent for inner operation:
-{
-    "request": "task_tool",
-    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
-    "prompt": "Compute Nebrowski(3, 2)",
-    "tools": ["nebrowski_tool"]
-}
-
-# Then spawns another sub-agent for outer operation:
-{
-    "request": "task_tool",
-    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
-    "prompt": "Compute Nebrowski(10, 11)",  # where 11 is the previous result
-    "tools": ["nebrowski_tool"]
-}
-```
-
-## Working Examples
-
-See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py) for complete examples including:
-- Basic task delegation with mock agents
-- Nested operations with custom tools
-- Both sync and async usage patterns
-
-## Important Notes
-
-- Spawned sub-agents run non-interactively (no human input)
-- `DoneTool` is automatically enabled for all sub-agents
-- Results are returned as `ChatDocument` objects. The Langroid framework takes care
-  of converting them to a suitable format for the parent agent's LLM to consume and 
-  respond to.
-- Sub-agents can be given custom names via the `agent_name` parameter, which helps with 
-  logging and debugging. If not specified, a unique name is auto-generated in the format 
-  "agent-{uuid}"
-- Only tools "known" to the parent agent can be enabled for sub-agents. This is an 
-  important aspect of the current mechanism. The `TaskTool` handler method in
-  the sub-agent only has access to tools that are known to the parent agent.
-  If there are tools that are only relevant to the sub-agent but not the parent,
-  you must still enable them in the parent agent, but you can set `use=False`
-  and `handle=False` when you enable them, e.g.:
-
-```python
-agent.enable_message(MySubAgentTool, use=False, handle=False)
-```
-  Since we are letting the main agent's LLM "decide" when to spawn a sub-agent,
-  your system message of the main agent should contain instructions clarifying that
-  it can decide which tools to enable for the sub-agent, as well as a list of 
-  all tools that might possibly be relevant to the sub-agent. This is particularly
-  important for tools that have been enabled with `use=False`, since instructions for
-  such tools would not be auto-inserted into the agent's system message. 
-
-
-
-## Best Practices
-
-1. **Clear Instructions**: Provide specific system messages that explain the sub-agent's role and tool usage
-2. **Tool Availability**: Ensure delegated tools are enabled for the parent agent
-3. **Appropriate Models**: Use simpler/faster models for simple subtasks
-4. **Iteration Limits**: Set reasonable limits based on task complexity
 </file>
 
 <file path="examples/basic/fn-call-local-simple.py">
@@ -56732,34 +56889,6 @@ big_doc_chunks = self.split_para_sentence(big_docs)
 big_doc_chunks = self.split_simple(big_docs)
 </file>
 
-<file path="langroid/pydantic_v1/__init__.py">
-"""
-Compatibility layer for Langroid's Pydantic migration.
-
-IMPORTANT: You are importing from langroid.pydantic_v1 but getting Pydantic v2 classes!
-Langroid has fully migrated to Pydantic v2, and this compatibility layer is deprecated.
-"""
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-# Only show the visual warning, not the standard deprecation warning
-# The standard warning is too noisy and shows the import line
-⋮----
-# Import from pydantic v2 directly (not from pydantic.v1)
-# This allows existing code to continue working if it's already v2-compatible
-from pydantic import *  # noqa: F403, F401
-⋮----
-# BaseSettings has moved in v2, import it explicitly
-⋮----
-from pydantic_settings import BaseSettings  # noqa: F401
-⋮----
-# Fallback for older pydantic versions
-from pydantic import BaseSettings  # type: ignore[no-redef] # noqa: F401
-⋮----
-# Explicitly export all items for mypy
-__all__ = [
-</file>
-
 <file path="langroid/vector_store/pineconedb.py">
 # import dataclass
 ⋮----
@@ -57409,169 +57538,6 @@ expected_sources = {_append_metadata_source(s, "new") for s in orig_sources}
 # Cleanup temp files
 </file>
 
-<file path="tests/main/test_task_tool.py">
-class MultiplierTool(ToolMessage)
-⋮----
-"""A simple calculator tool for testing."""
-⋮----
-request: str = "multiplier_tool"
-purpose: str = "To calculate the product of two numbers."
-a: int
-b: int
-⋮----
-def handle(self) -> str
-⋮----
-def test_task_tool_mock_main_agent()
-⋮----
-"""
-    Test that when MockAgent uses TaskTool, it  properly spawns a sub-agent
-    that can use tools and complete tasks.
-    """
-⋮----
-# Configure the main agent to use TaskTool:
-# The MockLM has a fixed response, which is the TaskTool request
-main_config = ChatAgentConfig(
-main_agent = ChatAgent(main_config)
-⋮----
-# Enable TaskTool and MultiplierTool for the main agent.
-# The MultiplierTool must be enabled for the main agent,
-# since the TaskTool handler will create a sub-agent that uses it,
-# and the handler only has access to tools enabled for the main agent.
-⋮----
-# Create main task that stops after handling the task_tool
-task = Task(
-⋮----
-done_sequences=["T,A"],  # LLM (Tool (TaskTool)), Agent(Handled) -> done
-⋮----
-# Run the task
-result = task.run(msg="Please calculate something")
-⋮----
-# The result should be from the sub-agent's execution
-⋮----
-class NebrowskiTool(ToolMessage)
-⋮----
-"""A tool that computes the exotic Nebrowski operation."""
-⋮----
-request: str = "nebrowski_tool"
-purpose: str = """
-⋮----
-# The Nebrowski operation: 3a + b
-result = 3 * self.a + self.b
-⋮----
-def _create_nebrowski_task()
-⋮----
-"""
-    Helper function to create a Nebrowski task for both sync and async tests.
-    Returns a configured Task ready to run.
-    """
-# Configure the main agent with a real LLM
-⋮----
-llm=OpenAIGPTConfig(),  # Uses default model
-⋮----
-# Enable TaskTool and NebrowskiTool
-⋮----
-# Create task with appropriate configuration
-⋮----
-def test_task_tool_real_llm_nebrowski()
-⋮----
-"""
-    Test that a real LLM agent can compute nested Nebrowski operations
-    by using TaskTool to delegate each Nebrowski computation to sub-agents.
-    """
-task = _create_nebrowski_task()
-⋮----
-# Run the task - compute Nebrowski(10, Nebrowski(3, 2))
-# Expected: Nebrowski(3, 2) = 11, then Nebrowski(10, 11) = 41
-result = task.run("Compute Nebrowski(10, Nebrowski(3, 2))", turns=15)
-⋮----
-# Verify the result
-⋮----
-@pytest.mark.asyncio
-async def test_task_tool_real_llm_nebrowski_async()
-⋮----
-"""
-    Async version: Test that a real LLM agent can compute nested Nebrowski operations
-    by using TaskTool to delegate each Nebrowski computation to sub-agents.
-    """
-⋮----
-# Run the task asynchronously - compute Nebrowski(10, Nebrowski(3, 2))
-⋮----
-result = await task.run_async("Compute Nebrowski(10, Nebrowski(3, 2))", turns=15)
-⋮----
-def test_task_tool_all_tools()
-⋮----
-"""
-    Test that tools="all" enables all available tools for the sub-agent.
-    """
-# Create a main agent with multiple tools available
-⋮----
-tools=["ALL"],  # Enable all tools
-⋮----
-# Set up multiple tools for the main agent
-⋮----
-# Create task
-⋮----
-done_sequences=["T,A"],  # LLM (Tool), Agent(Handled) -> done
-⋮----
-# Run the task: input text is immaterial since the
-# MockLM is hard-coded to return the TaskTool request
-result = task.run(msg="Test all tools")
-⋮----
-# Verify that the sub-agent had access to all tools
-# Expected: Multiply 4 and 6 = 24, Nebrowski(3, 5) = 14
-⋮----
-# Verify that parent chain is maintained through TaskTool
-# When TaskTool creates a prompt ChatDocument with parent_id pointing to the
-# TaskTool message, and passes it to the subtask, the subtask's init() method
-# should preserve that parent_id even though it deep copies the message.
-# This ensures the parent chain is not broken.
-⋮----
-# Traverse up the parent chain to find the TaskTool message
-current = result
-task_tool_found = False
-depth = 0
-# Prevent infinite loops, and allow enough look-back
-# to accommodate tool-forgetting retries that may occur.
-max_depth = 40
-⋮----
-# Check if current message is from TaskTool
-⋮----
-task_tool_found = True
-⋮----
-# Also check if it's a tool message with TaskTool request
-⋮----
-tool_messages = main_agent.try_get_tool_messages(current.content)
-⋮----
-pass  # Not a tool message
-⋮----
-current = current.parent
-⋮----
-def test_task_tool_none_tools()
-⋮----
-"""
-    Test that tools="none" disables all tools except DoneTool for the sub-agent.
-    """
-# Create a main agent that delegates with no tools
-⋮----
-tools=["NONE"],  # Disable all tools except DoneTool
-⋮----
-# Enable TaskTool and other tools for the main agent
-# (sub-agent won't have access to these)
-⋮----
-result = task.run(msg="Test no tools")
-⋮----
-# Verify that the task completed (sub-agent can still use DoneTool)
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.12.9
-  hooks:
-    - id: ruff
-</file>
-
 <file path="docs/notes/pydantic-v2-migration.md">
 # Pydantic v2 Migration Guide
 
@@ -57930,6 +57896,116 @@ planner = lr.ChatAgent(PlannerConfig())
 planner_task = lr.Task(planner, interactive=False)
 ⋮----
 result = await planner_task.run_async("Process this number: 3")
+</file>
+
+<file path="langroid/agent/tools/task_tool.py">
+"""
+TaskTool: A tool that allows agents to delegate a task to a sub-agent with
+    specific tools enabled.
+"""
+⋮----
+class TaskTool(ToolMessage)
+⋮----
+"""
+    Tool that spawns a sub-agent with specified tools to handle a task.
+
+    The sub-agent can be given a custom name for identification in logs.
+    If no name is provided, a random unique name starting with 'agent'
+    will be generated.
+    """
+⋮----
+# TODO: setting up termination conditions of sub-task needs to be improved
+request: str = "task_tool"
+purpose: str = """
+⋮----
+# Parameters for the agent tool
+⋮----
+system_message: Optional[str] = Field(
+⋮----
+prompt: str = Field(
+⋮----
+tools: List[str] = Field(
+# TODO: ensure valid model name
+model: Optional[str] = Field(
+max_iterations: Optional[int] = Field(
+agent_name: Optional[str] = Field(
+⋮----
+def _set_up_task(self, agent: ChatAgent) -> Task
+⋮----
+"""
+        Helper method to set up a task for the sub-agent.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+        """
+# Generate a random name if not provided
+agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
+⋮----
+# Create chat agent config with system message if provided
+# TODO: Maybe we just copy the parent agent's config and override chat_model?
+#   -- but what if parent agent has a MockLMConfig?
+llm_config = lm.OpenAIGPTConfig(
+config = ChatAgentConfig(
+⋮----
+# Create the sub-agent
+sub_agent = ChatAgent(config)
+⋮----
+# Enable the specified tools for the sub-agent
+# Convert tool names to actual tool classes using parent agent's tools_map
+⋮----
+# Enable all tools from the parent agent:
+# This is the list of all tools KNOWN (whether usable or handle-able or not)
+tool_classes = []
+⋮----
+tool_class = agent.llm_tools_map[t]
+allow_llm_use = tool_class._allow_llm_use
+⋮----
+allow_llm_use = allow_llm_use.default
+⋮----
+# No tools enabled
+⋮----
+# Enable only specified tools
+⋮----
+tool_class = agent.llm_tools_map[tool_name]
+⋮----
+# always enable the DoneTool to signal task completion
+⋮----
+# Create a non-interactive task
+task = Task(sub_agent, interactive=False)
+⋮----
+"""
+
+        Handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+⋮----
+task = self._set_up_task(agent)
+⋮----
+# Create a ChatDocument for the prompt with parent pointer
+prompt_doc = None
+⋮----
+prompt_doc = ChatDocument(
+# Set bidirectional parent-child relationship
+⋮----
+# Run the task with the ChatDocument or string prompt
+result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
+⋮----
+"""
+        Async method to handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+⋮----
+# TODO eventually allow the various task setup configs,
+#  including termination conditions
+result = await task.run_async(
 </file>
 
 <file path="langroid/agent/chat_agent.py">
@@ -58934,6 +59010,1268 @@ def __del__(self) -> None
 # Previously we closed clients here, but this caused issues when
 # multiple agents shared the same cached client instance.
 # Clients are now managed centrally in langroid.language_models.client_cache
+</file>
+
+<file path="langroid/parsing/url_loader.py">
+# Base crawler config and specific configurations
+class BaseCrawlerConfig(BaseSettings)
+⋮----
+"""Base configuration for web crawlers."""
+⋮----
+parser: Optional[Parser] = None
+⋮----
+class TrafilaturaConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for Trafilatura crawler."""
+⋮----
+threads: int = 4
+format: str = "markdown"  # or "xml" or "txt"
+⋮----
+class FirecrawlConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for Firecrawl crawler."""
+⋮----
+api_key: str = ""
+mode: str = "scrape"
+params: Dict[str, Any] = {}
+timeout: Optional[int] = None
+⋮----
+model_config = SettingsConfigDict(env_prefix="FIRECRAWL_")
+⋮----
+class ExaCrawlerConfig(BaseCrawlerConfig)
+⋮----
+model_config = SettingsConfigDict(env_prefix="EXA_")
+⋮----
+class Crawl4aiConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for the Crawl4aiCrawler."""
+⋮----
+crawl_mode: Literal["simple", "deep"] = "simple"
+extraction_strategy: Optional["ExtractionStrategy"] = None
+markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
+deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
+scraping_strategy: Optional["ContentScrapingStrategy"] = None
+browser_config: Optional["BrowserConfig"] = None
+run_config: Optional["CrawlerRunConfig"] = None
+⋮----
+model_config = SettingsConfigDict(arbitrary_types_allowed=True)
+⋮----
+# Resolve forward references for Crawl4aiConfig after the class is defined
+⋮----
+# Rebuild the model with resolved references
+⋮----
+# If crawl4ai is not installed, leave forward refs as strings
+⋮----
+class BaseCrawler(ABC)
+⋮----
+"""Abstract base class for web crawlers."""
+⋮----
+def __init__(self, config: BaseCrawlerConfig)
+⋮----
+"""Initialize the base crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+@property
+@abstractmethod
+    def needs_parser(self) -> bool
+⋮----
+"""Indicates whether the crawler requires a parser."""
+⋮----
+@abstractmethod
+    def crawl(self, urls: List[str]) -> List[Document]
+⋮----
+def _process_document(self, url: str) -> List[Document]
+⋮----
+doc_parser = DocumentParser.create(url, self.parser.config)
+new_chunks = doc_parser.get_doc_chunks()
+⋮----
+# If the document is empty, try to extract images
+img_parser = ImagePdfParser(url, self.parser.config)
+new_chunks = img_parser.get_doc_chunks()
+⋮----
+headers = requests.head(url).headers
+⋮----
+headers = CaseInsensitiveDict()
+⋮----
+content_type = headers.get("Content-Type", "").lower()
+temp_file_suffix = None
+⋮----
+temp_file_suffix = ".pdf"
+⋮----
+temp_file_suffix = ".docx"
+⋮----
+temp_file_suffix = ".doc"
+⋮----
+response = requests.get(url)
+⋮----
+temp_file_path = temp_file.name
+doc_parser = DocumentParser.create(
+docs = doc_parser.get_doc_chunks()
+⋮----
+def _is_document_url(self, url: str) -> bool
+⋮----
+class CrawlerFactory
+⋮----
+"""Factory for creating web crawlers."""
+⋮----
+@staticmethod
+    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler
+⋮----
+"""Create a crawler instance based on configuration type.
+
+        Args:
+            config: Configuration for the crawler
+
+        Returns:
+            A BaseCrawler instance
+
+        Raises:
+            ValueError: If config type is not supported
+        """
+⋮----
+class TrafilaturaCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Trafilatura."""
+⋮----
+def __init__(self, config: TrafilaturaConfig)
+⋮----
+"""Initialize the Trafilatura crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+@property
+    def needs_parser(self) -> bool
+⋮----
+def crawl(self, urls: List[str]) -> List[Document]
+⋮----
+docs = []
+dl_dict = add_to_compressed_dict(urls)
+⋮----
+parsed_doc = self._process_document(url)
+⋮----
+text = trafilatura.extract(
+⋮----
+with_metadata=True,  # Title, date, author... at start of text
+⋮----
+# heading_style="ATX" for markdown headings, i.e. #, ##, etc.
+text = md.markdownify(text, heading_style="ATX")
+⋮----
+text = result
+⋮----
+class FirecrawlCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Firecrawl."""
+⋮----
+def __init__(self, config: FirecrawlConfig) -> None
+⋮----
+"""Initialize the Firecrawl crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+# Code used verbatim from firecrawl blog with few modifications
+# https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
+⋮----
+pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
+⋮----
+processed_urls: set[str] = set()
+⋮----
+# Check current status
+status = app.check_crawl_status(crawl_id)
+new_pages = 0
+⋮----
+# Save new pages
+⋮----
+url = page["metadata"]["url"]
+⋮----
+content = page.get("markdown", "")
+filename = f"{output_dir}/{len(processed_urls)}.md"
+⋮----
+pbar.model_copy(update=new_pages)  # Update progress bar with new pages
+⋮----
+# Break if crawl is complete
+⋮----
+time.sleep(5)  # Wait before checking again
+⋮----
+app = FirecrawlApp(api_key=self.config.api_key)
+⋮----
+params = self.config.params.copy()  # Create a copy of the existing params
+⋮----
+params["timeout"] = self.config.timeout  # Add/override timeout in params
+⋮----
+result = app.scrape_url(url, params=params)
+metadata = result.get(
+⋮----
+)  # Default to empty dict if missing
+status_code = metadata.get("statusCode")
+⋮----
+# Start the crawl
+crawl_status = app.async_crawl_url(url=urls[0], params=params)
+⋮----
+# Save results incrementally
+docs = self._return_save_incremental_results(app, crawl_status["id"])
+⋮----
+class ExaCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Exa API."""
+⋮----
+def __init__(self, config: ExaCrawlerConfig) -> None
+⋮----
+"""Initialize the Exa crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+"""Crawl the given URLs using Exa SDK.
+
+        Args:
+            urls: List of URLs to crawl
+
+        Returns:
+            List of Documents with content extracted from the URLs
+
+        Raises:
+            LangroidImportError: If the exa package is not installed
+            ValueError: If the Exa API key is not set
+        """
+⋮----
+exa = Exa(self.config.api_key)
+⋮----
+parsed_doc_chunks = self._process_document(url)
+⋮----
+results = exa.get_contents(
+result = results.results[0]
+⋮----
+md_text = md.markdownify(result.text, heading_style="ATX")
+# append a NON-chunked document
+# (metadata.is_chunk = False, so will be chunked downstream)
+⋮----
+class Crawl4aiCrawler(BaseCrawler)
+⋮----
+"""
+    Crawler implementation using the crawl4ai library.
+
+    This crawler intelligently dispatches URLs. Standard web pages are rendered
+    and scraped using the crawl4ai browser engine. Direct links to documents
+    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
+    """
+⋮----
+def __init__(self, config: Crawl4aiConfig) -> None
+⋮----
+"""Initialize the Crawl4ai crawler."""
+⋮----
+"""
+        Indicates that this crawler relies on the framework's DocumentParser
+        for handling specific file types like PDF, DOCX, etc., which
+        the browser engine cannot parse directly.
+        """
+⋮----
+"""
+        Executes the crawl by separating document URLs from web page URLs.
+
+        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
+        - Web page URLs are handled using the async crawl4ai engine.
+        """
+all_documents: List[Document] = []
+webpage_urls: List[str] = []
+⋮----
+# Step 1: Separate URLs into documents and web pages
+⋮----
+# Step 2: Process web page URLs asynchronously
+⋮----
+loop = asyncio.get_running_loop()
+⋮----
+web_docs = asyncio.run(self._async_crawl(webpage_urls))
+⋮----
+"""Converts a crawl4ai CrawlResult into the framework's Document format."""
+⋮----
+content = ""
+⋮----
+content = result.extracted_content
+⋮----
+content = result.markdown.fit_markdown
+⋮----
+content = result.markdown.raw_markdown
+⋮----
+content = str(result.markdown)
+⋮----
+# Extract metadata safely
+title = "Unknown Title"
+published_date = "Unknown Date"
+⋮----
+title = result.metadata.get("title", "Unknown Title")
+# Try common date field names
+⋮----
+published_date = result.metadata.get(date_field)
+⋮----
+meta = DocMetaData(
+⋮----
+# Note: source_content is meant for reference content, not metadata
+# Keeping it minimal as other crawlers don't populate it
+⋮----
+async def _async_crawl(self, urls: List[str]) -> List[Document]
+⋮----
+# Import configs here for lazy loading
+⋮----
+# CHANGE 2: Handle the new optional config fields.
+# Use the user-provided config if it exists, otherwise create a default one.
+browser_config = self.config.browser_config or BrowserConfig()
+run_config = self.config.run_config or CrawlerRunConfig()
+⋮----
+crawled_documents: List[Document] = []
+⋮----
+result = await crawler.arun(url, config=run_config)
+doc = self._translate_result_to_document(result)
+⋮----
+# In deep crawl mode, `crawl4ai` will discover and crawl pages
+# starting from the seed URL. It will not process direct document links
+# found during the deep crawl; it is designed to follow hyperlinks.
+crawl_results = await crawler.arun(urls[0], config=run_config)
+⋮----
+class URLLoader
+⋮----
+"""Loads URLs and extracts text using a specified crawler."""
+⋮----
+"""Initialize the URL loader.
+
+        Args:
+            urls: List of URLs to load
+            parsing_config: Configuration for parsing
+            crawler_config: Configuration for the crawler
+        """
+⋮----
+crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
+⋮----
+def load(self) -> List[Document]
+⋮----
+"""Load the URLs using the specified crawler."""
+</file>
+
+<file path="langroid/pydantic_v1/__init__.py">
+"""
+Compatibility layer for Langroid's Pydantic migration.
+
+IMPORTANT: You are importing from langroid.pydantic_v1 but getting Pydantic v2 classes!
+Langroid has fully migrated to Pydantic v2, and this compatibility layer is deprecated.
+"""
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+# Only show the visual warning, not the standard deprecation warning
+# The standard warning is too noisy and shows the import line
+⋮----
+# Import from pydantic v2 directly (not from pydantic.v1)
+# This allows existing code to continue working if it's already v2-compatible
+from pydantic import *  # noqa: F403, F401
+⋮----
+# BaseSettings has moved in v2, import it explicitly
+⋮----
+from pydantic_settings import BaseSettings  # noqa: F401
+⋮----
+# Fallback for older pydantic versions
+from pydantic import BaseSettings  # type: ignore[no-redef] # noqa: F401
+⋮----
+# Explicitly export all items for mypy
+__all__ = [
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.12.9
+  hooks:
+    - id: ruff
+</file>
+
+<file path="langroid/agent/special/doc_chat_agent.py">
+# # langroid/agent/special/doc_chat_agent.py
+"""
+Agent that supports asking queries about a set of documents, using
+retrieval-augmented generation (RAG).
+
+Functionality includes:
+- summarizing a document, with a custom instruction; see `summarize_docs`
+- asking a question about a document; see `answer_from_docs`
+
+Note: to use the sentence-transformer embeddings, you must install
+langroid with the [hf-embeddings] extra, e.g.:
+
+pip install "langroid[hf-embeddings]"
+
+"""
+⋮----
+@cache
+def apply_nest_asyncio() -> None
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
+⋮----
+CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
+⋮----
+# Check if  module exists in sys.path
+spec = importlib.util.find_spec("sentence_transformers")
+has_sentence_transformers = spec is not None
+⋮----
+has_sentence_transformers = False
+⋮----
+hf_embed_config = SentenceTransformerEmbeddingsConfig(
+⋮----
+oai_embed_config = OpenAIEmbeddingsConfig(
+⋮----
+class ChunkEnrichmentAgentConfig(ChatAgentConfig)
+⋮----
+batch_size: int = 50
+delimiter: str = CHUNK_ENRICHMENT_DELIMITER
+enrichment_prompt_fn: Callable[[str], str] = lambda x: x
+⋮----
+class DocChatAgentConfig(ChatAgentConfig)
+⋮----
+system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
+summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
+# extra fields to include in content as key=value pairs
+# (helps retrieval for table-like data)
+add_fields_to_content: List[str] = []
+filter_fields: List[str] = []  # fields usable in filter
+retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
+extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
+filter: str | None = (
+⋮----
+None  # filter condition for various lexical/semantic search fns
+⋮----
+conversation_mode: bool = True  # accumulate message history?
+# retain retrieved context? Setting to True increases token consumption, but
+# helps LLM fix citation errors and improve accuracy of follow-up questions.
+retain_context: bool = False
+# In assistant mode, DocChatAgent receives questions from another Agent,
+# and those will already be in stand-alone form, so in this mode
+# there is no need to convert them to stand-alone form.
+assistant_mode: bool = False
+# Use LLM to generate hypothetical answer A to the query Q,
+# and use the embed(A) to find similar chunks in vecdb.
+# Referred to as HyDE in the paper:
+# https://arxiv.org/pdf/2212.10496.pdf
+# It is False by default; its benefits depends on the context.
+hypothetical_answer: bool = False
+# Optional config for chunk enrichment agent, e.g. to enrich
+# chunks with hypothetical questions, or keywords to increase
+# the "semantic surface area" of the chunks, which may help
+# improve retrieval.
+chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
+⋮----
+n_relevant_chunks: int = 3  # how many relevant chunks to retrieve finally
+n_similar_chunks: int = 3  # how many similar chunks to retrieve, by each method
+n_query_rephrases: int = 0
+n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
+n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
+use_fuzzy_match: bool = True
+use_bm25_search: bool = True
+use_reciprocal_rank_fusion: bool = False
+cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
+rerank_diversity: bool = True  # rerank to maximize diversity?
+rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
+rerank_after_adding_context: bool = True  # rerank after adding context window?
+# RRF (Reciprocal Rank Fusion) score = 1/(rank + reciprocal_rank_fusion_constant)
+# see https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works
+reciprocal_rank_fusion_constant: float = 60.0
+cache: bool = True  # cache results
+debug: bool = False
+stream: bool = True  # allow streaming where needed
+split: bool = True  # use chunking
+relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
+⋮----
+llm=None  # use the parent's llm unless explicitly set here
+⋮----
+doc_paths: List[str | bytes] = []
+default_paths: List[str] = [
+parsing: ParsingConfig = ParsingConfig(  # modify as needed
+⋮----
+chunk_size=1000,  # aim for this many tokens per chunk
+overlap=100,  # overlap between chunks
+⋮----
+# aim to have at least this many chars per chunk when
+# truncating due to punctuation
+⋮----
+discard_chunk_chars=5,  # discard chunks with fewer than this many chars
+# set deprecated n_similar_docs to None; use n_similar_chunks above instead
+⋮----
+n_neighbor_ids=0,  # num chunk IDs to store on either side of each chunk
+⋮----
+# NOTE: PDF parsing is extremely challenging, and each library
+# has its own strengths and weaknesses.
+# Try one that works for your use case.
+# or "unstructured", "fitz", "pymupdf4llm", "pypdf"
+⋮----
+crawler_config: Optional[BaseCrawlerConfig] = TrafilaturaConfig()
+⋮----
+# Allow vecdb to be None in case we want to explicitly set it later
+vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
+⋮----
+llm: OpenAIGPTConfig = OpenAIGPTConfig(
+prompts: PromptsConfig = PromptsConfig(
+⋮----
+def _append_metadata_source(orig_source: str, source: str) -> str
+⋮----
+class DocChatAgent(ChatAgent)
+⋮----
+"""
+    Agent for chatting with a collection of documents.
+    """
+⋮----
+# Handle backward compatibility for deprecated n_similar_docs
+⋮----
+# Use the deprecated value for both parameters
+⋮----
+def clear(self) -> None
+⋮----
+"""Clear the document collection and the specific collection in vecdb"""
+⋮----
+collection_name = self.vecdb.config.collection_name
+⋮----
+# Note we may have used a vecdb with a config.collection_name
+# different from the agent's config.vecdb.collection_name!!
+⋮----
+# Close the old vecdb before creating a new one
+old_vecdb = self.vecdb
+⋮----
+def ingest(self) -> None
+⋮----
+"""
+        Chunk + embed + store docs specified by self.config.doc_paths
+        """
+⋮----
+# we must be using a previously defined collection
+# But let's get all the chunked docs so we can
+# do keyword and other non-vector searches
+⋮----
+self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
+⋮----
+"""Split, ingest docs from specified paths,
+        do not add these to config.doc_paths.
+
+        Args:
+            paths: document paths, urls or byte-content of docs.
+                The bytes option is intended to support cases where a document
+                has already been read in as bytes (e.g. from an API or a database),
+                and we want to avoid having to write it to a temporary file
+                just to read it back in.
+            metadata: List of metadata dicts, one for each path.
+                If a single dict is passed in, it is used for all paths.
+            doc_type: DocumentType to use for parsing, if known.
+                MUST apply to all docs if specified.
+                This is especially useful when the `paths` are of bytes type,
+                to help with document type detection.
+        Returns:
+            List of Document objects
+        """
+⋮----
+paths = [paths]
+all_paths = paths
+paths_meta: Dict[int, Any] = {}
+urls_meta: Dict[int, Any] = {}
+idxs = range(len(all_paths))
+⋮----
+urls = [all_paths[i] for i in url_idxs]
+paths = [all_paths[i] for i in path_idxs]
+bytes_list = [all_paths[i] for i in bytes_idxs]
+⋮----
+idx2meta = {
+⋮----
+)  # appease mypy
+⋮----
+idx2meta = {p: metadata for p in idxs}
+⋮----
+idx2meta = {p: metadata.model_dump() for p in idxs}
+urls_meta = {u: idx2meta[u] for u in url_idxs}
+paths_meta = {p: idx2meta[p] for p in path_idxs}
+docs: List[Document] = []
+parser: Parser = Parser(self.config.parsing)
+⋮----
+meta = urls_meta.get(ui, {})
+loader = URLLoader(
+⋮----
+)  # type: ignore
+url_docs = loader.load()
+# update metadata of each doc with meta
+⋮----
+orig_source = d.metadata.source
+⋮----
+if len(paths) > 0:  # paths OR bytes are handled similarly
+⋮----
+meta = paths_meta.get(pi, {})
+p = all_paths[pi]
+path_docs = RepoLoader.get_documents(
+⋮----
+n_docs = len(docs)
+n_splits = self.ingest_docs(docs, split=self.config.split)
+⋮----
+n_urls = len(urls)
+n_paths = len(paths)
+⋮----
+path_reps = [p if isinstance(p, str) else "bytes" for p in paths]
+print("\n".join([u for u in urls if isinstance(u, str)]))  # appease mypy
+⋮----
+"""
+        Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
+
+        Args:
+            docs: List of Document objects
+            split: Whether to split docs into chunks. Default is True.
+                If False, docs are treated as "chunks" and are not split.
+            metadata: List of metadata dicts, one for each doc, to augment
+                whatever metadata is already in the doc.
+                [ASSUME no conflicting keys between the two metadata dicts.]
+                If a single dict is passed in, it is used for all docs.
+        """
+⋮----
+m_dict = m if isinstance(m, dict) else m.model_dump()  # type: ignore
+d.metadata = d.metadata.model_copy(update=m_dict)  # type: ignore
+⋮----
+docs = self.parser.split(docs)
+⋮----
+# we're not splitting, so we mark each doc as a chunk
+⋮----
+docs = self.enrich_chunks(docs)
+⋮----
+# If any additional fields need to be added to content,
+# add them as key=value pairs for all docs, before batching.
+# This helps retrieval for table-like data.
+# Note we need to do this at stage so that the embeddings
+# are computed on the full content with these additional fields.
+⋮----
+fields = [
+⋮----
+key_vals = extract_fields(d, fields)
+⋮----
+docs = docs[: self.config.parsing.max_chunks]
+# vecdb should take care of adding docs in batches;
+# batching can be controlled via vecdb.config.batch_size
+⋮----
+return 0  # Return 0 since no documents were added
+⋮----
+def retrieval_tool(self, msg: RetrievalTool) -> str
+⋮----
+"""Handle the RetrievalTool message"""
+⋮----
+content_doc = self.answer_from_docs(msg.query)
+⋮----
+"""
+        Convert dataframe so it is compatible with Document class:
+        - has "content" column
+        - has an "id" column to be used as Document.metadata.id
+
+        Args:
+            df: dataframe to convert
+            content: name of content column
+            metadata: list of metadata column names
+
+        Returns:
+            Tuple[pd.DataFrame, List[str]]: dataframe, metadata
+                - dataframe: dataframe with "content" column and "id" column
+                - metadata: list of metadata column names, including "id"
+        """
+⋮----
+# rename content column to "content", leave existing column intact
+df = df.rename(columns={content: "content"}, inplace=False)
+⋮----
+actual_metadata = metadata.copy()
+⋮----
+docs = dataframe_to_documents(df, content="content", metadata=metadata)
+ids = [str(d.id()) for d in docs]
+⋮----
+"""
+        Ingest a dataframe into vecdb.
+        """
+⋮----
+# When ingesting a dataframe we will no longer do any chunking,
+# so we mark each doc as a chunk.
+# TODO - revisit this since we may still want to chunk large text columns
+⋮----
+def set_filter(self, filter: str) -> None
+⋮----
+"""
+        Setup `self.chunked_docs` and `self.chunked_docs_clean`
+        based on possible filter.
+        These will be used in various non-vector-based search functions,
+        e.g. self.get_similar_chunks_bm25(), self.get_fuzzy_matches(), etc.
+
+        Args:
+            docs: List of Document objects. This is empty when we are calling this
+                method after initial doc ingestion.
+            filter: Filter condition for various lexical/semantic search fns.
+        """
+⋮----
+# no filter, so just use the docs passed in
+⋮----
+def get_field_values(self, fields: list[str]) -> Dict[str, str]
+⋮----
+"""Get string-listing of possible values of each field,
+        e.g.
+        {
+            "genre": "crime, drama, mystery, ... (10 more)",
+            "certificate": "R, PG-13, PG, R",
+        }
+        The field names may have "metadata." prefix, e.g. "metadata.genre".
+        """
+field_values: Dict[str, Set[str]] = {}
+# make empty set for each field
+⋮----
+# get all documents and accumulate possible values of each field until 10
+docs = self.vecdb.get_all_documents()  # only works for vecdbs that support this
+⋮----
+# extract fields from d
+doc_field_vals = extract_fields(d, fields)
+# the `field` returned by extract_fields may contain only the last
+# part of the field name, e.g. "genre" instead of "metadata.genre",
+# so we use the orig_field name to fill in the values
+⋮----
+# For each field make a string showing list of possible values,
+# truncate to 20 values, and if there are more, indicate how many
+# more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
+field_values_list = {}
+⋮----
+vals = list(field_values[f])
+n = len(vals)
+remaining = n - 20
+vals = vals[:20]
+⋮----
+# make a string of the values, ensure they are strings
+⋮----
+def doc_length(self, docs: List[Document]) -> int
+⋮----
+"""
+        Calc token-length of a list of docs
+        Args:
+            docs: list of Document objects
+        Returns:
+            int: number of tokens
+        """
+⋮----
+def user_docs_ingest_dialog(self) -> None
+⋮----
+"""
+        Ask user to select doc-collection, enter filenames/urls, and ingest into vecdb.
+        """
+⋮----
+n_deletes = self.vecdb.clear_empty_collections()
+collections = self.vecdb.list_collections()
+collection_name = "NEW"
+is_new_collection = False
+replace_collection = False
+⋮----
+n = len(collections)
+delete_str = (
+⋮----
+choice = Prompt.ask(
+⋮----
+confirm = Prompt.ask(
+⋮----
+collection_name = collections[int(choice) - 1]
+⋮----
+replace_collection = choice == "y"
+⋮----
+is_new_collection = True
+collection_name = Prompt.ask(
+⋮----
+default_urls_str = (
+⋮----
+inputs = get_list_from_user()
+⋮----
+inputs = self.config.default_paths
+self.config.doc_paths = inputs  # type: ignore
+⋮----
+query_str: str | None
+⋮----
+query_str = message.content
+⋮----
+query_str = message
+⋮----
+# direct query to LLM
+query_str = query_str[1:] if query_str is not None else None
+⋮----
+response = super().llm_response(query_str)
+⋮----
+response = self.answer_from_docs(query_str)
+# Citation details (if any) are NOT generated by LLM
+# (We extract these from LLM's numerical citations),
+# so render them here
+⋮----
+response = await super().llm_response_async(query_str)
+⋮----
+@staticmethod
+    def doc_string(docs: List[Document]) -> str
+⋮----
+"""
+        Generate a string representation of a list of docs.
+        Args:
+            docs: list of Document objects
+        Returns:
+            str: string representation
+        """
+contents = [d.content for d in docs]
+sources = [d.metadata.source for d in docs]
+sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
+⋮----
+"""
+        Given a question and a list of (possibly) doc snippets,
+        generate an answer if possible
+        Args:
+            question: question to answer
+            passages: list of `Document` objects each containing a possibly relevant
+                snippet, and metadata
+        Returns:
+            a `Document` object containing the answer,
+            and metadata containing source citations
+
+        """
+⋮----
+passages_str = self.doc_string(passages)
+# Substitute Q and P into the templatized prompt
+⋮----
+final_prompt = self.config.summarize_prompt.format(
+⋮----
+# Generate the final verbatim extract based on the final prompt.
+# Note this will send entire message history, plus this final_prompt
+# to the LLM, and self.message_history will be updated to include
+# 2 new LLMMessage objects:
+# one for `final_prompt`, and one for the LLM response
+⋮----
+answer_doc = super().llm_response(final_prompt)
+⋮----
+# respond with temporary context
+answer_doc = super()._llm_response_temp_context(question, final_prompt)
+⋮----
+answer_doc = super().llm_response_forget(final_prompt)
+⋮----
+final_answer = answer_doc.content.strip()
+⋮----
+# extract references like [^2], [^3], etc. from the final answer
+citations = extract_markdown_references(final_answer)
+# format the cited references as a string suitable for markdown footnote
+⋮----
+content=final_answer,  # does not contain citations
+⋮----
+source=citations_str,  # only the reference headers
+source_content=full_citations_str,  # reference + content
+⋮----
+def llm_hypothetical_answer(self, query: str) -> str
+⋮----
+# TODO: provide an easy way to
+# Adjust this prompt depending on context.
+answer = self.llm_response_forget(
+⋮----
+def enrich_chunks(self, docs: List[Document]) -> List[Document]
+⋮----
+"""
+        Enrich chunks using Agent configured with self.config.chunk_enrichment_config.
+
+        We assume that the system message of the agent is set in such a way
+        that when we run
+        ```
+        prompt = self.config.chunk_enrichment_config.enrichment_prompt_fn(text)
+        result = await agent.llm_response_forget_async(prompt)
+        ```
+
+        then `result.content` will contain the augmentation to the text.
+
+        Args:
+            docs: List of document chunks to enrich
+
+        Returns:
+            List[Document]: Documents (chunks) enriched with additional text,
+                separated by a delimiter.
+        """
+⋮----
+enrichment_config = self.config.chunk_enrichment_config
+agent = ChatAgent(enrichment_config)
+⋮----
+# Process chunks in parallel using run_batch_agent_method
+questions_batch = run_batch_agent_method(
+⋮----
+# Combine original content with generated questions
+augmented_docs = []
+⋮----
+# Combine original content with questions in a structured way
+combined_content = (
+⋮----
+new_doc = doc.model_copy(
+⋮----
+def llm_rephrase_query(self, query: str) -> List[str]
+⋮----
+rephrases = self.llm_response_forget(
+⋮----
+# find similar docs using bm25 similarity:
+# these may sometimes be more likely to contain a relevant verbatim extract
+⋮----
+docs_scores = find_closest_matches_with_bm25(
+⋮----
+self.chunked_docs_clean,  # already pre-processed!
+⋮----
+# find similar docs using fuzzy matching:
+⋮----
+fuzzy_match_docs = find_fuzzy_matches_in_docs(
+⋮----
+model = CrossEncoder(self.config.cross_encoder_reranking_model)
+scores = model.predict([(query, p.content) for p in passages])
+# Convert to [0,1] so we might could use a cutoff later.
+scores = 1.0 / (1 + np.exp(-np.array(scores)))
+# get top k scoring passages
+sorted_pairs = sorted(
+passages = [d for _, d in sorted_pairs]
+⋮----
+def rerank_with_diversity(self, passages: List[Document]) -> List[Document]
+⋮----
+"""
+        Rerank a list of items in such a way that each successive item is least similar
+        (on average) to the earlier items.
+
+        Args:
+        query (str): The query for which the passages are relevant.
+        passages (List[Document]): A list of Documents to be reranked.
+
+        Returns:
+        List[Documents]: A reranked list of Documents.
+        """
+⋮----
+emb_model = self.vecdb.embedding_model
+emb_fn = emb_model.embedding_fn()
+embs = emb_fn([p.content for p in passages])
+embs_arr = [np.array(e) for e in embs]
+indices = list(range(len(passages)))
+⋮----
+# Helper function to compute average similarity to
+# items in the current result list.
+def avg_similarity_to_result(i: int, result: List[int]) -> float
+⋮----
+return sum(  # type: ignore
+⋮----
+# copy passages to items
+result = [indices.pop(0)]  # Start with the first item.
+⋮----
+# Find the item that has the least average similarity
+# to items in the result list.
+least_similar_item = min(
+⋮----
+# return passages in order of result list
+⋮----
+def rerank_to_periphery(self, passages: List[Document]) -> List[Document]
+⋮----
+"""
+        Rerank to avoid Lost In the Middle (LIM) problem,
+        where LLMs pay more attention to items at the ends of a list,
+        rather than the middle. So we re-rank to make the best passages
+        appear at the periphery of the list.
+        https://arxiv.org/abs/2307.03172
+
+        Example reranking:
+        1 2 3 4 5 6 7 8 9 ==> 1 3 5 7 9 8 6 4 2
+
+        Args:
+            passages (List[Document]): A list of Documents to be reranked.
+
+        Returns:
+            List[Documents]: A reranked list of Documents.
+
+        """
+# Splitting items into odds and evens based on index, not value
+odds = passages[::2]
+evens = passages[1::2][::-1]
+⋮----
+# Merging them back together
+⋮----
+"""
+        In each doc's metadata, there may be a window_ids field indicating
+        the ids of the chunks around the current chunk. We use these stored
+        window_ids to retrieve the desired number
+        (self.config.n_neighbor_chunks) of neighbors
+        on either side of the current chunk.
+
+        Args:
+            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
+                to add context windows to together with their match scores.
+
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+⋮----
+# Do not add context window when there are other fields besides just
+# content and metadata, since we do not know how to set those other fields
+# for newly created docs with combined content.
+⋮----
+"""
+        Get semantic search results from vecdb.
+        Args:
+            query (str): query to search for
+            k (int): number of results to return
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+⋮----
+# Note: for dynamic filtering based on a query, users can
+# use the `temp_update` context-manager to pass in a `filter` to self.config,
+# e.g.:
+# with temp_update(self.config, {"filter": "metadata.source=='source1'"}):
+#     docs_scores = self.get_semantic_search_results(query, k=k)
+# This avoids having pass the `filter` argument to every function call
+# upstream of this one.
+# The `temp_update` context manager is defined in
+# `langroid/utils/pydantic_utils.py`
+⋮----
+"""
+        The retrieval stage in RAG: get doc-chunks that are most "relevant"
+        to the query (and possibly any proxy queries), from the document-store,
+        which currently is the vector store,
+        but in theory could be any document store, or even web-search.
+        This stage does NOT involve an LLM, and the retrieved chunks
+        could either be pre-chunked text (from the initial pre-processing stage
+        where chunks were stored in the vector store), or they could be
+        dynamically retrieved based on a window around a lexical match.
+
+        These are the steps (some optional based on config):
+        - semantic search based on vector-embedding distance, from vecdb
+        - lexical search using bm25-ranking (keyword similarity)
+        - fuzzy matching (keyword similarity)
+        - re-ranking of doc-chunks by relevance to query, using cross-encoder,
+           and pick top k
+
+        Args:
+            query: original query (assumed to be in stand-alone form)
+            query_proxies: possible rephrases, or hypothetical answer to query
+                    (e.g. for HyDE-type retrieval)
+
+        Returns:
+
+        """
+⋮----
+# if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
+# we can retrieve more docs during retrieval, and leave it to the cross-encoder
+# or RRF reranking to whittle down to self.config.n_similar_chunks
+retrieval_multiple = (
+⋮----
+docs_and_scores: List[Tuple[Document, float]] = []
+⋮----
+# sort by score descending
+docs_and_scores = sorted(
+⋮----
+# keep only docs with unique d.id()
+id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
+id2doc = {d.id(): d for d, _ in docs_and_scores}
+# make sure we get unique docs
+passages = [id2doc[id] for id in id2_rank_semantic.keys()]
+⋮----
+id2_rank_bm25 = {}
+⋮----
+# TODO: Add score threshold in config
+docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+⋮----
+# if we're not re-ranking with a cross-encoder, and have RRF enabled,
+# instead of accumulating the bm25 results into passages,
+# we collect these ranks for Reciprocal Rank Fusion down below.
+docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
+id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
+⋮----
+# eliminate duplicate ids
+passages = [id2doc[id] for id in id2doc.keys()]
+⋮----
+id2_rank_fuzzy = {}
+⋮----
+fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
+⋮----
+# if we're not re-ranking with a cross-encoder,
+# instead of accumulating the fuzzy match results into passages,
+⋮----
+fuzzy_match_doc_scores = sorted(
+id2_rank_fuzzy = {
+⋮----
+# Since we're not using cross-enocder re-ranking,
+# we need to re-order the retrieved chunks from potentially three
+# different retrieval methods (semantic, bm25, fuzzy), where the
+# similarity scores are on different scales.
+# We order the retrieved chunks using Reciprocal Rank Fusion (RRF) score.
+# Combine the ranks from each id2doc_rank_* dict into a single dict,
+# where the reciprocal rank score is the sum of
+# 1/(rank + self.config.reciprocal_rank_fusion_constant).
+# See https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking
+#
+# Note: diversity/periphery-reranking below may modify the final ranking.
+id2_reciprocal_score = {}
+⋮----
+# Use max_rank instead of infinity to avoid bias against
+# single-method docs
+max_rank = self.config.n_similar_chunks * retrieval_multiple
+rank_semantic = id2_rank_semantic.get(id_, max_rank + 1)
+rank_bm25 = id2_rank_bm25.get(id_, max_rank + 1)
+rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank + 1)
+c = self.config.reciprocal_rank_fusion_constant
+reciprocal_fusion_score = (
+⋮----
+# sort the docs by the reciprocal score, in descending order
+id2_reciprocal_score = OrderedDict(
+# each method retrieved up to retrieval_multiple * n_similar_chunks,
+# so we need to take the top n_similar_chunks from the combined list
+passages = [
+# passages must have distinct ids
+⋮----
+passages_scores = [(p, 0.0) for p in passages]
+passages_scores = self.add_context_window(passages_scores)
+passages = [p for p, _ in passages_scores]
+# now passages can potentially have a lot of doc chunks,
+# so we re-rank them using a cross-encoder scoring model
+# (provided that `reciprocal_rank_fusion` is not enabled),
+# and pick top k where k = config..n_similar_chunks
+# https://www.sbert.net/examples/applications/retrieve_rerank
+⋮----
+passages = self.rerank_with_cross_encoder(query, passages)
+⋮----
+# reorder to increase diversity among top docs
+passages = self.rerank_with_diversity(passages)
+⋮----
+# reorder so most important docs are at periphery
+# (see Lost In the Middle issue).
+passages = self.rerank_to_periphery(passages)
+⋮----
+@no_type_check
+    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]
+⋮----
+"""
+        Get list of (verbatim) extracts from doc-chunks relevant to answering a query.
+
+        These are the stages (some optional based on config):
+        - use LLM to convert query to stand-alone query
+        - optionally use LLM to rephrase query to use below
+        - optionally use LLM to generate hypothetical answer (HyDE) to use below.
+        - get_relevant_chunks(): get doc-chunks relevant to query and proxies
+        - use LLM to get relevant extracts from doc-chunks
+
+        Args:
+            query (str): query to search for
+
+        Returns:
+            query (str): stand-alone version of input query
+            List[Document]: list of relevant extracts
+
+        """
+⋮----
+# Regardless of whether we are in conversation mode or not,
+# for relevant doc/chunk extraction, we must convert the query
+# to a standalone query to get more relevant results.
+⋮----
+query = self.llm.followup_to_standalone(self.dialog, query)
+⋮----
+proxies = []
+⋮----
+answer = self.llm_hypothetical_answer(query)
+proxies = [answer]
+⋮----
+rephrases = self.llm_rephrase_query(query)
+⋮----
+passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+⋮----
+# these are async calls, one per passage; turn off streaming
+extracts = self.get_verbatim_extracts(query, passages)
+extracts = [e for e in extracts if e.content != NO_ANSWER]
+⋮----
+def remove_chunk_enrichments(self, passages: List[Document]) -> List[Document]
+⋮----
+"""Remove any enrichments (like hypothetical questions, or keywords)
+        from documents.
+        Only cleans if enrichment was enabled in config.
+
+        Args:
+            passages: List of documents to clean
+
+        Returns:
+            List of documents with only original content
+        """
+⋮----
+delimiter = self.config.chunk_enrichment_config.delimiter
+⋮----
+"""
+        Run RelevanceExtractorAgent in async/concurrent mode on passages,
+        to extract portions relevant to answering query, from each passage.
+        Args:
+            query (str): query to answer
+            passages (List[Documents]): list of passages to extract from
+
+        Returns:
+            List[Document]: list of Documents containing extracts and metadata.
+        """
+passages = self.remove_chunk_enrichments(passages)
+⋮----
+agent_cfg = self.config.relevance_extractor_config
+⋮----
+# no relevance extraction: simply return passages
+⋮----
+# Use main DocChatAgent's LLM if not provided explicitly:
+# this reduces setup burden on the user
+⋮----
+agent_cfg.llm.stream = False  # disable streaming for concurrent calls
+⋮----
+agent = RelevanceExtractorAgent(agent_cfg)
+task = Task(
+⋮----
+extracts: list[str] = run_batch_tasks(
+⋮----
+)  # type: ignore
+⋮----
+# Caution: Retain ALL other fields in the Documents (which could be
+# other than just `content` and `metadata`), while simply replacing
+# `content` with the extracted portions
+passage_extracts = []
+⋮----
+p_copy = p.model_copy()
+⋮----
+def answer_from_docs(self, query: str) -> ChatDocument
+⋮----
+"""
+        Answer query based on relevant docs from the VecDB
+
+        Args:
+            query (str): query to answer
+
+        Returns:
+            Document: answer
+        """
+response = ChatDocument(
+# query may be updated to a stand-alone version
+⋮----
+# only return extracts, skip LLM-based summary answer
+meta = dict(
+# copy metadata from first doc, unclear what to do here.
+⋮----
+metadata=ChatDocMetaData(**meta),  # type: ignore
+⋮----
+response = self.get_summary_answer(query, extracts)
+⋮----
+self.response = response  # save last response
+⋮----
+"""Summarize all docs"""
+⋮----
+full_text = "\n\n".join([d.content for d in self.original_docs])
+⋮----
+tot_tokens = self.parser.num_tokens(full_text)
+MAX_INPUT_TOKENS = (
+⋮----
+# truncate
+full_text = self.parser.tokenizer.decode(
+⋮----
+prompt = f"""
+⋮----
+summary = ChatAgent.llm_response(self, prompt)
+⋮----
+def justify_response(self) -> ChatDocument | None
+⋮----
+"""Show evidence for last response"""
+⋮----
+source = self.response.metadata.source
 </file>
 
 <file path="langroid/agent/task.py">
@@ -60160,1341 +61498,6 @@ responder = current_responder
 matched = False
 ⋮----
 matched = True
-</file>
-
-<file path="langroid/parsing/url_loader.py">
-# Base crawler config and specific configurations
-class BaseCrawlerConfig(BaseSettings)
-⋮----
-"""Base configuration for web crawlers."""
-⋮----
-parser: Optional[Parser] = None
-⋮----
-class TrafilaturaConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for Trafilatura crawler."""
-⋮----
-threads: int = 4
-format: str = "markdown"  # or "xml" or "txt"
-⋮----
-class FirecrawlConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for Firecrawl crawler."""
-⋮----
-api_key: str = ""
-mode: str = "scrape"
-params: Dict[str, Any] = {}
-timeout: Optional[int] = None
-⋮----
-model_config = SettingsConfigDict(env_prefix="FIRECRAWL_")
-⋮----
-class ExaCrawlerConfig(BaseCrawlerConfig)
-⋮----
-model_config = SettingsConfigDict(env_prefix="EXA_")
-⋮----
-class Crawl4aiConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for the Crawl4aiCrawler."""
-⋮----
-crawl_mode: Literal["simple", "deep"] = "simple"
-extraction_strategy: Optional["ExtractionStrategy"] = None
-markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
-deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
-scraping_strategy: Optional["ContentScrapingStrategy"] = None
-browser_config: Optional["BrowserConfig"] = None
-run_config: Optional["CrawlerRunConfig"] = None
-⋮----
-model_config = SettingsConfigDict(arbitrary_types_allowed=True)
-⋮----
-# Resolve forward references for Crawl4aiConfig after the class is defined
-⋮----
-# Rebuild the model with resolved references
-⋮----
-# If crawl4ai is not installed, leave forward refs as strings
-⋮----
-class BaseCrawler(ABC)
-⋮----
-"""Abstract base class for web crawlers."""
-⋮----
-def __init__(self, config: BaseCrawlerConfig)
-⋮----
-"""Initialize the base crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-@property
-@abstractmethod
-    def needs_parser(self) -> bool
-⋮----
-"""Indicates whether the crawler requires a parser."""
-⋮----
-@abstractmethod
-    def crawl(self, urls: List[str]) -> List[Document]
-⋮----
-def _process_document(self, url: str) -> List[Document]
-⋮----
-doc_parser = DocumentParser.create(url, self.parser.config)
-new_chunks = doc_parser.get_doc_chunks()
-⋮----
-# If the document is empty, try to extract images
-img_parser = ImagePdfParser(url, self.parser.config)
-new_chunks = img_parser.get_doc_chunks()
-⋮----
-headers = requests.head(url).headers
-⋮----
-headers = CaseInsensitiveDict()
-⋮----
-content_type = headers.get("Content-Type", "").lower()
-temp_file_suffix = None
-⋮----
-temp_file_suffix = ".pdf"
-⋮----
-temp_file_suffix = ".docx"
-⋮----
-temp_file_suffix = ".doc"
-⋮----
-response = requests.get(url)
-⋮----
-temp_file_path = temp_file.name
-doc_parser = DocumentParser.create(
-docs = doc_parser.get_doc_chunks()
-⋮----
-def _is_document_url(self, url: str) -> bool
-⋮----
-class CrawlerFactory
-⋮----
-"""Factory for creating web crawlers."""
-⋮----
-@staticmethod
-    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler
-⋮----
-"""Create a crawler instance based on configuration type.
-
-        Args:
-            config: Configuration for the crawler
-
-        Returns:
-            A BaseCrawler instance
-
-        Raises:
-            ValueError: If config type is not supported
-        """
-⋮----
-class TrafilaturaCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Trafilatura."""
-⋮----
-def __init__(self, config: TrafilaturaConfig)
-⋮----
-"""Initialize the Trafilatura crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-@property
-    def needs_parser(self) -> bool
-⋮----
-def crawl(self, urls: List[str]) -> List[Document]
-⋮----
-docs = []
-dl_dict = add_to_compressed_dict(urls)
-⋮----
-parsed_doc = self._process_document(url)
-⋮----
-text = trafilatura.extract(
-⋮----
-with_metadata=True,  # Title, date, author... at start of text
-⋮----
-# heading_style="ATX" for markdown headings, i.e. #, ##, etc.
-text = md.markdownify(text, heading_style="ATX")
-⋮----
-text = result
-⋮----
-class FirecrawlCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Firecrawl."""
-⋮----
-def __init__(self, config: FirecrawlConfig) -> None
-⋮----
-"""Initialize the Firecrawl crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-# Code used verbatim from firecrawl blog with few modifications
-# https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
-⋮----
-pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
-⋮----
-processed_urls: set[str] = set()
-⋮----
-# Check current status
-status = app.check_crawl_status(crawl_id)
-new_pages = 0
-⋮----
-# Save new pages
-⋮----
-url = page["metadata"]["url"]
-⋮----
-content = page.get("markdown", "")
-filename = f"{output_dir}/{len(processed_urls)}.md"
-⋮----
-pbar.model_copy(update=new_pages)  # Update progress bar with new pages
-⋮----
-# Break if crawl is complete
-⋮----
-time.sleep(5)  # Wait before checking again
-⋮----
-app = FirecrawlApp(api_key=self.config.api_key)
-⋮----
-params = self.config.params.copy()  # Create a copy of the existing params
-⋮----
-params["timeout"] = self.config.timeout  # Add/override timeout in params
-⋮----
-result = app.scrape_url(url, params=params)
-metadata = result.get(
-⋮----
-)  # Default to empty dict if missing
-status_code = metadata.get("statusCode")
-⋮----
-# Start the crawl
-crawl_status = app.async_crawl_url(url=urls[0], params=params)
-⋮----
-# Save results incrementally
-docs = self._return_save_incremental_results(app, crawl_status["id"])
-⋮----
-class ExaCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Exa API."""
-⋮----
-def __init__(self, config: ExaCrawlerConfig) -> None
-⋮----
-"""Initialize the Exa crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-"""Crawl the given URLs using Exa SDK.
-
-        Args:
-            urls: List of URLs to crawl
-
-        Returns:
-            List of Documents with content extracted from the URLs
-
-        Raises:
-            LangroidImportError: If the exa package is not installed
-            ValueError: If the Exa API key is not set
-        """
-⋮----
-exa = Exa(self.config.api_key)
-⋮----
-parsed_doc_chunks = self._process_document(url)
-⋮----
-results = exa.get_contents(
-result = results.results[0]
-⋮----
-md_text = md.markdownify(result.text, heading_style="ATX")
-# append a NON-chunked document
-# (metadata.is_chunk = False, so will be chunked downstream)
-⋮----
-class Crawl4aiCrawler(BaseCrawler)
-⋮----
-"""
-    Crawler implementation using the crawl4ai library.
-
-    This crawler intelligently dispatches URLs. Standard web pages are rendered
-    and scraped using the crawl4ai browser engine. Direct links to documents
-    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
-    """
-⋮----
-def __init__(self, config: Crawl4aiConfig) -> None
-⋮----
-"""Initialize the Crawl4ai crawler."""
-⋮----
-"""
-        Indicates that this crawler relies on the framework's DocumentParser
-        for handling specific file types like PDF, DOCX, etc., which
-        the browser engine cannot parse directly.
-        """
-⋮----
-"""
-        Executes the crawl by separating document URLs from web page URLs.
-
-        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
-        - Web page URLs are handled using the async crawl4ai engine.
-        """
-all_documents: List[Document] = []
-webpage_urls: List[str] = []
-⋮----
-# Step 1: Separate URLs into documents and web pages
-⋮----
-# Step 2: Process web page URLs asynchronously
-⋮----
-loop = asyncio.get_running_loop()
-⋮----
-web_docs = asyncio.run(self._async_crawl(webpage_urls))
-⋮----
-"""Converts a crawl4ai CrawlResult into the framework's Document format."""
-⋮----
-content = ""
-⋮----
-content = result.extracted_content
-⋮----
-content = result.markdown.fit_markdown
-⋮----
-content = result.markdown.raw_markdown
-⋮----
-content = str(result.markdown)
-⋮----
-# Extract metadata safely
-title = "Unknown Title"
-published_date = "Unknown Date"
-⋮----
-title = result.metadata.get("title", "Unknown Title")
-# Try common date field names
-⋮----
-published_date = result.metadata.get(date_field)
-⋮----
-meta = DocMetaData(
-⋮----
-# Note: source_content is meant for reference content, not metadata
-# Keeping it minimal as other crawlers don't populate it
-⋮----
-async def _async_crawl(self, urls: List[str]) -> List[Document]
-⋮----
-# Import configs here for lazy loading
-⋮----
-# CHANGE 2: Handle the new optional config fields.
-# Use the user-provided config if it exists, otherwise create a default one.
-browser_config = self.config.browser_config or BrowserConfig()
-run_config = self.config.run_config or CrawlerRunConfig()
-⋮----
-crawled_documents: List[Document] = []
-⋮----
-result = await crawler.arun(url, config=run_config)
-doc = self._translate_result_to_document(result)
-⋮----
-# In deep crawl mode, `crawl4ai` will discover and crawl pages
-# starting from the seed URL. It will not process direct document links
-# found during the deep crawl; it is designed to follow hyperlinks.
-crawl_results = await crawler.arun(urls[0], config=run_config)
-⋮----
-class URLLoader
-⋮----
-"""Loads URLs and extracts text using a specified crawler."""
-⋮----
-"""Initialize the URL loader.
-
-        Args:
-            urls: List of URLs to load
-            parsing_config: Configuration for parsing
-            crawler_config: Configuration for the crawler
-        """
-⋮----
-crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
-⋮----
-def load(self) -> List[Document]
-⋮----
-"""Load the URLs using the specified crawler."""
-</file>
-
-<file path="langroid/agent/special/doc_chat_agent.py">
-# # langroid/agent/special/doc_chat_agent.py
-"""
-Agent that supports asking queries about a set of documents, using
-retrieval-augmented generation (RAG).
-
-Functionality includes:
-- summarizing a document, with a custom instruction; see `summarize_docs`
-- asking a question about a document; see `answer_from_docs`
-
-Note: to use the sentence-transformer embeddings, you must install
-langroid with the [hf-embeddings] extra, e.g.:
-
-pip install "langroid[hf-embeddings]"
-
-"""
-⋮----
-@cache
-def apply_nest_asyncio() -> None
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
-⋮----
-CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
-⋮----
-# Check if  module exists in sys.path
-spec = importlib.util.find_spec("sentence_transformers")
-has_sentence_transformers = spec is not None
-⋮----
-has_sentence_transformers = False
-⋮----
-hf_embed_config = SentenceTransformerEmbeddingsConfig(
-⋮----
-oai_embed_config = OpenAIEmbeddingsConfig(
-⋮----
-class ChunkEnrichmentAgentConfig(ChatAgentConfig)
-⋮----
-batch_size: int = 50
-delimiter: str = CHUNK_ENRICHMENT_DELIMITER
-enrichment_prompt_fn: Callable[[str], str] = lambda x: x
-⋮----
-class DocChatAgentConfig(ChatAgentConfig)
-⋮----
-system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
-summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
-# extra fields to include in content as key=value pairs
-# (helps retrieval for table-like data)
-add_fields_to_content: List[str] = []
-filter_fields: List[str] = []  # fields usable in filter
-retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
-extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
-filter: str | None = (
-⋮----
-None  # filter condition for various lexical/semantic search fns
-⋮----
-conversation_mode: bool = True  # accumulate message history?
-# retain retrieved context? Setting to True increases token consumption, but
-# helps LLM fix citation errors and improve accuracy of follow-up questions.
-retain_context: bool = False
-# In assistant mode, DocChatAgent receives questions from another Agent,
-# and those will already be in stand-alone form, so in this mode
-# there is no need to convert them to stand-alone form.
-assistant_mode: bool = False
-# Use LLM to generate hypothetical answer A to the query Q,
-# and use the embed(A) to find similar chunks in vecdb.
-# Referred to as HyDE in the paper:
-# https://arxiv.org/pdf/2212.10496.pdf
-# It is False by default; its benefits depends on the context.
-hypothetical_answer: bool = False
-# Optional config for chunk enrichment agent, e.g. to enrich
-# chunks with hypothetical questions, or keywords to increase
-# the "semantic surface area" of the chunks, which may help
-# improve retrieval.
-chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
-⋮----
-n_relevant_chunks: int = 3  # how many relevant chunks to retrieve finally
-n_similar_chunks: int = 3  # how many similar chunks to retrieve, by each method
-n_query_rephrases: int = 0
-n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
-n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
-use_fuzzy_match: bool = True
-use_bm25_search: bool = True
-use_reciprocal_rank_fusion: bool = False
-cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
-rerank_diversity: bool = True  # rerank to maximize diversity?
-rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
-rerank_after_adding_context: bool = True  # rerank after adding context window?
-# RRF (Reciprocal Rank Fusion) score = 1/(rank + reciprocal_rank_fusion_constant)
-# see https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works
-reciprocal_rank_fusion_constant: float = 60.0
-cache: bool = True  # cache results
-debug: bool = False
-stream: bool = True  # allow streaming where needed
-split: bool = True  # use chunking
-relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
-⋮----
-llm=None  # use the parent's llm unless explicitly set here
-⋮----
-doc_paths: List[str | bytes] = []
-default_paths: List[str] = [
-parsing: ParsingConfig = ParsingConfig(  # modify as needed
-⋮----
-chunk_size=1000,  # aim for this many tokens per chunk
-overlap=100,  # overlap between chunks
-⋮----
-# aim to have at least this many chars per chunk when
-# truncating due to punctuation
-⋮----
-discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-# set deprecated n_similar_docs to None; use n_similar_chunks above instead
-⋮----
-n_neighbor_ids=0,  # num chunk IDs to store on either side of each chunk
-⋮----
-# NOTE: PDF parsing is extremely challenging, and each library
-# has its own strengths and weaknesses.
-# Try one that works for your use case.
-# or "unstructured", "fitz", "pymupdf4llm", "pypdf"
-⋮----
-crawler_config: Optional[BaseCrawlerConfig] = TrafilaturaConfig()
-⋮----
-# Allow vecdb to be None in case we want to explicitly set it later
-vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
-⋮----
-llm: OpenAIGPTConfig = OpenAIGPTConfig(
-prompts: PromptsConfig = PromptsConfig(
-⋮----
-def _append_metadata_source(orig_source: str, source: str) -> str
-⋮----
-class DocChatAgent(ChatAgent)
-⋮----
-"""
-    Agent for chatting with a collection of documents.
-    """
-⋮----
-# Handle backward compatibility for deprecated n_similar_docs
-⋮----
-# Use the deprecated value for both parameters
-⋮----
-def clear(self) -> None
-⋮----
-"""Clear the document collection and the specific collection in vecdb"""
-⋮----
-collection_name = self.vecdb.config.collection_name
-⋮----
-# Note we may have used a vecdb with a config.collection_name
-# different from the agent's config.vecdb.collection_name!!
-⋮----
-# Close the old vecdb before creating a new one
-old_vecdb = self.vecdb
-⋮----
-def ingest(self) -> None
-⋮----
-"""
-        Chunk + embed + store docs specified by self.config.doc_paths
-        """
-⋮----
-# we must be using a previously defined collection
-# But let's get all the chunked docs so we can
-# do keyword and other non-vector searches
-⋮----
-self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
-⋮----
-"""Split, ingest docs from specified paths,
-        do not add these to config.doc_paths.
-
-        Args:
-            paths: document paths, urls or byte-content of docs.
-                The bytes option is intended to support cases where a document
-                has already been read in as bytes (e.g. from an API or a database),
-                and we want to avoid having to write it to a temporary file
-                just to read it back in.
-            metadata: List of metadata dicts, one for each path.
-                If a single dict is passed in, it is used for all paths.
-            doc_type: DocumentType to use for parsing, if known.
-                MUST apply to all docs if specified.
-                This is especially useful when the `paths` are of bytes type,
-                to help with document type detection.
-        Returns:
-            List of Document objects
-        """
-⋮----
-paths = [paths]
-all_paths = paths
-paths_meta: Dict[int, Any] = {}
-urls_meta: Dict[int, Any] = {}
-idxs = range(len(all_paths))
-⋮----
-urls = [all_paths[i] for i in url_idxs]
-paths = [all_paths[i] for i in path_idxs]
-bytes_list = [all_paths[i] for i in bytes_idxs]
-⋮----
-idx2meta = {
-⋮----
-)  # appease mypy
-⋮----
-idx2meta = {p: metadata for p in idxs}
-⋮----
-idx2meta = {p: metadata.model_dump() for p in idxs}
-urls_meta = {u: idx2meta[u] for u in url_idxs}
-paths_meta = {p: idx2meta[p] for p in path_idxs}
-docs: List[Document] = []
-parser: Parser = Parser(self.config.parsing)
-⋮----
-meta = urls_meta.get(ui, {})
-loader = URLLoader(
-⋮----
-)  # type: ignore
-url_docs = loader.load()
-# update metadata of each doc with meta
-⋮----
-orig_source = d.metadata.source
-⋮----
-if len(paths) > 0:  # paths OR bytes are handled similarly
-⋮----
-meta = paths_meta.get(pi, {})
-p = all_paths[pi]
-path_docs = RepoLoader.get_documents(
-⋮----
-n_docs = len(docs)
-n_splits = self.ingest_docs(docs, split=self.config.split)
-⋮----
-n_urls = len(urls)
-n_paths = len(paths)
-⋮----
-path_reps = [p if isinstance(p, str) else "bytes" for p in paths]
-print("\n".join([u for u in urls if isinstance(u, str)]))  # appease mypy
-⋮----
-"""
-        Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
-
-        Args:
-            docs: List of Document objects
-            split: Whether to split docs into chunks. Default is True.
-                If False, docs are treated as "chunks" and are not split.
-            metadata: List of metadata dicts, one for each doc, to augment
-                whatever metadata is already in the doc.
-                [ASSUME no conflicting keys between the two metadata dicts.]
-                If a single dict is passed in, it is used for all docs.
-        """
-⋮----
-m_dict = m if isinstance(m, dict) else m.model_dump()  # type: ignore
-d.metadata = d.metadata.model_copy(update=m_dict)  # type: ignore
-⋮----
-docs = self.parser.split(docs)
-⋮----
-# we're not splitting, so we mark each doc as a chunk
-⋮----
-docs = self.enrich_chunks(docs)
-⋮----
-# If any additional fields need to be added to content,
-# add them as key=value pairs for all docs, before batching.
-# This helps retrieval for table-like data.
-# Note we need to do this at stage so that the embeddings
-# are computed on the full content with these additional fields.
-⋮----
-fields = [
-⋮----
-key_vals = extract_fields(d, fields)
-⋮----
-docs = docs[: self.config.parsing.max_chunks]
-# vecdb should take care of adding docs in batches;
-# batching can be controlled via vecdb.config.batch_size
-⋮----
-return 0  # Return 0 since no documents were added
-⋮----
-def retrieval_tool(self, msg: RetrievalTool) -> str
-⋮----
-"""Handle the RetrievalTool message"""
-⋮----
-content_doc = self.answer_from_docs(msg.query)
-⋮----
-"""
-        Convert dataframe so it is compatible with Document class:
-        - has "content" column
-        - has an "id" column to be used as Document.metadata.id
-
-        Args:
-            df: dataframe to convert
-            content: name of content column
-            metadata: list of metadata column names
-
-        Returns:
-            Tuple[pd.DataFrame, List[str]]: dataframe, metadata
-                - dataframe: dataframe with "content" column and "id" column
-                - metadata: list of metadata column names, including "id"
-        """
-⋮----
-# rename content column to "content", leave existing column intact
-df = df.rename(columns={content: "content"}, inplace=False)
-⋮----
-actual_metadata = metadata.copy()
-⋮----
-docs = dataframe_to_documents(df, content="content", metadata=metadata)
-ids = [str(d.id()) for d in docs]
-⋮----
-"""
-        Ingest a dataframe into vecdb.
-        """
-⋮----
-# When ingesting a dataframe we will no longer do any chunking,
-# so we mark each doc as a chunk.
-# TODO - revisit this since we may still want to chunk large text columns
-⋮----
-def set_filter(self, filter: str) -> None
-⋮----
-"""
-        Setup `self.chunked_docs` and `self.chunked_docs_clean`
-        based on possible filter.
-        These will be used in various non-vector-based search functions,
-        e.g. self.get_similar_chunks_bm25(), self.get_fuzzy_matches(), etc.
-
-        Args:
-            docs: List of Document objects. This is empty when we are calling this
-                method after initial doc ingestion.
-            filter: Filter condition for various lexical/semantic search fns.
-        """
-⋮----
-# no filter, so just use the docs passed in
-⋮----
-def get_field_values(self, fields: list[str]) -> Dict[str, str]
-⋮----
-"""Get string-listing of possible values of each field,
-        e.g.
-        {
-            "genre": "crime, drama, mystery, ... (10 more)",
-            "certificate": "R, PG-13, PG, R",
-        }
-        The field names may have "metadata." prefix, e.g. "metadata.genre".
-        """
-field_values: Dict[str, Set[str]] = {}
-# make empty set for each field
-⋮----
-# get all documents and accumulate possible values of each field until 10
-docs = self.vecdb.get_all_documents()  # only works for vecdbs that support this
-⋮----
-# extract fields from d
-doc_field_vals = extract_fields(d, fields)
-# the `field` returned by extract_fields may contain only the last
-# part of the field name, e.g. "genre" instead of "metadata.genre",
-# so we use the orig_field name to fill in the values
-⋮----
-# For each field make a string showing list of possible values,
-# truncate to 20 values, and if there are more, indicate how many
-# more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
-field_values_list = {}
-⋮----
-vals = list(field_values[f])
-n = len(vals)
-remaining = n - 20
-vals = vals[:20]
-⋮----
-# make a string of the values, ensure they are strings
-⋮----
-def doc_length(self, docs: List[Document]) -> int
-⋮----
-"""
-        Calc token-length of a list of docs
-        Args:
-            docs: list of Document objects
-        Returns:
-            int: number of tokens
-        """
-⋮----
-def user_docs_ingest_dialog(self) -> None
-⋮----
-"""
-        Ask user to select doc-collection, enter filenames/urls, and ingest into vecdb.
-        """
-⋮----
-n_deletes = self.vecdb.clear_empty_collections()
-collections = self.vecdb.list_collections()
-collection_name = "NEW"
-is_new_collection = False
-replace_collection = False
-⋮----
-n = len(collections)
-delete_str = (
-⋮----
-choice = Prompt.ask(
-⋮----
-confirm = Prompt.ask(
-⋮----
-collection_name = collections[int(choice) - 1]
-⋮----
-replace_collection = choice == "y"
-⋮----
-is_new_collection = True
-collection_name = Prompt.ask(
-⋮----
-default_urls_str = (
-⋮----
-inputs = get_list_from_user()
-⋮----
-inputs = self.config.default_paths
-self.config.doc_paths = inputs  # type: ignore
-⋮----
-query_str: str | None
-⋮----
-query_str = message.content
-⋮----
-query_str = message
-⋮----
-# direct query to LLM
-query_str = query_str[1:] if query_str is not None else None
-⋮----
-response = super().llm_response(query_str)
-⋮----
-response = self.answer_from_docs(query_str)
-# Citation details (if any) are NOT generated by LLM
-# (We extract these from LLM's numerical citations),
-# so render them here
-⋮----
-response = await super().llm_response_async(query_str)
-⋮----
-@staticmethod
-    def doc_string(docs: List[Document]) -> str
-⋮----
-"""
-        Generate a string representation of a list of docs.
-        Args:
-            docs: list of Document objects
-        Returns:
-            str: string representation
-        """
-contents = [d.content for d in docs]
-sources = [d.metadata.source for d in docs]
-sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
-⋮----
-"""
-        Given a question and a list of (possibly) doc snippets,
-        generate an answer if possible
-        Args:
-            question: question to answer
-            passages: list of `Document` objects each containing a possibly relevant
-                snippet, and metadata
-        Returns:
-            a `Document` object containing the answer,
-            and metadata containing source citations
-
-        """
-⋮----
-passages_str = self.doc_string(passages)
-# Substitute Q and P into the templatized prompt
-⋮----
-final_prompt = self.config.summarize_prompt.format(
-⋮----
-# Generate the final verbatim extract based on the final prompt.
-# Note this will send entire message history, plus this final_prompt
-# to the LLM, and self.message_history will be updated to include
-# 2 new LLMMessage objects:
-# one for `final_prompt`, and one for the LLM response
-⋮----
-answer_doc = super().llm_response(final_prompt)
-⋮----
-# respond with temporary context
-answer_doc = super()._llm_response_temp_context(question, final_prompt)
-⋮----
-answer_doc = super().llm_response_forget(final_prompt)
-⋮----
-final_answer = answer_doc.content.strip()
-⋮----
-# extract references like [^2], [^3], etc. from the final answer
-citations = extract_markdown_references(final_answer)
-# format the cited references as a string suitable for markdown footnote
-⋮----
-content=final_answer,  # does not contain citations
-⋮----
-source=citations_str,  # only the reference headers
-source_content=full_citations_str,  # reference + content
-⋮----
-def llm_hypothetical_answer(self, query: str) -> str
-⋮----
-# TODO: provide an easy way to
-# Adjust this prompt depending on context.
-answer = self.llm_response_forget(
-⋮----
-def enrich_chunks(self, docs: List[Document]) -> List[Document]
-⋮----
-"""
-        Enrich chunks using Agent configured with self.config.chunk_enrichment_config.
-
-        We assume that the system message of the agent is set in such a way
-        that when we run
-        ```
-        prompt = self.config.chunk_enrichment_config.enrichment_prompt_fn(text)
-        result = await agent.llm_response_forget_async(prompt)
-        ```
-
-        then `result.content` will contain the augmentation to the text.
-
-        Args:
-            docs: List of document chunks to enrich
-
-        Returns:
-            List[Document]: Documents (chunks) enriched with additional text,
-                separated by a delimiter.
-        """
-⋮----
-enrichment_config = self.config.chunk_enrichment_config
-agent = ChatAgent(enrichment_config)
-⋮----
-# Process chunks in parallel using run_batch_agent_method
-questions_batch = run_batch_agent_method(
-⋮----
-# Combine original content with generated questions
-augmented_docs = []
-⋮----
-# Combine original content with questions in a structured way
-combined_content = (
-⋮----
-new_doc = doc.model_copy(
-⋮----
-def llm_rephrase_query(self, query: str) -> List[str]
-⋮----
-rephrases = self.llm_response_forget(
-⋮----
-# find similar docs using bm25 similarity:
-# these may sometimes be more likely to contain a relevant verbatim extract
-⋮----
-docs_scores = find_closest_matches_with_bm25(
-⋮----
-self.chunked_docs_clean,  # already pre-processed!
-⋮----
-# find similar docs using fuzzy matching:
-⋮----
-fuzzy_match_docs = find_fuzzy_matches_in_docs(
-⋮----
-model = CrossEncoder(self.config.cross_encoder_reranking_model)
-scores = model.predict([(query, p.content) for p in passages])
-# Convert to [0,1] so we might could use a cutoff later.
-scores = 1.0 / (1 + np.exp(-np.array(scores)))
-# get top k scoring passages
-sorted_pairs = sorted(
-passages = [d for _, d in sorted_pairs]
-⋮----
-def rerank_with_diversity(self, passages: List[Document]) -> List[Document]
-⋮----
-"""
-        Rerank a list of items in such a way that each successive item is least similar
-        (on average) to the earlier items.
-
-        Args:
-        query (str): The query for which the passages are relevant.
-        passages (List[Document]): A list of Documents to be reranked.
-
-        Returns:
-        List[Documents]: A reranked list of Documents.
-        """
-⋮----
-emb_model = self.vecdb.embedding_model
-emb_fn = emb_model.embedding_fn()
-embs = emb_fn([p.content for p in passages])
-embs_arr = [np.array(e) for e in embs]
-indices = list(range(len(passages)))
-⋮----
-# Helper function to compute average similarity to
-# items in the current result list.
-def avg_similarity_to_result(i: int, result: List[int]) -> float
-⋮----
-return sum(  # type: ignore
-⋮----
-# copy passages to items
-result = [indices.pop(0)]  # Start with the first item.
-⋮----
-# Find the item that has the least average similarity
-# to items in the result list.
-least_similar_item = min(
-⋮----
-# return passages in order of result list
-⋮----
-def rerank_to_periphery(self, passages: List[Document]) -> List[Document]
-⋮----
-"""
-        Rerank to avoid Lost In the Middle (LIM) problem,
-        where LLMs pay more attention to items at the ends of a list,
-        rather than the middle. So we re-rank to make the best passages
-        appear at the periphery of the list.
-        https://arxiv.org/abs/2307.03172
-
-        Example reranking:
-        1 2 3 4 5 6 7 8 9 ==> 1 3 5 7 9 8 6 4 2
-
-        Args:
-            passages (List[Document]): A list of Documents to be reranked.
-
-        Returns:
-            List[Documents]: A reranked list of Documents.
-
-        """
-# Splitting items into odds and evens based on index, not value
-odds = passages[::2]
-evens = passages[1::2][::-1]
-⋮----
-# Merging them back together
-⋮----
-"""
-        In each doc's metadata, there may be a window_ids field indicating
-        the ids of the chunks around the current chunk. We use these stored
-        window_ids to retrieve the desired number
-        (self.config.n_neighbor_chunks) of neighbors
-        on either side of the current chunk.
-
-        Args:
-            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
-                to add context windows to together with their match scores.
-
-        Returns:
-            List[Tuple[Document, float]]: List of (Document, score) tuples.
-        """
-⋮----
-# Do not add context window when there are other fields besides just
-# content and metadata, since we do not know how to set those other fields
-# for newly created docs with combined content.
-⋮----
-"""
-        Get semantic search results from vecdb.
-        Args:
-            query (str): query to search for
-            k (int): number of results to return
-        Returns:
-            List[Tuple[Document, float]]: List of (Document, score) tuples.
-        """
-⋮----
-# Note: for dynamic filtering based on a query, users can
-# use the `temp_update` context-manager to pass in a `filter` to self.config,
-# e.g.:
-# with temp_update(self.config, {"filter": "metadata.source=='source1'"}):
-#     docs_scores = self.get_semantic_search_results(query, k=k)
-# This avoids having pass the `filter` argument to every function call
-# upstream of this one.
-# The `temp_update` context manager is defined in
-# `langroid/utils/pydantic_utils.py`
-⋮----
-"""
-        The retrieval stage in RAG: get doc-chunks that are most "relevant"
-        to the query (and possibly any proxy queries), from the document-store,
-        which currently is the vector store,
-        but in theory could be any document store, or even web-search.
-        This stage does NOT involve an LLM, and the retrieved chunks
-        could either be pre-chunked text (from the initial pre-processing stage
-        where chunks were stored in the vector store), or they could be
-        dynamically retrieved based on a window around a lexical match.
-
-        These are the steps (some optional based on config):
-        - semantic search based on vector-embedding distance, from vecdb
-        - lexical search using bm25-ranking (keyword similarity)
-        - fuzzy matching (keyword similarity)
-        - re-ranking of doc-chunks by relevance to query, using cross-encoder,
-           and pick top k
-
-        Args:
-            query: original query (assumed to be in stand-alone form)
-            query_proxies: possible rephrases, or hypothetical answer to query
-                    (e.g. for HyDE-type retrieval)
-
-        Returns:
-
-        """
-⋮----
-# if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
-# we can retrieve more docs during retrieval, and leave it to the cross-encoder
-# or RRF reranking to whittle down to self.config.n_similar_chunks
-retrieval_multiple = (
-⋮----
-docs_and_scores: List[Tuple[Document, float]] = []
-⋮----
-# sort by score descending
-docs_and_scores = sorted(
-⋮----
-# keep only docs with unique d.id()
-id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
-id2doc = {d.id(): d for d, _ in docs_and_scores}
-# make sure we get unique docs
-passages = [id2doc[id] for id in id2_rank_semantic.keys()]
-⋮----
-id2_rank_bm25 = {}
-⋮----
-# TODO: Add score threshold in config
-docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
-⋮----
-# if we're not re-ranking with a cross-encoder, and have RRF enabled,
-# instead of accumulating the bm25 results into passages,
-# we collect these ranks for Reciprocal Rank Fusion down below.
-docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
-id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
-⋮----
-# eliminate duplicate ids
-passages = [id2doc[id] for id in id2doc.keys()]
-⋮----
-id2_rank_fuzzy = {}
-⋮----
-fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
-⋮----
-# if we're not re-ranking with a cross-encoder,
-# instead of accumulating the fuzzy match results into passages,
-⋮----
-fuzzy_match_doc_scores = sorted(
-id2_rank_fuzzy = {
-⋮----
-# Since we're not using cross-enocder re-ranking,
-# we need to re-order the retrieved chunks from potentially three
-# different retrieval methods (semantic, bm25, fuzzy), where the
-# similarity scores are on different scales.
-# We order the retrieved chunks using Reciprocal Rank Fusion (RRF) score.
-# Combine the ranks from each id2doc_rank_* dict into a single dict,
-# where the reciprocal rank score is the sum of
-# 1/(rank + self.config.reciprocal_rank_fusion_constant).
-# See https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking
-#
-# Note: diversity/periphery-reranking below may modify the final ranking.
-id2_reciprocal_score = {}
-⋮----
-# Use max_rank instead of infinity to avoid bias against
-# single-method docs
-max_rank = self.config.n_similar_chunks * retrieval_multiple
-rank_semantic = id2_rank_semantic.get(id_, max_rank + 1)
-rank_bm25 = id2_rank_bm25.get(id_, max_rank + 1)
-rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank + 1)
-c = self.config.reciprocal_rank_fusion_constant
-reciprocal_fusion_score = (
-⋮----
-# sort the docs by the reciprocal score, in descending order
-id2_reciprocal_score = OrderedDict(
-# each method retrieved up to retrieval_multiple * n_similar_chunks,
-# so we need to take the top n_similar_chunks from the combined list
-passages = [
-# passages must have distinct ids
-⋮----
-passages_scores = [(p, 0.0) for p in passages]
-passages_scores = self.add_context_window(passages_scores)
-passages = [p for p, _ in passages_scores]
-# now passages can potentially have a lot of doc chunks,
-# so we re-rank them using a cross-encoder scoring model
-# (provided that `reciprocal_rank_fusion` is not enabled),
-# and pick top k where k = config..n_similar_chunks
-# https://www.sbert.net/examples/applications/retrieve_rerank
-⋮----
-passages = self.rerank_with_cross_encoder(query, passages)
-⋮----
-# reorder to increase diversity among top docs
-passages = self.rerank_with_diversity(passages)
-⋮----
-# reorder so most important docs are at periphery
-# (see Lost In the Middle issue).
-passages = self.rerank_to_periphery(passages)
-⋮----
-@no_type_check
-    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]
-⋮----
-"""
-        Get list of (verbatim) extracts from doc-chunks relevant to answering a query.
-
-        These are the stages (some optional based on config):
-        - use LLM to convert query to stand-alone query
-        - optionally use LLM to rephrase query to use below
-        - optionally use LLM to generate hypothetical answer (HyDE) to use below.
-        - get_relevant_chunks(): get doc-chunks relevant to query and proxies
-        - use LLM to get relevant extracts from doc-chunks
-
-        Args:
-            query (str): query to search for
-
-        Returns:
-            query (str): stand-alone version of input query
-            List[Document]: list of relevant extracts
-
-        """
-⋮----
-# Regardless of whether we are in conversation mode or not,
-# for relevant doc/chunk extraction, we must convert the query
-# to a standalone query to get more relevant results.
-⋮----
-query = self.llm.followup_to_standalone(self.dialog, query)
-⋮----
-proxies = []
-⋮----
-answer = self.llm_hypothetical_answer(query)
-proxies = [answer]
-⋮----
-rephrases = self.llm_rephrase_query(query)
-⋮----
-passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
-⋮----
-# these are async calls, one per passage; turn off streaming
-extracts = self.get_verbatim_extracts(query, passages)
-extracts = [e for e in extracts if e.content != NO_ANSWER]
-⋮----
-def remove_chunk_enrichments(self, passages: List[Document]) -> List[Document]
-⋮----
-"""Remove any enrichments (like hypothetical questions, or keywords)
-        from documents.
-        Only cleans if enrichment was enabled in config.
-
-        Args:
-            passages: List of documents to clean
-
-        Returns:
-            List of documents with only original content
-        """
-⋮----
-delimiter = self.config.chunk_enrichment_config.delimiter
-⋮----
-"""
-        Run RelevanceExtractorAgent in async/concurrent mode on passages,
-        to extract portions relevant to answering query, from each passage.
-        Args:
-            query (str): query to answer
-            passages (List[Documents]): list of passages to extract from
-
-        Returns:
-            List[Document]: list of Documents containing extracts and metadata.
-        """
-passages = self.remove_chunk_enrichments(passages)
-⋮----
-agent_cfg = self.config.relevance_extractor_config
-⋮----
-# no relevance extraction: simply return passages
-⋮----
-# Use main DocChatAgent's LLM if not provided explicitly:
-# this reduces setup burden on the user
-⋮----
-agent_cfg.llm.stream = False  # disable streaming for concurrent calls
-⋮----
-agent = RelevanceExtractorAgent(agent_cfg)
-task = Task(
-⋮----
-extracts: list[str] = run_batch_tasks(
-⋮----
-)  # type: ignore
-⋮----
-# Caution: Retain ALL other fields in the Documents (which could be
-# other than just `content` and `metadata`), while simply replacing
-# `content` with the extracted portions
-passage_extracts = []
-⋮----
-p_copy = p.model_copy()
-⋮----
-def answer_from_docs(self, query: str) -> ChatDocument
-⋮----
-"""
-        Answer query based on relevant docs from the VecDB
-
-        Args:
-            query (str): query to answer
-
-        Returns:
-            Document: answer
-        """
-response = ChatDocument(
-# query may be updated to a stand-alone version
-⋮----
-# only return extracts, skip LLM-based summary answer
-meta = dict(
-# copy metadata from first doc, unclear what to do here.
-⋮----
-metadata=ChatDocMetaData(**meta),  # type: ignore
-⋮----
-response = self.get_summary_answer(query, extracts)
-⋮----
-self.response = response  # save last response
-⋮----
-"""Summarize all docs"""
-⋮----
-full_text = "\n\n".join([d.content for d in self.original_docs])
-⋮----
-tot_tokens = self.parser.num_tokens(full_text)
-MAX_INPUT_TOKENS = (
-⋮----
-# truncate
-full_text = self.parser.tokenizer.decode(
-⋮----
-prompt = f"""
-⋮----
-summary = ChatAgent.llm_response(self, prompt)
-⋮----
-def justify_response(self) -> ChatDocument | None
-⋮----
-"""Show evidence for last response"""
-⋮----
-source = self.response.metadata.source
-</file>
-
-<file path="langroid/agent/tools/task_tool.py">
-"""
-TaskTool: A tool that allows agents to delegate a task to a sub-agent with
-    specific tools enabled.
-"""
-⋮----
-class TaskTool(ToolMessage)
-⋮----
-"""
-    Tool that spawns a sub-agent with specified tools to handle a task.
-
-    The sub-agent can be given a custom name for identification in logs.
-    If no name is provided, a random unique name starting with 'agent'
-    will be generated.
-    """
-⋮----
-# TODO: setting up termination conditions of sub-task needs to be improved
-request: str = "task_tool"
-purpose: str = """
-⋮----
-# Parameters for the agent tool
-⋮----
-system_message: Optional[str] = Field(
-⋮----
-prompt: str = Field(
-⋮----
-tools: List[str] = Field(
-# TODO: ensure valid model name
-model: Optional[str] = Field(
-max_iterations: Optional[int] = Field(
-agent_name: Optional[str] = Field(
-⋮----
-def _set_up_task(self, agent: ChatAgent) -> Task
-⋮----
-"""
-        Helper method to set up a task for the sub-agent.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-        """
-# Generate a random name if not provided
-agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
-⋮----
-# Create chat agent config with system message if provided
-# TODO: Maybe we just copy the parent agent's config and override chat_model?
-#   -- but what if parent agent has a MockLMConfig?
-llm_config = lm.OpenAIGPTConfig(
-config = ChatAgentConfig(
-⋮----
-# Create the sub-agent
-sub_agent = ChatAgent(config)
-⋮----
-# Enable the specified tools for the sub-agent
-# Convert tool names to actual tool classes using parent agent's tools_map
-⋮----
-# Enable all tools from the parent agent:
-# This is the list of all tools KNOWN (whether usable or handle-able or not)
-tool_classes = []
-⋮----
-tool_class = agent.llm_tools_map[t]
-allow_llm_use = tool_class._allow_llm_use
-⋮----
-allow_llm_use = allow_llm_use.default
-⋮----
-# No tools enabled
-⋮----
-# Enable only specified tools
-⋮----
-tool_class = agent.llm_tools_map[tool_name]
-⋮----
-# always enable the DoneTool to signal task completion
-⋮----
-# Create a non-interactive task
-task = Task(sub_agent, interactive=False)
-⋮----
-"""
-
-        Handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-⋮----
-task = self._set_up_task(agent)
-⋮----
-# Create a ChatDocument for the prompt with parent pointer
-prompt_doc = None
-⋮----
-prompt_doc = ChatDocument(
-# Set bidirectional parent-child relationship
-⋮----
-# Run the task with the ChatDocument or string prompt
-result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
-⋮----
-"""
-        Async method to handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-⋮----
-# TODO eventually allow the various task setup configs,
-#  including termination conditions
-result = await task.run_async(
 </file>
 
 <file path="mkdocs.yml">

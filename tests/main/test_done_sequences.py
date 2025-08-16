@@ -451,12 +451,6 @@ def test_done_sequence_tool_class_reference(test_settings: Settings):
     config3 = TaskConfig(done_sequences=["T[CalculatorTool]"])
     # ... and specialize the task to return the tool itself
     task3 = Task(agent2, config=config3, interactive=False)[CalculatorTool]
-    result3: CalculatorTool|None = task3.run("Calculate")
+    result3: CalculatorTool | None = task3.run("Calculate")
     assert isinstance(result3, CalculatorTool)
     assert result3.expression == "5*5"
-
-
-
-
-
-
