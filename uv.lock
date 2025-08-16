@@ -2878,7 +2878,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.58.2"
+version = "0.59.0b3"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -2912,6 +2912,7 @@ dependencies = [
     { name = "pandas" },
     { name = "prettytable" },
     { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "pygithub" },
     { name = "pygments" },
     { name = "pymupdf4llm" },
@@ -3251,7 +3252,8 @@ requires-dist = [
     { name = "psycopg2-binary", marker = "extra == 'postgres'", specifier = ">=2.9.10" },
     { name = "pyarrow", marker = "extra == 'lancedb'", specifier = ">=15.0.0,<16.0.0" },
     { name = "pyarrow", marker = "extra == 'vecdbs'", specifier = ">=15.0.0,<16.0.0" },
-    { name = "pydantic", specifier = ">=1,<3.0.0" },
+    { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0,<3.0.0" },
     { name = "pygithub", specifier = ">=1.58.1,<2.0.0" },
     { name = "pygments", specifier = ">=2.15.1,<3.0.0" },
     { name = "pymupdf", marker = "extra == 'all'", specifier = ">=1.23.3,<2.0.0" },

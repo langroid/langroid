@@ -17,8 +17,8 @@ from langroid.agent.callbacks.chainlit import add_instructions
 
 
 class CapitalTool(lr.ToolMessage):
-    request = "capital"
-    purpose = "To present the capital of given <country>."
+    request: str = "capital"
+    purpose: str = "To present the capital of given <country>."
     country: str
     capital: str
 

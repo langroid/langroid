@@ -33,7 +33,7 @@ class MeiliSearchConfig(VectorStoreConfig):
     cloud: bool = False
     collection_name: str | None = None
     primary_key: str = "id"
-    port = 7700
+    port: int = 7700
 
 
 class MeiliSearch(VectorStore):
@@ -193,7 +193,7 @@ class MeiliSearch(VectorStore):
             dict(
                 id=d.id(),
                 content=d.content,
-                metadata=d.metadata.dict(),
+                metadata=d.metadata.model_dump(),
             )
             for d in documents
         ]

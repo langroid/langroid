@@ -39,7 +39,7 @@ import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.parsing.file_attachment import FileAttachment
-from langroid.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 

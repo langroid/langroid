@@ -23,7 +23,7 @@ from fire import Fire
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 MODEL = lm.OpenAIChatModel.GPT4_1_MINI

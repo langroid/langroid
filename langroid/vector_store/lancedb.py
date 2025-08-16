@@ -15,8 +15,7 @@ from typing import (
 
 import pandas as pd
 from dotenv import load_dotenv
-
-from langroid.pydantic_v1 import BaseModel, ValidationError, create_model
+from pydantic import BaseModel, ValidationError, create_model
 
 if TYPE_CHECKING:
     from lancedb.query import LanceVectorQueryBuilder
@@ -175,11 +174,12 @@ class LanceDB(VectorStore):
         fields = {"id": (str, ...), "vector": (Vector(n), ...)}
 
         sorted_fields = dict(
-            sorted(doc_cls.__fields__.items(), key=lambda item: item[0])
+            sorted(doc_cls.model_fields.items(), key=lambda item: item[0])
         )
         # Add both statically and dynamically defined fields from doc_cls
         for field_name, field in sorted_fields.items():
-            fields[field_name] = (field.outer_type_, field.default)
+            field_type = field.annotation if hasattr(field, "annotation") else field
+            fields[field_name] = (field_type, field.default)
 
         # Create the new model with dynamic fields
         NewModel = create_model(
@@ -227,7 +227,7 @@ class LanceDB(VectorStore):
                     dict(
                         id=ids[i + j],
                         vector=embedding_vecs[i + j],
-                        **doc.dict(),
+                        **doc.model_dump(),
                     )
                     for j, doc in enumerate(documents[i : i + b])
                 ]

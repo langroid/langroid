@@ -17,7 +17,7 @@ from fire import Fire
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.mcp import get_tool_async, mcp_tool
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 
 
 def create_fs_mcp_server() -> FastMCP:

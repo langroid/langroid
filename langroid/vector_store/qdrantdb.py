@@ -328,7 +328,7 @@ class QdrantDB(VectorStore):
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return
-        document_dicts = [doc.dict() for doc in documents]
+        document_dicts = [doc.model_dump() for doc in documents]
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
         sparse_embedding_vecs = self.get_sparse_embeddings(
             [doc.content for doc in documents]
@@ -416,7 +416,7 @@ class QdrantDB(VectorStore):
             raise ValueError("No collection name set, cannot retrieve docs")
         docs = []
         offset = 0
-        filter = Filter() if where == "" else Filter.parse_obj(json.loads(where))
+        filter = Filter() if where == "" else Filter.model_validate(json.loads(where))
         while True:
             results, next_page_offset = self.client.scroll(
                 collection_name=self.config.collection_name,
@@ -473,7 +473,7 @@ class QdrantDB(VectorStore):
         if where is None or where == "":
             filter = Filter()
         else:
-            filter = Filter.parse_obj(json.loads(where))
+            filter = Filter.model_validate(json.loads(where))
         requests = [
             SearchRequest(
                 vector=NamedVector(

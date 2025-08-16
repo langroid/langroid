@@ -8,6 +8,8 @@ from arango.client import ArangoClient
 from arango.database import StandardDatabase
 from arango.exceptions import ArangoError, ServerConnectionError
 from numpy import ceil
+from pydantic import BaseModel, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.console import Console
 
@@ -31,7 +33,6 @@ from langroid.agent.special.arangodb.utils import count_fields, trim_schema
 from langroid.agent.tools.orchestration import DoneTool, ForwardTool
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Entity
-from langroid.pydantic_v1 import BaseModel, BaseSettings
 from langroid.utils.constants import SEND_TO
 
 logger = logging.getLogger(__name__)
@@ -49,8 +50,7 @@ class ArangoSettings(BaseSettings):
     password: str = ""
     database: str = ""
 
-    class Config:
-        env_prefix = "ARANGO_"
+    model_config = SettingsConfigDict(env_prefix="ARANGO_")
 
 
 class QueryResult(BaseModel):
@@ -68,22 +68,14 @@ class QueryResult(BaseModel):
         ]
     ] = None
 
-    class Config:
-        # Allow arbitrary types for flexibility
-        arbitrary_types_allowed = True
-
-        # Handle JSON serialization of special types
-        json_encoders = {
-            # Add custom encoders if needed, e.g.:
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        json_encoders={
             datetime.datetime: lambda v: v.isoformat(),
-            # Could add others for specific ArangoDB types
-        }
-
-        # Validate all assignments
-        validate_assignment = True
-
-        # Frozen=True if we want immutability
-        frozen = False
+        },
+        validate_assignment=True,
+        frozen=False,
+    )
 
 
 class ArangoChatAgentConfig(ChatAgentConfig):

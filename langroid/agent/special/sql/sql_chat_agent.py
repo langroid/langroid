@@ -184,7 +184,7 @@ class SQLChatAgent(ChatAgent):
         if self.config.use_helper:
             # helper_config.system_message is now the fully-populated sys msg of
             # the main SQLAgent.
-            self.helper_config = self.config.copy()
+            self.helper_config = self.config.model_copy()
             self.helper_config.is_helper = True
             self.helper_config.use_helper = False
             self.helper_config.chat_mode = False
@@ -271,8 +271,16 @@ class SQLChatAgent(ChatAgent):
 
     def _init_tools(self) -> None:
         """Initialize sys msg and tools."""
-        RunQueryTool._max_retained_tokens = self.config.max_retained_tokens
-        self.enable_message([RunQueryTool, ForwardTool])
+        # Create a custom RunQueryTool class with the desired max_retained_tokens
+        if self.config.max_retained_tokens is not None:
+
+            class CustomRunQueryTool(RunQueryTool):
+                _max_retained_tokens = self.config.max_retained_tokens
+
+            self.enable_message([CustomRunQueryTool, ForwardTool])
+        else:
+            self.enable_message([RunQueryTool, ForwardTool])
+
         if self.config.use_schema_tools:
             self._enable_schema_tools()
         if not self.config.chat_mode:

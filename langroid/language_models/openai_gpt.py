@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Mapping,
     Optional,
     Tuple,
     Type,
@@ -24,6 +25,8 @@ from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.markup import escape
 
@@ -78,7 +81,6 @@ from langroid.language_models.utils import (
     retry_with_exponential_backoff,
 )
 from langroid.parsing.parse_json import parse_imperfect_json
-from langroid.pydantic_v1 import BaseModel, BaseSettings
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
@@ -220,7 +222,7 @@ class OpenAICallParams(BaseModel):
     extra_body: Dict[str, Any] | None = None  # additional params for API request body
 
     def to_dict_exclude_none(self) -> Dict[str, Any]:
-        return {k: v for k, v in self.dict().items() if v is not None}
+        return {k: v for k, v in self.model_dump().items() if v is not None}
 
 
 class LiteLLMProxyConfig(BaseSettings):
@@ -229,8 +231,7 @@ class LiteLLMProxyConfig(BaseSettings):
     api_key: str = ""  # read from env var LITELLM_API_KEY if set
     api_base: str = ""  # read from env var LITELLM_API_BASE if set
 
-    class Config:
-        env_prefix = "LITELLM_"
+    model_config = SettingsConfigDict(env_prefix="LITELLM_")
 
 
 class OpenAIGPTConfig(LLMConfig):
@@ -259,7 +260,7 @@ class OpenAIGPTConfig(LLMConfig):
     litellm_proxy: LiteLLMProxyConfig = LiteLLMProxyConfig()
     ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
     min_output_tokens: int = 1
-    use_chat_for_completion = True  # do not change this, for OpenAI models!
+    use_chat_for_completion: bool = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
     seed: int | None = 42
@@ -316,8 +317,43 @@ class OpenAIGPTConfig(LLMConfig):
 
         super().__init__(**kwargs)
 
-    class Config:
-        env_prefix = "OPENAI_"
+    model_config = SettingsConfigDict(env_prefix="OPENAI_")
+
+    def model_copy(
+        self, *, update: Mapping[str, Any] | None = None, deep: bool = False
+    ) -> "OpenAIGPTConfig":
+        """
+        Override model_copy to handle unpicklable fields properly.
+
+        This preserves fields like http_client_factory during normal copying
+        while still allowing exclusion for pickling operations.
+        """
+        # Save references to unpicklable fields
+        http_client_factory = self.http_client_factory
+        streamer = self.streamer
+        streamer_async = self.streamer_async
+
+        # Get the current model data, excluding problematic fields
+        data = self.model_dump(
+            exclude={"http_client_factory", "streamer", "streamer_async"}
+        )
+
+        # Apply any updates
+        if update:
+            data.update(update)
+
+        # Create a new instance with the copied data
+        new_instance = self.__class__(**data)
+
+        # Restore the unpicklable fields if they weren't overridden by update
+        if "http_client_factory" not in (update or {}):
+            new_instance.http_client_factory = http_client_factory
+        if "streamer" not in (update or {}):
+            new_instance.streamer = streamer
+        if "streamer_async" not in (update or {}):
+            new_instance.streamer_async = streamer_async
+
+        return new_instance
 
     def _validate_litellm(self) -> None:
         """
@@ -330,12 +366,12 @@ class OpenAIGPTConfig(LLMConfig):
             import litellm
         except ImportError:
             raise LangroidImportError("litellm", "litellm")
+
         litellm.telemetry = False
         litellm.drop_params = True  # drop un-supported params without crashing
-        # modify params to fit the model expectations, and avoid crashing
-        # (e.g. anthropic doesn't like first msg to be system msg)
         litellm.modify_params = True
         self.seed = None  # some local mdls don't support seed
+
         if self.api_key == DUMMY_API_KEY:
             keys_dict = litellm.utils.validate_environment(self.chat_model)
             missing_keys = keys_dict.get("missing_keys", [])
@@ -365,8 +401,7 @@ class OpenAIGPTConfig(LLMConfig):
         class DynamicConfig(OpenAIGPTConfig):
             pass
 
-        DynamicConfig.Config.env_prefix = prefix.upper() + "_"
-
+        DynamicConfig.model_config = SettingsConfigDict(env_prefix=prefix.upper() + "_")
         return DynamicConfig
 
 
@@ -407,7 +442,7 @@ class OpenAIGPT(LanguageModel):
             config: configuration for openai-gpt model
         """
         # copy the config to avoid modifying the original
-        config = config.copy()
+        config = config.model_copy()
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
         # save original model name such as `provider/model` before
@@ -1477,7 +1512,7 @@ class OpenAIGPT(LanguageModel):
 
             if has_function:
                 function_call = LLMFunctionCall(name=function_name)
-                function_call_dict = function_call.dict()
+                function_call_dict = function_call.model_dump()
                 if function_args == "":
                     function_call.arguments = None
                 else:
@@ -1529,7 +1564,7 @@ class OpenAIGPT(LanguageModel):
                     ),
                 ),
             ),
-            openai_response.dict(),
+            openai_response.model_dump(),
         )
 
     def _cache_store(self, k: str, v: Any) -> None:
@@ -1680,7 +1715,7 @@ class OpenAIGPT(LanguageModel):
         cached, hashed_key, response = completions_with_backoff(**args)
         # assume response is an actual response rather than a streaming event
         if not isinstance(response, dict):
-            response = response.dict()
+            response = response.model_dump()
         if "message" in response["choices"][0]:
             msg = response["choices"][0]["message"]["content"].strip()
         else:
@@ -1758,7 +1793,7 @@ class OpenAIGPT(LanguageModel):
         )
         # assume response is an actual response rather than a streaming event
         if not isinstance(response, dict):
-            response = response.dict()
+            response = response.model_dump()
         if "message" in response["choices"][0]:
             msg = response["choices"][0]["message"]["content"].strip()
         else:
@@ -2056,7 +2091,7 @@ class OpenAIGPT(LanguageModel):
         if functions is not None:
             args.update(
                 dict(
-                    functions=[f.dict() for f in functions],
+                    functions=[f.model_dump() for f in functions],
                     function_call=function_call,
                 )
             )
@@ -2074,7 +2109,7 @@ class OpenAIGPT(LanguageModel):
                     tools=[
                         dict(
                             type="function",
-                            function=t.function.dict()
+                            function=t.function.model_dump()
                             | ({"strict": t.strict} if t.strict is not None else {}),
                         )
                         for t in tools

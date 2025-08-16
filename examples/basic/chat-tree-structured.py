@@ -59,8 +59,8 @@ class MyGlobalState(GlobalState):
 
 
 class AskNumTool(ToolMessage):
-    request = "ask_num"
-    purpose = "Ask user for the initial number"
+    request: str = "ask_num"
+    purpose: str = "Ask user for the initial number"
 
     def handle(self) -> str:
         """
@@ -75,8 +75,8 @@ class AskNumTool(ToolMessage):
 
 
 class AddNumTool(ToolMessage):
-    request = "add_num"
-    purpose = "Add <number> to the original number, return the result"
+    request: str = "add_num"
+    purpose: str = "Add <number> to the original number, return the result"
     number: int
 
     def handle(self) -> AgentDoneTool:

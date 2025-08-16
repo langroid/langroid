@@ -137,6 +137,7 @@ nav:
       - OpenAI HTTP Client Configuration: notes/openai-http-client.md
       - OpenAI Client Caching: notes/openai-client-caching.md
       - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
 
   - Examples:
     - Guide: examples/guide.md

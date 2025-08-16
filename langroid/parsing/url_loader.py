@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 import markdownify as md
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_parser import DocumentParser, ImagePdfParser
 from langroid.parsing.parser import Parser, ParsingConfig
-from langroid.pydantic_v1 import BaseSettings
 
 if TYPE_CHECKING:
     from firecrawl import FirecrawlApp
@@ -54,20 +54,13 @@ class FirecrawlConfig(BaseCrawlerConfig):
     params: Dict[str, Any] = {}
     timeout: Optional[int] = None
 
-    class Config:
-        # Leverage Pydantic's BaseSettings to
-        # allow setting of fields via env vars,
-        # e.g. FIRECRAWL_MODE=scrape and FIRECRAWL_API_KEY=...
-        env_prefix = "FIRECRAWL_"
+    model_config = SettingsConfigDict(env_prefix="FIRECRAWL_")
 
 
 class ExaCrawlerConfig(BaseCrawlerConfig):
     api_key: str = ""
 
-    class Config:
-        # Allow setting of fields via env vars with prefix EXA_
-        # e.g., EXA_API_KEY=your_api_key
-        env_prefix = "EXA_"
+    model_config = SettingsConfigDict(env_prefix="EXA_")
 
 
 class Crawl4aiConfig(BaseCrawlerConfig):
@@ -81,49 +74,22 @@ class Crawl4aiConfig(BaseCrawlerConfig):
     browser_config: Optional["BrowserConfig"] = None
     run_config: Optional["CrawlerRunConfig"] = None
 
-    _refs_resolved: bool = False
+    model_config = SettingsConfigDict(arbitrary_types_allowed=True)
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Resolve forward references when class is first subclassed or instantiated."""
-        super().__init_subclass__(**kwargs)
-        cls._resolve_forward_refs()
 
-    @classmethod
-    def _resolve_forward_refs(cls) -> None:
-        """Resolve forward references only when needed."""
-        if not cls._refs_resolved:
-            try:
-                from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
-                from crawl4ai.content_scraping_strategy import ContentScrapingStrategy
-                from crawl4ai.deep_crawling import DeepCrawlStrategy
-                from crawl4ai.extraction_strategy import ExtractionStrategy
-                from crawl4ai.markdown_generation_strategy import (
-                    MarkdownGenerationStrategy,
-                )
+# Resolve forward references for Crawl4aiConfig after the class is defined
+try:
+    from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
+    from crawl4ai.content_scraping_strategy import ContentScrapingStrategy
+    from crawl4ai.deep_crawling import DeepCrawlStrategy
+    from crawl4ai.extraction_strategy import ExtractionStrategy
+    from crawl4ai.markdown_generation_strategy import MarkdownGenerationStrategy
 
-                # Create namespace for update_forward_refs
-                namespace = {
-                    "BrowserConfig": BrowserConfig,
-                    "CrawlerRunConfig": CrawlerRunConfig,
-                    "ContentScrapingStrategy": ContentScrapingStrategy,
-                    "DeepCrawlStrategy": DeepCrawlStrategy,
-                    "ExtractionStrategy": ExtractionStrategy,
-                    "MarkdownGenerationStrategy": MarkdownGenerationStrategy,
-                }
-
-                cls.update_forward_refs(**namespace)
-                cls._refs_resolved = True
-            except ImportError:
-                # If crawl4ai is not installed, leave forward refs as strings
-                pass
-
-    def __init__(self, **kwargs: Any) -> None:
-        """Initialize and ensure forward refs are resolved."""
-        self._resolve_forward_refs()
-        super().__init__(**kwargs)
-
-    class Config:
-        arbitrary_types_allowed = True
+    # Rebuild the model with resolved references
+    Crawl4aiConfig.model_rebuild()
+except ImportError:
+    # If crawl4ai is not installed, leave forward refs as strings
+    pass
 
 
 class BaseCrawler(ABC):
@@ -347,7 +313,7 @@ class FirecrawlCrawler(BaseCrawler):
                     )
                     processed_urls.add(url)
                     new_pages += 1
-            pbar.update(new_pages)  # Update progress bar with new pages
+            pbar.model_copy(update=new_pages)  # Update progress bar with new pages
 
             # Break if crawl is complete
             if status["status"] == "completed":

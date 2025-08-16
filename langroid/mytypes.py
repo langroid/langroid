@@ -3,7 +3,7 @@ from textwrap import dedent
 from typing import Any, Callable, Dict, List, Union
 from uuid import uuid4
 
-from langroid.pydantic_v1 import BaseModel, Extra, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Number = Union[int, float]
 Embedding = List[Number]
@@ -51,13 +51,21 @@ class DocMetaData(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     window_ids: List[str] = []  # for RAG: ids of chunks around this one
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_id_to_string(cls, v: Any) -> str:
+        """Convert id to string if it's not already."""
+        if v is None:
+            return str(uuid4())
+        return str(v)
+
     def dict_bool_int(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """
         Special dict method to convert bool fields to int, to appease some
         downstream libraries,  e.g. Chroma which complains about bool fields in
         metadata.
         """
-        original_dict = super().dict(*args, **kwargs)
+        original_dict = super().model_dump(*args, **kwargs)
 
         for key, value in original_dict.items():
             if isinstance(value, bool):
@@ -92,8 +100,7 @@ class DocMetaData(BaseModel):
         )
         return ", ".join(components)
 
-    class Config:
-        extra = Extra.allow
+    model_config = ConfigDict(extra="allow")
 
 
 class Document(BaseModel):

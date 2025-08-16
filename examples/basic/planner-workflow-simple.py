@@ -32,7 +32,7 @@ from fire import Fire
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import DoneTool
-from langroid.pydantic_v1 import Field
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 MODEL = lm.OpenAIChatModel.GPT4_1
@@ -102,7 +102,7 @@ async def main(model: str = ""):
     class PlannerConfig(lr.ChatAgentConfig):
         name: str = "Planner"
         handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
-        llm = lm.OpenAIGPTConfig(
+        llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
             chat_model=model or MODEL,
             async_stream_quiet=False,
         )

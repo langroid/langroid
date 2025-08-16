@@ -32,7 +32,7 @@ import langroid.language_models as lm
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,7 @@ class JsonData(BaseModel):
 
     """
 
-    class Config:
-        extra = "allow"  # Allow any extra fields
+    model_config = ConfigDict(extra="allow")  # Allow any extra fields
 
 
 class FinalResult(ResultTool):

@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -21,7 +23,7 @@ cfg = AzureConfig(
 
 class _TestChatAgentConfig(ChatAgentConfig):
     max_tokens: int = 200
-    vecdb: VectorStoreConfig = None
+    vecdb: Optional[VectorStoreConfig] = None
     llm: AzureConfig = cfg
     parsing: ParsingConfig = ParsingConfig()
     prompts: PromptsConfig = PromptsConfig(

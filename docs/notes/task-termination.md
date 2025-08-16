@@ -98,7 +98,8 @@ from langroid.agent.task import Task, TaskConfig
 config = TaskConfig(
     done_sequences=[
         "T, A",                    # Tool followed by agent response
-        "T[calculator], A",        # Specific calculator tool
+        "T[calculator], A",        # Specific calculator tool by name
+        "T[CalculatorTool], A",    # Specific tool by class reference (NEW!)
         "L, T, A, L",              # LLM, tool, agent, LLM sequence
         "C[quit|exit|bye]",        # Content matching regex
         "U, L, A",                 # User, LLM, agent sequence
@@ -113,6 +114,7 @@ task = Task(agent, config=config)
 |---------|-------------|------------|
 | `T` | Any tool | `TOOL` |
 | `T[name]` | Specific tool by name | `SPECIFIC_TOOL` |
+| `T[ToolClass]` | Specific tool by class (NEW!) | `SPECIFIC_TOOL` |
 | `A` | Agent response | `AGENT_RESPONSE` |
 | `L` | LLM response | `LLM_RESPONSE` |
 | `U` | User response | `USER_RESPONSE` |
@@ -123,6 +125,7 @@ task = Task(agent, config=config)
 
 - `"T, A"` - Any tool followed by agent handling
 - `"T[search], A, T[calculator], A"` - Search tool, then calculator tool
+- `"T[CalculatorTool], A"` - Specific tool class followed by agent handling (NEW!)
 - `"L, C[complete|done|finished]"` - LLM response containing completion words
 - `"TOOL, AGENT"` - Full words also supported
 
@@ -149,7 +152,9 @@ config = TaskConfig(
             events=[
                 AgentEvent(
                     event_type=EventType.SPECIFIC_TOOL,
-                    tool_name="calculator"
+                    tool_name="calculator",
+                    # Can also use tool_class for type-safe references (NEW!):
+                    # tool_class=CalculatorTool
                 ),
                 AgentEvent(event_type=EventType.AGENT_RESPONSE),
             ]
@@ -165,7 +170,7 @@ The following event types are available:
 | EventType | Description | Additional Parameters |
 |-----------|-------------|----------------------|
 | `TOOL` | Any tool message generated | - |
-| `SPECIFIC_TOOL` | Specific tool by name | `tool_name` |
+| `SPECIFIC_TOOL` | Specific tool by name or class | `tool_name`, `tool_class` (NEW!) |
 | `LLM_RESPONSE` | LLM generates a response | - |
 | `AGENT_RESPONSE` | Agent responds (e.g., handles tool) | - |
 | `USER_RESPONSE` | User provides input | - |
@@ -206,20 +211,54 @@ config = TaskConfig(
 )
 ```
 
-#### Example 4: Mixed Syntax
+#### Example 4: Tool Class References (NEW!)
+Use actual tool classes instead of string names for type safety:
+
+```python
+from langroid.agent.tool_message import ToolMessage
+
+class CalculatorTool(ToolMessage):
+    request: str = "calculator"
+    # ... tool implementation
+
+class SearchTool(ToolMessage):
+    request: str = "search"
+    # ... tool implementation
+
+# Enable tools on the agent
+agent.enable_message([CalculatorTool, SearchTool])
+
+# Use tool classes in done sequences
+config = TaskConfig(
+    done_sequences=[
+        "T[CalculatorTool], A",  # Using class name
+        "T[SearchTool], A, T[CalculatorTool], A",  # Multiple tools
+    ]
+)
+```
+
+**Benefits of tool class references:**
+- **Type-safe**: IDE can validate tool class names
+- **Refactoring-friendly**: Renaming tool classes automatically updates references
+- **No string typos**: Compiler/linter catches invalid class names
+- **Better IDE support**: Autocomplete and go-to-definition work
+
+#### Example 5: Mixed Syntax
 Combine DSL strings and full objects:
 
 ```python
 config = TaskConfig(
     done_sequences=[
         "T, A",  # Simple DSL
+        "T[CalculatorTool], A",  # Tool class reference (NEW!)
         DoneSequence(  # Full control
             name="complex_check",
             events=[
                 AgentEvent(
                     event_type=EventType.SPECIFIC_TOOL,
                     tool_name="database_query",
-                    responder="DatabaseAgent"  # Can specify responder
+                    tool_class=DatabaseQueryTool,  # Can use class directly (NEW!)
+                    responder="DatabaseAgent"
                 ),
                 AgentEvent(event_type=EventType.AGENT_RESPONSE),
             ]
@@ -329,7 +368,7 @@ Events must occur consecutively without intervening messages:
 
 ### Code Examples
 - **Basic example**: [`examples/basic/done_sequences_example.py`](../../examples/basic/done_sequences_example.py)
-- **Test cases**: [`tests/main/test_done_sequences.py`](../../tests/main/test_done_sequences.py)
+- **Test cases**: [`tests/main/test_done_sequences.py`](../../tests/main/test_done_sequences.py) (includes tool class tests)
 - **DSL tests**: [`tests/main/test_done_sequences_dsl.py`](../../tests/main/test_done_sequences_dsl.py)
 - **Parser tests**: [`tests/main/test_done_sequence_parser.py`](../../tests/main/test_done_sequence_parser.py)
 
@@ -366,6 +405,24 @@ config = TaskConfig(
 )
 task = Task(agent, config=config)  # No subclassing needed
 ```
+
+**NEW: Using Tool Classes Instead of Strings**
+
+If you have tool classes defined, you can now reference them directly:
+
+```python
+# Before: Using string names (still works)
+config = TaskConfig(
+    done_sequences=["T[calculator], A"]  # String name
+)
+
+# After: Using tool class references (recommended)
+config = TaskConfig(
+    done_sequences=["T[CalculatorTool], A"]  # Class name
+)
+```
+
+This provides better type safety and makes refactoring easier.
 
 ## Troubleshooting
 

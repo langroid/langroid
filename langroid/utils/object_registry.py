@@ -2,7 +2,7 @@ import time
 from typing import TYPE_CHECKING, Dict, Optional, TypeAlias, TypeVar
 from uuid import uuid4
 
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from langroid.agent.base import Agent
