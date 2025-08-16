@@ -1,4 +1,6 @@
+import asyncio
 import os
+import shutil
 from typing import List, Optional
 
 import pytest
@@ -567,6 +569,7 @@ async def test_multiple_tools(prompt, tool_name, expected) -> None:
     assert expected in result.content
 
 
+@pytest.mark.skipif(not shutil.which("npx"), reason="npx not available")
 @pytest.mark.asyncio
 async def test_npxstdio_transport() -> None:
     """
@@ -578,7 +581,13 @@ async def test_npxstdio_transport() -> None:
         package="exa-mcp-server",
         env_vars=dict(EXA_API_KEY=os.getenv("EXA_API_KEY")),
     )
-    tools = await get_tools_async(transport)
+    # Add timeout to prevent hanging during npx package download/initialization
+    try:
+        tools = await asyncio.wait_for(get_tools_async(transport), timeout=60.0)
+    except asyncio.TimeoutError:
+        pytest.skip(
+            "Timeout while initializing npx transport - likely network/download issue"
+        )
     assert isinstance(tools, list)
     assert tools, "Expected at least one tool"
     WebSearchTool = await get_tool_async(transport, "web_search_exa")
@@ -698,6 +707,7 @@ async def test_uvxstdio_transport() -> None:
     assert "status" in result.content.lower()
 
 
+@pytest.mark.skipif(not shutil.which("npx"), reason="npx not available")
 @pytest.mark.asyncio
 async def test_npxstdio_transport_memory() -> None:
     """
@@ -709,7 +719,13 @@ async def test_npxstdio_transport_memory() -> None:
         package="@modelcontextprotocol/server-memory",
         args=["-y"],
     )
-    tools = await get_tools_async(transport)
+    # Add timeout to prevent hanging during npx package download/initialization
+    try:
+        tools = await asyncio.wait_for(get_tools_async(transport), timeout=60.0)
+    except asyncio.TimeoutError:
+        pytest.skip(
+            "Timeout while initializing npx transport - likely network/download issue"
+        )
     assert isinstance(tools, list)
     assert tools, "Expected at least one tool"
 
