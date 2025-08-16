@@ -409,18 +409,11 @@ def test_done_sequence_tool_class_reference(test_settings: Settings):
     config = TaskConfig(done_sequences=["T[CalculatorTool], A"])  # Using class name
 
     task = Task(agent, config=config, interactive=False)
-    task.run("Calculate something")
+    result = task.run("Calculate something")
 
     # The sequence is: LLM generates calculator tool -> Agent handles it -> done
-    # Check that tool was generated and handled
-    assert "calculator" in str(agent.message_history[-1])
-    # Task should complete after calculator tool is handled
-    # The result itself is from the task, not used for done checking
-
-
-def test_done_sequence_tool_name_vs_class(test_settings: Settings):
-    """Test that both tool name and class name work"""
-    set_global(test_settings)
+    # Check that result contains the calculated result,  from handling the tool
+    assert "4" in result.content
 
     agent = ChatAgent(
         ChatAgentConfig(
@@ -435,9 +428,9 @@ def test_done_sequence_tool_name_vs_class(test_settings: Settings):
     # Test with tool name
     config1 = TaskConfig(done_sequences=["T[calculator], A"])
     task1 = Task(agent, config=config1, interactive=False)
-    task1.run("Calculate", turns=5)
-    # Just verify tool was used
-    assert "calculator" in str(agent.message_history)
+    result = task1.run("Calculate")
+    # Result should contain the calculator tool's result
+    assert "25" in result.content
 
     # Test with class name
     agent2 = ChatAgent(
@@ -451,5 +444,19 @@ def test_done_sequence_tool_name_vs_class(test_settings: Settings):
     agent2.enable_message([CalculatorTool])
     config2 = TaskConfig(done_sequences=["T[CalculatorTool], A"])
     task2 = Task(agent2, config=config2, interactive=False)
-    task2.run("Calculate", turns=5)
-    assert "calculator" in str(agent2.message_history)
+    result2 = task2.run("Calculate")
+    assert "25" in result2.content
+
+    # set up task to end as soon as the tool is generated, using the class name
+    config3 = TaskConfig(done_sequences=["T[CalculatorTool]"])
+    # ... and specialize the task to return the tool itself
+    task3 = Task(agent2, config=config3, interactive=False)[CalculatorTool]
+    result3: CalculatorTool|None = task3.run("Calculate")
+    assert isinstance(result3, CalculatorTool)
+    assert result3.expression == "5*5"
+
+
+
+
+
+
