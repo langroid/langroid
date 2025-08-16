@@ -45,7 +45,7 @@ try:
     from pydantic_settings import BaseSettings  # noqa: F401
 except ImportError:
     # Fallback for older pydantic versions
-    from pydantic import BaseSettings  # noqa: F401
+    from pydantic import BaseSettings  # type: ignore[no-redef] # noqa: F401
 
 # Explicitly export all items for mypy
 __all__ = [
