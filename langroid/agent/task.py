@@ -90,6 +90,9 @@ class AgentEvent(BaseModel):
 
     event_type: EventType
     tool_name: Optional[str] = None  # For SPECIFIC_TOOL
+    tool_class: Optional[Type[Any]] = (
+        None  # For storing tool class references when using SPECIFIC_TOOL events
+    )
     content_pattern: Optional[str] = None  # For CONTENT_MATCH (regex)
     responder: Optional[str] = None  # Specific responder name
     # Optionally match only if the responder was specific entity/task
@@ -146,6 +149,7 @@ class TaskConfig(BaseModel):
         done_sequences (List[DoneSequence]): List of event sequences that trigger task
             completion. Task is done if ANY sequence matches the recent event history.
             Each sequence is checked against the message parent chain.
+            Tool classes can be referenced in sequences like "T[MyToolClass]".
 
     """
 
@@ -298,14 +302,8 @@ class Task:
             set_parent_agent=noop_fn,
         )
         self.config = config
-        # Store parsed done sequences
+        # Store parsed done sequences (will be initialized after agent assignment)
         self._parsed_done_sequences: Optional[List[DoneSequence]] = None
-        if self.config.done_sequences:
-            from .done_sequence_parser import parse_done_sequences
-
-            self._parsed_done_sequences = parse_done_sequences(
-                self.config.done_sequences
-            )
         # how to behave as a sub-task; can be overridden by `add_sub_task()`
         self.config_sub_task = copy.deepcopy(config)
         # counts of distinct pending messages in history,
@@ -340,6 +338,21 @@ class Task:
                 self.agent.set_system_message(system_message)
             if user_message:
                 self.agent.set_user_message(user_message)
+
+        # Initialize parsed done sequences now that self.agent is available
+        if self.config.done_sequences:
+            from .done_sequence_parser import parse_done_sequences
+
+            # Pass agent's llm_tools_map directly
+            tools_map = (
+                self.agent.llm_tools_map
+                if hasattr(self.agent, "llm_tools_map")
+                else None
+            )
+            self._parsed_done_sequences = parse_done_sequences(
+                self.config.done_sequences, tools_map
+            )
+
         self.max_cost: float = 0
         self.max_tokens: int = 0
         self.session_id: str = ""
@@ -2331,8 +2344,32 @@ class Task:
         if expected.event_type == EventType.SPECIFIC_TOOL:
             if actual.event_type != EventType.TOOL:
                 return False
+
+            # First try tool_class matching if available
+            if expected.tool_class is not None:
+                # Handle case where actual.tool_class might be a class instance
+                if hasattr(actual, "tool_class") and actual.tool_class is not None:
+                    # If actual.tool_class is an instance, get its class
+                    if isinstance(actual.tool_class, type):
+                        actual_class = actual.tool_class
+                    else:
+                        actual_class = type(actual.tool_class)
+
+                    # Compare the tool classes
+                    if actual_class == expected.tool_class:
+                        return True
+                    # Also check if actual tool is an instance of expected class
+                    if not isinstance(actual.tool_class, type) and isinstance(
+                        actual.tool_class, expected.tool_class
+                    ):
+                        return True
+
+                # If tool_class comparison didn't match, continue to tool_name fallback
+
+            # Fall back to tool_name comparison for backwards compatibility
             if expected.tool_name and actual.tool_name != expected.tool_name:
                 return False
+
         elif actual.event_type != expected.event_type:
             return False
         if expected.sender and actual.sender != expected.sender:
