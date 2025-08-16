@@ -143,6 +143,9 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Aug 2025:**
+  - [0.59.0](https://github.com/langroid/langroid/releases/tag/0.59.0) Complete Pydantic V2 Migration - 
+    5-50x faster validation, modern Python patterns, 100% backward compatible.
 - **Jul 2025:**
   - [0.58.0](https://github.com/langroid/langroid/releases/tag/0.58.0) Crawl4AI integration - 
     browser-based web crawling with Playwright for JavaScript-heavy sites, no API key required (thank you @abab-dev!).
