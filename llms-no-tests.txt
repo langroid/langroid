@@ -4194,6 +4194,473 @@ working example of this.
 This section contains brief notes describing various features and updates.
 </file>
 
+<file path="docs/notes/portkey.md">
+# Portkey Integration
+
+Langroid provides seamless integration with [Portkey](https://portkey.ai), a powerful AI gateway that enables you to access multiple LLM providers through a unified API with advanced features like caching, retries, fallbacks, and comprehensive observability.
+
+## What is Portkey?
+
+Portkey is an AI gateway that sits between your application and various LLM providers, offering:
+
+- **Unified API**: Access 200+ models from different providers through one interface
+- **Reliability**: Automatic retries, fallbacks, and load balancing
+- **Observability**: Detailed logging, tracing, and analytics
+- **Performance**: Intelligent caching and request optimization
+- **Security**: Virtual keys and advanced access controls
+- **Cost Management**: Usage tracking and budget controls
+
+For complete documentation, visit the [Portkey Documentation](https://docs.portkey.ai).
+
+## Quick Start
+
+### 1. Setup
+
+First, sign up for a Portkey account at [portkey.ai](https://portkey.ai) and get your API key.
+
+Set up your environment variables, either explicitly or in your `.env` file as usual: 
+
+```bash
+# Required: Portkey API key
+export PORTKEY_API_KEY="your-portkey-api-key"
+
+# Required: Provider API keys (for the models you want to use)
+export OPENAI_API_KEY="your-openai-key"
+export ANTHROPIC_API_KEY="your-anthropic-key"
+export GOOGLE_API_KEY="your-google-key"
+# ... other provider keys as needed
+```
+
+### 2. Basic Usage
+
+```python
+import langroid as lr
+import langroid.language_models as lm
+from langroid.language_models.provider_params import PortkeyParams
+
+# Create an LLM config to use Portkey's OpenAI-compatible API
+# (Note that the name `OpenAIGPTConfig` does NOT imply it only works with OpenAI models;
+# the name reflects the fact that the config is meant to be used with an
+# OpenAI-compatible API, which Portkey provides for multiple LLM providers.)
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        api_key="your-portkey-api-key",  # Or set PORTKEY_API_KEY env var
+    )
+)
+
+# Create LLM instance
+llm = lm.OpenAIGPT(llm_config)
+
+# Use normally
+response = llm.chat("What is the smallest prime number?")
+print(response.message)
+```
+
+### 3. Multiple Providers
+
+Switch between providers seamlessly:
+
+```python
+# OpenAI
+config_openai = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+)
+
+# Anthropic
+config_anthropic = lm.OpenAIGPTConfig(
+    chat_model="portkey/anthropic/claude-3-5-sonnet-20241022",
+)
+
+# Google Gemini
+config_gemini = lm.OpenAIGPTConfig(
+    chat_model="portkey/google/gemini-2.0-flash-lite",
+)
+```
+
+## Advanced Features
+
+### Virtual Keys
+
+Use virtual keys to abstract provider management:
+
+```python
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+    portkey_params=PortkeyParams(
+        virtual_key="vk-your-virtual-key",  # Configured in Portkey dashboard
+    )
+)
+```
+
+### Caching and Performance
+
+Enable intelligent caching to reduce costs and improve performance:
+
+```python
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        cache={
+            "enabled": True,
+            "ttl": 3600,  # 1 hour cache
+            "namespace": "my-app"
+        },
+        cache_force_refresh=False,
+    )
+)
+```
+
+### Retry Strategies
+
+Configure automatic retries for better reliability:
+
+```python
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/anthropic/claude-3-haiku-20240307",
+    portkey_params=PortkeyParams(
+        retry={
+            "max_retries": 3,
+            "backoff": "exponential",
+            "jitter": True
+        }
+    )
+)
+```
+
+### Observability and Tracing
+
+Add comprehensive tracking for production monitoring:
+
+```python
+import uuid
+
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+    portkey_params=PortkeyParams(
+        trace_id=f"trace-{uuid.uuid4().hex[:8]}",
+        metadata={
+            "user_id": "user-123",
+            "session_id": "session-456",
+            "app_version": "1.2.3"
+        },
+        user="user-123",
+        organization="my-org",
+        custom_headers={
+            "x-request-source": "langroid",
+            "x-feature": "chat-completion"
+        }
+    )
+)
+```
+
+## Configuration Reference
+
+The `PortkeyParams` class supports all Portkey features:
+
+```python
+from langroid.language_models.provider_params import PortkeyParams
+
+params = PortkeyParams(
+    # Authentication
+    api_key="pk-...",                    # Portkey API key
+    virtual_key="vk-...",               # Virtual key (optional)
+    
+    # Observability
+    trace_id="trace-123",               # Request tracing
+    metadata={"key": "value"},          # Custom metadata
+    user="user-id",                     # User identifier
+    organization="org-id",              # Organization identifier
+    
+    # Performance
+    cache={                             # Caching configuration
+        "enabled": True,
+        "ttl": 3600,
+        "namespace": "my-app"
+    },
+    cache_force_refresh=False,          # Force cache refresh
+    
+    # Reliability
+    retry={                             # Retry configuration
+        "max_retries": 3,
+        "backoff": "exponential",
+        "jitter": True
+    },
+    
+    # Custom headers
+    custom_headers={                    # Additional headers
+        "x-custom": "value"
+    },
+    
+    # Base URL (usually not needed)
+    base_url="https://api.portkey.ai"   # Portkey API endpoint
+)
+```
+
+## Supported Providers
+
+Portkey supports 200+ models from various providers. Common ones include:
+
+```python
+# OpenAI
+"portkey/openai/gpt-4o"
+"portkey/openai/gpt-4o-mini"
+
+# Anthropic
+"portkey/anthropic/claude-3-5-sonnet-20241022"
+"portkey/anthropic/claude-3-haiku-20240307"
+
+# Google
+"portkey/google/gemini-2.0-flash-lite"
+"portkey/google/gemini-1.5-pro"
+
+# Cohere
+"portkey/cohere/command-r-plus"
+
+# Meta
+"portkey/meta/llama-3.1-405b-instruct"
+
+# And many more...
+```
+
+Check the [Portkey documentation](https://docs.portkey.ai/docs/integrations/models) for the complete list.
+
+## Examples
+
+Langroid includes comprehensive Portkey examples in `examples/portkey/`:
+
+1. **`portkey_basic_chat.py`** - Basic usage with multiple providers
+2. **`portkey_advanced_features.py`** - Caching, retries, and observability
+3. **`portkey_multi_provider.py`** - Comparing responses across providers
+
+Run any example:
+
+```bash
+cd examples/portkey
+python portkey_basic_chat.py
+```
+
+## Best Practices
+
+### 1. Use Environment Variables
+
+Never hardcode API keys:
+
+```bash
+# .env file
+PORTKEY_API_KEY=your_portkey_key
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+```
+
+### 2. Implement Fallback Strategies
+
+Use multiple providers for reliability:
+
+```python
+providers = [
+    ("openai", "gpt-4o-mini"),
+    ("anthropic", "claude-3-haiku-20240307"),
+    ("google", "gemini-2.0-flash-lite")
+]
+
+for provider, model in providers:
+    try:
+        config = lm.OpenAIGPTConfig(
+            chat_model=f"portkey/{provider}/{model}"
+        )
+        llm = lm.OpenAIGPT(config)
+        return llm.chat(question)
+    except Exception:
+        continue  # Try next provider
+```
+
+### 3. Add Meaningful Metadata
+
+Include context for better observability:
+
+```python
+params = PortkeyParams(
+    metadata={
+        "user_id": user.id,
+        "feature": "document_qa",
+        "document_type": "pdf",
+        "processing_stage": "summary"
+    }
+)
+```
+
+### 4. Use Caching Wisely
+
+Enable caching for deterministic queries:
+
+```python
+# Good for caching
+params = PortkeyParams(
+    cache={"enabled": True, "ttl": 3600}
+)
+
+# Use with deterministic prompts
+response = llm.chat("What is the capital of France?")
+```
+
+### 5. Monitor Performance
+
+Use trace IDs to track request flows:
+
+```python
+import uuid
+
+trace_id = f"trace-{uuid.uuid4().hex[:8]}"
+params = PortkeyParams(
+    trace_id=trace_id,
+    metadata={"operation": "document_processing"}
+)
+
+# Use the same trace_id for related requests
+```
+
+## Monitoring and Analytics
+
+### Portkey Dashboard
+
+View detailed analytics at [app.portkey.ai](https://app.portkey.ai):
+
+- Request/response logs
+- Token usage and costs
+- Performance metrics (latency, errors)
+- Provider comparisons
+- Custom filters by metadata
+
+### Custom Filtering
+
+Use metadata and headers to filter requests:
+
+```python
+# Tag requests by feature
+params = PortkeyParams(
+    metadata={"feature": "chat", "version": "v2"},
+    custom_headers={"x-request-type": "production"}
+)
+```
+
+Then filter in the dashboard by:
+- `metadata.feature = "chat"`
+- `headers.x-request-type = "production"`
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**
+   ```
+   Error: Unauthorized (401)
+   ```
+   - Check `PORTKEY_API_KEY` is set correctly
+   - Verify API key is active in Portkey dashboard
+
+2. **Provider API Key Missing**
+   ```
+   Error: Missing API key for provider
+   ```
+   - Set provider API key (e.g., `OPENAI_API_KEY`)
+   - Or use virtual keys in Portkey dashboard
+
+3. **Model Not Found**
+   ```
+   Error: Model not supported
+   ```
+   - Check model name format: `portkey/provider/model`
+   - Verify model is available through Portkey
+
+4. **Rate Limiting**
+   ```
+   Error: Rate limit exceeded
+   ```
+   - Configure retry parameters
+   - Use virtual keys for better rate limit management
+
+### Debug Mode
+
+Enable detailed logging:
+
+```python
+import logging
+logging.getLogger("langroid").setLevel(logging.DEBUG)
+```
+
+### Test Configuration
+
+Verify your setup:
+
+```python
+# Test basic connection
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    max_output_tokens=50
+)
+llm = lm.OpenAIGPT(config)
+response = llm.chat("Hello")
+print("✅ Portkey integration working!")
+```
+
+## Migration Guide
+
+### From Direct Provider Access
+
+If you're currently using providers directly:
+
+```python
+# Before: Direct OpenAI
+config = lm.OpenAIGPTConfig(
+    chat_model="gpt-4o-mini"
+)
+
+# After: Through Portkey
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini"
+)
+```
+
+### Adding Advanced Features Gradually
+
+Start simple and add features as needed:
+
+```python
+# Step 1: Basic Portkey
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini"
+)
+
+# Step 2: Add caching
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        cache={"enabled": True, "ttl": 3600}
+    )
+)
+
+# Step 3: Add observability
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        cache={"enabled": True, "ttl": 3600},
+        metadata={"app": "my-app", "user": "user-123"},
+        trace_id="trace-abc123"
+    )
+)
+```
+
+## Resources
+
+- **Portkey Website**: [https://portkey.ai](https://portkey.ai)
+- **Portkey Documentation**: [https://docs.portkey.ai](https://docs.portkey.ai)
+- **Portkey Dashboard**: [https://app.portkey.ai](https://app.portkey.ai)
+- **Supported Models**: [https://docs.portkey.ai/docs/integrations/models](https://docs.portkey.ai/docs/integrations/models)
+- **Langroid Examples**: `examples/portkey/` directory
+- **API Reference**: [https://docs.portkey.ai/docs/api-reference](https://docs.portkey.ai/docs/api-reference)
+</file>
+
 <file path="docs/notes/quiet-mode.md">
 # Suppressing LLM output: quiet mode
 
@@ -6818,6 +7285,194 @@ where `<model>` follows the syntax described in the previous sections. Here's an
 pytest tests/main/test_chat_agent.py --m ollama/mixtral
 ```
 Of course, bear in mind that the tests may not pass due to weaknesses of the local LLM.
+</file>
+
+<file path="docs/tutorials/non-openai-llms.md">
+# Using Langroid with Non-OpenAI LLMs
+
+Langroid was initially written to work with OpenAI models via their API.
+This may sound limiting, but fortunately:
+
+- Many open-source LLMs can be served via 
+OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.io/langroid/tutorials/local-llm-setup/) guide for details.
+- There are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
+  that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
+(e.g. Anthropic's Claude, Google's Gemini).
+- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), and [OpenRouter](https://openrouter.ai/) provide unified access to multiple LLM providers with additional features like cost control, observability, caching, and fallback strategies.
+  
+Below we show how you can use these various options with Langroid.
+
+## Create an `OpenAIGPTConfig` object with `chat_model = "litellm/..."`
+
+!!! note "Install `litellm` extra"
+    To use `litellm` you need to install Langroid with the `litellm` extra, e.g.:
+    `pip install "langroid[litellm]"`
+
+Next, look up the instructions in LiteLLM docs for the specific model you are 
+interested. Here we take the example of Anthropic's `claude-instant-1` model.
+Set up the necessary environment variables as specified in the LiteLLM docs,
+e.g. for the `claude-instant-1` model, you will need to set the `ANTHROPIC_API_KEY`
+```bash
+export ANTHROPIC_API_KEY=my-api-key
+```
+
+Now you are ready to create an instance of `OpenAIGPTConfig` with the 
+`chat_model` set to `litellm/<model_spec>`, where you should set `model_spec` based on LiteLLM 
+docs. For example, for the `claude-instant-1` model, you would set `chat_model` to
+`litellm/claude-instant-1`. But if you are using the model via a 3rd party provider,
+(e.g. those via Amazon Bedrock), you may also need to have a `provider` part in the `model_spec`, e.g. 
+`litellm/bedrock/anthropic.claude-instant-v1`. In general you can see which of
+these to use, from the LiteLLM docs.
+
+```python
+import langroid.language_models as lm
+
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="litellm/claude-instant-v1",
+    chat_context_length=8000, # adjust according to model
+)
+```
+
+A similar process works for the `Gemini 1.5 Pro` LLM:
+
+- get the API key [here](https://aistudio.google.com/)
+- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="litellm/gemini/gemini-1.5-pro-latest"` in the `OpenAIGPTConfig` object
+
+For other gemini models supported by litellm, see [their docs](https://litellm.vercel.app/docs/providers/gemini)
+
+## Gemini LLMs via OpenAI client, without LiteLLM
+
+This is now the recommended way to use Gemini LLMs with Langroid,
+where you don't need to use LiteLLM. As of 11/20/2024, these models
+are [available via the OpenAI client](https://developers.googleblog.com/en/gemini-is-now-accessible-from-the-openai-library/).
+
+To use langroid with Gemini LLMs, all you have to do is:
+
+- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="gemini/<model_name>"` in the `OpenAIGPTConfig` object,  
+  where <model_name> is one of "gemini-1.5-flash", "gemini-1.5-flash-8b", or "gemini-1.5-pro"
+
+See [here](https://ai.google.dev/gemini-api/docs/models/gemini) for details on Gemini models.
+
+For example, you can use this `llm_config`:
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="gemini/" + lm.OpenAIChatModel.GEMINI_1_5_FLASH,
+)
+```
+
+In most tests you can switch to a gemini model, e.g. `--m gemini/gemini-1.5-flash`, 
+e.g.:
+
+```bash
+pytest -xvs tests/main/test_llm.py --m gemini/gemini-1.5-flash
+```
+
+Many of the example scripts allow switching the model using `-m` or `--model`, e.g.
+
+```bash
+python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
+```
+
+
+
+
+## AI Gateways for Multiple LLM Providers
+
+In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
+
+### LangDB
+
+[LangDB](https://langdb.ai/) is an AI gateway offering OpenAI-compatible APIs to access 250+ LLMs with cost control, observability, and performance benchmarking. LangDB enables seamless model switching while providing detailed analytics and usage tracking.
+
+To use LangDB with Langroid:
+- Set up your `LANGDB_API_KEY` and `LANGDB_PROJECT_ID` environment variables
+- Set `chat_model="langdb/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"langdb/anthropic/claude-3.7-sonnet"`)
+
+For detailed setup and usage instructions, see the [LangDB integration guide](../notes/langdb.md).
+
+### Portkey
+
+[Portkey](https://portkey.ai) is a comprehensive AI gateway that provides access to 200+ models from various providers through a unified API. It offers advanced features like intelligent caching, automatic retries, fallback strategies, and comprehensive observability tools for production deployments.
+
+To use Portkey with Langroid:
+- Set up your `PORTKEY_API_KEY` environment variable (plus provider API keys like `OPENAI_API_KEY`)
+- Set `chat_model="portkey/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"portkey/openai/gpt-4o-mini"`)
+
+For detailed setup and usage instructions, see the [Portkey integration guide](../notes/portkey.md).
+
+### OpenRouter
+
+[OpenRouter](https://openrouter.ai/) provides access to a wide variety of both open and proprietary LLMs through a unified API. It features automatic routing and load balancing, making it particularly useful for accessing larger open LLMs without local resources and for using multiple providers through a single interface.
+
+To use OpenRouter with Langroid:
+- Set up your `OPENROUTER_API_KEY` environment variable
+- Set `chat_model="openrouter/<model_name>"` in the `OpenAIGPTConfig`
+
+For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
+
+## Working with the created `OpenAIGPTConfig` object
+
+From here you can proceed as usual, creating instances of `OpenAIGPT`,
+`ChatAgentConfig`, `ChatAgent` and `Task` object as usual.
+
+E.g. you can create an object of class `OpenAIGPT` (which represents any
+LLM with an OpenAI-compatible API) and interact with it directly:
+```python
+llm = lm.OpenAIGPT(llm_config)
+messages = [
+    LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM),
+    LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
+],
+response = mdl.chat(messages, max_tokens=50)
+```
+
+When you interact directly with the LLM, you are responsible for keeping dialog history.
+Also you would often want an LLM to have access to tools/functions and external
+data/documents (e.g. vector DB or traditional DB). An Agent class simplifies managing all of these.
+For example, you can create an Agent powered by the above LLM, wrap it in a Task and have it
+run as an interactive chat app:
+
+```python
+agent_config = lr.ChatAgentConfig(llm=llm_config, name="my-llm-agent")
+agent = lr.ChatAgent(agent_config)
+
+task = lr.Task(agent, name="my-llm-task")
+task.run()
+```
+
+## Example: Simple Chat script with a non-OpenAI proprietary model
+
+Many of the Langroid example scripts have a convenient `-m`  flag that lets you
+easily switch to a different model. For example, you can run 
+the `chat.py` script in the `examples/basic` folder with the 
+`litellm/claude-instant-v1` model:
+```bash
+python3 examples/basic/chat.py -m litellm/claude-instant-1
+```
+
+## Quick testing with non-OpenAI models
+
+There are numerous tests in the main [Langroid repo](https://github.com/langroid/langroid) that involve
+LLMs, and once you setup the dev environment as described in the README of the repo, 
+you can run any of those tests (which run against the default GPT4 model) against
+local/remote models that are proxied by `liteLLM` (or served locally via the options mentioned above,
+such as `oobabooga`, `ollama` or `llama-cpp-python`), using the `--m <model-name>` option,
+where `model-name` takes one of the forms above. Some examples of tests are:
+
+```bash
+pytest -s tests/test_llm.py --m local/localhost:8000
+pytest -s tests/test_llm.py --m litellm/claude-instant-1
+```
+When the `--m` option is omitted, the default OpenAI GPT4 model is used.
+
+!!! note "`chat_context_length` is not affected by `--m`"
+      Be aware that the `--m` only switches the model, but does not affect the `chat_context_length` 
+      parameter in the `OpenAIGPTConfig` object. which you may need to adjust for different models.
+      So this option is only meant for quickly testing against different models, and not meant as
+      a way to switch between models in a production environment.
 </file>
 
 <file path="docs/tutorials/postgresql-agent.md">
@@ -10279,6 +10934,110 @@ if __name__ == "__main__":
     Fire(main)
 </file>
 
+<file path="examples/mcp/pyodide_code_executor.py">
+"""
+Simple example of using the Pyodide MCP server.
+    https://github.com/pydantic/pydantic-ai/tree/main/mcp-run-python
+
+Before running make sure you have deno installed
+    https://docs.deno.com/runtime/getting_started/installation/
+
+Run like this:
+
+    uv run examples/mcp/pyodide_code_executor.py --model gpt-4.1-mini
+
+"""
+
+from fastmcp.client.transports import StdioTransport
+from fire import Fire
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.mcp import mcp_tool
+from langroid.agent.tools.orchestration import ResultTool
+from langroid.mytypes import NonToolAction
+
+RUN_ONCE: bool = True  # terminate task on first result?
+
+deno_transport = StdioTransport(
+    command="deno",
+    args=[
+        "run",
+        "-N",
+        "-R=node_modules",
+        "-W=node_modules",
+        "--node-modules-dir=auto",
+        "jsr:@pydantic/mcp-run-python",
+        "stdio",
+    ],
+)
+
+# Illustrating how we can:
+# - use the MCP tool decorator to create a Langroid ToolMessage subclass
+# - override the handle_async() method to customize the output, sent to the LLM
+
+
+class MyResult(ResultTool):
+    answer: str
+
+
+@mcp_tool(deno_transport, "run_python_code")
+class PythonCodeExecutor(lr.ToolMessage):
+    async def handle_async(self):
+        result: str = await self.call_tool_async()
+        if RUN_ONCE:
+            # terminate task with this result
+            return MyResult(answer=result)
+        else:
+            # this result goes to LLM, and loop with user continues
+            return f"""
+            <CodeResult>
+            {result} 
+            </CodeResult>
+            """
+
+
+async def main(model: str = ""):
+    agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            # forward to user when LLM doesn't use a tool
+            handle_llm_no_tool=NonToolAction.FORWARD_USER,
+            llm=lm.OpenAIGPTConfig(
+                chat_model=model or "gpt-4.1-mini",
+                max_output_tokens=1000,
+                # this defaults to True, but we set it to False so we can see output
+                async_stream_quiet=False,
+            ),
+        )
+    )
+
+    # enable the agent to use the PythonCodeExecutor tool
+    agent.enable_message(PythonCodeExecutor)
+    # make task with interactive=False =>
+    # waits for user only when LLM doesn't use a tool
+    if RUN_ONCE:
+        task = lr.Task(agent, interactive=False)[MyResult]
+        result: MyResult | None = await task.run_async()
+        print("Final answer is: ", result.answer)
+    else:
+        task = lr.Task(agent, interactive=False)
+        await task.run_async()
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    def run_main(**kwargs) -> None:
+        """Run the async main function with a proper event loop.
+
+        Args:
+            **kwargs: Keyword arguments to pass to the main function.
+        """
+        asyncio.run(main(**kwargs))
+
+    Fire(run_main)
+</file>
+
 <file path="examples/multi-agent-debate/README.md">
 Debate System Using LLM Agents
 ==============================
@@ -10401,6 +11160,793 @@ The feedback mechanism evaluates debates based on:
 License
 -------
 This project is licensed under the MIT License.
+</file>
+
+<file path="examples/portkey/portkey_advanced_features.py">
+#!/usr/bin/env python3
+
+"""
+Advanced Portkey example showing observability, caching, retries, and metadata.
+
+This example demonstrates:
+- Advanced Portkey configuration with all features
+- Request tracing and metadata
+- Caching and retry strategies
+- Custom headers for observability
+
+Run with: python portkey_advanced_features.py
+"""
+
+import os
+import uuid
+from typing import Optional
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.language_models.provider_params import PortkeyParams
+
+
+def check_env_var(var_name: str) -> Optional[str]:
+    """Check if environment variable is set and return its value."""
+    value = os.getenv(var_name)
+    if not value:
+        print(f"⚠️  Warning: {var_name} not set in environment")
+        return None
+    return value
+
+
+def create_advanced_portkey_llm(portkey_api_key: str, user_id: str) -> lm.OpenAIGPT:
+    """Create an advanced Portkey-enabled LLM with all features."""
+
+    # Generate unique trace ID for this session
+    trace_id = f"trace-{uuid.uuid4().hex[:8]}"
+
+    config = lm.OpenAIGPTConfig(
+        chat_model="portkey/openai/gpt-4o-mini",
+        portkey_params=PortkeyParams(
+            api_key=portkey_api_key,
+            # Observability features
+            trace_id=trace_id,
+            metadata={
+                "user_id": user_id,
+                "app": "langroid-advanced-example",
+                "version": "1.0",
+                "environment": "demo",
+            },
+            # Retry configuration
+            retry={"max_retries": 3, "backoff": "exponential", "jitter": True},
+            # Caching configuration
+            cache={
+                "enabled": True,
+                "ttl": 3600,  # 1 hour
+                "namespace": "langroid-demo",
+            },
+            cache_force_refresh=False,
+            # User tracking
+            user=user_id,
+            organization="langroid-demo-org",
+            # Custom headers for additional tracking
+            custom_headers={
+                "x-session-id": f"session-{uuid.uuid4().hex[:8]}",
+                "x-demo-type": "advanced-features",
+                "x-langroid-version": (
+                    lr.__version__ if hasattr(lr, "__version__") else "unknown"
+                ),
+            },
+        ),
+        max_output_tokens=200,
+        temperature=0.3,
+    )
+
+    return lm.OpenAIGPT(config)
+
+
+def demonstrate_caching(llm: lm.OpenAIGPT):
+    """Demonstrate Portkey's caching capabilities."""
+    print("\n🧠 Testing Caching Capabilities")
+    print("=" * 50)
+
+    question = "What are the three laws of robotics by Isaac Asimov?"
+
+    print("🔄 First request (should hit the API)...")
+    response1 = llm.chat(question)
+    print(f"✅ Response: {response1.message[:100]}...")
+    print(f"📊 Cached: {response1.cached}")
+    if response1.usage:
+        print(f"📊 Tokens: {response1.usage.total_tokens}")
+
+    print("\n🔄 Second identical request (should hit cache)...")
+    response2 = llm.chat(question)
+    print(f"✅ Response: {response2.message[:100]}...")
+    print(f"📊 Cached: {response2.cached}")
+    if response2.usage:
+        print(f"📊 Tokens: {response2.usage.total_tokens}")
+
+
+def demonstrate_metadata_tracking(llm: lm.OpenAIGPT, user_id: str):
+    """Demonstrate request tracking with metadata."""
+    print("\n📊 Testing Metadata and Tracking")
+    print("=" * 50)
+
+    questions = [
+        "What is machine learning?",
+        "Explain neural networks briefly.",
+        "What is the difference between AI and ML?",
+    ]
+
+    for i, question in enumerate(questions, 1):
+        print(f"\n🔍 Question {i}: {question}")
+
+        # Create a new LLM instance with updated metadata for each question
+        trace_id = f"trace-q{i}-{uuid.uuid4().hex[:6]}"
+
+        config = lm.OpenAIGPTConfig(
+            chat_model="portkey/openai/gpt-4o-mini",
+            portkey_params=PortkeyParams(
+                api_key=llm.config.portkey_params.api_key,
+                trace_id=trace_id,
+                metadata={
+                    "user_id": user_id,
+                    "question_number": i,
+                    "question_category": "AI/ML basics",
+                    "timestamp": str(uuid.uuid4()),  # Unique per request
+                },
+                user=user_id,
+                custom_headers={
+                    "x-question-id": f"q-{i}",
+                    "x-session-type": "educational",
+                },
+            ),
+            max_output_tokens=150,
+            temperature=0.3,
+        )
+
+        question_llm = lm.OpenAIGPT(config)
+        response = question_llm.chat(question)
+
+        print(f"✅ Response: {response.message[:80]}...")
+        print(f"🏷️  Trace ID: {trace_id}")
+
+
+def demonstrate_error_handling():
+    """Demonstrate error handling and retry behavior."""
+    print("\n⚠️  Testing Error Handling")
+    print("=" * 50)
+
+    try:
+        # Create config with invalid model to test error handling
+        config = lm.OpenAIGPTConfig(
+            chat_model="portkey/openai/invalid-model-name",
+            portkey_params=PortkeyParams(
+                api_key=os.getenv("PORTKEY_API_KEY", ""),
+                retry={"max_retries": 2, "backoff": "linear"},
+                metadata={"test_type": "error_handling"},
+            ),
+        )
+
+        error_llm = lm.OpenAIGPT(config)
+        response = error_llm.chat("This should fail")
+        print(f"Unexpected success: {response.message}")
+
+    except Exception as e:
+        print(f"✅ Expected error caught: {type(e).__name__}")
+        print(f"   Error details: {str(e)[:100]}...")
+
+
+def main():
+    """Main function demonstrating advanced Portkey features."""
+    print("🚀 Portkey Advanced Features Example")
+    print("=" * 45)
+
+    # Check for required environment variables
+    portkey_api_key = check_env_var("PORTKEY_API_KEY")
+    if not portkey_api_key:
+        print("❌ PORTKEY_API_KEY is required. Please set it in your environment.")
+        return
+
+    openai_api_key = check_env_var("OPENAI_API_KEY")
+    if not openai_api_key:
+        print("❌ OPENAI_API_KEY is required for this example.")
+        return
+
+    print("✅ All required API keys found")
+
+    # Generate a unique user ID for this session
+    user_id = f"user-{uuid.uuid4().hex[:8]}"
+    print(f"🆔 Demo User ID: {user_id}")
+
+    # Create advanced LLM configuration
+    try:
+        llm = create_advanced_portkey_llm(portkey_api_key, user_id)
+        print("✅ Advanced Portkey LLM created successfully")
+
+        # Demonstrate different features
+        demonstrate_caching(llm)
+        demonstrate_metadata_tracking(llm, user_id)
+        demonstrate_error_handling()
+
+    except Exception as e:
+        print(f"❌ Failed to create advanced LLM: {str(e)}")
+        return
+
+    print("\n🎉 Advanced Portkey features example completed!")
+    print("\n💡 Next steps:")
+    print(
+        "   - View detailed request logs in Portkey dashboard: https://app.portkey.ai"
+    )
+    print(
+        "   - Filter by trace IDs, user IDs, or metadata to analyze specific requests"
+    )
+    print("   - Try the multi-provider example: portkey_multi_provider.py")
+    print(f"\n🔍 Your demo user ID: {user_id}")
+    print("   Use this to filter requests in the Portkey dashboard")
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="examples/portkey/portkey_basic_chat.py">
+#!/usr/bin/env python3
+
+"""
+Basic Portkey example showing how to use different AI providers through Portkey's gateway.
+
+This example demonstrates:
+- Basic Portkey configuration
+- Switching between different AI providers
+- Automatic API key resolution
+
+Run with: python portkey_basic_chat.py
+"""
+
+import os
+from typing import Optional
+
+import langroid.language_models as lm
+from langroid.language_models.provider_params import PortkeyParams
+
+
+def check_env_var(var_name: str) -> Optional[str]:
+    """Check if environment variable is set and return its value."""
+    value = os.getenv(var_name)
+    if not value:
+        print(f"⚠️  Warning: {var_name} not set in environment")
+        return None
+    return value
+
+
+def create_portkey_llm(provider: str, model: str, portkey_api_key: str) -> lm.OpenAIGPT:
+    """Create a Portkey-enabled LLM configuration."""
+    config = lm.OpenAIGPTConfig(
+        chat_model=f"portkey/{provider}/{model}",
+        portkey_params=PortkeyParams(
+            api_key=portkey_api_key,
+        ),
+        max_output_tokens=150,
+        temperature=0.7,
+    )
+    return lm.OpenAIGPT(config)
+
+
+def test_provider(llm: lm.OpenAIGPT, provider_name: str):
+    """Test a specific provider with a simple question."""
+    print(f"\n🔮 Testing {provider_name}...")
+    print("=" * 50)
+
+    question = "What is the capital of France? Answer in one sentence."
+
+    try:
+        response = llm.chat(question)
+        print(f"✅ {provider_name} Response:")
+        print(f"   {response.message}")
+
+        if response.usage:
+            print(f"   📊 Tokens: {response.usage.total_tokens}")
+
+    except Exception as e:
+        print(f"❌ {provider_name} Error: {str(e)}")
+
+
+def main():
+    """Main function demonstrating Portkey basic usage."""
+    print("🚀 Portkey Basic Chat Example")
+    print("=" * 40)
+
+    # Check for required environment variables
+    portkey_api_key = check_env_var("PORTKEY_API_KEY")
+    if not portkey_api_key:
+        print("❌ PORTKEY_API_KEY is required. Please set it in your environment.")
+        return
+
+    print("✅ Portkey API key found")
+
+    # Test different providers through Portkey
+    providers_to_test = []
+
+    # Check which provider keys are available
+    if os.getenv("OPENAI_API_KEY"):
+        providers_to_test.append(("OpenAI", "openai", "gpt-4o-mini"))
+        print("✅ OpenAI API key found")
+
+    if os.getenv("ANTHROPIC_API_KEY"):
+        providers_to_test.append(("Anthropic", "anthropic", "claude-3-haiku-20240307"))
+        print("✅ Anthropic API key found")
+
+    if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
+        providers_to_test.append(("Google Gemini", "google", "gemini-2.0-flash-lite"))
+        print("✅ Google/Gemini API key found")
+
+    if not providers_to_test:
+        print("❌ No provider API keys found. Please set at least one of:")
+        print("   - OPENAI_API_KEY")
+        print("   - ANTHROPIC_API_KEY")
+        print("   - GOOGLE_API_KEY or GEMINI_API_KEY")
+        return
+
+    print(f"\n🎯 Testing {len(providers_to_test)} provider(s) through Portkey...")
+
+    # Test each available provider
+    for provider_display_name, provider, model in providers_to_test:
+        try:
+            llm = create_portkey_llm(provider, model, portkey_api_key)
+            test_provider(llm, provider_display_name)
+        except Exception as e:
+            print(f"❌ Failed to create {provider_display_name} LLM: {str(e)}")
+
+    print("\n🎉 Portkey basic chat example completed!")
+    print("\n💡 Next steps:")
+    print("   - Try the advanced features example: portkey_advanced_features.py")
+    print("   - View your requests in the Portkey dashboard: https://app.portkey.ai")
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="examples/portkey/portkey_multi_provider.py">
+#!/usr/bin/env python3
+
+"""
+Multi-provider Portkey example showing how to compare responses across different AI providers.
+
+This example demonstrates:
+- Using multiple providers through Portkey
+- Comparing response quality and characteristics
+- Provider-specific configurations
+- Fallback strategies
+
+Run with: python portkey_multi_provider.py
+"""
+
+import os
+import time
+from typing import List, Optional, Tuple
+
+import langroid.language_models as lm
+from langroid.language_models.provider_params import PortkeyParams
+
+
+def check_env_var(var_name: str) -> Optional[str]:
+    """Check if environment variable is set and return its value."""
+    value = os.getenv(var_name)
+    if not value:
+        print(f"⚠️  Warning: {var_name} not set in environment")
+        return None
+    return value
+
+
+def create_provider_llm(
+    provider: str, model: str, portkey_api_key: str, temperature: float = 0.7
+) -> Tuple[lm.OpenAIGPT, str]:
+    """Create a Portkey-enabled LLM for a specific provider."""
+    config = lm.OpenAIGPTConfig(
+        chat_model=f"portkey/{provider}/{model}",
+        portkey_params=PortkeyParams(
+            api_key=portkey_api_key,
+            metadata={
+                "provider": provider,
+                "model": model,
+                "demo": "multi-provider-comparison",
+            },
+            user="multi-provider-demo",
+        ),
+        max_output_tokens=200,
+        temperature=temperature,
+    )
+
+    display_name = f"{provider.title()} ({model})"
+    return lm.OpenAIGPT(config), display_name
+
+
+def test_providers_on_question(
+    providers: List[Tuple[lm.OpenAIGPT, str]], question: str
+):
+    """Test all providers on the same question and compare responses."""
+    print(f"\n❓ Question: {question}")
+    print("=" * 80)
+
+    responses = []
+
+    for llm, display_name in providers:
+        print(f"\n🤖 {display_name}:")
+        print("-" * 40)
+
+        try:
+            start_time = time.time()
+            response = llm.chat(question)
+            end_time = time.time()
+
+            print(f"📝 Response: {response.message}")
+            print(f"⏱️  Time: {end_time - start_time:.2f}s")
+
+            if response.usage:
+                print(f"📊 Tokens: {response.usage.total_tokens}")
+
+            responses.append((display_name, response.message, response.usage))
+
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
+            responses.append((display_name, f"Error: {str(e)}", None))
+
+    return responses
+
+
+def demonstrate_creative_tasks(providers: List[Tuple[lm.OpenAIGPT, str]]):
+    """Test providers on creative tasks to see different capabilities."""
+    print("\n🎨 Creative Tasks Comparison")
+    print("=" * 50)
+
+    creative_questions = [
+        "Write a haiku about artificial intelligence.",
+        "Explain quantum computing using a food analogy.",
+        "Create a short story opening with exactly 50 words.",
+    ]
+
+    for question in creative_questions:
+        test_providers_on_question(providers, question)
+
+
+def demonstrate_analytical_tasks(providers: List[Tuple[lm.OpenAIGPT, str]]):
+    """Test providers on analytical tasks."""
+    print("\n🧮 Analytical Tasks Comparison")
+    print("=" * 50)
+
+    analytical_questions = [
+        "What are the pros and cons of renewable energy?",
+        "Explain the causes of inflation in simple terms.",
+        "Compare machine learning and traditional programming.",
+    ]
+
+    for question in analytical_questions:
+        test_providers_on_question(providers, question)
+
+
+def demonstrate_fallback_strategy(portkey_api_key: str):
+    """Demonstrate a simple fallback strategy across providers."""
+    print("\n🔄 Fallback Strategy Demo")
+    print("=" * 50)
+
+    # Define providers in order of preference
+    fallback_providers = [
+        ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
+        ("anthropic", "claude-3-haiku-20240307", "ANTHROPIC_API_KEY"),
+        ("google", "gemini-2.0-flash-lite", "GOOGLE_API_KEY"),
+    ]
+
+    question = "What is the meaning of life in one sentence?"
+
+    for provider, model, env_var in fallback_providers:
+        if os.getenv(env_var):
+            print(f"\n🎯 Trying {provider.title()}...")
+            try:
+                llm, display_name = create_provider_llm(
+                    provider, model, portkey_api_key, temperature=0.5
+                )
+                response = llm.chat(question)
+                print(f"✅ Success with {display_name}")
+                print(f"📝 Response: {response.message}")
+                return  # Success, stop trying
+
+            except Exception as e:
+                print(f"❌ {display_name} failed: {str(e)}")
+                print("🔄 Trying next provider...")
+        else:
+            print(f"⏭️  Skipping {provider.title()} (API key not available)")
+
+    print("❌ All providers failed!")
+
+
+def main():
+    """Main function demonstrating multi-provider usage."""
+    print("🚀 Portkey Multi-Provider Example")
+    print("=" * 45)
+
+    # Check for required environment variables
+    portkey_api_key = check_env_var("PORTKEY_API_KEY")
+    if not portkey_api_key:
+        print("❌ PORTKEY_API_KEY is required. Please set it in your environment.")
+        return
+
+    print("✅ Portkey API key found")
+
+    # Collect available providers
+    providers = []
+
+    if os.getenv("OPENAI_API_KEY"):
+        try:
+            llm, name = create_provider_llm("openai", "gpt-4o-mini", portkey_api_key)
+            providers.append((llm, name))
+            print("✅ OpenAI provider ready")
+        except Exception as e:
+            print(f"⚠️  OpenAI setup failed: {e}")
+
+    if os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            llm, name = create_provider_llm(
+                "anthropic", "claude-3-haiku-20240307", portkey_api_key
+            )
+            providers.append((llm, name))
+            print("✅ Anthropic provider ready")
+        except Exception as e:
+            print(f"⚠️  Anthropic setup failed: {e}")
+
+    if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
+        try:
+            llm, name = create_provider_llm(
+                "google", "gemini-2.0-flash-lite", portkey_api_key
+            )
+            providers.append((llm, name))
+            print("✅ Google/Gemini provider ready")
+        except Exception as e:
+            print(f"⚠️  Google/Gemini setup failed: {e}")
+
+    if len(providers) < 2:
+        print("\n⚠️  This example works best with at least 2 providers.")
+        print("   Please set API keys for multiple providers:")
+        print("   - OPENAI_API_KEY")
+        print("   - ANTHROPIC_API_KEY")
+        print("   - GOOGLE_API_KEY or GEMINI_API_KEY")
+
+        if len(providers) == 0:
+            print("❌ No providers available. Exiting.")
+            return
+
+    print(f"\n🎯 Ready to compare {len(providers)} provider(s)")
+
+    # Run comparisons
+    if len(providers) >= 2:
+        demonstrate_creative_tasks(providers)
+        demonstrate_analytical_tasks(providers)
+
+    # Always demonstrate fallback (works with 1+ providers)
+    demonstrate_fallback_strategy(portkey_api_key)
+
+    print("\n🎉 Multi-provider example completed!")
+    print("\n💡 Analysis tips:")
+    print("   - Different providers may excel at different types of tasks")
+    print("   - Response styles and lengths can vary significantly")
+    print("   - Use Portkey dashboard to analyze performance metrics")
+    print("   - Consider cost, speed, and quality when choosing providers")
+    print("\n🔍 View detailed comparisons at: https://app.portkey.ai")
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="examples/portkey/README.md">
+# Portkey Examples
+
+This folder contains examples demonstrating how to use [Portkey](https://portkey.ai) with Langroid for enhanced LLM gateway functionality and observability.
+
+## Prerequisites
+
+Before running any examples, make sure you've installed Langroid as usual.
+
+At minimum, have these environment variables set up in your `.env` file or environment:
+```bash
+PORTKEY_API_KEY=your_portkey_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here  # or any provider's key
+ANTHROPIC_API_KEY=your_anthropic_key_here  # if using Anthropic
+```
+
+### 1. Portkey Basic Chat (`portkey_basic_chat.py`)
+
+Demonstrates basic chat functionality with Portkey:
+- Uses Portkey as a gateway to different AI providers
+- Shows automatic provider API key resolution
+- Demonstrates model switching across providers
+
+```python
+# Run the example from root of repo, after activating your virtual environment with uv:
+uv run examples/portkey/portkey_basic_chat.py
+```
+
+### 2. Portkey Advanced Features (`portkey_advanced_features.py`)
+
+Shows how to use Portkey's advanced features:
+- Virtual keys for provider management
+- Caching and retry configurations
+- Request tracing and metadata
+- Custom headers for observability
+
+```python
+# Run the example
+uv run examples/portkey/portkey_advanced_features.py
+```
+
+### 3. Portkey Multi-Provider Example (`portkey_multi_provider.py`)
+
+Showcases Portkey's ability to switch between providers:
+- Compares responses from different providers
+- Demonstrates fallback strategies
+- Shows how to use virtual keys for different models
+
+```python
+# Run the example
+uv run examples/portkey/portkey_multi_provider.py
+```
+
+## Using Portkey
+
+### Basic Configuration
+
+Portkey can route requests to any AI provider through a unified API:
+
+```python
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.provider_params import PortkeyParams
+
+# Configure for OpenAI via Portkey
+config = OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        api_key="your-portkey-api-key",  # Or use PORTKEY_API_KEY env var
+    )
+)
+
+# Configure for Anthropic via Portkey
+config = OpenAIGPTConfig(
+    chat_model="portkey/anthropic/claude-3-sonnet-20240229",
+    portkey_params=PortkeyParams(
+        api_key="your-portkey-api-key",
+    )
+)
+```
+
+### Advanced Features
+
+Portkey provides powerful gateway features:
+
+```python
+from langroid.language_models.provider_params import PortkeyParams
+
+# Advanced configuration with observability
+params = PortkeyParams(
+    api_key="your-portkey-api-key",
+    virtual_key="vk-your-virtual-key",  # For provider abstraction
+    trace_id="trace-123",               # For request tracing
+    metadata={"user": "john", "app": "langroid"},  # Custom metadata
+    retry={"max_retries": 3, "backoff": "exponential"},  # Retry config
+    cache={"enabled": True, "ttl": 3600},  # Caching config
+    cache_force_refresh=False,          # Cache control
+    user="user-123",                    # User identifier
+    organization="org-456",             # Organization identifier
+    custom_headers={                    # Additional custom headers
+        "x-custom-header": "value"
+    }
+)
+
+config = OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+    portkey_params=params
+)
+```
+
+### Supported Providers
+
+Portkey supports many AI providers:
+
+```python
+# OpenAI
+chat_model="portkey/openai/gpt-4o"
+
+# Anthropic
+chat_model="portkey/anthropic/claude-3-5-sonnet-20241022"
+
+# Google Gemini
+chat_model="portkey/google/gemini-2.0-flash-lite"
+
+# Cohere
+chat_model="portkey/cohere/command-r-plus"
+
+# Many more providers available through Portkey
+```
+
+### Environment Variables
+
+Portkey integration automatically resolves API keys from environment variables:
+
+```bash
+# Portkey API key
+PORTKEY_API_KEY=your_portkey_api_key
+
+# Provider API keys (used for actual model calls)
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+GOOGLE_API_KEY=your_google_key
+COHERE_API_KEY=your_cohere_key
+```
+
+### Virtual Keys
+
+Use virtual keys to abstract provider management:
+
+```python
+# Configure with virtual key
+config = OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+    portkey_params=PortkeyParams(
+        virtual_key="vk-your-virtual-key",  # Manages provider key automatically
+    )
+)
+```
+
+### Viewing Results
+
+1. Visit the [Portkey Dashboard](https://app.portkey.ai)
+2. Navigate to your project
+3. View detailed analytics:
+   - Request/response logs
+   - Token usage and costs
+   - Performance metrics
+   - Error rates and debugging
+
+## Best Practices
+
+1. **Use Virtual Keys**: Abstract provider management for easier switching
+2. **Add Metadata**: Include user and application context for better tracking
+3. **Configure Retries**: Set up automatic retry strategies for reliability
+4. **Enable Caching**: Reduce costs and improve performance with intelligent caching
+5. **Monitor Performance**: Use trace IDs and metadata for detailed observability
+
+## Troubleshooting
+
+Common issues and solutions:
+
+1. **Authentication Errors**:
+   - Verify `PORTKEY_API_KEY` is set correctly
+   - Ensure provider API keys are available (e.g., `OPENAI_API_KEY`)
+
+2. **Model Not Found**:
+   - Ensure the model name includes the `portkey/` prefix
+   - Verify the provider and model are supported by Portkey
+
+3. **Rate Limiting**:
+   - Configure retry parameters in PortkeyParams
+   - Use virtual keys for better rate limit management
+
+4. **Virtual Key Issues**:
+   - Verify virtual key is correctly configured in Portkey dashboard
+   - Check virtual key has access to the requested provider/model
+
+For more help, visit the [Portkey Documentation](https://docs.portkey.ai).
+</file>
+
+<file path="examples/portkey/requirements.txt">
+# Requirements for Portkey examples
+# These are included in the main Langroid installation
+
+# Core Langroid (includes all necessary dependencies)
+langroid
+
+# The examples use standard library modules and Langroid's built-in Portkey support
+# No additional dependencies are required beyond what Langroid provides
+
+# Optional: For development and testing
+# pytest>=7.0.0
+# python-dotenv>=0.19.0
 </file>
 
 <file path="examples/quick-start/chat-agent.py">
@@ -20593,473 +22139,6 @@ except AssertionError as e:
 ```
 </file>
 
-<file path="docs/notes/portkey.md">
-# Portkey Integration
-
-Langroid provides seamless integration with [Portkey](https://portkey.ai), a powerful AI gateway that enables you to access multiple LLM providers through a unified API with advanced features like caching, retries, fallbacks, and comprehensive observability.
-
-## What is Portkey?
-
-Portkey is an AI gateway that sits between your application and various LLM providers, offering:
-
-- **Unified API**: Access 200+ models from different providers through one interface
-- **Reliability**: Automatic retries, fallbacks, and load balancing
-- **Observability**: Detailed logging, tracing, and analytics
-- **Performance**: Intelligent caching and request optimization
-- **Security**: Virtual keys and advanced access controls
-- **Cost Management**: Usage tracking and budget controls
-
-For complete documentation, visit the [Portkey Documentation](https://docs.portkey.ai).
-
-## Quick Start
-
-### 1. Setup
-
-First, sign up for a Portkey account at [portkey.ai](https://portkey.ai) and get your API key.
-
-Set up your environment variables, either explicitly or in your `.env` file as usual: 
-
-```bash
-# Required: Portkey API key
-export PORTKEY_API_KEY="your-portkey-api-key"
-
-# Required: Provider API keys (for the models you want to use)
-export OPENAI_API_KEY="your-openai-key"
-export ANTHROPIC_API_KEY="your-anthropic-key"
-export GOOGLE_API_KEY="your-google-key"
-# ... other provider keys as needed
-```
-
-### 2. Basic Usage
-
-```python
-import langroid as lr
-import langroid.language_models as lm
-from langroid.language_models.provider_params import PortkeyParams
-
-# Create an LLM config to use Portkey's OpenAI-compatible API
-# (Note that the name `OpenAIGPTConfig` does NOT imply it only works with OpenAI models;
-# the name reflects the fact that the config is meant to be used with an
-# OpenAI-compatible API, which Portkey provides for multiple LLM providers.)
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        api_key="your-portkey-api-key",  # Or set PORTKEY_API_KEY env var
-    )
-)
-
-# Create LLM instance
-llm = lm.OpenAIGPT(llm_config)
-
-# Use normally
-response = llm.chat("What is the smallest prime number?")
-print(response.message)
-```
-
-### 3. Multiple Providers
-
-Switch between providers seamlessly:
-
-```python
-# OpenAI
-config_openai = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-)
-
-# Anthropic
-config_anthropic = lm.OpenAIGPTConfig(
-    chat_model="portkey/anthropic/claude-3-5-sonnet-20241022",
-)
-
-# Google Gemini
-config_gemini = lm.OpenAIGPTConfig(
-    chat_model="portkey/google/gemini-2.0-flash-lite",
-)
-```
-
-## Advanced Features
-
-### Virtual Keys
-
-Use virtual keys to abstract provider management:
-
-```python
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-    portkey_params=PortkeyParams(
-        virtual_key="vk-your-virtual-key",  # Configured in Portkey dashboard
-    )
-)
-```
-
-### Caching and Performance
-
-Enable intelligent caching to reduce costs and improve performance:
-
-```python
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        cache={
-            "enabled": True,
-            "ttl": 3600,  # 1 hour cache
-            "namespace": "my-app"
-        },
-        cache_force_refresh=False,
-    )
-)
-```
-
-### Retry Strategies
-
-Configure automatic retries for better reliability:
-
-```python
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/anthropic/claude-3-haiku-20240307",
-    portkey_params=PortkeyParams(
-        retry={
-            "max_retries": 3,
-            "backoff": "exponential",
-            "jitter": True
-        }
-    )
-)
-```
-
-### Observability and Tracing
-
-Add comprehensive tracking for production monitoring:
-
-```python
-import uuid
-
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-    portkey_params=PortkeyParams(
-        trace_id=f"trace-{uuid.uuid4().hex[:8]}",
-        metadata={
-            "user_id": "user-123",
-            "session_id": "session-456",
-            "app_version": "1.2.3"
-        },
-        user="user-123",
-        organization="my-org",
-        custom_headers={
-            "x-request-source": "langroid",
-            "x-feature": "chat-completion"
-        }
-    )
-)
-```
-
-## Configuration Reference
-
-The `PortkeyParams` class supports all Portkey features:
-
-```python
-from langroid.language_models.provider_params import PortkeyParams
-
-params = PortkeyParams(
-    # Authentication
-    api_key="pk-...",                    # Portkey API key
-    virtual_key="vk-...",               # Virtual key (optional)
-    
-    # Observability
-    trace_id="trace-123",               # Request tracing
-    metadata={"key": "value"},          # Custom metadata
-    user="user-id",                     # User identifier
-    organization="org-id",              # Organization identifier
-    
-    # Performance
-    cache={                             # Caching configuration
-        "enabled": True,
-        "ttl": 3600,
-        "namespace": "my-app"
-    },
-    cache_force_refresh=False,          # Force cache refresh
-    
-    # Reliability
-    retry={                             # Retry configuration
-        "max_retries": 3,
-        "backoff": "exponential",
-        "jitter": True
-    },
-    
-    # Custom headers
-    custom_headers={                    # Additional headers
-        "x-custom": "value"
-    },
-    
-    # Base URL (usually not needed)
-    base_url="https://api.portkey.ai"   # Portkey API endpoint
-)
-```
-
-## Supported Providers
-
-Portkey supports 200+ models from various providers. Common ones include:
-
-```python
-# OpenAI
-"portkey/openai/gpt-4o"
-"portkey/openai/gpt-4o-mini"
-
-# Anthropic
-"portkey/anthropic/claude-3-5-sonnet-20241022"
-"portkey/anthropic/claude-3-haiku-20240307"
-
-# Google
-"portkey/google/gemini-2.0-flash-lite"
-"portkey/google/gemini-1.5-pro"
-
-# Cohere
-"portkey/cohere/command-r-plus"
-
-# Meta
-"portkey/meta/llama-3.1-405b-instruct"
-
-# And many more...
-```
-
-Check the [Portkey documentation](https://docs.portkey.ai/docs/integrations/models) for the complete list.
-
-## Examples
-
-Langroid includes comprehensive Portkey examples in `examples/portkey/`:
-
-1. **`portkey_basic_chat.py`** - Basic usage with multiple providers
-2. **`portkey_advanced_features.py`** - Caching, retries, and observability
-3. **`portkey_multi_provider.py`** - Comparing responses across providers
-
-Run any example:
-
-```bash
-cd examples/portkey
-python portkey_basic_chat.py
-```
-
-## Best Practices
-
-### 1. Use Environment Variables
-
-Never hardcode API keys:
-
-```bash
-# .env file
-PORTKEY_API_KEY=your_portkey_key
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
-```
-
-### 2. Implement Fallback Strategies
-
-Use multiple providers for reliability:
-
-```python
-providers = [
-    ("openai", "gpt-4o-mini"),
-    ("anthropic", "claude-3-haiku-20240307"),
-    ("google", "gemini-2.0-flash-lite")
-]
-
-for provider, model in providers:
-    try:
-        config = lm.OpenAIGPTConfig(
-            chat_model=f"portkey/{provider}/{model}"
-        )
-        llm = lm.OpenAIGPT(config)
-        return llm.chat(question)
-    except Exception:
-        continue  # Try next provider
-```
-
-### 3. Add Meaningful Metadata
-
-Include context for better observability:
-
-```python
-params = PortkeyParams(
-    metadata={
-        "user_id": user.id,
-        "feature": "document_qa",
-        "document_type": "pdf",
-        "processing_stage": "summary"
-    }
-)
-```
-
-### 4. Use Caching Wisely
-
-Enable caching for deterministic queries:
-
-```python
-# Good for caching
-params = PortkeyParams(
-    cache={"enabled": True, "ttl": 3600}
-)
-
-# Use with deterministic prompts
-response = llm.chat("What is the capital of France?")
-```
-
-### 5. Monitor Performance
-
-Use trace IDs to track request flows:
-
-```python
-import uuid
-
-trace_id = f"trace-{uuid.uuid4().hex[:8]}"
-params = PortkeyParams(
-    trace_id=trace_id,
-    metadata={"operation": "document_processing"}
-)
-
-# Use the same trace_id for related requests
-```
-
-## Monitoring and Analytics
-
-### Portkey Dashboard
-
-View detailed analytics at [app.portkey.ai](https://app.portkey.ai):
-
-- Request/response logs
-- Token usage and costs
-- Performance metrics (latency, errors)
-- Provider comparisons
-- Custom filters by metadata
-
-### Custom Filtering
-
-Use metadata and headers to filter requests:
-
-```python
-# Tag requests by feature
-params = PortkeyParams(
-    metadata={"feature": "chat", "version": "v2"},
-    custom_headers={"x-request-type": "production"}
-)
-```
-
-Then filter in the dashboard by:
-- `metadata.feature = "chat"`
-- `headers.x-request-type = "production"`
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication Errors**
-   ```
-   Error: Unauthorized (401)
-   ```
-   - Check `PORTKEY_API_KEY` is set correctly
-   - Verify API key is active in Portkey dashboard
-
-2. **Provider API Key Missing**
-   ```
-   Error: Missing API key for provider
-   ```
-   - Set provider API key (e.g., `OPENAI_API_KEY`)
-   - Or use virtual keys in Portkey dashboard
-
-3. **Model Not Found**
-   ```
-   Error: Model not supported
-   ```
-   - Check model name format: `portkey/provider/model`
-   - Verify model is available through Portkey
-
-4. **Rate Limiting**
-   ```
-   Error: Rate limit exceeded
-   ```
-   - Configure retry parameters
-   - Use virtual keys for better rate limit management
-
-### Debug Mode
-
-Enable detailed logging:
-
-```python
-import logging
-logging.getLogger("langroid").setLevel(logging.DEBUG)
-```
-
-### Test Configuration
-
-Verify your setup:
-
-```python
-# Test basic connection
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    max_output_tokens=50
-)
-llm = lm.OpenAIGPT(config)
-response = llm.chat("Hello")
-print("✅ Portkey integration working!")
-```
-
-## Migration Guide
-
-### From Direct Provider Access
-
-If you're currently using providers directly:
-
-```python
-# Before: Direct OpenAI
-config = lm.OpenAIGPTConfig(
-    chat_model="gpt-4o-mini"
-)
-
-# After: Through Portkey
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini"
-)
-```
-
-### Adding Advanced Features Gradually
-
-Start simple and add features as needed:
-
-```python
-# Step 1: Basic Portkey
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini"
-)
-
-# Step 2: Add caching
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        cache={"enabled": True, "ttl": 3600}
-    )
-)
-
-# Step 3: Add observability
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        cache={"enabled": True, "ttl": 3600},
-        metadata={"app": "my-app", "user": "user-123"},
-        trace_id="trace-abc123"
-    )
-)
-```
-
-## Resources
-
-- **Portkey Website**: [https://portkey.ai](https://portkey.ai)
-- **Portkey Documentation**: [https://docs.portkey.ai](https://docs.portkey.ai)
-- **Portkey Dashboard**: [https://app.portkey.ai](https://app.portkey.ai)
-- **Supported Models**: [https://docs.portkey.ai/docs/integrations/models](https://docs.portkey.ai/docs/integrations/models)
-- **Langroid Examples**: `examples/portkey/` directory
-- **API Reference**: [https://docs.portkey.ai/docs/api-reference](https://docs.portkey.ai/docs/api-reference)
-</file>
-
 <file path="docs/notes/pydantic-v2-migration.md">
 # Pydantic v2 Migration Guide
 
@@ -21962,194 +23041,6 @@ If you want to see full working examples combining these elements,
 have a look at the 
 [`examples`](https://github.com/langroid/langroid-examples/tree/main/examples)
 folder in the `langroid-examples` repo.
-</file>
-
-<file path="docs/tutorials/non-openai-llms.md">
-# Using Langroid with Non-OpenAI LLMs
-
-Langroid was initially written to work with OpenAI models via their API.
-This may sound limiting, but fortunately:
-
-- Many open-source LLMs can be served via 
-OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.io/langroid/tutorials/local-llm-setup/) guide for details.
-- There are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
-  that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
-(e.g. Anthropic's Claude, Google's Gemini).
-- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), and [OpenRouter](https://openrouter.ai/) provide unified access to multiple LLM providers with additional features like cost control, observability, caching, and fallback strategies.
-  
-Below we show how you can use these various options with Langroid.
-
-## Create an `OpenAIGPTConfig` object with `chat_model = "litellm/..."`
-
-!!! note "Install `litellm` extra"
-    To use `litellm` you need to install Langroid with the `litellm` extra, e.g.:
-    `pip install "langroid[litellm]"`
-
-Next, look up the instructions in LiteLLM docs for the specific model you are 
-interested. Here we take the example of Anthropic's `claude-instant-1` model.
-Set up the necessary environment variables as specified in the LiteLLM docs,
-e.g. for the `claude-instant-1` model, you will need to set the `ANTHROPIC_API_KEY`
-```bash
-export ANTHROPIC_API_KEY=my-api-key
-```
-
-Now you are ready to create an instance of `OpenAIGPTConfig` with the 
-`chat_model` set to `litellm/<model_spec>`, where you should set `model_spec` based on LiteLLM 
-docs. For example, for the `claude-instant-1` model, you would set `chat_model` to
-`litellm/claude-instant-1`. But if you are using the model via a 3rd party provider,
-(e.g. those via Amazon Bedrock), you may also need to have a `provider` part in the `model_spec`, e.g. 
-`litellm/bedrock/anthropic.claude-instant-v1`. In general you can see which of
-these to use, from the LiteLLM docs.
-
-```python
-import langroid.language_models as lm
-
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="litellm/claude-instant-v1",
-    chat_context_length=8000, # adjust according to model
-)
-```
-
-A similar process works for the `Gemini 1.5 Pro` LLM:
-
-- get the API key [here](https://aistudio.google.com/)
-- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
-- set `chat_model="litellm/gemini/gemini-1.5-pro-latest"` in the `OpenAIGPTConfig` object
-
-For other gemini models supported by litellm, see [their docs](https://litellm.vercel.app/docs/providers/gemini)
-
-## Gemini LLMs via OpenAI client, without LiteLLM
-
-This is now the recommended way to use Gemini LLMs with Langroid,
-where you don't need to use LiteLLM. As of 11/20/2024, these models
-are [available via the OpenAI client](https://developers.googleblog.com/en/gemini-is-now-accessible-from-the-openai-library/).
-
-To use langroid with Gemini LLMs, all you have to do is:
-
-- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
-- set `chat_model="gemini/<model_name>"` in the `OpenAIGPTConfig` object,  
-  where <model_name> is one of "gemini-1.5-flash", "gemini-1.5-flash-8b", or "gemini-1.5-pro"
-
-See [here](https://ai.google.dev/gemini-api/docs/models/gemini) for details on Gemini models.
-
-For example, you can use this `llm_config`:
-
-```python
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="gemini/" + lm.OpenAIChatModel.GEMINI_1_5_FLASH,
-)
-```
-
-In most tests you can switch to a gemini model, e.g. `--m gemini/gemini-1.5-flash`, 
-e.g.:
-
-```bash
-pytest -xvs tests/main/test_llm.py --m gemini/gemini-1.5-flash
-```
-
-Many of the example scripts allow switching the model using `-m` or `--model`, e.g.
-
-```bash
-python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
-```
-
-
-
-
-## AI Gateways for Multiple LLM Providers
-
-In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
-
-### LangDB
-
-[LangDB](https://langdb.ai/) is an AI gateway offering OpenAI-compatible APIs to access 250+ LLMs with cost control, observability, and performance benchmarking. LangDB enables seamless model switching while providing detailed analytics and usage tracking.
-
-To use LangDB with Langroid:
-- Set up your `LANGDB_API_KEY` and `LANGDB_PROJECT_ID` environment variables
-- Set `chat_model="langdb/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"langdb/anthropic/claude-3.7-sonnet"`)
-
-For detailed setup and usage instructions, see the [LangDB integration guide](../notes/langdb.md).
-
-### Portkey
-
-[Portkey](https://portkey.ai) is a comprehensive AI gateway that provides access to 200+ models from various providers through a unified API. It offers advanced features like intelligent caching, automatic retries, fallback strategies, and comprehensive observability tools for production deployments.
-
-To use Portkey with Langroid:
-- Set up your `PORTKEY_API_KEY` environment variable (plus provider API keys like `OPENAI_API_KEY`)
-- Set `chat_model="portkey/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"portkey/openai/gpt-4o-mini"`)
-
-For detailed setup and usage instructions, see the [Portkey integration guide](../notes/portkey.md).
-
-### OpenRouter
-
-[OpenRouter](https://openrouter.ai/) provides access to a wide variety of both open and proprietary LLMs through a unified API. It features automatic routing and load balancing, making it particularly useful for accessing larger open LLMs without local resources and for using multiple providers through a single interface.
-
-To use OpenRouter with Langroid:
-- Set up your `OPENROUTER_API_KEY` environment variable
-- Set `chat_model="openrouter/<model_name>"` in the `OpenAIGPTConfig`
-
-For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
-
-## Working with the created `OpenAIGPTConfig` object
-
-From here you can proceed as usual, creating instances of `OpenAIGPT`,
-`ChatAgentConfig`, `ChatAgent` and `Task` object as usual.
-
-E.g. you can create an object of class `OpenAIGPT` (which represents any
-LLM with an OpenAI-compatible API) and interact with it directly:
-```python
-llm = lm.OpenAIGPT(llm_config)
-messages = [
-    LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM),
-    LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
-],
-response = mdl.chat(messages, max_tokens=50)
-```
-
-When you interact directly with the LLM, you are responsible for keeping dialog history.
-Also you would often want an LLM to have access to tools/functions and external
-data/documents (e.g. vector DB or traditional DB). An Agent class simplifies managing all of these.
-For example, you can create an Agent powered by the above LLM, wrap it in a Task and have it
-run as an interactive chat app:
-
-```python
-agent_config = lr.ChatAgentConfig(llm=llm_config, name="my-llm-agent")
-agent = lr.ChatAgent(agent_config)
-
-task = lr.Task(agent, name="my-llm-task")
-task.run()
-```
-
-## Example: Simple Chat script with a non-OpenAI proprietary model
-
-Many of the Langroid example scripts have a convenient `-m`  flag that lets you
-easily switch to a different model. For example, you can run 
-the `chat.py` script in the `examples/basic` folder with the 
-`litellm/claude-instant-v1` model:
-```bash
-python3 examples/basic/chat.py -m litellm/claude-instant-1
-```
-
-## Quick testing with non-OpenAI models
-
-There are numerous tests in the main [Langroid repo](https://github.com/langroid/langroid) that involve
-LLMs, and once you setup the dev environment as described in the README of the repo, 
-you can run any of those tests (which run against the default GPT4 model) against
-local/remote models that are proxied by `liteLLM` (or served locally via the options mentioned above,
-such as `oobabooga`, `ollama` or `llama-cpp-python`), using the `--m <model-name>` option,
-where `model-name` takes one of the forms above. Some examples of tests are:
-
-```bash
-pytest -s tests/test_llm.py --m local/localhost:8000
-pytest -s tests/test_llm.py --m litellm/claude-instant-1
-```
-When the `--m` option is omitted, the default OpenAI GPT4 model is used.
-
-!!! note "`chat_context_length` is not affected by `--m`"
-      Be aware that the `--m` only switches the model, but does not affect the `chat_context_length` 
-      parameter in the `OpenAIGPTConfig` object. which you may need to adjust for different models.
-      So this option is only meant for quickly testing against different models, and not meant as
-      a way to switch between models in a production environment.
 </file>
 
 <file path="examples/basic/multi-agent-search-critic/assistant_agent.py">
@@ -29956,110 +30847,6 @@ if __name__ == "__main__":
     Fire(main)
 </file>
 
-<file path="examples/mcp/pyodide_code_executor.py">
-"""
-Simple example of using the Pyodide MCP server.
-    https://github.com/pydantic/pydantic-ai/tree/main/mcp-run-python
-
-Before running make sure you have deno installed
-    https://docs.deno.com/runtime/getting_started/installation/
-
-Run like this:
-
-    uv run examples/mcp/pyodide_code_executor.py --model gpt-4.1-mini
-
-"""
-
-from fastmcp.client.transports import StdioTransport
-from fire import Fire
-
-import langroid as lr
-import langroid.language_models as lm
-from langroid.agent.tools.mcp import mcp_tool
-from langroid.agent.tools.orchestration import ResultTool
-from langroid.mytypes import NonToolAction
-
-RUN_ONCE: bool = True  # terminate task on first result?
-
-deno_transport = StdioTransport(
-    command="deno",
-    args=[
-        "run",
-        "-N",
-        "-R=node_modules",
-        "-W=node_modules",
-        "--node-modules-dir=auto",
-        "jsr:@pydantic/mcp-run-python",
-        "stdio",
-    ],
-)
-
-# Illustrating how we can:
-# - use the MCP tool decorator to create a Langroid ToolMessage subclass
-# - override the handle_async() method to customize the output, sent to the LLM
-
-
-class MyResult(ResultTool):
-    answer: str
-
-
-@mcp_tool(deno_transport, "run_python_code")
-class PythonCodeExecutor(lr.ToolMessage):
-    async def handle_async(self):
-        result: str = await self.call_tool_async()
-        if RUN_ONCE:
-            # terminate task with this result
-            return MyResult(answer=result)
-        else:
-            # this result goes to LLM, and loop with user continues
-            return f"""
-            <CodeResult>
-            {result} 
-            </CodeResult>
-            """
-
-
-async def main(model: str = ""):
-    agent = lr.ChatAgent(
-        lr.ChatAgentConfig(
-            # forward to user when LLM doesn't use a tool
-            handle_llm_no_tool=NonToolAction.FORWARD_USER,
-            llm=lm.OpenAIGPTConfig(
-                chat_model=model or "gpt-4.1-mini",
-                max_output_tokens=1000,
-                # this defaults to True, but we set it to False so we can see output
-                async_stream_quiet=False,
-            ),
-        )
-    )
-
-    # enable the agent to use the PythonCodeExecutor tool
-    agent.enable_message(PythonCodeExecutor)
-    # make task with interactive=False =>
-    # waits for user only when LLM doesn't use a tool
-    if RUN_ONCE:
-        task = lr.Task(agent, interactive=False)[MyResult]
-        result: MyResult | None = await task.run_async()
-        print("Final answer is: ", result.answer)
-    else:
-        task = lr.Task(agent, interactive=False)
-        await task.run_async()
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    def run_main(**kwargs) -> None:
-        """Run the async main function with a proper event loop.
-
-        Args:
-            **kwargs: Keyword arguments to pass to the main function.
-        """
-        asyncio.run(main(**kwargs))
-
-    Fire(run_main)
-</file>
-
 <file path="examples/multi-agent-debate/chainlit_utils.py">
 import logging
 from typing import Optional, Tuple
@@ -31427,793 +32214,6 @@ def is_url_ask_question(topic_name: str) -> bool:
         f"Would you like to Chat with documents found through Search for more information on the {topic_name}",
         default=False,
     )
-</file>
-
-<file path="examples/portkey/portkey_advanced_features.py">
-#!/usr/bin/env python3
-
-"""
-Advanced Portkey example showing observability, caching, retries, and metadata.
-
-This example demonstrates:
-- Advanced Portkey configuration with all features
-- Request tracing and metadata
-- Caching and retry strategies
-- Custom headers for observability
-
-Run with: python portkey_advanced_features.py
-"""
-
-import os
-import uuid
-from typing import Optional
-
-import langroid as lr
-import langroid.language_models as lm
-from langroid.language_models.provider_params import PortkeyParams
-
-
-def check_env_var(var_name: str) -> Optional[str]:
-    """Check if environment variable is set and return its value."""
-    value = os.getenv(var_name)
-    if not value:
-        print(f"⚠️  Warning: {var_name} not set in environment")
-        return None
-    return value
-
-
-def create_advanced_portkey_llm(portkey_api_key: str, user_id: str) -> lm.OpenAIGPT:
-    """Create an advanced Portkey-enabled LLM with all features."""
-
-    # Generate unique trace ID for this session
-    trace_id = f"trace-{uuid.uuid4().hex[:8]}"
-
-    config = lm.OpenAIGPTConfig(
-        chat_model="portkey/openai/gpt-4o-mini",
-        portkey_params=PortkeyParams(
-            api_key=portkey_api_key,
-            # Observability features
-            trace_id=trace_id,
-            metadata={
-                "user_id": user_id,
-                "app": "langroid-advanced-example",
-                "version": "1.0",
-                "environment": "demo",
-            },
-            # Retry configuration
-            retry={"max_retries": 3, "backoff": "exponential", "jitter": True},
-            # Caching configuration
-            cache={
-                "enabled": True,
-                "ttl": 3600,  # 1 hour
-                "namespace": "langroid-demo",
-            },
-            cache_force_refresh=False,
-            # User tracking
-            user=user_id,
-            organization="langroid-demo-org",
-            # Custom headers for additional tracking
-            custom_headers={
-                "x-session-id": f"session-{uuid.uuid4().hex[:8]}",
-                "x-demo-type": "advanced-features",
-                "x-langroid-version": (
-                    lr.__version__ if hasattr(lr, "__version__") else "unknown"
-                ),
-            },
-        ),
-        max_output_tokens=200,
-        temperature=0.3,
-    )
-
-    return lm.OpenAIGPT(config)
-
-
-def demonstrate_caching(llm: lm.OpenAIGPT):
-    """Demonstrate Portkey's caching capabilities."""
-    print("\n🧠 Testing Caching Capabilities")
-    print("=" * 50)
-
-    question = "What are the three laws of robotics by Isaac Asimov?"
-
-    print("🔄 First request (should hit the API)...")
-    response1 = llm.chat(question)
-    print(f"✅ Response: {response1.message[:100]}...")
-    print(f"📊 Cached: {response1.cached}")
-    if response1.usage:
-        print(f"📊 Tokens: {response1.usage.total_tokens}")
-
-    print("\n🔄 Second identical request (should hit cache)...")
-    response2 = llm.chat(question)
-    print(f"✅ Response: {response2.message[:100]}...")
-    print(f"📊 Cached: {response2.cached}")
-    if response2.usage:
-        print(f"📊 Tokens: {response2.usage.total_tokens}")
-
-
-def demonstrate_metadata_tracking(llm: lm.OpenAIGPT, user_id: str):
-    """Demonstrate request tracking with metadata."""
-    print("\n📊 Testing Metadata and Tracking")
-    print("=" * 50)
-
-    questions = [
-        "What is machine learning?",
-        "Explain neural networks briefly.",
-        "What is the difference between AI and ML?",
-    ]
-
-    for i, question in enumerate(questions, 1):
-        print(f"\n🔍 Question {i}: {question}")
-
-        # Create a new LLM instance with updated metadata for each question
-        trace_id = f"trace-q{i}-{uuid.uuid4().hex[:6]}"
-
-        config = lm.OpenAIGPTConfig(
-            chat_model="portkey/openai/gpt-4o-mini",
-            portkey_params=PortkeyParams(
-                api_key=llm.config.portkey_params.api_key,
-                trace_id=trace_id,
-                metadata={
-                    "user_id": user_id,
-                    "question_number": i,
-                    "question_category": "AI/ML basics",
-                    "timestamp": str(uuid.uuid4()),  # Unique per request
-                },
-                user=user_id,
-                custom_headers={
-                    "x-question-id": f"q-{i}",
-                    "x-session-type": "educational",
-                },
-            ),
-            max_output_tokens=150,
-            temperature=0.3,
-        )
-
-        question_llm = lm.OpenAIGPT(config)
-        response = question_llm.chat(question)
-
-        print(f"✅ Response: {response.message[:80]}...")
-        print(f"🏷️  Trace ID: {trace_id}")
-
-
-def demonstrate_error_handling():
-    """Demonstrate error handling and retry behavior."""
-    print("\n⚠️  Testing Error Handling")
-    print("=" * 50)
-
-    try:
-        # Create config with invalid model to test error handling
-        config = lm.OpenAIGPTConfig(
-            chat_model="portkey/openai/invalid-model-name",
-            portkey_params=PortkeyParams(
-                api_key=os.getenv("PORTKEY_API_KEY", ""),
-                retry={"max_retries": 2, "backoff": "linear"},
-                metadata={"test_type": "error_handling"},
-            ),
-        )
-
-        error_llm = lm.OpenAIGPT(config)
-        response = error_llm.chat("This should fail")
-        print(f"Unexpected success: {response.message}")
-
-    except Exception as e:
-        print(f"✅ Expected error caught: {type(e).__name__}")
-        print(f"   Error details: {str(e)[:100]}...")
-
-
-def main():
-    """Main function demonstrating advanced Portkey features."""
-    print("🚀 Portkey Advanced Features Example")
-    print("=" * 45)
-
-    # Check for required environment variables
-    portkey_api_key = check_env_var("PORTKEY_API_KEY")
-    if not portkey_api_key:
-        print("❌ PORTKEY_API_KEY is required. Please set it in your environment.")
-        return
-
-    openai_api_key = check_env_var("OPENAI_API_KEY")
-    if not openai_api_key:
-        print("❌ OPENAI_API_KEY is required for this example.")
-        return
-
-    print("✅ All required API keys found")
-
-    # Generate a unique user ID for this session
-    user_id = f"user-{uuid.uuid4().hex[:8]}"
-    print(f"🆔 Demo User ID: {user_id}")
-
-    # Create advanced LLM configuration
-    try:
-        llm = create_advanced_portkey_llm(portkey_api_key, user_id)
-        print("✅ Advanced Portkey LLM created successfully")
-
-        # Demonstrate different features
-        demonstrate_caching(llm)
-        demonstrate_metadata_tracking(llm, user_id)
-        demonstrate_error_handling()
-
-    except Exception as e:
-        print(f"❌ Failed to create advanced LLM: {str(e)}")
-        return
-
-    print("\n🎉 Advanced Portkey features example completed!")
-    print("\n💡 Next steps:")
-    print(
-        "   - View detailed request logs in Portkey dashboard: https://app.portkey.ai"
-    )
-    print(
-        "   - Filter by trace IDs, user IDs, or metadata to analyze specific requests"
-    )
-    print("   - Try the multi-provider example: portkey_multi_provider.py")
-    print(f"\n🔍 Your demo user ID: {user_id}")
-    print("   Use this to filter requests in the Portkey dashboard")
-
-
-if __name__ == "__main__":
-    main()
-</file>
-
-<file path="examples/portkey/portkey_basic_chat.py">
-#!/usr/bin/env python3
-
-"""
-Basic Portkey example showing how to use different AI providers through Portkey's gateway.
-
-This example demonstrates:
-- Basic Portkey configuration
-- Switching between different AI providers
-- Automatic API key resolution
-
-Run with: python portkey_basic_chat.py
-"""
-
-import os
-from typing import Optional
-
-import langroid.language_models as lm
-from langroid.language_models.provider_params import PortkeyParams
-
-
-def check_env_var(var_name: str) -> Optional[str]:
-    """Check if environment variable is set and return its value."""
-    value = os.getenv(var_name)
-    if not value:
-        print(f"⚠️  Warning: {var_name} not set in environment")
-        return None
-    return value
-
-
-def create_portkey_llm(provider: str, model: str, portkey_api_key: str) -> lm.OpenAIGPT:
-    """Create a Portkey-enabled LLM configuration."""
-    config = lm.OpenAIGPTConfig(
-        chat_model=f"portkey/{provider}/{model}",
-        portkey_params=PortkeyParams(
-            api_key=portkey_api_key,
-        ),
-        max_output_tokens=150,
-        temperature=0.7,
-    )
-    return lm.OpenAIGPT(config)
-
-
-def test_provider(llm: lm.OpenAIGPT, provider_name: str):
-    """Test a specific provider with a simple question."""
-    print(f"\n🔮 Testing {provider_name}...")
-    print("=" * 50)
-
-    question = "What is the capital of France? Answer in one sentence."
-
-    try:
-        response = llm.chat(question)
-        print(f"✅ {provider_name} Response:")
-        print(f"   {response.message}")
-
-        if response.usage:
-            print(f"   📊 Tokens: {response.usage.total_tokens}")
-
-    except Exception as e:
-        print(f"❌ {provider_name} Error: {str(e)}")
-
-
-def main():
-    """Main function demonstrating Portkey basic usage."""
-    print("🚀 Portkey Basic Chat Example")
-    print("=" * 40)
-
-    # Check for required environment variables
-    portkey_api_key = check_env_var("PORTKEY_API_KEY")
-    if not portkey_api_key:
-        print("❌ PORTKEY_API_KEY is required. Please set it in your environment.")
-        return
-
-    print("✅ Portkey API key found")
-
-    # Test different providers through Portkey
-    providers_to_test = []
-
-    # Check which provider keys are available
-    if os.getenv("OPENAI_API_KEY"):
-        providers_to_test.append(("OpenAI", "openai", "gpt-4o-mini"))
-        print("✅ OpenAI API key found")
-
-    if os.getenv("ANTHROPIC_API_KEY"):
-        providers_to_test.append(("Anthropic", "anthropic", "claude-3-haiku-20240307"))
-        print("✅ Anthropic API key found")
-
-    if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
-        providers_to_test.append(("Google Gemini", "google", "gemini-2.0-flash-lite"))
-        print("✅ Google/Gemini API key found")
-
-    if not providers_to_test:
-        print("❌ No provider API keys found. Please set at least one of:")
-        print("   - OPENAI_API_KEY")
-        print("   - ANTHROPIC_API_KEY")
-        print("   - GOOGLE_API_KEY or GEMINI_API_KEY")
-        return
-
-    print(f"\n🎯 Testing {len(providers_to_test)} provider(s) through Portkey...")
-
-    # Test each available provider
-    for provider_display_name, provider, model in providers_to_test:
-        try:
-            llm = create_portkey_llm(provider, model, portkey_api_key)
-            test_provider(llm, provider_display_name)
-        except Exception as e:
-            print(f"❌ Failed to create {provider_display_name} LLM: {str(e)}")
-
-    print("\n🎉 Portkey basic chat example completed!")
-    print("\n💡 Next steps:")
-    print("   - Try the advanced features example: portkey_advanced_features.py")
-    print("   - View your requests in the Portkey dashboard: https://app.portkey.ai")
-
-
-if __name__ == "__main__":
-    main()
-</file>
-
-<file path="examples/portkey/portkey_multi_provider.py">
-#!/usr/bin/env python3
-
-"""
-Multi-provider Portkey example showing how to compare responses across different AI providers.
-
-This example demonstrates:
-- Using multiple providers through Portkey
-- Comparing response quality and characteristics
-- Provider-specific configurations
-- Fallback strategies
-
-Run with: python portkey_multi_provider.py
-"""
-
-import os
-import time
-from typing import List, Optional, Tuple
-
-import langroid.language_models as lm
-from langroid.language_models.provider_params import PortkeyParams
-
-
-def check_env_var(var_name: str) -> Optional[str]:
-    """Check if environment variable is set and return its value."""
-    value = os.getenv(var_name)
-    if not value:
-        print(f"⚠️  Warning: {var_name} not set in environment")
-        return None
-    return value
-
-
-def create_provider_llm(
-    provider: str, model: str, portkey_api_key: str, temperature: float = 0.7
-) -> Tuple[lm.OpenAIGPT, str]:
-    """Create a Portkey-enabled LLM for a specific provider."""
-    config = lm.OpenAIGPTConfig(
-        chat_model=f"portkey/{provider}/{model}",
-        portkey_params=PortkeyParams(
-            api_key=portkey_api_key,
-            metadata={
-                "provider": provider,
-                "model": model,
-                "demo": "multi-provider-comparison",
-            },
-            user="multi-provider-demo",
-        ),
-        max_output_tokens=200,
-        temperature=temperature,
-    )
-
-    display_name = f"{provider.title()} ({model})"
-    return lm.OpenAIGPT(config), display_name
-
-
-def test_providers_on_question(
-    providers: List[Tuple[lm.OpenAIGPT, str]], question: str
-):
-    """Test all providers on the same question and compare responses."""
-    print(f"\n❓ Question: {question}")
-    print("=" * 80)
-
-    responses = []
-
-    for llm, display_name in providers:
-        print(f"\n🤖 {display_name}:")
-        print("-" * 40)
-
-        try:
-            start_time = time.time()
-            response = llm.chat(question)
-            end_time = time.time()
-
-            print(f"📝 Response: {response.message}")
-            print(f"⏱️  Time: {end_time - start_time:.2f}s")
-
-            if response.usage:
-                print(f"📊 Tokens: {response.usage.total_tokens}")
-
-            responses.append((display_name, response.message, response.usage))
-
-        except Exception as e:
-            print(f"❌ Error: {str(e)}")
-            responses.append((display_name, f"Error: {str(e)}", None))
-
-    return responses
-
-
-def demonstrate_creative_tasks(providers: List[Tuple[lm.OpenAIGPT, str]]):
-    """Test providers on creative tasks to see different capabilities."""
-    print("\n🎨 Creative Tasks Comparison")
-    print("=" * 50)
-
-    creative_questions = [
-        "Write a haiku about artificial intelligence.",
-        "Explain quantum computing using a food analogy.",
-        "Create a short story opening with exactly 50 words.",
-    ]
-
-    for question in creative_questions:
-        test_providers_on_question(providers, question)
-
-
-def demonstrate_analytical_tasks(providers: List[Tuple[lm.OpenAIGPT, str]]):
-    """Test providers on analytical tasks."""
-    print("\n🧮 Analytical Tasks Comparison")
-    print("=" * 50)
-
-    analytical_questions = [
-        "What are the pros and cons of renewable energy?",
-        "Explain the causes of inflation in simple terms.",
-        "Compare machine learning and traditional programming.",
-    ]
-
-    for question in analytical_questions:
-        test_providers_on_question(providers, question)
-
-
-def demonstrate_fallback_strategy(portkey_api_key: str):
-    """Demonstrate a simple fallback strategy across providers."""
-    print("\n🔄 Fallback Strategy Demo")
-    print("=" * 50)
-
-    # Define providers in order of preference
-    fallback_providers = [
-        ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("anthropic", "claude-3-haiku-20240307", "ANTHROPIC_API_KEY"),
-        ("google", "gemini-2.0-flash-lite", "GOOGLE_API_KEY"),
-    ]
-
-    question = "What is the meaning of life in one sentence?"
-
-    for provider, model, env_var in fallback_providers:
-        if os.getenv(env_var):
-            print(f"\n🎯 Trying {provider.title()}...")
-            try:
-                llm, display_name = create_provider_llm(
-                    provider, model, portkey_api_key, temperature=0.5
-                )
-                response = llm.chat(question)
-                print(f"✅ Success with {display_name}")
-                print(f"📝 Response: {response.message}")
-                return  # Success, stop trying
-
-            except Exception as e:
-                print(f"❌ {display_name} failed: {str(e)}")
-                print("🔄 Trying next provider...")
-        else:
-            print(f"⏭️  Skipping {provider.title()} (API key not available)")
-
-    print("❌ All providers failed!")
-
-
-def main():
-    """Main function demonstrating multi-provider usage."""
-    print("🚀 Portkey Multi-Provider Example")
-    print("=" * 45)
-
-    # Check for required environment variables
-    portkey_api_key = check_env_var("PORTKEY_API_KEY")
-    if not portkey_api_key:
-        print("❌ PORTKEY_API_KEY is required. Please set it in your environment.")
-        return
-
-    print("✅ Portkey API key found")
-
-    # Collect available providers
-    providers = []
-
-    if os.getenv("OPENAI_API_KEY"):
-        try:
-            llm, name = create_provider_llm("openai", "gpt-4o-mini", portkey_api_key)
-            providers.append((llm, name))
-            print("✅ OpenAI provider ready")
-        except Exception as e:
-            print(f"⚠️  OpenAI setup failed: {e}")
-
-    if os.getenv("ANTHROPIC_API_KEY"):
-        try:
-            llm, name = create_provider_llm(
-                "anthropic", "claude-3-haiku-20240307", portkey_api_key
-            )
-            providers.append((llm, name))
-            print("✅ Anthropic provider ready")
-        except Exception as e:
-            print(f"⚠️  Anthropic setup failed: {e}")
-
-    if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
-        try:
-            llm, name = create_provider_llm(
-                "google", "gemini-2.0-flash-lite", portkey_api_key
-            )
-            providers.append((llm, name))
-            print("✅ Google/Gemini provider ready")
-        except Exception as e:
-            print(f"⚠️  Google/Gemini setup failed: {e}")
-
-    if len(providers) < 2:
-        print("\n⚠️  This example works best with at least 2 providers.")
-        print("   Please set API keys for multiple providers:")
-        print("   - OPENAI_API_KEY")
-        print("   - ANTHROPIC_API_KEY")
-        print("   - GOOGLE_API_KEY or GEMINI_API_KEY")
-
-        if len(providers) == 0:
-            print("❌ No providers available. Exiting.")
-            return
-
-    print(f"\n🎯 Ready to compare {len(providers)} provider(s)")
-
-    # Run comparisons
-    if len(providers) >= 2:
-        demonstrate_creative_tasks(providers)
-        demonstrate_analytical_tasks(providers)
-
-    # Always demonstrate fallback (works with 1+ providers)
-    demonstrate_fallback_strategy(portkey_api_key)
-
-    print("\n🎉 Multi-provider example completed!")
-    print("\n💡 Analysis tips:")
-    print("   - Different providers may excel at different types of tasks")
-    print("   - Response styles and lengths can vary significantly")
-    print("   - Use Portkey dashboard to analyze performance metrics")
-    print("   - Consider cost, speed, and quality when choosing providers")
-    print("\n🔍 View detailed comparisons at: https://app.portkey.ai")
-
-
-if __name__ == "__main__":
-    main()
-</file>
-
-<file path="examples/portkey/README.md">
-# Portkey Examples
-
-This folder contains examples demonstrating how to use [Portkey](https://portkey.ai) with Langroid for enhanced LLM gateway functionality and observability.
-
-## Prerequisites
-
-Before running any examples, make sure you've installed Langroid as usual.
-
-At minimum, have these environment variables set up in your `.env` file or environment:
-```bash
-PORTKEY_API_KEY=your_portkey_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here  # or any provider's key
-ANTHROPIC_API_KEY=your_anthropic_key_here  # if using Anthropic
-```
-
-### 1. Portkey Basic Chat (`portkey_basic_chat.py`)
-
-Demonstrates basic chat functionality with Portkey:
-- Uses Portkey as a gateway to different AI providers
-- Shows automatic provider API key resolution
-- Demonstrates model switching across providers
-
-```python
-# Run the example from root of repo, after activating your virtual environment with uv:
-uv run examples/portkey/portkey_basic_chat.py
-```
-
-### 2. Portkey Advanced Features (`portkey_advanced_features.py`)
-
-Shows how to use Portkey's advanced features:
-- Virtual keys for provider management
-- Caching and retry configurations
-- Request tracing and metadata
-- Custom headers for observability
-
-```python
-# Run the example
-uv run examples/portkey/portkey_advanced_features.py
-```
-
-### 3. Portkey Multi-Provider Example (`portkey_multi_provider.py`)
-
-Showcases Portkey's ability to switch between providers:
-- Compares responses from different providers
-- Demonstrates fallback strategies
-- Shows how to use virtual keys for different models
-
-```python
-# Run the example
-uv run examples/portkey/portkey_multi_provider.py
-```
-
-## Using Portkey
-
-### Basic Configuration
-
-Portkey can route requests to any AI provider through a unified API:
-
-```python
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.language_models.provider_params import PortkeyParams
-
-# Configure for OpenAI via Portkey
-config = OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        api_key="your-portkey-api-key",  # Or use PORTKEY_API_KEY env var
-    )
-)
-
-# Configure for Anthropic via Portkey
-config = OpenAIGPTConfig(
-    chat_model="portkey/anthropic/claude-3-sonnet-20240229",
-    portkey_params=PortkeyParams(
-        api_key="your-portkey-api-key",
-    )
-)
-```
-
-### Advanced Features
-
-Portkey provides powerful gateway features:
-
-```python
-from langroid.language_models.provider_params import PortkeyParams
-
-# Advanced configuration with observability
-params = PortkeyParams(
-    api_key="your-portkey-api-key",
-    virtual_key="vk-your-virtual-key",  # For provider abstraction
-    trace_id="trace-123",               # For request tracing
-    metadata={"user": "john", "app": "langroid"},  # Custom metadata
-    retry={"max_retries": 3, "backoff": "exponential"},  # Retry config
-    cache={"enabled": True, "ttl": 3600},  # Caching config
-    cache_force_refresh=False,          # Cache control
-    user="user-123",                    # User identifier
-    organization="org-456",             # Organization identifier
-    custom_headers={                    # Additional custom headers
-        "x-custom-header": "value"
-    }
-)
-
-config = OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-    portkey_params=params
-)
-```
-
-### Supported Providers
-
-Portkey supports many AI providers:
-
-```python
-# OpenAI
-chat_model="portkey/openai/gpt-4o"
-
-# Anthropic
-chat_model="portkey/anthropic/claude-3-5-sonnet-20241022"
-
-# Google Gemini
-chat_model="portkey/google/gemini-2.0-flash-lite"
-
-# Cohere
-chat_model="portkey/cohere/command-r-plus"
-
-# Many more providers available through Portkey
-```
-
-### Environment Variables
-
-Portkey integration automatically resolves API keys from environment variables:
-
-```bash
-# Portkey API key
-PORTKEY_API_KEY=your_portkey_api_key
-
-# Provider API keys (used for actual model calls)
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
-GOOGLE_API_KEY=your_google_key
-COHERE_API_KEY=your_cohere_key
-```
-
-### Virtual Keys
-
-Use virtual keys to abstract provider management:
-
-```python
-# Configure with virtual key
-config = OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-    portkey_params=PortkeyParams(
-        virtual_key="vk-your-virtual-key",  # Manages provider key automatically
-    )
-)
-```
-
-### Viewing Results
-
-1. Visit the [Portkey Dashboard](https://app.portkey.ai)
-2. Navigate to your project
-3. View detailed analytics:
-   - Request/response logs
-   - Token usage and costs
-   - Performance metrics
-   - Error rates and debugging
-
-## Best Practices
-
-1. **Use Virtual Keys**: Abstract provider management for easier switching
-2. **Add Metadata**: Include user and application context for better tracking
-3. **Configure Retries**: Set up automatic retry strategies for reliability
-4. **Enable Caching**: Reduce costs and improve performance with intelligent caching
-5. **Monitor Performance**: Use trace IDs and metadata for detailed observability
-
-## Troubleshooting
-
-Common issues and solutions:
-
-1. **Authentication Errors**:
-   - Verify `PORTKEY_API_KEY` is set correctly
-   - Ensure provider API keys are available (e.g., `OPENAI_API_KEY`)
-
-2. **Model Not Found**:
-   - Ensure the model name includes the `portkey/` prefix
-   - Verify the provider and model are supported by Portkey
-
-3. **Rate Limiting**:
-   - Configure retry parameters in PortkeyParams
-   - Use virtual keys for better rate limit management
-
-4. **Virtual Key Issues**:
-   - Verify virtual key is correctly configured in Portkey dashboard
-   - Check virtual key has access to the requested provider/model
-
-For more help, visit the [Portkey Documentation](https://docs.portkey.ai).
-</file>
-
-<file path="examples/portkey/requirements.txt">
-# Requirements for Portkey examples
-# These are included in the main Langroid installation
-
-# Core Langroid (includes all necessary dependencies)
-langroid
-
-# The examples use standard library modules and Langroid's built-in Portkey support
-# No additional dependencies are required beyond what Langroid provides
-
-# Optional: For development and testing
-# pytest>=7.0.0
-# python-dotenv>=0.19.0
 </file>
 
 <file path="examples/privacy/annotate.py">
@@ -44364,6 +44364,574 @@ class EmbeddingModel(ABC):
         )
 </file>
 
+<file path="langroid/embedding_models/models.py">
+import atexit
+import os
+from functools import cached_property
+from typing import Any, Callable, Dict, List, Optional
+
+import requests
+import tiktoken
+from dotenv import load_dotenv
+from openai import AzureOpenAI, OpenAI
+from pydantic_settings import SettingsConfigDict
+
+from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
+from langroid.exceptions import LangroidImportError
+from langroid.language_models.provider_params import LangDBParams
+from langroid.mytypes import Embeddings
+from langroid.parsing.utils import batched
+
+AzureADTokenProvider = Callable[[], str]
+
+
+class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "openai"
+    model_name: str = "text-embedding-3-small"
+    api_key: str = ""
+    api_base: Optional[str] = None
+    organization: str = ""
+    dims: int = 1536
+    context_length: int = 8192
+    langdb_params: LangDBParams = LangDBParams()
+
+    model_config = SettingsConfigDict(env_prefix="OPENAI_")
+
+
+class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "azure-openai"
+    model_name: str = "text-embedding-3-small"
+    api_key: str = ""
+    api_base: str = ""
+    deployment_name: Optional[str] = None
+    # api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
+    # change this to required  supported version
+    api_version: Optional[str] = "2024-06-01"
+    # TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
+    azure_ad_token: Optional[str] = None
+    azure_ad_token_provider: Optional[AzureADTokenProvider] = None
+    dims: int = 1536
+    context_length: int = 8192
+
+    model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
+
+
+class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "sentence-transformer"
+    model_name: str = "BAAI/bge-large-en-v1.5"
+    context_length: int = 512
+    data_parallel: bool = False
+    # Select device (e.g. "cuda", "cpu") when data parallel is disabled
+    device: Optional[str] = None
+    # Select devices when data parallel is enabled
+    devices: Optional[list[str]] = None
+
+
+class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
+    """Config for qdrant/fastembed embeddings,
+    see here: https://github.com/qdrant/fastembed
+    """
+
+    model_type: str = "fastembed"
+    model_name: str = "BAAI/bge-small-en-v1.5"
+    batch_size: int = 256
+    cache_dir: Optional[str] = None
+    threads: Optional[int] = None
+    parallel: Optional[int] = None
+    additional_kwargs: Dict[str, Any] = {}
+
+
+class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
+    api_base: str = ""
+    context_length: int = 2048
+    batch_size: int = 2048
+
+
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "gemini"
+    model_name: str = "models/text-embedding-004"
+    api_key: str = ""
+    dims: int = 768
+    batch_size: int = 512
+
+
+class EmbeddingFunctionCallable:
+    """
+    A callable class designed to generate embeddings for a list of texts using
+    the OpenAI or Azure OpenAI API, with automatic retries on failure.
+
+    Attributes:
+        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
+               configuration and utilities for generating embeddings.
+
+    Methods:
+        __call__(input: List[str]) -> Embeddings: Generate embeddings for
+                                a list of input texts.
+    """
+
+    def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512):
+        """
+        Initialize the EmbeddingFunctionCallable with a specific model.
+
+        Args:
+            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
+                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
+                            generating embeddings.
+            batch_size (int): Batch size
+        """
+        self.embed_model = embed_model
+        self.batch_size = batch_size
+
+    def __call__(self, input: List[str]) -> Embeddings:
+        """
+        Generate embeddings for a given list of input texts using the OpenAI API,
+        with retries on failure.
+
+        This method:
+        - Truncates each text in the input list to the model's maximum context length.
+        - Processes the texts in batches to generate embeddings efficiently.
+        - Automatically retries the embedding generation process with exponential
+        backoff in case of failures.
+
+        Args:
+            input (List[str]): A list of input texts to generate embeddings for.
+
+        Returns:
+            Embeddings: A list of embedding vectors corresponding to the input texts.
+        """
+        embeds = []
+        if isinstance(self.embed_model, (OpenAIEmbeddings, AzureOpenAIEmbeddings)):
+            # Truncate texts to context length while preserving text format
+            truncated_texts = self.embed_model.truncate_texts(input)
+
+            # Process in batches
+            for batch in batched(truncated_texts, self.batch_size):
+                result = self.embed_model.client.embeddings.create(
+                    input=batch, model=self.embed_model.config.model_name  # type: ignore
+                )
+                batch_embeds = [d.embedding for d in result.data]
+                embeds.extend(batch_embeds)
+
+        elif isinstance(self.embed_model, SentenceTransformerEmbeddings):
+            if self.embed_model.config.data_parallel:
+                embeds = self.embed_model.model.encode_multi_process(
+                    input,
+                    self.embed_model.pool,
+                    batch_size=self.batch_size,
+                ).tolist()
+            else:
+                for str_batch in batched(input, self.batch_size):
+                    batch_embeds = self.embed_model.model.encode(
+                        str_batch, convert_to_numpy=True
+                    ).tolist()  # type: ignore
+                    embeds.extend(batch_embeds)
+
+        elif isinstance(self.embed_model, FastEmbedEmbeddings):
+            embeddings = self.embed_model.model.embed(
+                input, batch_size=self.batch_size, parallel=self.embed_model.parallel
+            )
+
+            embeds = [embedding.tolist() for embedding in embeddings]
+        elif isinstance(self.embed_model, LlamaCppServerEmbeddings):
+            for input_string in input:
+                tokenized_text = self.embed_model.tokenize_string(input_string)
+                for token_batch in batched(tokenized_text, self.batch_size):
+                    gen_embedding = self.embed_model.generate_embedding(
+                        self.embed_model.detokenize_string(list(token_batch))
+                    )
+                    embeds.append(gen_embedding)
+        elif isinstance(self.embed_model, GeminiEmbeddings):
+            embeds = self.embed_model.generate_embeddings(input)
+        return embeds
+
+
+class OpenAIEmbeddings(EmbeddingModel):
+    def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig()):
+        super().__init__()
+        self.config = config
+        load_dotenv()
+
+        # Check if using LangDB
+        self.is_langdb = self.config.model_name.startswith("langdb/")
+
+        if self.is_langdb:
+            self.config.model_name = self.config.model_name.replace("langdb/", "")
+            self.config.api_base = self.config.langdb_params.base_url
+            project_id = self.config.langdb_params.project_id
+            if project_id:
+                self.config.api_base += "/" + project_id + "/v1"
+            self.config.api_key = self.config.langdb_params.api_key
+
+        if not self.config.api_key:
+            self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+
+        self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
+
+        if self.config.api_key == "":
+            if self.is_langdb:
+                raise ValueError(
+                    """
+                    LANGDB_API_KEY must be set in .env or your environment 
+                    to use OpenAIEmbeddings via LangDB.
+                    """
+                )
+            else:
+                raise ValueError(
+                    """
+                    OPENAI_API_KEY must be set in .env or your environment 
+                    to use OpenAIEmbeddings.
+                    """
+                )
+
+        self.client = OpenAI(
+            base_url=self.config.api_base,
+            api_key=self.config.api_key,
+            organization=self.config.organization,
+        )
+        model_for_tokenizer = self.config.model_name
+        if model_for_tokenizer.startswith("openai/"):
+            self.config.model_name = model_for_tokenizer.replace("openai/", "")
+        self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
+
+    def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]:
+        """
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+        truncated_tokens = [
+            self.tokenizer.encode(text, disallowed_special=())[
+                : self.config.context_length
+            ]
+            for text in texts
+        ]
+
+        if self.is_langdb:
+            # LangDB embedding endpt only works with strings, not tokens
+            return [self.tokenizer.decode(tokens) for tokens in truncated_tokens]
+        return truncated_tokens
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
+class AzureOpenAIEmbeddings(EmbeddingModel):
+    """
+    Azure OpenAI embeddings model implementation.
+    """
+
+    def __init__(
+        self, config: AzureOpenAIEmbeddingsConfig = AzureOpenAIEmbeddingsConfig()
+    ):
+        """
+        Initializes Azure OpenAI embeddings model.
+
+        Args:
+            config: Configuration for Azure OpenAI embeddings model.
+        Raises:
+            ValueError: If required Azure config values are not set.
+        """
+        super().__init__()
+        self.config = config
+        load_dotenv()
+
+        if self.config.api_key == "":
+            raise ValueError(
+                """AZURE_OPENAI_API_KEY env variable must be set to use 
+            AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_KEY value 
+            in your .env file."""
+            )
+
+        if self.config.api_base == "":
+            raise ValueError(
+                """AZURE_OPENAI_API_BASE env variable must be set to use 
+            AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_BASE value 
+            in your .env file."""
+            )
+        self.client = AzureOpenAI(
+            api_key=self.config.api_key,
+            api_version=self.config.api_version,
+            azure_endpoint=self.config.api_base,
+            azure_deployment=self.config.deployment_name,
+        )
+        self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
+
+    def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]:
+        """
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+        return [
+            self.tokenizer.encode(text, disallowed_special=())[
+                : self.config.context_length
+            ]
+            for text in texts
+        ]
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        """Get the embedding function for Azure OpenAI.
+
+        Returns:
+            Callable that generates embeddings for input texts.
+        """
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
+STEC = SentenceTransformerEmbeddingsConfig
+
+
+class SentenceTransformerEmbeddings(EmbeddingModel):
+    def __init__(self, config: STEC = STEC()):
+        # this is an "extra" optional dependency, so we import it here
+        try:
+            from sentence_transformers import SentenceTransformer
+            from transformers import AutoTokenizer
+        except ImportError:
+            raise ImportError(
+                """
+                To use sentence_transformers embeddings, 
+                you must install langroid with the [hf-embeddings] extra, e.g.:
+                pip install "langroid[hf-embeddings]"
+                """
+            )
+
+        super().__init__()
+        self.config = config
+
+        self.model = SentenceTransformer(
+            self.config.model_name,
+            device=self.config.device,
+        )
+        if self.config.data_parallel:
+            self.pool = self.model.start_multi_process_pool(
+                self.config.devices  # type: ignore
+            )
+            atexit.register(
+                lambda: SentenceTransformer.stop_multi_process_pool(self.pool)
+            )
+
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
+        self.config.context_length = self.tokenizer.model_max_length
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    @property
+    def embedding_dims(self) -> int:
+        dims = self.model.get_sentence_embedding_dimension()
+        if dims is None:
+            raise ValueError(
+                f"Could not get embedding dimension for model {self.config.model_name}"
+            )
+        return dims  # type: ignore
+
+
+class FastEmbedEmbeddings(EmbeddingModel):
+    def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig()):
+        try:
+            from fastembed import TextEmbedding
+        except ImportError:
+            raise LangroidImportError("fastembed", extra="fastembed")
+
+        super().__init__()
+        self.config = config
+        self.batch_size = config.batch_size
+        self.parallel = config.parallel
+
+        self.model = TextEmbedding(
+            model_name=self.config.model_name,
+            cache_dir=self.config.cache_dir,
+            threads=self.config.threads,
+            **self.config.additional_kwargs,
+        )
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    @cached_property
+    def embedding_dims(self) -> int:
+        embed_func = self.embedding_fn()
+        return len(embed_func(["text"])[0])
+
+
+LCSEC = LlamaCppServerEmbeddingsConfig
+
+
+class LlamaCppServerEmbeddings(EmbeddingModel):
+    def __init__(self, config: LCSEC = LCSEC()):
+        super().__init__()
+        self.config = config
+
+        if self.config.api_base == "":
+            raise ValueError(
+                """Api Base MUST be set for Llama Server Embeddings.
+                """
+            )
+
+        self.tokenize_url = self.config.api_base + "/tokenize"
+        self.detokenize_url = self.config.api_base + "/detokenize"
+        self.embedding_url = self.config.api_base + "/embeddings"
+
+    def tokenize_string(self, text: str) -> List[int]:
+        data = {"content": text, "add_special": False, "with_pieces": False}
+        response = requests.post(self.tokenize_url, json=data)
+
+        if response.status_code == 200:
+            tokens = response.json()["tokens"]
+            if not (isinstance(tokens, list) and isinstance(tokens[0], (int, float))):
+                # not all(isinstance(token, (int, float)) for token in tokens):
+                raise ValueError(
+                    """Tokenizer endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
+            return tokens
+        else:
+            raise requests.HTTPError(
+                self.tokenize_url,
+                response.status_code,
+                "Failed to connect to tokenization provider",
+            )
+
+    def detokenize_string(self, tokens: List[int]) -> str:
+        data = {"tokens": tokens}
+        response = requests.post(self.detokenize_url, json=data)
+
+        if response.status_code == 200:
+            text = response.json()["content"]
+            if not isinstance(text, str):
+                raise ValueError(
+                    """Deokenizer endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
+            return text
+        else:
+            raise requests.HTTPError(
+                self.detokenize_url,
+                response.status_code,
+                "Failed to connect to detokenization provider",
+            )
+
+    def truncate_string_to_context_size(self, text: str) -> str:
+        tokens = self.tokenize_string(text)
+        tokens = tokens[: self.config.context_length]
+        return self.detokenize_string(tokens)
+
+    def generate_embedding(self, text: str) -> List[int | float]:
+        data = {"content": text}
+        response = requests.post(self.embedding_url, json=data)
+
+        if response.status_code == 200:
+            embeddings = response.json()["embedding"]
+            if not (
+                isinstance(embeddings, list) and isinstance(embeddings[0], (int, float))
+            ):
+                raise ValueError(
+                    """Embedding endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
+            return embeddings
+        else:
+            raise requests.HTTPError(
+                self.embedding_url,
+                response.status_code,
+                "Failed to connect to embedding provider",
+            )
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
+class GeminiEmbeddings(EmbeddingModel):
+    def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig()):
+        try:
+            from google import genai
+        except ImportError as e:
+            raise LangroidImportError(extra="google-genai", error=str(e))
+        super().__init__()
+        self.config = config
+        load_dotenv()
+        self.config.api_key = os.getenv("GEMINI_API_KEY", "")
+
+        if self.config.api_key == "":
+            raise ValueError(
+                """
+                GEMINI_API_KEY env variable must be set to use GeminiEmbeddings.
+                """
+            )
+        self.client = genai.Client(api_key=self.config.api_key)
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generates embeddings for a list of input texts."""
+        all_embeddings: List[List[float]] = []
+
+        for batch in batched(texts, self.config.batch_size):
+            result = self.client.models.embed_content(  # type: ignore[attr-defined]
+                model=self.config.model_name,
+                contents=batch,  # type: ignore
+            )
+
+            if not hasattr(result, "embeddings") or not isinstance(
+                result.embeddings, list
+            ):
+                raise ValueError(
+                    "Unexpected format for embeddings: missing or incorrect type"
+                )
+
+            # Extract .values from ContentEmbedding objects
+            all_embeddings.extend(
+                [emb.values for emb in result.embeddings]  # type: ignore
+            )
+
+        return all_embeddings
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
+def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
+    """
+    Args:
+        embedding_fn_type: Type of embedding model to use. Options are:
+         - "openai",
+         - "azure-openai",
+         - "sentencetransformer", or
+         - "fastembed".
+            (others may be added in the future)
+    Returns:
+        EmbeddingModel: The corresponding embedding model class.
+    """
+    if embedding_fn_type == "openai":
+        return OpenAIEmbeddings  # type: ignore
+    elif embedding_fn_type == "azure-openai":
+        return AzureOpenAIEmbeddings  # type: ignore
+    elif embedding_fn_type == "fastembed":
+        return FastEmbedEmbeddings  # type: ignore
+    elif embedding_fn_type == "llamacppserver":
+        return LlamaCppServerEmbeddings  # type: ignore
+    elif embedding_fn_type == "gemini":
+        return GeminiEmbeddings  # type: ignore
+    else:  # default sentence transformer
+        return SentenceTransformerEmbeddings  # type: ignore
+</file>
+
 <file path="langroid/language_models/azure_openai.py">
 import logging
 from typing import Callable
@@ -44518,6 +45086,161 @@ class Llama2FormatterConfig(PromptFormatterConfig):
 class HFPromptFormatterConfig(PromptFormatterConfig):
     type: str = "hf"
     model_name: str
+</file>
+
+<file path="langroid/language_models/provider_params.py">
+"""
+Provider-specific parameter configurations for various LLM providers.
+"""
+
+from typing import Any, Dict, Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Constants
+LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
+PORTKEY_BASE_URL = "https://api.portkey.ai"
+DUMMY_API_KEY = "xxx"
+
+
+class LangDBParams(BaseSettings):
+    """
+    Parameters specific to LangDB integration.
+    """
+
+    api_key: str = DUMMY_API_KEY
+    project_id: str = ""
+    label: Optional[str] = None
+    run_id: Optional[str] = None
+    thread_id: Optional[str] = None
+    base_url: str = LANGDB_BASE_URL
+
+    model_config = SettingsConfigDict(env_prefix="LANGDB_")
+
+
+class PortkeyParams(BaseSettings):
+    """
+    Parameters specific to Portkey integration.
+
+    Portkey is an AI gateway that provides a unified API for multiple LLM providers,
+    with features like automatic retries, fallbacks, load balancing, and observability.
+
+    Example usage:
+        # Use Portkey with Anthropic
+        config = OpenAIGPTConfig(
+            chat_model="portkey/anthropic/claude-3-sonnet-20240229",
+            portkey_params=PortkeyParams(
+                api_key="your-portkey-api-key",
+                provider="anthropic"
+            )
+        )
+    """
+
+    api_key: str = DUMMY_API_KEY  # Portkey API key
+    provider: str = ""  # Required: e.g., "openai", "anthropic", "cohere", etc.
+    virtual_key: Optional[str] = None  # Optional: virtual key for the provider
+    trace_id: Optional[str] = None  # Optional: trace ID for request tracking
+    metadata: Optional[Dict[str, Any]] = None  # Optional: metadata for logging
+    retry: Optional[Dict[str, Any]] = None  # Optional: retry configuration
+    cache: Optional[Dict[str, Any]] = None  # Optional: cache configuration
+    cache_force_refresh: Optional[bool] = None  # Optional: force cache refresh
+    user: Optional[str] = None  # Optional: user identifier
+    organization: Optional[str] = None  # Optional: organization identifier
+    custom_headers: Optional[Dict[str, str]] = None  # Optional: additional headers
+    base_url: str = PORTKEY_BASE_URL
+
+    model_config = SettingsConfigDict(env_prefix="PORTKEY_")
+
+    def get_headers(self) -> Dict[str, str]:
+        """Generate Portkey-specific headers from parameters."""
+        import json
+        import os
+
+        headers = {}
+
+        if self.api_key and self.api_key != DUMMY_API_KEY:
+            headers["x-portkey-api-key"] = self.api_key
+        else:
+            portkey_key = os.getenv("PORTKEY_API_KEY", "")
+            if portkey_key:
+                headers["x-portkey-api-key"] = portkey_key
+
+        if self.provider:
+            headers["x-portkey-provider"] = self.provider
+
+        if self.virtual_key:
+            headers["x-portkey-virtual-key"] = self.virtual_key
+
+        if self.trace_id:
+            headers["x-portkey-trace-id"] = self.trace_id
+
+        if self.metadata:
+            headers["x-portkey-metadata"] = json.dumps(self.metadata)
+
+        if self.retry:
+            headers["x-portkey-retry"] = json.dumps(self.retry)
+
+        if self.cache:
+            headers["x-portkey-cache"] = json.dumps(self.cache)
+
+        if self.cache_force_refresh is not None:
+            headers["x-portkey-cache-force-refresh"] = str(
+                self.cache_force_refresh
+            ).lower()
+
+        if self.user:
+            headers["x-portkey-user"] = self.user
+
+        if self.organization:
+            headers["x-portkey-organization"] = self.organization
+
+        if self.custom_headers:
+            headers.update(self.custom_headers)
+
+        return headers
+
+    def parse_model_string(self, model_string: str) -> tuple[str, str]:
+        """
+        Parse a model string like "portkey/anthropic/claude-3-sonnet"
+        and extract provider and model name.
+
+        Returns:
+            tuple: (provider, model_name)
+        """
+        parts = model_string.split("/", 2)
+        if len(parts) >= 3 and parts[0] == "portkey":
+            _, provider, model = parts
+            return provider, model
+        else:
+            model = model_string.replace("portkey/", "")
+            return "", model
+
+    def get_provider_api_key(
+        self, provider: str, default_key: str = DUMMY_API_KEY
+    ) -> str:
+        """
+        Get the API key for the provider from environment variables.
+
+        Args:
+            provider: The provider name (e.g., "anthropic", "openai")
+            default_key: Default key to return if not found
+
+        Returns:
+            The API key for the provider
+        """
+        import os
+
+        env_patterns = [
+            f"{provider.upper()}_API_KEY",
+            f"{provider.upper()}_KEY",
+        ]
+
+        for pattern in env_patterns:
+            key = os.getenv(pattern, "")
+            if key:
+                return key
+
+        return default_key
 </file>
 
 <file path="langroid/parsing/code_parser.py">
@@ -60693,6 +61416,83 @@ if __name__ == "__main__":
     app()
 </file>
 
+<file path="examples/mcp/chainlit-mcp.py">
+"""
+Variant of gitmcp.py that works via the Chainlit UI library,
+hardcoded to work for a specific github repo.
+
+
+Simple example of using the GitMCP server to "chat" about a GitHub repository.
+
+https://github.com/idosal/git-mcp
+
+The server offers several tools, and we can enable ALL of them to be used
+by a Langroid agent.
+
+Run like this (-m model optional; defaults to gpt-4.1-mini):
+
+    uv run chainlit run examples/mcp/chainlit-mcp.py
+
+"""
+
+from textwrap import dedent
+
+import chainlit as cl
+from fastmcp.client.transports import SSETransport
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
+from langroid.agent.tools.orchestration import SendTool
+from langroid.mytypes import NonToolAction
+from pydantic import Field
+
+
+class SendUserTool(SendTool):
+    request: str = "send_user"
+    purpose: str = "Send <content> to user"
+    to: str = "user"
+    content: str = Field(
+        ...,
+        description="""
+        Message to send to user, typically answer to user's request,
+        or a clarification question to the user, if user's task/question
+        is not completely clear.
+        """,
+    )
+
+
+@cl.on_chat_start
+async def start():
+
+    lm_config = lm.OpenAIGPTConfig(
+        chat_model="gpt-4.1-mini",
+    )
+    transport = SSETransport(url="https://gitmcp.io/langroid/langroid-examples")
+    tools: list[type] = await get_tools_async(transport)
+    agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            handle_llm_no_tool=NonToolAction.FORWARD_USER,
+            llm=lm_config,
+            system_message=dedent(
+                """
+                  Make best use of any of the TOOLs available to you,
+                  to answer the user's questions.
+                  You are a DevOps assistant"
+                  """
+            ),
+        )
+    )  # Pass config as a dictionary
+    agent.enable_message(tools)
+    task_cfg = lr.TaskConfig(recognize_string_signals=False)
+    task = lr.Task(agent, config=task_cfg, interactive=False)
+    lr.ChainlitTaskCallbacks(task)
+    await task.run_async(
+        "Based on the TOOLs available to you, greet the user and"
+        "tell them what kinds of help you can provide."
+    )
+</file>
+
 <file path="examples/mcp/claude-code-mcp.py">
 """
 Interact with Claude Code's MCP server.
@@ -62460,574 +63260,6 @@ async def get_mcp_tools_async(
         return await client.client.list_tools()
 </file>
 
-<file path="langroid/embedding_models/models.py">
-import atexit
-import os
-from functools import cached_property
-from typing import Any, Callable, Dict, List, Optional
-
-import requests
-import tiktoken
-from dotenv import load_dotenv
-from openai import AzureOpenAI, OpenAI
-from pydantic_settings import SettingsConfigDict
-
-from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
-from langroid.exceptions import LangroidImportError
-from langroid.language_models.provider_params import LangDBParams
-from langroid.mytypes import Embeddings
-from langroid.parsing.utils import batched
-
-AzureADTokenProvider = Callable[[], str]
-
-
-class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
-    model_type: str = "openai"
-    model_name: str = "text-embedding-3-small"
-    api_key: str = ""
-    api_base: Optional[str] = None
-    organization: str = ""
-    dims: int = 1536
-    context_length: int = 8192
-    langdb_params: LangDBParams = LangDBParams()
-
-    model_config = SettingsConfigDict(env_prefix="OPENAI_")
-
-
-class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
-    model_type: str = "azure-openai"
-    model_name: str = "text-embedding-3-small"
-    api_key: str = ""
-    api_base: str = ""
-    deployment_name: Optional[str] = None
-    # api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
-    # change this to required  supported version
-    api_version: Optional[str] = "2024-06-01"
-    # TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
-    azure_ad_token: Optional[str] = None
-    azure_ad_token_provider: Optional[AzureADTokenProvider] = None
-    dims: int = 1536
-    context_length: int = 8192
-
-    model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
-
-
-class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
-    model_type: str = "sentence-transformer"
-    model_name: str = "BAAI/bge-large-en-v1.5"
-    context_length: int = 512
-    data_parallel: bool = False
-    # Select device (e.g. "cuda", "cpu") when data parallel is disabled
-    device: Optional[str] = None
-    # Select devices when data parallel is enabled
-    devices: Optional[list[str]] = None
-
-
-class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
-    """Config for qdrant/fastembed embeddings,
-    see here: https://github.com/qdrant/fastembed
-    """
-
-    model_type: str = "fastembed"
-    model_name: str = "BAAI/bge-small-en-v1.5"
-    batch_size: int = 256
-    cache_dir: Optional[str] = None
-    threads: Optional[int] = None
-    parallel: Optional[int] = None
-    additional_kwargs: Dict[str, Any] = {}
-
-
-class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
-    api_base: str = ""
-    context_length: int = 2048
-    batch_size: int = 2048
-
-
-class GeminiEmbeddingsConfig(EmbeddingModelsConfig):
-    model_type: str = "gemini"
-    model_name: str = "models/text-embedding-004"
-    api_key: str = ""
-    dims: int = 768
-    batch_size: int = 512
-
-
-class EmbeddingFunctionCallable:
-    """
-    A callable class designed to generate embeddings for a list of texts using
-    the OpenAI or Azure OpenAI API, with automatic retries on failure.
-
-    Attributes:
-        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
-               configuration and utilities for generating embeddings.
-
-    Methods:
-        __call__(input: List[str]) -> Embeddings: Generate embeddings for
-                                a list of input texts.
-    """
-
-    def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512):
-        """
-        Initialize the EmbeddingFunctionCallable with a specific model.
-
-        Args:
-            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
-                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
-                            generating embeddings.
-            batch_size (int): Batch size
-        """
-        self.embed_model = embed_model
-        self.batch_size = batch_size
-
-    def __call__(self, input: List[str]) -> Embeddings:
-        """
-        Generate embeddings for a given list of input texts using the OpenAI API,
-        with retries on failure.
-
-        This method:
-        - Truncates each text in the input list to the model's maximum context length.
-        - Processes the texts in batches to generate embeddings efficiently.
-        - Automatically retries the embedding generation process with exponential
-        backoff in case of failures.
-
-        Args:
-            input (List[str]): A list of input texts to generate embeddings for.
-
-        Returns:
-            Embeddings: A list of embedding vectors corresponding to the input texts.
-        """
-        embeds = []
-        if isinstance(self.embed_model, (OpenAIEmbeddings, AzureOpenAIEmbeddings)):
-            # Truncate texts to context length while preserving text format
-            truncated_texts = self.embed_model.truncate_texts(input)
-
-            # Process in batches
-            for batch in batched(truncated_texts, self.batch_size):
-                result = self.embed_model.client.embeddings.create(
-                    input=batch, model=self.embed_model.config.model_name  # type: ignore
-                )
-                batch_embeds = [d.embedding for d in result.data]
-                embeds.extend(batch_embeds)
-
-        elif isinstance(self.embed_model, SentenceTransformerEmbeddings):
-            if self.embed_model.config.data_parallel:
-                embeds = self.embed_model.model.encode_multi_process(
-                    input,
-                    self.embed_model.pool,
-                    batch_size=self.batch_size,
-                ).tolist()
-            else:
-                for str_batch in batched(input, self.batch_size):
-                    batch_embeds = self.embed_model.model.encode(
-                        str_batch, convert_to_numpy=True
-                    ).tolist()  # type: ignore
-                    embeds.extend(batch_embeds)
-
-        elif isinstance(self.embed_model, FastEmbedEmbeddings):
-            embeddings = self.embed_model.model.embed(
-                input, batch_size=self.batch_size, parallel=self.embed_model.parallel
-            )
-
-            embeds = [embedding.tolist() for embedding in embeddings]
-        elif isinstance(self.embed_model, LlamaCppServerEmbeddings):
-            for input_string in input:
-                tokenized_text = self.embed_model.tokenize_string(input_string)
-                for token_batch in batched(tokenized_text, self.batch_size):
-                    gen_embedding = self.embed_model.generate_embedding(
-                        self.embed_model.detokenize_string(list(token_batch))
-                    )
-                    embeds.append(gen_embedding)
-        elif isinstance(self.embed_model, GeminiEmbeddings):
-            embeds = self.embed_model.generate_embeddings(input)
-        return embeds
-
-
-class OpenAIEmbeddings(EmbeddingModel):
-    def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig()):
-        super().__init__()
-        self.config = config
-        load_dotenv()
-
-        # Check if using LangDB
-        self.is_langdb = self.config.model_name.startswith("langdb/")
-
-        if self.is_langdb:
-            self.config.model_name = self.config.model_name.replace("langdb/", "")
-            self.config.api_base = self.config.langdb_params.base_url
-            project_id = self.config.langdb_params.project_id
-            if project_id:
-                self.config.api_base += "/" + project_id + "/v1"
-            self.config.api_key = self.config.langdb_params.api_key
-
-        if not self.config.api_key:
-            self.config.api_key = os.getenv("OPENAI_API_KEY", "")
-
-        self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
-
-        if self.config.api_key == "":
-            if self.is_langdb:
-                raise ValueError(
-                    """
-                    LANGDB_API_KEY must be set in .env or your environment 
-                    to use OpenAIEmbeddings via LangDB.
-                    """
-                )
-            else:
-                raise ValueError(
-                    """
-                    OPENAI_API_KEY must be set in .env or your environment 
-                    to use OpenAIEmbeddings.
-                    """
-                )
-
-        self.client = OpenAI(
-            base_url=self.config.api_base,
-            api_key=self.config.api_key,
-            organization=self.config.organization,
-        )
-        model_for_tokenizer = self.config.model_name
-        if model_for_tokenizer.startswith("openai/"):
-            self.config.model_name = model_for_tokenizer.replace("openai/", "")
-        self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
-
-    def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]:
-        """
-        Truncate texts to the embedding model's context length.
-        TODO: Maybe we should show warning, and consider doing T5 summarization?
-        """
-        truncated_tokens = [
-            self.tokenizer.encode(text, disallowed_special=())[
-                : self.config.context_length
-            ]
-            for text in texts
-        ]
-
-        if self.is_langdb:
-            # LangDB embedding endpt only works with strings, not tokens
-            return [self.tokenizer.decode(tokens) for tokens in truncated_tokens]
-        return truncated_tokens
-
-    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        return EmbeddingFunctionCallable(self, self.config.batch_size)
-
-    @property
-    def embedding_dims(self) -> int:
-        return self.config.dims
-
-
-class AzureOpenAIEmbeddings(EmbeddingModel):
-    """
-    Azure OpenAI embeddings model implementation.
-    """
-
-    def __init__(
-        self, config: AzureOpenAIEmbeddingsConfig = AzureOpenAIEmbeddingsConfig()
-    ):
-        """
-        Initializes Azure OpenAI embeddings model.
-
-        Args:
-            config: Configuration for Azure OpenAI embeddings model.
-        Raises:
-            ValueError: If required Azure config values are not set.
-        """
-        super().__init__()
-        self.config = config
-        load_dotenv()
-
-        if self.config.api_key == "":
-            raise ValueError(
-                """AZURE_OPENAI_API_KEY env variable must be set to use 
-            AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_KEY value 
-            in your .env file."""
-            )
-
-        if self.config.api_base == "":
-            raise ValueError(
-                """AZURE_OPENAI_API_BASE env variable must be set to use 
-            AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_BASE value 
-            in your .env file."""
-            )
-        self.client = AzureOpenAI(
-            api_key=self.config.api_key,
-            api_version=self.config.api_version,
-            azure_endpoint=self.config.api_base,
-            azure_deployment=self.config.deployment_name,
-        )
-        self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
-
-    def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]:
-        """
-        Truncate texts to the embedding model's context length.
-        TODO: Maybe we should show warning, and consider doing T5 summarization?
-        """
-        return [
-            self.tokenizer.encode(text, disallowed_special=())[
-                : self.config.context_length
-            ]
-            for text in texts
-        ]
-
-    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        """Get the embedding function for Azure OpenAI.
-
-        Returns:
-            Callable that generates embeddings for input texts.
-        """
-        return EmbeddingFunctionCallable(self, self.config.batch_size)
-
-    @property
-    def embedding_dims(self) -> int:
-        return self.config.dims
-
-
-STEC = SentenceTransformerEmbeddingsConfig
-
-
-class SentenceTransformerEmbeddings(EmbeddingModel):
-    def __init__(self, config: STEC = STEC()):
-        # this is an "extra" optional dependency, so we import it here
-        try:
-            from sentence_transformers import SentenceTransformer
-            from transformers import AutoTokenizer
-        except ImportError:
-            raise ImportError(
-                """
-                To use sentence_transformers embeddings, 
-                you must install langroid with the [hf-embeddings] extra, e.g.:
-                pip install "langroid[hf-embeddings]"
-                """
-            )
-
-        super().__init__()
-        self.config = config
-
-        self.model = SentenceTransformer(
-            self.config.model_name,
-            device=self.config.device,
-        )
-        if self.config.data_parallel:
-            self.pool = self.model.start_multi_process_pool(
-                self.config.devices  # type: ignore
-            )
-            atexit.register(
-                lambda: SentenceTransformer.stop_multi_process_pool(self.pool)
-            )
-
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
-        self.config.context_length = self.tokenizer.model_max_length
-
-    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        return EmbeddingFunctionCallable(self, self.config.batch_size)
-
-    @property
-    def embedding_dims(self) -> int:
-        dims = self.model.get_sentence_embedding_dimension()
-        if dims is None:
-            raise ValueError(
-                f"Could not get embedding dimension for model {self.config.model_name}"
-            )
-        return dims  # type: ignore
-
-
-class FastEmbedEmbeddings(EmbeddingModel):
-    def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig()):
-        try:
-            from fastembed import TextEmbedding
-        except ImportError:
-            raise LangroidImportError("fastembed", extra="fastembed")
-
-        super().__init__()
-        self.config = config
-        self.batch_size = config.batch_size
-        self.parallel = config.parallel
-
-        self.model = TextEmbedding(
-            model_name=self.config.model_name,
-            cache_dir=self.config.cache_dir,
-            threads=self.config.threads,
-            **self.config.additional_kwargs,
-        )
-
-    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        return EmbeddingFunctionCallable(self, self.config.batch_size)
-
-    @cached_property
-    def embedding_dims(self) -> int:
-        embed_func = self.embedding_fn()
-        return len(embed_func(["text"])[0])
-
-
-LCSEC = LlamaCppServerEmbeddingsConfig
-
-
-class LlamaCppServerEmbeddings(EmbeddingModel):
-    def __init__(self, config: LCSEC = LCSEC()):
-        super().__init__()
-        self.config = config
-
-        if self.config.api_base == "":
-            raise ValueError(
-                """Api Base MUST be set for Llama Server Embeddings.
-                """
-            )
-
-        self.tokenize_url = self.config.api_base + "/tokenize"
-        self.detokenize_url = self.config.api_base + "/detokenize"
-        self.embedding_url = self.config.api_base + "/embeddings"
-
-    def tokenize_string(self, text: str) -> List[int]:
-        data = {"content": text, "add_special": False, "with_pieces": False}
-        response = requests.post(self.tokenize_url, json=data)
-
-        if response.status_code == 200:
-            tokens = response.json()["tokens"]
-            if not (isinstance(tokens, list) and isinstance(tokens[0], (int, float))):
-                # not all(isinstance(token, (int, float)) for token in tokens):
-                raise ValueError(
-                    """Tokenizer endpoint has not returned the correct format. 
-                   Is the URL correct?
-                """
-                )
-            return tokens
-        else:
-            raise requests.HTTPError(
-                self.tokenize_url,
-                response.status_code,
-                "Failed to connect to tokenization provider",
-            )
-
-    def detokenize_string(self, tokens: List[int]) -> str:
-        data = {"tokens": tokens}
-        response = requests.post(self.detokenize_url, json=data)
-
-        if response.status_code == 200:
-            text = response.json()["content"]
-            if not isinstance(text, str):
-                raise ValueError(
-                    """Deokenizer endpoint has not returned the correct format. 
-                   Is the URL correct?
-                """
-                )
-            return text
-        else:
-            raise requests.HTTPError(
-                self.detokenize_url,
-                response.status_code,
-                "Failed to connect to detokenization provider",
-            )
-
-    def truncate_string_to_context_size(self, text: str) -> str:
-        tokens = self.tokenize_string(text)
-        tokens = tokens[: self.config.context_length]
-        return self.detokenize_string(tokens)
-
-    def generate_embedding(self, text: str) -> List[int | float]:
-        data = {"content": text}
-        response = requests.post(self.embedding_url, json=data)
-
-        if response.status_code == 200:
-            embeddings = response.json()["embedding"]
-            if not (
-                isinstance(embeddings, list) and isinstance(embeddings[0], (int, float))
-            ):
-                raise ValueError(
-                    """Embedding endpoint has not returned the correct format. 
-                   Is the URL correct?
-                """
-                )
-            return embeddings
-        else:
-            raise requests.HTTPError(
-                self.embedding_url,
-                response.status_code,
-                "Failed to connect to embedding provider",
-            )
-
-    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        return EmbeddingFunctionCallable(self, self.config.batch_size)
-
-    @property
-    def embedding_dims(self) -> int:
-        return self.config.dims
-
-
-class GeminiEmbeddings(EmbeddingModel):
-    def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig()):
-        try:
-            from google import genai
-        except ImportError as e:
-            raise LangroidImportError(extra="google-genai", error=str(e))
-        super().__init__()
-        self.config = config
-        load_dotenv()
-        self.config.api_key = os.getenv("GEMINI_API_KEY", "")
-
-        if self.config.api_key == "":
-            raise ValueError(
-                """
-                GEMINI_API_KEY env variable must be set to use GeminiEmbeddings.
-                """
-            )
-        self.client = genai.Client(api_key=self.config.api_key)
-
-    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        return EmbeddingFunctionCallable(self, self.config.batch_size)
-
-    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Generates embeddings for a list of input texts."""
-        all_embeddings: List[List[float]] = []
-
-        for batch in batched(texts, self.config.batch_size):
-            result = self.client.models.embed_content(  # type: ignore[attr-defined]
-                model=self.config.model_name,
-                contents=batch,  # type: ignore
-            )
-
-            if not hasattr(result, "embeddings") or not isinstance(
-                result.embeddings, list
-            ):
-                raise ValueError(
-                    "Unexpected format for embeddings: missing or incorrect type"
-                )
-
-            # Extract .values from ContentEmbedding objects
-            all_embeddings.extend(
-                [emb.values for emb in result.embeddings]  # type: ignore
-            )
-
-        return all_embeddings
-
-    @property
-    def embedding_dims(self) -> int:
-        return self.config.dims
-
-
-def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
-    """
-    Args:
-        embedding_fn_type: Type of embedding model to use. Options are:
-         - "openai",
-         - "azure-openai",
-         - "sentencetransformer", or
-         - "fastembed".
-            (others may be added in the future)
-    Returns:
-        EmbeddingModel: The corresponding embedding model class.
-    """
-    if embedding_fn_type == "openai":
-        return OpenAIEmbeddings  # type: ignore
-    elif embedding_fn_type == "azure-openai":
-        return AzureOpenAIEmbeddings  # type: ignore
-    elif embedding_fn_type == "fastembed":
-        return FastEmbedEmbeddings  # type: ignore
-    elif embedding_fn_type == "llamacppserver":
-        return LlamaCppServerEmbeddings  # type: ignore
-    elif embedding_fn_type == "gemini":
-        return GeminiEmbeddings  # type: ignore
-    else:  # default sentence transformer
-        return SentenceTransformerEmbeddings  # type: ignore
-</file>
-
 <file path="langroid/language_models/client_cache.py">
 """
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
@@ -63389,6 +63621,9 @@ class OpenAIChatModel(ModelName):
     GPT4_1 = "gpt-4.1"
     GPT4_1_MINI = "gpt-4.1-mini"
     GPT4_1_NANO = "gpt-4.1-nano"
+    GPT5 = "gpt-5"
+    GPT5_MINI = "gpt-5-mini"
+    GPT5_NANO = "gpt-5-nano"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -63658,6 +63893,54 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_tools=False,
         description="O3 Mini Reasoning LM",
     ),
+    OpenAIChatModel.GPT5.value: ModelInfo(
+        name=OpenAIChatModel.GPT5.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.125,
+        output_cost_per_million=10.00,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5",
+    ),
+    OpenAIChatModel.GPT5_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.25,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=2.00,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5 Mini",
+    ),
+    OpenAIChatModel.GPT5_NANO.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_NANO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.05,
+        cached_cost_per_million=0.005,
+        output_cost_per_million=0.40,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5 Nano",
+    ),
     # Anthropic Models
     AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
         name=AnthropicModel.CLAUDE_3_5_SONNET.value,
@@ -63842,161 +64125,6 @@ def _get_model_info(model: str | ModelName) -> ModelInfo | None:
     if isinstance(model, str):
         return MODEL_INFO.get(model)
     return MODEL_INFO.get(model.value)
-</file>
-
-<file path="langroid/language_models/provider_params.py">
-"""
-Provider-specific parameter configurations for various LLM providers.
-"""
-
-from typing import Any, Dict, Optional
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-# Constants
-LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
-PORTKEY_BASE_URL = "https://api.portkey.ai"
-DUMMY_API_KEY = "xxx"
-
-
-class LangDBParams(BaseSettings):
-    """
-    Parameters specific to LangDB integration.
-    """
-
-    api_key: str = DUMMY_API_KEY
-    project_id: str = ""
-    label: Optional[str] = None
-    run_id: Optional[str] = None
-    thread_id: Optional[str] = None
-    base_url: str = LANGDB_BASE_URL
-
-    model_config = SettingsConfigDict(env_prefix="LANGDB_")
-
-
-class PortkeyParams(BaseSettings):
-    """
-    Parameters specific to Portkey integration.
-
-    Portkey is an AI gateway that provides a unified API for multiple LLM providers,
-    with features like automatic retries, fallbacks, load balancing, and observability.
-
-    Example usage:
-        # Use Portkey with Anthropic
-        config = OpenAIGPTConfig(
-            chat_model="portkey/anthropic/claude-3-sonnet-20240229",
-            portkey_params=PortkeyParams(
-                api_key="your-portkey-api-key",
-                provider="anthropic"
-            )
-        )
-    """
-
-    api_key: str = DUMMY_API_KEY  # Portkey API key
-    provider: str = ""  # Required: e.g., "openai", "anthropic", "cohere", etc.
-    virtual_key: Optional[str] = None  # Optional: virtual key for the provider
-    trace_id: Optional[str] = None  # Optional: trace ID for request tracking
-    metadata: Optional[Dict[str, Any]] = None  # Optional: metadata for logging
-    retry: Optional[Dict[str, Any]] = None  # Optional: retry configuration
-    cache: Optional[Dict[str, Any]] = None  # Optional: cache configuration
-    cache_force_refresh: Optional[bool] = None  # Optional: force cache refresh
-    user: Optional[str] = None  # Optional: user identifier
-    organization: Optional[str] = None  # Optional: organization identifier
-    custom_headers: Optional[Dict[str, str]] = None  # Optional: additional headers
-    base_url: str = PORTKEY_BASE_URL
-
-    model_config = SettingsConfigDict(env_prefix="PORTKEY_")
-
-    def get_headers(self) -> Dict[str, str]:
-        """Generate Portkey-specific headers from parameters."""
-        import json
-        import os
-
-        headers = {}
-
-        if self.api_key and self.api_key != DUMMY_API_KEY:
-            headers["x-portkey-api-key"] = self.api_key
-        else:
-            portkey_key = os.getenv("PORTKEY_API_KEY", "")
-            if portkey_key:
-                headers["x-portkey-api-key"] = portkey_key
-
-        if self.provider:
-            headers["x-portkey-provider"] = self.provider
-
-        if self.virtual_key:
-            headers["x-portkey-virtual-key"] = self.virtual_key
-
-        if self.trace_id:
-            headers["x-portkey-trace-id"] = self.trace_id
-
-        if self.metadata:
-            headers["x-portkey-metadata"] = json.dumps(self.metadata)
-
-        if self.retry:
-            headers["x-portkey-retry"] = json.dumps(self.retry)
-
-        if self.cache:
-            headers["x-portkey-cache"] = json.dumps(self.cache)
-
-        if self.cache_force_refresh is not None:
-            headers["x-portkey-cache-force-refresh"] = str(
-                self.cache_force_refresh
-            ).lower()
-
-        if self.user:
-            headers["x-portkey-user"] = self.user
-
-        if self.organization:
-            headers["x-portkey-organization"] = self.organization
-
-        if self.custom_headers:
-            headers.update(self.custom_headers)
-
-        return headers
-
-    def parse_model_string(self, model_string: str) -> tuple[str, str]:
-        """
-        Parse a model string like "portkey/anthropic/claude-3-sonnet"
-        and extract provider and model name.
-
-        Returns:
-            tuple: (provider, model_name)
-        """
-        parts = model_string.split("/", 2)
-        if len(parts) >= 3 and parts[0] == "portkey":
-            _, provider, model = parts
-            return provider, model
-        else:
-            model = model_string.replace("portkey/", "")
-            return "", model
-
-    def get_provider_api_key(
-        self, provider: str, default_key: str = DUMMY_API_KEY
-    ) -> str:
-        """
-        Get the API key for the provider from environment variables.
-
-        Args:
-            provider: The provider name (e.g., "anthropic", "openai")
-            default_key: Default key to return if not found
-
-        Returns:
-            The API key for the provider
-        """
-        import os
-
-        env_patterns = [
-            f"{provider.upper()}_API_KEY",
-            f"{provider.upper()}_KEY",
-        ]
-
-        for pattern in env_patterns:
-            key = os.getenv(pattern, "")
-            if key:
-                return key
-
-        return default_key
 </file>
 
 <file path="langroid/utils/html_logger.py">
@@ -68864,83 +68992,6 @@ def main(
 
 if __name__ == "__main__":
     Fire(main)
-</file>
-
-<file path="examples/mcp/chainlit-mcp.py">
-"""
-Variant of gitmcp.py that works via the Chainlit UI library,
-hardcoded to work for a specific github repo.
-
-
-Simple example of using the GitMCP server to "chat" about a GitHub repository.
-
-https://github.com/idosal/git-mcp
-
-The server offers several tools, and we can enable ALL of them to be used
-by a Langroid agent.
-
-Run like this (-m model optional; defaults to gpt-4.1-mini):
-
-    uv run chainlit run examples/mcp/chainlit-mcp.py
-
-"""
-
-from textwrap import dedent
-
-import chainlit as cl
-from fastmcp.client.transports import SSETransport
-
-import langroid as lr
-import langroid.language_models as lm
-from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
-from langroid.agent.tools.orchestration import SendTool
-from langroid.mytypes import NonToolAction
-from pydantic import Field
-
-
-class SendUserTool(SendTool):
-    request: str = "send_user"
-    purpose: str = "Send <content> to user"
-    to: str = "user"
-    content: str = Field(
-        ...,
-        description="""
-        Message to send to user, typically answer to user's request,
-        or a clarification question to the user, if user's task/question
-        is not completely clear.
-        """,
-    )
-
-
-@cl.on_chat_start
-async def start():
-
-    lm_config = lm.OpenAIGPTConfig(
-        chat_model="gpt-4.1-mini",
-    )
-    transport = SSETransport(url="https://gitmcp.io/langroid/langroid-examples")
-    tools: list[type] = await get_tools_async(transport)
-    agent = lr.ChatAgent(
-        lr.ChatAgentConfig(
-            handle_llm_no_tool=NonToolAction.FORWARD_USER,
-            llm=lm_config,
-            system_message=dedent(
-                """
-                  Make best use of any of the TOOLs available to you,
-                  to answer the user's questions.
-                  You are a DevOps assistant"
-                  """
-            ),
-        )
-    )  # Pass config as a dictionary
-    agent.enable_message(tools)
-    task_cfg = lr.TaskConfig(recognize_string_signals=False)
-    task = lr.Task(agent, config=task_cfg, interactive=False)
-    lr.ChainlitTaskCallbacks(task)
-    await task.run_async(
-        "Based on the TOOLs available to you, greet the user and"
-        "tell them what kinds of help you can provide."
-    )
 </file>
 
 <file path="langroid/agent/chat_agent.py">
@@ -77330,6 +77381,15 @@ class TaskTool(ToolMessage):
         return result
 </file>
 
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.12.9
+  hooks:
+    - id: ruff
+</file>
+
 <file path="README.md">
 <div align="center">
   <img src="docs/assets/langroid-card-lambda-ossem-rust-1200-630.png" alt="Logo" 
@@ -83049,15 +83109,6 @@ class Agent(ABC):
         if answer != no_answer:
             return (f"{agent_type} says: " + str(answer)).strip()
         return None
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.12.9
-  hooks:
-    - id: ruff
 </file>
 
 <file path="langroid/language_models/openai_gpt.py">

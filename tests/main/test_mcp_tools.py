@@ -38,11 +38,11 @@ async def check_npx_package_availability(package: str, timeout: float = 10.0) ->
     """
     Check if an npx package is available without actually starting the MCP server.
     This helps avoid ProcessLookupError by detecting package issues early.
-    
+
     Args:
         package: The npm package name to check
         timeout: Timeout for the check operation
-        
+
     Returns:
         True if package appears to be available, False otherwise
     """
@@ -50,26 +50,29 @@ async def check_npx_package_availability(package: str, timeout: float = 10.0) ->
         # Try to check if the package exists using npm info
         result = await asyncio.wait_for(
             asyncio.create_subprocess_exec(
-                "npm", "info", package, "--json",
+                "npm",
+                "info",
+                package,
+                "--json",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             ),
-            timeout=timeout
+            timeout=timeout,
         )
         stdout, stderr = await result.communicate()
-        
+
         # If npm info succeeds, the package exists
         if result.returncode == 0:
             return True
-        
+
         # Check for specific "not found" errors in stderr
         stderr_text = stderr.decode() if stderr else ""
         if "404" in stderr_text or "Not found" in stderr_text:
             return False
-            
+
         # For other errors, assume availability issues but not necessarily missing
         return False
-        
+
     except (asyncio.TimeoutError, Exception):
         # On any error (timeout, process issues, etc.), assume not available
         return False
@@ -612,8 +615,8 @@ async def test_multiple_tools(prompt, tool_name, expected) -> None:
 
 @pytest.mark.skipif(not shutil.which("npx"), reason="npx not available")
 @pytest.mark.skipif(
-    os.getenv("CI") and not os.getenv("TEST_MCP_NPX"), 
-    reason="Skipping npx tests in CI unless TEST_MCP_NPX is set"
+    os.getenv("CI") and not os.getenv("TEST_MCP_NPX"),
+    reason="Skipping npx tests in CI unless TEST_MCP_NPX is set",
 )
 @pytest.mark.asyncio
 async def test_npxstdio_transport() -> None:
@@ -623,11 +626,11 @@ async def test_npxstdio_transport() -> None:
     https://github.com/exa-labs/exa-mcp-server
     """
     package_name = "exa-mcp-server"
-    
+
     # Pre-check package availability to provide better error messages
     if not await check_npx_package_availability(package_name):
         pytest.skip(f"NPM package '{package_name}' not found or not accessible")
-    
+
     transport = NpxStdioTransport(
         package=package_name,
         env_vars=dict(EXA_API_KEY=os.getenv("EXA_API_KEY")),
@@ -775,8 +778,8 @@ async def test_uvxstdio_transport() -> None:
 
 @pytest.mark.skipif(not shutil.which("npx"), reason="npx not available")
 @pytest.mark.skipif(
-    os.getenv("CI") and not os.getenv("TEST_MCP_NPX"), 
-    reason="Skipping npx tests in CI unless TEST_MCP_NPX is set"
+    os.getenv("CI") and not os.getenv("TEST_MCP_NPX"),
+    reason="Skipping npx tests in CI unless TEST_MCP_NPX is set",
 )
 @pytest.mark.asyncio
 async def test_npxstdio_transport_memory() -> None:
@@ -786,11 +789,11 @@ async def test_npxstdio_transport_memory() -> None:
     https://github.com/modelcontextprotocol/servers/tree/main/src/memory
     """
     package_name = "@modelcontextprotocol/server-memory"
-    
+
     # Pre-check package availability to provide better error messages
     if not await check_npx_package_availability(package_name):
         pytest.skip(f"NPM package '{package_name}' not found or not accessible")
-    
+
     transport = NpxStdioTransport(
         package=package_name,
         args=["-y"],

@@ -36,6 +36,9 @@ class OpenAIChatModel(ModelName):
     GPT4_1 = "gpt-4.1"
     GPT4_1_MINI = "gpt-4.1-mini"
     GPT4_1_NANO = "gpt-4.1-nano"
+    GPT5 = "gpt-5"
+    GPT5_MINI = "gpt-5-mini"
+    GPT5_NANO = "gpt-5-nano"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -304,6 +307,54 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
         description="O3 Mini Reasoning LM",
+    ),
+    OpenAIChatModel.GPT5.value: ModelInfo(
+        name=OpenAIChatModel.GPT5.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.125,
+        output_cost_per_million=10.00,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5",
+    ),
+    OpenAIChatModel.GPT5_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.25,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=2.00,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5 Mini",
+    ),
+    OpenAIChatModel.GPT5_NANO.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_NANO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.05,
+        cached_cost_per_million=0.005,
+        output_cost_per_million=0.40,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5 Nano",
     ),
     # Anthropic Models
     AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(

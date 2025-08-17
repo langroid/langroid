@@ -4291,6 +4291,473 @@ working example of this.
 This section contains brief notes describing various features and updates.
 </file>
 
+<file path="docs/notes/portkey.md">
+# Portkey Integration
+
+Langroid provides seamless integration with [Portkey](https://portkey.ai), a powerful AI gateway that enables you to access multiple LLM providers through a unified API with advanced features like caching, retries, fallbacks, and comprehensive observability.
+
+## What is Portkey?
+
+Portkey is an AI gateway that sits between your application and various LLM providers, offering:
+
+- **Unified API**: Access 200+ models from different providers through one interface
+- **Reliability**: Automatic retries, fallbacks, and load balancing
+- **Observability**: Detailed logging, tracing, and analytics
+- **Performance**: Intelligent caching and request optimization
+- **Security**: Virtual keys and advanced access controls
+- **Cost Management**: Usage tracking and budget controls
+
+For complete documentation, visit the [Portkey Documentation](https://docs.portkey.ai).
+
+## Quick Start
+
+### 1. Setup
+
+First, sign up for a Portkey account at [portkey.ai](https://portkey.ai) and get your API key.
+
+Set up your environment variables, either explicitly or in your `.env` file as usual: 
+
+```bash
+# Required: Portkey API key
+export PORTKEY_API_KEY="your-portkey-api-key"
+
+# Required: Provider API keys (for the models you want to use)
+export OPENAI_API_KEY="your-openai-key"
+export ANTHROPIC_API_KEY="your-anthropic-key"
+export GOOGLE_API_KEY="your-google-key"
+# ... other provider keys as needed
+```
+
+### 2. Basic Usage
+
+```python
+import langroid as lr
+import langroid.language_models as lm
+from langroid.language_models.provider_params import PortkeyParams
+
+# Create an LLM config to use Portkey's OpenAI-compatible API
+# (Note that the name `OpenAIGPTConfig` does NOT imply it only works with OpenAI models;
+# the name reflects the fact that the config is meant to be used with an
+# OpenAI-compatible API, which Portkey provides for multiple LLM providers.)
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        api_key="your-portkey-api-key",  # Or set PORTKEY_API_KEY env var
+    )
+)
+
+# Create LLM instance
+llm = lm.OpenAIGPT(llm_config)
+
+# Use normally
+response = llm.chat("What is the smallest prime number?")
+print(response.message)
+```
+
+### 3. Multiple Providers
+
+Switch between providers seamlessly:
+
+```python
+# OpenAI
+config_openai = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+)
+
+# Anthropic
+config_anthropic = lm.OpenAIGPTConfig(
+    chat_model="portkey/anthropic/claude-3-5-sonnet-20241022",
+)
+
+# Google Gemini
+config_gemini = lm.OpenAIGPTConfig(
+    chat_model="portkey/google/gemini-2.0-flash-lite",
+)
+```
+
+## Advanced Features
+
+### Virtual Keys
+
+Use virtual keys to abstract provider management:
+
+```python
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+    portkey_params=PortkeyParams(
+        virtual_key="vk-your-virtual-key",  # Configured in Portkey dashboard
+    )
+)
+```
+
+### Caching and Performance
+
+Enable intelligent caching to reduce costs and improve performance:
+
+```python
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        cache={
+            "enabled": True,
+            "ttl": 3600,  # 1 hour cache
+            "namespace": "my-app"
+        },
+        cache_force_refresh=False,
+    )
+)
+```
+
+### Retry Strategies
+
+Configure automatic retries for better reliability:
+
+```python
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/anthropic/claude-3-haiku-20240307",
+    portkey_params=PortkeyParams(
+        retry={
+            "max_retries": 3,
+            "backoff": "exponential",
+            "jitter": True
+        }
+    )
+)
+```
+
+### Observability and Tracing
+
+Add comprehensive tracking for production monitoring:
+
+```python
+import uuid
+
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+    portkey_params=PortkeyParams(
+        trace_id=f"trace-{uuid.uuid4().hex[:8]}",
+        metadata={
+            "user_id": "user-123",
+            "session_id": "session-456",
+            "app_version": "1.2.3"
+        },
+        user="user-123",
+        organization="my-org",
+        custom_headers={
+            "x-request-source": "langroid",
+            "x-feature": "chat-completion"
+        }
+    )
+)
+```
+
+## Configuration Reference
+
+The `PortkeyParams` class supports all Portkey features:
+
+```python
+from langroid.language_models.provider_params import PortkeyParams
+
+params = PortkeyParams(
+    # Authentication
+    api_key="pk-...",                    # Portkey API key
+    virtual_key="vk-...",               # Virtual key (optional)
+    
+    # Observability
+    trace_id="trace-123",               # Request tracing
+    metadata={"key": "value"},          # Custom metadata
+    user="user-id",                     # User identifier
+    organization="org-id",              # Organization identifier
+    
+    # Performance
+    cache={                             # Caching configuration
+        "enabled": True,
+        "ttl": 3600,
+        "namespace": "my-app"
+    },
+    cache_force_refresh=False,          # Force cache refresh
+    
+    # Reliability
+    retry={                             # Retry configuration
+        "max_retries": 3,
+        "backoff": "exponential",
+        "jitter": True
+    },
+    
+    # Custom headers
+    custom_headers={                    # Additional headers
+        "x-custom": "value"
+    },
+    
+    # Base URL (usually not needed)
+    base_url="https://api.portkey.ai"   # Portkey API endpoint
+)
+```
+
+## Supported Providers
+
+Portkey supports 200+ models from various providers. Common ones include:
+
+```python
+# OpenAI
+"portkey/openai/gpt-4o"
+"portkey/openai/gpt-4o-mini"
+
+# Anthropic
+"portkey/anthropic/claude-3-5-sonnet-20241022"
+"portkey/anthropic/claude-3-haiku-20240307"
+
+# Google
+"portkey/google/gemini-2.0-flash-lite"
+"portkey/google/gemini-1.5-pro"
+
+# Cohere
+"portkey/cohere/command-r-plus"
+
+# Meta
+"portkey/meta/llama-3.1-405b-instruct"
+
+# And many more...
+```
+
+Check the [Portkey documentation](https://docs.portkey.ai/docs/integrations/models) for the complete list.
+
+## Examples
+
+Langroid includes comprehensive Portkey examples in `examples/portkey/`:
+
+1. **`portkey_basic_chat.py`** - Basic usage with multiple providers
+2. **`portkey_advanced_features.py`** - Caching, retries, and observability
+3. **`portkey_multi_provider.py`** - Comparing responses across providers
+
+Run any example:
+
+```bash
+cd examples/portkey
+python portkey_basic_chat.py
+```
+
+## Best Practices
+
+### 1. Use Environment Variables
+
+Never hardcode API keys:
+
+```bash
+# .env file
+PORTKEY_API_KEY=your_portkey_key
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+```
+
+### 2. Implement Fallback Strategies
+
+Use multiple providers for reliability:
+
+```python
+providers = [
+    ("openai", "gpt-4o-mini"),
+    ("anthropic", "claude-3-haiku-20240307"),
+    ("google", "gemini-2.0-flash-lite")
+]
+
+for provider, model in providers:
+    try:
+        config = lm.OpenAIGPTConfig(
+            chat_model=f"portkey/{provider}/{model}"
+        )
+        llm = lm.OpenAIGPT(config)
+        return llm.chat(question)
+    except Exception:
+        continue  # Try next provider
+```
+
+### 3. Add Meaningful Metadata
+
+Include context for better observability:
+
+```python
+params = PortkeyParams(
+    metadata={
+        "user_id": user.id,
+        "feature": "document_qa",
+        "document_type": "pdf",
+        "processing_stage": "summary"
+    }
+)
+```
+
+### 4. Use Caching Wisely
+
+Enable caching for deterministic queries:
+
+```python
+# Good for caching
+params = PortkeyParams(
+    cache={"enabled": True, "ttl": 3600}
+)
+
+# Use with deterministic prompts
+response = llm.chat("What is the capital of France?")
+```
+
+### 5. Monitor Performance
+
+Use trace IDs to track request flows:
+
+```python
+import uuid
+
+trace_id = f"trace-{uuid.uuid4().hex[:8]}"
+params = PortkeyParams(
+    trace_id=trace_id,
+    metadata={"operation": "document_processing"}
+)
+
+# Use the same trace_id for related requests
+```
+
+## Monitoring and Analytics
+
+### Portkey Dashboard
+
+View detailed analytics at [app.portkey.ai](https://app.portkey.ai):
+
+- Request/response logs
+- Token usage and costs
+- Performance metrics (latency, errors)
+- Provider comparisons
+- Custom filters by metadata
+
+### Custom Filtering
+
+Use metadata and headers to filter requests:
+
+```python
+# Tag requests by feature
+params = PortkeyParams(
+    metadata={"feature": "chat", "version": "v2"},
+    custom_headers={"x-request-type": "production"}
+)
+```
+
+Then filter in the dashboard by:
+- `metadata.feature = "chat"`
+- `headers.x-request-type = "production"`
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**
+   ```
+   Error: Unauthorized (401)
+   ```
+   - Check `PORTKEY_API_KEY` is set correctly
+   - Verify API key is active in Portkey dashboard
+
+2. **Provider API Key Missing**
+   ```
+   Error: Missing API key for provider
+   ```
+   - Set provider API key (e.g., `OPENAI_API_KEY`)
+   - Or use virtual keys in Portkey dashboard
+
+3. **Model Not Found**
+   ```
+   Error: Model not supported
+   ```
+   - Check model name format: `portkey/provider/model`
+   - Verify model is available through Portkey
+
+4. **Rate Limiting**
+   ```
+   Error: Rate limit exceeded
+   ```
+   - Configure retry parameters
+   - Use virtual keys for better rate limit management
+
+### Debug Mode
+
+Enable detailed logging:
+
+```python
+import logging
+logging.getLogger("langroid").setLevel(logging.DEBUG)
+```
+
+### Test Configuration
+
+Verify your setup:
+
+```python
+# Test basic connection
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    max_output_tokens=50
+)
+llm = lm.OpenAIGPT(config)
+response = llm.chat("Hello")
+print("✅ Portkey integration working!")
+```
+
+## Migration Guide
+
+### From Direct Provider Access
+
+If you're currently using providers directly:
+
+```python
+# Before: Direct OpenAI
+config = lm.OpenAIGPTConfig(
+    chat_model="gpt-4o-mini"
+)
+
+# After: Through Portkey
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini"
+)
+```
+
+### Adding Advanced Features Gradually
+
+Start simple and add features as needed:
+
+```python
+# Step 1: Basic Portkey
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini"
+)
+
+# Step 2: Add caching
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        cache={"enabled": True, "ttl": 3600}
+    )
+)
+
+# Step 3: Add observability
+config = lm.OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        cache={"enabled": True, "ttl": 3600},
+        metadata={"app": "my-app", "user": "user-123"},
+        trace_id="trace-abc123"
+    )
+)
+```
+
+## Resources
+
+- **Portkey Website**: [https://portkey.ai](https://portkey.ai)
+- **Portkey Documentation**: [https://docs.portkey.ai](https://docs.portkey.ai)
+- **Portkey Dashboard**: [https://app.portkey.ai](https://app.portkey.ai)
+- **Supported Models**: [https://docs.portkey.ai/docs/integrations/models](https://docs.portkey.ai/docs/integrations/models)
+- **Langroid Examples**: `examples/portkey/` directory
+- **API Reference**: [https://docs.portkey.ai/docs/api-reference](https://docs.portkey.ai/docs/api-reference)
+</file>
+
 <file path="docs/notes/quiet-mode.md">
 # Suppressing LLM output: quiet mode
 
@@ -6915,6 +7382,194 @@ where `<model>` follows the syntax described in the previous sections. Here's an
 pytest tests/main/test_chat_agent.py --m ollama/mixtral
 ```
 Of course, bear in mind that the tests may not pass due to weaknesses of the local LLM.
+</file>
+
+<file path="docs/tutorials/non-openai-llms.md">
+# Using Langroid with Non-OpenAI LLMs
+
+Langroid was initially written to work with OpenAI models via their API.
+This may sound limiting, but fortunately:
+
+- Many open-source LLMs can be served via 
+OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.io/langroid/tutorials/local-llm-setup/) guide for details.
+- There are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
+  that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
+(e.g. Anthropic's Claude, Google's Gemini).
+- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), and [OpenRouter](https://openrouter.ai/) provide unified access to multiple LLM providers with additional features like cost control, observability, caching, and fallback strategies.
+  
+Below we show how you can use these various options with Langroid.
+
+## Create an `OpenAIGPTConfig` object with `chat_model = "litellm/..."`
+
+!!! note "Install `litellm` extra"
+    To use `litellm` you need to install Langroid with the `litellm` extra, e.g.:
+    `pip install "langroid[litellm]"`
+
+Next, look up the instructions in LiteLLM docs for the specific model you are 
+interested. Here we take the example of Anthropic's `claude-instant-1` model.
+Set up the necessary environment variables as specified in the LiteLLM docs,
+e.g. for the `claude-instant-1` model, you will need to set the `ANTHROPIC_API_KEY`
+```bash
+export ANTHROPIC_API_KEY=my-api-key
+```
+
+Now you are ready to create an instance of `OpenAIGPTConfig` with the 
+`chat_model` set to `litellm/<model_spec>`, where you should set `model_spec` based on LiteLLM 
+docs. For example, for the `claude-instant-1` model, you would set `chat_model` to
+`litellm/claude-instant-1`. But if you are using the model via a 3rd party provider,
+(e.g. those via Amazon Bedrock), you may also need to have a `provider` part in the `model_spec`, e.g. 
+`litellm/bedrock/anthropic.claude-instant-v1`. In general you can see which of
+these to use, from the LiteLLM docs.
+
+```python
+import langroid.language_models as lm
+
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="litellm/claude-instant-v1",
+    chat_context_length=8000, # adjust according to model
+)
+```
+
+A similar process works for the `Gemini 1.5 Pro` LLM:
+
+- get the API key [here](https://aistudio.google.com/)
+- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="litellm/gemini/gemini-1.5-pro-latest"` in the `OpenAIGPTConfig` object
+
+For other gemini models supported by litellm, see [their docs](https://litellm.vercel.app/docs/providers/gemini)
+
+## Gemini LLMs via OpenAI client, without LiteLLM
+
+This is now the recommended way to use Gemini LLMs with Langroid,
+where you don't need to use LiteLLM. As of 11/20/2024, these models
+are [available via the OpenAI client](https://developers.googleblog.com/en/gemini-is-now-accessible-from-the-openai-library/).
+
+To use langroid with Gemini LLMs, all you have to do is:
+
+- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="gemini/<model_name>"` in the `OpenAIGPTConfig` object,  
+  where <model_name> is one of "gemini-1.5-flash", "gemini-1.5-flash-8b", or "gemini-1.5-pro"
+
+See [here](https://ai.google.dev/gemini-api/docs/models/gemini) for details on Gemini models.
+
+For example, you can use this `llm_config`:
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="gemini/" + lm.OpenAIChatModel.GEMINI_1_5_FLASH,
+)
+```
+
+In most tests you can switch to a gemini model, e.g. `--m gemini/gemini-1.5-flash`, 
+e.g.:
+
+```bash
+pytest -xvs tests/main/test_llm.py --m gemini/gemini-1.5-flash
+```
+
+Many of the example scripts allow switching the model using `-m` or `--model`, e.g.
+
+```bash
+python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
+```
+
+
+
+
+## AI Gateways for Multiple LLM Providers
+
+In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
+
+### LangDB
+
+[LangDB](https://langdb.ai/) is an AI gateway offering OpenAI-compatible APIs to access 250+ LLMs with cost control, observability, and performance benchmarking. LangDB enables seamless model switching while providing detailed analytics and usage tracking.
+
+To use LangDB with Langroid:
+- Set up your `LANGDB_API_KEY` and `LANGDB_PROJECT_ID` environment variables
+- Set `chat_model="langdb/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"langdb/anthropic/claude-3.7-sonnet"`)
+
+For detailed setup and usage instructions, see the [LangDB integration guide](../notes/langdb.md).
+
+### Portkey
+
+[Portkey](https://portkey.ai) is a comprehensive AI gateway that provides access to 200+ models from various providers through a unified API. It offers advanced features like intelligent caching, automatic retries, fallback strategies, and comprehensive observability tools for production deployments.
+
+To use Portkey with Langroid:
+- Set up your `PORTKEY_API_KEY` environment variable (plus provider API keys like `OPENAI_API_KEY`)
+- Set `chat_model="portkey/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"portkey/openai/gpt-4o-mini"`)
+
+For detailed setup and usage instructions, see the [Portkey integration guide](../notes/portkey.md).
+
+### OpenRouter
+
+[OpenRouter](https://openrouter.ai/) provides access to a wide variety of both open and proprietary LLMs through a unified API. It features automatic routing and load balancing, making it particularly useful for accessing larger open LLMs without local resources and for using multiple providers through a single interface.
+
+To use OpenRouter with Langroid:
+- Set up your `OPENROUTER_API_KEY` environment variable
+- Set `chat_model="openrouter/<model_name>"` in the `OpenAIGPTConfig`
+
+For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
+
+## Working with the created `OpenAIGPTConfig` object
+
+From here you can proceed as usual, creating instances of `OpenAIGPT`,
+`ChatAgentConfig`, `ChatAgent` and `Task` object as usual.
+
+E.g. you can create an object of class `OpenAIGPT` (which represents any
+LLM with an OpenAI-compatible API) and interact with it directly:
+```python
+llm = lm.OpenAIGPT(llm_config)
+messages = [
+    LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM),
+    LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
+],
+response = mdl.chat(messages, max_tokens=50)
+```
+
+When you interact directly with the LLM, you are responsible for keeping dialog history.
+Also you would often want an LLM to have access to tools/functions and external
+data/documents (e.g. vector DB or traditional DB). An Agent class simplifies managing all of these.
+For example, you can create an Agent powered by the above LLM, wrap it in a Task and have it
+run as an interactive chat app:
+
+```python
+agent_config = lr.ChatAgentConfig(llm=llm_config, name="my-llm-agent")
+agent = lr.ChatAgent(agent_config)
+
+task = lr.Task(agent, name="my-llm-task")
+task.run()
+```
+
+## Example: Simple Chat script with a non-OpenAI proprietary model
+
+Many of the Langroid example scripts have a convenient `-m`  flag that lets you
+easily switch to a different model. For example, you can run 
+the `chat.py` script in the `examples/basic` folder with the 
+`litellm/claude-instant-v1` model:
+```bash
+python3 examples/basic/chat.py -m litellm/claude-instant-1
+```
+
+## Quick testing with non-OpenAI models
+
+There are numerous tests in the main [Langroid repo](https://github.com/langroid/langroid) that involve
+LLMs, and once you setup the dev environment as described in the README of the repo, 
+you can run any of those tests (which run against the default GPT4 model) against
+local/remote models that are proxied by `liteLLM` (or served locally via the options mentioned above,
+such as `oobabooga`, `ollama` or `llama-cpp-python`), using the `--m <model-name>` option,
+where `model-name` takes one of the forms above. Some examples of tests are:
+
+```bash
+pytest -s tests/test_llm.py --m local/localhost:8000
+pytest -s tests/test_llm.py --m litellm/claude-instant-1
+```
+When the `--m` option is omitted, the default OpenAI GPT4 model is used.
+
+!!! note "`chat_context_length` is not affected by `--m`"
+      Be aware that the `--m` only switches the model, but does not affect the `chat_context_length` 
+      parameter in the `OpenAIGPTConfig` object. which you may need to adjust for different models.
+      So this option is only meant for quickly testing against different models, and not meant as
+      a way to switch between models in a production environment.
 </file>
 
 <file path="docs/tutorials/postgresql-agent.md">
@@ -9926,6 +10581,70 @@ agent = lr.ChatAgent(
 task = lr.Task(agent, interactive=False)
 </file>
 
+<file path="examples/mcp/pyodide_code_executor.py">
+"""
+Simple example of using the Pyodide MCP server.
+    https://github.com/pydantic/pydantic-ai/tree/main/mcp-run-python
+
+Before running make sure you have deno installed
+    https://docs.deno.com/runtime/getting_started/installation/
+
+Run like this:
+
+    uv run examples/mcp/pyodide_code_executor.py --model gpt-4.1-mini
+
+"""
+⋮----
+RUN_ONCE: bool = True  # terminate task on first result?
+⋮----
+deno_transport = StdioTransport(
+⋮----
+# Illustrating how we can:
+# - use the MCP tool decorator to create a Langroid ToolMessage subclass
+# - override the handle_async() method to customize the output, sent to the LLM
+⋮----
+class MyResult(ResultTool)
+⋮----
+answer: str
+⋮----
+@mcp_tool(deno_transport, "run_python_code")
+class PythonCodeExecutor(lr.ToolMessage)
+⋮----
+async def handle_async(self)
+⋮----
+result: str = await self.call_tool_async()
+⋮----
+# terminate task with this result
+⋮----
+# this result goes to LLM, and loop with user continues
+⋮----
+async def main(model: str = "")
+⋮----
+agent = lr.ChatAgent(
+⋮----
+# forward to user when LLM doesn't use a tool
+⋮----
+# this defaults to True, but we set it to False so we can see output
+⋮----
+# enable the agent to use the PythonCodeExecutor tool
+⋮----
+# make task with interactive=False =>
+# waits for user only when LLM doesn't use a tool
+⋮----
+task = lr.Task(agent, interactive=False)[MyResult]
+result: MyResult | None = await task.run_async()
+⋮----
+task = lr.Task(agent, interactive=False)
+⋮----
+def run_main(**kwargs) -> None
+⋮----
+"""Run the async main function with a proper event loop.
+
+        Args:
+            **kwargs: Keyword arguments to pass to the main function.
+        """
+</file>
+
 <file path="examples/multi-agent-debate/README.md">
 Debate System Using LLM Agents
 ==============================
@@ -10048,6 +10767,433 @@ The feedback mechanism evaluates debates based on:
 License
 -------
 This project is licensed under the MIT License.
+</file>
+
+<file path="examples/portkey/portkey_advanced_features.py">
+#!/usr/bin/env python3
+⋮----
+"""
+Advanced Portkey example showing observability, caching, retries, and metadata.
+
+This example demonstrates:
+- Advanced Portkey configuration with all features
+- Request tracing and metadata
+- Caching and retry strategies
+- Custom headers for observability
+
+Run with: python portkey_advanced_features.py
+"""
+⋮----
+def check_env_var(var_name: str) -> Optional[str]
+⋮----
+"""Check if environment variable is set and return its value."""
+value = os.getenv(var_name)
+⋮----
+def create_advanced_portkey_llm(portkey_api_key: str, user_id: str) -> lm.OpenAIGPT
+⋮----
+"""Create an advanced Portkey-enabled LLM with all features."""
+⋮----
+# Generate unique trace ID for this session
+trace_id = f"trace-{uuid.uuid4().hex[:8]}"
+⋮----
+config = lm.OpenAIGPTConfig(
+⋮----
+# Observability features
+⋮----
+# Retry configuration
+⋮----
+# Caching configuration
+⋮----
+"ttl": 3600,  # 1 hour
+⋮----
+# User tracking
+⋮----
+# Custom headers for additional tracking
+⋮----
+def demonstrate_caching(llm: lm.OpenAIGPT)
+⋮----
+"""Demonstrate Portkey's caching capabilities."""
+⋮----
+question = "What are the three laws of robotics by Isaac Asimov?"
+⋮----
+response1 = llm.chat(question)
+⋮----
+response2 = llm.chat(question)
+⋮----
+def demonstrate_metadata_tracking(llm: lm.OpenAIGPT, user_id: str)
+⋮----
+"""Demonstrate request tracking with metadata."""
+⋮----
+questions = [
+⋮----
+# Create a new LLM instance with updated metadata for each question
+trace_id = f"trace-q{i}-{uuid.uuid4().hex[:6]}"
+⋮----
+"timestamp": str(uuid.uuid4()),  # Unique per request
+⋮----
+question_llm = lm.OpenAIGPT(config)
+response = question_llm.chat(question)
+⋮----
+def demonstrate_error_handling()
+⋮----
+"""Demonstrate error handling and retry behavior."""
+⋮----
+# Create config with invalid model to test error handling
+⋮----
+error_llm = lm.OpenAIGPT(config)
+response = error_llm.chat("This should fail")
+⋮----
+def main()
+⋮----
+"""Main function demonstrating advanced Portkey features."""
+⋮----
+# Check for required environment variables
+portkey_api_key = check_env_var("PORTKEY_API_KEY")
+⋮----
+openai_api_key = check_env_var("OPENAI_API_KEY")
+⋮----
+# Generate a unique user ID for this session
+user_id = f"user-{uuid.uuid4().hex[:8]}"
+⋮----
+# Create advanced LLM configuration
+⋮----
+llm = create_advanced_portkey_llm(portkey_api_key, user_id)
+⋮----
+# Demonstrate different features
+</file>
+
+<file path="examples/portkey/portkey_basic_chat.py">
+#!/usr/bin/env python3
+⋮----
+"""
+Basic Portkey example showing how to use different AI providers through Portkey's gateway.
+
+This example demonstrates:
+- Basic Portkey configuration
+- Switching between different AI providers
+- Automatic API key resolution
+
+Run with: python portkey_basic_chat.py
+"""
+⋮----
+def check_env_var(var_name: str) -> Optional[str]
+⋮----
+"""Check if environment variable is set and return its value."""
+value = os.getenv(var_name)
+⋮----
+def create_portkey_llm(provider: str, model: str, portkey_api_key: str) -> lm.OpenAIGPT
+⋮----
+"""Create a Portkey-enabled LLM configuration."""
+config = lm.OpenAIGPTConfig(
+⋮----
+def test_provider(llm: lm.OpenAIGPT, provider_name: str)
+⋮----
+"""Test a specific provider with a simple question."""
+⋮----
+question = "What is the capital of France? Answer in one sentence."
+⋮----
+response = llm.chat(question)
+⋮----
+def main()
+⋮----
+"""Main function demonstrating Portkey basic usage."""
+⋮----
+# Check for required environment variables
+portkey_api_key = check_env_var("PORTKEY_API_KEY")
+⋮----
+# Test different providers through Portkey
+providers_to_test = []
+⋮----
+# Check which provider keys are available
+⋮----
+# Test each available provider
+⋮----
+llm = create_portkey_llm(provider, model, portkey_api_key)
+</file>
+
+<file path="examples/portkey/portkey_multi_provider.py">
+#!/usr/bin/env python3
+⋮----
+"""
+Multi-provider Portkey example showing how to compare responses across different AI providers.
+
+This example demonstrates:
+- Using multiple providers through Portkey
+- Comparing response quality and characteristics
+- Provider-specific configurations
+- Fallback strategies
+
+Run with: python portkey_multi_provider.py
+"""
+⋮----
+def check_env_var(var_name: str) -> Optional[str]
+⋮----
+"""Check if environment variable is set and return its value."""
+value = os.getenv(var_name)
+⋮----
+"""Create a Portkey-enabled LLM for a specific provider."""
+config = lm.OpenAIGPTConfig(
+⋮----
+display_name = f"{provider.title()} ({model})"
+⋮----
+"""Test all providers on the same question and compare responses."""
+⋮----
+responses = []
+⋮----
+start_time = time.time()
+response = llm.chat(question)
+end_time = time.time()
+⋮----
+def demonstrate_creative_tasks(providers: List[Tuple[lm.OpenAIGPT, str]])
+⋮----
+"""Test providers on creative tasks to see different capabilities."""
+⋮----
+creative_questions = [
+⋮----
+def demonstrate_analytical_tasks(providers: List[Tuple[lm.OpenAIGPT, str]])
+⋮----
+"""Test providers on analytical tasks."""
+⋮----
+analytical_questions = [
+⋮----
+def demonstrate_fallback_strategy(portkey_api_key: str)
+⋮----
+"""Demonstrate a simple fallback strategy across providers."""
+⋮----
+# Define providers in order of preference
+fallback_providers = [
+⋮----
+question = "What is the meaning of life in one sentence?"
+⋮----
+return  # Success, stop trying
+⋮----
+def main()
+⋮----
+"""Main function demonstrating multi-provider usage."""
+⋮----
+# Check for required environment variables
+portkey_api_key = check_env_var("PORTKEY_API_KEY")
+⋮----
+# Collect available providers
+providers = []
+⋮----
+# Run comparisons
+⋮----
+# Always demonstrate fallback (works with 1+ providers)
+</file>
+
+<file path="examples/portkey/README.md">
+# Portkey Examples
+
+This folder contains examples demonstrating how to use [Portkey](https://portkey.ai) with Langroid for enhanced LLM gateway functionality and observability.
+
+## Prerequisites
+
+Before running any examples, make sure you've installed Langroid as usual.
+
+At minimum, have these environment variables set up in your `.env` file or environment:
+```bash
+PORTKEY_API_KEY=your_portkey_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here  # or any provider's key
+ANTHROPIC_API_KEY=your_anthropic_key_here  # if using Anthropic
+```
+
+### 1. Portkey Basic Chat (`portkey_basic_chat.py`)
+
+Demonstrates basic chat functionality with Portkey:
+- Uses Portkey as a gateway to different AI providers
+- Shows automatic provider API key resolution
+- Demonstrates model switching across providers
+
+```python
+# Run the example from root of repo, after activating your virtual environment with uv:
+uv run examples/portkey/portkey_basic_chat.py
+```
+
+### 2. Portkey Advanced Features (`portkey_advanced_features.py`)
+
+Shows how to use Portkey's advanced features:
+- Virtual keys for provider management
+- Caching and retry configurations
+- Request tracing and metadata
+- Custom headers for observability
+
+```python
+# Run the example
+uv run examples/portkey/portkey_advanced_features.py
+```
+
+### 3. Portkey Multi-Provider Example (`portkey_multi_provider.py`)
+
+Showcases Portkey's ability to switch between providers:
+- Compares responses from different providers
+- Demonstrates fallback strategies
+- Shows how to use virtual keys for different models
+
+```python
+# Run the example
+uv run examples/portkey/portkey_multi_provider.py
+```
+
+## Using Portkey
+
+### Basic Configuration
+
+Portkey can route requests to any AI provider through a unified API:
+
+```python
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.provider_params import PortkeyParams
+
+# Configure for OpenAI via Portkey
+config = OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o-mini",
+    portkey_params=PortkeyParams(
+        api_key="your-portkey-api-key",  # Or use PORTKEY_API_KEY env var
+    )
+)
+
+# Configure for Anthropic via Portkey
+config = OpenAIGPTConfig(
+    chat_model="portkey/anthropic/claude-3-sonnet-20240229",
+    portkey_params=PortkeyParams(
+        api_key="your-portkey-api-key",
+    )
+)
+```
+
+### Advanced Features
+
+Portkey provides powerful gateway features:
+
+```python
+from langroid.language_models.provider_params import PortkeyParams
+
+# Advanced configuration with observability
+params = PortkeyParams(
+    api_key="your-portkey-api-key",
+    virtual_key="vk-your-virtual-key",  # For provider abstraction
+    trace_id="trace-123",               # For request tracing
+    metadata={"user": "john", "app": "langroid"},  # Custom metadata
+    retry={"max_retries": 3, "backoff": "exponential"},  # Retry config
+    cache={"enabled": True, "ttl": 3600},  # Caching config
+    cache_force_refresh=False,          # Cache control
+    user="user-123",                    # User identifier
+    organization="org-456",             # Organization identifier
+    custom_headers={                    # Additional custom headers
+        "x-custom-header": "value"
+    }
+)
+
+config = OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+    portkey_params=params
+)
+```
+
+### Supported Providers
+
+Portkey supports many AI providers:
+
+```python
+# OpenAI
+chat_model="portkey/openai/gpt-4o"
+
+# Anthropic
+chat_model="portkey/anthropic/claude-3-5-sonnet-20241022"
+
+# Google Gemini
+chat_model="portkey/google/gemini-2.0-flash-lite"
+
+# Cohere
+chat_model="portkey/cohere/command-r-plus"
+
+# Many more providers available through Portkey
+```
+
+### Environment Variables
+
+Portkey integration automatically resolves API keys from environment variables:
+
+```bash
+# Portkey API key
+PORTKEY_API_KEY=your_portkey_api_key
+
+# Provider API keys (used for actual model calls)
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+GOOGLE_API_KEY=your_google_key
+COHERE_API_KEY=your_cohere_key
+```
+
+### Virtual Keys
+
+Use virtual keys to abstract provider management:
+
+```python
+# Configure with virtual key
+config = OpenAIGPTConfig(
+    chat_model="portkey/openai/gpt-4o",
+    portkey_params=PortkeyParams(
+        virtual_key="vk-your-virtual-key",  # Manages provider key automatically
+    )
+)
+```
+
+### Viewing Results
+
+1. Visit the [Portkey Dashboard](https://app.portkey.ai)
+2. Navigate to your project
+3. View detailed analytics:
+   - Request/response logs
+   - Token usage and costs
+   - Performance metrics
+   - Error rates and debugging
+
+## Best Practices
+
+1. **Use Virtual Keys**: Abstract provider management for easier switching
+2. **Add Metadata**: Include user and application context for better tracking
+3. **Configure Retries**: Set up automatic retry strategies for reliability
+4. **Enable Caching**: Reduce costs and improve performance with intelligent caching
+5. **Monitor Performance**: Use trace IDs and metadata for detailed observability
+
+## Troubleshooting
+
+Common issues and solutions:
+
+1. **Authentication Errors**:
+   - Verify `PORTKEY_API_KEY` is set correctly
+   - Ensure provider API keys are available (e.g., `OPENAI_API_KEY`)
+
+2. **Model Not Found**:
+   - Ensure the model name includes the `portkey/` prefix
+   - Verify the provider and model are supported by Portkey
+
+3. **Rate Limiting**:
+   - Configure retry parameters in PortkeyParams
+   - Use virtual keys for better rate limit management
+
+4. **Virtual Key Issues**:
+   - Verify virtual key is correctly configured in Portkey dashboard
+   - Check virtual key has access to the requested provider/model
+
+For more help, visit the [Portkey Documentation](https://docs.portkey.ai).
+</file>
+
+<file path="examples/portkey/requirements.txt">
+# Requirements for Portkey examples
+# These are included in the main Langroid installation
+
+# Core Langroid (includes all necessary dependencies)
+langroid
+
+# The examples use standard library modules and Langroid's built-in Portkey support
+# No additional dependencies are required beyond what Langroid provides
+
+# Optional: For development and testing
+# pytest>=7.0.0
+# python-dotenv>=0.19.0
 </file>
 
 <file path="examples/quick-start/chat-agent.py">
@@ -16317,6 +17463,157 @@ def test_parse_imperfect_json(input_json, expected_output)
 def test_invalid_json_raises_error(invalid_input)
 </file>
 
+<file path="tests/main/test_llm_async.py">
+# allow streaming globally, but can be turned off by individual models
+⋮----
+cfg = OpenAIGPTConfig(
+⋮----
+stream=streaming,  # use streaming output if enabled globally
+⋮----
+mdl = OpenAIGPT(config=cfg)
+question = "What is the capital of " + country + "?"
+⋮----
+# chat mode via `generate`,
+# i.e. use same call as for completion, but the setting below
+# actually calls `achat` under the hood
+⋮----
+# check that "agenerate" works
+response = await mdl.agenerate(prompt=question, max_tokens=50)
+⋮----
+# actual chat mode
+messages = [
+response = await mdl.achat(messages=messages, max_tokens=50)
+⋮----
+# should be from cache this time
+⋮----
+# pass intentional bad msg to test error handling
+⋮----
+@pytest.mark.asyncio
+async def test_llm_async_concurrent(test_settings: Settings)
+⋮----
+stream=False,  # use streaming output if enabled globally
+⋮----
+N = 5
+questions = ["1+" + str(i) for i in range(N)]
+expected_answers = [str(i + 1) for i in range(N)]
+answers = await asyncio.gather(
+⋮----
+async def test_llm_langdb(model: str)
+⋮----
+"""Test that LLM access via LangDB works."""
+⋮----
+llm_config_langdb = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_langdb)
+result = await llm.achat("what is 3+4?")
+⋮----
+async def test_llm_openrouter(model: str)
+⋮----
+# override models set via pytest ... --m <model>
+⋮----
+llm_config = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config)
+⋮----
+@pytest.mark.asyncio
+async def test_llm_pdf_attachment_async()
+⋮----
+"""Test sending a PDF file attachment to the LLM asynchronously."""
+⋮----
+# Path to the test PDF file
+pdf_path = Path("tests/main/data/dummy.pdf")
+⋮----
+# Create a FileAttachment from the PDF file
+attachment = FileAttachment.from_path(pdf_path)
+⋮----
+# Verify the attachment properties
+⋮----
+# Create messages with the attachment
+⋮----
+# Set up the LLM with a suitable model that supports PDFs
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+⋮----
+# Get response from the LLM asynchronously
+response = await llm.achat(messages=messages)
+⋮----
+# follow-up question
+⋮----
+@pytest.mark.asyncio
+async def test_llm_multi_pdf_attachment_async()
+⋮----
+# multiple attachments
+pdf_path2 = Path("tests/main/data/sample-test.pdf")
+⋮----
+attachment2 = FileAttachment.from_path(pdf_path2)
+⋮----
+@pytest.mark.asyncio
+async def test_litellm_model_key_async()
+⋮----
+"""
+    Test that passing in explicit api_key works with `litellm/*` models
+    """
+model = "litellm/anthropic/claude-3-5-haiku-latest"
+# disable any chat model passed via --m arg to pytest cmd
+⋮----
+# Create the LLM instance
+⋮----
+response = await llm.achat("What is 3+4?")
+⋮----
+async def test_llm_portkey_async(model: str)
+⋮----
+"""Test that LLM access via Portkey works asynchronously."""
+# override any chat model passed via --m arg to pytest cmd
+⋮----
+# Skip if PORTKEY_API_KEY is not set
+⋮----
+# Extract provider from model string
+provider = model.split("/")[1] if "/" in model else ""
+provider_key_var = f"{provider.upper()}_API_KEY"
+⋮----
+# Skip if provider API key is not set
+⋮----
+llm_config_portkey = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_portkey)
+result = await llm.achat("what is 3+4 equal to?")
+⋮----
+@pytest.mark.asyncio
+async def test_portkey_params_async()
+⋮----
+"""Test that PortkeyParams are correctly configured in async context."""
+⋮----
+# Test with explicit parameters
+params = PortkeyParams(
+⋮----
+headers = params.get_headers()
+⋮----
+# Test model string parsing
+⋮----
+# Test fallback parsing
+⋮----
+# Test provider API key retrieval
+⋮----
+key = params.get_provider_api_key("test_provider")
+⋮----
+@pytest.mark.asyncio
+async def test_portkey_integration_async()
+⋮----
+"""Test that Portkey integration is properly configured in OpenAIGPT with async."""
+⋮----
+# Save the current chat model setting
+original_chat_model = settings.chat_model
+⋮----
+# Clear any global chat model override
+⋮----
+# Test basic portkey model configuration
+config = lm.OpenAIGPTConfig(
+⋮----
+llm = lm.OpenAIGPT(config)
+⋮----
+# Check that model was parsed correctly
+⋮----
+# Check headers are set correctly
+⋮----
+# Restore original chat model setting
+</file>
+
 <file path="tests/main/test_markitdown_parser.py">
 def test_markitdown_xls_parser()
 ⋮----
@@ -19446,473 +20743,6 @@ except AssertionError as e:
 ```
 </file>
 
-<file path="docs/notes/portkey.md">
-# Portkey Integration
-
-Langroid provides seamless integration with [Portkey](https://portkey.ai), a powerful AI gateway that enables you to access multiple LLM providers through a unified API with advanced features like caching, retries, fallbacks, and comprehensive observability.
-
-## What is Portkey?
-
-Portkey is an AI gateway that sits between your application and various LLM providers, offering:
-
-- **Unified API**: Access 200+ models from different providers through one interface
-- **Reliability**: Automatic retries, fallbacks, and load balancing
-- **Observability**: Detailed logging, tracing, and analytics
-- **Performance**: Intelligent caching and request optimization
-- **Security**: Virtual keys and advanced access controls
-- **Cost Management**: Usage tracking and budget controls
-
-For complete documentation, visit the [Portkey Documentation](https://docs.portkey.ai).
-
-## Quick Start
-
-### 1. Setup
-
-First, sign up for a Portkey account at [portkey.ai](https://portkey.ai) and get your API key.
-
-Set up your environment variables, either explicitly or in your `.env` file as usual: 
-
-```bash
-# Required: Portkey API key
-export PORTKEY_API_KEY="your-portkey-api-key"
-
-# Required: Provider API keys (for the models you want to use)
-export OPENAI_API_KEY="your-openai-key"
-export ANTHROPIC_API_KEY="your-anthropic-key"
-export GOOGLE_API_KEY="your-google-key"
-# ... other provider keys as needed
-```
-
-### 2. Basic Usage
-
-```python
-import langroid as lr
-import langroid.language_models as lm
-from langroid.language_models.provider_params import PortkeyParams
-
-# Create an LLM config to use Portkey's OpenAI-compatible API
-# (Note that the name `OpenAIGPTConfig` does NOT imply it only works with OpenAI models;
-# the name reflects the fact that the config is meant to be used with an
-# OpenAI-compatible API, which Portkey provides for multiple LLM providers.)
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        api_key="your-portkey-api-key",  # Or set PORTKEY_API_KEY env var
-    )
-)
-
-# Create LLM instance
-llm = lm.OpenAIGPT(llm_config)
-
-# Use normally
-response = llm.chat("What is the smallest prime number?")
-print(response.message)
-```
-
-### 3. Multiple Providers
-
-Switch between providers seamlessly:
-
-```python
-# OpenAI
-config_openai = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-)
-
-# Anthropic
-config_anthropic = lm.OpenAIGPTConfig(
-    chat_model="portkey/anthropic/claude-3-5-sonnet-20241022",
-)
-
-# Google Gemini
-config_gemini = lm.OpenAIGPTConfig(
-    chat_model="portkey/google/gemini-2.0-flash-lite",
-)
-```
-
-## Advanced Features
-
-### Virtual Keys
-
-Use virtual keys to abstract provider management:
-
-```python
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-    portkey_params=PortkeyParams(
-        virtual_key="vk-your-virtual-key",  # Configured in Portkey dashboard
-    )
-)
-```
-
-### Caching and Performance
-
-Enable intelligent caching to reduce costs and improve performance:
-
-```python
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        cache={
-            "enabled": True,
-            "ttl": 3600,  # 1 hour cache
-            "namespace": "my-app"
-        },
-        cache_force_refresh=False,
-    )
-)
-```
-
-### Retry Strategies
-
-Configure automatic retries for better reliability:
-
-```python
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/anthropic/claude-3-haiku-20240307",
-    portkey_params=PortkeyParams(
-        retry={
-            "max_retries": 3,
-            "backoff": "exponential",
-            "jitter": True
-        }
-    )
-)
-```
-
-### Observability and Tracing
-
-Add comprehensive tracking for production monitoring:
-
-```python
-import uuid
-
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-    portkey_params=PortkeyParams(
-        trace_id=f"trace-{uuid.uuid4().hex[:8]}",
-        metadata={
-            "user_id": "user-123",
-            "session_id": "session-456",
-            "app_version": "1.2.3"
-        },
-        user="user-123",
-        organization="my-org",
-        custom_headers={
-            "x-request-source": "langroid",
-            "x-feature": "chat-completion"
-        }
-    )
-)
-```
-
-## Configuration Reference
-
-The `PortkeyParams` class supports all Portkey features:
-
-```python
-from langroid.language_models.provider_params import PortkeyParams
-
-params = PortkeyParams(
-    # Authentication
-    api_key="pk-...",                    # Portkey API key
-    virtual_key="vk-...",               # Virtual key (optional)
-    
-    # Observability
-    trace_id="trace-123",               # Request tracing
-    metadata={"key": "value"},          # Custom metadata
-    user="user-id",                     # User identifier
-    organization="org-id",              # Organization identifier
-    
-    # Performance
-    cache={                             # Caching configuration
-        "enabled": True,
-        "ttl": 3600,
-        "namespace": "my-app"
-    },
-    cache_force_refresh=False,          # Force cache refresh
-    
-    # Reliability
-    retry={                             # Retry configuration
-        "max_retries": 3,
-        "backoff": "exponential",
-        "jitter": True
-    },
-    
-    # Custom headers
-    custom_headers={                    # Additional headers
-        "x-custom": "value"
-    },
-    
-    # Base URL (usually not needed)
-    base_url="https://api.portkey.ai"   # Portkey API endpoint
-)
-```
-
-## Supported Providers
-
-Portkey supports 200+ models from various providers. Common ones include:
-
-```python
-# OpenAI
-"portkey/openai/gpt-4o"
-"portkey/openai/gpt-4o-mini"
-
-# Anthropic
-"portkey/anthropic/claude-3-5-sonnet-20241022"
-"portkey/anthropic/claude-3-haiku-20240307"
-
-# Google
-"portkey/google/gemini-2.0-flash-lite"
-"portkey/google/gemini-1.5-pro"
-
-# Cohere
-"portkey/cohere/command-r-plus"
-
-# Meta
-"portkey/meta/llama-3.1-405b-instruct"
-
-# And many more...
-```
-
-Check the [Portkey documentation](https://docs.portkey.ai/docs/integrations/models) for the complete list.
-
-## Examples
-
-Langroid includes comprehensive Portkey examples in `examples/portkey/`:
-
-1. **`portkey_basic_chat.py`** - Basic usage with multiple providers
-2. **`portkey_advanced_features.py`** - Caching, retries, and observability
-3. **`portkey_multi_provider.py`** - Comparing responses across providers
-
-Run any example:
-
-```bash
-cd examples/portkey
-python portkey_basic_chat.py
-```
-
-## Best Practices
-
-### 1. Use Environment Variables
-
-Never hardcode API keys:
-
-```bash
-# .env file
-PORTKEY_API_KEY=your_portkey_key
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
-```
-
-### 2. Implement Fallback Strategies
-
-Use multiple providers for reliability:
-
-```python
-providers = [
-    ("openai", "gpt-4o-mini"),
-    ("anthropic", "claude-3-haiku-20240307"),
-    ("google", "gemini-2.0-flash-lite")
-]
-
-for provider, model in providers:
-    try:
-        config = lm.OpenAIGPTConfig(
-            chat_model=f"portkey/{provider}/{model}"
-        )
-        llm = lm.OpenAIGPT(config)
-        return llm.chat(question)
-    except Exception:
-        continue  # Try next provider
-```
-
-### 3. Add Meaningful Metadata
-
-Include context for better observability:
-
-```python
-params = PortkeyParams(
-    metadata={
-        "user_id": user.id,
-        "feature": "document_qa",
-        "document_type": "pdf",
-        "processing_stage": "summary"
-    }
-)
-```
-
-### 4. Use Caching Wisely
-
-Enable caching for deterministic queries:
-
-```python
-# Good for caching
-params = PortkeyParams(
-    cache={"enabled": True, "ttl": 3600}
-)
-
-# Use with deterministic prompts
-response = llm.chat("What is the capital of France?")
-```
-
-### 5. Monitor Performance
-
-Use trace IDs to track request flows:
-
-```python
-import uuid
-
-trace_id = f"trace-{uuid.uuid4().hex[:8]}"
-params = PortkeyParams(
-    trace_id=trace_id,
-    metadata={"operation": "document_processing"}
-)
-
-# Use the same trace_id for related requests
-```
-
-## Monitoring and Analytics
-
-### Portkey Dashboard
-
-View detailed analytics at [app.portkey.ai](https://app.portkey.ai):
-
-- Request/response logs
-- Token usage and costs
-- Performance metrics (latency, errors)
-- Provider comparisons
-- Custom filters by metadata
-
-### Custom Filtering
-
-Use metadata and headers to filter requests:
-
-```python
-# Tag requests by feature
-params = PortkeyParams(
-    metadata={"feature": "chat", "version": "v2"},
-    custom_headers={"x-request-type": "production"}
-)
-```
-
-Then filter in the dashboard by:
-- `metadata.feature = "chat"`
-- `headers.x-request-type = "production"`
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication Errors**
-   ```
-   Error: Unauthorized (401)
-   ```
-   - Check `PORTKEY_API_KEY` is set correctly
-   - Verify API key is active in Portkey dashboard
-
-2. **Provider API Key Missing**
-   ```
-   Error: Missing API key for provider
-   ```
-   - Set provider API key (e.g., `OPENAI_API_KEY`)
-   - Or use virtual keys in Portkey dashboard
-
-3. **Model Not Found**
-   ```
-   Error: Model not supported
-   ```
-   - Check model name format: `portkey/provider/model`
-   - Verify model is available through Portkey
-
-4. **Rate Limiting**
-   ```
-   Error: Rate limit exceeded
-   ```
-   - Configure retry parameters
-   - Use virtual keys for better rate limit management
-
-### Debug Mode
-
-Enable detailed logging:
-
-```python
-import logging
-logging.getLogger("langroid").setLevel(logging.DEBUG)
-```
-
-### Test Configuration
-
-Verify your setup:
-
-```python
-# Test basic connection
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    max_output_tokens=50
-)
-llm = lm.OpenAIGPT(config)
-response = llm.chat("Hello")
-print("✅ Portkey integration working!")
-```
-
-## Migration Guide
-
-### From Direct Provider Access
-
-If you're currently using providers directly:
-
-```python
-# Before: Direct OpenAI
-config = lm.OpenAIGPTConfig(
-    chat_model="gpt-4o-mini"
-)
-
-# After: Through Portkey
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini"
-)
-```
-
-### Adding Advanced Features Gradually
-
-Start simple and add features as needed:
-
-```python
-# Step 1: Basic Portkey
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini"
-)
-
-# Step 2: Add caching
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        cache={"enabled": True, "ttl": 3600}
-    )
-)
-
-# Step 3: Add observability
-config = lm.OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        cache={"enabled": True, "ttl": 3600},
-        metadata={"app": "my-app", "user": "user-123"},
-        trace_id="trace-abc123"
-    )
-)
-```
-
-## Resources
-
-- **Portkey Website**: [https://portkey.ai](https://portkey.ai)
-- **Portkey Documentation**: [https://docs.portkey.ai](https://docs.portkey.ai)
-- **Portkey Dashboard**: [https://app.portkey.ai](https://app.portkey.ai)
-- **Supported Models**: [https://docs.portkey.ai/docs/integrations/models](https://docs.portkey.ai/docs/integrations/models)
-- **Langroid Examples**: `examples/portkey/` directory
-- **API Reference**: [https://docs.portkey.ai/docs/api-reference](https://docs.portkey.ai/docs/api-reference)
-</file>
-
 <file path="docs/notes/pydantic-v2-migration.md">
 # Pydantic v2 Migration Guide
 
@@ -20815,194 +21645,6 @@ If you want to see full working examples combining these elements,
 have a look at the 
 [`examples`](https://github.com/langroid/langroid-examples/tree/main/examples)
 folder in the `langroid-examples` repo.
-</file>
-
-<file path="docs/tutorials/non-openai-llms.md">
-# Using Langroid with Non-OpenAI LLMs
-
-Langroid was initially written to work with OpenAI models via their API.
-This may sound limiting, but fortunately:
-
-- Many open-source LLMs can be served via 
-OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.io/langroid/tutorials/local-llm-setup/) guide for details.
-- There are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
-  that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
-(e.g. Anthropic's Claude, Google's Gemini).
-- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), and [OpenRouter](https://openrouter.ai/) provide unified access to multiple LLM providers with additional features like cost control, observability, caching, and fallback strategies.
-  
-Below we show how you can use these various options with Langroid.
-
-## Create an `OpenAIGPTConfig` object with `chat_model = "litellm/..."`
-
-!!! note "Install `litellm` extra"
-    To use `litellm` you need to install Langroid with the `litellm` extra, e.g.:
-    `pip install "langroid[litellm]"`
-
-Next, look up the instructions in LiteLLM docs for the specific model you are 
-interested. Here we take the example of Anthropic's `claude-instant-1` model.
-Set up the necessary environment variables as specified in the LiteLLM docs,
-e.g. for the `claude-instant-1` model, you will need to set the `ANTHROPIC_API_KEY`
-```bash
-export ANTHROPIC_API_KEY=my-api-key
-```
-
-Now you are ready to create an instance of `OpenAIGPTConfig` with the 
-`chat_model` set to `litellm/<model_spec>`, where you should set `model_spec` based on LiteLLM 
-docs. For example, for the `claude-instant-1` model, you would set `chat_model` to
-`litellm/claude-instant-1`. But if you are using the model via a 3rd party provider,
-(e.g. those via Amazon Bedrock), you may also need to have a `provider` part in the `model_spec`, e.g. 
-`litellm/bedrock/anthropic.claude-instant-v1`. In general you can see which of
-these to use, from the LiteLLM docs.
-
-```python
-import langroid.language_models as lm
-
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="litellm/claude-instant-v1",
-    chat_context_length=8000, # adjust according to model
-)
-```
-
-A similar process works for the `Gemini 1.5 Pro` LLM:
-
-- get the API key [here](https://aistudio.google.com/)
-- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
-- set `chat_model="litellm/gemini/gemini-1.5-pro-latest"` in the `OpenAIGPTConfig` object
-
-For other gemini models supported by litellm, see [their docs](https://litellm.vercel.app/docs/providers/gemini)
-
-## Gemini LLMs via OpenAI client, without LiteLLM
-
-This is now the recommended way to use Gemini LLMs with Langroid,
-where you don't need to use LiteLLM. As of 11/20/2024, these models
-are [available via the OpenAI client](https://developers.googleblog.com/en/gemini-is-now-accessible-from-the-openai-library/).
-
-To use langroid with Gemini LLMs, all you have to do is:
-
-- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
-- set `chat_model="gemini/<model_name>"` in the `OpenAIGPTConfig` object,  
-  where <model_name> is one of "gemini-1.5-flash", "gemini-1.5-flash-8b", or "gemini-1.5-pro"
-
-See [here](https://ai.google.dev/gemini-api/docs/models/gemini) for details on Gemini models.
-
-For example, you can use this `llm_config`:
-
-```python
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="gemini/" + lm.OpenAIChatModel.GEMINI_1_5_FLASH,
-)
-```
-
-In most tests you can switch to a gemini model, e.g. `--m gemini/gemini-1.5-flash`, 
-e.g.:
-
-```bash
-pytest -xvs tests/main/test_llm.py --m gemini/gemini-1.5-flash
-```
-
-Many of the example scripts allow switching the model using `-m` or `--model`, e.g.
-
-```bash
-python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
-```
-
-
-
-
-## AI Gateways for Multiple LLM Providers
-
-In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
-
-### LangDB
-
-[LangDB](https://langdb.ai/) is an AI gateway offering OpenAI-compatible APIs to access 250+ LLMs with cost control, observability, and performance benchmarking. LangDB enables seamless model switching while providing detailed analytics and usage tracking.
-
-To use LangDB with Langroid:
-- Set up your `LANGDB_API_KEY` and `LANGDB_PROJECT_ID` environment variables
-- Set `chat_model="langdb/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"langdb/anthropic/claude-3.7-sonnet"`)
-
-For detailed setup and usage instructions, see the [LangDB integration guide](../notes/langdb.md).
-
-### Portkey
-
-[Portkey](https://portkey.ai) is a comprehensive AI gateway that provides access to 200+ models from various providers through a unified API. It offers advanced features like intelligent caching, automatic retries, fallback strategies, and comprehensive observability tools for production deployments.
-
-To use Portkey with Langroid:
-- Set up your `PORTKEY_API_KEY` environment variable (plus provider API keys like `OPENAI_API_KEY`)
-- Set `chat_model="portkey/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"portkey/openai/gpt-4o-mini"`)
-
-For detailed setup and usage instructions, see the [Portkey integration guide](../notes/portkey.md).
-
-### OpenRouter
-
-[OpenRouter](https://openrouter.ai/) provides access to a wide variety of both open and proprietary LLMs through a unified API. It features automatic routing and load balancing, making it particularly useful for accessing larger open LLMs without local resources and for using multiple providers through a single interface.
-
-To use OpenRouter with Langroid:
-- Set up your `OPENROUTER_API_KEY` environment variable
-- Set `chat_model="openrouter/<model_name>"` in the `OpenAIGPTConfig`
-
-For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
-
-## Working with the created `OpenAIGPTConfig` object
-
-From here you can proceed as usual, creating instances of `OpenAIGPT`,
-`ChatAgentConfig`, `ChatAgent` and `Task` object as usual.
-
-E.g. you can create an object of class `OpenAIGPT` (which represents any
-LLM with an OpenAI-compatible API) and interact with it directly:
-```python
-llm = lm.OpenAIGPT(llm_config)
-messages = [
-    LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM),
-    LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
-],
-response = mdl.chat(messages, max_tokens=50)
-```
-
-When you interact directly with the LLM, you are responsible for keeping dialog history.
-Also you would often want an LLM to have access to tools/functions and external
-data/documents (e.g. vector DB or traditional DB). An Agent class simplifies managing all of these.
-For example, you can create an Agent powered by the above LLM, wrap it in a Task and have it
-run as an interactive chat app:
-
-```python
-agent_config = lr.ChatAgentConfig(llm=llm_config, name="my-llm-agent")
-agent = lr.ChatAgent(agent_config)
-
-task = lr.Task(agent, name="my-llm-task")
-task.run()
-```
-
-## Example: Simple Chat script with a non-OpenAI proprietary model
-
-Many of the Langroid example scripts have a convenient `-m`  flag that lets you
-easily switch to a different model. For example, you can run 
-the `chat.py` script in the `examples/basic` folder with the 
-`litellm/claude-instant-v1` model:
-```bash
-python3 examples/basic/chat.py -m litellm/claude-instant-1
-```
-
-## Quick testing with non-OpenAI models
-
-There are numerous tests in the main [Langroid repo](https://github.com/langroid/langroid) that involve
-LLMs, and once you setup the dev environment as described in the README of the repo, 
-you can run any of those tests (which run against the default GPT4 model) against
-local/remote models that are proxied by `liteLLM` (or served locally via the options mentioned above,
-such as `oobabooga`, `ollama` or `llama-cpp-python`), using the `--m <model-name>` option,
-where `model-name` takes one of the forms above. Some examples of tests are:
-
-```bash
-pytest -s tests/test_llm.py --m local/localhost:8000
-pytest -s tests/test_llm.py --m litellm/claude-instant-1
-```
-When the `--m` option is omitted, the default OpenAI GPT4 model is used.
-
-!!! note "`chat_context_length` is not affected by `--m`"
-      Be aware that the `--m` only switches the model, but does not affect the `chat_context_length` 
-      parameter in the `OpenAIGPTConfig` object. which you may need to adjust for different models.
-      So this option is only meant for quickly testing against different models, and not meant as
-      a way to switch between models in a production environment.
 </file>
 
 <file path="examples/basic/multi-agent-search-critic/assistant_agent.py">
@@ -24708,70 +25350,6 @@ tools = await get_tools_async(transport)
 task = lr.Task(agent, interactive=False)
 </file>
 
-<file path="examples/mcp/pyodide_code_executor.py">
-"""
-Simple example of using the Pyodide MCP server.
-    https://github.com/pydantic/pydantic-ai/tree/main/mcp-run-python
-
-Before running make sure you have deno installed
-    https://docs.deno.com/runtime/getting_started/installation/
-
-Run like this:
-
-    uv run examples/mcp/pyodide_code_executor.py --model gpt-4.1-mini
-
-"""
-⋮----
-RUN_ONCE: bool = True  # terminate task on first result?
-⋮----
-deno_transport = StdioTransport(
-⋮----
-# Illustrating how we can:
-# - use the MCP tool decorator to create a Langroid ToolMessage subclass
-# - override the handle_async() method to customize the output, sent to the LLM
-⋮----
-class MyResult(ResultTool)
-⋮----
-answer: str
-⋮----
-@mcp_tool(deno_transport, "run_python_code")
-class PythonCodeExecutor(lr.ToolMessage)
-⋮----
-async def handle_async(self)
-⋮----
-result: str = await self.call_tool_async()
-⋮----
-# terminate task with this result
-⋮----
-# this result goes to LLM, and loop with user continues
-⋮----
-async def main(model: str = "")
-⋮----
-agent = lr.ChatAgent(
-⋮----
-# forward to user when LLM doesn't use a tool
-⋮----
-# this defaults to True, but we set it to False so we can see output
-⋮----
-# enable the agent to use the PythonCodeExecutor tool
-⋮----
-# make task with interactive=False =>
-# waits for user only when LLM doesn't use a tool
-⋮----
-task = lr.Task(agent, interactive=False)[MyResult]
-result: MyResult | None = await task.run_async()
-⋮----
-task = lr.Task(agent, interactive=False)
-⋮----
-def run_main(**kwargs) -> None
-⋮----
-"""Run the async main function with a proper event loop.
-
-        Args:
-            **kwargs: Keyword arguments to pass to the main function.
-        """
-</file>
-
 <file path="examples/multi-agent-debate/chainlit_utils.py">
 DEFAULT_TURN_COUNT = 2
 DEFAULT_TIMEOUT = 100
@@ -25429,433 +26007,6 @@ def is_url_ask_question(topic_name: str) -> bool
     Returns:
         bool: True if the user chooses to ask questions from searched url docs., otherwise return False.
     """
-</file>
-
-<file path="examples/portkey/portkey_advanced_features.py">
-#!/usr/bin/env python3
-⋮----
-"""
-Advanced Portkey example showing observability, caching, retries, and metadata.
-
-This example demonstrates:
-- Advanced Portkey configuration with all features
-- Request tracing and metadata
-- Caching and retry strategies
-- Custom headers for observability
-
-Run with: python portkey_advanced_features.py
-"""
-⋮----
-def check_env_var(var_name: str) -> Optional[str]
-⋮----
-"""Check if environment variable is set and return its value."""
-value = os.getenv(var_name)
-⋮----
-def create_advanced_portkey_llm(portkey_api_key: str, user_id: str) -> lm.OpenAIGPT
-⋮----
-"""Create an advanced Portkey-enabled LLM with all features."""
-⋮----
-# Generate unique trace ID for this session
-trace_id = f"trace-{uuid.uuid4().hex[:8]}"
-⋮----
-config = lm.OpenAIGPTConfig(
-⋮----
-# Observability features
-⋮----
-# Retry configuration
-⋮----
-# Caching configuration
-⋮----
-"ttl": 3600,  # 1 hour
-⋮----
-# User tracking
-⋮----
-# Custom headers for additional tracking
-⋮----
-def demonstrate_caching(llm: lm.OpenAIGPT)
-⋮----
-"""Demonstrate Portkey's caching capabilities."""
-⋮----
-question = "What are the three laws of robotics by Isaac Asimov?"
-⋮----
-response1 = llm.chat(question)
-⋮----
-response2 = llm.chat(question)
-⋮----
-def demonstrate_metadata_tracking(llm: lm.OpenAIGPT, user_id: str)
-⋮----
-"""Demonstrate request tracking with metadata."""
-⋮----
-questions = [
-⋮----
-# Create a new LLM instance with updated metadata for each question
-trace_id = f"trace-q{i}-{uuid.uuid4().hex[:6]}"
-⋮----
-"timestamp": str(uuid.uuid4()),  # Unique per request
-⋮----
-question_llm = lm.OpenAIGPT(config)
-response = question_llm.chat(question)
-⋮----
-def demonstrate_error_handling()
-⋮----
-"""Demonstrate error handling and retry behavior."""
-⋮----
-# Create config with invalid model to test error handling
-⋮----
-error_llm = lm.OpenAIGPT(config)
-response = error_llm.chat("This should fail")
-⋮----
-def main()
-⋮----
-"""Main function demonstrating advanced Portkey features."""
-⋮----
-# Check for required environment variables
-portkey_api_key = check_env_var("PORTKEY_API_KEY")
-⋮----
-openai_api_key = check_env_var("OPENAI_API_KEY")
-⋮----
-# Generate a unique user ID for this session
-user_id = f"user-{uuid.uuid4().hex[:8]}"
-⋮----
-# Create advanced LLM configuration
-⋮----
-llm = create_advanced_portkey_llm(portkey_api_key, user_id)
-⋮----
-# Demonstrate different features
-</file>
-
-<file path="examples/portkey/portkey_basic_chat.py">
-#!/usr/bin/env python3
-⋮----
-"""
-Basic Portkey example showing how to use different AI providers through Portkey's gateway.
-
-This example demonstrates:
-- Basic Portkey configuration
-- Switching between different AI providers
-- Automatic API key resolution
-
-Run with: python portkey_basic_chat.py
-"""
-⋮----
-def check_env_var(var_name: str) -> Optional[str]
-⋮----
-"""Check if environment variable is set and return its value."""
-value = os.getenv(var_name)
-⋮----
-def create_portkey_llm(provider: str, model: str, portkey_api_key: str) -> lm.OpenAIGPT
-⋮----
-"""Create a Portkey-enabled LLM configuration."""
-config = lm.OpenAIGPTConfig(
-⋮----
-def test_provider(llm: lm.OpenAIGPT, provider_name: str)
-⋮----
-"""Test a specific provider with a simple question."""
-⋮----
-question = "What is the capital of France? Answer in one sentence."
-⋮----
-response = llm.chat(question)
-⋮----
-def main()
-⋮----
-"""Main function demonstrating Portkey basic usage."""
-⋮----
-# Check for required environment variables
-portkey_api_key = check_env_var("PORTKEY_API_KEY")
-⋮----
-# Test different providers through Portkey
-providers_to_test = []
-⋮----
-# Check which provider keys are available
-⋮----
-# Test each available provider
-⋮----
-llm = create_portkey_llm(provider, model, portkey_api_key)
-</file>
-
-<file path="examples/portkey/portkey_multi_provider.py">
-#!/usr/bin/env python3
-⋮----
-"""
-Multi-provider Portkey example showing how to compare responses across different AI providers.
-
-This example demonstrates:
-- Using multiple providers through Portkey
-- Comparing response quality and characteristics
-- Provider-specific configurations
-- Fallback strategies
-
-Run with: python portkey_multi_provider.py
-"""
-⋮----
-def check_env_var(var_name: str) -> Optional[str]
-⋮----
-"""Check if environment variable is set and return its value."""
-value = os.getenv(var_name)
-⋮----
-"""Create a Portkey-enabled LLM for a specific provider."""
-config = lm.OpenAIGPTConfig(
-⋮----
-display_name = f"{provider.title()} ({model})"
-⋮----
-"""Test all providers on the same question and compare responses."""
-⋮----
-responses = []
-⋮----
-start_time = time.time()
-response = llm.chat(question)
-end_time = time.time()
-⋮----
-def demonstrate_creative_tasks(providers: List[Tuple[lm.OpenAIGPT, str]])
-⋮----
-"""Test providers on creative tasks to see different capabilities."""
-⋮----
-creative_questions = [
-⋮----
-def demonstrate_analytical_tasks(providers: List[Tuple[lm.OpenAIGPT, str]])
-⋮----
-"""Test providers on analytical tasks."""
-⋮----
-analytical_questions = [
-⋮----
-def demonstrate_fallback_strategy(portkey_api_key: str)
-⋮----
-"""Demonstrate a simple fallback strategy across providers."""
-⋮----
-# Define providers in order of preference
-fallback_providers = [
-⋮----
-question = "What is the meaning of life in one sentence?"
-⋮----
-return  # Success, stop trying
-⋮----
-def main()
-⋮----
-"""Main function demonstrating multi-provider usage."""
-⋮----
-# Check for required environment variables
-portkey_api_key = check_env_var("PORTKEY_API_KEY")
-⋮----
-# Collect available providers
-providers = []
-⋮----
-# Run comparisons
-⋮----
-# Always demonstrate fallback (works with 1+ providers)
-</file>
-
-<file path="examples/portkey/README.md">
-# Portkey Examples
-
-This folder contains examples demonstrating how to use [Portkey](https://portkey.ai) with Langroid for enhanced LLM gateway functionality and observability.
-
-## Prerequisites
-
-Before running any examples, make sure you've installed Langroid as usual.
-
-At minimum, have these environment variables set up in your `.env` file or environment:
-```bash
-PORTKEY_API_KEY=your_portkey_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here  # or any provider's key
-ANTHROPIC_API_KEY=your_anthropic_key_here  # if using Anthropic
-```
-
-### 1. Portkey Basic Chat (`portkey_basic_chat.py`)
-
-Demonstrates basic chat functionality with Portkey:
-- Uses Portkey as a gateway to different AI providers
-- Shows automatic provider API key resolution
-- Demonstrates model switching across providers
-
-```python
-# Run the example from root of repo, after activating your virtual environment with uv:
-uv run examples/portkey/portkey_basic_chat.py
-```
-
-### 2. Portkey Advanced Features (`portkey_advanced_features.py`)
-
-Shows how to use Portkey's advanced features:
-- Virtual keys for provider management
-- Caching and retry configurations
-- Request tracing and metadata
-- Custom headers for observability
-
-```python
-# Run the example
-uv run examples/portkey/portkey_advanced_features.py
-```
-
-### 3. Portkey Multi-Provider Example (`portkey_multi_provider.py`)
-
-Showcases Portkey's ability to switch between providers:
-- Compares responses from different providers
-- Demonstrates fallback strategies
-- Shows how to use virtual keys for different models
-
-```python
-# Run the example
-uv run examples/portkey/portkey_multi_provider.py
-```
-
-## Using Portkey
-
-### Basic Configuration
-
-Portkey can route requests to any AI provider through a unified API:
-
-```python
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.language_models.provider_params import PortkeyParams
-
-# Configure for OpenAI via Portkey
-config = OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o-mini",
-    portkey_params=PortkeyParams(
-        api_key="your-portkey-api-key",  # Or use PORTKEY_API_KEY env var
-    )
-)
-
-# Configure for Anthropic via Portkey
-config = OpenAIGPTConfig(
-    chat_model="portkey/anthropic/claude-3-sonnet-20240229",
-    portkey_params=PortkeyParams(
-        api_key="your-portkey-api-key",
-    )
-)
-```
-
-### Advanced Features
-
-Portkey provides powerful gateway features:
-
-```python
-from langroid.language_models.provider_params import PortkeyParams
-
-# Advanced configuration with observability
-params = PortkeyParams(
-    api_key="your-portkey-api-key",
-    virtual_key="vk-your-virtual-key",  # For provider abstraction
-    trace_id="trace-123",               # For request tracing
-    metadata={"user": "john", "app": "langroid"},  # Custom metadata
-    retry={"max_retries": 3, "backoff": "exponential"},  # Retry config
-    cache={"enabled": True, "ttl": 3600},  # Caching config
-    cache_force_refresh=False,          # Cache control
-    user="user-123",                    # User identifier
-    organization="org-456",             # Organization identifier
-    custom_headers={                    # Additional custom headers
-        "x-custom-header": "value"
-    }
-)
-
-config = OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-    portkey_params=params
-)
-```
-
-### Supported Providers
-
-Portkey supports many AI providers:
-
-```python
-# OpenAI
-chat_model="portkey/openai/gpt-4o"
-
-# Anthropic
-chat_model="portkey/anthropic/claude-3-5-sonnet-20241022"
-
-# Google Gemini
-chat_model="portkey/google/gemini-2.0-flash-lite"
-
-# Cohere
-chat_model="portkey/cohere/command-r-plus"
-
-# Many more providers available through Portkey
-```
-
-### Environment Variables
-
-Portkey integration automatically resolves API keys from environment variables:
-
-```bash
-# Portkey API key
-PORTKEY_API_KEY=your_portkey_api_key
-
-# Provider API keys (used for actual model calls)
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
-GOOGLE_API_KEY=your_google_key
-COHERE_API_KEY=your_cohere_key
-```
-
-### Virtual Keys
-
-Use virtual keys to abstract provider management:
-
-```python
-# Configure with virtual key
-config = OpenAIGPTConfig(
-    chat_model="portkey/openai/gpt-4o",
-    portkey_params=PortkeyParams(
-        virtual_key="vk-your-virtual-key",  # Manages provider key automatically
-    )
-)
-```
-
-### Viewing Results
-
-1. Visit the [Portkey Dashboard](https://app.portkey.ai)
-2. Navigate to your project
-3. View detailed analytics:
-   - Request/response logs
-   - Token usage and costs
-   - Performance metrics
-   - Error rates and debugging
-
-## Best Practices
-
-1. **Use Virtual Keys**: Abstract provider management for easier switching
-2. **Add Metadata**: Include user and application context for better tracking
-3. **Configure Retries**: Set up automatic retry strategies for reliability
-4. **Enable Caching**: Reduce costs and improve performance with intelligent caching
-5. **Monitor Performance**: Use trace IDs and metadata for detailed observability
-
-## Troubleshooting
-
-Common issues and solutions:
-
-1. **Authentication Errors**:
-   - Verify `PORTKEY_API_KEY` is set correctly
-   - Ensure provider API keys are available (e.g., `OPENAI_API_KEY`)
-
-2. **Model Not Found**:
-   - Ensure the model name includes the `portkey/` prefix
-   - Verify the provider and model are supported by Portkey
-
-3. **Rate Limiting**:
-   - Configure retry parameters in PortkeyParams
-   - Use virtual keys for better rate limit management
-
-4. **Virtual Key Issues**:
-   - Verify virtual key is correctly configured in Portkey dashboard
-   - Check virtual key has access to the requested provider/model
-
-For more help, visit the [Portkey Documentation](https://docs.portkey.ai).
-</file>
-
-<file path="examples/portkey/requirements.txt">
-# Requirements for Portkey examples
-# These are included in the main Langroid installation
-
-# Core Langroid (includes all necessary dependencies)
-langroid
-
-# The examples use standard library modules and Langroid's built-in Portkey support
-# No additional dependencies are required beyond what Langroid provides
-
-# Optional: For development and testing
-# pytest>=7.0.0
-# python-dotenv>=0.19.0
 </file>
 
 <file path="examples/privacy/annotate.py">
@@ -34079,6 +34230,296 @@ def similarity(self, text1: str, text2: str) -> float
 """Compute cosine similarity between two texts."""
 </file>
 
+<file path="langroid/embedding_models/models.py">
+AzureADTokenProvider = Callable[[], str]
+⋮----
+class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "openai"
+model_name: str = "text-embedding-3-small"
+api_key: str = ""
+api_base: Optional[str] = None
+organization: str = ""
+dims: int = 1536
+context_length: int = 8192
+langdb_params: LangDBParams = LangDBParams()
+⋮----
+model_config = SettingsConfigDict(env_prefix="OPENAI_")
+⋮----
+class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "azure-openai"
+⋮----
+api_base: str = ""
+deployment_name: Optional[str] = None
+# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
+# change this to required  supported version
+api_version: Optional[str] = "2024-06-01"
+# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
+azure_ad_token: Optional[str] = None
+azure_ad_token_provider: Optional[AzureADTokenProvider] = None
+⋮----
+model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
+⋮----
+class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "sentence-transformer"
+model_name: str = "BAAI/bge-large-en-v1.5"
+context_length: int = 512
+data_parallel: bool = False
+# Select device (e.g. "cuda", "cpu") when data parallel is disabled
+device: Optional[str] = None
+# Select devices when data parallel is enabled
+devices: Optional[list[str]] = None
+⋮----
+class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+"""Config for qdrant/fastembed embeddings,
+    see here: https://github.com/qdrant/fastembed
+    """
+⋮----
+model_type: str = "fastembed"
+model_name: str = "BAAI/bge-small-en-v1.5"
+batch_size: int = 256
+cache_dir: Optional[str] = None
+threads: Optional[int] = None
+parallel: Optional[int] = None
+additional_kwargs: Dict[str, Any] = {}
+⋮----
+class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+context_length: int = 2048
+batch_size: int = 2048
+⋮----
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "gemini"
+model_name: str = "models/text-embedding-004"
+⋮----
+dims: int = 768
+batch_size: int = 512
+⋮----
+class EmbeddingFunctionCallable
+⋮----
+"""
+    A callable class designed to generate embeddings for a list of texts using
+    the OpenAI or Azure OpenAI API, with automatic retries on failure.
+
+    Attributes:
+        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
+               configuration and utilities for generating embeddings.
+
+    Methods:
+        __call__(input: List[str]) -> Embeddings: Generate embeddings for
+                                a list of input texts.
+    """
+⋮----
+def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
+⋮----
+"""
+        Initialize the EmbeddingFunctionCallable with a specific model.
+
+        Args:
+            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
+                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
+                            generating embeddings.
+            batch_size (int): Batch size
+        """
+⋮----
+def __call__(self, input: List[str]) -> Embeddings
+⋮----
+"""
+        Generate embeddings for a given list of input texts using the OpenAI API,
+        with retries on failure.
+
+        This method:
+        - Truncates each text in the input list to the model's maximum context length.
+        - Processes the texts in batches to generate embeddings efficiently.
+        - Automatically retries the embedding generation process with exponential
+        backoff in case of failures.
+
+        Args:
+            input (List[str]): A list of input texts to generate embeddings for.
+
+        Returns:
+            Embeddings: A list of embedding vectors corresponding to the input texts.
+        """
+embeds = []
+⋮----
+# Truncate texts to context length while preserving text format
+truncated_texts = self.embed_model.truncate_texts(input)
+⋮----
+# Process in batches
+⋮----
+result = self.embed_model.client.embeddings.create(
+⋮----
+input=batch, model=self.embed_model.config.model_name  # type: ignore
+⋮----
+batch_embeds = [d.embedding for d in result.data]
+⋮----
+embeds = self.embed_model.model.encode_multi_process(
+⋮----
+batch_embeds = self.embed_model.model.encode(
+⋮----
+).tolist()  # type: ignore
+⋮----
+embeddings = self.embed_model.model.embed(
+⋮----
+embeds = [embedding.tolist() for embedding in embeddings]
+⋮----
+tokenized_text = self.embed_model.tokenize_string(input_string)
+⋮----
+gen_embedding = self.embed_model.generate_embedding(
+⋮----
+embeds = self.embed_model.generate_embeddings(input)
+⋮----
+class OpenAIEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
+⋮----
+# Check if using LangDB
+⋮----
+project_id = self.config.langdb_params.project_id
+⋮----
+model_for_tokenizer = self.config.model_name
+⋮----
+def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
+⋮----
+"""
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+truncated_tokens = [
+⋮----
+# LangDB embedding endpt only works with strings, not tokens
+⋮----
+def embedding_fn(self) -> Callable[[List[str]], Embeddings]
+⋮----
+@property
+    def embedding_dims(self) -> int
+⋮----
+class AzureOpenAIEmbeddings(EmbeddingModel)
+⋮----
+"""
+    Azure OpenAI embeddings model implementation.
+    """
+⋮----
+"""
+        Initializes Azure OpenAI embeddings model.
+
+        Args:
+            config: Configuration for Azure OpenAI embeddings model.
+        Raises:
+            ValueError: If required Azure config values are not set.
+        """
+⋮----
+"""Get the embedding function for Azure OpenAI.
+
+        Returns:
+            Callable that generates embeddings for input texts.
+        """
+⋮----
+STEC = SentenceTransformerEmbeddingsConfig
+⋮----
+class SentenceTransformerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: STEC = STEC())
+⋮----
+# this is an "extra" optional dependency, so we import it here
+⋮----
+self.config.devices  # type: ignore
+⋮----
+dims = self.model.get_sentence_embedding_dimension()
+⋮----
+return dims  # type: ignore
+⋮----
+class FastEmbedEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
+⋮----
+@cached_property
+    def embedding_dims(self) -> int
+⋮----
+embed_func = self.embedding_fn()
+⋮----
+LCSEC = LlamaCppServerEmbeddingsConfig
+⋮----
+class LlamaCppServerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: LCSEC = LCSEC())
+⋮----
+def tokenize_string(self, text: str) -> List[int]
+⋮----
+data = {"content": text, "add_special": False, "with_pieces": False}
+response = requests.post(self.tokenize_url, json=data)
+⋮----
+tokens = response.json()["tokens"]
+⋮----
+# not all(isinstance(token, (int, float)) for token in tokens):
+⋮----
+def detokenize_string(self, tokens: List[int]) -> str
+⋮----
+data = {"tokens": tokens}
+response = requests.post(self.detokenize_url, json=data)
+⋮----
+text = response.json()["content"]
+⋮----
+def truncate_string_to_context_size(self, text: str) -> str
+⋮----
+tokens = self.tokenize_string(text)
+tokens = tokens[: self.config.context_length]
+⋮----
+def generate_embedding(self, text: str) -> List[int | float]
+⋮----
+data = {"content": text}
+response = requests.post(self.embedding_url, json=data)
+⋮----
+embeddings = response.json()["embedding"]
+⋮----
+class GeminiEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
+⋮----
+def generate_embeddings(self, texts: List[str]) -> List[List[float]]
+⋮----
+"""Generates embeddings for a list of input texts."""
+all_embeddings: List[List[float]] = []
+⋮----
+result = self.client.models.embed_content(  # type: ignore[attr-defined]
+⋮----
+contents=batch,  # type: ignore
+⋮----
+# Extract .values from ContentEmbedding objects
+⋮----
+[emb.values for emb in result.embeddings]  # type: ignore
+⋮----
+def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
+⋮----
+"""
+    Args:
+        embedding_fn_type: Type of embedding model to use. Options are:
+         - "openai",
+         - "azure-openai",
+         - "sentencetransformer", or
+         - "fastembed".
+            (others may be added in the future)
+    Returns:
+        EmbeddingModel: The corresponding embedding model class.
+    """
+⋮----
+return OpenAIEmbeddings  # type: ignore
+⋮----
+return AzureOpenAIEmbeddings  # type: ignore
+⋮----
+return FastEmbedEmbeddings  # type: ignore
+⋮----
+return LlamaCppServerEmbeddings  # type: ignore
+⋮----
+return GeminiEmbeddings  # type: ignore
+else:  # default sentence transformer
+return SentenceTransformerEmbeddings  # type: ignore
+</file>
+
 <file path="langroid/language_models/azure_openai.py">
 azureStructuredOutputList = [
 ⋮----
@@ -34154,6 +34595,102 @@ class HFPromptFormatterConfig(PromptFormatterConfig)
 ⋮----
 type: str = "hf"
 model_name: str
+</file>
+
+<file path="langroid/language_models/provider_params.py">
+"""
+Provider-specific parameter configurations for various LLM providers.
+"""
+⋮----
+# Constants
+LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
+PORTKEY_BASE_URL = "https://api.portkey.ai"
+DUMMY_API_KEY = "xxx"
+⋮----
+class LangDBParams(BaseSettings)
+⋮----
+"""
+    Parameters specific to LangDB integration.
+    """
+⋮----
+api_key: str = DUMMY_API_KEY
+project_id: str = ""
+label: Optional[str] = None
+run_id: Optional[str] = None
+thread_id: Optional[str] = None
+base_url: str = LANGDB_BASE_URL
+⋮----
+model_config = SettingsConfigDict(env_prefix="LANGDB_")
+⋮----
+class PortkeyParams(BaseSettings)
+⋮----
+"""
+    Parameters specific to Portkey integration.
+
+    Portkey is an AI gateway that provides a unified API for multiple LLM providers,
+    with features like automatic retries, fallbacks, load balancing, and observability.
+
+    Example usage:
+        # Use Portkey with Anthropic
+        config = OpenAIGPTConfig(
+            chat_model="portkey/anthropic/claude-3-sonnet-20240229",
+            portkey_params=PortkeyParams(
+                api_key="your-portkey-api-key",
+                provider="anthropic"
+            )
+        )
+    """
+⋮----
+api_key: str = DUMMY_API_KEY  # Portkey API key
+provider: str = ""  # Required: e.g., "openai", "anthropic", "cohere", etc.
+virtual_key: Optional[str] = None  # Optional: virtual key for the provider
+trace_id: Optional[str] = None  # Optional: trace ID for request tracking
+metadata: Optional[Dict[str, Any]] = None  # Optional: metadata for logging
+retry: Optional[Dict[str, Any]] = None  # Optional: retry configuration
+cache: Optional[Dict[str, Any]] = None  # Optional: cache configuration
+cache_force_refresh: Optional[bool] = None  # Optional: force cache refresh
+user: Optional[str] = None  # Optional: user identifier
+organization: Optional[str] = None  # Optional: organization identifier
+custom_headers: Optional[Dict[str, str]] = None  # Optional: additional headers
+base_url: str = PORTKEY_BASE_URL
+⋮----
+model_config = SettingsConfigDict(env_prefix="PORTKEY_")
+⋮----
+def get_headers(self) -> Dict[str, str]
+⋮----
+"""Generate Portkey-specific headers from parameters."""
+⋮----
+headers = {}
+⋮----
+portkey_key = os.getenv("PORTKEY_API_KEY", "")
+⋮----
+def parse_model_string(self, model_string: str) -> tuple[str, str]
+⋮----
+"""
+        Parse a model string like "portkey/anthropic/claude-3-sonnet"
+        and extract provider and model name.
+
+        Returns:
+            tuple: (provider, model_name)
+        """
+parts = model_string.split("/", 2)
+⋮----
+model = model_string.replace("portkey/", "")
+⋮----
+"""
+        Get the API key for the provider from environment variables.
+
+        Args:
+            provider: The provider name (e.g., "anthropic", "openai")
+            default_key: Default key to return if not found
+
+        Returns:
+            The API key for the provider
+        """
+⋮----
+env_patterns = [
+⋮----
+key = os.getenv(pattern, "")
 </file>
 
 <file path="langroid/parsing/code_parser.py">
@@ -39460,157 +39997,6 @@ seq = parse_done_sequence("T, A,")
 seq = parse_done_sequence(",T, A")
 </file>
 
-<file path="tests/main/test_llm_async.py">
-# allow streaming globally, but can be turned off by individual models
-⋮----
-cfg = OpenAIGPTConfig(
-⋮----
-stream=streaming,  # use streaming output if enabled globally
-⋮----
-mdl = OpenAIGPT(config=cfg)
-question = "What is the capital of " + country + "?"
-⋮----
-# chat mode via `generate`,
-# i.e. use same call as for completion, but the setting below
-# actually calls `achat` under the hood
-⋮----
-# check that "agenerate" works
-response = await mdl.agenerate(prompt=question, max_tokens=50)
-⋮----
-# actual chat mode
-messages = [
-response = await mdl.achat(messages=messages, max_tokens=50)
-⋮----
-# should be from cache this time
-⋮----
-# pass intentional bad msg to test error handling
-⋮----
-@pytest.mark.asyncio
-async def test_llm_async_concurrent(test_settings: Settings)
-⋮----
-stream=False,  # use streaming output if enabled globally
-⋮----
-N = 5
-questions = ["1+" + str(i) for i in range(N)]
-expected_answers = [str(i + 1) for i in range(N)]
-answers = await asyncio.gather(
-⋮----
-async def test_llm_langdb(model: str)
-⋮----
-"""Test that LLM access via LangDB works."""
-⋮----
-llm_config_langdb = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_langdb)
-result = await llm.achat("what is 3+4?")
-⋮----
-async def test_llm_openrouter(model: str)
-⋮----
-# override models set via pytest ... --m <model>
-⋮----
-llm_config = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config)
-⋮----
-@pytest.mark.asyncio
-async def test_llm_pdf_attachment_async()
-⋮----
-"""Test sending a PDF file attachment to the LLM asynchronously."""
-⋮----
-# Path to the test PDF file
-pdf_path = Path("tests/main/data/dummy.pdf")
-⋮----
-# Create a FileAttachment from the PDF file
-attachment = FileAttachment.from_path(pdf_path)
-⋮----
-# Verify the attachment properties
-⋮----
-# Create messages with the attachment
-⋮----
-# Set up the LLM with a suitable model that supports PDFs
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
-⋮----
-# Get response from the LLM asynchronously
-response = await llm.achat(messages=messages)
-⋮----
-# follow-up question
-⋮----
-@pytest.mark.asyncio
-async def test_llm_multi_pdf_attachment_async()
-⋮----
-# multiple attachments
-pdf_path2 = Path("tests/main/data/sample-test.pdf")
-⋮----
-attachment2 = FileAttachment.from_path(pdf_path2)
-⋮----
-@pytest.mark.asyncio
-async def test_litellm_model_key_async()
-⋮----
-"""
-    Test that passing in explicit api_key works with `litellm/*` models
-    """
-model = "litellm/anthropic/claude-3-5-haiku-latest"
-# disable any chat model passed via --m arg to pytest cmd
-⋮----
-# Create the LLM instance
-⋮----
-response = await llm.achat("What is 3+4?")
-⋮----
-async def test_llm_portkey_async(model: str)
-⋮----
-"""Test that LLM access via Portkey works asynchronously."""
-# override any chat model passed via --m arg to pytest cmd
-⋮----
-# Skip if PORTKEY_API_KEY is not set
-⋮----
-# Extract provider from model string
-provider = model.split("/")[1] if "/" in model else ""
-provider_key_var = f"{provider.upper()}_API_KEY"
-⋮----
-# Skip if provider API key is not set
-⋮----
-llm_config_portkey = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_portkey)
-result = await llm.achat("what is 3+4 equal to?")
-⋮----
-@pytest.mark.asyncio
-async def test_portkey_params_async()
-⋮----
-"""Test that PortkeyParams are correctly configured in async context."""
-⋮----
-# Test with explicit parameters
-params = PortkeyParams(
-⋮----
-headers = params.get_headers()
-⋮----
-# Test model string parsing
-⋮----
-# Test fallback parsing
-⋮----
-# Test provider API key retrieval
-⋮----
-key = params.get_provider_api_key("test_provider")
-⋮----
-@pytest.mark.asyncio
-async def test_portkey_integration_async()
-⋮----
-"""Test that Portkey integration is properly configured in OpenAIGPT with async."""
-⋮----
-# Save the current chat model setting
-original_chat_model = settings.chat_model
-⋮----
-# Clear any global chat model override
-⋮----
-# Test basic portkey model configuration
-config = lm.OpenAIGPTConfig(
-⋮----
-llm = lm.OpenAIGPT(config)
-⋮----
-# Check that model was parsed correctly
-⋮----
-# Check headers are set correctly
-⋮----
-# Restore original chat model setting
-</file>
-
 <file path="tests/main/test_llm_pdf_parser.py">
 @pytest.mark.parametrize("split_on_page", [True, False])
 @pytest.mark.parametrize("pdf_file", ["imagenet.pdf"])
@@ -39635,469 +40021,274 @@ n = len(docs)
 k = llm_parser.config.n_neighbor_ids
 </file>
 
-<file path="tests/main/test_mcp_tools.py">
-# note we use pydantic v2 to define MCP server
-from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
+<file path="tests/main/test_llm.py">
+import fitz  # PyMuPDF
 ⋮----
-class SubItem(BaseModel)
+# allow streaming globally, but can be turned off by individual models
 ⋮----
-"""A sub‐item with a value and multiplier."""
+@pytest.mark.parametrize("use_cache", [True, False])
+def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache)
 ⋮----
-val: int = Field(..., description="Value for sub-item")
-multiplier: float = Field(1.0, description="Multiplier applied to val")
+test_settings.cache = False  # cache response but don't retrieve from cache
 ⋮----
-class ComplexData(BaseModel)
+cfg = OpenAIGPTConfig(
 ⋮----
-"""Complex data combining two ints and a list of SubItem."""
+stream=streaming,  # use streaming output if enabled globally
 ⋮----
-a: int = Field(..., description="First integer")
-b: int = Field(..., description="Second integer")
-items: List[SubItem] = Field(..., description="List of sub-items")
+mdl = OpenAIGPT(config=cfg)
+question = "What is the capital of " + country + "?"
+# chat mode via `generate`,
+# i.e. use same call as for completion, but the setting below
+# actually calls `chat` under the hood
 ⋮----
-def mcp_server()
+# check that "generate" works when "use_chat_for_completion" is True
+response = mdl.generate(prompt=question, max_tokens=800)
 ⋮----
-server = FastMCP("TestServer")
+# actual chat mode
+messages = [
+response = mdl.chat(messages=messages, max_tokens=500)
 ⋮----
-class Counter
+# should be from cache this time, Provided config.cache_config is not None
 ⋮----
-def __init__(self) -> None
+# pass intentional bad msg to test error handling
 ⋮----
-def get_num_beans(self) -> int
+_ = mdl.chat(messages=messages, max_tokens=500)
 ⋮----
-"""Return current counter."""
-⋮----
-"""Increment and return new counter."""
-⋮----
-# create a stateful tool
-counter = Counter()
-# we can't directly use the tool decorator on instance methods,
-# so we use the server.add_tool() method to add the tool
-⋮----
-# example of tool that uses an arg of type Context, and
-# uses this arg to request client LLM sampling, and send logs
-⋮----
-@server.tool()
-    async def prime_check(number: int, ctx: Context) -> str
+def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int)
 ⋮----
 """
-        Determine if the given number is Prime or not.
-        """
-result: TextContent | ImageContent = await ctx.sample(
-⋮----
-@server.tool()
-    def greet(person: str) -> str
-⋮----
-"""Get weather alerts for a state."""
-⋮----
-# example of MCP tool whose fields clash with Langroid ToolMessage,
-# and a `name` field which is reserved by pydantic
-⋮----
-"""Get information for a recipient."""
-⋮----
-@server.tool()
-    async def get_alerts_async(state: str) -> list[str]
-⋮----
-@server.tool()
-    def nabroski(a: int, b: int) -> int
-⋮----
-"""Computes the Nabroski transform of integers a and b."""
-⋮----
-@server.tool()
-    def coriolis(x: int, y: int) -> int
-⋮----
-"""Computes the Coriolis transform of integers x and y."""
-⋮----
-@server.tool()
-    def hydra_nest(data: ComplexData) -> int
-⋮----
-"""Compute the HydraNest calculation over nested data."""
-total = data.a * data.b
-⋮----
-async def test_get_tools_and_handle(server: FastMCP | str) -> None
-⋮----
-"""End‐to‐end test for get_tools and .handle() against server."""
-tools = await get_tools_async(server)
-# basic sanity
-⋮----
-# find the alerts tool
-AlertsTool = next(
-⋮----
-# test get_mcp_tool_async
-AlertsMCPTool: Tool = await get_mcp_tool_async(server, "get_alerts")
-⋮----
-AlertsTool = await get_tool_async(server, AlertsMCPTool.name)
-⋮----
-# instantiate Langroid ToolMessage
-msg = AlertsTool(state="NY")
-⋮----
-# invoke the tool via the Langroid ToolMessage.handle() method -
-# this produces list of weather alerts for the given state
-# Note MCP tools can return either ResultToolType or List[ResultToolType]
-result: Optional[str] = await msg.handle_async()
-⋮----
-# make tool from async FastMCP tool
-AlertsMCPToolAsync = await get_mcp_tool_async(server, "get_alerts_async")
-⋮----
-AlertsToolAsync = await get_tool_async(server, AlertsMCPToolAsync.name)
-⋮----
-msg = AlertsToolAsync(state="NY")
-⋮----
-# invoke the tool via the Langroid ToolMessage.handle_async() method -
-⋮----
-# test making tool with utility functions
-AlertsTool = await get_tool_async(server, "get_alerts")
-⋮----
-@pytest.mark.asyncio
-async def test_tools_connect_close(server: str | FastMCP) -> None
-⋮----
-"""Test that we can use connect()... tool-calls ... close()"""
-⋮----
-client = FastMCPClient(server)
-⋮----
-mcp_tools = await client.client.list_tools()
-⋮----
-langroid_tool_classes = await client.get_tools_async()
-⋮----
-AlertsMCPTool = await get_mcp_tool_async(server, "get_alerts")
-⋮----
-result = await msg.handle_async()
-⋮----
-@pytest.mark.asyncio
-async def test_stateful_tool() -> None
-⋮----
-# instantiate the server
-server = mcp_server()
-⋮----
-# get tools from the SAME instance of the server
-AddBeansTool = await get_tool_async(server, "add_beans")
-⋮----
-GetNumBeansTool = await get_tool_async(server, "get_num_beans")
-⋮----
-add_beans_msg = AddBeansTool(x=5)
-⋮----
-result = await add_beans_msg.handle_async()
-⋮----
-get_num_beans_msg = GetNumBeansTool()
-⋮----
-result = await get_num_beans_msg.handle_async()
-⋮----
-@pytest.mark.asyncio
-async def test_tool_with_context_and_sampling() -> None
-⋮----
-"""Handle a sampling request from server"""
-# simulate an LLM call
-⋮----
-PrimeCheckTool = await get_tool_async(
-⋮----
-# assert that "ctx" is NOT a field in the tool
-⋮----
-prime_check_msg = PrimeCheckTool(number=7)
-⋮----
-result = await prime_check_msg.handle_async()
-⋮----
-@pytest.mark.asyncio
-async def test_mcp_tool_schemas() -> None
-⋮----
-"""
-    Test that descriptions, field-descriptions of MCP tools are preserved
-    when we translate them to Langroid ToolMessage classes. This is important
-    since the LLM is shown these, and helps with tool-call accuracy.
-    """
-# make a langroid AlertsTool from the corresponding MCP tool
-AlertsTool = await get_tool_async(mcp_server(), "get_alerts")
-⋮----
-description = "Get weather alerts for a state."
-⋮----
-schema: lm.LLMFunctionSpec = AlertsTool.llm_function_schema()
-⋮----
-InfoTool = await get_tool_async(mcp_server(), "info_tool")
-⋮----
-description = "Get information for a recipient."
-⋮----
-# instantiate InfoTool
-msg = InfoTool(
-⋮----
-# call the tool
-⋮----
-@pytest.mark.asyncio
-async def test_single_output() -> None
-⋮----
-"""Test that a tool with a single string output works
-    similarly to one that has a list of strings outputs."""
-⋮----
-OneAlertTool = await get_tool_async(mcp_server(), "get_one_alert")
-⋮----
-msg = OneAlertTool(state="NY")
-⋮----
-# we expect a list containing a single str
-⋮----
-@pytest.mark.asyncio
-async def test_agent_mcp_tools() -> None
-⋮----
-"""Test that a Langroid ChatAgent can use and handle MCP tools."""
-⋮----
-agent = lr.ChatAgent(
-⋮----
-NabroskiTool: lr.ToolMessage = await get_tool_async(server, "nabroski")
-⋮----
-response: lr.ChatDocument = await agent.llm_response_async(
-tools = agent.get_tool_messages(response)
-⋮----
-result: lr.ChatDocument = await agent.agent_response_async(response)
-# TODO assert needs to take LLM tool-forgetting into account
-⋮----
-task = lr.Task(agent, interactive=False)
-result: lr.ChatDocument = await task.run_async(
-⋮----
-# test MCP tool with fields that clash with Langroid ToolMessage
-InfoTool = await get_tool_async(server, "info_tool")
-⋮----
-# Need to define the tools outside async def,
-# since the decorator uses asyncio.run() to wrap around an async fn
-⋮----
-@mcp_tool(mcp_server(), "get_alerts")
-class GetAlertsTool(lr.ToolMessage)
-⋮----
-"""Tool to get weather alerts."""
-⋮----
-async def my_handler(self) -> str
-⋮----
-alert = await self.handle_async()
-⋮----
-@mcp_tool(mcp_server(), "nabroski")
-class NabroskiTool(lr.ToolMessage)
-⋮----
-"""Tool to get Nabroski transform."""
-⋮----
-result = await self.handle_async()
-⋮----
-@pytest.mark.asyncio
-async def test_fastmcp_decorator() -> None
-⋮----
-"""Test that the mcp_tool decorator works as expected."""
-⋮----
-msg = GetAlertsTool(state="NY")
-⋮----
-result = await msg.my_handler()
-⋮----
-result = await task.run_async("What is the nabroski transform of 5 and 3?", turns=3)
-⋮----
-@mcp_tool(mcp_server(), "hydra_nest")
-class HydraNestTool(lr.ToolMessage)
-⋮----
-"""Tool for computing HydraNest calculation."""
-⋮----
-"""Call hydra_nest and format result."""
-⋮----
-@pytest.mark.asyncio
-async def test_complex_tool_decorator() -> None
-⋮----
-"""Test that compute_complex via decorator works end‐to‐end."""
-# build nested input
-payload = {
-msg = HydraNestTool(**payload)
-⋮----
-# call handler
-⋮----
-expected = int(4 * 5 + 2 * 1.5 + 3 * 2.0)
-⋮----
-# round‐trip via an agent
-⋮----
-prompt = """
-response = await task.run_async(prompt, turns=3)
-⋮----
-@pytest.mark.asyncio
-async def test_multiple_tools(prompt, tool_name, expected) -> None
-⋮----
-"""
-    Test one-shot enabling of multiple tools.
+    Test disabled, see TODO below.
+    Also it takes too long since we are trying to test
+    that it raises the expected error when the context length is exceeded.
+    Args:
+        test_settings: from conftest.py
+        mode: "completion" or "chat"
+        max_tokens: number of tokens to generate
     """
 ⋮----
-all_tools = await get_tools_async(mcp_server())
+parser = Parser(config=ParsingConfig())
+llm = OpenAIGPT(config=cfg)
+context_length = (
 ⋮----
-tool = next(
+toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
+max_sentences = int(context_length * 1.5 / toks_per_sentence)
+big_message = generate_random_sentences(max_sentences + 1)
+big_message_tokens = parser.num_tokens(big_message)
 ⋮----
-# test that agent (LLM) can pick right tool based on prompt
-prompt = "use one of your TOOLs to answer this: " + prompt
-response: lr.ChatDocument = await agent.llm_response_async(prompt)
+response = None
+# TODO need to figure out what error type to expect here
 ⋮----
-# test in a task
+response = llm.chat(big_message, max_tokens=max_tokens)
 ⋮----
-result: lr.ChatDocument = await task.run_async(prompt, turns=3)
+response = llm.generate(prompt=big_message, max_tokens=max_tokens)
 ⋮----
-@pytest.mark.skipif(not shutil.which("npx"), reason="npx not available")
-@pytest.mark.asyncio
-async def test_npxstdio_transport() -> None
+@pytest.mark.parametrize("ctx", [16_000, None])
+def test_llm_config_context_length(mdl: str, ctx: int | None)
+⋮----
+llm_config = lm.OpenAIGPTConfig(
+⋮----
+chat_context_length=ctx,  # even if wrong, use if explicitly set
+⋮----
+mdl = lm.OpenAIGPT(config=llm_config)
+⋮----
+def test_model_selection(test_settings: Settings)
+⋮----
+defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
+⋮----
+def get_response(llm)
+⋮----
+def simulate_response(llm)
+⋮----
+# Default is GPT4o; we should not generate the warning in this case
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig())
+⋮----
+# Default is GPT3.5 (simulate GPT 4 inaccessible)
+⋮----
+# No warnings generated if we specify the model explicitly
+⋮----
+# No warnings generated if we are using a local model
+llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
+⋮----
+# We should warn on the first usage of a model with auto-selected GPT-3.5
+⋮----
+# We should not warn on subsequent uses and models with auto-selected GPT-3.5
+⋮----
+def test_keys()
+⋮----
+# Do not override the explicit settings below
+⋮----
+providers = [
+key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
+⋮----
+config = lm.OpenAIGPTConfig(
+⋮----
+llm = lm.OpenAIGPT(config)
+⋮----
+rand_key = str(random.randint(0, 10**9))
+⋮----
+def test_llm_langdb(model: str)
+⋮----
+"""Test that LLM access via LangDB works."""
+# override any chat model passed via --m arg to pytest cmd
+⋮----
+llm_config_langdb = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_langdb)
+result = llm.chat("what is 3+4?")
+⋮----
+def test_llm_openrouter(model: str)
+⋮----
+llm = lm.OpenAIGPT(config=llm_config)
+⋮----
+def test_llm_portkey(model: str)
+⋮----
+"""Test that LLM access via Portkey works."""
+⋮----
+# Skip if PORTKEY_API_KEY is not set
+⋮----
+# Extract provider from model string
+provider = model.split("/")[1] if "/" in model else ""
+provider_key_var = f"{provider.upper()}_API_KEY"
+⋮----
+# Skip if provider API key is not set
+⋮----
+llm_config_portkey = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_portkey)
+result = llm.chat("what is 3+4 equal to?")
+⋮----
+def test_portkey_params()
+⋮----
+"""Test that PortkeyParams are correctly configured."""
+⋮----
+# Test with explicit parameters
+params = PortkeyParams(
+⋮----
+headers = params.get_headers()
+⋮----
+# Test model string parsing
+⋮----
+# Test fallback parsing
+⋮----
+# Test provider API key retrieval
+⋮----
+key = params.get_provider_api_key("test_provider")
+⋮----
+def test_portkey_integration()
+⋮----
+"""Test that Portkey integration is properly configured in OpenAIGPT."""
+⋮----
+# Save the current chat model setting
+original_chat_model = settings.chat_model
+⋮----
+# Clear any global chat model override
+⋮----
+# Test basic portkey model configuration
+⋮----
+# Check that model was parsed correctly
+⋮----
+# Check headers are set correctly
+⋮----
+# Restore original chat model setting
+⋮----
+def test_followup_standalone()
+⋮----
+"""Test that followup_to_standalone works."""
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig())
+dialog = [
+followup = "What about 11?"
+response = llm.followup_to_standalone(dialog, followup)
+⋮----
+def test_llm_pdf_attachment()
+⋮----
+"""Test sending a PDF file attachment to the LLM."""
+⋮----
+# Path to the test PDF file
+pdf_path = Path("tests/main/data/dummy.pdf")
+⋮----
+# Create a FileAttachment from the PDF file
+attachment = FileAttachment.from_path(pdf_path)
+⋮----
+# Verify the attachment properties
+⋮----
+# Create messages with the attachment
+⋮----
+# Set up the LLM with a suitable model that supports PDFs
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+⋮----
+# Get response from the LLM
+response = llm.chat(messages=messages)
+⋮----
+# follow-up question
+⋮----
+def test_llm_multi_pdf_attachments()
+⋮----
+# multiple attachments
+pdf_path2 = Path("tests/main/data/sample-test.pdf")
+⋮----
+attachment2 = FileAttachment.from_path(pdf_path2)
+⋮----
+def test_llm_pdf_bytes_and_split()
+⋮----
+"""Test sending PDF files to LLM as bytes and split into pages."""
+⋮----
+# Test creating attachment from bytes
+⋮----
+pdf_bytes = f.read()
+⋮----
+attachment_from_bytes = FileAttachment.from_bytes(
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
+⋮----
+# Test creating attachment from file-like object
+pdf_io = io.BytesIO(pdf_bytes)
+attachment_from_io = FileAttachment.from_io(
+⋮----
+# Test splitting PDF into pages and sending individual pages
+doc = fitz.open(pdf_path)
+page_attachments = []
+⋮----
+# Extract page as PDF
+page_pdf = io.BytesIO()
+page_doc = fitz.open()
+⋮----
+# Create attachment for this page
+page_attachment = FileAttachment.from_io(
+⋮----
+# Send just the first page
+⋮----
+# Test with multiple pages as separate attachments
+⋮----
+def test_llm_image_input(path: str)
+⋮----
+attachment = FileAttachment.from_path(path, detail="low")
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
+⋮----
+def test_litellm_model_key()
 ⋮----
 """
-    Test that we can create Langroid ToolMessage from an MCP server
-    via npx stdio transport, for example the `exa-mcp-server`:
-    https://github.com/exa-labs/exa-mcp-server
+    Test that passing in explicit api_key works with `litellm/*` models
     """
-transport = NpxStdioTransport(
-# Add timeout to prevent hanging during npx package download/initialization
+model = "litellm/anthropic/claude-3-5-haiku-latest"
+# disable any chat model passed via --m arg to pytest cmd
 ⋮----
-tools = await asyncio.wait_for(get_tools_async(transport), timeout=60.0)
+class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig)
 ⋮----
-WebSearchTool = await get_tool_async(transport, "web_search_exa")
+"""OpenAI config that doesn't auto-load from environment variables."""
 ⋮----
-# Note: we shouldn't have to explicitly beg the LLM to use the tool here
-# but I've found that even GPT-4o sometimes fails to use the tool
-question = """
-response = await agent.llm_response_async(question)
+# Disable environment prefix to prevent auto-loading
+model_config = SettingsConfigDict(env_prefix="")
 ⋮----
-result: lr.ChatDocument = await task.run_async(question, turns=3)
+llm_config = CustomOpenAIGPTConfig(
 ⋮----
-transport = UvxStdioTransport(
-⋮----
-# `tool_name` is a misleading name -- it really refers to the
-# MCP server, which offers several tools
-⋮----
-@mcp_tool(transport, "git_status")
-class GitStatusTool(lr.ToolMessage)
-⋮----
-"""Tool to get git status."""
-⋮----
-async def handle_async(self) -> str
-⋮----
-"""
-        When defining a class explicitly with the @mcp_tool decorator,
-        we have the flexibility to define our own `handle_async` method
-        which calls the call_tool_async method, which in turn calls the
-        MCP server's call_tool method.
-        Returns:
-
-        """
-status = await self.call_tool_async()
-⋮----
-@pytest.mark.asyncio
-async def test_uvxstdio_transport() -> None
-⋮----
-"""
-    Test that we can create Langroid ToolMessage from an MCP server
-    via uvx stdio transport. We use this example `git` MCP server:
-    https://github.com/modelcontextprotocol/servers/tree/main/src/git
-    """
-tools = await get_tools_async(transport)
-⋮----
-GitStatusTool = await get_tool_async(transport, "git_status")
-⋮----
-response = await agent.llm_response_async(prompt)
-⋮----
-# test GitStatusTool created via @mcp_tool decorator
-⋮----
-@pytest.mark.skipif(not shutil.which("npx"), reason="npx not available")
-@pytest.mark.asyncio
-async def test_npxstdio_transport_memory() -> None
-⋮----
-"""
-    Test that we can create Langroid ToolMessage from the `memory` MCP server
-    via npx stdio transport:
-    https://github.com/modelcontextprotocol/servers/tree/main/src/memory
-    """
-⋮----
-task = lr.Task(agent, interactive=False, restart=False)
-⋮----
-@pytest.mark.asyncio
-async def test_persist_connection() -> None
-⋮----
-"""Test that persist_connection keeps the connection open between tool calls."""
-⋮----
-# Create client with persist_connection=True
-⋮----
-# First tool call - this should create and keep the connection open
-tool1 = await client.get_tool_async("add_beans")
-⋮----
-# Check that client connection is established
-⋮----
-initial_client = client.client
-⋮----
-# Second tool call - should reuse the same connection
-tool2 = await client.get_tool_async("get_num_beans")
-⋮----
-# Verify the same client connection was reused
-⋮----
-# Call the tools to ensure they work
-add_msg = tool1(x=5)
-result1 = await add_msg.handle_async()
-assert result1 == "5"  # handle_async returns string for backward compatibility
-⋮----
-get_msg = tool2()
-result2 = await get_msg.handle_async()
-assert result2 == "5"  # handle_async returns string for backward compatibility
-⋮----
-@pytest.mark.asyncio
-async def test_handle_async_with_images() -> None
-⋮----
-"""Test that response_async returns ChatDocument with file attachments."""
-# Create a mock server that returns image content
-server = FastMCP("ImageServer")
-⋮----
-@server.tool()
-    async def get_chart() -> List[TextContent | ImageContent]
-⋮----
-"""Get a chart with image."""
-⋮----
-data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",  # noqa: E501
-⋮----
-# Get the tool and test response_async
-⋮----
-ChartTool = await client.get_tool_async("get_chart")
-⋮----
-# Create a mock agent
-agent = lr.ChatAgent(lr.ChatAgentConfig())
-⋮----
-# Test response_async method
-chart_msg = ChartTool()
-response = await chart_msg.handle_async(agent)
-⋮----
-# Verify we got a ChatDocument
-⋮----
-# Verify we have file attachments in the files attribute
-⋮----
-# Verify the file is an image
-file = response.files[0]
-⋮----
-@pytest.mark.asyncio
-async def test_forward_text_resources() -> None
-⋮----
-"""Test that forward_text_resources setting works correctly."""
-⋮----
-server = FastMCP("TextResourceServer")
-⋮----
-# Test the _convert_tool_result method directly with mocked data
-⋮----
-# Create a mock CallToolResult with text and text resource
-mock_result = CallToolResult(
-⋮----
-# Test with forward_text_resources=True
-result = client._convert_tool_result("test_tool", mock_result)
-⋮----
-# Should include both the main text and the resource text
-⋮----
-# Test with forward_text_resources=False
-⋮----
-# Should only include the main text, not the resource text
-⋮----
-@pytest.mark.asyncio
-async def test_forward_blob_resources() -> None
-⋮----
-"""Test that forward_blob_resources setting works correctly."""
-⋮----
-server = FastMCP("BlobResourceServer")
-⋮----
-# Small PNG data (1x1 blue pixel)
-png_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD0lEQVR42mNkYPhfz/ADAAKAA4RkT4UVAAAAAElFTkSuQmCC"  # noqa: E501
-⋮----
-# Create a mock CallToolResult with text and blob resource
-⋮----
-# Test with forward_blob_resources=True
-⋮----
-# Should have text content and file attachment
-⋮----
-# Test with forward_blob_resources=False
-⋮----
-# Should only have text content, no file attachments
+response = llm.chat("What is 3+4?")
 </file>
 
 <file path="tests/main/test_multi_agent_complex_async.py">
@@ -48049,6 +48240,46 @@ task = lr.Task(
 # Set up settings
 </file>
 
+<file path="examples/mcp/chainlit-mcp.py">
+"""
+Variant of gitmcp.py that works via the Chainlit UI library,
+hardcoded to work for a specific github repo.
+
+
+Simple example of using the GitMCP server to "chat" about a GitHub repository.
+
+https://github.com/idosal/git-mcp
+
+The server offers several tools, and we can enable ALL of them to be used
+by a Langroid agent.
+
+Run like this (-m model optional; defaults to gpt-4.1-mini):
+
+    uv run chainlit run examples/mcp/chainlit-mcp.py
+
+"""
+⋮----
+class SendUserTool(SendTool)
+⋮----
+request: str = "send_user"
+purpose: str = "Send <content> to user"
+to: str = "user"
+content: str = Field(
+⋮----
+@cl.on_chat_start
+async def start()
+⋮----
+lm_config = lm.OpenAIGPTConfig(
+transport = SSETransport(url="https://gitmcp.io/langroid/langroid-examples")
+tools: list[type] = await get_tools_async(transport)
+agent = lr.ChatAgent(
+⋮----
+)  # Pass config as a dictionary
+⋮----
+task_cfg = lr.TaskConfig(recognize_string_signals=False)
+task = lr.Task(agent, config=task_cfg, interactive=False)
+</file>
+
 <file path="examples/mcp/claude-code-mcp.py">
 """
 Interact with Claude Code's MCP server.
@@ -48917,296 +49148,6 @@ results = self._convert_tool_result(tool_name, result)
     """
 </file>
 
-<file path="langroid/embedding_models/models.py">
-AzureADTokenProvider = Callable[[], str]
-⋮----
-class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "openai"
-model_name: str = "text-embedding-3-small"
-api_key: str = ""
-api_base: Optional[str] = None
-organization: str = ""
-dims: int = 1536
-context_length: int = 8192
-langdb_params: LangDBParams = LangDBParams()
-⋮----
-model_config = SettingsConfigDict(env_prefix="OPENAI_")
-⋮----
-class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "azure-openai"
-⋮----
-api_base: str = ""
-deployment_name: Optional[str] = None
-# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
-# change this to required  supported version
-api_version: Optional[str] = "2024-06-01"
-# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
-azure_ad_token: Optional[str] = None
-azure_ad_token_provider: Optional[AzureADTokenProvider] = None
-⋮----
-model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
-⋮----
-class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "sentence-transformer"
-model_name: str = "BAAI/bge-large-en-v1.5"
-context_length: int = 512
-data_parallel: bool = False
-# Select device (e.g. "cuda", "cpu") when data parallel is disabled
-device: Optional[str] = None
-# Select devices when data parallel is enabled
-devices: Optional[list[str]] = None
-⋮----
-class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-"""Config for qdrant/fastembed embeddings,
-    see here: https://github.com/qdrant/fastembed
-    """
-⋮----
-model_type: str = "fastembed"
-model_name: str = "BAAI/bge-small-en-v1.5"
-batch_size: int = 256
-cache_dir: Optional[str] = None
-threads: Optional[int] = None
-parallel: Optional[int] = None
-additional_kwargs: Dict[str, Any] = {}
-⋮----
-class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-context_length: int = 2048
-batch_size: int = 2048
-⋮----
-class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "gemini"
-model_name: str = "models/text-embedding-004"
-⋮----
-dims: int = 768
-batch_size: int = 512
-⋮----
-class EmbeddingFunctionCallable
-⋮----
-"""
-    A callable class designed to generate embeddings for a list of texts using
-    the OpenAI or Azure OpenAI API, with automatic retries on failure.
-
-    Attributes:
-        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
-               configuration and utilities for generating embeddings.
-
-    Methods:
-        __call__(input: List[str]) -> Embeddings: Generate embeddings for
-                                a list of input texts.
-    """
-⋮----
-def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
-⋮----
-"""
-        Initialize the EmbeddingFunctionCallable with a specific model.
-
-        Args:
-            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
-                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
-                            generating embeddings.
-            batch_size (int): Batch size
-        """
-⋮----
-def __call__(self, input: List[str]) -> Embeddings
-⋮----
-"""
-        Generate embeddings for a given list of input texts using the OpenAI API,
-        with retries on failure.
-
-        This method:
-        - Truncates each text in the input list to the model's maximum context length.
-        - Processes the texts in batches to generate embeddings efficiently.
-        - Automatically retries the embedding generation process with exponential
-        backoff in case of failures.
-
-        Args:
-            input (List[str]): A list of input texts to generate embeddings for.
-
-        Returns:
-            Embeddings: A list of embedding vectors corresponding to the input texts.
-        """
-embeds = []
-⋮----
-# Truncate texts to context length while preserving text format
-truncated_texts = self.embed_model.truncate_texts(input)
-⋮----
-# Process in batches
-⋮----
-result = self.embed_model.client.embeddings.create(
-⋮----
-input=batch, model=self.embed_model.config.model_name  # type: ignore
-⋮----
-batch_embeds = [d.embedding for d in result.data]
-⋮----
-embeds = self.embed_model.model.encode_multi_process(
-⋮----
-batch_embeds = self.embed_model.model.encode(
-⋮----
-).tolist()  # type: ignore
-⋮----
-embeddings = self.embed_model.model.embed(
-⋮----
-embeds = [embedding.tolist() for embedding in embeddings]
-⋮----
-tokenized_text = self.embed_model.tokenize_string(input_string)
-⋮----
-gen_embedding = self.embed_model.generate_embedding(
-⋮----
-embeds = self.embed_model.generate_embeddings(input)
-⋮----
-class OpenAIEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
-⋮----
-# Check if using LangDB
-⋮----
-project_id = self.config.langdb_params.project_id
-⋮----
-model_for_tokenizer = self.config.model_name
-⋮----
-def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
-⋮----
-"""
-        Truncate texts to the embedding model's context length.
-        TODO: Maybe we should show warning, and consider doing T5 summarization?
-        """
-truncated_tokens = [
-⋮----
-# LangDB embedding endpt only works with strings, not tokens
-⋮----
-def embedding_fn(self) -> Callable[[List[str]], Embeddings]
-⋮----
-@property
-    def embedding_dims(self) -> int
-⋮----
-class AzureOpenAIEmbeddings(EmbeddingModel)
-⋮----
-"""
-    Azure OpenAI embeddings model implementation.
-    """
-⋮----
-"""
-        Initializes Azure OpenAI embeddings model.
-
-        Args:
-            config: Configuration for Azure OpenAI embeddings model.
-        Raises:
-            ValueError: If required Azure config values are not set.
-        """
-⋮----
-"""Get the embedding function for Azure OpenAI.
-
-        Returns:
-            Callable that generates embeddings for input texts.
-        """
-⋮----
-STEC = SentenceTransformerEmbeddingsConfig
-⋮----
-class SentenceTransformerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: STEC = STEC())
-⋮----
-# this is an "extra" optional dependency, so we import it here
-⋮----
-self.config.devices  # type: ignore
-⋮----
-dims = self.model.get_sentence_embedding_dimension()
-⋮----
-return dims  # type: ignore
-⋮----
-class FastEmbedEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
-⋮----
-@cached_property
-    def embedding_dims(self) -> int
-⋮----
-embed_func = self.embedding_fn()
-⋮----
-LCSEC = LlamaCppServerEmbeddingsConfig
-⋮----
-class LlamaCppServerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: LCSEC = LCSEC())
-⋮----
-def tokenize_string(self, text: str) -> List[int]
-⋮----
-data = {"content": text, "add_special": False, "with_pieces": False}
-response = requests.post(self.tokenize_url, json=data)
-⋮----
-tokens = response.json()["tokens"]
-⋮----
-# not all(isinstance(token, (int, float)) for token in tokens):
-⋮----
-def detokenize_string(self, tokens: List[int]) -> str
-⋮----
-data = {"tokens": tokens}
-response = requests.post(self.detokenize_url, json=data)
-⋮----
-text = response.json()["content"]
-⋮----
-def truncate_string_to_context_size(self, text: str) -> str
-⋮----
-tokens = self.tokenize_string(text)
-tokens = tokens[: self.config.context_length]
-⋮----
-def generate_embedding(self, text: str) -> List[int | float]
-⋮----
-data = {"content": text}
-response = requests.post(self.embedding_url, json=data)
-⋮----
-embeddings = response.json()["embedding"]
-⋮----
-class GeminiEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
-⋮----
-def generate_embeddings(self, texts: List[str]) -> List[List[float]]
-⋮----
-"""Generates embeddings for a list of input texts."""
-all_embeddings: List[List[float]] = []
-⋮----
-result = self.client.models.embed_content(  # type: ignore[attr-defined]
-⋮----
-contents=batch,  # type: ignore
-⋮----
-# Extract .values from ContentEmbedding objects
-⋮----
-[emb.values for emb in result.embeddings]  # type: ignore
-⋮----
-def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
-⋮----
-"""
-    Args:
-        embedding_fn_type: Type of embedding model to use. Options are:
-         - "openai",
-         - "azure-openai",
-         - "sentencetransformer", or
-         - "fastembed".
-            (others may be added in the future)
-    Returns:
-        EmbeddingModel: The corresponding embedding model class.
-    """
-⋮----
-return OpenAIEmbeddings  # type: ignore
-⋮----
-return AzureOpenAIEmbeddings  # type: ignore
-⋮----
-return FastEmbedEmbeddings  # type: ignore
-⋮----
-return LlamaCppServerEmbeddings  # type: ignore
-⋮----
-return GeminiEmbeddings  # type: ignore
-else:  # default sentence transformer
-return SentenceTransformerEmbeddings  # type: ignore
-</file>
-
 <file path="langroid/language_models/client_cache.py">
 """
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
@@ -49411,6 +49352,9 @@ O4_MINI = "o4-mini"
 GPT4_1 = "gpt-4.1"
 GPT4_1_MINI = "gpt-4.1-mini"
 GPT4_1_NANO = "gpt-4.1-nano"
+GPT5 = "gpt-5"
+GPT5_MINI = "gpt-5-mini"
+GPT5_NANO = "gpt-5-nano"
 ⋮----
 class OpenAICompletionModel(str, Enum)
 ⋮----
@@ -49514,102 +49458,6 @@ None,  # Default value if the iterator is exhausted (no valid info found)
 # Return the found info, or a default ModelInfo if none was found
 ⋮----
 def _get_model_info(model: str | ModelName) -> ModelInfo | None
-</file>
-
-<file path="langroid/language_models/provider_params.py">
-"""
-Provider-specific parameter configurations for various LLM providers.
-"""
-⋮----
-# Constants
-LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
-PORTKEY_BASE_URL = "https://api.portkey.ai"
-DUMMY_API_KEY = "xxx"
-⋮----
-class LangDBParams(BaseSettings)
-⋮----
-"""
-    Parameters specific to LangDB integration.
-    """
-⋮----
-api_key: str = DUMMY_API_KEY
-project_id: str = ""
-label: Optional[str] = None
-run_id: Optional[str] = None
-thread_id: Optional[str] = None
-base_url: str = LANGDB_BASE_URL
-⋮----
-model_config = SettingsConfigDict(env_prefix="LANGDB_")
-⋮----
-class PortkeyParams(BaseSettings)
-⋮----
-"""
-    Parameters specific to Portkey integration.
-
-    Portkey is an AI gateway that provides a unified API for multiple LLM providers,
-    with features like automatic retries, fallbacks, load balancing, and observability.
-
-    Example usage:
-        # Use Portkey with Anthropic
-        config = OpenAIGPTConfig(
-            chat_model="portkey/anthropic/claude-3-sonnet-20240229",
-            portkey_params=PortkeyParams(
-                api_key="your-portkey-api-key",
-                provider="anthropic"
-            )
-        )
-    """
-⋮----
-api_key: str = DUMMY_API_KEY  # Portkey API key
-provider: str = ""  # Required: e.g., "openai", "anthropic", "cohere", etc.
-virtual_key: Optional[str] = None  # Optional: virtual key for the provider
-trace_id: Optional[str] = None  # Optional: trace ID for request tracking
-metadata: Optional[Dict[str, Any]] = None  # Optional: metadata for logging
-retry: Optional[Dict[str, Any]] = None  # Optional: retry configuration
-cache: Optional[Dict[str, Any]] = None  # Optional: cache configuration
-cache_force_refresh: Optional[bool] = None  # Optional: force cache refresh
-user: Optional[str] = None  # Optional: user identifier
-organization: Optional[str] = None  # Optional: organization identifier
-custom_headers: Optional[Dict[str, str]] = None  # Optional: additional headers
-base_url: str = PORTKEY_BASE_URL
-⋮----
-model_config = SettingsConfigDict(env_prefix="PORTKEY_")
-⋮----
-def get_headers(self) -> Dict[str, str]
-⋮----
-"""Generate Portkey-specific headers from parameters."""
-⋮----
-headers = {}
-⋮----
-portkey_key = os.getenv("PORTKEY_API_KEY", "")
-⋮----
-def parse_model_string(self, model_string: str) -> tuple[str, str]
-⋮----
-"""
-        Parse a model string like "portkey/anthropic/claude-3-sonnet"
-        and extract provider and model name.
-
-        Returns:
-            tuple: (provider, model_name)
-        """
-parts = model_string.split("/", 2)
-⋮----
-model = model_string.replace("portkey/", "")
-⋮----
-"""
-        Get the API key for the provider from environment variables.
-
-        Args:
-            provider: The provider name (e.g., "anthropic", "openai")
-            default_key: Default key to return if not found
-
-        Returns:
-            The API key for the provider
-        """
-⋮----
-env_patterns = [
-⋮----
-key = os.getenv(pattern, "")
 </file>
 
 <file path="langroid/utils/html_logger.py">
@@ -50525,276 +50373,6 @@ df = df[["year", "state", "text"]]
 ⋮----
 result = task.run(
 # check there is non-empty response content
-</file>
-
-<file path="tests/main/test_llm.py">
-import fitz  # PyMuPDF
-⋮----
-# allow streaming globally, but can be turned off by individual models
-⋮----
-@pytest.mark.parametrize("use_cache", [True, False])
-def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache)
-⋮----
-test_settings.cache = False  # cache response but don't retrieve from cache
-⋮----
-cfg = OpenAIGPTConfig(
-⋮----
-stream=streaming,  # use streaming output if enabled globally
-⋮----
-mdl = OpenAIGPT(config=cfg)
-question = "What is the capital of " + country + "?"
-# chat mode via `generate`,
-# i.e. use same call as for completion, but the setting below
-# actually calls `chat` under the hood
-⋮----
-# check that "generate" works when "use_chat_for_completion" is True
-response = mdl.generate(prompt=question, max_tokens=800)
-⋮----
-# actual chat mode
-messages = [
-response = mdl.chat(messages=messages, max_tokens=500)
-⋮----
-# should be from cache this time, Provided config.cache_config is not None
-⋮----
-# pass intentional bad msg to test error handling
-⋮----
-_ = mdl.chat(messages=messages, max_tokens=500)
-⋮----
-def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int)
-⋮----
-"""
-    Test disabled, see TODO below.
-    Also it takes too long since we are trying to test
-    that it raises the expected error when the context length is exceeded.
-    Args:
-        test_settings: from conftest.py
-        mode: "completion" or "chat"
-        max_tokens: number of tokens to generate
-    """
-⋮----
-parser = Parser(config=ParsingConfig())
-llm = OpenAIGPT(config=cfg)
-context_length = (
-⋮----
-toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
-max_sentences = int(context_length * 1.5 / toks_per_sentence)
-big_message = generate_random_sentences(max_sentences + 1)
-big_message_tokens = parser.num_tokens(big_message)
-⋮----
-response = None
-# TODO need to figure out what error type to expect here
-⋮----
-response = llm.chat(big_message, max_tokens=max_tokens)
-⋮----
-response = llm.generate(prompt=big_message, max_tokens=max_tokens)
-⋮----
-@pytest.mark.parametrize("ctx", [16_000, None])
-def test_llm_config_context_length(mdl: str, ctx: int | None)
-⋮----
-llm_config = lm.OpenAIGPTConfig(
-⋮----
-chat_context_length=ctx,  # even if wrong, use if explicitly set
-⋮----
-mdl = lm.OpenAIGPT(config=llm_config)
-⋮----
-def test_model_selection(test_settings: Settings)
-⋮----
-defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
-⋮----
-def get_response(llm)
-⋮----
-def simulate_response(llm)
-⋮----
-# Default is GPT4o; we should not generate the warning in this case
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig())
-⋮----
-# Default is GPT3.5 (simulate GPT 4 inaccessible)
-⋮----
-# No warnings generated if we specify the model explicitly
-⋮----
-# No warnings generated if we are using a local model
-llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
-⋮----
-# We should warn on the first usage of a model with auto-selected GPT-3.5
-⋮----
-# We should not warn on subsequent uses and models with auto-selected GPT-3.5
-⋮----
-def test_keys()
-⋮----
-# Do not override the explicit settings below
-⋮----
-providers = [
-key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
-⋮----
-config = lm.OpenAIGPTConfig(
-⋮----
-llm = lm.OpenAIGPT(config)
-⋮----
-rand_key = str(random.randint(0, 10**9))
-⋮----
-def test_llm_langdb(model: str)
-⋮----
-"""Test that LLM access via LangDB works."""
-# override any chat model passed via --m arg to pytest cmd
-⋮----
-llm_config_langdb = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_langdb)
-result = llm.chat("what is 3+4?")
-⋮----
-def test_llm_openrouter(model: str)
-⋮----
-llm = lm.OpenAIGPT(config=llm_config)
-⋮----
-def test_llm_portkey(model: str)
-⋮----
-"""Test that LLM access via Portkey works."""
-⋮----
-# Skip if PORTKEY_API_KEY is not set
-⋮----
-# Extract provider from model string
-provider = model.split("/")[1] if "/" in model else ""
-provider_key_var = f"{provider.upper()}_API_KEY"
-⋮----
-# Skip if provider API key is not set
-⋮----
-llm_config_portkey = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_portkey)
-result = llm.chat("what is 3+4 equal to?")
-⋮----
-def test_portkey_params()
-⋮----
-"""Test that PortkeyParams are correctly configured."""
-⋮----
-# Test with explicit parameters
-params = PortkeyParams(
-⋮----
-headers = params.get_headers()
-⋮----
-# Test model string parsing
-⋮----
-# Test fallback parsing
-⋮----
-# Test provider API key retrieval
-⋮----
-key = params.get_provider_api_key("test_provider")
-⋮----
-def test_portkey_integration()
-⋮----
-"""Test that Portkey integration is properly configured in OpenAIGPT."""
-⋮----
-# Save the current chat model setting
-original_chat_model = settings.chat_model
-⋮----
-# Clear any global chat model override
-⋮----
-# Test basic portkey model configuration
-⋮----
-# Check that model was parsed correctly
-⋮----
-# Check headers are set correctly
-⋮----
-# Restore original chat model setting
-⋮----
-def test_followup_standalone()
-⋮----
-"""Test that followup_to_standalone works."""
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig())
-dialog = [
-followup = "What about 11?"
-response = llm.followup_to_standalone(dialog, followup)
-⋮----
-def test_llm_pdf_attachment()
-⋮----
-"""Test sending a PDF file attachment to the LLM."""
-⋮----
-# Path to the test PDF file
-pdf_path = Path("tests/main/data/dummy.pdf")
-⋮----
-# Create a FileAttachment from the PDF file
-attachment = FileAttachment.from_path(pdf_path)
-⋮----
-# Verify the attachment properties
-⋮----
-# Create messages with the attachment
-⋮----
-# Set up the LLM with a suitable model that supports PDFs
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
-⋮----
-# Get response from the LLM
-response = llm.chat(messages=messages)
-⋮----
-# follow-up question
-⋮----
-def test_llm_multi_pdf_attachments()
-⋮----
-# multiple attachments
-pdf_path2 = Path("tests/main/data/sample-test.pdf")
-⋮----
-attachment2 = FileAttachment.from_path(pdf_path2)
-⋮----
-def test_llm_pdf_bytes_and_split()
-⋮----
-"""Test sending PDF files to LLM as bytes and split into pages."""
-⋮----
-# Test creating attachment from bytes
-⋮----
-pdf_bytes = f.read()
-⋮----
-attachment_from_bytes = FileAttachment.from_bytes(
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
-⋮----
-# Test creating attachment from file-like object
-pdf_io = io.BytesIO(pdf_bytes)
-attachment_from_io = FileAttachment.from_io(
-⋮----
-# Test splitting PDF into pages and sending individual pages
-doc = fitz.open(pdf_path)
-page_attachments = []
-⋮----
-# Extract page as PDF
-page_pdf = io.BytesIO()
-page_doc = fitz.open()
-⋮----
-# Create attachment for this page
-page_attachment = FileAttachment.from_io(
-⋮----
-# Send just the first page
-⋮----
-# Test with multiple pages as separate attachments
-⋮----
-def test_llm_image_input(path: str)
-⋮----
-attachment = FileAttachment.from_path(path, detail="low")
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
-⋮----
-def test_litellm_model_key()
-⋮----
-"""
-    Test that passing in explicit api_key works with `litellm/*` models
-    """
-model = "litellm/anthropic/claude-3-5-haiku-latest"
-# disable any chat model passed via --m arg to pytest cmd
-⋮----
-class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig)
-⋮----
-"""OpenAI config that doesn't auto-load from environment variables."""
-⋮----
-# Disable environment prefix to prevent auto-loading
-model_config = SettingsConfigDict(env_prefix="")
-⋮----
-llm_config = CustomOpenAIGPTConfig(
-⋮----
-response = llm.chat("What is 3+4?")
 </file>
 
 <file path="tests/main/test_retriever_agent.py">
@@ -52542,46 +52120,6 @@ create_collection = False
 [paths[musician]],  # all chunks of this doc will have same metadata
 ⋮----
 task = lr.Task(agent, interactive=True)
-</file>
-
-<file path="examples/mcp/chainlit-mcp.py">
-"""
-Variant of gitmcp.py that works via the Chainlit UI library,
-hardcoded to work for a specific github repo.
-
-
-Simple example of using the GitMCP server to "chat" about a GitHub repository.
-
-https://github.com/idosal/git-mcp
-
-The server offers several tools, and we can enable ALL of them to be used
-by a Langroid agent.
-
-Run like this (-m model optional; defaults to gpt-4.1-mini):
-
-    uv run chainlit run examples/mcp/chainlit-mcp.py
-
-"""
-⋮----
-class SendUserTool(SendTool)
-⋮----
-request: str = "send_user"
-purpose: str = "Send <content> to user"
-to: str = "user"
-content: str = Field(
-⋮----
-@cl.on_chat_start
-async def start()
-⋮----
-lm_config = lm.OpenAIGPTConfig(
-transport = SSETransport(url="https://gitmcp.io/langroid/langroid-examples")
-tools: list[type] = await get_tools_async(transport)
-agent = lr.ChatAgent(
-⋮----
-)  # Pass config as a dictionary
-⋮----
-task_cfg = lr.TaskConfig(recognize_string_signals=False)
-task = lr.Task(agent, config=task_cfg, interactive=False)
 </file>
 
 <file path="langroid/agent/chat_agent.py">
@@ -55484,6 +55022,504 @@ config3 = TaskConfig(done_sequences=["T[CalculatorTool]"])
 # ... and specialize the task to return the tool itself
 task3 = Task(agent2, config=config3, interactive=False)[CalculatorTool]
 result3: CalculatorTool | None = task3.run("Calculate")
+</file>
+
+<file path="tests/main/test_mcp_tools.py">
+# note we use pydantic v2 to define MCP server
+from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
+⋮----
+async def check_npx_package_availability(package: str, timeout: float = 10.0) -> bool
+⋮----
+"""
+    Check if an npx package is available without actually starting the MCP server.
+    This helps avoid ProcessLookupError by detecting package issues early.
+
+    Args:
+        package: The npm package name to check
+        timeout: Timeout for the check operation
+
+    Returns:
+        True if package appears to be available, False otherwise
+    """
+⋮----
+# Try to check if the package exists using npm info
+result = await asyncio.wait_for(
+⋮----
+# If npm info succeeds, the package exists
+⋮----
+# Check for specific "not found" errors in stderr
+stderr_text = stderr.decode() if stderr else ""
+⋮----
+# For other errors, assume availability issues but not necessarily missing
+⋮----
+# On any error (timeout, process issues, etc.), assume not available
+⋮----
+class SubItem(BaseModel)
+⋮----
+"""A sub‐item with a value and multiplier."""
+⋮----
+val: int = Field(..., description="Value for sub-item")
+multiplier: float = Field(1.0, description="Multiplier applied to val")
+⋮----
+class ComplexData(BaseModel)
+⋮----
+"""Complex data combining two ints and a list of SubItem."""
+⋮----
+a: int = Field(..., description="First integer")
+b: int = Field(..., description="Second integer")
+items: List[SubItem] = Field(..., description="List of sub-items")
+⋮----
+def mcp_server()
+⋮----
+server = FastMCP("TestServer")
+⋮----
+class Counter
+⋮----
+def __init__(self) -> None
+⋮----
+def get_num_beans(self) -> int
+⋮----
+"""Return current counter."""
+⋮----
+"""Increment and return new counter."""
+⋮----
+# create a stateful tool
+counter = Counter()
+# we can't directly use the tool decorator on instance methods,
+# so we use the server.add_tool() method to add the tool
+⋮----
+# example of tool that uses an arg of type Context, and
+# uses this arg to request client LLM sampling, and send logs
+⋮----
+@server.tool()
+    async def prime_check(number: int, ctx: Context) -> str
+⋮----
+"""
+        Determine if the given number is Prime or not.
+        """
+result: TextContent | ImageContent = await ctx.sample(
+⋮----
+@server.tool()
+    def greet(person: str) -> str
+⋮----
+"""Get weather alerts for a state."""
+⋮----
+# example of MCP tool whose fields clash with Langroid ToolMessage,
+# and a `name` field which is reserved by pydantic
+⋮----
+"""Get information for a recipient."""
+⋮----
+@server.tool()
+    async def get_alerts_async(state: str) -> list[str]
+⋮----
+@server.tool()
+    def nabroski(a: int, b: int) -> int
+⋮----
+"""Computes the Nabroski transform of integers a and b."""
+⋮----
+@server.tool()
+    def coriolis(x: int, y: int) -> int
+⋮----
+"""Computes the Coriolis transform of integers x and y."""
+⋮----
+@server.tool()
+    def hydra_nest(data: ComplexData) -> int
+⋮----
+"""Compute the HydraNest calculation over nested data."""
+total = data.a * data.b
+⋮----
+async def test_get_tools_and_handle(server: FastMCP | str) -> None
+⋮----
+"""End‐to‐end test for get_tools and .handle() against server."""
+tools = await get_tools_async(server)
+# basic sanity
+⋮----
+# find the alerts tool
+AlertsTool = next(
+⋮----
+# test get_mcp_tool_async
+AlertsMCPTool: Tool = await get_mcp_tool_async(server, "get_alerts")
+⋮----
+AlertsTool = await get_tool_async(server, AlertsMCPTool.name)
+⋮----
+# instantiate Langroid ToolMessage
+msg = AlertsTool(state="NY")
+⋮----
+# invoke the tool via the Langroid ToolMessage.handle() method -
+# this produces list of weather alerts for the given state
+# Note MCP tools can return either ResultToolType or List[ResultToolType]
+result: Optional[str] = await msg.handle_async()
+⋮----
+# make tool from async FastMCP tool
+AlertsMCPToolAsync = await get_mcp_tool_async(server, "get_alerts_async")
+⋮----
+AlertsToolAsync = await get_tool_async(server, AlertsMCPToolAsync.name)
+⋮----
+msg = AlertsToolAsync(state="NY")
+⋮----
+# invoke the tool via the Langroid ToolMessage.handle_async() method -
+⋮----
+# test making tool with utility functions
+AlertsTool = await get_tool_async(server, "get_alerts")
+⋮----
+@pytest.mark.asyncio
+async def test_tools_connect_close(server: str | FastMCP) -> None
+⋮----
+"""Test that we can use connect()... tool-calls ... close()"""
+⋮----
+client = FastMCPClient(server)
+⋮----
+mcp_tools = await client.client.list_tools()
+⋮----
+langroid_tool_classes = await client.get_tools_async()
+⋮----
+AlertsMCPTool = await get_mcp_tool_async(server, "get_alerts")
+⋮----
+result = await msg.handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_stateful_tool() -> None
+⋮----
+# instantiate the server
+server = mcp_server()
+⋮----
+# get tools from the SAME instance of the server
+AddBeansTool = await get_tool_async(server, "add_beans")
+⋮----
+GetNumBeansTool = await get_tool_async(server, "get_num_beans")
+⋮----
+add_beans_msg = AddBeansTool(x=5)
+⋮----
+result = await add_beans_msg.handle_async()
+⋮----
+get_num_beans_msg = GetNumBeansTool()
+⋮----
+result = await get_num_beans_msg.handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_tool_with_context_and_sampling() -> None
+⋮----
+"""Handle a sampling request from server"""
+# simulate an LLM call
+⋮----
+PrimeCheckTool = await get_tool_async(
+⋮----
+# assert that "ctx" is NOT a field in the tool
+⋮----
+prime_check_msg = PrimeCheckTool(number=7)
+⋮----
+result = await prime_check_msg.handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_mcp_tool_schemas() -> None
+⋮----
+"""
+    Test that descriptions, field-descriptions of MCP tools are preserved
+    when we translate them to Langroid ToolMessage classes. This is important
+    since the LLM is shown these, and helps with tool-call accuracy.
+    """
+# make a langroid AlertsTool from the corresponding MCP tool
+AlertsTool = await get_tool_async(mcp_server(), "get_alerts")
+⋮----
+description = "Get weather alerts for a state."
+⋮----
+schema: lm.LLMFunctionSpec = AlertsTool.llm_function_schema()
+⋮----
+InfoTool = await get_tool_async(mcp_server(), "info_tool")
+⋮----
+description = "Get information for a recipient."
+⋮----
+# instantiate InfoTool
+msg = InfoTool(
+⋮----
+# call the tool
+⋮----
+@pytest.mark.asyncio
+async def test_single_output() -> None
+⋮----
+"""Test that a tool with a single string output works
+    similarly to one that has a list of strings outputs."""
+⋮----
+OneAlertTool = await get_tool_async(mcp_server(), "get_one_alert")
+⋮----
+msg = OneAlertTool(state="NY")
+⋮----
+# we expect a list containing a single str
+⋮----
+@pytest.mark.asyncio
+async def test_agent_mcp_tools() -> None
+⋮----
+"""Test that a Langroid ChatAgent can use and handle MCP tools."""
+⋮----
+agent = lr.ChatAgent(
+⋮----
+NabroskiTool: lr.ToolMessage = await get_tool_async(server, "nabroski")
+⋮----
+response: lr.ChatDocument = await agent.llm_response_async(
+tools = agent.get_tool_messages(response)
+⋮----
+result: lr.ChatDocument = await agent.agent_response_async(response)
+# TODO assert needs to take LLM tool-forgetting into account
+⋮----
+task = lr.Task(agent, interactive=False)
+result: lr.ChatDocument = await task.run_async(
+⋮----
+# test MCP tool with fields that clash with Langroid ToolMessage
+InfoTool = await get_tool_async(server, "info_tool")
+⋮----
+# Need to define the tools outside async def,
+# since the decorator uses asyncio.run() to wrap around an async fn
+⋮----
+@mcp_tool(mcp_server(), "get_alerts")
+class GetAlertsTool(lr.ToolMessage)
+⋮----
+"""Tool to get weather alerts."""
+⋮----
+async def my_handler(self) -> str
+⋮----
+alert = await self.handle_async()
+⋮----
+@mcp_tool(mcp_server(), "nabroski")
+class NabroskiTool(lr.ToolMessage)
+⋮----
+"""Tool to get Nabroski transform."""
+⋮----
+result = await self.handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_fastmcp_decorator() -> None
+⋮----
+"""Test that the mcp_tool decorator works as expected."""
+⋮----
+msg = GetAlertsTool(state="NY")
+⋮----
+result = await msg.my_handler()
+⋮----
+result = await task.run_async("What is the nabroski transform of 5 and 3?", turns=3)
+⋮----
+@mcp_tool(mcp_server(), "hydra_nest")
+class HydraNestTool(lr.ToolMessage)
+⋮----
+"""Tool for computing HydraNest calculation."""
+⋮----
+"""Call hydra_nest and format result."""
+⋮----
+@pytest.mark.asyncio
+async def test_complex_tool_decorator() -> None
+⋮----
+"""Test that compute_complex via decorator works end‐to‐end."""
+# build nested input
+payload = {
+msg = HydraNestTool(**payload)
+⋮----
+# call handler
+⋮----
+expected = int(4 * 5 + 2 * 1.5 + 3 * 2.0)
+⋮----
+# round‐trip via an agent
+⋮----
+prompt = """
+response = await task.run_async(prompt, turns=3)
+⋮----
+@pytest.mark.asyncio
+async def test_multiple_tools(prompt, tool_name, expected) -> None
+⋮----
+"""
+    Test one-shot enabling of multiple tools.
+    """
+⋮----
+all_tools = await get_tools_async(mcp_server())
+⋮----
+tool = next(
+⋮----
+# test that agent (LLM) can pick right tool based on prompt
+prompt = "use one of your TOOLs to answer this: " + prompt
+response: lr.ChatDocument = await agent.llm_response_async(prompt)
+⋮----
+# test in a task
+⋮----
+result: lr.ChatDocument = await task.run_async(prompt, turns=3)
+⋮----
+@pytest.mark.asyncio
+async def test_npxstdio_transport() -> None
+⋮----
+"""
+    Test that we can create Langroid ToolMessage from an MCP server
+    via npx stdio transport, for example the `exa-mcp-server`:
+    https://github.com/exa-labs/exa-mcp-server
+    """
+package_name = "exa-mcp-server"
+⋮----
+# Pre-check package availability to provide better error messages
+⋮----
+transport = NpxStdioTransport(
+# Add timeout to prevent hanging during npx package download/initialization
+⋮----
+tools = await asyncio.wait_for(get_tools_async(transport), timeout=60.0)
+⋮----
+# Catch other potential MCP/subprocess errors in CI environments
+⋮----
+# Re-raise if it's not a known npx/subprocess issue
+⋮----
+WebSearchTool = await get_tool_async(transport, "web_search_exa")
+⋮----
+# Note: we shouldn't have to explicitly beg the LLM to use the tool here
+# but I've found that even GPT-4o sometimes fails to use the tool
+question = """
+response = await agent.llm_response_async(question)
+⋮----
+result: lr.ChatDocument = await task.run_async(question, turns=3)
+⋮----
+transport = UvxStdioTransport(
+⋮----
+# `tool_name` is a misleading name -- it really refers to the
+# MCP server, which offers several tools
+⋮----
+@mcp_tool(transport, "git_status")
+class GitStatusTool(lr.ToolMessage)
+⋮----
+"""Tool to get git status."""
+⋮----
+async def handle_async(self) -> str
+⋮----
+"""
+        When defining a class explicitly with the @mcp_tool decorator,
+        we have the flexibility to define our own `handle_async` method
+        which calls the call_tool_async method, which in turn calls the
+        MCP server's call_tool method.
+        Returns:
+
+        """
+status = await self.call_tool_async()
+⋮----
+@pytest.mark.asyncio
+async def test_uvxstdio_transport() -> None
+⋮----
+"""
+    Test that we can create Langroid ToolMessage from an MCP server
+    via uvx stdio transport. We use this example `git` MCP server:
+    https://github.com/modelcontextprotocol/servers/tree/main/src/git
+    """
+tools = await get_tools_async(transport)
+⋮----
+GitStatusTool = await get_tool_async(transport, "git_status")
+⋮----
+response = await agent.llm_response_async(prompt)
+⋮----
+# test GitStatusTool created via @mcp_tool decorator
+⋮----
+@pytest.mark.asyncio
+async def test_npxstdio_transport_memory() -> None
+⋮----
+"""
+    Test that we can create Langroid ToolMessage from the `memory` MCP server
+    via npx stdio transport:
+    https://github.com/modelcontextprotocol/servers/tree/main/src/memory
+    """
+package_name = "@modelcontextprotocol/server-memory"
+⋮----
+task = lr.Task(agent, interactive=False, restart=False)
+⋮----
+@pytest.mark.asyncio
+async def test_persist_connection() -> None
+⋮----
+"""Test that persist_connection keeps the connection open between tool calls."""
+⋮----
+# Create client with persist_connection=True
+⋮----
+# First tool call - this should create and keep the connection open
+tool1 = await client.get_tool_async("add_beans")
+⋮----
+# Check that client connection is established
+⋮----
+initial_client = client.client
+⋮----
+# Second tool call - should reuse the same connection
+tool2 = await client.get_tool_async("get_num_beans")
+⋮----
+# Verify the same client connection was reused
+⋮----
+# Call the tools to ensure they work
+add_msg = tool1(x=5)
+result1 = await add_msg.handle_async()
+assert result1 == "5"  # handle_async returns string for backward compatibility
+⋮----
+get_msg = tool2()
+result2 = await get_msg.handle_async()
+assert result2 == "5"  # handle_async returns string for backward compatibility
+⋮----
+@pytest.mark.asyncio
+async def test_handle_async_with_images() -> None
+⋮----
+"""Test that response_async returns ChatDocument with file attachments."""
+# Create a mock server that returns image content
+server = FastMCP("ImageServer")
+⋮----
+@server.tool()
+    async def get_chart() -> List[TextContent | ImageContent]
+⋮----
+"""Get a chart with image."""
+⋮----
+data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",  # noqa: E501
+⋮----
+# Get the tool and test response_async
+⋮----
+ChartTool = await client.get_tool_async("get_chart")
+⋮----
+# Create a mock agent
+agent = lr.ChatAgent(lr.ChatAgentConfig())
+⋮----
+# Test response_async method
+chart_msg = ChartTool()
+response = await chart_msg.handle_async(agent)
+⋮----
+# Verify we got a ChatDocument
+⋮----
+# Verify we have file attachments in the files attribute
+⋮----
+# Verify the file is an image
+file = response.files[0]
+⋮----
+@pytest.mark.asyncio
+async def test_forward_text_resources() -> None
+⋮----
+"""Test that forward_text_resources setting works correctly."""
+⋮----
+server = FastMCP("TextResourceServer")
+⋮----
+# Test the _convert_tool_result method directly with mocked data
+⋮----
+# Create a mock CallToolResult with text and text resource
+mock_result = CallToolResult(
+⋮----
+# Test with forward_text_resources=True
+result = client._convert_tool_result("test_tool", mock_result)
+⋮----
+# Should include both the main text and the resource text
+⋮----
+# Test with forward_text_resources=False
+⋮----
+# Should only include the main text, not the resource text
+⋮----
+@pytest.mark.asyncio
+async def test_forward_blob_resources() -> None
+⋮----
+"""Test that forward_blob_resources setting works correctly."""
+⋮----
+server = FastMCP("BlobResourceServer")
+⋮----
+# Small PNG data (1x1 blue pixel)
+png_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD0lEQVR42mNkYPhfz/ADAAKAA4RkT4UVAAAAAElFTkSuQmCC"  # noqa: E501
+⋮----
+# Create a mock CallToolResult with text and blob resource
+⋮----
+# Test with forward_blob_resources=True
+⋮----
+# Should have text content and file attachment
+⋮----
+# Test with forward_blob_resources=False
+⋮----
+# Should only have text content, no file attachments
 </file>
 
 <file path=".gitignore">
@@ -59190,6 +59226,15 @@ result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
 result = await task.run_async(
 </file>
 
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.12.9
+  hooks:
+    - id: ruff
+</file>
+
 <file path="README.md">
 <div align="center">
   <img src="docs/assets/langroid-card-lambda-ossem-rust-1200-630.png" alt="Logo" 
@@ -62524,15 +62569,6 @@ agent_type = type(agent).__name__
 user_response = Prompt.ask(
 ⋮----
 answer = agent.llm_response(request)
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.12.9
-  hooks:
-    - id: ruff
 </file>
 
 <file path="langroid/language_models/openai_gpt.py">
