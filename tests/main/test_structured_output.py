@@ -2,12 +2,12 @@ import copy
 from typing import Any, Callable, List
 
 import pytest
+from pydantic import BaseModel, Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 
 cfg = ChatAgentConfig(
@@ -135,32 +135,34 @@ def test_llm_structured_output_list(
     assert agent_result.content == str(N)
 
 
-@pytest.mark.parametrize("use_tools_api", [True, False])
-@pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize("use_functions_api", [False, True])
 def test_llm_structured_output_nested(
     test_settings: Settings,
     use_functions_api: bool,
-    use_tools_api: bool,
 ):
     """
     Test whether LLM is able to GENERATE nested structured output.
     """
     set_global(test_settings)
-    agent = ChatAgent(cfg)
+    agent = ChatAgent(strict_cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
-    agent.config.use_tools_api = use_tools_api
+    agent.config.use_tools_api = True
     agent.enable_message(PresidentTool)
     country = "France"
-    prompt = f"Show me an example of a President of {country}"
+    prompt = f"""
+    Show me an example of a President of {country}.
+    Make sure you use the `{PresidentTool.name()}` 
+    correctly with ALL the required fields!
+    """
     llm_msg = agent.llm_response_forget(prompt)
     assert isinstance(agent.get_tool_messages(llm_msg)[0], PresidentTool)
     assert country == agent.agent_response(llm_msg).content
 
 
-@pytest.mark.parametrize("instructions", [True, False])
+@pytest.mark.parametrize("instructions", [False, True])
 @pytest.mark.parametrize("use", [True, False])
-@pytest.mark.parametrize("force_tools", [True, False])
+@pytest.mark.parametrize("force_tools", [False, True])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_strict_json(

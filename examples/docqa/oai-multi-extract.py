@@ -27,7 +27,7 @@ from langroid.agent.openai_assistant import (
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langroid.utils.constants import DONE, NO_ANSWER
 from langroid.utils.logging import setup_colored_logging
 
@@ -71,7 +71,7 @@ class LeaseMessage(ToolMessage):
         as a method with name `lease_info`.
         """
         print(f"DONE! Successfully extracted Lease Info:" f"{self.terms}")
-        return DONE + " " + json.dumps(self.terms.dict())
+        return DONE + " " + json.dumps(self.terms.model_dump())
 
 
 @app.command()

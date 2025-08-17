@@ -9,10 +9,9 @@ from urllib.parse import urldefrag, urljoin, urlparse
 import fire
 import requests
 from bs4 import BeautifulSoup
+from pydantic import BaseModel, HttpUrl, TypeAdapter, ValidationError
 from rich import print
 from rich.prompt import Prompt
-
-from langroid.pydantic_v1 import BaseModel, HttpUrl, ValidationError, parse_obj_as
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +105,8 @@ class Url(BaseModel):
 
 def is_url(s: str) -> bool:
     try:
-        Url(url=parse_obj_as(HttpUrl, s))
+        url_adapter = TypeAdapter(HttpUrl)
+        Url(url=url_adapter.validate_python(s))
         return True
     except ValidationError:
         return False
@@ -133,7 +133,8 @@ def get_urls_paths_bytes_indices(
             byte_list.append(i)
             continue
         try:
-            Url(url=parse_obj_as(HttpUrl, item))
+            url_adapter = TypeAdapter(HttpUrl)
+            Url(url=url_adapter.validate_python(item))
             urls.append(i)
         except ValidationError:
             if os.path.exists(item):

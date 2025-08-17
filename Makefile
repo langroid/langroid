@@ -36,15 +36,6 @@ stubs:
 	@uv run stubgen -p langroid -o stubs
 	@echo "Stubs generated in the 'stubs' directory"
 
-.PHONY: fix-pydantic
-
-# Entry to replace pydantic imports in specified directories
-fix-pydantic:
-	@echo "Fixing pydantic imports..."
-	@chmod +x scripts/fix-pydantic-imports.sh
-	@./scripts/fix-pydantic-imports.sh
-
-
 .PHONY: tests
 tests:
 	pytest tests/main --basetemp=/tmp/pytest
@@ -96,7 +87,7 @@ repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (exclude
 repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
 
 .PHONY: check
-check: fix-pydantic lint type-check repomix-all
+check: lint type-check repomix-all
 
 .PHONY: revert-tag
 revert-tag:
@@ -145,6 +136,18 @@ clean:
 release:
 	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
 
+.PHONY: bump-rc
+bump-rc:
+	@cz bump --prerelease rc
+
+.PHONY: bump-beta
+bump-beta:
+	@cz bump --prerelease beta
+
+.PHONY: bump-alpha
+bump-alpha:
+	@cz bump --prerelease alpha
+
 .PHONY: all-patch
 all-patch: bump-patch clean build push release
 
@@ -153,6 +156,110 @@ all-minor: bump-minor clean build push release
 
 .PHONY: all-major
 all-major: bump-major clean build push release
+
+.PHONY: all-rc
+all-rc: bump-rc clean build push release
+
+.PHONY: all-beta
+all-beta: bump-beta clean build push release
+
+.PHONY: all-alpha
+all-alpha: bump-alpha clean build push release
+
+.PHONY: pre-release-branch
+pre-release-branch: ## Create and push pre-release from current branch
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot create pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	PRERELEASE_TYPE=$${PRERELEASE_TYPE:-rc} && \
+	cz bump --prerelease "$$PRERELEASE_TYPE" && \
+	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	git push origin "$$CURRENT_BRANCH" --tags && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: pre-release-rc
+pre-release-rc: ## Create release candidate from current branch
+	@PRERELEASE_TYPE=rc make pre-release-branch
+
+.PHONY: pre-release-beta
+pre-release-beta: ## Create beta release from current branch
+	@PRERELEASE_TYPE=beta make pre-release-branch
+
+.PHONY: pre-release-alpha
+pre-release-alpha: ## Create alpha release from current branch
+	@PRERELEASE_TYPE=alpha make pre-release-branch
+
+.PHONY: pre-release-push
+pre-release-push: ## Push current branch and tags (for pre-releases)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot push pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	git push origin "$$CURRENT_BRANCH" --tags
+
+.PHONY: pre-release-release
+pre-release-release: ## Create GitHub pre-release (requires VERSION env var)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot create pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: bump-rc-patch
+bump-rc-patch: ## Bump to release candidate patch
+	@cz bump --increment PATCH --prerelease rc
+
+.PHONY: bump-rc-minor
+bump-rc-minor: ## Bump to release candidate minor
+	@cz bump --increment MINOR --prerelease rc
+
+.PHONY: bump-rc-major
+bump-rc-major: ## Bump to release candidate major
+	@cz bump --increment MAJOR --prerelease rc
+
+.PHONY: bump-beta-patch
+bump-beta-patch: ## Bump to beta patch
+	@cz bump --increment PATCH --prerelease beta
+
+.PHONY: bump-beta-minor
+bump-beta-minor: ## Bump to beta minor
+	@cz bump --increment MINOR --prerelease beta
+
+.PHONY: bump-alpha-patch
+bump-alpha-patch: ## Bump to alpha patch
+	@cz bump --increment PATCH --prerelease alpha
+
+.PHONY: bump-alpha-minor
+bump-alpha-minor: ## Bump to alpha minor
+	@cz bump --increment MINOR --prerelease alpha
+
+.PHONY: pre-release-rc-patch
+pre-release-rc-patch: bump-rc-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-rc-minor
+pre-release-rc-minor: bump-rc-minor clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-rc-major
+pre-release-rc-major: bump-rc-major clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-beta-patch
+pre-release-beta-patch: bump-beta-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-beta-minor
+pre-release-beta-minor: bump-beta-minor clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-alpha-patch
+pre-release-alpha-patch: bump-alpha-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-alpha-minor
+pre-release-alpha-minor: bump-alpha-minor clean build pre-release-push pre-release-release
 
 .PHONY: publish
 publish:

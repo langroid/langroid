@@ -29,7 +29,7 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE, NO_ANSWER, PASS, SEND_TO
 

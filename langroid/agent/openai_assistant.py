@@ -15,6 +15,7 @@ from openai.types.beta.assistant_update_params import (
 )
 from openai.types.beta.threads import Message, Run
 from openai.types.beta.threads.runs import RunStep
+from pydantic import BaseModel
 from rich import print
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -26,7 +27,6 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPT,
     OpenAIGPTConfig,
 )
-from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.system import generate_user_id, update_hash
 
@@ -44,7 +44,7 @@ class AssistantTool(BaseModel):
     function: Dict[str, Any] | None = None
 
     def dct(self) -> Dict[str, Any]:
-        d = super().dict()
+        d = super().model_dump()
         d["type"] = d["type"].value
         if self.type != ToolType.FUNCTION:
             d.pop("function")
@@ -72,14 +72,14 @@ class RunStatus(str, Enum):
 class OpenAIAssistantConfig(ChatAgentConfig):
     use_cached_assistant: bool = False  # set in script via user dialog
     assistant_id: str | None = None
-    use_tools = False
-    use_functions_api = True
+    use_tools: bool = False
+    use_functions_api: bool = True
     use_cached_thread: bool = False  # set in script via user dialog
     thread_id: str | None = None
     # set to True once we can add Assistant msgs in threads
     cache_responses: bool = True
     timeout: int = 30  # can be different from llm.timeout
-    llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o)
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o)
     tools: List[AssistantTool] = []
     files: List[str] = []
 
@@ -214,7 +214,7 @@ class OpenAIAssistant(ChatAgent):
             [
                 {
                     "type": "function",  # type: ignore
-                    "function": f.dict(),
+                    "function": f.model_dump(),
                 }
                 for f in functions
             ]
@@ -272,7 +272,7 @@ class OpenAIAssistant(ChatAgent):
         cached_dict = self.llm.cache.retrieve(key)
         if cached_dict is None:
             return None
-        return LLMResponse.parse_obj(cached_dict)
+        return LLMResponse.model_validate(cached_dict)
 
     def _cache_store(self) -> None:
         """
@@ -638,7 +638,7 @@ class OpenAIAssistant(ChatAgent):
             cached=False,  # TODO - revisit when able to insert Assistant responses
         )
         if self.llm.cache is not None:
-            self.llm.cache.store(key, result.dict())
+            self.llm.cache.store(key, result.model_dump())
         return result
 
     def _parse_run_required_action(self) -> List[AssistantToolCall]:
@@ -773,7 +773,7 @@ class OpenAIAssistant(ChatAgent):
             # it looks like assistant produced it
             if self.config.cache_responses:
                 self._add_thread_message(
-                    json.dumps(response.dict()), role=Role.ASSISTANT
+                    json.dumps(response.model_dump()), role=Role.ASSISTANT
                 )
             return response  # type: ignore
         else:

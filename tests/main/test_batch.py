@@ -36,8 +36,8 @@ def process_int(x: str) -> str:
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
-    vecdb: VectorStoreConfig = None
-    llm = MockLMConfig(response_fn=lambda x: process_int(x))
+    vecdb: Optional[VectorStoreConfig] = None
+    llm: MockLMConfig = MockLMConfig(response_fn=lambda x: process_int(x))
 
 
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])
@@ -244,8 +244,8 @@ def test_task_gen_batch(
                     return str(2 * int(x))
 
         class _TestChatAgentConfig(ChatAgentConfig):
-            vecdb: VectorStoreConfig = None
-            llm = MockLMConfig(response_fn_async=response_fn_async)
+            vecdb: Optional[VectorStoreConfig] = None
+            llm: MockLMConfig = MockLMConfig(response_fn_async=response_fn_async)
 
         cfg = _TestChatAgentConfig()
         return Task(

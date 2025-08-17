@@ -1,6 +1,6 @@
 import pytest
+from pydantic import BaseModel, ConfigDict
 
-from langroid.pydantic_v1 import BaseModel
 from langroid.utils.pydantic_utils import extract_fields, flatten_dict
 
 
@@ -14,8 +14,7 @@ class TestModel(BaseModel):
     age: int
     details: DetailsModel
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 def test_extract_fields():

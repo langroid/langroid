@@ -25,7 +25,7 @@ from rich import print
 
 import langroid as lr
 from langroid.language_models.openai_gpt import LangDBParams, OpenAIGPTConfig
-from langroid.pydantic_v1 import BaseSettings
+from pydantic_settings import BaseSettings
 
 app = typer.Typer()
 

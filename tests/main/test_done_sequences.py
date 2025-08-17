@@ -2,6 +2,8 @@
 Tests for the done_sequences feature in Task.
 """
 
+from pydantic import Field
+
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import (
     AgentEvent,
@@ -23,6 +25,15 @@ class SimpleTool(ToolMessage):
     def handle(self) -> str:
         """Handle the tool and return a response"""
         return f"Processed value: {self.value}"
+
+
+class CalculatorTool(ToolMessage):
+    request: str = "calculator"
+    purpose: str = "Calculate math expressions"
+    expression: str = Field(..., description="Math expression")
+
+    def handle(self) -> str:
+        return f"Result: {eval(self.expression)}"
 
 
 def test_done_sequence_tool_then_agent(test_settings: Settings):
@@ -377,3 +388,69 @@ def test_done_sequence_simulates_done_if_tool(test_settings: Settings):
 
     # Verify they are truly equivalent by checking the exact same number of messages
     assert len(agent1.message_history) == len(agent2.message_history)
+
+
+def test_done_sequence_tool_class_reference(test_settings: Settings):
+    """Test using tool class names in done sequences"""
+    set_global(test_settings)
+
+    # Mock LLM that generates calculator tool
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="TestAgent",
+            llm=MockLMConfig(
+                response_fn=lambda x: '{"request": "calculator", "expression": "2+2"}'
+            ),
+        )
+    )
+    agent.enable_message([SimpleTool, CalculatorTool])
+
+    # Use tool class name in done sequence
+    config = TaskConfig(done_sequences=["T[CalculatorTool], A"])  # Using class name
+
+    task = Task(agent, config=config, interactive=False)
+    result = task.run("Calculate something")
+
+    # The sequence is: LLM generates calculator tool -> Agent handles it -> done
+    # Check that result contains the calculated result,  from handling the tool
+    assert "4" in result.content
+
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="TestAgent",
+            llm=MockLMConfig(
+                response_fn=lambda x: '{"request": "calculator", "expression": "5*5"}'
+            ),
+        )
+    )
+    agent.enable_message([CalculatorTool])
+
+    # Test with tool name
+    config1 = TaskConfig(done_sequences=["T[calculator], A"])
+    task1 = Task(agent, config=config1, interactive=False)
+    result = task1.run("Calculate")
+    # Result should contain the calculator tool's result
+    assert "25" in result.content
+
+    # Test with class name
+    agent2 = ChatAgent(
+        ChatAgentConfig(
+            name="TestAgent2",
+            llm=MockLMConfig(
+                response_fn=lambda x: '{"request": "calculator", "expression": "5*5"}'
+            ),
+        )
+    )
+    agent2.enable_message([CalculatorTool])
+    config2 = TaskConfig(done_sequences=["T[CalculatorTool], A"])
+    task2 = Task(agent2, config=config2, interactive=False)
+    result2 = task2.run("Calculate")
+    assert "25" in result2.content
+
+    # set up task to end as soon as the tool is generated, using the class name
+    config3 = TaskConfig(done_sequences=["T[CalculatorTool]"])
+    # ... and specialize the task to return the tool itself
+    task3 = Task(agent2, config=config3, interactive=False)[CalculatorTool]
+    result3: CalculatorTool | None = task3.run("Calculate")
+    assert isinstance(result3, CalculatorTool)
+    assert result3.expression == "5*5"

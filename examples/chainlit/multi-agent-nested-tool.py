@@ -24,8 +24,8 @@ settings.cache = False
 
 
 class ExportTool(lr.ToolMessage):
-    request = "main_export"
-    purpose = "To request the main export of a given <country>."
+    request: str = "main_export"
+    purpose: str = "To request the main export of a given <country>."
     country: str
 
 

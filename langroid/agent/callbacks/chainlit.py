@@ -16,8 +16,9 @@ from typing import (
     no_type_check,
 )
 
+from pydantic_settings import BaseSettings
+
 from langroid.exceptions import LangroidImportError
-from langroid.pydantic_v1 import BaseSettings
 
 try:
     import chainlit as cl

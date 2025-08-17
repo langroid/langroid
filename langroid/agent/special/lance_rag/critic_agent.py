@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 
 class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
-    name = "QueryPlanCritic"
-    system_message = f"""
+    name: str = "QueryPlanCritic"
+    system_message: str = f"""
     You are an expert at carefully planning a query that needs to be answered
     based on a large collection of documents. These docs have a special `content` field
     and additional FILTERABLE fields in the SCHEMA below, along with the 

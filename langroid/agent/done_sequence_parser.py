@@ -11,16 +11,20 @@ Examples:
 """
 
 import re
-from typing import List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from .task import AgentEvent, DoneSequence, EventType
 
 
-def parse_done_sequence(sequence: Union[str, DoneSequence]) -> DoneSequence:
+def parse_done_sequence(
+    sequence: Union[str, DoneSequence], tools_map: Optional[Dict[str, Any]] = None
+) -> DoneSequence:
     """Parse a string pattern or return existing DoneSequence unchanged.
 
     Args:
         sequence: Either a DoneSequence object or a string pattern to parse
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
 
     Returns:
         DoneSequence object
@@ -34,21 +38,25 @@ def parse_done_sequence(sequence: Union[str, DoneSequence]) -> DoneSequence:
     if not isinstance(sequence, str):
         raise ValueError(f"Expected string or DoneSequence, got {type(sequence)}")
 
-    events = _parse_string_pattern(sequence)
+    events = _parse_string_pattern(sequence, tools_map)
     return DoneSequence(events=events)
 
 
-def _parse_string_pattern(pattern: str) -> List[AgentEvent]:
+def _parse_string_pattern(
+    pattern: str, tools_map: Optional[Dict[str, Any]] = None
+) -> List[AgentEvent]:
     """Parse a string pattern into a list of AgentEvent objects.
 
     Pattern format:
         - Single letter codes: T, A, L, U, N, C
-        - Specific tools: T[tool_name]
+        - Specific tools: T[tool_name] or T[ToolClass]
         - Content match: C[regex_pattern]
         - Separated by commas, spaces allowed
 
     Args:
         pattern: String pattern to parse
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
 
     Returns:
         List of AgentEvent objects
@@ -65,7 +73,7 @@ def _parse_string_pattern(pattern: str) -> List[AgentEvent]:
         if not part:
             continue
 
-        event = _parse_event_token(part)
+        event = _parse_event_token(part, tools_map)
         events.append(event)
 
     if not events:
@@ -74,11 +82,15 @@ def _parse_string_pattern(pattern: str) -> List[AgentEvent]:
     return events
 
 
-def _parse_event_token(token: str) -> AgentEvent:
+def _parse_event_token(
+    token: str, tools_map: Optional[Dict[str, Any]] = None
+) -> AgentEvent:
     """Parse a single event token into an AgentEvent.
 
     Args:
         token: Single event token (e.g., "T", "T[calc]", "C[quit|exit]")
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
 
     Returns:
         AgentEvent object
@@ -94,8 +106,28 @@ def _parse_event_token(token: str) -> AgentEvent:
         param = bracket_match.group(2)
 
         if event_code == "T":
-            # Specific tool: T[tool_name]
-            return AgentEvent(event_type=EventType.SPECIFIC_TOOL, tool_name=param)
+            # Specific tool: T[tool_name] or T[ToolClass]
+            tool_class = None
+            tool_name = param
+
+            # First try direct lookup in tools_map by the param (tool name)
+            if tools_map and param in tools_map:
+                tool_class = tools_map[param]
+                tool_name = param
+            elif tools_map:
+                # If not found, loop through tools_map to find a tool class
+                # whose __name__ matches param
+                for name, cls in tools_map.items():
+                    if hasattr(cls, "__name__") and cls.__name__ == param:
+                        tool_class = cls
+                        tool_name = name
+                        break
+
+            return AgentEvent(
+                event_type=EventType.SPECIFIC_TOOL,
+                tool_name=tool_name,
+                tool_class=tool_class,
+            )
         elif event_code == "C":
             # Content match: C[regex_pattern]
             return AgentEvent(event_type=EventType.CONTENT_MATCH, content_pattern=param)
@@ -136,14 +168,17 @@ def _parse_event_token(token: str) -> AgentEvent:
 
 
 def parse_done_sequences(
-    sequences: List[Union[str, DoneSequence]]
+    sequences: List[Union[str, DoneSequence]],
+    tools_map: Optional[Dict[str, Any]] = None,
 ) -> List[DoneSequence]:
     """Parse a list of mixed string patterns and DoneSequence objects.
 
     Args:
         sequences: List containing strings and/or DoneSequence objects
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
 
     Returns:
         List of DoneSequence objects
     """
-    return [parse_done_sequence(seq) for seq in sequences]
+    return [parse_done_sequence(seq, tools_map) for seq in sequences]

@@ -34,7 +34,7 @@ import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.task import TaskConfig
 from langroid.agent.tools.orchestration import ForwardTool, ResultTool
-from langroid.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langroid.utils.configuration import settings
 
 logging.basicConfig(level=logging.INFO)

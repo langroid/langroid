@@ -1,6 +1,7 @@
 from typing import List
 
 import pytest
+from pydantic import Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage
@@ -8,7 +9,6 @@ from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.azure_openai import AzureConfig
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.pydantic_v1 import Field
 
 
 class CountryCapitalMessage(ToolMessage):

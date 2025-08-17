@@ -4,8 +4,7 @@ from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Literal, cast
 
 from dotenv import find_dotenv, load_dotenv
-
-from langroid.pydantic_v1 import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Global reentrant lock to serialize any modifications to the global settings.
 _global_lock = threading.RLock()
@@ -22,8 +21,7 @@ class Settings(BaseSettings):
     quiet: bool = False  # quiet mode (i.e. suppress all output)?
     notebook: bool = False  # running in a notebook?
 
-    class Config:
-        extra = "forbid"
+    model_config = SettingsConfigDict(extra="forbid")
 
 
 # Load environment variables from .env file.
@@ -60,8 +58,10 @@ class SettingsProxy:
         # Return a dict view of the settings as seen by the caller.
         # Note that temporary overrides are not “merged” with global settings.
         if hasattr(_thread_local, "override"):
-            return cast(Dict[str, Any], cast(Settings, _thread_local.override.dict()))
-        return _global_settings.dict()
+            return cast(
+                Dict[str, Any], cast(Settings, _thread_local.override.model_dump())
+            )
+        return _global_settings.model_dump()
 
 
 settings = SettingsProxy()
@@ -76,7 +76,7 @@ def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
 
     This updates the global default.
     """
-    config_dict = cfg.dict()
+    config_dict = cfg.model_dump()
     filtered_config = {key: config_dict[key] for key in keys if key in config_dict}
     new_settings = Settings(**filtered_config)
     _global_settings.__dict__.update(new_settings.__dict__)
@@ -117,7 +117,9 @@ def quiet_mode(quiet: bool = True) -> Iterator[None]:
     if quiet is already True (from an outer context),
     then it remains True even if a nested context passes quiet=False.
     """
-    current_effective = settings.dict()  # get the current thread's effective settings
+    current_effective = (
+        settings.model_dump()
+    )  # get the current thread's effective settings
     # Create a new settings instance from the current effective state.
     temp = Settings(**current_effective)
     # Merge the new flag: once quiet is enabled, it stays enabled.
@@ -132,6 +134,6 @@ def set_env(settings_instance: BaseSettings) -> None:
 
     Each field in the settings is written to os.environ.
     """
-    for field_name, field in settings_instance.__class__.__fields__.items():
-        env_var_name = field.field_info.extra.get("env", field_name).upper()
-        os.environ[env_var_name] = str(settings_instance.dict()[field_name])
+    for field_name, field in settings_instance.__class__.model_fields.items():
+        env_var_name = field.alias or field_name.upper()
+        os.environ[env_var_name] = str(settings_instance.model_dump()[field_name])

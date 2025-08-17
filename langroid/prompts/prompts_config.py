@@ -1,4 +1,4 @@
-from langroid.pydantic_v1 import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class PromptsConfig(BaseSettings):

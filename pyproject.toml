@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.58.3"
+version = "0.59.0"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -39,7 +39,8 @@ dependencies = [
     "openai<2.0.0,>=1.61.1",
     "pandas<3.0.0,>=2.0.3",
     "prettytable<4.0.0,>=3.8.0",
-    "pydantic<3.0.0,>=1",
+    "pydantic<3.0.0,>=2.0.0",
+    "pydantic-settings<3.0.0,>=2.0.0",
     "pygithub<2.0.0,>=1.58.1",
     "pygments<3.0.0,>=2.15.1",
     "pymupdf4llm<0.1.0,>=0.0.17",

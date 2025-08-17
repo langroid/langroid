@@ -17,11 +17,11 @@ from typing import (
 
 from dotenv import load_dotenv
 
+# import dataclass
+from pydantic import BaseModel
+
 from langroid import LangroidImportError
 from langroid.mytypes import Document
-
-# import dataclass
-from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -246,7 +246,7 @@ class PineconeDB(VectorStore):
             return
 
         super().maybe_add_ids(documents)
-        document_dicts = [doc.dict() for doc in documents]
+        document_dicts = [doc.model_dump() for doc in documents]
         document_ids = [doc.id() for doc in documents]
         embedding_vectors = self.embedding_fn([doc.content for doc in documents])
         vectors = [

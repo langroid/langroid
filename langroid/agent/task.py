@@ -27,6 +27,7 @@ from typing import (
 )
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 from rich import print
 from rich.markup import escape
 
@@ -45,7 +46,6 @@ from langroid.exceptions import InfiniteLoopException
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.routing import parse_addressed_message
-from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
     DONE,
@@ -90,6 +90,9 @@ class AgentEvent(BaseModel):
 
     event_type: EventType
     tool_name: Optional[str] = None  # For SPECIFIC_TOOL
+    tool_class: Optional[Type[Any]] = (
+        None  # For storing tool class references when using SPECIFIC_TOOL events
+    )
     content_pattern: Optional[str] = None  # For CONTENT_MATCH (regex)
     responder: Optional[str] = None  # Specific responder name
     # Optionally match only if the responder was specific entity/task
@@ -146,6 +149,7 @@ class TaskConfig(BaseModel):
         done_sequences (List[DoneSequence]): List of event sequences that trigger task
             completion. Task is done if ANY sequence matches the recent event history.
             Each sequence is checked against the message parent chain.
+            Tool classes can be referenced in sequences like "T[MyToolClass]".
 
     """
 
@@ -298,14 +302,8 @@ class Task:
             set_parent_agent=noop_fn,
         )
         self.config = config
-        # Store parsed done sequences
+        # Store parsed done sequences (will be initialized after agent assignment)
         self._parsed_done_sequences: Optional[List[DoneSequence]] = None
-        if self.config.done_sequences:
-            from .done_sequence_parser import parse_done_sequences
-
-            self._parsed_done_sequences = parse_done_sequences(
-                self.config.done_sequences
-            )
         # how to behave as a sub-task; can be overridden by `add_sub_task()`
         self.config_sub_task = copy.deepcopy(config)
         # counts of distinct pending messages in history,
@@ -340,6 +338,21 @@ class Task:
                 self.agent.set_system_message(system_message)
             if user_message:
                 self.agent.set_user_message(user_message)
+
+        # Initialize parsed done sequences now that self.agent is available
+        if self.config.done_sequences:
+            from .done_sequence_parser import parse_done_sequences
+
+            # Pass agent's llm_tools_map directly
+            tools_map = (
+                self.agent.llm_tools_map
+                if hasattr(self.agent, "llm_tools_map")
+                else None
+            )
+            self._parsed_done_sequences = parse_done_sequences(
+                self.config.done_sequences, tools_map
+            )
+
         self.max_cost: float = 0
         self.max_tokens: int = 0
         self.session_id: str = ""
@@ -483,7 +496,7 @@ class Task:
         self.message_counter.clear()
         # create a unique string that will not likely be in any message,
         # so we always have a message with count=1
-        self.message_counter.update([hash("___NO_MESSAGE___")])
+        self.message_counter.update([str(hash("___NO_MESSAGE___"))])
 
     def _cache_session_store(self, key: str, value: str) -> None:
         """
@@ -2083,7 +2096,7 @@ class Task:
         """
         from langroid.agent.chat_document import ChatDocLoggerFields
 
-        default_values = ChatDocLoggerFields().dict().values()
+        default_values = ChatDocLoggerFields().model_dump().values()
         msg_str_tsv = "\t".join(str(v) for v in default_values)
         if msg is not None:
             msg_str_tsv = msg.tsv_str()
@@ -2144,7 +2157,7 @@ class Task:
             else:
                 # Get fields from the message
                 fields = msg.log_fields()
-                fields_dict = fields.dict()
+                fields_dict = fields.model_dump()
                 fields_dict.update(
                     {
                         "responder": str(resp),
@@ -2155,13 +2168,11 @@ class Task:
 
             # Create a ChatDocLoggerFields-like object for the HTML logger
             # Create a simple BaseModel subclass dynamically
-            from langroid.pydantic_v1 import BaseModel
+            from pydantic import BaseModel
 
             class LogFields(BaseModel):
-                class Config:
-                    extra = "allow"  # Allow extra fields
+                model_config = ConfigDict(extra="allow")  # Allow extra fields
 
-            # Create instance with the fields from fields_dict
             log_obj = LogFields(**fields_dict)
             self.html_logger.log(log_obj)
 
@@ -2173,8 +2184,6 @@ class Task:
         """
         if recipient == "":
             return True
-        # native responders names are USER, LLM, AGENT,
-        # and the names of subtasks are from Task.name attribute
         responder_names = [self.name.lower()] + [
             r.name.lower() for r in self.responders
         ]
@@ -2184,7 +2193,6 @@ class Task:
         """
         Is the recipient explicitly specified and does not match responder "e" ?
         """
-        # Note that recipient could be specified as an Entity or a Task name
         return (
             self.pending_message is not None
             and (recipient := self.pending_message.metadata.recipient) != ""
@@ -2195,8 +2203,6 @@ class Task:
 
     def _user_can_respond(self) -> bool:
         return self.interactive or (
-            # regardless of self.interactive, if a msg is explicitly addressed to
-            # user, then wait for user response
             self.pending_message is not None
             and self.pending_message.metadata.recipient == Entity.USER
             and not self.agent.has_tool_message_attempt(self.pending_message)
@@ -2204,19 +2210,13 @@ class Task:
 
     def _can_respond(self, e: Responder) -> bool:
         user_can_respond = self._user_can_respond()
-
         if self.pending_sender == e or (e == Entity.USER and not user_can_respond):
-            # sender is same as e (an entity cannot respond to its own msg),
-            # or user cannot respond
             return False
-
         if self.pending_message is None:
             return True
         if isinstance(e, Task) and not e.agent.can_respond(self.pending_message):
             return False
-
         if self._recipient_mismatch(e):
-            # Cannot respond if not addressed to this entity
             return False
         return self.pending_message.metadata.block != e
 
@@ -2230,7 +2230,6 @@ class Task:
         Args:
             enable (bool): value of `self.color_log` to set to,
                 which will enable/diable rich logging
-
         """
         self.color_log = enable
 
@@ -2247,16 +2246,13 @@ class Task:
         Args:
             msg (ChatDocument|str|None): message to parse
             addressing_prefix (str): prefix to address other agents or entities,
-                 (e.g. "@". See documentation of `TaskConfig` for details).
+                (e.g. "@". See documentation of `TaskConfig` for details).
         Returns:
             Tuple[bool|None, str|None, str|None]:
                 bool: true=PASS, false=SEND, or None if neither
                 str: recipient, or None
                 str: content to send, or None
         """
-        # handle routing instruction-strings in result if any,
-        # such as PASS, PASS_TO, or SEND
-
         msg_str = msg.content if isinstance(msg, ChatDocument) else msg
         if (
             self.agent.has_tool_message_attempt(msg)
@@ -2264,10 +2260,7 @@ class Task:
             and not msg_str.startswith(PASS_TO)
             and not msg_str.startswith(SEND_TO)
         ):
-            # if there's an attempted tool-call, we ignore any routing strings,
-            # unless they are at the start of the msg
             return None, None, None
-
         content = msg.content if isinstance(msg, ChatDocument) else msg
         content = content.strip()
         if PASS in content and PASS_TO not in content:
@@ -2279,10 +2272,7 @@ class Task:
             and (addressee_content := parse_addressed_message(content, SEND_TO))[0]
             is not None
         ):
-            # Note this will discard any portion of content BEFORE SEND_TO.
-            # TODO maybe make this configurable.
             (addressee, content_to_send) = addressee_content
-            # if no content then treat same as PASS_TO
             if content_to_send == "":
                 return True, addressee, None
             else:
@@ -2296,12 +2286,10 @@ class Task:
             is not None
         ):
             (addressee, content_to_send) = addressee_content
-            # if no content then treat same as PASS_TO
             if content_to_send == "":
                 return True, addressee, None
             else:
                 return False, addressee, content_to_send
-
         return None, None, None
 
     def _classify_event(
@@ -2310,19 +2298,13 @@ class Task:
         """Classify a message into an AgentEvent for sequence matching."""
         if msg is None:
             return AgentEvent(event_type=EventType.NO_RESPONSE)
-
-        # Determine the event type based on responder and message content
         event_type = EventType.NO_RESPONSE
         tool_name = None
-
-        # Check if there are tool messages
         tool_messages = self.agent.try_get_tool_messages(msg, all_tools=True)
         if tool_messages:
             event_type = EventType.TOOL
             if len(tool_messages) == 1:
                 tool_name = tool_messages[0].request
-
-        # Check responder type
         if responder == Entity.LLM and not tool_messages:
             event_type = EventType.LLM_RESPONSE
         elif responder == Entity.AGENT:
@@ -2330,21 +2312,17 @@ class Task:
         elif responder == Entity.USER:
             event_type = EventType.USER_RESPONSE
         elif isinstance(responder, Task):
-            # For sub-task responses, check the sender in metadata
             if msg.metadata.sender == Entity.LLM:
                 event_type = EventType.LLM_RESPONSE
             elif msg.metadata.sender == Entity.AGENT:
                 event_type = EventType.AGENT_RESPONSE
             else:
                 event_type = EventType.USER_RESPONSE
-
-        # Get sender name
         sender_name = None
         if isinstance(responder, Entity):
             sender_name = responder.value
         elif isinstance(responder, Task):
             sender_name = responder.name
-
         return AgentEvent(
             event_type=event_type,
             tool_name=tool_name,
@@ -2356,71 +2334,74 @@ class Task:
     ) -> List[ChatDocument]:
         """Get the chain of messages from response sequence."""
         if max_depth is None:
-            # Get max depth needed from all sequences
             max_depth = 50  # default fallback
-            if self._parsed_done_sequences:
-                max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
-
-        # Simply return the last max_depth elements from response_sequence
+        if self._parsed_done_sequences:
+            max_depth = max(len(seq.events) for seq in self._parsed_done_sequences)
         return self.response_sequence[-max_depth:]
 
     def _matches_event(self, actual: AgentEvent, expected: AgentEvent) -> bool:
         """Check if an actual event matches an expected event pattern."""
-        # Check event type
         if expected.event_type == EventType.SPECIFIC_TOOL:
             if actual.event_type != EventType.TOOL:
                 return False
+
+            # First try tool_class matching if available
+            if expected.tool_class is not None:
+                # Handle case where actual.tool_class might be a class instance
+                if hasattr(actual, "tool_class") and actual.tool_class is not None:
+                    # If actual.tool_class is an instance, get its class
+                    if isinstance(actual.tool_class, type):
+                        actual_class = actual.tool_class
+                    else:
+                        actual_class = type(actual.tool_class)
+
+                    # Compare the tool classes
+                    if actual_class == expected.tool_class:
+                        return True
+                    # Also check if actual tool is an instance of expected class
+                    if not isinstance(actual.tool_class, type) and isinstance(
+                        actual.tool_class, expected.tool_class
+                    ):
+                        return True
+
+                # If tool_class comparison didn't match, continue to tool_name fallback
+
+            # Fall back to tool_name comparison for backwards compatibility
             if expected.tool_name and actual.tool_name != expected.tool_name:
                 return False
+
         elif actual.event_type != expected.event_type:
             return False
-
-        # Check sender if specified
         if expected.sender and actual.sender != expected.sender:
             return False
-
-        # TODO: Add content pattern matching for CONTENT_MATCH type
-
         return True
 
     def _matches_sequence(
         self, msg_chain: List[ChatDocument], sequence: DoneSequence
     ) -> bool:
         """Check if a message chain matches a done sequence.
-
         We traverse the message chain and try to match the sequence events.
         The events don't have to be consecutive in the chain.
         """
         if not sequence.events:
             return False
-
-        # Convert messages to events
         events = []
         for i, msg in enumerate(msg_chain):
-            # Determine responder from metadata or by checking previous message
             responder = None
             if msg.metadata.sender:
                 responder = msg.metadata.sender
             elif msg.metadata.sender_name:
-                # Could be a task name - keep as None for now since we can't resolve
-                # the actual Task object from just the name
                 responder = None
-
             event = self._classify_event(msg, responder)
             if event:
                 events.append(event)
-
-        # Try to match the sequence
         seq_idx = 0
         for event in events:
             if seq_idx >= len(sequence.events):
                 break
-
             expected = sequence.events[seq_idx]
             if self._matches_event(event, expected):
                 seq_idx += 1
-
-        # Check if we matched the entire sequence
         return seq_idx == len(sequence.events)
 
     def close_loggers(self) -> None:
@@ -2438,43 +2419,26 @@ class Task:
         current_responder: Optional[Responder],
     ) -> bool:
         """Check if the message chain plus current message matches a done sequence.
-
         Process messages in reverse order (newest first) and match against
         the sequence events in reverse order.
         """
-        # Add current message to chain if not already there
         if not msg_chain or msg_chain[-1].id() != current_msg.id():
             msg_chain = msg_chain + [current_msg]
-
-        # If we don't have enough messages for the sequence, can't match
         if len(msg_chain) < len(sequence.events):
             return False
-
-        # Process in reverse order - start from the end of both lists
         seq_idx = len(sequence.events) - 1
         msg_idx = len(msg_chain) - 1
-
         while seq_idx >= 0 and msg_idx >= 0:
             msg = msg_chain[msg_idx]
             expected = sequence.events[seq_idx]
-
-            # Determine responder for this message
             if msg_idx == len(msg_chain) - 1 and current_responder is not None:
-                # For the last message, use the current responder
                 responder = current_responder
             else:
-                # For other messages, determine from metadata
                 responder = msg.metadata.sender
-
-            # Classify the event
             event = self._classify_event(msg, responder)
             if not event:
                 return False
-
-            # Check if it matches
             matched = False
-
-            # Special handling for CONTENT_MATCH
             if (
                 expected.event_type == EventType.CONTENT_MATCH
                 and expected.content_pattern
@@ -2483,14 +2447,9 @@ class Task:
                     matched = True
             elif self._matches_event(event, expected):
                 matched = True
-
             if not matched:
-                # Strict matching - no skipping allowed
                 return False
             else:
-                # Matched! Move to next expected event
                 seq_idx -= 1
                 msg_idx -= 1
-
-        # We matched if we've matched all events in the sequence
         return seq_idx < 0

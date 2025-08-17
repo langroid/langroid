@@ -23,7 +23,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.logging import setup_colored_logging
 
@@ -69,19 +69,19 @@ class ExtractorAgent(ChatAgent):
         {message.methods}
         """
         )
-        return "\n".join(json.dumps(m.dict()) for m in message.methods)
+        return "\n".join(json.dumps(m.model_dump()) for m in message.methods)
 
 
 class ExtractorConfig(ChatAgentConfig):
-    name = "Extractor"
+    name: str = "Extractor"
     debug: bool = False
-    conversation_mode = True
+    conversation_mode: bool = True
     cache: bool = True  # cache results
     gpt4: bool = False  # use GPT-4?
     stream: bool = True  # allow streaming where needed
     max_tokens: int = 10000
-    use_tools = False
-    use_functions_api = True
+    use_tools: bool = False
+    use_functions_api: bool = True
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4o,
