@@ -99,6 +99,7 @@ docs/
     marker-pdf.md
     markitdown.md
     mcp-tools.md
+    openai_responses_api.md
     openai-client-caching.md
     openai-http-client.md
     overview.md
@@ -158,6 +159,9 @@ issues/
   llm-client-caching-phase2-summary.md
   llm-client-caching-test-summary.md
   llm-client-caching.md
+  openai-responses-api-spec.md
+  openai-responses-implementation-plan.md
+  openai-responses-routing-spec.md
   pr-882-cached-tokens-improvements.md
   pr-openai-client-caching.md
   pr-qdrant-lock-fix.md
@@ -254,6 +258,7 @@ langroid/
     mock_lm.py
     model_info.py
     openai_gpt.py
+    openai_responses.py
     provider_params.py
     utils.py
   parsing/
@@ -3964,6 +3969,317 @@ async def main():
 
 See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full 
 working example of this.
+</file>
+
+<file path="docs/notes/openai_responses_api.md">
+# OpenAI Responses API Support in Langroid
+
+Langroid now supports OpenAI's new Responses API, providing a modern alternative
+to the Chat Completions API with enhanced features and better performance.
+
+## Overview
+
+The Responses API is OpenAI's next-generation API that offers:
+- Improved streaming capabilities
+- Better support for reasoning models (o1 series)
+- Enhanced caching for reduced costs
+- Cleaner API design with explicit input/output structure
+
+## Quick Start
+
+```python
+from langroid.language_models import LanguageModel
+from langroid.language_models.openai_responses import OpenAIResponsesConfig
+from langroid.language_models.base import LLMMessage, Role
+
+# Create configuration
+config = OpenAIResponsesConfig(
+    chat_model="gpt-4o-mini",
+    stream=True,
+    temperature=0.7,
+)
+
+# Create language model instance
+llm = LanguageModel.create(config)
+
+# Send messages
+messages = [
+    LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+    LLMMessage(role=Role.USER, content="Hello! How are you?"),
+]
+
+response = llm.chat(messages, max_tokens=100)
+print(response.message)
+```
+
+## Features
+
+### 1. Basic Chat Completion
+
+The Responses API seamlessly integrates with Langroid's existing chat interface:
+
+```python
+config = OpenAIResponsesConfig(chat_model="gpt-4o-mini")
+llm = LanguageModel.create(config)
+
+response = llm.chat("What is the capital of France?", max_tokens=50)
+print(response.message)  # "The capital of France is Paris."
+```
+
+### 2. Streaming Support
+
+Stream responses token by token for real-time output:
+
+```python
+def print_token(token: str):
+    print(token, end="", flush=True)
+
+config = OpenAIResponsesConfig(
+    chat_model="gpt-4o-mini",
+    stream=True,
+    streamer=print_token,  # Custom callback for each token
+)
+llm = LanguageModel.create(config)
+
+response = llm.chat("Tell me a story", max_tokens=200)
+```
+
+### 3. Tool/Function Calling
+
+Support for OpenAI's function calling feature:
+
+```python
+from langroid.language_models.base import OpenAIToolSpec
+
+# Define a tool
+weather_tool = OpenAIToolSpec(
+    type="function",
+    function={
+        "name": "get_weather",
+        "description": "Get weather information",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string"},
+                "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+            },
+            "required": ["location"],
+        },
+    },
+)
+
+response = llm.chat(
+    "What's the weather in Paris?",
+    tools=[weather_tool],
+    max_tokens=100,
+)
+
+if response.oai_tool_calls:
+    for tool_call in response.oai_tool_calls:
+        print(f"Tool: {tool_call.function.name}")
+        print(f"Args: {tool_call.function.arguments}")
+```
+
+### 4. Structured Output (JSON Schema)
+
+Generate responses that conform to a specific JSON schema:
+
+```python
+from pydantic import BaseModel, Field
+from langroid.language_models.base import LLMFunctionSpec, OpenAIJsonSchemaSpec
+
+class PersonInfo(BaseModel):
+    name: str = Field(description="Person's name")
+    age: int = Field(description="Person's age")
+    city: str = Field(description="Person's city")
+
+schema_spec = OpenAIJsonSchemaSpec(
+    strict=True,
+    function=LLMFunctionSpec(
+        name="person_info",
+        description="Person information",
+        parameters=PersonInfo.model_json_schema(),
+    ),
+)
+
+response = llm.chat(
+    "Generate info for John, 30 years old, from Paris",
+    response_format=schema_spec,
+    max_tokens=100,
+)
+
+import json
+data = json.loads(response.message)
+print(data)  # {"name": "John", "age": 30, "city": "Paris"}
+```
+
+### 5. Vision/Multimodal Support
+
+Process images alongside text (requires vision-capable models like gpt-4o):
+
+```python
+from langroid.parsing.file_attachment import FileAttachment
+
+# Create image attachment
+image_url = "https://example.com/image.jpg"
+attachment = FileAttachment(content=b"", url=image_url)
+
+messages = [
+    LLMMessage(
+        role=Role.USER,
+        content="What's in this image?",
+        files=[attachment],
+    ),
+]
+
+response = llm.chat(messages, max_tokens=200)
+print(response.message)
+```
+
+### 6. Reasoning Models (o1 Series)
+
+Special support for OpenAI's o1 reasoning models:
+
+```python
+config = OpenAIResponsesConfig(
+    chat_model="o1-mini",
+    reasoning_effort="medium",  # low, medium, or high
+)
+llm = LanguageModel.create(config)
+
+# Note: o1 models don't support system messages
+messages = [
+    LLMMessage(
+        role=Role.USER,
+        content="Solve this complex problem step by step...",
+    ),
+]
+
+response = llm.chat(messages, max_tokens=500)
+
+# Access reasoning process
+if response.reasoning:
+    print(f"Reasoning: {response.reasoning}")
+print(f"Answer: {response.message}")
+```
+
+### 7. Usage Tracking and Cost Calculation
+
+Automatic tracking of token usage and costs:
+
+```python
+response = llm.chat("Hello!", max_tokens=50)
+
+print(f"Prompt tokens: {response.usage.prompt_tokens}")
+print(f"Completion tokens: {response.usage.completion_tokens}")
+print(f"Cached tokens: {response.usage.cached_tokens}")
+print(f"Total cost: ${response.usage.cost:.4f}")
+```
+
+### 8. Automatic Fallback
+
+The implementation automatically falls back to the Chat Completions API
+if the Responses API is unavailable:
+
+```python
+# This works transparently whether Responses API is available or not
+config = OpenAIResponsesConfig(chat_model="gpt-4o-mini")
+llm = LanguageModel.create(config)
+response = llm.chat("Hello!", max_tokens=50)
+```
+
+## Configuration
+
+The `OpenAIResponsesConfig` class extends `OpenAIGPTConfig` with additional
+options:
+
+```python
+config = OpenAIResponsesConfig(
+    # Standard OpenAI configuration
+    chat_model="gpt-4o-mini",
+    api_key="your-api-key",  # Or use OPENAI_API_KEY env var
+    api_base="https://api.openai.com/v1",
+    temperature=0.7,
+    stream=False,
+    
+    # Responses API specific
+    reasoning_effort="medium",  # For o1 models: low, medium, high
+    
+    # Retry configuration
+    retry_params=RetryParams(
+        max_retries=3,
+        initial_delay=1.0,
+        exponential_base=2.0,
+        jitter=True,
+    ),
+)
+```
+
+## Error Handling
+
+The implementation includes robust error handling with automatic retries:
+
+- **Authentication errors**: Clear error messages for invalid API keys
+- **Rate limiting**: Automatic retry with exponential backoff
+- **Network errors**: Graceful handling of connection issues
+- **Timeout handling**: Configurable timeouts with proper error reporting
+- **Invalid models**: Helpful error messages for non-existent models
+
+## Testing
+
+Run the test suite to verify the implementation:
+
+```bash
+# Run all Responses API tests
+pytest tests/language_models/test_openai_responses_*.py -v
+
+# Run specific test categories
+pytest tests/language_models/test_openai_responses_basic.py -v
+pytest tests/language_models/test_openai_responses_streaming.py -v
+pytest tests/language_models/test_openai_responses_tools.py -v
+pytest tests/language_models/test_openai_responses_structured.py -v
+pytest tests/language_models/test_openai_responses_reasoning.py -v
+pytest tests/language_models/test_openai_responses_vision.py -v
+pytest tests/language_models/test_openai_responses_usage.py -v
+pytest tests/language_models/test_openai_responses_errors.py -v
+pytest tests/language_models/test_openai_responses_integration.py -v
+```
+
+## Examples
+
+See `examples/basic/openai_responses_example.py` for comprehensive examples
+of all features.
+
+## Migration from Chat Completions
+
+Migrating from the existing OpenAI implementation is straightforward:
+
+```python
+# Old (Chat Completions)
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+
+config = OpenAIGPTConfig(chat_model="gpt-4o-mini")
+
+# New (Responses API)
+from langroid.language_models.openai_responses import OpenAIResponsesConfig
+
+config = OpenAIResponsesConfig(chat_model="gpt-4o-mini")
+```
+
+The rest of your code remains the same - the Responses API implementation
+maintains full compatibility with Langroid's `LanguageModel` interface.
+
+## Limitations
+
+- The Responses API is currently in beta and may have limited availability
+- Some older models may not support all Responses API features
+- Automatic fallback to Chat Completions API ensures compatibility
+
+## See Also
+
+- [OpenAI Responses API Documentation](https://platform.openai.com/docs/api-reference/responses)
+- [Langroid Language Models Documentation](https://langroid.github.io/langroid/tutorials/language_models/)
+- [Example Script](../examples/basic/openai_responses_example.py)
 </file>
 
 <file path="docs/notes/overview.md">
@@ -8071,6 +8387,1295 @@ The [Getting Started Guide](quick-start/index.md) and subsequent pages
 will help you get up to speed.
 </file>
 
+<file path="issues/openai-responses-api-spec.md">
+# Langroid: OpenAI Responses API Support — Architecture & Design Spec
+
+This document specifies the architecture, design, and implementation plan for adding first‑class support for the OpenAI Responses API to Langroid. The new module will live alongside the existing OpenAI Chat Completions integration in `langroid/language_models/openai_gpt.py`, and will be exposed as a new provider implementing Langroid’s `LanguageModel` interface.
+
+Owner: Langroid core
+Status: Draft (implementation-ready)
+Scope: Add new Responses-based provider + config, mapping, streaming, tools, structured outputs, multimodal, usage/cost, caching, retries, and examples/docs.
+
+
+## Goals
+
+- Add a Langroid LLM provider that uses the OpenAI Responses API for chat, tool calling, structured outputs, reasoning stream, and multimodal inputs.
+- Keep full compatibility with the existing `LanguageModel` interfaces used by agents (messages, tools, usage, cost, streaming APIs).
+- Provide robust streaming and non-streaming paths with retries and cache integration.
+- Preserve existing agent behavior; adoption should require only a config swap.
+
+
+## Non-Goals
+
+- Support for non-OpenAI “OpenAI-like” backends via Responses (Groq, Cerebras, etc.) on day one.
+- Azure Responses parity (can be implemented later as a sibling module).
+- Rewriting agent prompts or higher-level chat logic; this is a drop-in LLM provider.
+
+
+## High-Level Design
+
+- New module: `langroid/language_models/openai_responses.py`.
+- New classes:
+  - `OpenAIResponsesConfig`: configuration for Responses API (extends `OpenAIGPTConfig` to reuse auth, headers, http client, retry, cache, cost knobs; ignores irrelevant fields).
+  - `OpenAIResponses`: concrete provider implementing `LanguageModel` using `client.responses.create` and `client.responses.stream`.
+- `LanguageModel.create` will route `config.type == "openai_responses"` to `OpenAIResponses`.
+- Export from `langroid/language_models/__init__.py` for public availability.
+
+
+## Configuration
+
+Base class choice: extend `OpenAIGPTConfig` to maximize reuse (auth, proxies, headers, http client factory/config, retry params, cache settings, cost helpers). Fields not applicable to Responses are ignored gracefully.
+
+Key fields:
+- `type`: `"openai_responses"` (used by `LanguageModel.create`).
+- `api_key`, `api_base`, `headers`, `http_client_factory`, `http_client_config`, `http_verify_ssl`: reuse.
+- `chat_model`: OpenAI model name (e.g., `gpt-4.1`, `gpt-4o`, `o3-mini`, `o1-mini`).
+- `temperature`, `top_p`, `seed`, `timeout`, `stream`, `retry_params`: reuse.
+- `max_output_tokens`: mapped to Responses `max_output_tokens` (note: not `max_tokens`).
+- `params`: extend existing `OpenAICallParams` to include `reasoning_effort` and other Responses-relevant knobs; mapped to `reasoning={"effort": ...}` for o‑models.
+- `supports_json_schema`, `supports_strict_tools`: default from `model_info` when `api_base is None` (OpenAI endpoints); conservative `False` otherwise.
+- `parallel_tool_calls`: pass-through if supported by Responses.
+- `cache_config`, `use_cached_client`: reuse.
+- Optional `beta_headers` toggle if certain Responses features require `OpenAI-Beta`.
+
+Validation:
+- If `chat_model` is not an OpenAI Responses-capable model (per `model_info`), raise a clear error.
+- Filter/rename params for quirks (e.g., o‑series) similar to `openai_gpt.py`’s `unsupported_params` and `rename_params`.
+
+
+## Client and Transport
+
+- Use `OpenAI` / `AsyncOpenAI` via `get_openai_client` / `get_async_openai_client` (from `client_cache.py`).
+- Respect `api_base`, `headers`, and injected HTTP client per the three-tier strategy already used by `openai_gpt.py`:
+  1) `http_client_factory` (not cacheable),
+  2) `http_client_config` (cacheable),
+  3) `http_verify_ssl=False` (cacheable, simple bypass).
+- Only support OpenAI base at first; if `chat_model` implies non-OpenAI provider, raise a helpful error.
+
+
+## Request Mapping (LLMMessage → Responses input)
+
+The Responses API unifies chat, tools, and multimodal into a single `input` (and optional `instructions`). We convert Langroid’s `List[LLMMessage]` to Responses as follows:
+
+Roles:
+- `Role.SYSTEM`: join all system messages into a top-level `instructions` string (joined with double newlines). Optionally also attach system messages in `input` with `role: system` if needed later.
+- `Role.USER`: map to content parts with `{type: "input_text", text: ...}` and `{type: "input_image", ...}` (for attachments).
+- `Role.ASSISTANT`: prior assistant text → `{type: "output_text", text: ...}`; prior tool calls are not typically replayed unless intentionally reconstructing state.
+- `Role.TOOL` / `Role.FUNCTION`: results of tool executions → `{type: "tool_result", tool_call_id: ..., output: <string>, is_error?: bool}`.
+
+Attachments (via `FileAttachment`):
+- `image_url`: wrap into `{type: "input_image", image_url: {url, detail?}}`.
+- `file` (data URI): for images/PDFs, use `{type: "input_image", image_url: {url: data:...}}`. Start with images and PDFs; other file types can be iterated later if Responses adds `input_file`.
+
+Tools and tool choice:
+- `tools: List[OpenAIToolSpec]` pass-through; already OpenAI-compatible. Include `strict` if supported.
+- `tool_choice`: support `"auto" | "none" | "required"` or `{"type": "function", "function": {"name": "..."}}`.
+
+Structured outputs:
+- `response_format: OpenAIJsonSchemaSpec` → pass `{type: "json_schema", json_schema: {name, description, schema, strict?}}` directly.
+- Optionally support `{type: "json_object"}` when schema is not provided.
+
+Parameters:
+- `model`, `max_output_tokens` (derived from `config.model_max_output_tokens` and context), `temperature`, `top_p`, `seed`, `user`.
+- `reasoning`: for o‑series, `{"effort": config.params.reasoning_effort}`.
+- `parallel_tool_calls`: include if enabled.
+
+
+## Response Mapping (Responses → LLMResponse)
+
+Non-stream path (`client.responses.create`):
+- The Responses object contains `output` entries such as `message`, `tool_call`, and `tool_result`.
+- Aggregate assistant text by concatenating all `text` from `message.content` parts.
+- Collect `reasoning` text if present (o‑models) from `message.content` reasoning parts.
+- Convert `tool_call` entries into `List[OpenAIToolCall]` with `function.name` and parsed `function.arguments` (via `parse_imperfect_json`). Preserve `id`.
+- Usage: read `usage.input_tokens`, `usage.output_tokens`, and `usage.input_tokens_details.cached_tokens` if available.
+- Return `LLMResponse` with `message`, `reasoning`, `oai_tool_calls`, and `usage`.
+
+Stream path (`client.responses.stream`):
+- Handle events:
+  - `response.output_text.delta`: append `delta` to completion; stream via `config.streamer(..., StreamEventType.TEXT)`.
+  - `response.reasoning.delta`: append to reasoning; stream as TEXT (same mechanism; the CLI may style it dimmer but API-wise it’s the same event type).
+  - `response.tool_call.delta`: accumulate deltas per tool index (`id`, `type`, and concatenated `function.arguments` string). Stream name/args via `TOOL_NAME` and `TOOL_ARGS` events.
+  - `response.completed`: capture `final_response` for usage and caching; end loop.
+  - `response.error`: raise to trigger retry.
+- After stream completes, convert tool deltas into `OpenAIToolCall` using logic analogous to `OpenAIGPT.tool_deltas_to_tools`, parsing args with `parse_imperfect_json` and omitting malformed tool calls (moving their raw content into `message` as a last resort when necessary).
+- Cache the `final_response.model_dump()` snapshot post-stream (see Caching section).
+
+
+## Unsupported and Renamed Params
+
+- Maintain `rename_params()` and `unsupported_params()` akin to `openai_gpt.py`, driven by `model_info` and special-casing notable model families (e.g., o‑series). Filter out unsupported keys from the final request to avoid 400s.
+
+
+## Caching
+
+- Reuse Redis-based cache via `cache_config` and helpers (`_cache_lookup`, `_cache_store`) as in `openai_gpt.py`.
+- Cache key: SHA256 hash of a canonical request dict: `model + instructions + input payload + tools + tool_choice + response_format + params`.
+- Non-stream path: store the `response.model_dump()`.
+- Stream path: do not cache the generator; after `response.completed`, store the reconstructed `final_response.model_dump()`.
+- Respect global `settings.cache` on/off.
+
+
+## Retries, Timeouts, Errors
+
+- Wrap core calls with `retry_with_exponential_backoff` / `async_retry_with_exponential_backoff` using `config.retry_params`.
+- For streaming, attempt to read the first event to detect immediate errors (rate-limit/auth) and rebuild the stream on success, mirroring `openai_gpt.py`.
+- Respect `timeout` via underlying OpenAI client options.
+- Use `friendly_error` to surface clear, user-centric messages.
+
+
+## Usage and Cost Accounting
+
+- Compute costs using `LanguageModel.chat_cost()` and `model_info` rates for the active model.
+- Token counts:
+  - Prompt tokens = `usage.input_tokens - (usage.input_tokens_details.cached_tokens or 0)`.
+  - Cached tokens = `usage.input_tokens_details.cached_tokens` (when present).
+  - Completion tokens = `usage.output_tokens`.
+- Update `usage_cost_dict` accordingly and include `LLMTokenUsage` in `LLMResponse.usage`.
+
+
+## Compatibility and Integration
+
+- `LanguageModel.create`: add case to return `OpenAIResponses` when `config.type == "openai_responses"`.
+- `supports_functions_or_tools()`: use `model_info.has_tools` for the current model.
+- `supports_json_schema`: `True` when `api_base is None` (OpenAI) and `model_info.has_structured_output`.
+- No changes to agent APIs; `LLMMessage` and `LLMResponse` remain the lingua franca.
+
+
+## Testing Plan
+
+Unit (no network):
+- Message conversion:
+  - System → `instructions` (concatenation verified).
+  - User text and images/files → `input_text` and `input_image` parts.
+  - Assistant text → `output_text` parts.
+  - Tool results → `tool_result` with correct `tool_call_id`.
+- Tools and strict mode: `OpenAIToolSpec` → API dict; `tool_choice` mapping.
+- Structured output mapping: `OpenAIJsonSchemaSpec` → `response_format`.
+- Streaming aggregation:
+  - Aggregate output text from `response.output_text.delta`.
+  - Accumulate tool_call deltas and parse into `OpenAIToolCall`.
+  - Reasoning deltas collected into `LLMResponse.reasoning`.
+- Caching:
+  - Non-stream: identical requests hit cache.
+  - Stream: cache populated after `completed`.
+
+Mocked client:
+- Simulate `responses.create` returning a composed `output` list with `message`, `tool_call`, and `usage` fields.
+- Simulate streaming sequence (deltas → completed) and error path.
+
+Integration (requires `OPENAI_API_KEY`, marked slow):
+- Basic chat.
+- Tools: single simple tool; verify tool_call and tool_result round-trip.
+- Structured output with a small JSON schema.
+- Reasoning model (`o3-mini` or `o1-mini`) with `reasoning_effort`; assert reasoning text present.
+- Vision: image input with `gpt-4o`.
+- Usage/cost: token counts present; calls tracked.
+
+
+## Documentation & Examples
+
+New examples:
+- `examples/openai_responses/tools_json_structured.py`: tools + schema + streaming.
+- `examples/openai_responses/vision.py`: image input with a short output; streaming enabled.
+- `examples/openai_responses/reasoning.py`: o‑series reasoning with streamed deltas and `reasoning_effort`.
+
+Docs:
+- README section: Choosing Responses vs Chat Completions (when to use which).
+- Config snippet:
+
+```python
+from langroid.language_models.openai_responses import OpenAIResponsesConfig
+from langroid.language_models.base import LLMMessage, Role
+
+cfg = OpenAIResponsesConfig(
+    chat_model="gpt-4.1",
+    stream=True,
+)
+
+llm = LanguageModel.create(cfg)
+resp = llm.chat([
+    LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+    LLMMessage(role=Role.USER, content="Summarize this in 3 bullets:"),
+])
+print(resp.message)
+```
+
+- Tool calling and structured output examples; reasoning model note and `reasoning_effort`.
+
+
+## Migration Notes
+
+- Safe to run side-by-side with `OpenAIGPT`.
+- Prefer `OpenAIResponses` for unified tool+multimodal and reasoning streams.
+- Existing agents do not change; only swap `config.type` to `"openai_responses"` and set `chat_model` to a Responses-capable model.
+
+
+## Open Questions / Iteration Targets
+
+- Non-image file inputs (e.g., non-PDF docs): start with images and PDFs via data URIs; expand if/when OpenAI exposes an `input_file` pathway broadly.
+- Azure Responses parity: likely a follow-up module mirroring `azure_openai.py`.
+- Whether to add a global flag to route `OpenAIGPT` through Responses internally: not recommended initially to avoid surprises.
+
+
+## Implementation Outline (Pseudocode)
+
+File: `langroid/language_models/openai_responses.py`
+
+```python
+class OpenAIResponsesConfig(OpenAIGPTConfig):
+    type: str = "openai_responses"
+    # inherits api_key, api_base, headers, retry, cache, http client knobs, etc.
+    # ensure irrelevant fields (use_chat_for_completion, completion_model, formatter) are ignored
+
+class OpenAIResponses(LanguageModel):
+    client: OpenAI | None
+    async_client: AsyncOpenAI | None
+
+    def __init__(self, config: OpenAIResponsesConfig = OpenAIResponsesConfig()):
+        cfg = config.model_copy()
+        super().__init__(cfg)
+        # set up clients via client_cache with http client injection like openai_gpt.py
+        # set supports_json_schema/strict_tools from model_info when api_base is None
+
+    def set_stream(self, stream: bool) -> bool: ...
+    def get_stream(self) -> bool: ...
+
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        # Wrap into a minimal Responses request using `input = [{type: "input_text", text: prompt}]`
+        # Call create(); map result to LLMResponse
+
+    async def agenerate(...): ...
+
+    def chat(self, messages, max_tokens=200, tools=None, tool_choice="auto", functions=None, function_call="auto", response_format=None) -> LLMResponse:
+        # Convert messages -> instructions + input parts
+        # Build request including tools, tool_choice, response_format, params
+        # Call create() or stream(); handle retries, caching, usage
+
+    async def achat(...): ...
+
+    # Helpers: conversion, streaming event processing, tool delta accumulation, cache lookup/store,
+    # cost/usage computation (reuse chat_cost and LLMTokenUsage)
+```
+
+Key helper functions:
+- `messages_to_responses_input(messages) -> (instructions: str, input_parts: list)`
+- `attachments_to_input_parts(files, model) -> list`
+- `tool_deltas_to_calls(deltas) -> (raw_content: str, tool_calls: List[OpenAIToolCall])`
+- `_process_stream_event(event, ...) -> state transitions` (sync and async versions)
+
+
+## Acceptance Criteria
+
+- New provider compiles and integrates with `LanguageModel.create`.
+- Non-stream and stream chats work with text-only, tools, and JSON schema.
+- Vision example works with image input for `gpt-4o`.
+- Reasoning example works and captures streamed reasoning.
+- Usage and cost metrics are recorded and exposed via `LanguageModel.usage_cost_summary()`.
+- Caching works for non-streaming calls and stores post-stream snapshots for streaming.
+- Documentation and examples are added and pass basic sanity checks.
+</file>
+
+<file path="issues/openai-responses-implementation-plan.md">
+# Test-Driven Implementation Plan: OpenAI Responses API Support
+
+This document outlines a stage-by-stage, test-driven implementation plan for adding OpenAI Responses API support to Langroid. Each stage builds incrementally on the previous, with tests written first to guide the implementation.
+
+## Testing Philosophy
+
+- **Real API calls**: Tests use the actual OpenAI API, not mocks (except where specifically justified)
+- **Progressive functionality**: Each stage delivers working features that subsequent stages build upon
+- **Fail-first approach**: Write tests that fail initially, then implement code to make them pass
+- **Meaningful assertions**: Tests verify actual behavior, not just that methods exist
+
+## Environment Setup
+
+### Required Environment Variables
+```bash
+export OPENAI_API_KEY="your-api-key"
+export OPENAI_RESPONSES_TEST_MODEL="gpt-4o-mini"  # Cost-effective model for testing
+export OPENAI_RESPONSES_TEST_REASONING_MODEL="o1-mini"  # For reasoning tests
+```
+
+### Test Markers
+```python
+# pytest.ini configuration
+[pytest]
+markers =
+    openai_responses: Tests for OpenAI Responses API
+    slow: Tests that make real API calls
+    stream: Tests for streaming functionality
+    tools: Tests for tool/function calling
+    vision: Tests requiring vision models
+    reasoning: Tests for reasoning models
+    cache: Tests for caching functionality
+```
+
+## Stage 1: Skeleton and Basic Infrastructure
+
+### Objectives
+- Create minimal module structure
+- Set up configuration class
+- Wire into LanguageModel.create
+- Establish test structure
+
+### Tests to Write First
+```python
+# tests/language_models/test_openai_responses_basic.py
+
+import pytest
+from langroid.language_models import LanguageModel
+from langroid.language_models.openai_responses import (
+    OpenAIResponsesConfig,
+    OpenAIResponses,
+)
+
+@pytest.mark.openai_responses
+class TestBasicInfrastructure:
+    def test_config_creation(self):
+        """Config can be instantiated with minimal params."""
+        config = OpenAIResponsesConfig(chat_model="gpt-4o-mini")
+        assert config.type == "openai_responses"
+        assert config.chat_model == "gpt-4o-mini"
+    
+    def test_provider_creation(self):
+        """Provider can be instantiated from config."""
+        config = OpenAIResponsesConfig(chat_model="gpt-4o-mini")
+        provider = OpenAIResponses(config)
+        assert isinstance(provider, LanguageModel)
+    
+    def test_language_model_create(self):
+        """LanguageModel.create routes to OpenAIResponses."""
+        config = OpenAIResponsesConfig(chat_model="gpt-4o-mini")
+        llm = LanguageModel.create(config)
+        assert isinstance(llm, OpenAIResponses)
+```
+
+### Skeleton Code to Create
+```python
+# langroid/language_models/openai_responses.py
+
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.base import LanguageModel, LLMResponse
+
+class OpenAIResponsesConfig(OpenAIGPTConfig):
+    type: str = "openai_responses"
+
+class OpenAIResponses(LanguageModel):
+    def __init__(self, config: OpenAIResponsesConfig = OpenAIResponsesConfig()):
+        super().__init__(config)
+        # Client setup will come in Stage 2
+    
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        raise NotImplementedError("Stage 2")
+    
+    def chat(self, messages, max_tokens=200, **kwargs) -> LLMResponse:
+        raise NotImplementedError("Stage 2")
+    
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        raise NotImplementedError("Stage 2")
+    
+    async def achat(self, messages, max_tokens=200, **kwargs) -> LLMResponse:
+        raise NotImplementedError("Stage 2")
+```
+
+### Wiring Changes
+```python
+# langroid/language_models/base.py - Update create method
+def create(config: LLMConfig) -> LanguageModel:
+    # ... existing cases ...
+    elif config.type == "openai_responses":
+        from .openai_responses import OpenAIResponses
+        return OpenAIResponses(config)
+```
+
+## Stage 2: Non-Streaming Text Chat
+
+### Objectives
+- Implement basic chat() method
+- Set up OpenAI client
+- Convert messages to Responses format
+- Handle basic text responses
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_chat.py
+
+@pytest.mark.openai_responses
+@pytest.mark.slow
+class TestNonStreamingChat:
+    def test_simple_text_chat(self):
+        """Basic text-only chat returns valid response."""
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL", "gpt-4o-mini"),
+            stream=False,
+        )
+        llm = OpenAIResponses(config)
+        
+        messages = [
+            LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+            LLMMessage(role=Role.USER, content="Say 'Hello World' and nothing else."),
+        ]
+        
+        response = llm.chat(messages, max_tokens=20)
+        
+        assert response.message is not None
+        assert "Hello World" in response.message
+        assert response.usage is not None
+        assert response.usage.total_tokens > 0
+    
+    def test_message_conversion(self):
+        """Messages convert correctly to Responses format."""
+        # This tests the helper function directly
+        from langroid.language_models.openai_responses import messages_to_responses_input
+        
+        messages = [
+            LLMMessage(role=Role.SYSTEM, content="System prompt"),
+            LLMMessage(role=Role.USER, content="User message"),
+        ]
+        
+        instructions, input_parts = messages_to_responses_input(messages)
+        
+        assert instructions == "System prompt"
+        assert len(input_parts) == 1
+        assert input_parts[0]["type"] == "input_text"
+        assert input_parts[0]["text"] == "User message"
+```
+
+### Implementation to Add
+```python
+# langroid/language_models/openai_responses.py
+
+def messages_to_responses_input(messages: List[LLMMessage]) -> Tuple[str, List[Dict]]:
+    """Convert Langroid messages to Responses API format."""
+    instructions = []
+    input_parts = []
+    
+    for msg in messages:
+        if msg.role == Role.SYSTEM:
+            instructions.append(msg.content)
+        elif msg.role == Role.USER:
+            input_parts.append({"type": "input_text", "text": msg.content})
+        elif msg.role == Role.ASSISTANT:
+            input_parts.append({"type": "output_text", "text": msg.content})
+        # Tool results handled in Stage 4
+    
+    return "\n\n".join(instructions), input_parts
+
+class OpenAIResponses(LanguageModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.client = self._create_client()
+    
+    def _create_client(self):
+        # Use existing client creation logic from openai_gpt.py
+        from langroid.client.openai_client import get_openai_client
+        return get_openai_client(self.config)
+    
+    def chat(self, messages, max_tokens=200, **kwargs) -> LLMResponse:
+        instructions, input_parts = messages_to_responses_input(messages)
+        
+        response = self.client.responses.create(
+            model=self.config.chat_model,
+            instructions=instructions,
+            input=input_parts,
+            max_output_tokens=max_tokens,
+            temperature=self.config.temperature,
+        )
+        
+        # Extract text from output
+        message = self._extract_message(response.output)
+        usage = self._extract_usage(response.usage)
+        
+        return LLMResponse(message=message, usage=usage)
+```
+
+## Stage 3: Streaming Support
+
+### Objectives
+- Implement streaming chat
+- Handle stream events
+- Aggregate streamed content
+- Verify streaming matches non-streaming results
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_streaming.py
+
+@pytest.mark.openai_responses
+@pytest.mark.slow
+@pytest.mark.stream
+class TestStreaming:
+    def test_streaming_aggregates_correctly(self):
+        """Streaming produces same result as non-streaming."""
+        messages = [
+            LLMMessage(role=Role.USER, content="Count from 1 to 5"),
+        ]
+        
+        # Non-streaming
+        config_no_stream = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+            stream=False,
+        )
+        llm_no_stream = OpenAIResponses(config_no_stream)
+        response_no_stream = llm_no_stream.chat(messages, max_tokens=50)
+        
+        # Streaming
+        config_stream = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+            stream=True,
+        )
+        llm_stream = OpenAIResponses(config_stream)
+        response_stream = llm_stream.chat(messages, max_tokens=50)
+        
+        # Should produce similar content (not identical due to randomness)
+        assert "1" in response_stream.message
+        assert "5" in response_stream.message
+        assert response_stream.usage.total_tokens > 0
+    
+    def test_stream_events_processed(self):
+        """Stream events are properly handled."""
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+            stream=True,
+        )
+        llm = OpenAIResponses(config)
+        
+        # Track streaming callbacks
+        streamed_chunks = []
+        def capture_stream(chunk, event_type):
+            streamed_chunks.append((chunk, event_type))
+        
+        config.streamer = capture_stream
+        
+        messages = [LLMMessage(role=Role.USER, content="Say 'test'")]
+        response = llm.chat(messages, max_tokens=10)
+        
+        assert len(streamed_chunks) > 0
+        assert any("test" in chunk for chunk, _ in streamed_chunks)
+```
+
+### Implementation to Add
+```python
+# langroid/language_models/openai_responses.py
+
+def _process_stream_event(self, event, accumulated_text, tool_deltas):
+    """Process a single stream event."""
+    if event.type == "response.output_text.delta":
+        delta = event.data.delta
+        accumulated_text.append(delta)
+        if self.config.streamer:
+            self.config.streamer(delta, StreamEventType.TEXT)
+    
+    elif event.type == "response.tool_call.delta":
+        # Handle in Stage 4
+        pass
+    
+    elif event.type == "response.completed":
+        return event.data.final_response
+    
+    return None
+
+def _stream_response(self, request_params):
+    """Handle streaming response."""
+    stream = self.client.responses.stream(**request_params)
+    
+    accumulated_text = []
+    tool_deltas = {}
+    
+    for event in stream:
+        final = self._process_stream_event(event, accumulated_text, tool_deltas)
+        if final:
+            break
+    
+    message = "".join(accumulated_text)
+    usage = self._extract_usage(final.usage) if final else None
+    
+    return LLMResponse(message=message, usage=usage)
+```
+
+## Stage 4: Tool/Function Calling
+
+### Objectives
+- Support tool definitions
+- Handle tool calls in responses
+- Process tool results in messages
+- Implement roundtrip tool interaction
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_tools.py
+
+@pytest.mark.openai_responses
+@pytest.mark.slow
+@pytest.mark.tools
+class TestToolCalling:
+    def test_tool_call_invocation(self):
+        """Model correctly calls provided tool."""
+        from langroid.agent.tools.orchestration import OpenAIToolSpec
+        
+        def get_weather(location: str) -> str:
+            """Get weather for a location."""
+            return f"Sunny in {location}"
+        
+        tool_spec = OpenAIToolSpec.from_function(get_weather)
+        
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+            stream=False,
+        )
+        llm = OpenAIResponses(config)
+        
+        messages = [
+            LLMMessage(role=Role.USER, content="What's the weather in Paris?"),
+        ]
+        
+        response = llm.chat(messages, tools=[tool_spec])
+        
+        assert response.oai_tool_calls is not None
+        assert len(response.oai_tool_calls) > 0
+        assert response.oai_tool_calls[0].function.name == "get_weather"
+        assert "Paris" in response.oai_tool_calls[0].function.arguments
+    
+    def test_tool_result_handling(self):
+        """Tool results are correctly included in conversation."""
+        messages = [
+            LLMMessage(role=Role.USER, content="What's the weather?"),
+            LLMMessage(
+                role=Role.ASSISTANT,
+                oai_tool_calls=[
+                    OpenAIToolCall(
+                        id="call_123",
+                        function=OpenAIFunctionCall(
+                            name="get_weather",
+                            arguments='{"location": "Paris"}',
+                        ),
+                    )
+                ],
+            ),
+            LLMMessage(
+                role=Role.TOOL,
+                content="Sunny in Paris",
+                tool_call_id="call_123",
+            ),
+        ]
+        
+        instructions, input_parts = messages_to_responses_input(messages)
+        
+        # Find tool result in input_parts
+        tool_results = [p for p in input_parts if p["type"] == "tool_result"]
+        assert len(tool_results) == 1
+        assert tool_results[0]["tool_call_id"] == "call_123"
+        assert tool_results[0]["output"] == "Sunny in Paris"
+```
+
+## Stage 5: Structured Output (JSON Schema)
+
+### Objectives
+- Support response_format with JSON schema
+- Validate structured outputs
+- Handle JSON parsing
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_structured.py
+
+@pytest.mark.openai_responses
+@pytest.mark.slow
+class TestStructuredOutput:
+    def test_json_schema_response(self):
+        """Model returns valid JSON matching schema."""
+        from langroid.agent.tools.orchestration import OpenAIJsonSchemaSpec
+        from pydantic import BaseModel
+        
+        class PersonInfo(BaseModel):
+            name: str
+            age: int
+            city: str
+        
+        schema_spec = OpenAIJsonSchemaSpec.from_pydantic(PersonInfo)
+        
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+        )
+        llm = OpenAIResponses(config)
+        
+        messages = [
+            LLMMessage(
+                role=Role.USER,
+                content="Generate info for John, 30 years old, from Paris",
+            ),
+        ]
+        
+        response = llm.chat(messages, response_format=schema_spec)
+        
+        # Response should be valid JSON
+        import json
+        data = json.loads(response.message)
+        
+        assert data["name"] == "John"
+        assert data["age"] == 30
+        assert data["city"] == "Paris"
+```
+
+## Stage 6: Reasoning Models
+
+### Objectives
+- Support reasoning parameter
+- Capture reasoning in responses
+- Stream reasoning deltas
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_reasoning.py
+
+@pytest.mark.openai_responses
+@pytest.mark.slow
+@pytest.mark.reasoning
+@pytest.mark.skipif(
+    not os.getenv("OPENAI_RESPONSES_TEST_REASONING_MODEL"),
+    reason="Reasoning model not configured"
+)
+class TestReasoning:
+    def test_reasoning_captured(self):
+        """Reasoning is captured for o-models."""
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_REASONING_MODEL"),
+            stream=False,
+        )
+        config.params.reasoning_effort = "low"
+        
+        llm = OpenAIResponses(config)
+        
+        messages = [
+            LLMMessage(role=Role.USER, content="What is 2+2? Think step by step."),
+        ]
+        
+        response = llm.chat(messages, max_tokens=100)
+        
+        assert response.message is not None
+        assert "4" in response.message
+        assert response.reasoning is not None
+        assert len(response.reasoning) > 0
+```
+
+## Stage 7: Vision/Multimodal
+
+### Objectives
+- Support image inputs
+- Handle FileAttachment conversion
+- Test with vision models
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_vision.py
+
+@pytest.mark.openai_responses
+@pytest.mark.slow
+@pytest.mark.vision
+class TestVision:
+    def test_image_input(self):
+        """Model can process image inputs."""
+        from langroid.agent.chat_document import FileAttachment
+        
+        # Use a small test image (1x1 red pixel as data URI)
+        red_pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+        
+        config = OpenAIResponsesConfig(
+            chat_model="gpt-4o",  # Vision-capable model
+        )
+        llm = OpenAIResponses(config)
+        
+        attachment = FileAttachment(url=red_pixel)
+        messages = [
+            LLMMessage(
+                role=Role.USER,
+                content="What color is this image?",
+                attachments=[attachment],
+            ),
+        ]
+        
+        response = llm.chat(messages, max_tokens=50)
+        
+        assert response.message is not None
+        assert "red" in response.message.lower()
+```
+
+## Stage 8: Usage and Cost Tracking
+
+### Objectives
+- Track token usage correctly
+- Calculate costs
+- Update usage_cost_dict
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_usage.py
+
+@pytest.mark.openai_responses
+@pytest.mark.slow
+class TestUsageTracking:
+    def test_usage_tracked(self):
+        """Token usage is tracked correctly."""
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+        )
+        llm = OpenAIResponses(config)
+        
+        # Reset usage
+        llm.reset_usage_cost()
+        
+        messages = [
+            LLMMessage(role=Role.USER, content="Say 'test'"),
+        ]
+        
+        response = llm.chat(messages, max_tokens=10)
+        
+        assert response.usage is not None
+        assert response.usage.prompt_tokens > 0
+        assert response.usage.completion_tokens > 0
+        assert response.usage.total_tokens == (
+            response.usage.prompt_tokens + response.usage.completion_tokens
+        )
+        
+        # Check accumulated usage
+        summary = llm.usage_cost_summary()
+        assert summary["total_tokens"] == response.usage.total_tokens
+```
+
+## Stage 9: Caching
+
+### Objectives
+- Implement cache key generation
+- Cache non-streaming responses
+- Cache streaming after completion
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_cache.py
+
+@pytest.mark.openai_responses
+@pytest.mark.cache
+class TestCaching:
+    def test_cache_hit(self):
+        """Identical requests hit cache."""
+        from langroid.cachedb import RedisCacheConfig
+        
+        cache_config = RedisCacheConfig(fake=True)  # In-memory cache for testing
+        
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+            cache_config=cache_config,
+            stream=False,
+        )
+        llm = OpenAIResponses(config)
+        
+        messages = [
+            LLMMessage(role=Role.USER, content="Say exactly 'CACHED'"),
+        ]
+        
+        # First call - goes to API
+        response1 = llm.chat(messages, max_tokens=10)
+        tokens1 = response1.usage.total_tokens
+        
+        # Second call - should hit cache
+        response2 = llm.chat(messages, max_tokens=10)
+        tokens2 = response2.usage.total_tokens
+        
+        assert response1.message == response2.message
+        assert tokens2 == 0  # Cached responses don't consume tokens
+```
+
+## Stage 10: Error Handling and Retries
+
+### Objectives
+- Handle API errors gracefully
+- Implement retry logic
+- Test timeout handling
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_errors.py
+
+@pytest.mark.openai_responses
+class TestErrorHandling:
+    def test_invalid_api_key(self):
+        """Invalid API key raises appropriate error."""
+        config = OpenAIResponsesConfig(
+            chat_model="gpt-4o-mini",
+            api_key="invalid_key_for_testing",
+        )
+        llm = OpenAIResponses(config)
+        
+        messages = [LLMMessage(role=Role.USER, content="test")]
+        
+        with pytest.raises(Exception) as exc_info:
+            llm.chat(messages)
+        
+        assert "authentication" in str(exc_info.value).lower()
+    
+    def test_timeout_handling(self):
+        """Timeouts are handled correctly."""
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+            timeout=0.001,  # Impossibly short timeout
+        )
+        llm = OpenAIResponses(config)
+        
+        messages = [LLMMessage(role=Role.USER, content="test")]
+        
+        with pytest.raises(Exception) as exc_info:
+            llm.chat(messages)
+        
+        assert "timeout" in str(exc_info.value).lower()
+```
+
+## Stage 11: Integration with LanguageModel.create
+
+### Objectives
+- Ensure proper routing in factory method
+- Update __init__.py exports
+- Verify config type handling
+
+### Tests to Write
+```python
+# tests/language_models/test_openai_responses_integration.py
+
+@pytest.mark.openai_responses
+class TestIntegration:
+    def test_create_factory(self):
+        """LanguageModel.create properly routes to OpenAIResponses."""
+        config = OpenAIResponsesConfig(
+            chat_model=os.getenv("OPENAI_RESPONSES_TEST_MODEL"),
+        )
+        
+        llm = LanguageModel.create(config)
+        
+        assert isinstance(llm, OpenAIResponses)
+        assert llm.config.type == "openai_responses"
+    
+    def test_import_availability(self):
+        """OpenAIResponses is available from package imports."""
+        from langroid.language_models import OpenAIResponses, OpenAIResponsesConfig
+        
+        assert OpenAIResponses is not None
+        assert OpenAIResponsesConfig is not None
+```
+
+## Stage 12: Examples and Documentation
+
+### Objectives
+- Create working examples
+- Add docstrings
+- Update README
+
+### Examples to Create
+```python
+# examples/openai_responses/basic_chat.py
+# examples/openai_responses/streaming.py
+# examples/openai_responses/tools.py
+# examples/openai_responses/structured_output.py
+# examples/openai_responses/reasoning.py
+# examples/openai_responses/vision.py
+```
+
+## Running Tests
+
+### Run all Responses API tests
+```bash
+pytest tests/language_models/test_openai_responses*.py -m openai_responses
+```
+
+### Run specific stages
+```bash
+# Stage 1 (no API calls)
+pytest tests/language_models/test_openai_responses_basic.py
+
+# Stage 2 (requires API key)
+pytest tests/language_models/test_openai_responses_chat.py -m "openai_responses and slow"
+```
+
+### Run with specific model
+```bash
+OPENAI_RESPONSES_TEST_MODEL=gpt-4.1 pytest tests/language_models/test_openai_responses*.py
+```
+
+## Progress Tracking
+
+- [ ] Stage 1: Skeleton and Basic Infrastructure
+- [ ] Stage 2: Non-Streaming Text Chat
+- [ ] Stage 3: Streaming Support
+- [ ] Stage 4: Tool/Function Calling
+- [ ] Stage 5: Structured Output
+- [ ] Stage 6: Reasoning Models
+- [ ] Stage 7: Vision/Multimodal
+- [ ] Stage 8: Usage and Cost Tracking
+- [ ] Stage 9: Caching
+- [ ] Stage 10: Error Handling and Retries
+- [ ] Stage 11: Integration
+- [ ] Stage 12: Examples and Documentation
+
+## Notes
+
+- Each stage should be completed and tested before moving to the next
+- Tests may initially skip with `@pytest.mark.skip("Not implemented")` until the stage is reached
+- Use `pytest -xvs` for detailed output during development
+- Keep API costs low by using small models and minimal token limits in tests
+- Consider rate limiting between tests if hitting API limits
+</file>
+
+<file path="issues/openai-responses-routing-spec.md">
+# OpenAI Responses API Routing Specification
+
+## Overview
+Enable automatic routing to the OpenAI Responses API implementation when appropriate, making it a drop-in replacement for the existing OpenAI Chat Completions implementation while maintaining backward compatibility.
+
+## Current State
+- `OpenAIResponses` exists as a separate implementation with `type = "openai_responses"`
+- Users must explicitly choose between `OpenAIGPTConfig` and `OpenAIResponsesConfig`
+- `ChatAgent` has hardcoded checks for `isinstance(self.llm, OpenAIGPT)`
+- No automatic routing based on model or configuration
+
+## Proposed Changes
+
+### 1. Configuration Changes
+
+#### Add Flag to OpenAIGPTConfig
+```python
+# In langroid/language_models/openai_gpt.py
+class OpenAIGPTConfig(LLMConfig):
+    # ... existing fields ...
+    use_responses_api: bool = False  # New flag, default False for backward compatibility
+```
+
+### 2. Factory Method Routing
+
+#### Update LanguageModel.create()
+```python
+# In langroid/language_models/base.py, around line 490
+@staticmethod
+def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
+    # ... existing code ...
+    
+    if config.type == "openai":
+        from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
+        from langroid.language_models.openai_responses import OpenAIResponses
+        
+        if isinstance(config, OpenAIGPTConfig) and config.use_responses_api:
+            # Route to Responses API implementation
+            return OpenAIResponses(config)
+        else:
+            # Use traditional Chat Completions API
+            return OpenAIGPT(config)
+    
+    # ... rest of existing routing ...
+```
+
+### 3. ChatAgent Compatibility Updates
+
+#### Update isinstance Checks
+Replace hardcoded `OpenAIGPT` checks with tuple checks:
+
+```python
+# In langroid/agent/chat_agent.py
+
+# Line ~308
+def _strict_tools_available(self) -> bool:
+    from langroid.language_models.openai_gpt import OpenAIGPT
+    from langroid.language_models.openai_responses import OpenAIResponses
+    
+    return (
+        not self.disable_strict
+        and self.llm is not None
+        and isinstance(self.llm, (OpenAIGPT, OpenAIResponses))
+        and self.llm.config.parallel_tool_calls is False
+        and self.llm.supports_strict_tools
+    )
+
+# Line ~318
+def _json_schema_available(self) -> bool:
+    from langroid.language_models.openai_gpt import OpenAIGPT
+    from langroid.language_models.openai_responses import OpenAIResponses
+    
+    return (
+        not self.disable_strict
+        and self.llm is not None
+        and isinstance(self.llm, (OpenAIGPT, OpenAIResponses))
+        and self.llm.supports_json_schema
+    )
+```
+
+### 4. OpenAIResponses Compatibility
+
+#### Ensure Required Properties
+Add missing properties to `OpenAIResponses` class:
+
+```python
+# In langroid/language_models/openai_responses.py
+class OpenAIResponses(LanguageModel):
+    # ... existing code ...
+    
+    @property
+    def supports_strict_tools(self) -> bool:
+        """Check if this model supports strict tool schemas."""
+        # Check model capabilities
+        model = self.config.chat_model.lower()
+        return "gpt-4" in model or "gpt-3.5" in model
+    
+    @property
+    def supports_json_schema(self) -> bool:
+        """Check if this model supports JSON schema output format."""
+        model = self.config.chat_model.lower()
+        return "gpt-4" in model or "gpt-3.5" in model
+```
+
+#### Config Compatibility
+Ensure `OpenAIResponses` can accept `OpenAIGPTConfig`:
+
+```python
+def __init__(self, config: Optional[LLMConfig] = None):
+    # Accept either OpenAIGPTConfig or OpenAIResponsesConfig
+    if config is None:
+        config = OpenAIResponsesConfig()
+    elif isinstance(config, OpenAIGPTConfig) and not isinstance(config, OpenAIResponsesConfig):
+        # Convert OpenAIGPTConfig to OpenAIResponsesConfig
+        responses_config = OpenAIResponsesConfig(**config.model_dump())
+        config = responses_config
+    
+    super().__init__(config)
+    self.config: OpenAIResponsesConfig = config
+    # ... rest of initialization ...
+```
+
+## Usage Examples
+
+### Example 1: Explicit Opt-In
+```python
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+
+# Opt into Responses API
+config = ChatAgentConfig(
+    llm=OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        use_responses_api=True,  # Enable Responses API
+    )
+)
+agent = ChatAgent(config)
+# Agent will use OpenAIResponses implementation
+```
+
+### Example 2: Traditional Usage (Unchanged)
+```python
+# Default behavior remains unchanged
+config = ChatAgentConfig(
+    llm=OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        # use_responses_api=False by default
+    )
+)
+agent = ChatAgent(config)
+# Agent will use OpenAIGPT implementation
+```
+
+### Example 3: Future Auto-Detection
+```python
+# Future enhancement: auto-detect based on model
+config = ChatAgentConfig(
+    llm=OpenAIGPTConfig(
+        chat_model="o1-preview",  # Reasoning model
+        # Could auto-set use_responses_api=True for o1 models
+    )
+)
+```
+
+## Migration Path
+
+### Phase 1: Initial Implementation
+1. Add `use_responses_api` flag (default False)
+2. Update factory routing
+3. Update ChatAgent compatibility checks
+4. Ensure OpenAIResponses has required properties
+
+### Phase 2: Testing & Validation
+1. Test with existing code (should be unchanged with flag=False)
+2. Test with flag=True for various models
+3. Verify all ChatAgent features work with both implementations
+
+### Phase 3: Gradual Rollout
+1. Document the new flag in examples
+2. Consider making it default True for new models (o1, future models)
+3. Eventually deprecate Chat Completions for models that work better with Responses API
+
+## Testing Requirements
+
+### Backward Compatibility Tests
+- Verify existing code works unchanged when `use_responses_api=False`
+- Ensure all existing tests pass
+
+### Routing Tests
+```python
+def test_routing_to_responses_api():
+    config = OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        use_responses_api=True
+    )
+    llm = LanguageModel.create(config)
+    assert isinstance(llm, OpenAIResponses)
+
+def test_routing_to_chat_completions():
+    config = OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        use_responses_api=False
+    )
+    llm = LanguageModel.create(config)
+    assert isinstance(llm, OpenAIGPT)
+```
+
+### Feature Parity Tests
+- Test that ChatAgent features work with both implementations:
+  - Tool calling
+  - Structured output
+  - Streaming
+  - Vision
+  - Caching
+
+## Benefits
+
+1. **Seamless Migration**: Users can opt into Responses API with a single flag
+2. **Backward Compatible**: No breaking changes for existing code
+3. **Future Proof**: Easy to make Responses API the default for new models
+4. **Clean Architecture**: No complex inheritance, clear separation of implementations
+
+## Risks & Mitigations
+
+### Risk 1: Feature Differences
+- **Risk**: Responses API may not support all Chat Completions features
+- **Mitigation**: Fallback mechanism already implemented in OpenAIResponses
+
+### Risk 2: Performance Differences
+- **Risk**: Different latency/throughput characteristics
+- **Mitigation**: Keep flag optional, let users choose based on needs
+
+### Risk 3: Import Cycles
+- **Risk**: Circular imports when updating ChatAgent
+- **Mitigation**: Use local imports in methods that need both classes
+
+## Implementation Checklist
+
+- [ ] Add `use_responses_api` flag to OpenAIGPTConfig
+- [ ] Update LanguageModel.create() routing logic
+- [ ] Update ChatAgent._strict_tools_available() check
+- [ ] Update ChatAgent._json_schema_available() check
+- [ ] Add supports_strict_tools property to OpenAIResponses
+- [ ] Add supports_json_schema property to OpenAIResponses
+- [ ] Ensure OpenAIResponses accepts OpenAIGPTConfig
+- [ ] Add routing tests
+- [ ] Add feature parity tests
+- [ ] Update documentation with examples
+- [ ] Test with real ChatAgent usage
+</file>
+
 <file path="langroid/agent/special/arangodb/system_messages.py">
 done_tool_name = DoneTool.default_value("request")
 ⋮----
@@ -9653,6 +11258,408 @@ async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
 def get_stream(self) -> bool
 ⋮----
 def set_stream(self, stream: bool) -> bool
+</file>
+
+<file path="langroid/language_models/openai_responses.py">
+logger = logging.getLogger(__name__)
+⋮----
+class OpenAIResponsesConfig(OpenAIGPTConfig)
+⋮----
+"""Configuration for the OpenAI Responses API provider.
+
+    Inherits most behavior from OpenAIGPTConfig (auth, headers, http client knobs,
+    retry/cache settings). Irrelevant fields (e.g., completion-specific) are ignored.
+    """
+⋮----
+type: str = "openai_responses"
+reasoning_effort: str | None = None  # "low", "medium", or "high" for o1 models
+⋮----
+# Keep same env prefix behavior as OpenAIGPTConfig (OPENAI_*)
+model_config = SettingsConfigDict(env_prefix="OPENAI_")
+⋮----
+class OpenAIResponses(LanguageModel)
+⋮----
+"""OpenAI Responses API provider implementing the `LanguageModel` interface.
+
+    Stage 1 provided stubs; Stage 2 adds minimal non-stream chat via
+    `client.responses.create` with basic request/response mapping and usage.
+    Subsequent stages will add streaming, tools, structured output, vision, etc.
+    """
+⋮----
+def __init__(self, config: Optional[LLMConfig] = None)
+⋮----
+config = OpenAIResponsesConfig()
+⋮----
+# Initialize cache if configured
+⋮----
+def _convert_tool_spec(self, tool: OpenAIToolSpec) -> Dict[str, Any]
+⋮----
+"""Convert OpenAIToolSpec to Responses API format."""
+# For Responses API, tools are in the same format as Chat Completions
+⋮----
+"""Convert messages to Responses API input parts."""
+⋮----
+input_parts: List[Dict[str, Any]] = []
+⋮----
+# Process messages in order
+⋮----
+# User messages become input_text parts
+⋮----
+# Add any file attachments as image parts
+⋮----
+image_part = self._convert_file_attachment(file_attachment)
+⋮----
+# Assistant tool calls - these are already in the conversation
+# We don't add them as input parts, they're part of history
+⋮----
+# Tool results become tool_result parts
+⋮----
+# If no user content was added, add from last user message
+⋮----
+user_msgs = [m for m in messages if m.role == Role.USER]
+⋮----
+last_user = user_msgs[-1]
+⋮----
+# Also add files from last user message if any
+⋮----
+# Fallback
+⋮----
+def _convert_file_attachment(self, attachment: Any) -> Optional[Dict[str, Any]]
+⋮----
+"""Convert a FileAttachment to Responses API image format."""
+⋮----
+# Get the URL (could be data URI or HTTP URL)
+url = attachment.url
+⋮----
+# Create image part for Responses API
+⋮----
+"image": url,  # Responses API accepts both data URIs and HTTP URLs
+⋮----
+def set_stream(self, stream: bool) -> bool:  # pragma: no cover - trivial
+⋮----
+prev = self.config.stream
+⋮----
+def get_stream(self) -> bool:  # pragma: no cover - trivial
+⋮----
+def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+def _cache_lookup(self, fn_name: str, **kwargs: Any) -> Tuple[str, Any]
+⋮----
+"""Look up cached result for given function and arguments.
+
+        Returns:
+            Tuple of (cache_key, cached_result or None)
+        """
+⋮----
+# Check global cache setting
+from langroid import settings  # type: ignore
+⋮----
+# Create deterministic cache key from function name and kwargs
+sorted_kwargs_str = str(sorted(kwargs.items()))
+raw_key = f"{fn_name}:{sorted_kwargs_str}"
+⋮----
+# Hash the key to fixed length using SHA256
+hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+⋮----
+# Look up in cache
+cached_result = self.cache.retrieve(hashed_key)
+⋮----
+def _cache_store(self, key: str, value: Any) -> None
+⋮----
+"""Store a value in cache with given key."""
+⋮----
+# Minimal non-stream chat implementation (Stage 2)
+⋮----
+# Handle edge cases for messages input
+⋮----
+# Wrap string into simple system+user dialog
+messages = [
+⋮----
+# Empty message list - create default
+⋮----
+# Check if this is an o1 reasoning model
+is_o1_model = "o1" in self.config.chat_model.lower()
+⋮----
+# Build instructions from SYSTEM messages and a simple user input block
+instructions_parts: List[str] = [
+⋮----
+# For o1 models, convert system messages to user messages
+⋮----
+# o1 models don't support system messages, merge them into user content
+system_context = "\n\n".join(instructions_parts)
+# Find first user message and prepend system context
+⋮----
+instructions = None  # No separate instructions for o1
+⋮----
+instructions = (
+⋮----
+# Collect the last USER message content and attachments (minimal for Stage 2)
+⋮----
+# Fallback: create a placeholder user message if none was provided
+user_msgs = [LLMMessage(role=Role.USER, content="Hello")]
+⋮----
+# Map messages to input parts for Responses API
+input_parts = self._messages_to_input_parts(messages)
+⋮----
+# Compute a conservative max_output_tokens honoring method arg over config
+max_output_tokens = (
+⋮----
+# Prepare headers - add beta header if using strict JSON schema
+headers = dict(self.config.headers) if self.config.headers else {}
+⋮----
+# Check if strict mode is enabled
+⋮----
+# Create a client (reusing cached client if configured)
+client = get_openai_client(
+⋮----
+# Prepare request payload
+req: Dict[str, Any] = {
+⋮----
+),  # o1 always uses temperature=1
+⋮----
+# Add reasoning_effort for o1 models
+⋮----
+# Add tools if provided (but not for o1 models)
+⋮----
+# Handle tool_choice parameter
+⋮----
+# Specific tool choice
+func_dict = tool_choice.get("function", {})
+⋮----
+# Add response_format if provided
+⋮----
+# Convert OpenAIJsonSchemaSpec to API format
+⋮----
+# Simple format like {"type": "json_object"}
+⋮----
+# Direct dict format
+⋮----
+# Check cache before making API call
+⋮----
+# Return cached response
+⋮----
+cost=0,  # No cost for cached responses
+⋮----
+# Check if we should stream and if Responses API is available
+use_responses_api = hasattr(client, "responses") and callable(
+⋮----
+getattr(client, "responses").create  # type: ignore[attr-defined]
+⋮----
+# Create retry wrapper with config params
+retry_decorator = partial(
+⋮----
+@retry_decorator
+        def _api_call_with_retry(**kwargs: Any) -> Any
+⋮----
+"""Make API call with retry logic."""
+⋮----
+return client.responses.create(**kwargs)  # type: ignore[attr-defined]
+⋮----
+# Use Chat Completions API
+⋮----
+# Stage 3: Streaming support for Responses API
+⋮----
+# Non-streaming Responses API call with retry
+⋮----
+result = _api_call_with_retry(**req)
+⋮----
+# Fall back to Chat Completions on Responses API failure
+use_responses_api = False
+# Continue to Chat Completions fallback below
+⋮----
+# Fallback: emulate via Chat Completions
+# Map messages to OpenAI chat format
+chat_messages: List[Dict[str, Any]] = []
+⋮----
+# Convert all messages for Chat Completions
+⋮----
+# Handle user messages with potential file attachments
+⋮----
+# Create content array with text and images
+content_parts: List[Dict[str, Any]] = [
+⋮----
+chat_msg: Dict[str, Any] = {"role": "assistant"}
+⋮----
+cc_req: Dict[str, Any] = {
+⋮----
+# Add tools to Chat Completions request if provided
+⋮----
+# Add response_format to Chat Completions request if provided
+⋮----
+# Streaming Chat Completions fallback
+⋮----
+# Non-streaming Chat Completions with retry
+result = _api_call_with_retry(**cc_req, use_chat_completions=True)
+⋮----
+# Extract message text, reasoning, and tool calls from response
+message_text = ""
+reasoning_text = ""
+tool_calls = None
+usage_dict: Dict[str, Any] = {}
+⋮----
+# SDK object may have attributes
+message_text = getattr(result, "output_text", "") or ""
+# Extract reasoning for o1 models
+reasoning_text = getattr(result, "reasoning", "") or ""
+usage_obj = getattr(result, "usage", None)
+⋮----
+usage_dict = (
+⋮----
+# Try to extract tool calls
+⋮----
+tool_calls = []
+# Convert to OpenAIToolCall format
+⋮----
+# Fallback to dict inspection
+rd = (
+message_text = rd.get("output_text", "") or ""
+⋮----
+# Try first text part in output
+out = rd.get("output", [])
+⋮----
+# Find first message entry with text or tool calls
+⋮----
+parts = entry.get("content", [])
+⋮----
+# Responses: output_text or text type
+⋮----
+message_text = p["text"]
+⋮----
+# Extract tool call
+⋮----
+usage_dict = rd.get("usage", {}) or usage_dict
+⋮----
+# Chat Completions result mapping
+rd = result.model_dump() if hasattr(result, "model_dump") else result
+⋮----
+choice0 = rd["choices"][0]
+⋮----
+message_text = (choice0["message"].get("content") or "").strip()
+# Extract tool calls from Chat Completions response
+⋮----
+message_text = (choice0.get("text") or "").strip()
+usage_dict = rd.get("usage", {}) if isinstance(rd, dict) else {}
+⋮----
+# Build usage, cost
+# Usage mapping differs between Responses and Chat Completions
+⋮----
+prompt_tokens = int(usage_dict.get("input_tokens", 0))
+completion_tokens = int(usage_dict.get("output_tokens", 0))
+cached_tokens = int(usage_dict.get("cached_tokens", 0))
+⋮----
+prompt_tokens = int(usage_dict.get("prompt_tokens", 0))
+completion_tokens = int(usage_dict.get("completion_tokens", 0))
+# Chat Completions API may report cached_prompt_tokens
+cached_tokens = int(usage_dict.get("cached_prompt_tokens", 0))
+⋮----
+# Compute cost using model info
+info = get_model_info(self.config.chat_model)
+# Price per 1K tokens for chat models
+input_per_k = info.input_cost_per_million / 1000.0
+cached_per_k = (
+output_per_k = info.output_cost_per_million / 1000.0
+cost = (
+⋮----
+usage = LLMTokenUsage(
+⋮----
+response = LLMResponse(
+⋮----
+# Store in cache if we have a cache key
+⋮----
+cache_value = {
+⋮----
+"""Handle streaming response for Responses API."""
+⋮----
+accumulated_text: List[str] = []
+accumulated_reasoning: List[str] = []  # Track reasoning deltas
+tool_calls: Dict[str, Any] = {}  # Track tool calls by ID
+final_response = None
+⋮----
+# Create streaming request with retry wrapper
+⋮----
+@retry_decorator
+            def _create_stream() -> Any
+⋮----
+return client.responses.create(**request_params, stream=True)  # type: ignore[attr-defined]
+⋮----
+stream = _create_stream()
+⋮----
+# Process stream events
+⋮----
+# Text delta event
+delta_text = getattr(event, "delta", "")
+⋮----
+# Call streamer callback if configured
+⋮----
+# Reasoning delta event for o1 models
+delta_reasoning = getattr(event, "delta", "")
+⋮----
+# Tool call delta - accumulate tool calls
+⋮----
+tool_id = getattr(event.delta, "id", None)
+⋮----
+# Update function details
+⋮----
+func = event.delta.function
+⋮----
+# Final response with usage
+final_response = event
+⋮----
+# Alternative completion event
+⋮----
+# Handle streaming errors gracefully
+⋮----
+# Join accumulated text and reasoning
+message_text = "".join(accumulated_text).strip()
+reasoning_text = "".join(accumulated_reasoning).strip()
+⋮----
+# Extract usage from final response
+⋮----
+usage_obj = final_response.usage
+⋮----
+usage_obj = final_response.data.usage
+⋮----
+# Build usage with Responses API field names
+⋮----
+# Compute cost
+⋮----
+# Convert tool_calls dict to list of OpenAIToolCall objects
+oai_tool_calls = None
+⋮----
+oai_tool_calls = []
+⋮----
+# Store streaming response in cache after completion
+⋮----
+"""Handle streaming response for Chat Completions API fallback."""
+⋮----
+reasoning_text = ""  # Chat Completions API doesn't return reasoning
+tool_calls: Dict[str, Any] = {}  # Track tool calls by index
+⋮----
+# Process stream chunks
+⋮----
+choice = chunk.choices[0]
+⋮----
+# Handle text content
+⋮----
+delta_text = choice.delta.content
+⋮----
+# Call streamer callback if configured
+⋮----
+# Handle tool calls
+⋮----
+idx = tc_delta.index
+⋮----
+# Some models include usage in final chunk
+⋮----
+usage_obj = chunk.usage
+⋮----
+# Join accumulated text
+⋮----
+# Build usage with Chat Completions API field names
+⋮----
+# Chat Completions API may report cached_prompt_tokens in usage
 </file>
 
 <file path="langroid/language_models/utils.py">
@@ -26166,146 +28173,6 @@ def _clear_cache() -> None
 """Clear the client cache. Only for testing."""
 </file>
 
-<file path="langroid/language_models/model_info.py">
-class ModelProvider(str, Enum)
-⋮----
-"""Enum for model providers"""
-⋮----
-OPENAI = "openai"
-ANTHROPIC = "anthropic"
-DEEPSEEK = "deepseek"
-GOOGLE = "google"
-UNKNOWN = "unknown"
-⋮----
-class ModelName(str, Enum)
-⋮----
-"""Parent class for all model name enums"""
-⋮----
-class OpenAIChatModel(ModelName)
-⋮----
-"""Enum for OpenAI Chat models"""
-⋮----
-GPT3_5_TURBO = "gpt-3.5-turbo"
-GPT4 = "gpt-4o"  # avoid deprecated gpt-4
-GPT4_TURBO = "gpt-4-turbo"
-GPT4o = "gpt-4o"
-GPT4o_MINI = "gpt-4o-mini"
-O1 = "o1"
-O1_MINI = "o1-mini"
-O3_MINI = "o3-mini"
-O3 = "o3"
-O4_MINI = "o4-mini"
-GPT4_1 = "gpt-4.1"
-GPT4_1_MINI = "gpt-4.1-mini"
-GPT4_1_NANO = "gpt-4.1-nano"
-GPT5 = "gpt-5"
-GPT5_MINI = "gpt-5-mini"
-GPT5_NANO = "gpt-5-nano"
-⋮----
-class OpenAICompletionModel(str, Enum)
-⋮----
-"""Enum for OpenAI Completion models"""
-⋮----
-DAVINCI = "davinci-002"
-BABBAGE = "babbage-002"
-⋮----
-class AnthropicModel(ModelName)
-⋮----
-"""Enum for Anthropic models"""
-⋮----
-CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
-CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
-CLAUDE_3_OPUS = "claude-3-opus-latest"
-CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
-CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
-⋮----
-class DeepSeekModel(ModelName)
-⋮----
-"""Enum for DeepSeek models direct from DeepSeek API"""
-⋮----
-DEEPSEEK = "deepseek/deepseek-chat"
-DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
-OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
-⋮----
-class GeminiModel(ModelName)
-⋮----
-"""Enum for Gemini models"""
-⋮----
-GEMINI_1_5_FLASH = "gemini-1.5-flash"
-GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
-GEMINI_1_5_PRO = "gemini-1.5-pro"
-GEMINI_2_5_PRO = "gemini-2.5-pro"
-GEMINI_2_5_FLASH = "gemini-2.5-flash"
-GEMINI_2_5_FLASH_LITE_PREVIEW = "gemini-2.5-flash-lite-preview-06-17"
-GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
-GEMINI_2_FLASH = "gemini-2.0-flash"
-GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite-preview"
-GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
-⋮----
-class OpenAI_API_ParamInfo(BaseModel)
-⋮----
-"""
-    Parameters exclusive to some models, when using OpenAI API
-    """
-⋮----
-# model-specific params at top level
-params: Dict[str, List[str]] = dict(
-# model-specific params in extra_body
-extra_parameters: Dict[str, List[str]] = dict(
-⋮----
-class ModelInfo(BaseModel)
-⋮----
-"""
-    Consolidated information about LLM, related to capacity, cost and API
-    idiosyncrasies. Reasonable defaults for all params in case there's no
-    specific info available.
-    """
-⋮----
-name: str = "unknown"
-provider: ModelProvider = ModelProvider.UNKNOWN
-context_length: int = 16_000
-max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
-max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
-input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
-cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
-output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
-allows_streaming: bool = True  # Whether model supports streaming output
-allows_system_message: bool = True  # Whether model supports system messages
-rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
-unsupported_params: List[str] = []
-has_structured_output: bool = False  # Does model API support structured output?
-has_tools: bool = True  # Does model API support tools/function-calling?
-needs_first_user_message: bool = False  # Does API need first msg to be from user?
-description: Optional[str] = None
-⋮----
-# Model information registry
-MODEL_INFO: Dict[str, ModelInfo] = {
-⋮----
-# OpenAI Models
-⋮----
-# Anthropic Models
-⋮----
-# DeepSeek Models
-⋮----
-# Gemini Models
-⋮----
-# Gemini 2.5 Models
-⋮----
-"""Get model information by name or enum value"""
-# Sequence of models to try, starting with the primary model
-models_to_try = [model] + fallback_models
-⋮----
-# Find the first model in the sequence that has info defined using next()
-# on a generator expression that filters out None results from _get_model_info
-found_info = next(
-⋮----
-None,  # Default value if the iterator is exhausted (no valid info found)
-⋮----
-# Return the found info, or a default ModelInfo if none was found
-⋮----
-def _get_model_info(model: str | ModelName) -> ModelInfo | None
-</file>
-
 <file path="langroid/utils/html_logger.py">
 """HTML Logger for Langroid Task System.
 
@@ -28630,9 +30497,11 @@ def __init__(self, config: LLMConfig = LLMConfig())
         Returns: instance of language model
         """
 ⋮----
-openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+openai: Union[Type[AzureGPT], Type[OpenAIGPT], Type[OpenAIResponses]]
 ⋮----
 openai = AzureGPT
+⋮----
+openai = OpenAIResponses
 ⋮----
 openai = OpenAIGPT
 cls = dict(
@@ -28832,6 +30701,146 @@ def __init__(self, llm: LanguageModel, stream: bool = True)
 def __enter__(self) -> None
 ⋮----
 def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
+</file>
+
+<file path="langroid/language_models/model_info.py">
+class ModelProvider(str, Enum)
+⋮----
+"""Enum for model providers"""
+⋮----
+OPENAI = "openai"
+ANTHROPIC = "anthropic"
+DEEPSEEK = "deepseek"
+GOOGLE = "google"
+UNKNOWN = "unknown"
+⋮----
+class ModelName(str, Enum)
+⋮----
+"""Parent class for all model name enums"""
+⋮----
+class OpenAIChatModel(ModelName)
+⋮----
+"""Enum for OpenAI Chat models"""
+⋮----
+GPT3_5_TURBO = "gpt-3.5-turbo"
+GPT4 = "gpt-4o"  # avoid deprecated gpt-4
+GPT4_TURBO = "gpt-4-turbo"
+GPT4o = "gpt-4o"
+GPT4o_MINI = "gpt-4o-mini"
+O1 = "o1"
+O1_MINI = "o1-mini"
+O3_MINI = "o3-mini"
+O3 = "o3"
+O4_MINI = "o4-mini"
+GPT4_1 = "gpt-4.1"
+GPT4_1_MINI = "gpt-4.1-mini"
+GPT4_1_NANO = "gpt-4.1-nano"
+GPT5 = "gpt-5"
+GPT5_MINI = "gpt-5-mini"
+GPT5_NANO = "gpt-5-nano"
+⋮----
+class OpenAICompletionModel(str, Enum)
+⋮----
+"""Enum for OpenAI Completion models"""
+⋮----
+DAVINCI = "davinci-002"
+BABBAGE = "babbage-002"
+⋮----
+class AnthropicModel(ModelName)
+⋮----
+"""Enum for Anthropic models"""
+⋮----
+CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
+CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
+CLAUDE_3_OPUS = "claude-3-opus-latest"
+CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
+CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
+⋮----
+class DeepSeekModel(ModelName)
+⋮----
+"""Enum for DeepSeek models direct from DeepSeek API"""
+⋮----
+DEEPSEEK = "deepseek/deepseek-chat"
+DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
+OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
+⋮----
+class GeminiModel(ModelName)
+⋮----
+"""Enum for Gemini models"""
+⋮----
+GEMINI_1_5_FLASH = "gemini-1.5-flash"
+GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
+GEMINI_1_5_PRO = "gemini-1.5-pro"
+GEMINI_2_5_PRO = "gemini-2.5-pro"
+GEMINI_2_5_FLASH = "gemini-2.5-flash"
+GEMINI_2_5_FLASH_LITE_PREVIEW = "gemini-2.5-flash-lite-preview-06-17"
+GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
+GEMINI_2_FLASH = "gemini-2.0-flash"
+GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite-preview"
+GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
+⋮----
+class OpenAI_API_ParamInfo(BaseModel)
+⋮----
+"""
+    Parameters exclusive to some models, when using OpenAI API
+    """
+⋮----
+# model-specific params at top level
+params: Dict[str, List[str]] = dict(
+# model-specific params in extra_body
+extra_parameters: Dict[str, List[str]] = dict(
+⋮----
+class ModelInfo(BaseModel)
+⋮----
+"""
+    Consolidated information about LLM, related to capacity, cost and API
+    idiosyncrasies. Reasonable defaults for all params in case there's no
+    specific info available.
+    """
+⋮----
+name: str = "unknown"
+provider: ModelProvider = ModelProvider.UNKNOWN
+context_length: int = 16_000
+max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
+max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
+input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
+cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
+output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
+allows_streaming: bool = True  # Whether model supports streaming output
+allows_system_message: bool = True  # Whether model supports system messages
+rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
+unsupported_params: List[str] = []
+has_structured_output: bool = False  # Does model API support structured output?
+has_tools: bool = True  # Does model API support tools/function-calling?
+needs_first_user_message: bool = False  # Does API need first msg to be from user?
+description: Optional[str] = None
+⋮----
+# Model information registry
+MODEL_INFO: Dict[str, ModelInfo] = {
+⋮----
+# OpenAI Models
+⋮----
+# Anthropic Models
+⋮----
+# DeepSeek Models
+⋮----
+# Gemini Models
+⋮----
+# Gemini 2.5 Models
+⋮----
+"""Get model information by name or enum value"""
+# Sequence of models to try, starting with the primary model
+models_to_try = [model] + fallback_models
+⋮----
+# Find the first model in the sequence that has info defined using next()
+# on a generator expression that filters out None results from _get_model_info
+found_info = next(
+⋮----
+None,  # Default value if the iterator is exhausted (no valid info found)
+⋮----
+# Return the found info, or a default ModelInfo if none was found
+⋮----
+def _get_model_info(model: str | ModelName) -> ModelInfo | None
 </file>
 
 <file path="langroid/parsing/parser.py">
@@ -31636,125 +33645,6 @@ def justify_response(self) -> ChatDocument | None
 source = self.response.metadata.source
 </file>
 
-<file path="langroid/agent/tools/task_tool.py">
-"""
-TaskTool: A tool that allows agents to delegate a task to a sub-agent with
-    specific tools enabled.
-"""
-⋮----
-class TaskTool(ToolMessage)
-⋮----
-"""
-    Tool that spawns a sub-agent with specified tools to handle a task.
-
-    The sub-agent can be given a custom name for identification in logs.
-    If no name is provided, a random unique name starting with 'agent'
-    will be generated.
-    """
-⋮----
-# TODO: setting up termination conditions of sub-task needs to be improved
-request: str = "task_tool"
-purpose: str = """
-⋮----
-# Parameters for the agent tool
-⋮----
-system_message: Optional[str] = Field(
-⋮----
-prompt: str = Field(
-⋮----
-tools: List[str] = Field(
-# TODO: ensure valid model name
-model: Optional[str] = Field(
-max_iterations: Optional[int] = Field(
-agent_name: Optional[str] = Field(
-⋮----
-def _set_up_task(self, agent: ChatAgent) -> Task
-⋮----
-"""
-        Helper method to set up a task for the sub-agent.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-        """
-# Generate a random name if not provided
-agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
-⋮----
-# Create chat agent config with system message if provided
-# TODO: Maybe we just copy the parent agent's config and override chat_model?
-#   -- but what if parent agent has a MockLMConfig?
-llm_config = lm.OpenAIGPTConfig(
-config = ChatAgentConfig(
-⋮----
-# Create the sub-agent
-sub_agent = ChatAgent(config)
-⋮----
-# Enable the specified tools for the sub-agent
-# Convert tool names to actual tool classes using parent agent's tools_map
-⋮----
-# Enable all tools from the parent agent:
-# This is the list of all tools KNOWN (whether usable or handle-able or not)
-tool_classes = []
-⋮----
-tool_class = agent.llm_tools_map[t]
-allow_llm_use = tool_class._allow_llm_use
-⋮----
-allow_llm_use = allow_llm_use.default
-⋮----
-# No tools enabled
-⋮----
-# Enable only specified tools
-⋮----
-tool_class = agent.llm_tools_map[tool_name]
-⋮----
-# always enable the DoneTool to signal task completion
-⋮----
-# Create a non-interactive task
-task = Task(sub_agent, interactive=False)
-⋮----
-"""
-
-        Handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-⋮----
-task = self._set_up_task(agent)
-⋮----
-# Create a ChatDocument for the prompt with parent pointer
-prompt_doc = None
-⋮----
-prompt_doc = ChatDocument(
-# Set bidirectional parent-child relationship
-⋮----
-# Run the task with the ChatDocument or string prompt
-result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
-⋮----
-"""
-        Async method to handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-⋮----
-# TODO eventually allow the various task setup configs,
-#  including termination conditions
-result = await task.run_async(
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.12.9
-  hooks:
-    - id: ruff
-</file>
-
 <file path="README.md">
 <div align="center">
   <img src="docs/assets/langroid-card-lambda-ossem-rust-1200-630.png" alt="Logo" 
@@ -32776,6 +34666,125 @@ Your support will help build Langroid's momentum and community.
 
 - [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
 - [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
+</file>
+
+<file path="langroid/agent/tools/task_tool.py">
+"""
+TaskTool: A tool that allows agents to delegate a task to a sub-agent with
+    specific tools enabled.
+"""
+⋮----
+class TaskTool(ToolMessage)
+⋮----
+"""
+    Tool that spawns a sub-agent with specified tools to handle a task.
+
+    The sub-agent can be given a custom name for identification in logs.
+    If no name is provided, a random unique name starting with 'agent'
+    will be generated.
+    """
+⋮----
+# TODO: setting up termination conditions of sub-task needs to be improved
+request: str = "task_tool"
+purpose: str = """
+⋮----
+# Parameters for the agent tool
+⋮----
+system_message: Optional[str] = Field(
+⋮----
+prompt: str = Field(
+⋮----
+tools: List[str] = Field(
+# TODO: ensure valid model name
+model: Optional[str] = Field(
+max_iterations: Optional[int] = Field(
+agent_name: Optional[str] = Field(
+⋮----
+def _set_up_task(self, agent: ChatAgent) -> Task
+⋮----
+"""
+        Helper method to set up a task for the sub-agent.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+        """
+# Generate a random name if not provided
+agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
+⋮----
+# Create chat agent config with system message if provided
+# TODO: Maybe we just copy the parent agent's config and override chat_model?
+#   -- but what if parent agent has a MockLMConfig?
+llm_config = lm.OpenAIGPTConfig(
+config = ChatAgentConfig(
+⋮----
+# Create the sub-agent
+sub_agent = ChatAgent(config)
+⋮----
+# Enable the specified tools for the sub-agent
+# Convert tool names to actual tool classes using parent agent's tools_map
+⋮----
+# Enable all tools from the parent agent:
+# This is the list of all tools KNOWN (whether usable or handle-able or not)
+tool_classes = []
+⋮----
+tool_class = agent.llm_tools_map[t]
+allow_llm_use = tool_class._allow_llm_use
+⋮----
+allow_llm_use = allow_llm_use.default
+⋮----
+# No tools enabled
+⋮----
+# Enable only specified tools
+⋮----
+tool_class = agent.llm_tools_map[tool_name]
+⋮----
+# always enable the DoneTool to signal task completion
+⋮----
+# Create a non-interactive task
+task = Task(sub_agent, interactive=False)
+⋮----
+"""
+
+        Handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+⋮----
+task = self._set_up_task(agent)
+⋮----
+# Create a ChatDocument for the prompt with parent pointer
+prompt_doc = None
+⋮----
+prompt_doc = ChatDocument(
+# Set bidirectional parent-child relationship
+⋮----
+# Run the task with the ChatDocument or string prompt
+result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
+⋮----
+"""
+        Async method to handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+⋮----
+# TODO eventually allow the various task setup configs,
+#  including termination conditions
+result = await task.run_async(
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.12.9
+  hooks:
+    - id: ruff
 </file>
 
 <file path="langroid/agent/task.py">
@@ -36208,6 +38217,7 @@ nav:
       - OpenAI Client Caching: notes/openai-client-caching.md
       - Task Logs: notes/html-logger.md
       - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - OpenAI Responses API: notes/openai_responses_api.md
 
   - Examples:
     - Guide: examples/guide.md
@@ -36257,7 +38267,7 @@ extra_javascript:
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.0"
+version = "0.59.1"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

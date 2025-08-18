@@ -138,6 +138,7 @@ nav:
       - OpenAI Client Caching: notes/openai-client-caching.md
       - Task Logs: notes/html-logger.md
       - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - OpenAI Responses API: notes/openai_responses_api.md
 
   - Examples:
     - Guide: examples/guide.md
