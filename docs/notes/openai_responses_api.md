@@ -13,6 +13,8 @@ The Responses API is OpenAI's next-generation API that offers:
 
 ## Quick Start
 
+### Option 1: Direct Usage
+
 ```python
 from langroid.language_models import LanguageModel
 from langroid.language_models.openai_responses import OpenAIResponsesConfig
@@ -37,6 +39,34 @@ messages = [
 response = llm.chat(messages, max_tokens=100)
 print(response.message)
 ```
+
+### Option 2: Automatic Routing (New!)
+
+You can now use the Responses API as a drop-in replacement by setting a flag:
+
+```python
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models import LanguageModel
+
+# Use existing OpenAIGPTConfig with the new flag
+config = OpenAIGPTConfig(
+    chat_model="gpt-4o",
+    use_responses_api=True,  # Enable Responses API routing
+    stream=True,
+    temperature=0.7,
+)
+
+# This will automatically create an OpenAIResponses instance
+llm = LanguageModel.create(config)
+
+# Use exactly as before - no code changes needed!
+response = llm.chat(messages, max_tokens=100)
+```
+
+This routing mechanism makes it easy to:
+- Try the Responses API with existing code
+- Gradually migrate without changing all configurations
+- Switch between APIs with a single flag
 
 ## Features
 
@@ -275,6 +305,51 @@ pytest tests/language_models/test_openai_responses_integration.py -v
 
 See `examples/basic/openai_responses_example.py` for comprehensive examples
 of all features.
+
+## Integration with ChatAgent
+
+The Responses API works seamlessly with Langroid's ChatAgent:
+
+### Using the Routing Flag
+
+```python
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+
+# Configure agent to use Responses API
+config = ChatAgentConfig(
+    llm=OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        use_responses_api=True,  # Use Responses API
+    )
+)
+
+agent = ChatAgent(config)
+
+# All ChatAgent features work as expected:
+# - Tool calling
+# - Structured output
+# - JSON schema validation
+# - Strict tool schemas
+```
+
+### Direct Configuration
+
+```python
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.language_models.openai_responses import OpenAIResponsesConfig
+
+config = ChatAgentConfig(
+    llm=OpenAIResponsesConfig(
+        chat_model="gpt-4o",
+    )
+)
+
+agent = ChatAgent(config)
+```
+
+Both approaches provide full compatibility with all ChatAgent features including
+tool calling, structured output, and advanced prompting strategies.
 
 ## Migration from Chat Completions
 

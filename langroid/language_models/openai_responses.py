@@ -49,11 +49,36 @@ class OpenAIResponses(LanguageModel):
     Subsequent stages will add streaming, tools, structured output, vision, etc.
     """
 
+    @property
+    def supports_strict_tools(self) -> bool:
+        """Check if this model supports strict tool schemas."""
+        # Check model capabilities - most modern OpenAI models support this
+        model = self.config.chat_model.lower()
+        return "gpt-4" in model or "gpt-3.5" in model or "o1" in model
+
+    @property
+    def supports_json_schema(self) -> bool:
+        """Check if this model supports JSON schema output format."""
+        model = self.config.chat_model.lower()
+        return "gpt-4" in model or "gpt-3.5" in model or "o1" in model
+
     def __init__(self, config: Optional[LLMConfig] = None):
-        if config is None or not isinstance(config, OpenAIResponsesConfig):
+        """Initialize OpenAI Responses API client."""
+        # Accept either OpenAIGPTConfig or OpenAIResponsesConfig
+        if config is None:
             config = OpenAIResponsesConfig()
+        elif hasattr(config, "use_responses_api"):  # It's an OpenAIGPTConfig
+            from langroid.language_models.openai_gpt import OpenAIGPTConfig
+
+            if isinstance(config, OpenAIGPTConfig) and not isinstance(
+                config, OpenAIResponsesConfig
+            ):
+                # Convert OpenAIGPTConfig to OpenAIResponsesConfig
+                responses_config = OpenAIResponsesConfig(**config.model_dump())
+                config = responses_config
+
         super().__init__(config)
-        self.config: OpenAIResponsesConfig = config
+        self.config: OpenAIResponsesConfig = config  # type: ignore
 
         # Initialize cache if configured
         self.cache: Optional[CacheDB] = None

@@ -291,6 +291,9 @@ class OpenAIGPTConfig(LLMConfig):
     http_client_factory: Optional[Callable[[], Any]] = None  # Factory for httpx.Client
     http_verify_ssl: bool = True  # Simple flag for SSL verification
     http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
+    use_responses_api: bool = (
+        False  # Use OpenAI Responses API instead of Chat Completions
+    )
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None

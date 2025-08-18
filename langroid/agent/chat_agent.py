@@ -33,6 +33,7 @@ from langroid.language_models.base import (
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
+from langroid.language_models.openai_responses import OpenAIResponses
 from langroid.mytypes import Entity, NonToolAction
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
@@ -305,7 +306,7 @@ class ChatAgent(Agent):
         return (
             not self.disable_strict
             and self.llm is not None
-            and isinstance(self.llm, OpenAIGPT)
+            and isinstance(self.llm, (OpenAIGPT, OpenAIResponses))
             and self.llm.config.parallel_tool_calls is False
             and self.llm.supports_strict_tools
         )
@@ -315,7 +316,7 @@ class ChatAgent(Agent):
         return (
             not self.disable_strict
             and self.llm is not None
-            and isinstance(self.llm, OpenAIGPT)
+            and isinstance(self.llm, (OpenAIGPT, OpenAIResponses))
             and self.llm.supports_json_schema
         )
 

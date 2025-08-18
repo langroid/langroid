@@ -488,7 +488,13 @@ class LanguageModel(ABC):
         elif config.type == "openai_responses":
             openai = OpenAIResponses
         else:
-            openai = OpenAIGPT
+            # Check if we should use Responses API for regular OpenAI config
+            from langroid.language_models.openai_gpt import OpenAIGPTConfig
+
+            if isinstance(config, OpenAIGPTConfig) and config.use_responses_api:
+                openai = OpenAIResponses
+            else:
+                openai = OpenAIGPT
         cls = dict(
             openai=openai,
         ).get(config.type, openai)
