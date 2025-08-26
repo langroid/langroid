@@ -74,10 +74,10 @@ class GeminiModel(ModelName):
     GEMINI_1_5_PRO = "gemini-1.5-pro"
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
-    GEMINI_2_5_FLASH_LITE_PREVIEW = "gemini-2.5-flash-lite-preview-06-17"
+    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
     GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
     GEMINI_2_FLASH = "gemini-2.0-flash"
-    GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite-preview"
+    GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
     GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
 
 
@@ -90,6 +90,9 @@ class OpenAI_API_ParamInfo(BaseModel):
     params: Dict[str, List[str]] = dict(
         reasoning_effort=[
             OpenAIChatModel.O3_MINI.value,
+            GeminiModel.GEMINI_2_5_PRO.value,
+            GeminiModel.GEMINI_2_5_FLASH.value,
+            GeminiModel.GEMINI_2_5_FLASH_LITE.value,
         ],
     )
     # model-specific params in extra_body
@@ -438,7 +441,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.075,
         output_cost_per_million=0.30,
         rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.0 Flash Lite Preview",
+        description="Gemini 2.0 Flash Lite",
     ),
     GeminiModel.GEMINI_1_5_FLASH.value: ModelInfo(
         name=GeminiModel.GEMINI_1_5_FLASH.value,
@@ -503,8 +506,8 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.5 Flash",
     ),
-    GeminiModel.GEMINI_2_5_FLASH_LITE_PREVIEW.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_5_FLASH_LITE_PREVIEW.value,
+    GeminiModel.GEMINI_2_5_FLASH_LITE.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH_LITE.value,
         provider=ModelProvider.GOOGLE,
         context_length=65_536,
         max_output_tokens=65_536,
@@ -512,7 +515,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         cached_cost_per_million=0.025,
         output_cost_per_million=0.40,
         rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.5 Flash Lite Preview",
+        description="Gemini 2.5 Flash Lite",
     ),
 }
 

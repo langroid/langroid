@@ -215,7 +215,7 @@ class OpenAICallParams(BaseModel):
     top_p: float | None = None
     reasoning_effort: str | None = None  # or "low" or "high" or "medium"
     top_logprobs: int | None = None  # if int, requires logprobs=True
-    n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
+    n: int | None = None  # how many completions to generate (n > 1 is NOT handled now)
     stop: str | List[str] | None = None  # (list of) stop sequence(s)
     seed: int | None = None
     user: str | None = None  # user id for tracking
