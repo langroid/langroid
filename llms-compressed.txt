@@ -573,6 +573,7 @@ tests/
     test_arangodb.py
     test_async_handlers.py
     test_azure_openai.py
+    test_batch_tasks_typed.py
     test_batch.py
     test_chat_agent_async.py
     test_chat_agent.py
@@ -612,6 +613,7 @@ tests/
     test_openai_gpt_client_cache.py
     test_openai_http_client_simple.py
     test_openai_http_client.py
+    test_openai_params_subclass.py
     test_pandas_utils.py
     test_parser.py
     test_parsing_citations.py
@@ -16895,6 +16897,46 @@ doc = {"category": "A" if i < 3 else "B", "value": i * 10}
 result = sorted(result, key=lambda x: x["category"])
 </file>
 
+<file path="tests/main/test_batch_tasks_typed.py">
+class DummyTool(ToolMessage)
+⋮----
+request: str = "dummy"
+purpose: str = "to show a dummy tool"
+⋮----
+value: int
+⋮----
+def make_typed_dummy_task()
+⋮----
+# MockLM always returns a valid DummyTool JSON payload
+mock_json = DummyTool(value=42).json()
+cfg = ChatAgentConfig(
+agent = ChatAgent(cfg)
+⋮----
+task_cfg = lr.TaskConfig(done_if_tool=True)
+# Typed Task: expect single-run to return DummyTool
+task = lr.Task(agent, interactive=False, config=task_cfg)[DummyTool]
+⋮----
+def test_single_run_typed_task_returns_dummy_tool()
+⋮----
+result = task.run("any input")
+⋮----
+task_clone = task.clone(1)
+result2 = task_clone.run("any input")
+⋮----
+def test_batched_typed_task_returns_typed_objects()
+⋮----
+"""
+    This intentionally asserts the behavior we WANT (typed results from batch),
+    """
+⋮----
+inputs = ["a", "b"]
+results = run_batch_tasks(
+⋮----
+output_map=lambda x: x,  # identity; we expect typed but get ChatDocument
+⋮----
+# What we would like to be true (but isn't):
+</file>
+
 <file path="tests/main/test_chat_agent.py">
 class _TestChatAgentConfig(ChatAgentConfig)
 ⋮----
@@ -19262,6 +19304,217 @@ bob_hist = bob.message_history[: bob_msg_idx + 1]
 # ll responds 16
 </file>
 
+<file path="tests/main/test_tool_handler_async.py">
+"""
+Test various async handler method signatures for ToolMessage classes.
+Tests the new flexible handle_async method that can accept optional agent parameter.
+"""
+⋮----
+class HandleAsyncNoArgsMsg(ToolMessage)
+⋮----
+"""Tool with handle_async() method - no arguments"""
+⋮----
+request: str = "handle_async_no_args"
+purpose: str = "Test async handle with no arguments"
+⋮----
+async def handle_async(self) -> str
+⋮----
+class HandleAsyncChatDocMsg(ToolMessage)
+⋮----
+"""Tool with handle_async(chat_doc) method"""
+⋮----
+request: str = "handle_async_chat_doc"
+purpose: str = "Test async handle with chat_doc"
+data: str
+⋮----
+async def handle_async(self, chat_doc: ChatDocument) -> str
+⋮----
+# Actually use the chat_doc parameter
+⋮----
+class HandleAsyncAgentMsg(ToolMessage)
+⋮----
+"""Tool with handle_async(agent) method"""
+⋮----
+request: str = "handle_async_agent"
+purpose: str = "Test async handle with agent"
+⋮----
+async def handle_async(self, agent: ChatAgent) -> str
+⋮----
+class HandleAsyncAgentChatDocMsg(ToolMessage)
+⋮----
+"""Tool with handle_async(agent, chat_doc) method"""
+⋮----
+request: str = "handle_async_agent_chat_doc"
+purpose: str = "Test async handle with agent and chat_doc"
+⋮----
+async def handle_async(self, agent: ChatAgent, chat_doc: ChatDocument) -> str
+⋮----
+# Use both agent and chat_doc
+⋮----
+class HandleAsyncChatDocAgentMsg(ToolMessage)
+⋮----
+"""Tool with handle_async(chat_doc, agent) method - reversed order"""
+⋮----
+request: str = "handle_async_chat_doc_agent"
+purpose: str = "Test async handle with chat_doc and agent in reverse order"
+⋮----
+async def handle_async(self, chat_doc: ChatDocument, agent: ChatAgent) -> str
+⋮----
+# Use both parameters in the order they're defined
+⋮----
+class HandleAsyncNoAnnotationsMsg(ToolMessage)
+⋮----
+"""Tool with async handle method but no type annotations - single param"""
+⋮----
+request: str = "handle_async_no_annotations"
+purpose: str = "Test async handle without type annotations"
+⋮----
+async def handle_async(self, chat_doc) -> str
+⋮----
+# Should fall back to parameter name - assume single arg is chat_doc
+# Access content attribute to verify it's actually a ChatDocument
+⋮----
+class HandleAsyncNoAnnotationsAgentMsg(ToolMessage)
+⋮----
+"""Tool with async handle method expecting agent but no type annotations"""
+⋮----
+request: str = "handle_async_no_annotations_agent"
+purpose: str = "Test async handle with agent but no annotations"
+⋮----
+async def handle_async(self, agent) -> str
+⋮----
+# Parameter name 'agent' should be recognized even without annotations
+⋮----
+class HandleAsyncNoAnnotationsBothMsg(ToolMessage)
+⋮----
+"""Tool with async handle method expecting both params but no type annotations"""
+⋮----
+request: str = "handle_async_no_annotations_both"
+purpose: str = "Test async handle with both params but no annotations"
+⋮----
+async def handle_async(self, agent, chat_doc) -> str
+⋮----
+# Parameter names 'agent' and 'chat_doc' should be recognized
+⋮----
+class HandleAsyncNoAnnotationsBothReversedMsg(ToolMessage)
+⋮----
+"""Tool with async handle method with reversed parameter order but no type annotations"""  # noqa: E501
+⋮----
+request: str = "handle_async_no_annotations_both_reversed"
+purpose: str = "Test async handle with reversed params but no annotations"
+⋮----
+async def handle_async(self, chat_doc, agent) -> str
+⋮----
+# Parameter order should be respected based on names
+⋮----
+class TestToolHandlerAsync
+⋮----
+"""Test the flexible async tool handler extraction"""
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_no_args(self)
+⋮----
+"""Test handle_async() with no arguments"""
+agent = ChatAgent(ChatAgentConfig())
+⋮----
+msg = HandleAsyncNoArgsMsg()
+result = await agent.handle_async_no_args_async(msg)
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_chat_doc(self)
+⋮----
+"""Test handle_async(chat_doc) with type annotation"""
+⋮----
+msg = HandleAsyncChatDocMsg(data="test data")
+chat_doc = agent.create_agent_response(content="test")
+result = await agent.handle_async_chat_doc_async(msg, chat_doc)
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_agent(self)
+⋮----
+"""Test handle_async(agent) with type annotation"""
+⋮----
+msg = HandleAsyncAgentMsg()
+result = await agent.handle_async_agent_async(msg)
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_agent_chat_doc(self)
+⋮----
+"""Test handle_async(agent, chat_doc) with type annotations"""
+⋮----
+msg = HandleAsyncAgentChatDocMsg(data="test data")
+⋮----
+result = await agent.handle_async_agent_chat_doc_async(msg, chat_doc)
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_chat_doc_agent(self)
+⋮----
+"""Test handle_async(chat_doc, agent) with reversed parameter order"""
+⋮----
+msg = HandleAsyncChatDocAgentMsg(data="test data")
+⋮----
+result = await agent.handle_async_chat_doc_agent_async(msg, chat_doc)
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_no_annotations(self)
+⋮----
+"""Test async handle with no type annotations - should use parameter name"""
+⋮----
+msg = HandleAsyncNoAnnotationsMsg(data="test data")
+⋮----
+result = await agent.handle_async_no_annotations_async(msg, chat_doc)
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_no_annotations_agent(self)
+⋮----
+"""Test async handle with agent param but no type annotations"""
+⋮----
+msg = HandleAsyncNoAnnotationsAgentMsg()
+# Parameter name 'agent' should be recognized, so no chat_doc needed
+result = await agent.handle_async_no_annotations_agent_async(msg)
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_no_annotations_both(self)
+⋮----
+"""Test async handle with both params but no type annotations"""
+⋮----
+msg = HandleAsyncNoAnnotationsBothMsg(data="test data")
+⋮----
+result = await agent.handle_async_no_annotations_both_async(msg, chat_doc)
+⋮----
+@pytest.mark.asyncio
+    async def test_handle_async_no_annotations_both_reversed(self)
+⋮----
+"""Test async handle with reversed params but no type annotations"""
+⋮----
+msg = HandleAsyncNoAnnotationsBothReversedMsg(data="test data")
+⋮----
+result = await agent.handle_async_no_annotations_both_reversed_async(
+⋮----
+# Test that sync and async can coexist
+class HandleBothSyncAsyncMsg(ToolMessage)
+⋮----
+"""Tool with both sync and async handle methods"""
+⋮----
+request: str = "handle_both_sync_async"
+purpose: str = "Test tool with both sync and async handlers"
+⋮----
+def handle(self, agent: ChatAgent) -> str
+⋮----
+@pytest.mark.asyncio
+async def test_handle_both_sync_async()
+⋮----
+"""Test that a tool can have both sync and async handlers"""
+⋮----
+msg = HandleBothSyncAsyncMsg()
+⋮----
+# Test sync handler
+sync_result = agent.handle_both_sync_async(msg)
+⋮----
+# Test async handler
+async_result = await agent.handle_both_sync_async_async(msg)
+</file>
+
 <file path="tests/main/test_web_search_tools.py">
 """
 NOTE: running this test requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
@@ -19792,6 +20045,70 @@ Once a security vulnerability is reported, we will work to:
 exclude = .*,.*/.*,.*/*,.*/*.*
 max-line-length = 88
 ignore = W291, W293, E501, E203, W503
+</file>
+
+<file path="ai-instructions/claude-repomix-instructions.md">
+# AI Instructions for Setting Up Repomix
+
+## Task Overview
+Set up [repomix](https://github.com/yamadashy/repomix) to generate LLM-friendly repository exports. This creates text files that can be uploaded to AI models for code analysis.
+
+## Steps to Complete
+
+### 1. Install Repomix
+```bash
+npm install -g repomix
+```
+
+### 2. Create repomix.config.json
+Create a configuration file in the repository root with:
+- **Include patterns**: Source code files (*.py, *.js, *.md, *.yaml, *.yml, *.toml)
+- **Exclude patterns**: Data directories, logs, node_modules, JSON files, generated files
+- **Security check**: Enable to prevent sensitive data inclusion
+
+### 3. Configure Include/Exclude Patterns
+- Include only source code directories and documentation
+- Exclude data/, logs/, build artifacts, dependencies
+- Add `llms*.txt` to exclusions to prevent recursive inclusion
+
+### 4. Test Configuration (Optional)
+```bash
+# Generate file list only for inspection
+repomix --no-files -o file-list.txt
+```
+This allows you to review which files will be included before generating the full output.
+
+### 5. Generate Output Versions
+
+Use the Makefile targets to generate repomix files:
+
+```bash
+# Generate all variants (recommended)
+make repomix-all
+
+# Or generate specific versions:
+make repomix                      # llms.txt and llms-compressed.txt (includes tests)
+make repomix-no-tests             # llms-no-tests.txt and llms-no-tests-compressed.txt
+make repomix-no-tests-no-examples # llms-no-tests-no-examples.txt and compressed version
+```
+
+All commands use `git ls-files` to ensure only git-tracked files are included.
+
+### 6. Verify Results
+- Check file sizes and token counts in repomix output
+- Ensure no sensitive data is included
+- Confirm only relevant source files are packaged
+
+## Expected Outcome
+Six text files optimized for different LLM contexts:
+- `llms.txt`: Full version with tests and examples (870K tokens)
+- `llms-compressed.txt`: Compressed version with tests and examples (513K tokens)
+- `llms-no-tests.txt`: Full version without tests (677K tokens)
+- `llms-no-tests-compressed.txt`: Compressed version without tests (433K tokens)
+- `llms-no-tests-no-examples.txt`: Core library code only (no tests/examples)
+- `llms-no-tests-no-examples-compressed.txt`: Compressed core library code (285K tokens)
+
+The files contain only git-tracked source code with proper exclusions for clean, focused LLM consumption.
 </file>
 
 <file path="ai-notes/Langroid-repo-docs.md">
@@ -25348,6 +25665,114 @@ tools = await get_tools_async(transport)
 # make task with interactive=False =>
 # waits for user only when LLM doesn't use a tool
 task = lr.Task(agent, interactive=False)
+</file>
+
+<file path="examples/mcp/playwright-mcp.py">
+"""
+Playwright MCP Example - Langroid integration with Playwright MCP server
+
+This example demonstrates how to use Langroid with the Playwright MCP server
+to create an agent that can automate web interactions, take screenshots,
+and perform web browsing tasks.
+
+What this example shows:
+- Integration with Playwright MCP server for web automation
+- How to connect to and use Playwright's web interaction tools within a Langroid agent
+- Creation of a web automation agent that can navigate, click, type, and capture web content
+
+What is Playwright MCP?
+- Playwright MCP is a Model Context Protocol server that provides web automation capabilities
+- It allows LLMs to interact with web pages through browser automation
+- The MCP server provides tools for navigation, interaction, and content capture
+- This example demonstrates using these web automation capabilities within a Langroid agent
+
+References:
+https://github.com/microsoft/playwright-mcp
+
+Steps to run:
+1. Ensure Node.js 18+ is installed
+2. The script will automatically start the Playwright MCP server via npx
+
+Run like this (-m model optional; defaults to gpt-4.1-mini):
+    uv run examples/mcp/playwright/playwright-mcp.py -m ollama/qwen2.5-coder:32b
+
+NOTE: This simple example is hardcoded to answer a single question,
+but you can easily extend this with a loop to enable a
+continuous chat with the user.
+
+"""
+⋮----
+async def main(model: str = "")
+⋮----
+agent = lr.ChatAgent(
+⋮----
+# forward to user when LLM doesn't use a tool
+⋮----
+transport = NpxStdioTransport(
+⋮----
+args=[],  # "--isolated", "--storage-path={./playwright-storage.json}"],
+⋮----
+tools = await client.get_tools_async()
+⋮----
+# limit the max tokens for each tool-result to 1000
+⋮----
+# enable the agent to use all tools
+⋮----
+# make task with interactive=False =>
+task = lr.Task(agent, interactive=False, recognize_string_signals=False)
+</file>
+
+<file path="examples/mcp/puppeteer-mcp.py">
+"""
+Puppeteer MCP Example - Langroid integration with Puppeteer MCP server
+
+This example demonstrates how to use Langroid with the Puppeteer MCP server
+to create an agent that can automate web interactions, take screenshots,
+and perform web browsing tasks.
+
+What this example shows:
+- Integration with Puppeteer MCP server for web automation
+- How to connect to and use Puppeteer's web interaction tools within a Langroid agent
+- Creation of a web automation agent that can navigate, click, type, and capture web content
+
+What is Puppeteer MCP?
+- Puppeteer MCP is a Model Context Protocol server that provides web automation capabilities
+- It allows LLMs to interact with web pages through browser automation
+- The MCP server provides tools for navigation, interaction, and content capture
+- This example demonstrates using these web automation capabilities within a Langroid agent
+
+References:
+https://github.com/modelcontextprotocol/server-puppeteer
+
+Steps to run:
+1. Ensure Node.js 18+ is installed
+2. The script will automatically start the Puppeteer MCP server via npx
+
+Run like this (-m model optional; defaults to gpt-4.1-mini):
+    uv run examples/mcp/puppeteer-mcp.py -m ollama/qwen2.5-coder:32b
+
+NOTE: This simple example is hardcoded to answer a single question,
+but you can easily extend this with a loop to enable a
+continuous chat with the user.
+
+"""
+⋮----
+async def main(model: str = "")
+⋮----
+agent = lr.ChatAgent(
+⋮----
+# forward to user when LLM doesn't use a tool
+⋮----
+transport = NpxStdioTransport(
+⋮----
+tools = await client.get_tools_async()
+⋮----
+# limit the max tokens for each tool-result to 1000
+⋮----
+# enable the agent to use all tools
+⋮----
+# make task with interactive=False =>
+task = lr.Task(agent, interactive=False, recognize_string_signals=False)
 </file>
 
 <file path="examples/multi-agent-debate/chainlit_utils.py">
@@ -32754,6 +33179,317 @@ result = "No result"
 # LLM forgot to say DONE
 ⋮----
 # LLM forgot to use the `pandas_eval` tool
+</file>
+
+<file path="langroid/agent/tools/mcp/fastmcp_client.py">
+load_dotenv()  # load environment variables from .env
+⋮----
+FastMCPServerSpec: TypeAlias = str | FastMCP[Any] | ClientTransport | AnyUrl
+⋮----
+class FastMCPClient
+⋮----
+"""A client for interacting with a FastMCP server.
+
+    Provides async context manager functionality to safely manage resources.
+    """
+⋮----
+logger = logging.getLogger(__name__)
+_cm: Optional[Client] = None
+client: Optional[Client] = None
+⋮----
+sampling_handler: SamplingHandler | None = None,  # type: ignore
+roots: RootsList | RootsHandler | None = None,  # type: ignore
+⋮----
+"""Initialize the FastMCPClient.
+
+        Args:
+            server: FastMCP server or path to such a server
+        """
+⋮----
+async def __aenter__(self) -> "FastMCPClient"
+⋮----
+"""Enter the async context manager and connect inner client."""
+# create inner client context manager
+⋮----
+# actually enter it (opens the session)
+self.client = await self._cm.__aenter__()  # type: ignore
+⋮----
+async def connect(self) -> None
+⋮----
+"""Open the underlying session."""
+⋮----
+async def close(self) -> None
+⋮----
+"""Close the underlying session."""
+⋮----
+"""Exit the async context manager and close inner client."""
+# exit and close the inner fastmcp.Client
+⋮----
+await self._cm.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore
+⋮----
+def __del__(self) -> None
+⋮----
+"""Warn about unclosed persistent connections."""
+⋮----
+"""Convert a JSON Schema snippet into a (type, Field) tuple.
+
+        Args:
+            name: Name of the field.
+            schema: JSON Schema for this field.
+            prefix: Prefix to use for nested model names.
+
+        Returns:
+            A tuple of (python_type, Field(...)) for create_model.
+        """
+t = schema.get("type")
+default = schema.get("default", ...)
+desc = schema.get("description")
+# Object → nested BaseModel
+⋮----
+sub_name = f"{prefix}_{name.capitalize()}"
+sub_fields: Dict[str, Tuple[type, Any]] = {}
+⋮----
+submodel = create_model(  # type: ignore
+return submodel, Field(default=default, description=desc)  # type: ignore
+# Array → List of items
+⋮----
+return List[item_type], Field(default=default, description=desc)  # type: ignore
+# Primitive types
+⋮----
+# Fallback or unions
+⋮----
+# Default fallback
+⋮----
+async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]
+⋮----
+"""
+        Create a Langroid ToolMessage subclass from the MCP Tool
+        with the given `tool_name`.
+        """
+⋮----
+target = await self.get_mcp_tool_async(tool_name)
+⋮----
+props = target.inputSchema.get("properties", {})
+fields: Dict[str, Tuple[type, Any]] = {}
+⋮----
+# Convert target.name to CamelCase and add Tool suffix
+parts = target.name.replace("-", "_").split("_")
+camel_case = "".join(part.capitalize() for part in parts)
+model_name = f"{camel_case}Tool"
+⋮----
+# IMPORTANT: Avoid clashes with reserved field names in Langroid ToolMessage!
+# First figure out which field names are reserved
+reserved = set(_BaseToolMessage.__annotations__.keys())
+⋮----
+renamed: Dict[str, str] = {}
+new_fields: Dict[str, Tuple[type, Any]] = {}
+⋮----
+new_name = fname + "__"
+⋮----
+# now replace fields with our renamed‐aware mapping
+fields = new_fields
+⋮----
+# create Langroid ToolMessage subclass, with expected fields.
+tool_model = cast(
+⋮----
+create_model(  # type: ignore[call-overload]
+⋮----
+# Store ALL client configuration needed to recreate a client
+client_config = {
+⋮----
+tool_model._client_config = client_config  # type: ignore [attr-defined]
+tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
+⋮----
+# 2) define an arg-free call_tool_async()
+async def call_tool_async(itself: ToolMessage) -> Any
+⋮----
+# pack up the payload
+# Get exclude fields from model config with proper type checking
+exclude_fields = set()
+model_config = getattr(itself, "model_config", {})
+⋮----
+exclude_list = model_config["json_schema_extra"]["exclude"]
+⋮----
+exclude_fields = set(exclude_list)
+⋮----
+# Add standard excluded fields
+⋮----
+payload = itself.model_dump(exclude=exclude_fields)
+⋮----
+# restore any renamed fields
+for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
+⋮----
+client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
+⋮----
+# Fallback or error - ideally _client_config should always exist
+⋮----
+# Connect the client if not yet connected and keep the connection open
+⋮----
+# open a fresh client, call the tool, then close
+async with FastMCPClient(**client_cfg) as client:  # type: ignore
+⋮----
+tool_model.call_tool_async = call_tool_async  # type: ignore
+⋮----
+# 3) define handle_async() method with optional agent parameter
+⋮----
+"""
+                Auto-generated handler for MCP tool. Returns ChatDocument with files
+                if files are present and agent is provided, otherwise returns text.
+
+                To override: define your own handle_async method with matching signature
+                if you need file handling, or simpler signature if you only need text.
+                """
+response = await self.call_tool_async()  # type: ignore[attr-defined]
+⋮----
+# If we have files and an agent is provided, return a ChatDocument
+⋮----
+# Otherwise, just return the text content
+⋮----
+# add the handle_async() method to the tool model
+tool_model.handle_async = handle_async  # type: ignore
+⋮----
+async def get_tools_async(self) -> List[Type[ToolMessage]]
+⋮----
+"""
+        Get all available tools as Langroid ToolMessage classes,
+        handling nested schemas, with `handle_async` methods
+        """
+⋮----
+resp = await self.client.list_tools()
+⋮----
+async def get_mcp_tool_async(self, name: str) -> Optional[Tool]
+⋮----
+"""Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
+         matching `name`, or None if missing. This contains the metadata for the tool:
+         name, description, inputSchema, etc.
+
+        Args:
+            name: Name of the tool to look up.
+
+        Returns:
+            The raw Tool object from the server, or None.
+        """
+⋮----
+resp: List[Tool] = await self.client.list_tools()
+⋮----
+# Log more detailed error information
+error_content = None
+⋮----
+error_content = [
+⋮----
+error_content = [f"Could not extract error content: {str(e)}"]
+⋮----
+results_text = [
+results_file = []
+⋮----
+"""Call an MCP tool with the given arguments.
+
+        Args:
+            tool_name: Name of the tool to call.
+            arguments: Arguments to pass to the tool.
+
+        Returns:
+            The result of the tool call.
+        """
+⋮----
+result: CallToolResult = await self.client.session.call_tool(
+results = self._convert_tool_result(tool_name, result)
+⋮----
+# ==============================================================================
+# Convenience functions (wrappers around FastMCPClient methods)
+# These are useful for one-off calls without needing to manage the
+# FastMCPClient context explicitly.
+⋮----
+"""Get a single Langroid ToolMessage subclass for a specific MCP tool name (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        tool_name: The name of the tool to retrieve.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A dynamically created Langroid ToolMessage subclass representing the
+        requested tool.
+    """
+⋮----
+"""Get a single Langroid ToolMessage subclass
+    for a specific MCP tool name (synchronous).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
+    async `get_tool_async` function using `asyncio.run()`.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        tool_name: The name of the tool to retrieve.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A dynamically created Langroid ToolMessage subclass representing the
+        requested tool.
+    """
+⋮----
+"""Get all available tools as Langroid ToolMessage subclasses (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A list of dynamically created Langroid ToolMessage subclasses
+        representing all available tools on the server.
+    """
+⋮----
+"""Get all available tools as Langroid ToolMessage subclasses (synchronous).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
+    async `get_tools_async` function using `asyncio.run()`.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A list of dynamically created Langroid ToolMessage subclasses
+        representing all available tools on the server.
+    """
+⋮----
+"""Get the raw MCP Tool object for a specific tool name (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient to
+    retrieve the tool definition from the server.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        name: The name of the tool to look up.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor.
+
+    Returns:
+        The raw `mcp.types.Tool` object from the server, or `None` if the tool
+        is not found.
+    """
+⋮----
+"""Get all available raw MCP Tool objects from the server (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient to
+    retrieve the list of tool definitions from the server.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor.
+
+    Returns:
+        A list of raw `mcp.types.Tool` objects available on the server.
+    """
 </file>
 
 <file path="langroid/agent/tools/file_tools.py">
@@ -41227,6 +41963,133 @@ def mock_factory()
 # Verify the factory was called
 </file>
 
+<file path="tests/main/test_openai_params_subclass.py">
+"""
+Test Pydantic v2 subclassing behavior with OpenAICallParams.
+
+This test demonstrates:
+1. The WRONG way to subclass (without proper type annotations) - fields get dropped
+2. The CORRECT way to subclass (with proper type annotations) - fields are preserved
+"""
+⋮----
+# Note: In Pydantic v2, we can't even define a class with non-annotated fields
+# without getting an error. We'll use typing.ClassVar to demonstrate the issue
+⋮----
+# WRONG WAY: Using ClassVar makes them class attributes, not instance fields
+class WrongCustomParams(OpenAICallParams)
+⋮----
+# These become class attributes, not model fields
+custom_field: ClassVar[str] = "default_value"
+another_field: ClassVar[int] = 42
+⋮----
+# CORRECT WAY: Subclassing with proper type annotations
+class CorrectCustomParams(OpenAICallParams)
+⋮----
+# This is the correct approach - proper type annotations
+custom_field: str = "default_value"
+another_field: int = 42
+⋮----
+def test_wrong_way_subclass_loses_fields()
+⋮----
+"""Test that using ClassVar makes fields class-level, not instance fields."""
+⋮----
+# Create an instance - note we can't pass custom fields to constructor
+# because ClassVar fields are not model fields
+wrong_params = WrongCustomParams(temperature=0.8)
+⋮----
+# ClassVar fields exist as class attributes only
+⋮----
+assert WrongCustomParams.custom_field == "default_value"  # Class attribute
+assert WrongCustomParams.another_field == 42  # Class attribute
+⋮----
+# In Pydantic v2, you can't even set ClassVar on instances - it raises an error!
+⋮----
+# This is what happens in OpenAIGPT.__init__()
+copied_params = wrong_params.model_copy()
+⋮----
+# After model_copy(), only model fields are preserved
+assert copied_params.temperature == 0.8  # Standard field preserved
+⋮----
+# ClassVar fields are NOT part of the model
+dumped = copied_params.model_dump()
+⋮----
+assert "custom_field" not in dumped  # Not a model field
+assert "another_field" not in dumped  # Not a model field
+⋮----
+def test_correct_way_subclass_preserves_fields()
+⋮----
+"""Test that subclassing with proper type annotations preserves custom fields."""
+⋮----
+# Create an instance with custom fields
+correct_params = CorrectCustomParams(
+⋮----
+# Verify original params have the fields
+⋮----
+copied_params = correct_params.model_copy()
+⋮----
+# After model_copy(), custom fields should be preserved (this is the solution)
+⋮----
+assert copied_params.custom_field == "test_value"  # Custom field preserved
+assert copied_params.another_field == 123  # Custom field preserved
+⋮----
+# Verify fields are in model_dump
+⋮----
+def test_openai_gpt_preserves_custom_fields_after_fix()
+⋮----
+"""Test that OpenAIGPT now preserves custom fields after the fix."""
+⋮----
+# Test with correct params
+⋮----
+config = OpenAIGPTConfig(
+⋮----
+chat_model="gpt-3.5-turbo",  # Use a basic model for testing
+⋮----
+# Verify config has custom fields before OpenAIGPT.__init__()
+⋮----
+# This will call config.model_copy() internally
+llm = OpenAIGPT(config)
+⋮----
+# After the fix, params should preserve the subclass type!
+⋮----
+)  # Still is-a OpenAICallParams
+⋮----
+# Custom fields are preserved
+⋮----
+# Test mutation independence - changes to llm.config don't affect original
+⋮----
+assert config.params.custom_field == "integration_test"  # Original unchanged
+⋮----
+def test_workaround_set_params_after_init()
+⋮----
+"""Test the workaround: set params after OpenAIGPT initialization."""
+⋮----
+# Create config with default params first
+config = OpenAIGPTConfig(chat_model="gpt-3.5-turbo")
+⋮----
+# Initialize OpenAIGPT
+⋮----
+# WORKAROUND: Set custom params after initialization
+⋮----
+# Verify custom fields are preserved with workaround
+⋮----
+def test_pydantic_v2_behavior_documentation()
+⋮----
+"""
+    Document the Pydantic v2 behavior for reference.
+
+    In Pydantic v2:
+    1. Fields without type annotations are not considered model fields
+    2. They become class attributes but are not part of the model schema
+    3. model_copy() only copies actual model fields (those with type annotations)
+    4. This is different from Pydantic v1 where all class attributes were included
+
+    SOLUTION: Always use proper type annotations for all fields you want to persist:
+      ❌ custom_field = 'default'           # Class attribute, not model field
+      ✅ custom_field: str = 'default'      # Model field, will be copied
+    """
+# This is a documentation test - it always passes
+</file>
+
 <file path="tests/main/test_pydantic_utils.py">
 class DetailsModel(BaseModel)
 ⋮----
@@ -41719,217 +42582,6 @@ async def test_strict_recovery_async()
 async def is_correct(n: int) -> bool
 ⋮----
 result = await task.run_async(str(n))
-</file>
-
-<file path="tests/main/test_tool_handler_async.py">
-"""
-Test various async handler method signatures for ToolMessage classes.
-Tests the new flexible handle_async method that can accept optional agent parameter.
-"""
-⋮----
-class HandleAsyncNoArgsMsg(ToolMessage)
-⋮----
-"""Tool with handle_async() method - no arguments"""
-⋮----
-request: str = "handle_async_no_args"
-purpose: str = "Test async handle with no arguments"
-⋮----
-async def handle_async(self) -> str
-⋮----
-class HandleAsyncChatDocMsg(ToolMessage)
-⋮----
-"""Tool with handle_async(chat_doc) method"""
-⋮----
-request: str = "handle_async_chat_doc"
-purpose: str = "Test async handle with chat_doc"
-data: str
-⋮----
-async def handle_async(self, chat_doc: ChatDocument) -> str
-⋮----
-# Actually use the chat_doc parameter
-⋮----
-class HandleAsyncAgentMsg(ToolMessage)
-⋮----
-"""Tool with handle_async(agent) method"""
-⋮----
-request: str = "handle_async_agent"
-purpose: str = "Test async handle with agent"
-⋮----
-async def handle_async(self, agent: ChatAgent) -> str
-⋮----
-class HandleAsyncAgentChatDocMsg(ToolMessage)
-⋮----
-"""Tool with handle_async(agent, chat_doc) method"""
-⋮----
-request: str = "handle_async_agent_chat_doc"
-purpose: str = "Test async handle with agent and chat_doc"
-⋮----
-async def handle_async(self, agent: ChatAgent, chat_doc: ChatDocument) -> str
-⋮----
-# Use both agent and chat_doc
-⋮----
-class HandleAsyncChatDocAgentMsg(ToolMessage)
-⋮----
-"""Tool with handle_async(chat_doc, agent) method - reversed order"""
-⋮----
-request: str = "handle_async_chat_doc_agent"
-purpose: str = "Test async handle with chat_doc and agent in reverse order"
-⋮----
-async def handle_async(self, chat_doc: ChatDocument, agent: ChatAgent) -> str
-⋮----
-# Use both parameters in the order they're defined
-⋮----
-class HandleAsyncNoAnnotationsMsg(ToolMessage)
-⋮----
-"""Tool with async handle method but no type annotations - single param"""
-⋮----
-request: str = "handle_async_no_annotations"
-purpose: str = "Test async handle without type annotations"
-⋮----
-async def handle_async(self, chat_doc) -> str
-⋮----
-# Should fall back to parameter name - assume single arg is chat_doc
-# Access content attribute to verify it's actually a ChatDocument
-⋮----
-class HandleAsyncNoAnnotationsAgentMsg(ToolMessage)
-⋮----
-"""Tool with async handle method expecting agent but no type annotations"""
-⋮----
-request: str = "handle_async_no_annotations_agent"
-purpose: str = "Test async handle with agent but no annotations"
-⋮----
-async def handle_async(self, agent) -> str
-⋮----
-# Parameter name 'agent' should be recognized even without annotations
-⋮----
-class HandleAsyncNoAnnotationsBothMsg(ToolMessage)
-⋮----
-"""Tool with async handle method expecting both params but no type annotations"""
-⋮----
-request: str = "handle_async_no_annotations_both"
-purpose: str = "Test async handle with both params but no annotations"
-⋮----
-async def handle_async(self, agent, chat_doc) -> str
-⋮----
-# Parameter names 'agent' and 'chat_doc' should be recognized
-⋮----
-class HandleAsyncNoAnnotationsBothReversedMsg(ToolMessage)
-⋮----
-"""Tool with async handle method with reversed parameter order but no type annotations"""  # noqa: E501
-⋮----
-request: str = "handle_async_no_annotations_both_reversed"
-purpose: str = "Test async handle with reversed params but no annotations"
-⋮----
-async def handle_async(self, chat_doc, agent) -> str
-⋮----
-# Parameter order should be respected based on names
-⋮----
-class TestToolHandlerAsync
-⋮----
-"""Test the flexible async tool handler extraction"""
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_no_args(self)
-⋮----
-"""Test handle_async() with no arguments"""
-agent = ChatAgent(ChatAgentConfig())
-⋮----
-msg = HandleAsyncNoArgsMsg()
-result = await agent.handle_async_no_args_async(msg)
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_chat_doc(self)
-⋮----
-"""Test handle_async(chat_doc) with type annotation"""
-⋮----
-msg = HandleAsyncChatDocMsg(data="test data")
-chat_doc = agent.create_agent_response(content="test")
-result = await agent.handle_async_chat_doc_async(msg, chat_doc)
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_agent(self)
-⋮----
-"""Test handle_async(agent) with type annotation"""
-⋮----
-msg = HandleAsyncAgentMsg()
-result = await agent.handle_async_agent_async(msg)
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_agent_chat_doc(self)
-⋮----
-"""Test handle_async(agent, chat_doc) with type annotations"""
-⋮----
-msg = HandleAsyncAgentChatDocMsg(data="test data")
-⋮----
-result = await agent.handle_async_agent_chat_doc_async(msg, chat_doc)
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_chat_doc_agent(self)
-⋮----
-"""Test handle_async(chat_doc, agent) with reversed parameter order"""
-⋮----
-msg = HandleAsyncChatDocAgentMsg(data="test data")
-⋮----
-result = await agent.handle_async_chat_doc_agent_async(msg, chat_doc)
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_no_annotations(self)
-⋮----
-"""Test async handle with no type annotations - should use parameter name"""
-⋮----
-msg = HandleAsyncNoAnnotationsMsg(data="test data")
-⋮----
-result = await agent.handle_async_no_annotations_async(msg, chat_doc)
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_no_annotations_agent(self)
-⋮----
-"""Test async handle with agent param but no type annotations"""
-⋮----
-msg = HandleAsyncNoAnnotationsAgentMsg()
-# Parameter name 'agent' should be recognized, so no chat_doc needed
-result = await agent.handle_async_no_annotations_agent_async(msg)
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_no_annotations_both(self)
-⋮----
-"""Test async handle with both params but no type annotations"""
-⋮----
-msg = HandleAsyncNoAnnotationsBothMsg(data="test data")
-⋮----
-result = await agent.handle_async_no_annotations_both_async(msg, chat_doc)
-⋮----
-@pytest.mark.asyncio
-    async def test_handle_async_no_annotations_both_reversed(self)
-⋮----
-"""Test async handle with reversed params but no type annotations"""
-⋮----
-msg = HandleAsyncNoAnnotationsBothReversedMsg(data="test data")
-⋮----
-result = await agent.handle_async_no_annotations_both_reversed_async(
-⋮----
-# Test that sync and async can coexist
-class HandleBothSyncAsyncMsg(ToolMessage)
-⋮----
-"""Tool with both sync and async handle methods"""
-⋮----
-request: str = "handle_both_sync_async"
-purpose: str = "Test tool with both sync and async handlers"
-⋮----
-def handle(self, agent: ChatAgent) -> str
-⋮----
-@pytest.mark.asyncio
-async def test_handle_both_sync_async()
-⋮----
-"""Test that a tool can have both sync and async handlers"""
-⋮----
-msg = HandleBothSyncAsyncMsg()
-⋮----
-# Test sync handler
-sync_result = agent.handle_both_sync_async(msg)
-⋮----
-# Test async handler
-async_result = await agent.handle_both_sync_async_async(msg)
 </file>
 
 <file path="tests/main/test_tool_messages_async.py">
@@ -43945,70 +44597,6 @@ is an ongoing PR, just push to github again and the PR will be updated.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
 Read more [here](docs/development/github-cli.md).
-</file>
-
-<file path="ai-instructions/claude-repomix-instructions.md">
-# AI Instructions for Setting Up Repomix
-
-## Task Overview
-Set up [repomix](https://github.com/yamadashy/repomix) to generate LLM-friendly repository exports. This creates text files that can be uploaded to AI models for code analysis.
-
-## Steps to Complete
-
-### 1. Install Repomix
-```bash
-npm install -g repomix
-```
-
-### 2. Create repomix.config.json
-Create a configuration file in the repository root with:
-- **Include patterns**: Source code files (*.py, *.js, *.md, *.yaml, *.yml, *.toml)
-- **Exclude patterns**: Data directories, logs, node_modules, JSON files, generated files
-- **Security check**: Enable to prevent sensitive data inclusion
-
-### 3. Configure Include/Exclude Patterns
-- Include only source code directories and documentation
-- Exclude data/, logs/, build artifacts, dependencies
-- Add `llms*.txt` to exclusions to prevent recursive inclusion
-
-### 4. Test Configuration (Optional)
-```bash
-# Generate file list only for inspection
-repomix --no-files -o file-list.txt
-```
-This allows you to review which files will be included before generating the full output.
-
-### 5. Generate Output Versions
-
-Use the Makefile targets to generate repomix files:
-
-```bash
-# Generate all variants (recommended)
-make repomix-all
-
-# Or generate specific versions:
-make repomix                      # llms.txt and llms-compressed.txt (includes tests)
-make repomix-no-tests             # llms-no-tests.txt and llms-no-tests-compressed.txt
-make repomix-no-tests-no-examples # llms-no-tests-no-examples.txt and compressed version
-```
-
-All commands use `git ls-files` to ensure only git-tracked files are included.
-
-### 6. Verify Results
-- Check file sizes and token counts in repomix output
-- Ensure no sensitive data is included
-- Confirm only relevant source files are packaged
-
-## Expected Outcome
-Six text files optimized for different LLM contexts:
-- `llms.txt`: Full version with tests and examples (870K tokens)
-- `llms-compressed.txt`: Compressed version with tests and examples (513K tokens)
-- `llms-no-tests.txt`: Full version without tests (677K tokens)
-- `llms-no-tests-compressed.txt`: Compressed version without tests (433K tokens)
-- `llms-no-tests-no-examples.txt`: Core library code only (no tests/examples)
-- `llms-no-tests-no-examples-compressed.txt`: Compressed core library code (285K tokens)
-
-The files contain only git-tracked source code with proper exclusions for clean, focused LLM consumption.
 </file>
 
 <file path="ai-notes/handler-parameter-analysis-notes.md">
@@ -48437,114 +49025,6 @@ def _run(**kwargs: str) -> None
 """Fire entry point to run the async main function."""
 </file>
 
-<file path="examples/mcp/playwright-mcp.py">
-"""
-Playwright MCP Example - Langroid integration with Playwright MCP server
-
-This example demonstrates how to use Langroid with the Playwright MCP server
-to create an agent that can automate web interactions, take screenshots,
-and perform web browsing tasks.
-
-What this example shows:
-- Integration with Playwright MCP server for web automation
-- How to connect to and use Playwright's web interaction tools within a Langroid agent
-- Creation of a web automation agent that can navigate, click, type, and capture web content
-
-What is Playwright MCP?
-- Playwright MCP is a Model Context Protocol server that provides web automation capabilities
-- It allows LLMs to interact with web pages through browser automation
-- The MCP server provides tools for navigation, interaction, and content capture
-- This example demonstrates using these web automation capabilities within a Langroid agent
-
-References:
-https://github.com/microsoft/playwright-mcp
-
-Steps to run:
-1. Ensure Node.js 18+ is installed
-2. The script will automatically start the Playwright MCP server via npx
-
-Run like this (-m model optional; defaults to gpt-4.1-mini):
-    uv run examples/mcp/playwright/playwright-mcp.py -m ollama/qwen2.5-coder:32b
-
-NOTE: This simple example is hardcoded to answer a single question,
-but you can easily extend this with a loop to enable a
-continuous chat with the user.
-
-"""
-⋮----
-async def main(model: str = "")
-⋮----
-agent = lr.ChatAgent(
-⋮----
-# forward to user when LLM doesn't use a tool
-⋮----
-transport = NpxStdioTransport(
-⋮----
-args=[],  # "--isolated", "--storage-path={./playwright-storage.json}"],
-⋮----
-tools = await client.get_tools_async()
-⋮----
-# limit the max tokens for each tool-result to 1000
-⋮----
-# enable the agent to use all tools
-⋮----
-# make task with interactive=False =>
-task = lr.Task(agent, interactive=False, recognize_string_signals=False)
-</file>
-
-<file path="examples/mcp/puppeteer-mcp.py">
-"""
-Puppeteer MCP Example - Langroid integration with Puppeteer MCP server
-
-This example demonstrates how to use Langroid with the Puppeteer MCP server
-to create an agent that can automate web interactions, take screenshots,
-and perform web browsing tasks.
-
-What this example shows:
-- Integration with Puppeteer MCP server for web automation
-- How to connect to and use Puppeteer's web interaction tools within a Langroid agent
-- Creation of a web automation agent that can navigate, click, type, and capture web content
-
-What is Puppeteer MCP?
-- Puppeteer MCP is a Model Context Protocol server that provides web automation capabilities
-- It allows LLMs to interact with web pages through browser automation
-- The MCP server provides tools for navigation, interaction, and content capture
-- This example demonstrates using these web automation capabilities within a Langroid agent
-
-References:
-https://github.com/modelcontextprotocol/server-puppeteer
-
-Steps to run:
-1. Ensure Node.js 18+ is installed
-2. The script will automatically start the Puppeteer MCP server via npx
-
-Run like this (-m model optional; defaults to gpt-4.1-mini):
-    uv run examples/mcp/puppeteer-mcp.py -m ollama/qwen2.5-coder:32b
-
-NOTE: This simple example is hardcoded to answer a single question,
-but you can easily extend this with a loop to enable a
-continuous chat with the user.
-
-"""
-⋮----
-async def main(model: str = "")
-⋮----
-agent = lr.ChatAgent(
-⋮----
-# forward to user when LLM doesn't use a tool
-⋮----
-transport = NpxStdioTransport(
-⋮----
-tools = await client.get_tools_async()
-⋮----
-# limit the max tokens for each tool-result to 1000
-⋮----
-# enable the agent to use all tools
-⋮----
-# make task with interactive=False =>
-task = lr.Task(agent, interactive=False, recognize_string_signals=False)
-</file>
-
 <file path="examples/multi-agent-debate/config.py">
 # Constants
 MODEL_MAP = {
@@ -48835,317 +49315,6 @@ def chat(opts: CLIOptions) -> None
 spy_game_agent = SpyGameAgent(
 ⋮----
 task = lr.Task(
-</file>
-
-<file path="langroid/agent/tools/mcp/fastmcp_client.py">
-load_dotenv()  # load environment variables from .env
-⋮----
-FastMCPServerSpec: TypeAlias = str | FastMCP[Any] | ClientTransport | AnyUrl
-⋮----
-class FastMCPClient
-⋮----
-"""A client for interacting with a FastMCP server.
-
-    Provides async context manager functionality to safely manage resources.
-    """
-⋮----
-logger = logging.getLogger(__name__)
-_cm: Optional[Client] = None
-client: Optional[Client] = None
-⋮----
-sampling_handler: SamplingHandler | None = None,  # type: ignore
-roots: RootsList | RootsHandler | None = None,  # type: ignore
-⋮----
-"""Initialize the FastMCPClient.
-
-        Args:
-            server: FastMCP server or path to such a server
-        """
-⋮----
-async def __aenter__(self) -> "FastMCPClient"
-⋮----
-"""Enter the async context manager and connect inner client."""
-# create inner client context manager
-⋮----
-# actually enter it (opens the session)
-self.client = await self._cm.__aenter__()  # type: ignore
-⋮----
-async def connect(self) -> None
-⋮----
-"""Open the underlying session."""
-⋮----
-async def close(self) -> None
-⋮----
-"""Close the underlying session."""
-⋮----
-"""Exit the async context manager and close inner client."""
-# exit and close the inner fastmcp.Client
-⋮----
-await self._cm.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore
-⋮----
-def __del__(self) -> None
-⋮----
-"""Warn about unclosed persistent connections."""
-⋮----
-"""Convert a JSON Schema snippet into a (type, Field) tuple.
-
-        Args:
-            name: Name of the field.
-            schema: JSON Schema for this field.
-            prefix: Prefix to use for nested model names.
-
-        Returns:
-            A tuple of (python_type, Field(...)) for create_model.
-        """
-t = schema.get("type")
-default = schema.get("default", ...)
-desc = schema.get("description")
-# Object → nested BaseModel
-⋮----
-sub_name = f"{prefix}_{name.capitalize()}"
-sub_fields: Dict[str, Tuple[type, Any]] = {}
-⋮----
-submodel = create_model(  # type: ignore
-return submodel, Field(default=default, description=desc)  # type: ignore
-# Array → List of items
-⋮----
-return List[item_type], Field(default=default, description=desc)  # type: ignore
-# Primitive types
-⋮----
-# Fallback or unions
-⋮----
-# Default fallback
-⋮----
-async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]
-⋮----
-"""
-        Create a Langroid ToolMessage subclass from the MCP Tool
-        with the given `tool_name`.
-        """
-⋮----
-target = await self.get_mcp_tool_async(tool_name)
-⋮----
-props = target.inputSchema.get("properties", {})
-fields: Dict[str, Tuple[type, Any]] = {}
-⋮----
-# Convert target.name to CamelCase and add Tool suffix
-parts = target.name.replace("-", "_").split("_")
-camel_case = "".join(part.capitalize() for part in parts)
-model_name = f"{camel_case}Tool"
-⋮----
-# IMPORTANT: Avoid clashes with reserved field names in Langroid ToolMessage!
-# First figure out which field names are reserved
-reserved = set(_BaseToolMessage.__annotations__.keys())
-⋮----
-renamed: Dict[str, str] = {}
-new_fields: Dict[str, Tuple[type, Any]] = {}
-⋮----
-new_name = fname + "__"
-⋮----
-# now replace fields with our renamed‐aware mapping
-fields = new_fields
-⋮----
-# create Langroid ToolMessage subclass, with expected fields.
-tool_model = cast(
-⋮----
-create_model(  # type: ignore[call-overload]
-⋮----
-# Store ALL client configuration needed to recreate a client
-client_config = {
-⋮----
-tool_model._client_config = client_config  # type: ignore [attr-defined]
-tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
-⋮----
-# 2) define an arg-free call_tool_async()
-async def call_tool_async(itself: ToolMessage) -> Any
-⋮----
-# pack up the payload
-# Get exclude fields from model config with proper type checking
-exclude_fields = set()
-model_config = getattr(itself, "model_config", {})
-⋮----
-exclude_list = model_config["json_schema_extra"]["exclude"]
-⋮----
-exclude_fields = set(exclude_list)
-⋮----
-# Add standard excluded fields
-⋮----
-payload = itself.model_dump(exclude=exclude_fields)
-⋮----
-# restore any renamed fields
-for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
-⋮----
-client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
-⋮----
-# Fallback or error - ideally _client_config should always exist
-⋮----
-# Connect the client if not yet connected and keep the connection open
-⋮----
-# open a fresh client, call the tool, then close
-async with FastMCPClient(**client_cfg) as client:  # type: ignore
-⋮----
-tool_model.call_tool_async = call_tool_async  # type: ignore
-⋮----
-# 3) define handle_async() method with optional agent parameter
-⋮----
-"""
-                Auto-generated handler for MCP tool. Returns ChatDocument with files
-                if files are present and agent is provided, otherwise returns text.
-
-                To override: define your own handle_async method with matching signature
-                if you need file handling, or simpler signature if you only need text.
-                """
-response = await self.call_tool_async()  # type: ignore[attr-defined]
-⋮----
-# If we have files and an agent is provided, return a ChatDocument
-⋮----
-# Otherwise, just return the text content
-⋮----
-# add the handle_async() method to the tool model
-tool_model.handle_async = handle_async  # type: ignore
-⋮----
-async def get_tools_async(self) -> List[Type[ToolMessage]]
-⋮----
-"""
-        Get all available tools as Langroid ToolMessage classes,
-        handling nested schemas, with `handle_async` methods
-        """
-⋮----
-resp = await self.client.list_tools()
-⋮----
-async def get_mcp_tool_async(self, name: str) -> Optional[Tool]
-⋮----
-"""Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
-         matching `name`, or None if missing. This contains the metadata for the tool:
-         name, description, inputSchema, etc.
-
-        Args:
-            name: Name of the tool to look up.
-
-        Returns:
-            The raw Tool object from the server, or None.
-        """
-⋮----
-resp: List[Tool] = await self.client.list_tools()
-⋮----
-# Log more detailed error information
-error_content = None
-⋮----
-error_content = [
-⋮----
-error_content = [f"Could not extract error content: {str(e)}"]
-⋮----
-results_text = [
-results_file = []
-⋮----
-"""Call an MCP tool with the given arguments.
-
-        Args:
-            tool_name: Name of the tool to call.
-            arguments: Arguments to pass to the tool.
-
-        Returns:
-            The result of the tool call.
-        """
-⋮----
-result: CallToolResult = await self.client.session.call_tool(
-results = self._convert_tool_result(tool_name, result)
-⋮----
-# ==============================================================================
-# Convenience functions (wrappers around FastMCPClient methods)
-# These are useful for one-off calls without needing to manage the
-# FastMCPClient context explicitly.
-⋮----
-"""Get a single Langroid ToolMessage subclass for a specific MCP tool name (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        tool_name: The name of the tool to retrieve.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A dynamically created Langroid ToolMessage subclass representing the
-        requested tool.
-    """
-⋮----
-"""Get a single Langroid ToolMessage subclass
-    for a specific MCP tool name (synchronous).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
-    async `get_tool_async` function using `asyncio.run()`.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        tool_name: The name of the tool to retrieve.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A dynamically created Langroid ToolMessage subclass representing the
-        requested tool.
-    """
-⋮----
-"""Get all available tools as Langroid ToolMessage subclasses (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A list of dynamically created Langroid ToolMessage subclasses
-        representing all available tools on the server.
-    """
-⋮----
-"""Get all available tools as Langroid ToolMessage subclasses (synchronous).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
-    async `get_tools_async` function using `asyncio.run()`.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A list of dynamically created Langroid ToolMessage subclasses
-        representing all available tools on the server.
-    """
-⋮----
-"""Get the raw MCP Tool object for a specific tool name (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient to
-    retrieve the tool definition from the server.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        name: The name of the tool to look up.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor.
-
-    Returns:
-        The raw `mcp.types.Tool` object from the server, or `None` if the tool
-        is not found.
-    """
-⋮----
-"""Get all available raw MCP Tool objects from the server (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient to
-    retrieve the list of tool definitions from the server.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor.
-
-    Returns:
-        A list of raw `mcp.types.Tool` objects available on the server.
-    """
 </file>
 
 <file path="langroid/language_models/client_cache.py">
@@ -50529,6 +50698,305 @@ def test_crawl4ai_integration()
 test_urls = ["https://example.com"]
 ⋮----
 loader = URLLoader(urls=test_urls, crawler_config=config)
+</file>
+
+<file path="CLAUDE.md">
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+### Development
+- Install core dependencies: `pip install -e .`
+- Install dev dependencies: `pip install -e ".[dev]"`
+- Install specific feature groups:
+  - Document chat features: `pip install -e ".[doc-chat]"`
+  - Database features: `pip install -e ".[db]"`
+  - HuggingFace embeddings: `pip install -e ".[hf-embeddings]"`
+  - All features: `pip install -e ".[all]"`
+- Run linting and type checking: `make check`
+- Format code: `make lint`
+
+### Testing
+- Run all tests: `pytest tests/`
+- Run specific test: `pytest tests/main/test_file.py::test_function`
+- Run tests with coverage: `pytest --cov=langroid tests/`
+- Run only main tests: `make tests` (uses `pytest tests/main`)
+
+### Linting and Type Checking
+- Lint code: `make check` (runs black, ruff check, mypy)
+- Format only: `make lint` (runs black and ruff fix)
+- Type check only: `make type-check`
+- Always use `make check` to run lints + mypy before trying to commit changes
+
+### Version and Release Management
+- Bump version: `./bump_version.sh [patch|minor|major]`
+- Or use make commands:
+  - `make all-patch` - Bump patch version, build, push, release
+  - `make all-minor` - Bump minor version, build, push, release
+  - `make all-major` - Bump major version, build, push, release
+
+## Architecture
+
+Langroid is a framework for building LLM-powered agents that can use tools and collaborate with each other.
+
+### Core Components:
+
+1. **Agents** (`langroid/agent/`):
+   - `chat_agent.py` - Base ChatAgent that can converse and use tools
+   - `task.py` - Handles execution flow for agents
+   - `special/` - Domain-specific agents (doc chat, table chat, SQL chat, etc.)
+   - `openai_assistant.py` - Integration with OpenAI Assistant API
+
+2. **Tools** (`langroid/agent/tools/`):
+   - Tool system for agents to interact with external systems
+   - `tool_message.py` - Protocol for tool messages
+   - Various search tools (Google, DuckDuckGo, Tavily, Exa, etc.)
+
+3. **Language Models** (`langroid/language_models/`):
+   - Abstract interfaces for different LLM providers
+   - Implementations for OpenAI, Azure, local models, etc.
+   - Support for hundreds of LLMs via LiteLLM
+
+4. **Vector Stores** (`langroid/vector_store/`):
+   - Abstract interface and implementations for different vector databases
+   - Includes support for Qdrant, Chroma, LanceDB, Pinecone, PGVector, Weaviate
+
+5. **Document Processing** (`langroid/parsing/`):
+   - Parse and process documents from various formats
+   - Chunk text for embedding and retrieval
+   - Support for PDF, DOCX, images, and more
+
+6. **Embedding Models** (`langroid/embedding_models/`):
+   - Abstract interface for embedding generation
+   - Support for OpenAI, HuggingFace, and custom embeddings
+
+### Key Multi-Agent Patterns:
+
+- **Task Delegation**: Agents can delegate tasks to other agents through hierarchical task structures
+- **Message Passing**: Agents communicate by transforming and passing messages
+- **Collaboration**: Multiple agents can work together on complex tasks
+
+### Key Security Features:
+
+- The `full_eval` flag in both `TableChatAgentConfig` and `VectorStoreConfig` controls code injection protection
+- Defaults to `False` for security, set to `True` only in trusted environments
+
+## Documentation
+
+- Main documentation is in the `docs/` directory
+- Examples in the `examples/` directory demonstrate usage patterns
+- Quick start examples available in `examples/quick-start/`
+
+## MCP (Model Context Protocol) Tools Integration
+
+Langroid provides comprehensive support for MCP tools through the `langroid.agent.tools.mcp` module. Here are the key patterns and approaches:
+
+### MCP Tool Creation Methods
+
+#### 1. Using the `@mcp_tool` Decorator (Module Level)
+```python
+from langroid.agent.tools.mcp import mcp_tool
+from fastmcp.client.transports import StdioTransport
+
+transport = StdioTransport(command="...", args=[...])
+
+@mcp_tool(transport, "tool_name")
+class MyTool(lr.ToolMessage):
+    async def handle_async(self):
+        result = await self.call_tool_async()
+        # custom processing
+        return result
+```
+
+**Important**: The decorator creates the transport connection at module import time, so it must be used at module level (not inside async functions).
+
+#### 2. Using `get_tool_async` (Inside Async Functions)
+```python
+from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
+
+async def main():
+    transport = StdioTransport(command="...", args=[...])
+    BaseTool = await get_tool_async(transport, "tool_name")
+    
+    class MyTool(BaseTool):
+        async def handle_async(self):
+            result = await self.call_tool_async()
+            # custom processing
+            return result
+```
+
+**Use this approach when**:
+- Creating tools inside async functions
+- Need to avoid event loop conflicts
+- Want to delay transport creation until runtime
+
+### Transport Types and Event Loop Considerations
+
+- **StdioTransport**: Creates subprocess immediately, can cause "event loop closed" errors if created at module level in certain contexts
+- **SSETransport**: HTTP-based, generally safer for module-level creation
+- **Best Practice**: Create transports inside async functions when possible, use `asyncio.run()` wrapper for Fire CLI integration
+
+### Tool Message Request Field and Agent Handlers
+
+When you get an MCP tool named "my_tool", Langroid automatically:
+
+1. **Sets the `request` field**: The dynamically created ToolMessage subclass has `request = "my_tool"`
+2. **Enables custom agent handlers**: Agents can define these methods:
+   - `my_tool()` - synchronous handler
+   - `my_tool_async()` - async handler
+
+The agent's message routing system automatically calls these handlers when the tool is used.
+
+### Custom `handle_async` Method Override
+
+Both decorator and non-decorator approaches support overriding `handle_async`:
+
+```python
+class MyTool(BaseTool):  # or use @mcp_tool decorator
+    async def handle_async(self):
+        # Get raw result from MCP server
+        result = await self.call_tool_async()
+        
+        # Option 1: Return processed result to LLM (continues conversation)
+        return f"<ProcessedResult>{result}</ProcessedResult>"
+        
+        # Option 2: Return ResultTool to terminate task
+        return MyResultTool(answer=result)
+```
+
+### Common Async Issues and Solutions
+
+**Problem**: "RuntimeError: asyncio.run() cannot be called from a running event loop"
+**Solution**: Use `get_tool_async` instead of `@mcp_tool` decorator when already in async context
+
+**Problem**: "RuntimeError: Event loop is closed"
+**Solution**: 
+- Move transport creation inside async functions
+- Use `asyncio.run()` wrapper for Fire CLI integration:
+```python
+if __name__ == "__main__":
+    import asyncio
+    def run_main(**kwargs):
+        asyncio.run(main(**kwargs))
+    Fire(run_main)
+```
+
+### MCP Tool Integration Examples
+
+See `examples/mcp/` for working examples:
+- `gitmcp.py` - HTTP-based SSE transport
+- `pyodide_code_executor.py` - Subprocess-based stdio transport with proper async handling
+
+## Testing and Tool Message Patterns
+
+### MockLM for Testing Tool Generation
+- Use `MockLM` with `response_dict` to simulate LLM responses that include tool messages
+- Set `tools=[ToolClass]` or `enable_message=[ToolClass]` on the agent to enable tool handling
+- The `try_get_tool_messages()` method can extract tool messages from LLM responses with `all_tools=True`
+
+### Task Termination Control
+- `TaskConfig` has `done_if_tool` parameter to terminate tasks when any tool is generated
+- `Task.done()` method checks `result.agent_response` for tool content when this flag is set
+- Useful for workflows where tool generation signals task completion
+
+### Testing Tool-Based Task Flows
+```python
+# Example: Test task termination on tool generation
+config = TaskConfig(done_if_tool=True)
+task = Task(agent, config=config)
+response_dict = {"content": '{"request": "my_tool", "param": "value"}'}
+```
+
+## Multi-Agent System Development
+
+### Important Patterns and Best Practices
+
+#### 1. Pydantic Imports
+**ALWAYS import Pydantic classes from `langroid.pydantic_v1`**, not from `pydantic` directly:
+```python
+# CORRECT
+from langroid.pydantic_v1 import Field, BaseModel
+
+# WRONG - will cause issues
+from pydantic import Field, BaseModel
+```
+
+#### 2. Tool Name References in System Messages
+When referencing tool names in f-strings within system messages, use the `.name()` method:
+```python
+system_message: str = f"""
+Use {MyTool.name()} to perform the action.
+"""
+```
+This works at module level in configs, but be aware that complex initialization at module level can sometimes cause issues.
+
+#### 3. Agent Configuration with LLM
+Always specify the LLM configuration explicitly in agent configs:
+```python
+class MyAgentConfig(lr.ChatAgentConfig):
+    name: str = "MyAgent"
+    llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
+        chat_model="gpt-4",  # or "gpt-4.1" etc.
+    )
+    system_message: str = "..."
+```
+
+#### 4. Tool Organization in Multi-Agent Systems
+When tools delegate to agents:
+- Define agent configs and agents BEFORE the tools that use them
+- Tools can directly instantiate agents in their `handle()` methods:
+```python
+class MyTool(lr.ToolMessage):
+    def handle(self) -> str:
+        agent = MyAgent(MyAgentConfig())
+        task = lr.Task(agent, interactive=False)
+        result = task.run(prompt)
+        return result.content
+```
+
+#### 5. Task Termination with Done Sequences
+Use `done_sequences` for precise task termination control:
+```python
+# For a task that should complete after: Tool -> Agent handles -> LLM responds
+task = lr.Task(
+    agent,
+    interactive=False,
+    config=lr.TaskConfig(done_sequences=["T,A,L"]),
+)
+```
+
+Common patterns:
+- `"T,A"` - Tool used and handled by agent
+- `"T,A,L"` - Tool used, handled, then LLM responds
+- `"T[specific_tool],A"` - Specific tool used and handled
+
+See `docs/notes/task-termination.md` for comprehensive documentation.
+
+#### 6. Handling Non-Tool LLM Responses
+Use `handle_llm_no_tool` in agent configs to handle cases where the LLM forgets to use a tool:
+```python
+class MyAgentConfig(lr.ChatAgentConfig):
+    handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
+```
+
+#### 7. Agent Method Parameters
+Note that `ChatAgentConfig` does not have a `use_tools` parameter. Instead, enable tools on the agent after creation:
+```python
+agent = MyAgent(config)
+agent.enable_message([Tool1, Tool2, Tool3])  # Pass list of tool classes
+```
+
+## Commit and Pull Request Guidelines
+
+- Never include "co-authored by Claude Code" or "created by Claude" in commit messages or pull request descriptions
+
+## Codecov Badge Fix (June 2025)
+
+- Fixed broken Codecov badge in README by removing the token parameter from the URL
+- Changed from `https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE` to `https://codecov.io/gh/langroid/langroid/graph/badge.svg`
+- Tokens are not needed for public repositories and can cause GitHub rendering issues
 </file>
 
 <file path="examples/basic/planner-workflow.py">
@@ -52148,7 +52616,9 @@ def clone(self, i: int = 0) -> "ChatAgent"
         Revisit later.
         """
 agent_cls = type(self)
-config_copy = copy.deepcopy(self.config)
+# Use model_copy to preserve Pydantic subclass types (like MockLMConfig)
+# instead of deepcopy which loses subclass information
+config_copy = self.config.model_copy(deep=True)
 ⋮----
 new_agent = agent_cls(config_copy)
 ⋮----
@@ -54884,6 +55354,504 @@ task3 = Task(agent2, config=config3, interactive=False)[CalculatorTool]
 result3: CalculatorTool | None = task3.run("Calculate")
 </file>
 
+<file path="tests/main/test_mcp_tools.py">
+# note we use pydantic v2 to define MCP server
+from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
+⋮----
+async def check_npx_package_availability(package: str, timeout: float = 10.0) -> bool
+⋮----
+"""
+    Check if an npx package is available without actually starting the MCP server.
+    This helps avoid ProcessLookupError by detecting package issues early.
+
+    Args:
+        package: The npm package name to check
+        timeout: Timeout for the check operation
+
+    Returns:
+        True if package appears to be available, False otherwise
+    """
+⋮----
+# Try to check if the package exists using npm info
+result = await asyncio.wait_for(
+⋮----
+# If npm info succeeds, the package exists
+⋮----
+# Check for specific "not found" errors in stderr
+stderr_text = stderr.decode() if stderr else ""
+⋮----
+# For other errors, assume availability issues but not necessarily missing
+⋮----
+# On any error (timeout, process issues, etc.), assume not available
+⋮----
+class SubItem(BaseModel)
+⋮----
+"""A sub‐item with a value and multiplier."""
+⋮----
+val: int = Field(..., description="Value for sub-item")
+multiplier: float = Field(1.0, description="Multiplier applied to val")
+⋮----
+class ComplexData(BaseModel)
+⋮----
+"""Complex data combining two ints and a list of SubItem."""
+⋮----
+a: int = Field(..., description="First integer")
+b: int = Field(..., description="Second integer")
+items: List[SubItem] = Field(..., description="List of sub-items")
+⋮----
+def mcp_server()
+⋮----
+server = FastMCP("TestServer")
+⋮----
+class Counter
+⋮----
+def __init__(self) -> None
+⋮----
+def get_num_beans(self) -> int
+⋮----
+"""Return current counter."""
+⋮----
+"""Increment and return new counter."""
+⋮----
+# create a stateful tool
+counter = Counter()
+# we can't directly use the tool decorator on instance methods,
+# so we use the server.add_tool() method to add the tool
+⋮----
+# example of tool that uses an arg of type Context, and
+# uses this arg to request client LLM sampling, and send logs
+⋮----
+@server.tool()
+    async def prime_check(number: int, ctx: Context) -> str
+⋮----
+"""
+        Determine if the given number is Prime or not.
+        """
+result: TextContent | ImageContent = await ctx.sample(
+⋮----
+@server.tool()
+    def greet(person: str) -> str
+⋮----
+"""Get weather alerts for a state."""
+⋮----
+# example of MCP tool whose fields clash with Langroid ToolMessage,
+# and a `name` field which is reserved by pydantic
+⋮----
+"""Get information for a recipient."""
+⋮----
+@server.tool()
+    async def get_alerts_async(state: str) -> list[str]
+⋮----
+@server.tool()
+    def nabroski(a: int, b: int) -> int
+⋮----
+"""Computes the Nabroski transform of integers a and b."""
+⋮----
+@server.tool()
+    def coriolis(x: int, y: int) -> int
+⋮----
+"""Computes the Coriolis transform of integers x and y."""
+⋮----
+@server.tool()
+    def hydra_nest(data: ComplexData) -> int
+⋮----
+"""Compute the HydraNest calculation over nested data."""
+total = data.a * data.b
+⋮----
+async def test_get_tools_and_handle(server: FastMCP | str) -> None
+⋮----
+"""End‐to‐end test for get_tools and .handle() against server."""
+tools = await get_tools_async(server)
+# basic sanity
+⋮----
+# find the alerts tool
+AlertsTool = next(
+⋮----
+# test get_mcp_tool_async
+AlertsMCPTool: Tool = await get_mcp_tool_async(server, "get_alerts")
+⋮----
+AlertsTool = await get_tool_async(server, AlertsMCPTool.name)
+⋮----
+# instantiate Langroid ToolMessage
+msg = AlertsTool(state="NY")
+⋮----
+# invoke the tool via the Langroid ToolMessage.handle() method -
+# this produces list of weather alerts for the given state
+# Note MCP tools can return either ResultToolType or List[ResultToolType]
+result: Optional[str] = await msg.handle_async()
+⋮----
+# make tool from async FastMCP tool
+AlertsMCPToolAsync = await get_mcp_tool_async(server, "get_alerts_async")
+⋮----
+AlertsToolAsync = await get_tool_async(server, AlertsMCPToolAsync.name)
+⋮----
+msg = AlertsToolAsync(state="NY")
+⋮----
+# invoke the tool via the Langroid ToolMessage.handle_async() method -
+⋮----
+# test making tool with utility functions
+AlertsTool = await get_tool_async(server, "get_alerts")
+⋮----
+@pytest.mark.asyncio
+async def test_tools_connect_close(server: str | FastMCP) -> None
+⋮----
+"""Test that we can use connect()... tool-calls ... close()"""
+⋮----
+client = FastMCPClient(server)
+⋮----
+mcp_tools = await client.client.list_tools()
+⋮----
+langroid_tool_classes = await client.get_tools_async()
+⋮----
+AlertsMCPTool = await get_mcp_tool_async(server, "get_alerts")
+⋮----
+result = await msg.handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_stateful_tool() -> None
+⋮----
+# instantiate the server
+server = mcp_server()
+⋮----
+# get tools from the SAME instance of the server
+AddBeansTool = await get_tool_async(server, "add_beans")
+⋮----
+GetNumBeansTool = await get_tool_async(server, "get_num_beans")
+⋮----
+add_beans_msg = AddBeansTool(x=5)
+⋮----
+result = await add_beans_msg.handle_async()
+⋮----
+get_num_beans_msg = GetNumBeansTool()
+⋮----
+result = await get_num_beans_msg.handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_tool_with_context_and_sampling() -> None
+⋮----
+"""Handle a sampling request from server"""
+# simulate an LLM call
+⋮----
+PrimeCheckTool = await get_tool_async(
+⋮----
+# assert that "ctx" is NOT a field in the tool
+⋮----
+prime_check_msg = PrimeCheckTool(number=7)
+⋮----
+result = await prime_check_msg.handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_mcp_tool_schemas() -> None
+⋮----
+"""
+    Test that descriptions, field-descriptions of MCP tools are preserved
+    when we translate them to Langroid ToolMessage classes. This is important
+    since the LLM is shown these, and helps with tool-call accuracy.
+    """
+# make a langroid AlertsTool from the corresponding MCP tool
+AlertsTool = await get_tool_async(mcp_server(), "get_alerts")
+⋮----
+description = "Get weather alerts for a state."
+⋮----
+schema: lm.LLMFunctionSpec = AlertsTool.llm_function_schema()
+⋮----
+InfoTool = await get_tool_async(mcp_server(), "info_tool")
+⋮----
+description = "Get information for a recipient."
+⋮----
+# instantiate InfoTool
+msg = InfoTool(
+⋮----
+# call the tool
+⋮----
+@pytest.mark.asyncio
+async def test_single_output() -> None
+⋮----
+"""Test that a tool with a single string output works
+    similarly to one that has a list of strings outputs."""
+⋮----
+OneAlertTool = await get_tool_async(mcp_server(), "get_one_alert")
+⋮----
+msg = OneAlertTool(state="NY")
+⋮----
+# we expect a list containing a single str
+⋮----
+@pytest.mark.asyncio
+async def test_agent_mcp_tools() -> None
+⋮----
+"""Test that a Langroid ChatAgent can use and handle MCP tools."""
+⋮----
+agent = lr.ChatAgent(
+⋮----
+NabroskiTool: lr.ToolMessage = await get_tool_async(server, "nabroski")
+⋮----
+response: lr.ChatDocument = await agent.llm_response_async(
+tools = agent.get_tool_messages(response)
+⋮----
+result: lr.ChatDocument = await agent.agent_response_async(response)
+# TODO assert needs to take LLM tool-forgetting into account
+⋮----
+task = lr.Task(agent, interactive=False)
+result: lr.ChatDocument = await task.run_async(
+⋮----
+# test MCP tool with fields that clash with Langroid ToolMessage
+InfoTool = await get_tool_async(server, "info_tool")
+⋮----
+# Need to define the tools outside async def,
+# since the decorator uses asyncio.run() to wrap around an async fn
+⋮----
+@mcp_tool(mcp_server(), "get_alerts")
+class GetAlertsTool(lr.ToolMessage)
+⋮----
+"""Tool to get weather alerts."""
+⋮----
+async def my_handler(self) -> str
+⋮----
+alert = await self.handle_async()
+⋮----
+@mcp_tool(mcp_server(), "nabroski")
+class NabroskiTool(lr.ToolMessage)
+⋮----
+"""Tool to get Nabroski transform."""
+⋮----
+result = await self.handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_fastmcp_decorator() -> None
+⋮----
+"""Test that the mcp_tool decorator works as expected."""
+⋮----
+msg = GetAlertsTool(state="NY")
+⋮----
+result = await msg.my_handler()
+⋮----
+result = await task.run_async("What is the nabroski transform of 5 and 3?", turns=3)
+⋮----
+@mcp_tool(mcp_server(), "hydra_nest")
+class HydraNestTool(lr.ToolMessage)
+⋮----
+"""Tool for computing HydraNest calculation."""
+⋮----
+"""Call hydra_nest and format result."""
+⋮----
+@pytest.mark.asyncio
+async def test_complex_tool_decorator() -> None
+⋮----
+"""Test that compute_complex via decorator works end‐to‐end."""
+# build nested input
+payload = {
+msg = HydraNestTool(**payload)
+⋮----
+# call handler
+⋮----
+expected = int(4 * 5 + 2 * 1.5 + 3 * 2.0)
+⋮----
+# round‐trip via an agent
+⋮----
+prompt = """
+response = await task.run_async(prompt, turns=3)
+⋮----
+@pytest.mark.asyncio
+async def test_multiple_tools(prompt, tool_name, expected) -> None
+⋮----
+"""
+    Test one-shot enabling of multiple tools.
+    """
+⋮----
+all_tools = await get_tools_async(mcp_server())
+⋮----
+tool = next(
+⋮----
+# test that agent (LLM) can pick right tool based on prompt
+prompt = "use one of your TOOLs to answer this: " + prompt
+response: lr.ChatDocument = await agent.llm_response_async(prompt)
+⋮----
+# test in a task
+⋮----
+result: lr.ChatDocument = await task.run_async(prompt, turns=3)
+⋮----
+@pytest.mark.asyncio
+async def test_npxstdio_transport() -> None
+⋮----
+"""
+    Test that we can create Langroid ToolMessage from an MCP server
+    via npx stdio transport, for example the `exa-mcp-server`:
+    https://github.com/exa-labs/exa-mcp-server
+    """
+package_name = "exa-mcp-server"
+⋮----
+# Pre-check package availability to provide better error messages
+⋮----
+transport = NpxStdioTransport(
+# Add timeout to prevent hanging during npx package download/initialization
+⋮----
+tools = await asyncio.wait_for(get_tools_async(transport), timeout=60.0)
+⋮----
+# Catch other potential MCP/subprocess errors in CI environments
+⋮----
+# Re-raise if it's not a known npx/subprocess issue
+⋮----
+WebSearchTool = await get_tool_async(transport, "web_search_exa")
+⋮----
+# Note: we shouldn't have to explicitly beg the LLM to use the tool here
+# but I've found that even GPT-4o sometimes fails to use the tool
+question = """
+response = await agent.llm_response_async(question)
+⋮----
+result: lr.ChatDocument = await task.run_async(question, turns=3)
+⋮----
+transport = UvxStdioTransport(
+⋮----
+# `tool_name` is a misleading name -- it really refers to the
+# MCP server, which offers several tools
+⋮----
+@mcp_tool(transport, "git_status")
+class GitStatusTool(lr.ToolMessage)
+⋮----
+"""Tool to get git status."""
+⋮----
+async def handle_async(self) -> str
+⋮----
+"""
+        When defining a class explicitly with the @mcp_tool decorator,
+        we have the flexibility to define our own `handle_async` method
+        which calls the call_tool_async method, which in turn calls the
+        MCP server's call_tool method.
+        Returns:
+
+        """
+status = await self.call_tool_async()
+⋮----
+@pytest.mark.asyncio
+async def test_uvxstdio_transport() -> None
+⋮----
+"""
+    Test that we can create Langroid ToolMessage from an MCP server
+    via uvx stdio transport. We use this example `git` MCP server:
+    https://github.com/modelcontextprotocol/servers/tree/main/src/git
+    """
+tools = await get_tools_async(transport)
+⋮----
+GitStatusTool = await get_tool_async(transport, "git_status")
+⋮----
+response = await agent.llm_response_async(prompt)
+⋮----
+# test GitStatusTool created via @mcp_tool decorator
+⋮----
+@pytest.mark.asyncio
+async def test_npxstdio_transport_memory() -> None
+⋮----
+"""
+    Test that we can create Langroid ToolMessage from the `memory` MCP server
+    via npx stdio transport:
+    https://github.com/modelcontextprotocol/servers/tree/main/src/memory
+    """
+package_name = "@modelcontextprotocol/server-memory"
+⋮----
+task = lr.Task(agent, interactive=False, restart=False)
+⋮----
+@pytest.mark.asyncio
+async def test_persist_connection() -> None
+⋮----
+"""Test that persist_connection keeps the connection open between tool calls."""
+⋮----
+# Create client with persist_connection=True
+⋮----
+# First tool call - this should create and keep the connection open
+tool1 = await client.get_tool_async("add_beans")
+⋮----
+# Check that client connection is established
+⋮----
+initial_client = client.client
+⋮----
+# Second tool call - should reuse the same connection
+tool2 = await client.get_tool_async("get_num_beans")
+⋮----
+# Verify the same client connection was reused
+⋮----
+# Call the tools to ensure they work
+add_msg = tool1(x=5)
+result1 = await add_msg.handle_async()
+assert result1 == "5"  # handle_async returns string for backward compatibility
+⋮----
+get_msg = tool2()
+result2 = await get_msg.handle_async()
+assert result2 == "5"  # handle_async returns string for backward compatibility
+⋮----
+@pytest.mark.asyncio
+async def test_handle_async_with_images() -> None
+⋮----
+"""Test that response_async returns ChatDocument with file attachments."""
+# Create a mock server that returns image content
+server = FastMCP("ImageServer")
+⋮----
+@server.tool()
+    async def get_chart() -> List[TextContent | ImageContent]
+⋮----
+"""Get a chart with image."""
+⋮----
+data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",  # noqa: E501
+⋮----
+# Get the tool and test response_async
+⋮----
+ChartTool = await client.get_tool_async("get_chart")
+⋮----
+# Create a mock agent
+agent = lr.ChatAgent(lr.ChatAgentConfig())
+⋮----
+# Test response_async method
+chart_msg = ChartTool()
+response = await chart_msg.handle_async(agent)
+⋮----
+# Verify we got a ChatDocument
+⋮----
+# Verify we have file attachments in the files attribute
+⋮----
+# Verify the file is an image
+file = response.files[0]
+⋮----
+@pytest.mark.asyncio
+async def test_forward_text_resources() -> None
+⋮----
+"""Test that forward_text_resources setting works correctly."""
+⋮----
+server = FastMCP("TextResourceServer")
+⋮----
+# Test the _convert_tool_result method directly with mocked data
+⋮----
+# Create a mock CallToolResult with text and text resource
+mock_result = CallToolResult(
+⋮----
+# Test with forward_text_resources=True
+result = client._convert_tool_result("test_tool", mock_result)
+⋮----
+# Should include both the main text and the resource text
+⋮----
+# Test with forward_text_resources=False
+⋮----
+# Should only include the main text, not the resource text
+⋮----
+@pytest.mark.asyncio
+async def test_forward_blob_resources() -> None
+⋮----
+"""Test that forward_blob_resources setting works correctly."""
+⋮----
+server = FastMCP("BlobResourceServer")
+⋮----
+# Small PNG data (1x1 blue pixel)
+png_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD0lEQVR42mNkYPhfz/ADAAKAA4RkT4UVAAAAAElFTkSuQmCC"  # noqa: E501
+⋮----
+# Create a mock CallToolResult with text and blob resource
+⋮----
+# Test with forward_blob_resources=True
+⋮----
+# Should have text content and file attachment
+⋮----
+# Test with forward_blob_resources=False
+⋮----
+# Should only have text content, no file attachments
+</file>
+
 <file path="tests/main/test_task.py">
 """
 Other tests for Task are in test_chat_agent.py
@@ -55307,6 +56275,293 @@ sub_task2 = Task(agent, interactive=False, name="SubTask2")
 # Since original had no parent_id, it should be set to msg.id
 </file>
 
+<file path="tests/main/test_tool_handler.py">
+"""
+Test various handler method signatures for ToolMessage classes.
+Tests the new flexible handle method that can accept optional agent parameter.
+"""
+⋮----
+class HandleNoArgsMsg(ToolMessage)
+⋮----
+"""Tool with handle() method - no arguments"""
+⋮----
+request: str = "handle_no_args"
+purpose: str = "Test handle with no arguments"
+⋮----
+def handle(self) -> str
+⋮----
+class HandleChatDocMsg(ToolMessage)
+⋮----
+"""Tool with handle(chat_doc) method"""
+⋮----
+request: str = "handle_chat_doc"
+purpose: str = "Test handle with chat_doc"
+data: str
+⋮----
+def handle(self, chat_doc: ChatDocument) -> str
+⋮----
+# Actually use the chat_doc parameter
+⋮----
+class HandleAgentMsg(ToolMessage)
+⋮----
+"""Tool with handle(agent) method"""
+⋮----
+request: str = "handle_agent"
+purpose: str = "Test handle with agent"
+⋮----
+def handle(self, agent: ChatAgent) -> str
+⋮----
+class HandleAgentChatDocMsg(ToolMessage)
+⋮----
+"""Tool with handle(agent, chat_doc) method"""
+⋮----
+request: str = "handle_agent_chat_doc"
+purpose: str = "Test handle with agent and chat_doc"
+⋮----
+def handle(self, agent: ChatAgent, chat_doc: ChatDocument) -> str
+⋮----
+# Use both agent and chat_doc
+⋮----
+class HandleChatDocAgentMsg(ToolMessage)
+⋮----
+"""Tool with handle(chat_doc, agent) method - reversed order"""
+⋮----
+request: str = "handle_chat_doc_agent"
+purpose: str = "Test handle with chat_doc and agent in reverse order"
+⋮----
+def handle(self, chat_doc: ChatDocument, agent: ChatAgent) -> str
+⋮----
+# Use both parameters in the order they're defined
+⋮----
+class HandleNoAnnotationsMsg(ToolMessage)
+⋮----
+"""Tool with handle method but no type annotations - single param"""
+⋮----
+request: str = "handle_no_annotations"
+purpose: str = "Test handle without type annotations"
+⋮----
+def handle(self, chat_doc) -> str
+⋮----
+# Should fall back to duck typing - assume single arg is chat_doc
+# Access content attribute to verify it's actually a ChatDocument
+⋮----
+class HandleNoAnnotationsAgentMsg(ToolMessage)
+⋮----
+"""Tool with handle method expecting agent but no type annotations"""
+⋮----
+request: str = "handle_no_annotations_agent"
+purpose: str = "Test handle with agent but no annotations"
+⋮----
+def handle(self, agent) -> str
+⋮----
+# Parameter name 'agent' should be recognized even without annotations
+⋮----
+class HandleNoAnnotationsBothMsg(ToolMessage)
+⋮----
+"""Tool with handle method expecting both params but no type annotations"""
+⋮----
+request: str = "handle_no_annotations_both"
+purpose: str = "Test handle with both params but no annotations"
+⋮----
+def handle(self, agent, chat_doc) -> str
+⋮----
+# Parameter names 'agent' and 'chat_doc' should be recognized
+⋮----
+class HandleNoAnnotationsBothReversedMsg(ToolMessage)
+⋮----
+"""Tool with handle method with reversed parameter order but no type annotations"""
+⋮----
+request: str = "handle_no_annotations_both_reversed"
+purpose: str = "Test handle with reversed params but no annotations"
+⋮----
+def handle(self, chat_doc, agent) -> str
+⋮----
+# Parameter order should be respected based on names
+⋮----
+Foo = ChatDocument
+⋮----
+class Bar(ChatAgent)
+⋮----
+class HandleClassAnnotations(ToolMessage)
+⋮----
+"""
+    Tool with handle method with type annotations matched via
+    subclassing and non-standard self-parameter naming.
+    """
+⋮----
+request: str = "handle_class_annotations"
+purpose: str = "Test handle with annotations matched via subclassing."
+⋮----
+def handle(this, bar: Bar, foo: Foo)
+⋮----
+class HandleClassAnnotationsReversed(ToolMessage)
+⋮----
+"""
+    Tool with handle method with reversed parameter order and type
+    annotations matched via subclassing and non-standard
+    self-parameter naming.
+    """
+⋮----
+request: str = "handle_class_annotations_reversed"
+purpose: str = (
+⋮----
+def handle(this, foo: Foo, bar: Bar)
+⋮----
+class TestToolHandler
+⋮----
+"""Test the flexible tool handler extraction"""
+⋮----
+def test_handle_no_args(self)
+⋮----
+"""Test handle() with no arguments"""
+agent = ChatAgent(ChatAgentConfig())
+⋮----
+msg = HandleNoArgsMsg()
+result = agent.handle_no_args(msg)
+⋮----
+def test_handle_chat_doc(self)
+⋮----
+"""Test handle(chat_doc) with type annotation"""
+⋮----
+msg = HandleChatDocMsg(data="test data")
+chat_doc = agent.create_agent_response(content="test")
+result = agent.handle_chat_doc(msg, chat_doc)
+⋮----
+def test_handle_agent(self)
+⋮----
+"""Test handle(agent) with type annotation"""
+⋮----
+msg = HandleAgentMsg()
+result = agent.handle_agent(msg)
+⋮----
+def test_handle_agent_chat_doc(self)
+⋮----
+"""Test handle(agent, chat_doc) with type annotations"""
+⋮----
+msg = HandleAgentChatDocMsg(data="test data")
+⋮----
+result = agent.handle_agent_chat_doc(msg, chat_doc)
+⋮----
+def test_handle_chat_doc_agent(self)
+⋮----
+"""Test handle(chat_doc, agent) with reversed parameter order"""
+⋮----
+msg = HandleChatDocAgentMsg(data="test data")
+⋮----
+result = agent.handle_chat_doc_agent(msg, chat_doc)
+⋮----
+def test_handle_no_annotations(self)
+⋮----
+"""Test handle with no type annotations - should use duck typing"""
+⋮----
+msg = HandleNoAnnotationsMsg(data="test data")
+⋮----
+result = agent.handle_no_annotations(msg, chat_doc)
+⋮----
+def test_handle_no_annotations_agent(self)
+⋮----
+"""Test handle with agent param but no type annotations"""
+⋮----
+msg = HandleNoAnnotationsAgentMsg()
+# When called from agent, it won't pass chat_doc if the handler
+# only expects one parameter
+result = agent.handle_no_annotations_agent(msg)
+⋮----
+def test_handle_no_annotations_both(self)
+⋮----
+"""Test handle with both params but no type annotations"""
+⋮----
+msg = HandleNoAnnotationsBothMsg(data="test data")
+⋮----
+result = agent.handle_no_annotations_both(msg, chat_doc)
+⋮----
+def test_handle_no_annotations_both_reversed(self)
+⋮----
+"""Test handle with reversed params but no type annotations"""
+⋮----
+msg = HandleNoAnnotationsBothReversedMsg(data="test data")
+⋮----
+result = agent.handle_no_annotations_both_reversed(msg, chat_doc)
+⋮----
+def test_backward_compatibility(self)
+⋮----
+"""Test that existing tools with response() method still work"""
+⋮----
+# DoneTool uses response(agent) method
+msg = DoneTool(content="task complete")
+result = agent.done_tool(msg)
+⋮----
+def test_agent_response_with_tool_message(self)
+⋮----
+"""Test agent_response method with various tool messages"""
+⋮----
+# Create a tool message
+tool_msg = HandleAgentChatDocMsg(data="response test")
+⋮----
+# When using a handler that expects both agent and chat_doc,
+# we need to provide the tool message within a ChatDocument
+# so that chat_doc is available
+chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
+response = agent.agent_response(chat_doc)
+⋮----
+def test_agent_response_with_chat_document(self)
+⋮----
+"""Test agent_response with ChatDocument containing tool message"""
+⋮----
+tool_msg = HandleChatDocAgentMsg(data="chat doc test")
+⋮----
+# Create a ChatDocument with the tool message
+⋮----
+# Process through agent_response
+⋮----
+# Check that our handle method was called with both agent and chat_doc
+⋮----
+def test_agent_response_no_annotations(self)
+⋮----
+"""Test agent_response with handler that has no type annotations"""
+⋮----
+tool_msg = HandleNoAnnotationsBothMsg(data="no annotations test")
+⋮----
+# Since the handler expects both agent and chat_doc,
+# we need to provide it within a ChatDocument
+⋮----
+def test_agent_response_agent_only(self)
+⋮----
+"""Test agent_response with handler that only takes agent parameter"""
+⋮----
+tool_msg = HandleAgentMsg()
+⋮----
+# Test with tool message as JSON string
+json_msg = tool_msg.model_dump_json()
+response = agent.agent_response(json_msg)
+⋮----
+def test_agent_response_chat_doc_only(self)
+⋮----
+"""Test agent_response with handler that only takes chat_doc parameter"""
+⋮----
+tool_msg = HandleChatDocMsg(data="chat doc only test")
+⋮----
+# For handlers that only need chat_doc, we can pass as ChatDocument
+⋮----
+def test_agent_response_class_annotations(self)
+⋮----
+"""
+        Test agent_response with handler that requires annotation
+        processing via subclassing
+        """
+⋮----
+tool_msg = HandleClassAnnotations(data="class annotations test")
+⋮----
+def test_agent_response_class_annotations_reversed(self)
+⋮----
+"""
+        Test agent_response with handler that requires annotation
+        processing via subclassing and reversed order
+        """
+⋮----
+tool_msg = HandleClassAnnotationsReversed(
+</file>
+
 <file path=".gitignore">
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -55466,305 +56721,6 @@ test_minimal.py
 test_debug_full.py
 test_agent_difference.py
 test_isolated.py
-</file>
-
-<file path="CLAUDE.md">
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Commands
-
-### Development
-- Install core dependencies: `pip install -e .`
-- Install dev dependencies: `pip install -e ".[dev]"`
-- Install specific feature groups:
-  - Document chat features: `pip install -e ".[doc-chat]"`
-  - Database features: `pip install -e ".[db]"`
-  - HuggingFace embeddings: `pip install -e ".[hf-embeddings]"`
-  - All features: `pip install -e ".[all]"`
-- Run linting and type checking: `make check`
-- Format code: `make lint`
-
-### Testing
-- Run all tests: `pytest tests/`
-- Run specific test: `pytest tests/main/test_file.py::test_function`
-- Run tests with coverage: `pytest --cov=langroid tests/`
-- Run only main tests: `make tests` (uses `pytest tests/main`)
-
-### Linting and Type Checking
-- Lint code: `make check` (runs black, ruff check, mypy)
-- Format only: `make lint` (runs black and ruff fix)
-- Type check only: `make type-check`
-- Always use `make check` to run lints + mypy before trying to commit changes
-
-### Version and Release Management
-- Bump version: `./bump_version.sh [patch|minor|major]`
-- Or use make commands:
-  - `make all-patch` - Bump patch version, build, push, release
-  - `make all-minor` - Bump minor version, build, push, release
-  - `make all-major` - Bump major version, build, push, release
-
-## Architecture
-
-Langroid is a framework for building LLM-powered agents that can use tools and collaborate with each other.
-
-### Core Components:
-
-1. **Agents** (`langroid/agent/`):
-   - `chat_agent.py` - Base ChatAgent that can converse and use tools
-   - `task.py` - Handles execution flow for agents
-   - `special/` - Domain-specific agents (doc chat, table chat, SQL chat, etc.)
-   - `openai_assistant.py` - Integration with OpenAI Assistant API
-
-2. **Tools** (`langroid/agent/tools/`):
-   - Tool system for agents to interact with external systems
-   - `tool_message.py` - Protocol for tool messages
-   - Various search tools (Google, DuckDuckGo, Tavily, Exa, etc.)
-
-3. **Language Models** (`langroid/language_models/`):
-   - Abstract interfaces for different LLM providers
-   - Implementations for OpenAI, Azure, local models, etc.
-   - Support for hundreds of LLMs via LiteLLM
-
-4. **Vector Stores** (`langroid/vector_store/`):
-   - Abstract interface and implementations for different vector databases
-   - Includes support for Qdrant, Chroma, LanceDB, Pinecone, PGVector, Weaviate
-
-5. **Document Processing** (`langroid/parsing/`):
-   - Parse and process documents from various formats
-   - Chunk text for embedding and retrieval
-   - Support for PDF, DOCX, images, and more
-
-6. **Embedding Models** (`langroid/embedding_models/`):
-   - Abstract interface for embedding generation
-   - Support for OpenAI, HuggingFace, and custom embeddings
-
-### Key Multi-Agent Patterns:
-
-- **Task Delegation**: Agents can delegate tasks to other agents through hierarchical task structures
-- **Message Passing**: Agents communicate by transforming and passing messages
-- **Collaboration**: Multiple agents can work together on complex tasks
-
-### Key Security Features:
-
-- The `full_eval` flag in both `TableChatAgentConfig` and `VectorStoreConfig` controls code injection protection
-- Defaults to `False` for security, set to `True` only in trusted environments
-
-## Documentation
-
-- Main documentation is in the `docs/` directory
-- Examples in the `examples/` directory demonstrate usage patterns
-- Quick start examples available in `examples/quick-start/`
-
-## MCP (Model Context Protocol) Tools Integration
-
-Langroid provides comprehensive support for MCP tools through the `langroid.agent.tools.mcp` module. Here are the key patterns and approaches:
-
-### MCP Tool Creation Methods
-
-#### 1. Using the `@mcp_tool` Decorator (Module Level)
-```python
-from langroid.agent.tools.mcp import mcp_tool
-from fastmcp.client.transports import StdioTransport
-
-transport = StdioTransport(command="...", args=[...])
-
-@mcp_tool(transport, "tool_name")
-class MyTool(lr.ToolMessage):
-    async def handle_async(self):
-        result = await self.call_tool_async()
-        # custom processing
-        return result
-```
-
-**Important**: The decorator creates the transport connection at module import time, so it must be used at module level (not inside async functions).
-
-#### 2. Using `get_tool_async` (Inside Async Functions)
-```python
-from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
-
-async def main():
-    transport = StdioTransport(command="...", args=[...])
-    BaseTool = await get_tool_async(transport, "tool_name")
-    
-    class MyTool(BaseTool):
-        async def handle_async(self):
-            result = await self.call_tool_async()
-            # custom processing
-            return result
-```
-
-**Use this approach when**:
-- Creating tools inside async functions
-- Need to avoid event loop conflicts
-- Want to delay transport creation until runtime
-
-### Transport Types and Event Loop Considerations
-
-- **StdioTransport**: Creates subprocess immediately, can cause "event loop closed" errors if created at module level in certain contexts
-- **SSETransport**: HTTP-based, generally safer for module-level creation
-- **Best Practice**: Create transports inside async functions when possible, use `asyncio.run()` wrapper for Fire CLI integration
-
-### Tool Message Request Field and Agent Handlers
-
-When you get an MCP tool named "my_tool", Langroid automatically:
-
-1. **Sets the `request` field**: The dynamically created ToolMessage subclass has `request = "my_tool"`
-2. **Enables custom agent handlers**: Agents can define these methods:
-   - `my_tool()` - synchronous handler
-   - `my_tool_async()` - async handler
-
-The agent's message routing system automatically calls these handlers when the tool is used.
-
-### Custom `handle_async` Method Override
-
-Both decorator and non-decorator approaches support overriding `handle_async`:
-
-```python
-class MyTool(BaseTool):  # or use @mcp_tool decorator
-    async def handle_async(self):
-        # Get raw result from MCP server
-        result = await self.call_tool_async()
-        
-        # Option 1: Return processed result to LLM (continues conversation)
-        return f"<ProcessedResult>{result}</ProcessedResult>"
-        
-        # Option 2: Return ResultTool to terminate task
-        return MyResultTool(answer=result)
-```
-
-### Common Async Issues and Solutions
-
-**Problem**: "RuntimeError: asyncio.run() cannot be called from a running event loop"
-**Solution**: Use `get_tool_async` instead of `@mcp_tool` decorator when already in async context
-
-**Problem**: "RuntimeError: Event loop is closed"
-**Solution**: 
-- Move transport creation inside async functions
-- Use `asyncio.run()` wrapper for Fire CLI integration:
-```python
-if __name__ == "__main__":
-    import asyncio
-    def run_main(**kwargs):
-        asyncio.run(main(**kwargs))
-    Fire(run_main)
-```
-
-### MCP Tool Integration Examples
-
-See `examples/mcp/` for working examples:
-- `gitmcp.py` - HTTP-based SSE transport
-- `pyodide_code_executor.py` - Subprocess-based stdio transport with proper async handling
-
-## Testing and Tool Message Patterns
-
-### MockLM for Testing Tool Generation
-- Use `MockLM` with `response_dict` to simulate LLM responses that include tool messages
-- Set `tools=[ToolClass]` or `enable_message=[ToolClass]` on the agent to enable tool handling
-- The `try_get_tool_messages()` method can extract tool messages from LLM responses with `all_tools=True`
-
-### Task Termination Control
-- `TaskConfig` has `done_if_tool` parameter to terminate tasks when any tool is generated
-- `Task.done()` method checks `result.agent_response` for tool content when this flag is set
-- Useful for workflows where tool generation signals task completion
-
-### Testing Tool-Based Task Flows
-```python
-# Example: Test task termination on tool generation
-config = TaskConfig(done_if_tool=True)
-task = Task(agent, config=config)
-response_dict = {"content": '{"request": "my_tool", "param": "value"}'}
-```
-
-## Multi-Agent System Development
-
-### Important Patterns and Best Practices
-
-#### 1. Pydantic Imports
-**ALWAYS import Pydantic classes from `langroid.pydantic_v1`**, not from `pydantic` directly:
-```python
-# CORRECT
-from langroid.pydantic_v1 import Field, BaseModel
-
-# WRONG - will cause issues
-from pydantic import Field, BaseModel
-```
-
-#### 2. Tool Name References in System Messages
-When referencing tool names in f-strings within system messages, use the `.name()` method:
-```python
-system_message: str = f"""
-Use {MyTool.name()} to perform the action.
-"""
-```
-This works at module level in configs, but be aware that complex initialization at module level can sometimes cause issues.
-
-#### 3. Agent Configuration with LLM
-Always specify the LLM configuration explicitly in agent configs:
-```python
-class MyAgentConfig(lr.ChatAgentConfig):
-    name: str = "MyAgent"
-    llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
-        chat_model="gpt-4",  # or "gpt-4.1" etc.
-    )
-    system_message: str = "..."
-```
-
-#### 4. Tool Organization in Multi-Agent Systems
-When tools delegate to agents:
-- Define agent configs and agents BEFORE the tools that use them
-- Tools can directly instantiate agents in their `handle()` methods:
-```python
-class MyTool(lr.ToolMessage):
-    def handle(self) -> str:
-        agent = MyAgent(MyAgentConfig())
-        task = lr.Task(agent, interactive=False)
-        result = task.run(prompt)
-        return result.content
-```
-
-#### 5. Task Termination with Done Sequences
-Use `done_sequences` for precise task termination control:
-```python
-# For a task that should complete after: Tool -> Agent handles -> LLM responds
-task = lr.Task(
-    agent,
-    interactive=False,
-    config=lr.TaskConfig(done_sequences=["T,A,L"]),
-)
-```
-
-Common patterns:
-- `"T,A"` - Tool used and handled by agent
-- `"T,A,L"` - Tool used, handled, then LLM responds
-- `"T[specific_tool],A"` - Specific tool used and handled
-
-See `docs/notes/task-termination.md` for comprehensive documentation.
-
-#### 6. Handling Non-Tool LLM Responses
-Use `handle_llm_no_tool` in agent configs to handle cases where the LLM forgets to use a tool:
-```python
-class MyAgentConfig(lr.ChatAgentConfig):
-    handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
-```
-
-#### 7. Agent Method Parameters
-Note that `ChatAgentConfig` does not have a `use_tools` parameter. Instead, enable tools on the agent after creation:
-```python
-agent = MyAgent(config)
-agent.enable_message([Tool1, Tool2, Tool3])  # Pass list of tool classes
-```
-
-## Commit and Pull Request Guidelines
-
-- Never include "co-authored by Claude Code" or "created by Claude" in commit messages or pull request descriptions
-
-## Codecov Badge Fix (June 2025)
-
-- Fixed broken Codecov badge in README by removing the token parameter from the URL
-- Changed from `https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE` to `https://codecov.io/gh/langroid/langroid/graph/badge.svg`
-- Tokens are not needed for public repositories and can cause GitHub rendering issues
 </file>
 
 <file path="docs/notes/task-termination.md">
@@ -56753,791 +57709,6 @@ crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
 def load(self) -> List[Document]
 ⋮----
 """Load the URLs using the specified crawler."""
-</file>
-
-<file path="tests/main/test_mcp_tools.py">
-# note we use pydantic v2 to define MCP server
-from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
-⋮----
-async def check_npx_package_availability(package: str, timeout: float = 10.0) -> bool
-⋮----
-"""
-    Check if an npx package is available without actually starting the MCP server.
-    This helps avoid ProcessLookupError by detecting package issues early.
-
-    Args:
-        package: The npm package name to check
-        timeout: Timeout for the check operation
-
-    Returns:
-        True if package appears to be available, False otherwise
-    """
-⋮----
-# Try to check if the package exists using npm info
-result = await asyncio.wait_for(
-⋮----
-# If npm info succeeds, the package exists
-⋮----
-# Check for specific "not found" errors in stderr
-stderr_text = stderr.decode() if stderr else ""
-⋮----
-# For other errors, assume availability issues but not necessarily missing
-⋮----
-# On any error (timeout, process issues, etc.), assume not available
-⋮----
-class SubItem(BaseModel)
-⋮----
-"""A sub‐item with a value and multiplier."""
-⋮----
-val: int = Field(..., description="Value for sub-item")
-multiplier: float = Field(1.0, description="Multiplier applied to val")
-⋮----
-class ComplexData(BaseModel)
-⋮----
-"""Complex data combining two ints and a list of SubItem."""
-⋮----
-a: int = Field(..., description="First integer")
-b: int = Field(..., description="Second integer")
-items: List[SubItem] = Field(..., description="List of sub-items")
-⋮----
-def mcp_server()
-⋮----
-server = FastMCP("TestServer")
-⋮----
-class Counter
-⋮----
-def __init__(self) -> None
-⋮----
-def get_num_beans(self) -> int
-⋮----
-"""Return current counter."""
-⋮----
-"""Increment and return new counter."""
-⋮----
-# create a stateful tool
-counter = Counter()
-# we can't directly use the tool decorator on instance methods,
-# so we use the server.add_tool() method to add the tool
-⋮----
-# example of tool that uses an arg of type Context, and
-# uses this arg to request client LLM sampling, and send logs
-⋮----
-@server.tool()
-    async def prime_check(number: int, ctx: Context) -> str
-⋮----
-"""
-        Determine if the given number is Prime or not.
-        """
-result: TextContent | ImageContent = await ctx.sample(
-⋮----
-@server.tool()
-    def greet(person: str) -> str
-⋮----
-"""Get weather alerts for a state."""
-⋮----
-# example of MCP tool whose fields clash with Langroid ToolMessage,
-# and a `name` field which is reserved by pydantic
-⋮----
-"""Get information for a recipient."""
-⋮----
-@server.tool()
-    async def get_alerts_async(state: str) -> list[str]
-⋮----
-@server.tool()
-    def nabroski(a: int, b: int) -> int
-⋮----
-"""Computes the Nabroski transform of integers a and b."""
-⋮----
-@server.tool()
-    def coriolis(x: int, y: int) -> int
-⋮----
-"""Computes the Coriolis transform of integers x and y."""
-⋮----
-@server.tool()
-    def hydra_nest(data: ComplexData) -> int
-⋮----
-"""Compute the HydraNest calculation over nested data."""
-total = data.a * data.b
-⋮----
-async def test_get_tools_and_handle(server: FastMCP | str) -> None
-⋮----
-"""End‐to‐end test for get_tools and .handle() against server."""
-tools = await get_tools_async(server)
-# basic sanity
-⋮----
-# find the alerts tool
-AlertsTool = next(
-⋮----
-# test get_mcp_tool_async
-AlertsMCPTool: Tool = await get_mcp_tool_async(server, "get_alerts")
-⋮----
-AlertsTool = await get_tool_async(server, AlertsMCPTool.name)
-⋮----
-# instantiate Langroid ToolMessage
-msg = AlertsTool(state="NY")
-⋮----
-# invoke the tool via the Langroid ToolMessage.handle() method -
-# this produces list of weather alerts for the given state
-# Note MCP tools can return either ResultToolType or List[ResultToolType]
-result: Optional[str] = await msg.handle_async()
-⋮----
-# make tool from async FastMCP tool
-AlertsMCPToolAsync = await get_mcp_tool_async(server, "get_alerts_async")
-⋮----
-AlertsToolAsync = await get_tool_async(server, AlertsMCPToolAsync.name)
-⋮----
-msg = AlertsToolAsync(state="NY")
-⋮----
-# invoke the tool via the Langroid ToolMessage.handle_async() method -
-⋮----
-# test making tool with utility functions
-AlertsTool = await get_tool_async(server, "get_alerts")
-⋮----
-@pytest.mark.asyncio
-async def test_tools_connect_close(server: str | FastMCP) -> None
-⋮----
-"""Test that we can use connect()... tool-calls ... close()"""
-⋮----
-client = FastMCPClient(server)
-⋮----
-mcp_tools = await client.client.list_tools()
-⋮----
-langroid_tool_classes = await client.get_tools_async()
-⋮----
-AlertsMCPTool = await get_mcp_tool_async(server, "get_alerts")
-⋮----
-result = await msg.handle_async()
-⋮----
-@pytest.mark.asyncio
-async def test_stateful_tool() -> None
-⋮----
-# instantiate the server
-server = mcp_server()
-⋮----
-# get tools from the SAME instance of the server
-AddBeansTool = await get_tool_async(server, "add_beans")
-⋮----
-GetNumBeansTool = await get_tool_async(server, "get_num_beans")
-⋮----
-add_beans_msg = AddBeansTool(x=5)
-⋮----
-result = await add_beans_msg.handle_async()
-⋮----
-get_num_beans_msg = GetNumBeansTool()
-⋮----
-result = await get_num_beans_msg.handle_async()
-⋮----
-@pytest.mark.asyncio
-async def test_tool_with_context_and_sampling() -> None
-⋮----
-"""Handle a sampling request from server"""
-# simulate an LLM call
-⋮----
-PrimeCheckTool = await get_tool_async(
-⋮----
-# assert that "ctx" is NOT a field in the tool
-⋮----
-prime_check_msg = PrimeCheckTool(number=7)
-⋮----
-result = await prime_check_msg.handle_async()
-⋮----
-@pytest.mark.asyncio
-async def test_mcp_tool_schemas() -> None
-⋮----
-"""
-    Test that descriptions, field-descriptions of MCP tools are preserved
-    when we translate them to Langroid ToolMessage classes. This is important
-    since the LLM is shown these, and helps with tool-call accuracy.
-    """
-# make a langroid AlertsTool from the corresponding MCP tool
-AlertsTool = await get_tool_async(mcp_server(), "get_alerts")
-⋮----
-description = "Get weather alerts for a state."
-⋮----
-schema: lm.LLMFunctionSpec = AlertsTool.llm_function_schema()
-⋮----
-InfoTool = await get_tool_async(mcp_server(), "info_tool")
-⋮----
-description = "Get information for a recipient."
-⋮----
-# instantiate InfoTool
-msg = InfoTool(
-⋮----
-# call the tool
-⋮----
-@pytest.mark.asyncio
-async def test_single_output() -> None
-⋮----
-"""Test that a tool with a single string output works
-    similarly to one that has a list of strings outputs."""
-⋮----
-OneAlertTool = await get_tool_async(mcp_server(), "get_one_alert")
-⋮----
-msg = OneAlertTool(state="NY")
-⋮----
-# we expect a list containing a single str
-⋮----
-@pytest.mark.asyncio
-async def test_agent_mcp_tools() -> None
-⋮----
-"""Test that a Langroid ChatAgent can use and handle MCP tools."""
-⋮----
-agent = lr.ChatAgent(
-⋮----
-NabroskiTool: lr.ToolMessage = await get_tool_async(server, "nabroski")
-⋮----
-response: lr.ChatDocument = await agent.llm_response_async(
-tools = agent.get_tool_messages(response)
-⋮----
-result: lr.ChatDocument = await agent.agent_response_async(response)
-# TODO assert needs to take LLM tool-forgetting into account
-⋮----
-task = lr.Task(agent, interactive=False)
-result: lr.ChatDocument = await task.run_async(
-⋮----
-# test MCP tool with fields that clash with Langroid ToolMessage
-InfoTool = await get_tool_async(server, "info_tool")
-⋮----
-# Need to define the tools outside async def,
-# since the decorator uses asyncio.run() to wrap around an async fn
-⋮----
-@mcp_tool(mcp_server(), "get_alerts")
-class GetAlertsTool(lr.ToolMessage)
-⋮----
-"""Tool to get weather alerts."""
-⋮----
-async def my_handler(self) -> str
-⋮----
-alert = await self.handle_async()
-⋮----
-@mcp_tool(mcp_server(), "nabroski")
-class NabroskiTool(lr.ToolMessage)
-⋮----
-"""Tool to get Nabroski transform."""
-⋮----
-result = await self.handle_async()
-⋮----
-@pytest.mark.asyncio
-async def test_fastmcp_decorator() -> None
-⋮----
-"""Test that the mcp_tool decorator works as expected."""
-⋮----
-msg = GetAlertsTool(state="NY")
-⋮----
-result = await msg.my_handler()
-⋮----
-result = await task.run_async("What is the nabroski transform of 5 and 3?", turns=3)
-⋮----
-@mcp_tool(mcp_server(), "hydra_nest")
-class HydraNestTool(lr.ToolMessage)
-⋮----
-"""Tool for computing HydraNest calculation."""
-⋮----
-"""Call hydra_nest and format result."""
-⋮----
-@pytest.mark.asyncio
-async def test_complex_tool_decorator() -> None
-⋮----
-"""Test that compute_complex via decorator works end‐to‐end."""
-# build nested input
-payload = {
-msg = HydraNestTool(**payload)
-⋮----
-# call handler
-⋮----
-expected = int(4 * 5 + 2 * 1.5 + 3 * 2.0)
-⋮----
-# round‐trip via an agent
-⋮----
-prompt = """
-response = await task.run_async(prompt, turns=3)
-⋮----
-@pytest.mark.asyncio
-async def test_multiple_tools(prompt, tool_name, expected) -> None
-⋮----
-"""
-    Test one-shot enabling of multiple tools.
-    """
-⋮----
-all_tools = await get_tools_async(mcp_server())
-⋮----
-tool = next(
-⋮----
-# test that agent (LLM) can pick right tool based on prompt
-prompt = "use one of your TOOLs to answer this: " + prompt
-response: lr.ChatDocument = await agent.llm_response_async(prompt)
-⋮----
-# test in a task
-⋮----
-result: lr.ChatDocument = await task.run_async(prompt, turns=3)
-⋮----
-@pytest.mark.asyncio
-async def test_npxstdio_transport() -> None
-⋮----
-"""
-    Test that we can create Langroid ToolMessage from an MCP server
-    via npx stdio transport, for example the `exa-mcp-server`:
-    https://github.com/exa-labs/exa-mcp-server
-    """
-package_name = "exa-mcp-server"
-⋮----
-# Pre-check package availability to provide better error messages
-⋮----
-transport = NpxStdioTransport(
-# Add timeout to prevent hanging during npx package download/initialization
-⋮----
-tools = await asyncio.wait_for(get_tools_async(transport), timeout=60.0)
-⋮----
-# Catch other potential MCP/subprocess errors in CI environments
-⋮----
-# Re-raise if it's not a known npx/subprocess issue
-⋮----
-WebSearchTool = await get_tool_async(transport, "web_search_exa")
-⋮----
-# Note: we shouldn't have to explicitly beg the LLM to use the tool here
-# but I've found that even GPT-4o sometimes fails to use the tool
-question = """
-response = await agent.llm_response_async(question)
-⋮----
-result: lr.ChatDocument = await task.run_async(question, turns=3)
-⋮----
-transport = UvxStdioTransport(
-⋮----
-# `tool_name` is a misleading name -- it really refers to the
-# MCP server, which offers several tools
-⋮----
-@mcp_tool(transport, "git_status")
-class GitStatusTool(lr.ToolMessage)
-⋮----
-"""Tool to get git status."""
-⋮----
-async def handle_async(self) -> str
-⋮----
-"""
-        When defining a class explicitly with the @mcp_tool decorator,
-        we have the flexibility to define our own `handle_async` method
-        which calls the call_tool_async method, which in turn calls the
-        MCP server's call_tool method.
-        Returns:
-
-        """
-status = await self.call_tool_async()
-⋮----
-@pytest.mark.asyncio
-async def test_uvxstdio_transport() -> None
-⋮----
-"""
-    Test that we can create Langroid ToolMessage from an MCP server
-    via uvx stdio transport. We use this example `git` MCP server:
-    https://github.com/modelcontextprotocol/servers/tree/main/src/git
-    """
-tools = await get_tools_async(transport)
-⋮----
-GitStatusTool = await get_tool_async(transport, "git_status")
-⋮----
-response = await agent.llm_response_async(prompt)
-⋮----
-# test GitStatusTool created via @mcp_tool decorator
-⋮----
-@pytest.mark.asyncio
-async def test_npxstdio_transport_memory() -> None
-⋮----
-"""
-    Test that we can create Langroid ToolMessage from the `memory` MCP server
-    via npx stdio transport:
-    https://github.com/modelcontextprotocol/servers/tree/main/src/memory
-    """
-package_name = "@modelcontextprotocol/server-memory"
-⋮----
-task = lr.Task(agent, interactive=False, restart=False)
-⋮----
-@pytest.mark.asyncio
-async def test_persist_connection() -> None
-⋮----
-"""Test that persist_connection keeps the connection open between tool calls."""
-⋮----
-# Create client with persist_connection=True
-⋮----
-# First tool call - this should create and keep the connection open
-tool1 = await client.get_tool_async("add_beans")
-⋮----
-# Check that client connection is established
-⋮----
-initial_client = client.client
-⋮----
-# Second tool call - should reuse the same connection
-tool2 = await client.get_tool_async("get_num_beans")
-⋮----
-# Verify the same client connection was reused
-⋮----
-# Call the tools to ensure they work
-add_msg = tool1(x=5)
-result1 = await add_msg.handle_async()
-assert result1 == "5"  # handle_async returns string for backward compatibility
-⋮----
-get_msg = tool2()
-result2 = await get_msg.handle_async()
-assert result2 == "5"  # handle_async returns string for backward compatibility
-⋮----
-@pytest.mark.asyncio
-async def test_handle_async_with_images() -> None
-⋮----
-"""Test that response_async returns ChatDocument with file attachments."""
-# Create a mock server that returns image content
-server = FastMCP("ImageServer")
-⋮----
-@server.tool()
-    async def get_chart() -> List[TextContent | ImageContent]
-⋮----
-"""Get a chart with image."""
-⋮----
-data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",  # noqa: E501
-⋮----
-# Get the tool and test response_async
-⋮----
-ChartTool = await client.get_tool_async("get_chart")
-⋮----
-# Create a mock agent
-agent = lr.ChatAgent(lr.ChatAgentConfig())
-⋮----
-# Test response_async method
-chart_msg = ChartTool()
-response = await chart_msg.handle_async(agent)
-⋮----
-# Verify we got a ChatDocument
-⋮----
-# Verify we have file attachments in the files attribute
-⋮----
-# Verify the file is an image
-file = response.files[0]
-⋮----
-@pytest.mark.asyncio
-async def test_forward_text_resources() -> None
-⋮----
-"""Test that forward_text_resources setting works correctly."""
-⋮----
-server = FastMCP("TextResourceServer")
-⋮----
-# Test the _convert_tool_result method directly with mocked data
-⋮----
-# Create a mock CallToolResult with text and text resource
-mock_result = CallToolResult(
-⋮----
-# Test with forward_text_resources=True
-result = client._convert_tool_result("test_tool", mock_result)
-⋮----
-# Should include both the main text and the resource text
-⋮----
-# Test with forward_text_resources=False
-⋮----
-# Should only include the main text, not the resource text
-⋮----
-@pytest.mark.asyncio
-async def test_forward_blob_resources() -> None
-⋮----
-"""Test that forward_blob_resources setting works correctly."""
-⋮----
-server = FastMCP("BlobResourceServer")
-⋮----
-# Small PNG data (1x1 blue pixel)
-png_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD0lEQVR42mNkYPhfz/ADAAKAA4RkT4UVAAAAAElFTkSuQmCC"  # noqa: E501
-⋮----
-# Create a mock CallToolResult with text and blob resource
-⋮----
-# Test with forward_blob_resources=True
-⋮----
-# Should have text content and file attachment
-⋮----
-# Test with forward_blob_resources=False
-⋮----
-# Should only have text content, no file attachments
-</file>
-
-<file path="tests/main/test_tool_handler.py">
-"""
-Test various handler method signatures for ToolMessage classes.
-Tests the new flexible handle method that can accept optional agent parameter.
-"""
-⋮----
-class HandleNoArgsMsg(ToolMessage)
-⋮----
-"""Tool with handle() method - no arguments"""
-⋮----
-request: str = "handle_no_args"
-purpose: str = "Test handle with no arguments"
-⋮----
-def handle(self) -> str
-⋮----
-class HandleChatDocMsg(ToolMessage)
-⋮----
-"""Tool with handle(chat_doc) method"""
-⋮----
-request: str = "handle_chat_doc"
-purpose: str = "Test handle with chat_doc"
-data: str
-⋮----
-def handle(self, chat_doc: ChatDocument) -> str
-⋮----
-# Actually use the chat_doc parameter
-⋮----
-class HandleAgentMsg(ToolMessage)
-⋮----
-"""Tool with handle(agent) method"""
-⋮----
-request: str = "handle_agent"
-purpose: str = "Test handle with agent"
-⋮----
-def handle(self, agent: ChatAgent) -> str
-⋮----
-class HandleAgentChatDocMsg(ToolMessage)
-⋮----
-"""Tool with handle(agent, chat_doc) method"""
-⋮----
-request: str = "handle_agent_chat_doc"
-purpose: str = "Test handle with agent and chat_doc"
-⋮----
-def handle(self, agent: ChatAgent, chat_doc: ChatDocument) -> str
-⋮----
-# Use both agent and chat_doc
-⋮----
-class HandleChatDocAgentMsg(ToolMessage)
-⋮----
-"""Tool with handle(chat_doc, agent) method - reversed order"""
-⋮----
-request: str = "handle_chat_doc_agent"
-purpose: str = "Test handle with chat_doc and agent in reverse order"
-⋮----
-def handle(self, chat_doc: ChatDocument, agent: ChatAgent) -> str
-⋮----
-# Use both parameters in the order they're defined
-⋮----
-class HandleNoAnnotationsMsg(ToolMessage)
-⋮----
-"""Tool with handle method but no type annotations - single param"""
-⋮----
-request: str = "handle_no_annotations"
-purpose: str = "Test handle without type annotations"
-⋮----
-def handle(self, chat_doc) -> str
-⋮----
-# Should fall back to duck typing - assume single arg is chat_doc
-# Access content attribute to verify it's actually a ChatDocument
-⋮----
-class HandleNoAnnotationsAgentMsg(ToolMessage)
-⋮----
-"""Tool with handle method expecting agent but no type annotations"""
-⋮----
-request: str = "handle_no_annotations_agent"
-purpose: str = "Test handle with agent but no annotations"
-⋮----
-def handle(self, agent) -> str
-⋮----
-# Parameter name 'agent' should be recognized even without annotations
-⋮----
-class HandleNoAnnotationsBothMsg(ToolMessage)
-⋮----
-"""Tool with handle method expecting both params but no type annotations"""
-⋮----
-request: str = "handle_no_annotations_both"
-purpose: str = "Test handle with both params but no annotations"
-⋮----
-def handle(self, agent, chat_doc) -> str
-⋮----
-# Parameter names 'agent' and 'chat_doc' should be recognized
-⋮----
-class HandleNoAnnotationsBothReversedMsg(ToolMessage)
-⋮----
-"""Tool with handle method with reversed parameter order but no type annotations"""
-⋮----
-request: str = "handle_no_annotations_both_reversed"
-purpose: str = "Test handle with reversed params but no annotations"
-⋮----
-def handle(self, chat_doc, agent) -> str
-⋮----
-# Parameter order should be respected based on names
-⋮----
-Foo = ChatDocument
-⋮----
-class Bar(ChatAgent)
-⋮----
-class HandleClassAnnotations(ToolMessage)
-⋮----
-"""
-    Tool with handle method with type annotations matched via
-    subclassing and non-standard self-parameter naming.
-    """
-⋮----
-request: str = "handle_class_annotations"
-purpose: str = "Test handle with annotations matched via subclassing."
-⋮----
-def handle(this, bar: Bar, foo: Foo)
-⋮----
-class HandleClassAnnotationsReversed(ToolMessage)
-⋮----
-"""
-    Tool with handle method with reversed parameter order and type
-    annotations matched via subclassing and non-standard
-    self-parameter naming.
-    """
-⋮----
-request: str = "handle_class_annotations_reversed"
-purpose: str = (
-⋮----
-def handle(this, foo: Foo, bar: Bar)
-⋮----
-class TestToolHandler
-⋮----
-"""Test the flexible tool handler extraction"""
-⋮----
-def test_handle_no_args(self)
-⋮----
-"""Test handle() with no arguments"""
-agent = ChatAgent(ChatAgentConfig())
-⋮----
-msg = HandleNoArgsMsg()
-result = agent.handle_no_args(msg)
-⋮----
-def test_handle_chat_doc(self)
-⋮----
-"""Test handle(chat_doc) with type annotation"""
-⋮----
-msg = HandleChatDocMsg(data="test data")
-chat_doc = agent.create_agent_response(content="test")
-result = agent.handle_chat_doc(msg, chat_doc)
-⋮----
-def test_handle_agent(self)
-⋮----
-"""Test handle(agent) with type annotation"""
-⋮----
-msg = HandleAgentMsg()
-result = agent.handle_agent(msg)
-⋮----
-def test_handle_agent_chat_doc(self)
-⋮----
-"""Test handle(agent, chat_doc) with type annotations"""
-⋮----
-msg = HandleAgentChatDocMsg(data="test data")
-⋮----
-result = agent.handle_agent_chat_doc(msg, chat_doc)
-⋮----
-def test_handle_chat_doc_agent(self)
-⋮----
-"""Test handle(chat_doc, agent) with reversed parameter order"""
-⋮----
-msg = HandleChatDocAgentMsg(data="test data")
-⋮----
-result = agent.handle_chat_doc_agent(msg, chat_doc)
-⋮----
-def test_handle_no_annotations(self)
-⋮----
-"""Test handle with no type annotations - should use duck typing"""
-⋮----
-msg = HandleNoAnnotationsMsg(data="test data")
-⋮----
-result = agent.handle_no_annotations(msg, chat_doc)
-⋮----
-def test_handle_no_annotations_agent(self)
-⋮----
-"""Test handle with agent param but no type annotations"""
-⋮----
-msg = HandleNoAnnotationsAgentMsg()
-# When called from agent, it won't pass chat_doc if the handler
-# only expects one parameter
-result = agent.handle_no_annotations_agent(msg)
-⋮----
-def test_handle_no_annotations_both(self)
-⋮----
-"""Test handle with both params but no type annotations"""
-⋮----
-msg = HandleNoAnnotationsBothMsg(data="test data")
-⋮----
-result = agent.handle_no_annotations_both(msg, chat_doc)
-⋮----
-def test_handle_no_annotations_both_reversed(self)
-⋮----
-"""Test handle with reversed params but no type annotations"""
-⋮----
-msg = HandleNoAnnotationsBothReversedMsg(data="test data")
-⋮----
-result = agent.handle_no_annotations_both_reversed(msg, chat_doc)
-⋮----
-def test_backward_compatibility(self)
-⋮----
-"""Test that existing tools with response() method still work"""
-⋮----
-# DoneTool uses response(agent) method
-msg = DoneTool(content="task complete")
-result = agent.done_tool(msg)
-⋮----
-def test_agent_response_with_tool_message(self)
-⋮----
-"""Test agent_response method with various tool messages"""
-⋮----
-# Create a tool message
-tool_msg = HandleAgentChatDocMsg(data="response test")
-⋮----
-# When using a handler that expects both agent and chat_doc,
-# we need to provide the tool message within a ChatDocument
-# so that chat_doc is available
-chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
-response = agent.agent_response(chat_doc)
-⋮----
-def test_agent_response_with_chat_document(self)
-⋮----
-"""Test agent_response with ChatDocument containing tool message"""
-⋮----
-tool_msg = HandleChatDocAgentMsg(data="chat doc test")
-⋮----
-# Create a ChatDocument with the tool message
-⋮----
-# Process through agent_response
-⋮----
-# Check that our handle method was called with both agent and chat_doc
-⋮----
-def test_agent_response_no_annotations(self)
-⋮----
-"""Test agent_response with handler that has no type annotations"""
-⋮----
-tool_msg = HandleNoAnnotationsBothMsg(data="no annotations test")
-⋮----
-# Since the handler expects both agent and chat_doc,
-# we need to provide it within a ChatDocument
-⋮----
-def test_agent_response_agent_only(self)
-⋮----
-"""Test agent_response with handler that only takes agent parameter"""
-⋮----
-tool_msg = HandleAgentMsg()
-⋮----
-# Test with tool message as JSON string
-json_msg = tool_msg.model_dump_json()
-response = agent.agent_response(json_msg)
-⋮----
-def test_agent_response_chat_doc_only(self)
-⋮----
-"""Test agent_response with handler that only takes chat_doc parameter"""
-⋮----
-tool_msg = HandleChatDocMsg(data="chat doc only test")
-⋮----
-# For handlers that only need chat_doc, we can pass as ChatDocument
-⋮----
-def test_agent_response_class_annotations(self)
-⋮----
-"""
-        Test agent_response with handler that requires annotation
-        processing via subclassing
-        """
-⋮----
-tool_msg = HandleClassAnnotations(data="class annotations test")
-⋮----
-def test_agent_response_class_annotations_reversed(self)
-⋮----
-"""
-        Test agent_response with handler that requires annotation
-        processing via subclassing and reversed order
-        """
-⋮----
-tool_msg = HandleClassAnnotationsReversed(
 </file>
 
 <file path="Makefile">
@@ -59114,15 +59285,6 @@ tools=["NONE"],  # Disable all tools except DoneTool
 result = task.run(msg="Test no tools")
 ⋮----
 # Verify that the task completed (sub-agent can still use DoneTool)
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.12.10
-  hooks:
-    - id: ruff
 </file>
 
 <file path="README.md">
@@ -61484,6 +61646,15 @@ matched = False
 matched = True
 </file>
 
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.12.10
+  hooks:
+    - id: ruff
+</file>
+
 <file path="langroid/agent/base.py">
 ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
 console = Console(quiet=settings.quiet)
@@ -62571,6 +62742,193 @@ user_response = Prompt.ask(
 answer = agent.llm_response(request)
 </file>
 
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+</file>
+
 <file path="langroid/language_models/openai_gpt.py">
 OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
 ⋮----
@@ -62723,25 +63081,15 @@ def with_warning() -> None
 model_config = SettingsConfigDict(env_prefix="OPENAI_")
 ⋮----
 """
-        Override model_copy to handle unpicklable fields properly.
+        Copy config while preserving nested model instances and subclasses.
 
-        This preserves fields like http_client_factory during normal copying
-        while still allowing exclusion for pickling operations.
+        Important: Avoid reconstructing via `model_dump` as that coerces nested
+        models to their annotated base types (dropping subclass-only fields).
+        Instead, defer to Pydantic's native `model_copy`, which keeps nested
+        `BaseModel` instances (and their concrete subclasses) intact.
         """
-# Save references to unpicklable fields
-http_client_factory = self.http_client_factory
-streamer = self.streamer
-streamer_async = self.streamer_async
-⋮----
-# Get the current model data, excluding problematic fields
-data = self.model_dump(
-⋮----
-# Apply any updates
-⋮----
-# Create a new instance with the copied data
-new_instance = self.__class__(**data)
-⋮----
-# Restore the unpicklable fields if they weren't overridden by update
+# Delegate to BaseSettings/BaseModel implementation to preserve types
+return super().model_copy(update=update, deep=deep)  # type: ignore[return-value]
 ⋮----
 def _validate_litellm(self) -> None
 ⋮----
@@ -62806,8 +63154,9 @@ def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig())
         Args:
             config: configuration for openai-gpt model
         """
-# copy the config to avoid modifying the original
-config = config.model_copy()
+# copy the config to avoid modifying the original; deep to decouple
+# nested models while preserving their concrete subclasses
+config = config.model_copy(deep=True)
 ⋮----
 # save original model name such as `provider/model` before
 # we strip out the `provider` - we retain the original in
@@ -63547,197 +63896,10 @@ response_dict = response.model_dump()
 cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.2"
+version = "0.59.4"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
