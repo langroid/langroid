@@ -2230,7 +2230,7 @@ wheels = [
 
 [[package]]
 name = "htmldate"
-version = "1.8.1"
+version = "1.9.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "charset-normalizer" },
@@ -2239,9 +2239,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cd/71/ac70cf10ea9b58414a0d8d32593f916ab83e0d9d28c95e91879d26cffd0d/htmldate-1.8.1.tar.gz", hash = "sha256:caf1686cf75c61dd1f061ede5d7a46e759b15d5f9987cd8e13c8c4237511263d", size = 45080 }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/26/aaae4cab984f0b7dd0f5f1b823fa2ed2fd4a2bb50acd5bd2f0d217562678/htmldate-1.9.3.tar.gz", hash = "sha256:ac0caf4628c3ded4042011e2d60dc68dfb314c77b106587dd307a80d77e708e9", size = 44913 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/6b/a52c2e6592d37b374c0c4913bca1a3771c262061a7d7fba354874ca9af70/htmldate-1.8.1-py3-none-any.whl", hash = "sha256:b1209dedfa7bc9bb4d0b812a3f0983ea5d39f1bdfe21745659ad26af4f8b7f32", size = 31831 },
+    { url = "https://files.pythonhosted.org/packages/05/49/8872130016209c20436ce0c1067de1cf630755d0443d068a5bc17fa95015/htmldate-1.9.3-py3-none-any.whl", hash = "sha256:3fadc422cf3c10a5cdb5e1b914daf37ec7270400a80a1b37e2673ff84faaaff8", size = 31565 },
 ]
 
 [[package]]
@@ -2878,7 +2878,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.59.4"
+version = "0.59.5"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -3311,7 +3311,7 @@ requires-dist = [
     { name = "torch", marker = "extra == 'hf-embeddings'", specifier = ">=2.0.0,<3.0.0" },
     { name = "torch", marker = "extra == 'hf-transformers'", specifier = ">=2.0.0,<3.0.0" },
     { name = "torch", marker = "extra == 'transformers'", specifier = ">=2.0.0,<3.0.0" },
-    { name = "trafilatura", specifier = ">=1.5.0,<2.0.0" },
+    { name = "trafilatura", specifier = ">=2.0.0,<3.0.0" },
     { name = "transformers", marker = "extra == 'all'", specifier = ">=4.40.1,<5.0.0" },
     { name = "transformers", marker = "extra == 'hf-transformers'", specifier = ">=4.40.1,<5.0.0" },
     { name = "transformers", marker = "extra == 'transformers'", specifier = ">=4.40.1,<5.0.0" },
@@ -8896,7 +8896,7 @@ wheels = [
 
 [[package]]
 name = "trafilatura"
-version = "1.12.2"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -8907,9 +8907,9 @@ dependencies = [
     { name = "lxml" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/cd/77e4403b61d5da59063bb65ee894cf951c6f1137658499947adc040102f5/trafilatura-1.12.2.tar.gz", hash = "sha256:4c9cb1434f7e13ef0b16cb44ee1d44e84523ec7268940b9559c374e7effc9a96", size = 2987179 }
+sdist = { url = "https://files.pythonhosted.org/packages/06/25/e3ebeefdebfdfae8c4a4396f5a6ea51fc6fa0831d63ce338e5090a8003dc/trafilatura-2.0.0.tar.gz", hash = "sha256:ceb7094a6ecc97e72fea73c7dba36714c5c5b577b6470e4520dca893706d6247", size = 253404 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/14/d69c627444a7e93bee0425cd05e11a30dfb7a1b471e990ad0aafbb234307/trafilatura-1.12.2-py3-none-any.whl", hash = "sha256:6df5b666f625c9579a50d7cc715005f450fa75606696aceab73eeda0a76dbe96", size = 132246 },
+    { url = "https://files.pythonhosted.org/packages/8a/b6/097367f180b6383a3581ca1b86fcae284e52075fa941d1232df35293363c/trafilatura-2.0.0-py3-none-any.whl", hash = "sha256:77eb5d1e993747f6f20938e1de2d840020719735690c840b9a1024803a4cd51d", size = 132557 },
 ]
 
 [[package]]
