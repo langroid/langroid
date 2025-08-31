@@ -358,26 +358,31 @@ class ChatAgent(Agent):
                 if tool_call.id in self.oai_tool_id2call:
                     del self.oai_tool_id2call[tool_call.id]
 
-    def clear_history(self, start: int = -2) -> None:
+    def clear_history(self, start: int = -2, end: int = 0) -> None:
         """
-        Clear the message history, starting at the index `start`
+        Clear the message history, starting at the index `start` and
+        ending at the index `end`.
 
         Args:
             start (int): index of first message to delete; default = -2
                     (i.e. delete last 2 messages, typically these
                     are the last user and assistant messages)
+            end (int): index of last message to delete; default = 0
+                    (i.e. delete all messages up to the last one)
         """
+        n = len(self.message_history)
         if start < 0:
-            n = len(self.message_history)
             start = max(0, n + start)
-        dropped = self.message_history[start:]
+        if end <= 0:
+            end = max(0, n + end)
+        dropped = self.message_history[start:end]
         # consider the dropped msgs in REVERSE order, so we are
         # carefully updating self.oai_tool_calls
         for msg in reversed(dropped):
             self._drop_msg_update_tool_calls(msg)
             # clear out the chat document from the ObjectRegistry
             ChatDocument.delete_id(msg.chat_document_id)
-        self.message_history = self.message_history[:start]
+        del self.message_history[start:end]
 
     def update_history(self, message: str, response: str) -> None:
         """
@@ -699,7 +704,7 @@ class ChatAgent(Agent):
             if request == "":
                 raise ValueError(
                     f"""
-                    ToolMessage class {message_class} must have a non-empty 
+                    ToolMessage class {message_class} must have a non-empty
                     'request' field if it is to be enabled as a tool.
                     """
                 )
@@ -741,10 +746,10 @@ class ChatAgent(Agent):
                     logger.warning(
                         f"""
                         ToolMessage class {tool_class} does not allow LLM use,
-                        because `_allow_llm_use=False` either in the Tool or a 
+                        because `_allow_llm_use=False` either in the Tool or a
                         parent class of this tool;
                         so not enabling LLM use for this tool!
-                        If you intended an LLM to use this tool, 
+                        If you intended an LLM to use this tool,
                         set `_allow_llm_use=True` when you define the tool.
                         """
                     )
@@ -1293,7 +1298,7 @@ class ChatAgent(Agent):
                 tool_name = limiting_tool.default_value("request")
                 max_tokens: int = max_retained_tokens
                 truncation_warning = f"""
-                    The result of the {tool_name} tool were too large, 
+                    The result of the {tool_name} tool were too large,
                     and has been truncated to {max_tokens} tokens.
                     To obtain the full result, the tool needs to be re-used.
                 """
@@ -1586,9 +1591,9 @@ class ChatAgent(Agent):
                 logger.debug(
                     f"""
                     Chat Model context length is {self.llm.chat_context_length()},
-                    but the current message history is {self.chat_num_tokens(hist)} 
-                    tokens long, which does not allow 
-                    {self.config.llm.model_max_output_tokens} output tokens. 
+                    but the current message history is {self.chat_num_tokens(hist)}
+                    tokens long, which does not allow
+                    {self.config.llm.model_max_output_tokens} output tokens.
                     Therefore we reduced `max_output_tokens` to {output_len} tokens,
                     so they can fit within the model's context length
                     """
@@ -1620,16 +1625,16 @@ class ChatAgent(Agent):
                         # and last message (user msg).
                         raise ValueError(
                             """
-                        The (message history + max_output_tokens) is longer than the 
-                        max chat context length of this model, and we have tried 
+                        The (message history + max_output_tokens) is longer than the
+                        max chat context length of this model, and we have tried
                         reducing the requested max output tokens, as well as truncating
-                        early parts of the message history, to accommodate the model 
+                        early parts of the message history, to accommodate the model
                         context length, but we have run out of msgs to drop.
-                         
-                        HINT: In the `llm` field of your `ChatAgentConfig` object, 
-                        which is of type `LLMConfig/OpenAIGPTConfig`, try 
-                        - increasing `chat_context_length` 
-                            (if accurate for the model), or  
+
+                        HINT: In the `llm` field of your `ChatAgentConfig` object,
+                        which is of type `LLMConfig/OpenAIGPTConfig`, try
+                        - increasing `chat_context_length`
+                            (if accurate for the model), or
                         - decreasing `max_output_tokens`
                         """
                         )
@@ -1652,15 +1657,15 @@ class ChatAgent(Agent):
                 if output_len < self.config.llm.min_output_tokens:
                     raise ValueError(
                         f"""
-                        Tried to shorten prompt history for chat mode 
-                        but even after truncating all messages except system msg and 
-                        last (user) msg, 
+                        Tried to shorten prompt history for chat mode
+                        but even after truncating all messages except system msg and
+                        last (user) msg,
                         the history token len {self.chat_num_tokens(hist)} is
                         too long to accommodate the desired minimum output tokens
-                        {self.config.llm.min_output_tokens} within the 
+                        {self.config.llm.min_output_tokens} within the
                         model's context length {self.llm.chat_context_length()}.
                         Please try shortening the system msg or user prompts,
-                        or adjust `config.llm.min_output_tokens` to be smaller. 
+                        or adjust `config.llm.min_output_tokens` to be smaller.
                         """
                     )
                 else:
@@ -1668,13 +1673,13 @@ class ChatAgent(Agent):
                     msg_tokens = self.chat_num_tokens()
                     logger.warning(
                         f"""
-                    Chat Model context length is {self.llm.chat_context_length()} 
+                    Chat Model context length is {self.llm.chat_context_length()}
                     tokens, but the current message history is {msg_tokens} tokens long,
-                    which does not allow {self.config.llm.model_max_output_tokens} 
-                    output tokens. 
+                    which does not allow {self.config.llm.model_max_output_tokens}
+                    output tokens.
                     Therefore we truncated the first {n_truncated} messages
-                    in the conversation history so that history token 
-                    length is reduced to {self.chat_num_tokens(hist)}, and 
+                    in the conversation history so that history token
+                    length is reduced to {self.chat_num_tokens(hist)}, and
                     we use `max_output_tokens = {output_len}`,
                     so they can fit within the model's context length
                     of {self.llm.chat_context_length()} tokens.
