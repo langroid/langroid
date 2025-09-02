@@ -90,9 +90,9 @@ class OpenAI_API_ParamInfo(BaseModel):
     params: Dict[str, List[str]] = dict(
         reasoning_effort=[
             OpenAIChatModel.O3_MINI.value,
-            OpenAIChatModel.GEMINI_2_5_PRO.value,
-            OpenAIChatModel.GEMINI_2_5_FLASH.value,
-            OpenAIChatModel.GEMINI_2_5_FLASH_LITE.value,
+            GeminiModel.GEMINI_2_5_PRO.value,
+            GeminiModel.GEMINI_2_5_FLASH.value,
+            GeminiModel.GEMINI_2_5_FLASH_LITE.value,
         ],
     )
     # model-specific params in extra_body

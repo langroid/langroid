@@ -264,12 +264,17 @@ class ChatAgent(Agent):
         Revisit later.
         """
         agent_cls = type(self)
-        config_copy = copy.deepcopy(self.config)
+        # Use model_copy to preserve Pydantic subclass types (like MockLMConfig)
+        # instead of deepcopy which loses subclass information
+        config_copy = self.config.model_copy(deep=True)
         config_copy.name = f"{config_copy.name}-{i}"
         new_agent = agent_cls(config_copy)
         new_agent.system_tool_instructions = self.system_tool_instructions
         new_agent.system_tool_format_instructions = self.system_tool_format_instructions
         new_agent.llm_tools_map = self.llm_tools_map
+        new_agent.llm_tools_known = self.llm_tools_known
+        new_agent.llm_tools_handled = self.llm_tools_handled
+        new_agent.llm_tools_usable = self.llm_tools_usable
         new_agent.llm_functions_map = self.llm_functions_map
         new_agent.llm_functions_handled = self.llm_functions_handled
         new_agent.llm_functions_usable = self.llm_functions_usable

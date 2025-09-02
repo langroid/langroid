@@ -323,37 +323,15 @@ class OpenAIGPTConfig(LLMConfig):
         self, *, update: Mapping[str, Any] | None = None, deep: bool = False
     ) -> "OpenAIGPTConfig":
         """
-        Override model_copy to handle unpicklable fields properly.
+        Copy config while preserving nested model instances and subclasses.
 
-        This preserves fields like http_client_factory during normal copying
-        while still allowing exclusion for pickling operations.
+        Important: Avoid reconstructing via `model_dump` as that coerces nested
+        models to their annotated base types (dropping subclass-only fields).
+        Instead, defer to Pydantic's native `model_copy`, which keeps nested
+        `BaseModel` instances (and their concrete subclasses) intact.
         """
-        # Save references to unpicklable fields
-        http_client_factory = self.http_client_factory
-        streamer = self.streamer
-        streamer_async = self.streamer_async
-
-        # Get the current model data, excluding problematic fields
-        data = self.model_dump(
-            exclude={"http_client_factory", "streamer", "streamer_async"}
-        )
-
-        # Apply any updates
-        if update:
-            data.update(update)
-
-        # Create a new instance with the copied data
-        new_instance = self.__class__(**data)
-
-        # Restore the unpicklable fields if they weren't overridden by update
-        if "http_client_factory" not in (update or {}):
-            new_instance.http_client_factory = http_client_factory
-        if "streamer" not in (update or {}):
-            new_instance.streamer = streamer
-        if "streamer_async" not in (update or {}):
-            new_instance.streamer_async = streamer_async
-
-        return new_instance
+        # Delegate to BaseSettings/BaseModel implementation to preserve types
+        return super().model_copy(update=update, deep=deep)  # type: ignore[return-value]
 
     def _validate_litellm(self) -> None:
         """
@@ -441,8 +419,9 @@ class OpenAIGPT(LanguageModel):
         Args:
             config: configuration for openai-gpt model
         """
-        # copy the config to avoid modifying the original
-        config = config.model_copy()
+        # copy the config to avoid modifying the original; deep to decouple
+        # nested models while preserving their concrete subclasses
+        config = config.model_copy(deep=True)
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
         # save original model name such as `provider/model` before
