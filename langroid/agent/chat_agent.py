@@ -358,31 +358,30 @@ class ChatAgent(Agent):
                 if tool_call.id in self.oai_tool_id2call:
                     del self.oai_tool_id2call[tool_call.id]
 
-    def clear_history(self, start: int = -2, end: int = 0) -> None:
+    def clear_history(self, start: int = -2, end: int = -1) -> None:
         """
-        Clear the message history, starting at the index `start` and
-        ending at the index `end`.
+        Clear the message history, deleting  messages from index `start`,
+        up to index `end`.
 
         Args:
             start (int): index of first message to delete; default = -2
                     (i.e. delete last 2 messages, typically these
                     are the last user and assistant messages)
-            end (int): index of last message to delete; default = 0
+            end (int): index of last message to delete; Default = -1
                     (i.e. delete all messages up to the last one)
         """
         n = len(self.message_history)
         if start < 0:
             start = max(0, n + start)
-        if end <= 0:
-            end = max(0, n + end)
-        dropped = self.message_history[start:end]
+        end_ = n if end == -1 else end + 1
+        dropped = self.message_history[start:end_]
         # consider the dropped msgs in REVERSE order, so we are
         # carefully updating self.oai_tool_calls
         for msg in reversed(dropped):
             self._drop_msg_update_tool_calls(msg)
             # clear out the chat document from the ObjectRegistry
             ChatDocument.delete_id(msg.chat_document_id)
-        del self.message_history[start:end]
+        del self.message_history[start:end_]
 
     def update_history(self, message: str, response: str) -> None:
         """
