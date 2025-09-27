@@ -463,7 +463,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.embedding_url, json=data)
 
         if response.status_code == 200:
-            embeddings = response.json()["embedding"]
+            embeddings = response.json()[0]["embedding"][0]
             if not (
                 isinstance(embeddings, list) and isinstance(embeddings[0], (int, float))
             ):
