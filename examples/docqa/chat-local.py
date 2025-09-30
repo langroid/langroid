@@ -48,7 +48,7 @@ def main(
         # "ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=4096,  # adjust based on model
+        chat_context_length=32_000,  # adjust based on model
         timeout=90,
     )
 
@@ -60,6 +60,7 @@ def main(
         n_similar_chunks=3,
         n_relevant_chunks=3,
         llm=llm_config,
+        # relevance_extractor_config=None,
         # system_message="...override default DocChatAgent system msg here",
         # user_message="...override default DocChatAgent user msg here",
         # summarize_prompt="...override default DocChatAgent summarize prompt here",

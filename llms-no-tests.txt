@@ -41984,7 +41984,6 @@ from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
 from langroid.language_models.base import LLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.mytypes import Entity
 from langroid.parsing.utils import extract_numbered_segments, number_segments
 from langroid.utils.constants import DONE, NO_ANSWER
 
@@ -41996,12 +41995,19 @@ class RelevanceExtractorAgentConfig(ChatAgentConfig):
     llm: LLMConfig | None = OpenAIGPTConfig()
     segment_length: int = 1  # number of sentences per segment
     query: str = ""  # query for relevance extraction
+    handle_llm_no_tool: str = """
+    You FORGOT to use the `extract_segments` tool!
+    Remember that your response MUST be a JSON-formatted string
+    starting with `{"request": "extract_segments", ...}`
+    """
     system_message: str = """
     The user will give you a PASSAGE containing segments numbered as  
     <#1#>, <#2#>, <#3#>, etc.,
     followed by a QUERY. Extract ONLY the segment-numbers from 
     the PASSAGE that are RELEVANT to the QUERY.
     Present the extracted segment-numbers using the `extract_segments` tool/function.
+    Note that your response MUST be a JSON-formatted string 
+    starting with `{"request": "extract_segments", ...}`
     """
 
 
@@ -42033,13 +42039,22 @@ class RelevanceExtractorAgent(ChatAgent):
         self.numbered_passage = number_segments(message_str, self.config.segment_length)
         # compose prompt
         prompt = f"""
+        <Instructions>
+        Given the PASSAGE below with NUMBERED segments, and the QUERY,
+        extract ONLY the segment-numbers that are RELEVANT to the QUERY,
+        and present them using the `extract_segments` tool/function,
+        i.e. your response MUST be a JSON-formatted string starting with
+        `{{"request": "extract_segments", ...}}`
+        </Instructions>
+        
         PASSAGE:
         {self.numbered_passage}
         
         QUERY: {self.config.query}
         """
         # send to LLM
-        return super().llm_response(prompt)
+        response = super().llm_response(prompt)
+        return response
 
     @no_type_check
     async def llm_response_async(
@@ -42069,7 +42084,8 @@ class RelevanceExtractorAgent(ChatAgent):
         QUERY: {self.config.query}
         """
         # send to LLM
-        return await super().llm_response_async(prompt)
+        response = await super().llm_response_async(prompt)
+        return response
 
     def extract_segments(self, msg: SegmentExtractTool) -> str:
         """Method to handle a segmentExtractTool message from LLM"""
@@ -42086,15 +42102,6 @@ class RelevanceExtractorAgent(ChatAgent):
             return DONE + " " + NO_ANSWER
         # this response ends the task by saying DONE
         return DONE + " " + extracts
-
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        """Handle case where LLM forgets to use SegmentExtractTool"""
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            return DONE + " " + NO_ANSWER
-        else:
-            return None
 </file>
 
 <file path="langroid/agent/special/table_chat_agent.py">
@@ -56624,21 +56631,6 @@ class CityTool(lr.agent.ToolMessage):
         print("SUCCESS! Got Valid City Info")
         return FinalResultTool(answer=self.city_info)
 
-    @staticmethod
-    def handle_message_fallback(
-        agent: lr.ChatAgent, msg: str | ChatDocument
-    ) -> str | None:
-        """
-        We end up here when there was no recognized tool msg from the LLM;
-        In this case use the AgentDoneTool with content set to
-        the original message content.
-        """
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-            return f"""
-            You forgot to use the TOOL/Function `{CityTool.name()}`.
-            Please use this tool to present the city info.
-            """
-
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
         # Used to provide few-shot examples in the system prompt
@@ -56691,10 +56683,15 @@ def app(
 
     config = lr.ChatAgentConfig(
         llm=llm_cfg,
+        handle_llm_no_tool=f"""
+            You FORGOT to use the TOOL/Function `{CityTool.name()}` 
+            to present city info!
+            """,
         system_message=f"""
         You will receive a city name, 
         and you must use the TOOL/FUNCTION `{CityTool.name()}` to generate/present
-        information about the city.
+        information about the city. In other words, your response must 
+        be a JSON string starting with `{{"request": "{CityTool.name()}", ...}}`
         """,
     )
 
@@ -59100,7 +59097,7 @@ def main(
         # "ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=4096,  # adjust based on model
+        chat_context_length=32_000,  # adjust based on model
         timeout=90,
     )
 
@@ -59112,6 +59109,7 @@ def main(
         n_similar_chunks=3,
         n_relevant_chunks=3,
         llm=llm_config,
+        # relevance_extractor_config=None,
         # system_message="...override default DocChatAgent system msg here",
         # user_message="...override default DocChatAgent user msg here",
         # summarize_prompt="...override default DocChatAgent summarize prompt here",
@@ -77956,264 +77954,6 @@ class DocChatAgent(ChatAgent):
         return None
 </file>
 
-<file path="langroid/agent/tools/task_tool.py">
-"""
-TaskTool: A tool that allows agents to delegate a task to a sub-agent with
-    specific tools enabled.
-"""
-
-import uuid
-from typing import List, Optional
-
-from pydantic import Field
-from pydantic.fields import ModelPrivateAttr
-
-import langroid.language_models as lm
-from langroid import ChatDocument
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
-from langroid.agent.tools.orchestration import DoneTool
-
-
-class TaskTool(ToolMessage):
-    """
-    Tool that spawns a sub-agent with specified tools to handle a task.
-
-    The sub-agent can be given a custom name for identification in logs.
-    If no name is provided, a random unique name starting with 'agent'
-    will be generated.
-    """
-
-    # TODO: setting up termination conditions of sub-task needs to be improved
-    request: str = "task_tool"
-    purpose: str = """
-        <HowToUse>
-        Use this tool to delegate a task to a sub-agent with specific tools enabled.
-        The sub-agent will be created with the specified tools and will run the task
-        non-interactively.
-    """
-
-    # Parameters for the agent tool
-
-    system_message: Optional[str] = Field(
-        ...,
-        description="""
-        Optional system message to configure the sub-agent's general behavior and 
-        to specify the task and its context.
-            A good system message will have these components:
-            - Inform the sub-agent of its role, e.g. "You are a financial analyst."
-            - Clear spec of the task, with sufficient context for the sub-agent to 
-              understand what it needs to do, since the sub-agent does 
-              NOT have access to your conversation history!
-            - Any additional general context needed for the task, such as a
-              (part of a) document, or data items, etc.
-            - Specify when to use certain tools, e.g. 
-                "You MUST use the 'stock_data' tool to extract stock information.
-        """,
-    )
-
-    prompt: str = Field(
-        ...,
-        description="""
-            The prompt to run the sub-agent with. This differs from the agent's
-            system message: Whereas the system message configures the sub-agent's
-            GENERAL role and goals, the `prompt` is the SPECIFIC input that the 
-            sub-agent will process. In LLM terms, the system message is sent to the 
-            LLM as the first message, with role = "system" or "developer", and 
-            the prompt is sent as a message with role = "user".
-            EXAMPLE: system_message = "You are a financial analyst, when the 
-                user asks about the share-price of a company, 
-                you must use your tools to do the research, and 
-                return the final answer to the user."
-            
-            prompt = "What is the share-price of Apple Inc.?"
-            """,
-    )
-
-    tools: List[str] = Field(
-        ...,
-        description="""
-        A list of tool names to enable for the sub-agent.
-        This must be a list of strings referring to the names of tools
-        that are known to you. 
-        If you want to enable all tools, or you do not have any preference
-        on what tools are enabled for the sub-agent, you can set 
-        this field to a singleton list ['ALL']
-        To disable all tools, set it to a singleton list ['NONE']
-        """,
-    )
-    # TODO: ensure valid model name
-    model: Optional[str] = Field(
-        default=None,
-        description="""
-            Optional name of the LLM model to use for the sub-agent, e.g. 'gpt-4.1'
-            If omitted, the sub-agent will use the same model as yours.
-            """,
-    )
-    max_iterations: Optional[int] = Field(
-        default=None,
-        description="Optional max iterations for the sub-agent to run the task",
-    )
-    agent_name: Optional[str] = Field(
-        default=None,
-        description="""
-            Optional name for the sub-agent. This will be used as the agent's name
-            in logs and for identification purposes. If not provided, a random unique
-            name starting with 'agent' will be generated.
-            """,
-    )
-
-    def _set_up_task(self, agent: ChatAgent) -> Task:
-        """
-        Helper method to set up a task for the sub-agent.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-        """
-        # Generate a random name if not provided
-        agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
-
-        # Create chat agent config with system message if provided
-        # TODO: Maybe we just copy the parent agent's config and override chat_model?
-        #   -- but what if parent agent has a MockLMConfig?
-        llm_config = lm.OpenAIGPTConfig(
-            chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
-        )
-        config = ChatAgentConfig(
-            name=agent_name,
-            llm=llm_config,
-            handle_llm_no_tool=f"""
-                You forgot to use one of your TOOLs! Remember that you must either:
-                - use a tool, or a sequence of tools, to complete your task, OR
-                - if you are done with your task, use the `{DoneTool.name()}` tool
-                to return the result.
-                
-                As a reminder, this was your task:
-                {self.prompt}
-                """,
-            system_message=f"""
-                {self.system_message}
-                
-                When you are finished with your task, you MUST
-                use the TOOL `{DoneTool.name()}` to end the task
-                and return the result.                
-            """,
-        )
-
-        # Create the sub-agent
-        sub_agent = ChatAgent(config)
-
-        # Enable the specified tools for the sub-agent
-        # Convert tool names to actual tool classes using parent agent's tools_map
-        if self.tools == ["ALL"]:
-            # Enable all tools from the parent agent:
-            # This is the list of all tools KNOWN (whether usable or handle-able or not)
-            tool_classes = []
-            for t in agent.llm_tools_known:
-                if t in agent.llm_tools_map and t != self.request:
-                    tool_class = agent.llm_tools_map[t]
-                    allow_llm_use = tool_class._allow_llm_use
-                    if isinstance(allow_llm_use, ModelPrivateAttr):
-                        allow_llm_use = allow_llm_use.default
-                    if allow_llm_use:
-                        tool_classes.append(tool_class)
-        elif self.tools == ["NONE"]:
-            # No tools enabled
-            tool_classes = []
-        else:
-            # Enable only specified tools
-            tool_classes = []
-            for tool_name in self.tools:
-                if tool_name in agent.llm_tools_map:
-                    tool_class = agent.llm_tools_map[tool_name]
-                    allow_llm_use = tool_class._allow_llm_use
-                    if isinstance(allow_llm_use, ModelPrivateAttr):
-                        allow_llm_use = allow_llm_use.default
-                    if allow_llm_use:
-                        tool_classes.append(tool_class)
-
-        # always enable the DoneTool to signal task completion
-        sub_agent.enable_message(tool_classes + [DoneTool], use=True, handle=True)
-
-        # Create a non-interactive task
-        task = Task(sub_agent, interactive=False)
-
-        return task
-
-    def handle(
-        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        """
-
-        Handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-
-        task = self._set_up_task(agent)
-
-        # Create a ChatDocument for the prompt with parent pointer
-        prompt_doc = None
-        if chat_doc is not None:
-            from langroid.agent.chat_document import ChatDocMetaData
-
-            prompt_doc = ChatDocument(
-                content=self.prompt,
-                metadata=ChatDocMetaData(
-                    parent_id=chat_doc.id(),
-                    agent_id=agent.id,
-                    sender=chat_doc.metadata.sender,
-                ),
-            )
-            # Set bidirectional parent-child relationship
-            chat_doc.metadata.child_id = prompt_doc.id()
-
-        # Run the task with the ChatDocument or string prompt
-        result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
-        return result
-
-    async def handle_async(
-        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        """
-        Async method to handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-        task = self._set_up_task(agent)
-
-        # Create a ChatDocument for the prompt with parent pointer
-        prompt_doc = None
-        if chat_doc is not None:
-            from langroid.agent.chat_document import ChatDocMetaData
-
-            prompt_doc = ChatDocument(
-                content=self.prompt,
-                metadata=ChatDocMetaData(
-                    parent_id=chat_doc.id(),
-                    agent_id=agent.id,
-                    sender=chat_doc.metadata.sender,
-                ),
-            )
-            # Set bidirectional parent-child relationship
-            chat_doc.metadata.child_id = prompt_doc.id()
-
-        # Run the task with the ChatDocument or string prompt
-        # TODO eventually allow the various task setup configs,
-        #  including termination conditions
-        result = await task.run_async(
-            prompt_doc or self.prompt, turns=self.max_iterations or 10
-        )
-        return result
-</file>
-
 <file path="langroid/agent/chat_agent.py">
 import copy
 import inspect
@@ -80326,564 +80066,269 @@ class ChatAgent(Agent):
         pass
 </file>
 
-<file path="langroid/language_models/model_info.py">
-from enum import Enum
-from typing import Dict, List, Optional
+<file path="langroid/agent/tools/task_tool.py">
+"""
+TaskTool: A tool that allows agents to delegate a task to a sub-agent with
+    specific tools enabled.
+"""
 
-from pydantic import BaseModel
+import uuid
+from typing import List, Optional
 
+from pydantic import Field
+from pydantic.fields import ModelPrivateAttr
 
-class ModelProvider(str, Enum):
-    """Enum for model providers"""
-
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
-    DEEPSEEK = "deepseek"
-    GOOGLE = "google"
-    UNKNOWN = "unknown"
-
-
-class ModelName(str, Enum):
-    """Parent class for all model name enums"""
-
-    pass
+import langroid.language_models as lm
+from langroid import ChatDocument
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import DoneTool
 
 
-class OpenAIChatModel(ModelName):
-    """Enum for OpenAI Chat models"""
-
-    GPT3_5_TURBO = "gpt-3.5-turbo"
-    GPT4 = "gpt-4o"  # avoid deprecated gpt-4
-    GPT4_TURBO = "gpt-4-turbo"
-    GPT4o = "gpt-4o"
-    GPT4o_MINI = "gpt-4o-mini"
-    O1 = "o1"
-    O1_MINI = "o1-mini"
-    O3_MINI = "o3-mini"
-    O3 = "o3"
-    O4_MINI = "o4-mini"
-    GPT4_1 = "gpt-4.1"
-    GPT4_1_MINI = "gpt-4.1-mini"
-    GPT4_1_NANO = "gpt-4.1-nano"
-    GPT5 = "gpt-5"
-    GPT5_MINI = "gpt-5-mini"
-    GPT5_NANO = "gpt-5-nano"
-
-
-class OpenAICompletionModel(str, Enum):
-    """Enum for OpenAI Completion models"""
-
-    DAVINCI = "davinci-002"
-    BABBAGE = "babbage-002"
-
-
-class AnthropicModel(ModelName):
-    """Enum for Anthropic models"""
-
-    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
-    CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
-    CLAUDE_3_OPUS = "claude-3-opus-latest"
-    CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
-    CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
-
-
-class DeepSeekModel(ModelName):
-    """Enum for DeepSeek models direct from DeepSeek API"""
-
-    DEEPSEEK = "deepseek/deepseek-chat"
-    DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
-    OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
-
-
-class GeminiModel(ModelName):
-    """Enum for Gemini models"""
-
-    GEMINI_1_5_FLASH = "gemini-1.5-flash"
-    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
-    GEMINI_1_5_PRO = "gemini-1.5-pro"
-    GEMINI_2_5_PRO = "gemini-2.5-pro"
-    GEMINI_2_5_FLASH = "gemini-2.5-flash"
-    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
-    GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
-    GEMINI_2_FLASH = "gemini-2.0-flash"
-    GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
-    GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
-
-
-class OpenAI_API_ParamInfo(BaseModel):
+class TaskTool(ToolMessage):
     """
-    Parameters exclusive to some models, when using OpenAI API
+    Tool that spawns a sub-agent with specified tools to handle a task.
+
+    The sub-agent can be given a custom name for identification in logs.
+    If no name is provided, a random unique name starting with 'agent'
+    will be generated.
     """
 
-    # model-specific params at top level
-    params: Dict[str, List[str]] = dict(
-        reasoning_effort=[
-            OpenAIChatModel.O3_MINI.value,
-            OpenAIChatModel.O3.value,
-            OpenAIChatModel.O4_MINI.value,
-            OpenAIChatModel.GPT5.value,
-            OpenAIChatModel.GPT5_MINI.value,
-            OpenAIChatModel.GPT5_NANO.value,
-            GeminiModel.GEMINI_2_5_PRO.value,
-            GeminiModel.GEMINI_2_5_FLASH.value,
-            GeminiModel.GEMINI_2_5_FLASH_LITE.value,
-        ],
-    )
-    # model-specific params in extra_body
-    extra_parameters: Dict[str, List[str]] = dict(
-        include_reasoning=[
-            DeepSeekModel.OPENROUTER_DEEPSEEK_R1.value,
-        ]
+    # TODO: setting up termination conditions of sub-task needs to be improved
+    request: str = "task_tool"
+    purpose: str = """
+        <HowToUse>
+        Use this tool to delegate a task to a sub-agent with specific tools enabled.
+        The sub-agent will be created with the specified tools and will run the task
+        non-interactively.
+    """
+
+    # Parameters for the agent tool
+
+    system_message: Optional[str] = Field(
+        ...,
+        description="""
+        Optional system message to configure the sub-agent's general behavior and 
+        to specify the task and its context.
+            A good system message will have these components:
+            - Inform the sub-agent of its role, e.g. "You are a financial analyst."
+            - Clear spec of the task, with sufficient context for the sub-agent to 
+              understand what it needs to do, since the sub-agent does 
+              NOT have access to your conversation history!
+            - Any additional general context needed for the task, such as a
+              (part of a) document, or data items, etc.
+            - Specify when to use certain tools, e.g. 
+                "You MUST use the 'stock_data' tool to extract stock information.
+        """,
     )
 
-
-class ModelInfo(BaseModel):
-    """
-    Consolidated information about LLM, related to capacity, cost and API
-    idiosyncrasies. Reasonable defaults for all params in case there's no
-    specific info available.
-    """
-
-    name: str = "unknown"
-    provider: ModelProvider = ModelProvider.UNKNOWN
-    context_length: int = 16_000
-    max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
-    max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
-    input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
-    cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
-    output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
-    allows_streaming: bool = True  # Whether model supports streaming output
-    allows_system_message: bool = True  # Whether model supports system messages
-    rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
-    unsupported_params: List[str] = []
-    has_structured_output: bool = False  # Does model API support structured output?
-    has_tools: bool = True  # Does model API support tools/function-calling?
-    needs_first_user_message: bool = False  # Does API need first msg to be from user?
-    description: Optional[str] = None
-
-
-# Model information registry
-MODEL_INFO: Dict[str, ModelInfo] = {
-    # OpenAI Models
-    OpenAICompletionModel.DAVINCI.value: ModelInfo(
-        name=OpenAICompletionModel.DAVINCI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=4096,
-        max_output_tokens=4096,
-        input_cost_per_million=2.0,
-        output_cost_per_million=2.0,
-        description="Davinci-002",
-    ),
-    OpenAICompletionModel.BABBAGE.value: ModelInfo(
-        name=OpenAICompletionModel.BABBAGE.value,
-        provider=ModelProvider.OPENAI,
-        context_length=4096,
-        max_output_tokens=4096,
-        input_cost_per_million=0.40,
-        output_cost_per_million=0.40,
-        description="Babbage-002",
-    ),
-    OpenAIChatModel.GPT3_5_TURBO.value: ModelInfo(
-        name=OpenAIChatModel.GPT3_5_TURBO.value,
-        provider=ModelProvider.OPENAI,
-        context_length=16_385,
-        max_output_tokens=4096,
-        input_cost_per_million=0.50,
-        output_cost_per_million=1.50,
-        description="GPT-3.5 Turbo",
-    ),
-    OpenAIChatModel.GPT4.value: ModelInfo(
-        name=OpenAIChatModel.GPT4.value,
-        provider=ModelProvider.OPENAI,
-        context_length=8192,
-        max_output_tokens=8192,
-        input_cost_per_million=30.0,
-        output_cost_per_million=60.0,
-        description="GPT-4 (8K context)",
-    ),
-    OpenAIChatModel.GPT4_TURBO.value: ModelInfo(
-        name=OpenAIChatModel.GPT4_TURBO.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=4096,
-        input_cost_per_million=10.0,
-        output_cost_per_million=30.0,
-        description="GPT-4 Turbo",
-    ),
-    OpenAIChatModel.GPT4_1_NANO.value: ModelInfo(
-        name=OpenAIChatModel.GPT4_1_NANO.value,
-        provider=ModelProvider.OPENAI,
-        has_structured_output=True,
-        context_length=1_047_576,
-        max_output_tokens=32_768,
-        input_cost_per_million=0.10,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=0.40,
-        description="GPT-4.1",
-    ),
-    OpenAIChatModel.GPT4_1_MINI.value: ModelInfo(
-        name=OpenAIChatModel.GPT4_1_MINI.value,
-        provider=ModelProvider.OPENAI,
-        has_structured_output=True,
-        context_length=1_047_576,
-        max_output_tokens=32_768,
-        input_cost_per_million=0.40,
-        cached_cost_per_million=0.10,
-        output_cost_per_million=1.60,
-        description="GPT-4.1 Mini",
-    ),
-    OpenAIChatModel.GPT4_1.value: ModelInfo(
-        name=OpenAIChatModel.GPT4_1.value,
-        provider=ModelProvider.OPENAI,
-        has_structured_output=True,
-        context_length=1_047_576,
-        max_output_tokens=32_768,
-        input_cost_per_million=2.00,
-        cached_cost_per_million=0.50,
-        output_cost_per_million=8.00,
-        description="GPT-4.1",
-    ),
-    OpenAIChatModel.GPT4o.value: ModelInfo(
-        name=OpenAIChatModel.GPT4o.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=16_384,
-        input_cost_per_million=2.5,
-        cached_cost_per_million=1.25,
-        output_cost_per_million=10.0,
-        has_structured_output=True,
-        description="GPT-4o (128K context)",
-    ),
-    OpenAIChatModel.GPT4o_MINI.value: ModelInfo(
-        name=OpenAIChatModel.GPT4o_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=16_384,
-        input_cost_per_million=0.15,
-        cached_cost_per_million=0.075,
-        output_cost_per_million=0.60,
-        has_structured_output=True,
-        description="GPT-4o Mini",
-    ),
-    OpenAIChatModel.O1.value: ModelInfo(
-        name=OpenAIChatModel.O1.value,
-        provider=ModelProvider.OPENAI,
-        context_length=200_000,
-        max_output_tokens=100_000,
-        input_cost_per_million=15.0,
-        cached_cost_per_million=7.50,
-        output_cost_per_million=60.0,
-        allows_streaming=True,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
-        description="O1 Reasoning LM",
-    ),
-    OpenAIChatModel.O3.value: ModelInfo(
-        name=OpenAIChatModel.O3.value,
-        provider=ModelProvider.OPENAI,
-        context_length=200_000,
-        max_output_tokens=100_000,
-        input_cost_per_million=2.0,
-        cached_cost_per_million=0.50,
-        output_cost_per_million=8.0,
-        allows_streaming=True,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
-        description="O1 Reasoning LM",
-    ),
-    OpenAIChatModel.O1_MINI.value: ModelInfo(
-        name=OpenAIChatModel.O1_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=65_536,
-        input_cost_per_million=1.1,
-        cached_cost_per_million=0.55,
-        output_cost_per_million=4.4,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature", "stream"],
-        rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
-        description="O1 Mini Reasoning LM",
-    ),
-    OpenAIChatModel.O3_MINI.value: ModelInfo(
-        name=OpenAIChatModel.O3_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=200_000,
-        max_output_tokens=100_000,
-        input_cost_per_million=1.1,
-        cached_cost_per_million=0.55,
-        output_cost_per_million=4.4,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature", "stream"],
-        rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
-        description="O3 Mini Reasoning LM",
-    ),
-    OpenAIChatModel.O4_MINI.value: ModelInfo(
-        name=OpenAIChatModel.O4_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=200_000,
-        max_output_tokens=100_000,
-        input_cost_per_million=1.10,
-        cached_cost_per_million=0.275,
-        output_cost_per_million=4.40,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature", "stream"],
-        rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
-        description="O3 Mini Reasoning LM",
-    ),
-    OpenAIChatModel.GPT5.value: ModelInfo(
-        name=OpenAIChatModel.GPT5.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=1.25,
-        cached_cost_per_million=0.125,
-        output_cost_per_million=10.00,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
-        description="GPT-5",
-    ),
-    OpenAIChatModel.GPT5_MINI.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=0.25,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=2.00,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
-        description="GPT-5 Mini",
-    ),
-    OpenAIChatModel.GPT5_NANO.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_NANO.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=0.05,
-        cached_cost_per_million=0.005,
-        output_cost_per_million=0.40,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
-        description="GPT-5 Nano",
-    ),
-    # Anthropic Models
-    AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_5_SONNET.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=8192,
-        input_cost_per_million=3.0,
-        cached_cost_per_million=0.30,
-        output_cost_per_million=15.0,
-        description="Claude 3.5 Sonnet",
-    ),
-    AnthropicModel.CLAUDE_3_OPUS.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_OPUS.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=4096,
-        input_cost_per_million=15.0,
-        cached_cost_per_million=1.50,
-        output_cost_per_million=75.0,
-        description="Claude 3 Opus",
-    ),
-    AnthropicModel.CLAUDE_3_SONNET.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_SONNET.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=4096,
-        input_cost_per_million=3.0,
-        cached_cost_per_million=0.30,
-        output_cost_per_million=15.0,
-        description="Claude 3 Sonnet",
-    ),
-    AnthropicModel.CLAUDE_3_HAIKU.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_HAIKU.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=4096,
-        input_cost_per_million=0.25,
-        cached_cost_per_million=0.03,
-        output_cost_per_million=1.25,
-        description="Claude 3 Haiku",
-    ),
-    # DeepSeek Models
-    DeepSeekModel.DEEPSEEK.value: ModelInfo(
-        name=DeepSeekModel.DEEPSEEK.value,
-        provider=ModelProvider.DEEPSEEK,
-        context_length=64_000,
-        max_output_tokens=8_000,
-        input_cost_per_million=0.27,
-        cached_cost_per_million=0.07,
-        output_cost_per_million=1.10,
-        description="DeepSeek Chat",
-    ),
-    DeepSeekModel.DEEPSEEK_R1.value: ModelInfo(
-        name=DeepSeekModel.DEEPSEEK_R1.value,
-        provider=ModelProvider.DEEPSEEK,
-        context_length=64_000,
-        max_output_tokens=8_000,
-        input_cost_per_million=0.55,
-        cached_cost_per_million=0.14,
-        output_cost_per_million=2.19,
-        description="DeepSeek-R1 Reasoning LM",
-    ),
-    # Gemini Models
-    GeminiModel.GEMINI_2_FLASH.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_FLASH.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_056_768,
-        max_output_tokens=8192,
-        input_cost_per_million=0.10,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=0.40,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.0 Flash",
-    ),
-    GeminiModel.GEMINI_2_FLASH_LITE.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_FLASH_LITE.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_056_768,
-        max_output_tokens=8192,
-        input_cost_per_million=0.075,
-        output_cost_per_million=0.30,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.0 Flash Lite",
-    ),
-    GeminiModel.GEMINI_1_5_FLASH.value: ModelInfo(
-        name=GeminiModel.GEMINI_1_5_FLASH.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_056_768,
-        max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 1.5 Flash",
-    ),
-    GeminiModel.GEMINI_1_5_FLASH_8B.value: ModelInfo(
-        name=GeminiModel.GEMINI_1_5_FLASH_8B.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_000_000,
-        max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 1.5 Flash 8B",
-    ),
-    GeminiModel.GEMINI_1_5_PRO.value: ModelInfo(
-        name=GeminiModel.GEMINI_1_5_PRO.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=2_000_000,
-        max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 1.5 Pro",
-    ),
-    GeminiModel.GEMINI_2_PRO.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_PRO.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=2_000_000,
-        max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2 Pro Exp 02-05",
-    ),
-    GeminiModel.GEMINI_2_FLASH_THINKING.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_FLASH_THINKING.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_000_000,
-        max_output_tokens=64_000,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.0 Flash Thinking",
-    ),
-    # Gemini 2.5 Models
-    GeminiModel.GEMINI_2_5_PRO.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_5_PRO.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_048_576,
-        max_output_tokens=65_536,
-        input_cost_per_million=1.25,
-        cached_cost_per_million=0.31,
-        output_cost_per_million=10.0,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.5 Pro",
-    ),
-    GeminiModel.GEMINI_2_5_FLASH.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_5_FLASH.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_048_576,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.30,
-        cached_cost_per_million=0.075,
-        output_cost_per_million=2.50,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.5 Flash",
-    ),
-    GeminiModel.GEMINI_2_5_FLASH_LITE.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_5_FLASH_LITE.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=65_536,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.10,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=0.40,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.5 Flash Lite",
-    ),
-}
-
-
-def get_model_info(
-    model: str | ModelName,
-    fallback_models: List[str] = [],
-) -> ModelInfo:
-    """Get model information by name or enum value"""
-    # Sequence of models to try, starting with the primary model
-    models_to_try = [model] + fallback_models
-
-    # Find the first model in the sequence that has info defined using next()
-    # on a generator expression that filters out None results from _get_model_info
-    found_info = next(
-        (info for m in models_to_try if (info := _get_model_info(m)) is not None),
-        None,  # Default value if the iterator is exhausted (no valid info found)
+    prompt: str = Field(
+        ...,
+        description="""
+            The prompt to run the sub-agent with. This differs from the agent's
+            system message: Whereas the system message configures the sub-agent's
+            GENERAL role and goals, the `prompt` is the SPECIFIC input that the 
+            sub-agent will process. In LLM terms, the system message is sent to the 
+            LLM as the first message, with role = "system" or "developer", and 
+            the prompt is sent as a message with role = "user".
+            EXAMPLE: system_message = "You are a financial analyst, when the 
+                user asks about the share-price of a company, 
+                you must use your tools to do the research, and 
+                return the final answer to the user."
+            
+            prompt = "What is the share-price of Apple Inc.?"
+            """,
     )
 
-    # Return the found info, or a default ModelInfo if none was found
-    return found_info or ModelInfo()
+    tools: List[str] = Field(
+        ...,
+        description="""
+        A list of tool names to enable for the sub-agent.
+        This must be a list of strings referring to the names of tools
+        that are known to you. 
+        If you want to enable all tools, or you do not have any preference
+        on what tools are enabled for the sub-agent, you can set 
+        this field to a singleton list ['ALL']
+        To disable all tools, set it to a singleton list ['NONE']
+        """,
+    )
+    # TODO: ensure valid model name
+    model: Optional[str] = Field(
+        default=None,
+        description="""
+            Optional name of the LLM model to use for the sub-agent, e.g. 'gpt-4.1'
+            If omitted, the sub-agent will use the same model as yours.
+            """,
+    )
+    max_iterations: Optional[int] = Field(
+        default=None,
+        description="Optional max iterations for the sub-agent to run the task",
+    )
+    agent_name: Optional[str] = Field(
+        default=None,
+        description="""
+            Optional name for the sub-agent. This will be used as the agent's name
+            in logs and for identification purposes. If not provided, a random unique
+            name starting with 'agent' will be generated.
+            """,
+    )
 
+    def _set_up_task(self, agent: ChatAgent) -> Task:
+        """
+        Helper method to set up a task for the sub-agent.
 
-def _get_model_info(model: str | ModelName) -> ModelInfo | None:
-    if isinstance(model, str):
-        return MODEL_INFO.get(model)
-    return MODEL_INFO.get(model.value)
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+        """
+        # Generate a random name if not provided
+        agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
+
+        # Create chat agent config with system message if provided
+        # TODO: Maybe we just copy the parent agent's config and override chat_model?
+        #   -- but what if parent agent has a MockLMConfig?
+        llm_config = lm.OpenAIGPTConfig(
+            chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
+        )
+        config = ChatAgentConfig(
+            name=agent_name,
+            llm=llm_config,
+            handle_llm_no_tool=f"""
+                You forgot to use one of your TOOLs! Remember that you must either:
+                - use a tool, or a sequence of tools, to complete your task, OR
+                - if you are done with your task, use the `{DoneTool.name()}` tool
+                to return the result.
+                
+                As a reminder, this was your task:
+                {self.prompt}
+                """,
+            system_message=f"""
+                {self.system_message}
+                
+                When you are finished with your task, you MUST
+                use the TOOL `{DoneTool.name()}` to end the task
+                and return the result.                
+            """,
+        )
+
+        # Create the sub-agent
+        sub_agent = ChatAgent(config)
+
+        # Enable the specified tools for the sub-agent
+        # Convert tool names to actual tool classes using parent agent's tools_map
+        if self.tools == ["ALL"]:
+            # Enable all tools from the parent agent:
+            # This is the list of all tools KNOWN (whether usable or handle-able or not)
+            tool_classes = []
+            for t in agent.llm_tools_known:
+                if t in agent.llm_tools_map and t != self.request:
+                    tool_class = agent.llm_tools_map[t]
+                    allow_llm_use = tool_class._allow_llm_use
+                    if isinstance(allow_llm_use, ModelPrivateAttr):
+                        allow_llm_use = allow_llm_use.default
+                    if allow_llm_use:
+                        tool_classes.append(tool_class)
+        elif self.tools == ["NONE"]:
+            # No tools enabled
+            tool_classes = []
+        else:
+            # Enable only specified tools
+            tool_classes = []
+            for tool_name in self.tools:
+                if tool_name in agent.llm_tools_map:
+                    tool_class = agent.llm_tools_map[tool_name]
+                    allow_llm_use = tool_class._allow_llm_use
+                    if isinstance(allow_llm_use, ModelPrivateAttr):
+                        allow_llm_use = allow_llm_use.default
+                    if allow_llm_use:
+                        tool_classes.append(tool_class)
+
+        # always enable the DoneTool to signal task completion
+        sub_agent.enable_message(tool_classes + [DoneTool], use=True, handle=True)
+
+        # Create a non-interactive task
+        task = Task(sub_agent, interactive=False)
+
+        return task
+
+    def handle(
+        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """
+
+        Handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+
+        task = self._set_up_task(agent)
+
+        # Create a ChatDocument for the prompt with parent pointer
+        prompt_doc = None
+        if chat_doc is not None:
+            from langroid.agent.chat_document import ChatDocMetaData
+
+            prompt_doc = ChatDocument(
+                content=self.prompt,
+                metadata=ChatDocMetaData(
+                    parent_id=chat_doc.id(),
+                    agent_id=agent.id,
+                    sender=chat_doc.metadata.sender,
+                ),
+            )
+            # Set bidirectional parent-child relationship
+            chat_doc.metadata.child_id = prompt_doc.id()
+
+        # Run the task with the ChatDocument or string prompt
+        result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
+        return result
+
+    async def handle_async(
+        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """
+        Async method to handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+        task = self._set_up_task(agent)
+
+        # Create a ChatDocument for the prompt with parent pointer
+        prompt_doc = None
+        if chat_doc is not None:
+            from langroid.agent.chat_document import ChatDocMetaData
+
+            prompt_doc = ChatDocument(
+                content=self.prompt,
+                metadata=ChatDocMetaData(
+                    parent_id=chat_doc.id(),
+                    agent_id=agent.id,
+                    sender=chat_doc.metadata.sender,
+                ),
+            )
+            # Set bidirectional parent-child relationship
+            chat_doc.metadata.child_id = prompt_doc.id()
+
+        # Run the task with the ChatDocument or string prompt
+        # TODO eventually allow the various task setup configs,
+        #  including termination conditions
+        result = await task.run_async(
+            prompt_doc or self.prompt, turns=self.max_iterations or 10
+        )
+        return result
 </file>
 
 <file path=".pre-commit-config.yaml">
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.12.11
+  rev: v0.13.2
   hooks:
     - id: ruff
 </file>
@@ -83126,6 +82571,553 @@ class Agent(ABC):
         if answer != no_answer:
             return (f"{agent_type} says: " + str(answer)).strip()
         return None
+</file>
+
+<file path="langroid/language_models/model_info.py">
+from enum import Enum
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel
+
+
+class ModelProvider(str, Enum):
+    """Enum for model providers"""
+
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    DEEPSEEK = "deepseek"
+    GOOGLE = "google"
+    UNKNOWN = "unknown"
+
+
+class ModelName(str, Enum):
+    """Parent class for all model name enums"""
+
+    pass
+
+
+class OpenAIChatModel(ModelName):
+    """Enum for OpenAI Chat models"""
+
+    GPT3_5_TURBO = "gpt-3.5-turbo"
+    GPT4 = "gpt-4o"  # avoid deprecated gpt-4
+    GPT4_TURBO = "gpt-4-turbo"
+    GPT4o = "gpt-4o"
+    GPT4o_MINI = "gpt-4o-mini"
+    O1 = "o1"
+    O1_MINI = "o1-mini"
+    O3_MINI = "o3-mini"
+    O3 = "o3"
+    O4_MINI = "o4-mini"
+    GPT4_1 = "gpt-4.1"
+    GPT4_1_MINI = "gpt-4.1-mini"
+    GPT4_1_NANO = "gpt-4.1-nano"
+    GPT5 = "gpt-5"
+    GPT5_MINI = "gpt-5-mini"
+    GPT5_NANO = "gpt-5-nano"
+
+
+class OpenAICompletionModel(str, Enum):
+    """Enum for OpenAI Completion models"""
+
+    DAVINCI = "davinci-002"
+    BABBAGE = "babbage-002"
+
+
+class AnthropicModel(ModelName):
+    """Enum for Anthropic models"""
+
+    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
+    CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
+    CLAUDE_3_OPUS = "claude-3-opus-latest"
+    CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
+    CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
+
+
+class DeepSeekModel(ModelName):
+    """Enum for DeepSeek models direct from DeepSeek API"""
+
+    DEEPSEEK = "deepseek/deepseek-chat"
+    DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
+    OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
+
+
+class GeminiModel(ModelName):
+    """Enum for Gemini models"""
+
+    GEMINI_1_5_FLASH = "gemini-1.5-flash"
+    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
+    GEMINI_1_5_PRO = "gemini-1.5-pro"
+    GEMINI_2_5_PRO = "gemini-2.5-pro"
+    GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+    GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
+    GEMINI_2_FLASH = "gemini-2.0-flash"
+    GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
+    GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
+
+
+class OpenAI_API_ParamInfo(BaseModel):
+    """
+    Parameters exclusive to some models, when using OpenAI API
+    """
+
+    # model-specific params at top level
+    params: Dict[str, List[str]] = dict(
+        reasoning_effort=[
+            OpenAIChatModel.O3_MINI.value,
+            OpenAIChatModel.O3.value,
+            OpenAIChatModel.O4_MINI.value,
+            OpenAIChatModel.GPT5.value,
+            OpenAIChatModel.GPT5_MINI.value,
+            OpenAIChatModel.GPT5_NANO.value,
+            GeminiModel.GEMINI_2_5_PRO.value,
+            GeminiModel.GEMINI_2_5_FLASH.value,
+            GeminiModel.GEMINI_2_5_FLASH_LITE.value,
+        ],
+    )
+    # model-specific params in extra_body
+    extra_parameters: Dict[str, List[str]] = dict(
+        include_reasoning=[
+            DeepSeekModel.OPENROUTER_DEEPSEEK_R1.value,
+        ]
+    )
+
+
+class ModelInfo(BaseModel):
+    """
+    Consolidated information about LLM, related to capacity, cost and API
+    idiosyncrasies. Reasonable defaults for all params in case there's no
+    specific info available.
+    """
+
+    name: str = "unknown"
+    provider: ModelProvider = ModelProvider.UNKNOWN
+    context_length: int = 16_000
+    max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
+    max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
+    input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
+    cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
+    output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
+    allows_streaming: bool = True  # Whether model supports streaming output
+    allows_system_message: bool = True  # Whether model supports system messages
+    rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
+    unsupported_params: List[str] = []
+    has_structured_output: bool = False  # Does model API support structured output?
+    has_tools: bool = True  # Does model API support tools/function-calling?
+    needs_first_user_message: bool = False  # Does API need first msg to be from user?
+    description: Optional[str] = None
+
+
+# Model information registry
+MODEL_INFO: Dict[str, ModelInfo] = {
+    # OpenAI Models
+    OpenAICompletionModel.DAVINCI.value: ModelInfo(
+        name=OpenAICompletionModel.DAVINCI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=4096,
+        max_output_tokens=4096,
+        input_cost_per_million=2.0,
+        output_cost_per_million=2.0,
+        description="Davinci-002",
+    ),
+    OpenAICompletionModel.BABBAGE.value: ModelInfo(
+        name=OpenAICompletionModel.BABBAGE.value,
+        provider=ModelProvider.OPENAI,
+        context_length=4096,
+        max_output_tokens=4096,
+        input_cost_per_million=0.40,
+        output_cost_per_million=0.40,
+        description="Babbage-002",
+    ),
+    OpenAIChatModel.GPT3_5_TURBO.value: ModelInfo(
+        name=OpenAIChatModel.GPT3_5_TURBO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=16_385,
+        max_output_tokens=4096,
+        input_cost_per_million=0.50,
+        output_cost_per_million=1.50,
+        description="GPT-3.5 Turbo",
+    ),
+    OpenAIChatModel.GPT4.value: ModelInfo(
+        name=OpenAIChatModel.GPT4.value,
+        provider=ModelProvider.OPENAI,
+        context_length=8192,
+        max_output_tokens=8192,
+        input_cost_per_million=30.0,
+        output_cost_per_million=60.0,
+        description="GPT-4 (8K context)",
+    ),
+    OpenAIChatModel.GPT4_TURBO.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_TURBO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=4096,
+        input_cost_per_million=10.0,
+        output_cost_per_million=30.0,
+        description="GPT-4 Turbo",
+    ),
+    OpenAIChatModel.GPT4_1_NANO.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1_NANO.value,
+        provider=ModelProvider.OPENAI,
+        has_structured_output=True,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=0.40,
+        description="GPT-4.1",
+    ),
+    OpenAIChatModel.GPT4_1_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1_MINI.value,
+        provider=ModelProvider.OPENAI,
+        has_structured_output=True,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=0.40,
+        cached_cost_per_million=0.10,
+        output_cost_per_million=1.60,
+        description="GPT-4.1 Mini",
+    ),
+    OpenAIChatModel.GPT4_1.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1.value,
+        provider=ModelProvider.OPENAI,
+        has_structured_output=True,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=2.00,
+        cached_cost_per_million=0.50,
+        output_cost_per_million=8.00,
+        description="GPT-4.1",
+    ),
+    OpenAIChatModel.GPT4o.value: ModelInfo(
+        name=OpenAIChatModel.GPT4o.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=2.5,
+        cached_cost_per_million=1.25,
+        output_cost_per_million=10.0,
+        has_structured_output=True,
+        description="GPT-4o (128K context)",
+    ),
+    OpenAIChatModel.GPT4o_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT4o_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=0.15,
+        cached_cost_per_million=0.075,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="GPT-4o Mini",
+    ),
+    OpenAIChatModel.O1.value: ModelInfo(
+        name=OpenAIChatModel.O1.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=15.0,
+        cached_cost_per_million=7.50,
+        output_cost_per_million=60.0,
+        allows_streaming=True,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="O1 Reasoning LM",
+    ),
+    OpenAIChatModel.O3.value: ModelInfo(
+        name=OpenAIChatModel.O3.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=2.0,
+        cached_cost_per_million=0.50,
+        output_cost_per_million=8.0,
+        allows_streaming=True,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="O1 Reasoning LM",
+    ),
+    OpenAIChatModel.O1_MINI.value: ModelInfo(
+        name=OpenAIChatModel.O1_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=65_536,
+        input_cost_per_million=1.1,
+        cached_cost_per_million=0.55,
+        output_cost_per_million=4.4,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="O1 Mini Reasoning LM",
+    ),
+    OpenAIChatModel.O3_MINI.value: ModelInfo(
+        name=OpenAIChatModel.O3_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=1.1,
+        cached_cost_per_million=0.55,
+        output_cost_per_million=4.4,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="O3 Mini Reasoning LM",
+    ),
+    OpenAIChatModel.O4_MINI.value: ModelInfo(
+        name=OpenAIChatModel.O4_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=1.10,
+        cached_cost_per_million=0.275,
+        output_cost_per_million=4.40,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="O3 Mini Reasoning LM",
+    ),
+    OpenAIChatModel.GPT5.value: ModelInfo(
+        name=OpenAIChatModel.GPT5.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.125,
+        output_cost_per_million=10.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5",
+    ),
+    OpenAIChatModel.GPT5_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.25,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=2.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5 Mini",
+    ),
+    OpenAIChatModel.GPT5_NANO.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_NANO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.05,
+        cached_cost_per_million=0.005,
+        output_cost_per_million=0.40,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5 Nano",
+    ),
+    # Anthropic Models
+    AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_5_SONNET.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=8192,
+        input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
+        output_cost_per_million=15.0,
+        description="Claude 3.5 Sonnet",
+    ),
+    AnthropicModel.CLAUDE_3_OPUS.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_OPUS.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=4096,
+        input_cost_per_million=15.0,
+        cached_cost_per_million=1.50,
+        output_cost_per_million=75.0,
+        description="Claude 3 Opus",
+    ),
+    AnthropicModel.CLAUDE_3_SONNET.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_SONNET.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=4096,
+        input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
+        output_cost_per_million=15.0,
+        description="Claude 3 Sonnet",
+    ),
+    AnthropicModel.CLAUDE_3_HAIKU.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_HAIKU.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=4096,
+        input_cost_per_million=0.25,
+        cached_cost_per_million=0.03,
+        output_cost_per_million=1.25,
+        description="Claude 3 Haiku",
+    ),
+    # DeepSeek Models
+    DeepSeekModel.DEEPSEEK.value: ModelInfo(
+        name=DeepSeekModel.DEEPSEEK.value,
+        provider=ModelProvider.DEEPSEEK,
+        context_length=64_000,
+        max_output_tokens=8_000,
+        input_cost_per_million=0.27,
+        cached_cost_per_million=0.07,
+        output_cost_per_million=1.10,
+        description="DeepSeek Chat",
+    ),
+    DeepSeekModel.DEEPSEEK_R1.value: ModelInfo(
+        name=DeepSeekModel.DEEPSEEK_R1.value,
+        provider=ModelProvider.DEEPSEEK,
+        context_length=64_000,
+        max_output_tokens=8_000,
+        input_cost_per_million=0.55,
+        cached_cost_per_million=0.14,
+        output_cost_per_million=2.19,
+        description="DeepSeek-R1 Reasoning LM",
+    ),
+    # Gemini Models
+    GeminiModel.GEMINI_2_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_056_768,
+        max_output_tokens=8192,
+        input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=0.40,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.0 Flash",
+    ),
+    GeminiModel.GEMINI_2_FLASH_LITE.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_FLASH_LITE.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_056_768,
+        max_output_tokens=8192,
+        input_cost_per_million=0.075,
+        output_cost_per_million=0.30,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.0 Flash Lite",
+    ),
+    GeminiModel.GEMINI_1_5_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_1_5_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_056_768,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 1.5 Flash",
+    ),
+    GeminiModel.GEMINI_1_5_FLASH_8B.value: ModelInfo(
+        name=GeminiModel.GEMINI_1_5_FLASH_8B.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_000_000,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 1.5 Flash 8B",
+    ),
+    GeminiModel.GEMINI_1_5_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_1_5_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=2_000_000,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 1.5 Pro",
+    ),
+    GeminiModel.GEMINI_2_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=2_000_000,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2 Pro Exp 02-05",
+    ),
+    GeminiModel.GEMINI_2_FLASH_THINKING.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_FLASH_THINKING.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_000_000,
+        max_output_tokens=64_000,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.0 Flash Thinking",
+    ),
+    # Gemini 2.5 Models
+    GeminiModel.GEMINI_2_5_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_536,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.31,
+        output_cost_per_million=10.0,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Pro",
+    ),
+    GeminiModel.GEMINI_2_5_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.30,
+        cached_cost_per_million=0.075,
+        output_cost_per_million=2.50,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Flash",
+    ),
+    GeminiModel.GEMINI_2_5_FLASH_LITE.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH_LITE.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=65_536,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=0.40,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Flash Lite",
+    ),
+}
+
+
+def get_model_info(
+    model: str | ModelName,
+    fallback_models: List[str] = [],
+) -> ModelInfo:
+    """Get model information by name or enum value"""
+    # Sequence of models to try, starting with the primary model
+    models_to_try = [model] + fallback_models
+
+    # Find the first model in the sequence that has info defined using next()
+    # on a generator expression that filters out None results from _get_model_info
+    found_info = next(
+        (info for m in models_to_try if (info := _get_model_info(m)) is not None),
+        None,  # Default value if the iterator is exhausted (no valid info found)
+    )
+
+    # Return the found info, or a default ModelInfo if none was found
+    return found_info or ModelInfo()
+
+
+def _get_model_info(model: str | ModelName) -> ModelInfo | None:
+    if isinstance(model, str):
+        return MODEL_INFO.get(model)
+    return MODEL_INFO.get(model.value)
 </file>
 
 <file path="mkdocs.yml">
@@ -85617,7 +85609,7 @@ class OpenAIGPT(LanguageModel):
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.6"
+version = "0.59.8"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

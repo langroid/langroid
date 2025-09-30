@@ -68,21 +68,6 @@ class CityTool(lr.agent.ToolMessage):
         print("SUCCESS! Got Valid City Info")
         return FinalResultTool(answer=self.city_info)
 
-    @staticmethod
-    def handle_message_fallback(
-        agent: lr.ChatAgent, msg: str | ChatDocument
-    ) -> str | None:
-        """
-        We end up here when there was no recognized tool msg from the LLM;
-        In this case use the AgentDoneTool with content set to
-        the original message content.
-        """
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-            return f"""
-            You forgot to use the TOOL/Function `{CityTool.name()}`.
-            Please use this tool to present the city info.
-            """
-
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
         # Used to provide few-shot examples in the system prompt
@@ -135,10 +120,15 @@ def app(
 
     config = lr.ChatAgentConfig(
         llm=llm_cfg,
+        handle_llm_no_tool=f"""
+            You FORGOT to use the TOOL/Function `{CityTool.name()}` 
+            to present city info!
+            """,
         system_message=f"""
         You will receive a city name, 
         and you must use the TOOL/FUNCTION `{CityTool.name()}` to generate/present
-        information about the city.
+        information about the city. In other words, your response must 
+        be a JSON string starting with `{{"request": "{CityTool.name()}", ...}}`
         """,
     )
 
