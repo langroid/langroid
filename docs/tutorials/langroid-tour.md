@@ -18,6 +18,7 @@ import langroid as lr
 import langroid.language_models as lm
 ```
 
+
 Set up the LLM; note how you can specify the chat model -- if omitted, defaults
 to OpenAI `GPT4o`. See the guide to using Langroid with 
 [local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
@@ -25,7 +26,7 @@ and with [non-OpenAI LLMs](https://langroid.github.io/langroid/tutorials/non-ope
     
 ```python
 llm_config = lm.OpenAIGPTConfig( 
-   chat_model="glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct" 
+   chat_model="gpt-5-mini"
 )
 llm = lm.OpenAIGPT(llm_config)
 ```
@@ -71,8 +72,7 @@ are far more reliable when having the LLM return code in a structured output.)
 
 
 ```python
-from langroid.pydantic_v1 import BaseModel
-from langroid.agent.tools.orchestration import ResultTool
+from pydantic import BaseModel
 
 class CityTemperature(BaseModel):
     city: str
@@ -85,8 +85,8 @@ class WeatherTool(lr.ToolMessage):
     city_temp: CityTemperature
 
     # tool handler
-    def handle(self) -> ResultTool:
-        return ResultTool(city_temp = self.city_temp)
+    def handle(self) -> CityTemperature:
+        return self.city_temp
 ```
 
 1. When this tool is enabled for an agent, a method named `weather_tool` gets auto-inserted in the agent class, 
@@ -95,16 +95,25 @@ class WeatherTool(lr.ToolMessage):
 2. The value of the `purpose` field is used to populate the system message to the LLM,
    along with the Tool's schema derived from its Pydantic-based definition.
 
-Enable the Agent to use the `ToolMessage`:
+Enable the Agent to use the `ToolMessage`, and set a system message describing the 
+agent's task:
 
 ```python
 agent.enable_message(WeatherTool)
+agent.config.system_message = """
+ Your job is to extract city and temperature info from user input
+ and return it using the `weather_tool`.
+"""
 ```
 
 Create specialized task that returns a `CityTemperature` object:
 
 ```python
-task = lr.Task(agent, interactive=False)[CityTemperature]
+# configure task to terminate after (a) LLM emits a tool, (b) tool is handled by Agent
+task_config = lr.TaskConfig(done_sequences=["T,A"])
+
+# create a task that returns a CityTemperature object
+task = lr.Task(agent, interactive=False, config=task_config)[CityTemperature]
 
 # run task, with built-in tool-handling loop
 data = task.run("It is 45 degrees F in Boston")
