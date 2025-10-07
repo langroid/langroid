@@ -154,6 +154,7 @@ issues/
   898-implementation.md
   html-logger-implementation.md
   html-logger.md
+  issue-919-llamacpp-embeddings.md
   llm-client-caching-phase1-summary.md
   llm-client-caching-phase2-summary.md
   llm-client-caching-test-summary.md
@@ -6596,207 +6597,6 @@ for a simple [numbers game](three-agent-chat-num.md).
 height: 60px !important; /* Adjust size as necessary */
 </file>
 
-<file path="docs/tutorials/langroid-tour.md">
-# A quick tour of Langroid
-
-This is a quick tour of some Langroid features. For a more detailed guide,
-see the [Getting Started guide](https://langroid.github.io/langroid/quick-start/).
-There are many more features besides the ones shown here. To explore langroid more,
-see the sections of the main [docs](https://langroid.github.io/langroid/),
-and a 
-[Colab notebook](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
-you can try yourself.  
-
-
-## Chat directly with LLM
-
-Imports:
-
-```python
-import langroid as lr
-import langroid.language_models as lm
-```
-
-Set up the LLM; note how you can specify the chat model -- if omitted, defaults
-to OpenAI `GPT4o`. See the guide to using Langroid with 
-[local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
-and with [non-OpenAI LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
-    
-```python
-llm_config = lm.OpenAIGPTConfig( 
-   chat_model="glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct" 
-)
-llm = lm.OpenAIGPT(llm_config)
-```
-
-Chat with bare LLM -- no chat accumulation, i.e. follow-up responses will *not*
-be aware of prior conversation history (you need an Agent for that, see below).
-
-```python
-llm.chat("1 2 4 7 11 ?")
-# ==> answers 16, with some explanation
-```
-
-## Agent
-
-Make a [`ChatAgent`][langroid.agent.chat_agent.ChatAgent], 
-and chat with it; now accumulates conv history
-
-```python
-agent = lr.ChatAgent(lr.ChatAgentConfig(llm=llm_config))
-agent.llm_response("Find the next number: 1 2 4 7 11 ?")
-# => responds 16
-agent.llm_response("and then?)
-# => answers 22
-```
-
-## Task
-
-Make a [`Task`][langroid.agent.task.Task] and create a chat loop with the user:
-
-```python
-task = lr.Task(agent, interactive=True)
-task.run()
-```
-
-## Tools/Functions/Structured outputs:
-
-Define a [`ToolMessage`][langroid.agent.tool_message.ToolMessage] 
-using Pydantic (v1) -- this gets transpiled into system-message instructions
-to the LLM, so you never have to deal with writing a JSON schema.
-(Besides JSON-based tools, Langroid also supports 
-[XML-based tools](https://langroid.github.io/langroid/notes/xml-tools/), which 
-are far more reliable when having the LLM return code in a structured output.)
-
-
-```python
-from langroid.pydantic_v1 import BaseModel
-from langroid.agent.tools.orchestration import ResultTool
-
-class CityTemperature(BaseModel):
-    city: str
-    temp: float
-
-class WeatherTool(lr.ToolMessage):
-    request: str = "weather_tool" #(1)!
-    purpose: str = "To extract <city_temp> info from text" #(2)!
-
-    city_temp: CityTemperature
-
-    # tool handler
-    def handle(self) -> ResultTool:
-        return ResultTool(city_temp = self.city_temp)
-```
-
-1. When this tool is enabled for an agent, a method named `weather_tool` gets auto-inserted in the agent class, 
-   with body being the `handle` method -- this method handles the LLM's generation 
-   of this tool.
-2. The value of the `purpose` field is used to populate the system message to the LLM,
-   along with the Tool's schema derived from its Pydantic-based definition.
-
-Enable the Agent to use the `ToolMessage`:
-
-```python
-agent.enable_message(WeatherTool)
-```
-
-Create specialized task that returns a `CityTemperature` object:
-
-```python
-task = lr.Task(agent, interactive=False)[CityTemperature]
-
-# run task, with built-in tool-handling loop
-data = task.run("It is 45 degrees F in Boston")
-
-assert data.city == "Boston"
-assert int(data.temp) == 45
-```
-
-## Chat with a document (RAG)
-
-Create a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent].
-
-```python
-doc_agent_config = lr.agent.special.DocChatAgentConfig(llm=llm_config)
-doc_agent = lr.agent.special.DocChatAgent(doc_agent_config)
-```
-
-Ingest the contents of a web page into the agent 
-(this involves chunking, indexing into a vector-database, etc.):
-
-```python
-doc_agent.ingest_doc_paths("https://en.wikipedia.org/wiki/Ludwig_van_Beethoven")
-```
-
-Ask a question:
-
-```
-result = doc_agent.llm_response("When did Beethoven move from Bonn to Vienna?")
-```
-
-You should see the streamed response with citations like this:
-
-![langroid-tour-beethoven.png](langroid-tour-beethoven.png)
-
-## Two-agent interaction
-
-Set up a teacher agent:
-
-```python
-from langroid.agent.tools.orchestration import DoneTool
-
-teacher = lr.ChatAgent(
-    lr.ChatAgentConfig(
-        llm=llm_config,
-        system_message=f"""
-        Ask a numbers-based question, and your student will answer.
-        You can then provide feedback or hints to the student to help them
-        arrive at the right answer. Once you receive the right answer,
-        use the `{DoneTool.name()}` tool to end the session.
-        """
-    )
-)
-
-teacher.enable_message(DoneTool)
-teacher_task = lr.Task(teacher, interactive=False)
-
-```
-
-Set up a student agent:
-
-```python
-student = lr.ChatAgent(
-    lr.ChatAgentConfig(
-        llm=llm_config,
-        system_message=f"""
-        You will receive a numbers-related question. Answer to the best of
-        your ability. If your answer is wrong, you will receive feedback or hints,
-        and you can revise your answer, and repeat this process until you get 
-        the right answer.
-        """
-    )
-)
-
-student_task = lr.Task(student, interactive=False, single_round=True)
-```
-
-Make the `student_task` a subtask of the `teacher_task`:
-
-```python
-teacher_task.add_sub_task(student_task)
-```
-
-Run the teacher task:
-
-```python
-teacher_task.run()
-```
-
-You should then see this type of interaction:
-
-![langroid-tour-teacher.png](langroid-tour-teacher.png)
-</file>
-
 <file path="docs/tutorials/llm-usage-options.md">
 # Options for accessing LLMs
 
@@ -8335,6 +8135,294 @@ Besides Agents, Langroid also provides simple ways to directly interact with LLM
 Don't worry if some of these terms are not clear to you. 
 The [Getting Started Guide](quick-start/index.md) and subsequent pages 
 will help you get up to speed.
+</file>
+
+<file path="issues/issue-919-llamacpp-embeddings.md">
+# Issue #919: llama.cpp Embeddings Support
+
+## Background
+
+User reported issues using llama.cpp server for local embeddings with Langroid. The error occurred when using `LlamaCppServerEmbeddingsConfig`:
+
+```
+TypeError: list indices must be integers or slices, not str
+```
+
+This happened at line 466 in `langroid/embedding_models/models.py`:
+```python
+embeddings = response.json()["embedding"]
+```
+
+## Investigation Summary
+
+### Can llama.cpp Generate Embeddings?
+
+**YES!** llama.cpp supports embeddings in two ways:
+
+1. **Dedicated embedding models** (RECOMMENDED):
+   - nomic-embed-text-v1.5 (768 dims)
+   - nomic-embed-text-v2-moe
+   - nomic-embed-code
+   - Other GGUF embedding models
+
+2. **Regular LLMs** (works but not optimal):
+   - gpt-oss-20b, gpt-oss-120b
+   - Llama models
+   - By extracting internal representations
+
+### How to Enable
+
+Start llama-server with the `--embeddings` flag:
+
+```bash
+./llama-server -ngl 100 -c 2048 \
+  -m ~/nomic-embed-text-v1.5.Q8_0.gguf \
+  --host localhost --port 8080 \
+  --embeddings -b 2048 -ub 2048
+```
+
+## llama.cpp Embedding Endpoints
+
+llama.cpp provides multiple embedding endpoints with different response formats:
+
+### 1. Native `/embedding` endpoint
+
+**Request:**
+```json
+{
+  "content": "your text here"
+}
+```
+
+**Response:**
+```json
+{
+  "embedding": [0.1, 0.2, 0.3, ...]
+}
+```
+
+### 2. OpenAI-compatible `/v1/embeddings` endpoint
+
+**Request:**
+```json
+{
+  "input": "your text here",
+  "model": "model-name"
+}
+```
+
+**Response:**
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [0.1, 0.2, 0.3, ...],
+      "index": 0
+    }
+  ],
+  "model": "model-name",
+  "usage": {
+    "prompt_tokens": 5,
+    "total_tokens": 5
+  }
+}
+```
+
+## The Problem
+
+The original Langroid code expected only format #1 (native):
+```python
+embeddings = response.json()["embedding"]
+```
+
+However, llama.cpp can return **different formats** depending on:
+- Endpoint used (`/embedding` vs `/v1/embeddings`)
+- Server version/configuration
+- Batch mode settings
+
+The error indicated that `response.json()` returned a **list**, not a **dict**, suggesting llama.cpp returned an array format.
+
+## Discovered Response Formats
+
+Through investigation, we identified **5 possible response formats**:
+
+1. **Native format**: `{"embedding": [floats]}`
+2. **Array format**: `[{"embedding": [floats]}]`
+3. **Double-nested**: `[{"embedding": [[floats]]}]`
+4. **OpenAI-compatible**: `{"data": [{"embedding": [floats]}]}`
+5. **Dict-nested**: `{"embedding": [[floats]]}`
+
+## Our Solution
+
+### Implementation
+
+Added a robust `_extract_embedding()` method in `langroid/embedding_models/models.py` (lines 483-544) that:
+
+1. Tries each format in order
+2. Validates the extracted embedding is a list of floats
+3. Provides clear error messages if format is unrecognized
+
+```python
+def _extract_embedding(
+    self, response_json: dict[str, Any] | list[Any]
+) -> List[int | float]:
+    """
+    Extract embedding vector from llama.cpp response.
+
+    Handles multiple response formats:
+    1. Native /embedding: {"embedding": [floats]}
+    2. Array format: [{"embedding": [floats]}]
+    3. Double-nested: [{"embedding": [[floats]]}]
+    4. OpenAI /v1/embeddings: {"data": [{"embedding": [floats]}]}
+    5. Nested in dict: {"embedding": [[floats]]}
+
+    Args:
+        response_json: The JSON response from llama.cpp server
+
+    Returns:
+        List of floats representing the embedding vector
+
+    Raises:
+        ValueError: If response format is not recognized
+    """
+    # Implementation handles all 5 formats...
+```
+
+### Modified `generate_embedding()` method
+
+Changed from:
+```python
+embeddings = response.json()["embedding"]
+```
+
+To:
+```python
+embeddings = self._extract_embedding(response.json())
+```
+
+## Testing
+
+Created comprehensive unit tests in `tests/extras/test_llamacpp_embedding_formats.py`:
+
+- ✅ test_native_format
+- ✅ test_array_format
+- ✅ test_double_nested_array_format
+- ✅ test_openai_compatible_format
+- ✅ test_nested_in_dict_format
+- ✅ test_invalid_format_raises_error
+- ✅ test_generate_embedding_with_native_format (mocked)
+- ✅ test_generate_embedding_with_array_format (mocked)
+- ✅ test_generate_embedding_with_openai_format (mocked)
+- ✅ test_generate_embedding_http_error
+
+**All tests pass** ✅
+**Linting and type checking pass** ✅
+
+## Comparison with PR #920
+
+### PR #920 Approach
+
+Changed:
+```python
+embeddings = response.json()["embedding"]
+```
+
+To:
+```python
+embeddings = response.json()[0]["embedding"][0]
+```
+
+### Issues with PR #920
+
+1. **Too specific**: Only handles ONE format: `[{"embedding": [[floats]]}]`
+2. **Logic error**: The double `[0]` indexing would extract a single float, not the full embedding vector
+3. **Would fail validation**: The existing validation expects a list of floats
+4. **No tests**: No unit tests provided
+5. **No documentation**: No explanation of what format is expected
+
+### Our Solution Advantages
+
+1. **Handles 5 different formats** automatically
+2. **Backwards compatible**: Works with existing deployments
+3. **Well-tested**: 10 unit tests covering all scenarios
+4. **Well-documented**: Clear docstring explaining all formats
+5. **Robust error messages**: Helps users debug configuration issues
+
+## Usage Example
+
+### Configuration
+
+```python
+from langroid.embedding_models.models import LlamaCppServerEmbeddingsConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
+
+embed_cfg = LlamaCppServerEmbeddingsConfig(
+    api_base="http://localhost:8080",  # Your llama.cpp server
+    dims=768,  # Match your embedding model dimensions
+    context_length=2048,
+    batch_size=2048,
+)
+
+vecdb_config = QdrantDBConfig(
+    collection_name="my-docs",
+    embedding=embed_cfg,
+    storage_path=".qdrant/",
+)
+```
+
+### Running llama-server
+
+```bash
+# For dedicated embedding model (RECOMMENDED)
+./llama-server -ngl 100 -c 2048 \
+  -m ~/nomic-embed-text-v1.5.Q8_0.gguf \
+  --embeddings -b 2048 -ub 2048 \
+  --host localhost --port 8080
+
+# For LLM-based embeddings (gpt-oss example)
+./llama-server -ngl 99 \
+  -m ~/.cache/llama.cpp/gpt-oss-20b.gguf \
+  --embeddings \
+  --host localhost --port 8080
+```
+
+## Recommendations
+
+### For Users
+
+1. **Use dedicated embedding models** like nomic-embed-text-v1.5 for best results
+2. **Match dimensions** in config to your embedding model
+3. **Use the `--embeddings` flag** when starting llama-server
+4. **Check server logs** if you encounter issues
+
+### For Langroid
+
+1. ✅ **Implemented**: Robust format detection in `_extract_embedding()`
+2. ✅ **Tested**: Comprehensive unit tests
+3. ✅ **Documented**: Clear docstrings and examples
+4. **Consider**: Adding example in `examples/docqa/` using local embeddings
+5. **Consider**: Adding to documentation/tutorials
+
+## Files Modified
+
+- `langroid/embedding_models/models.py` - Added `_extract_embedding()` method
+- `tests/extras/test_llamacpp_embedding_formats.py` - New comprehensive test suite
+
+## References
+
+- Issue #919: https://github.com/langroid/langroid/issues/919
+- PR #920: https://github.com/langroid/langroid/pull/920
+- llama.cpp discussion #7712: https://github.com/ggml-org/llama.cpp/discussions/7712
+- nomic-embed models: https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF
+- Langroid docs: `docs/notes/llama-cpp-embeddings.md`
+
+## Conclusion
+
+**Issue #919 is now resolved** with a robust, well-tested solution that handles all known llama.cpp embedding response formats. Users can now use local embeddings with llama.cpp without worrying about response format variations.
+
+**PR #920 is not needed** as our solution is more comprehensive and handles all cases, not just one specific format.
 </file>
 
 <file path="langroid/agent/special/arangodb/system_messages.py">
@@ -12368,6 +12456,45 @@ Main langroid package
 __all__ = [
 </file>
 
+<file path="scripts/fix-pydantic-imports.sh">
+#!/bin/bash
+
+# Langroid currently has pydantic v2 compatibility, but internally uses v1,
+# via langroid.pydantic_v1. However since `import pydantic` brings in v2,
+# this script replaces all instances of 'from pydantic' and 'import pydantic' in
+# Python files with 'from langroid.pydantic_v1' and 'import langroid.pydantic_v1'.
+#
+# It makes an exception if the line contains '# keep', and leaves the
+# import untouched. Of course this should be used mainly in tests and examples,
+# since we don't want to mix pydantic v1 and v2 within core langroid code.
+
+# Define the directories to search in
+directories=("langroid" "examples" "tests")
+
+# Function to perform replacements and log changes
+replace_and_log() {
+    # Use find to locate all .py files in the specified directories, excluding .venv directories
+    find "${directories[@]}" -type f -name '*.py' -not -path '*/.venv/*' | while read -r file; do
+        # Check and replace lines starting with specific patterns
+        if grep -q '^from pydantic ' "$file" && grep -v '# keep' "$file" | grep -q '^from pydantic '; then
+            sed -i'' -e  '/^from pydantic .*# keep/!s/^from pydantic /from langroid.pydantic_v1 /' "$file"
+            echo "Replaced 'from pydantic ' in $file"
+        fi
+        if grep -q '^from pydantic.v1 ' "$file" && grep -v '# keep' "$file" | grep -q '^from pydantic.v1 '; then
+            sed -i'' -e '/^from pydantic .*# keep/s/^from pydantic.v1 /from langroid.pydantic_v1 /' "$file"
+            echo "Replaced 'from pydantic.v1 ' in $file"
+        fi
+        if grep -q '^import pydantic' "$file" && grep -v '# keep' "$file" | grep -q '^import pydantic'; then
+            sed -i'' -e '/^from pydantic .*# keep/!s/^import pydantic/import langroid.pydantic_v1/' "$file"
+            echo "Replaced 'import pydantic' in $file"
+        fi
+    done
+}
+
+# Call the function to perform the replacements and logging
+replace_and_log
+</file>
+
 <file path=".blackignore">
 ./examples/urlqa/chat-clear.py
 </file>
@@ -14462,6 +14589,216 @@ If you want to see full working examples combining these elements,
 have a look at the 
 [`examples`](https://github.com/langroid/langroid-examples/tree/main/examples)
 folder in the `langroid-examples` repo.
+</file>
+
+<file path="docs/tutorials/langroid-tour.md">
+# A quick tour of Langroid
+
+This is a quick tour of some Langroid features. For a more detailed guide,
+see the [Getting Started guide](https://langroid.github.io/langroid/quick-start/).
+There are many more features besides the ones shown here. To explore langroid more,
+see the sections of the main [docs](https://langroid.github.io/langroid/),
+and a 
+[Colab notebook](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
+you can try yourself.  
+
+
+## Chat directly with LLM
+
+Imports:
+
+```python
+import langroid as lr
+import langroid.language_models as lm
+```
+
+
+Set up the LLM; note how you can specify the chat model -- if omitted, defaults
+to OpenAI `GPT4o`. See the guide to using Langroid with 
+[local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
+and with [non-OpenAI LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
+    
+```python
+llm_config = lm.OpenAIGPTConfig( 
+   chat_model="gpt-5-mini"
+)
+llm = lm.OpenAIGPT(llm_config)
+```
+
+Chat with bare LLM -- no chat accumulation, i.e. follow-up responses will *not*
+be aware of prior conversation history (you need an Agent for that, see below).
+
+```python
+llm.chat("1 2 4 7 11 ?")
+# ==> answers 16, with some explanation
+```
+
+## Agent
+
+Make a [`ChatAgent`][langroid.agent.chat_agent.ChatAgent], 
+and chat with it; now accumulates conv history
+
+```python
+agent = lr.ChatAgent(lr.ChatAgentConfig(llm=llm_config))
+agent.llm_response("Find the next number: 1 2 4 7 11 ?")
+# => responds 16
+agent.llm_response("and then?)
+# => answers 22
+```
+
+## Task
+
+Make a [`Task`][langroid.agent.task.Task] and create a chat loop with the user:
+
+```python
+task = lr.Task(agent, interactive=True)
+task.run()
+```
+
+## Tools/Functions/Structured outputs:
+
+Define a [`ToolMessage`][langroid.agent.tool_message.ToolMessage] 
+using Pydantic (v1) -- this gets transpiled into system-message instructions
+to the LLM, so you never have to deal with writing a JSON schema.
+(Besides JSON-based tools, Langroid also supports 
+[XML-based tools](https://langroid.github.io/langroid/notes/xml-tools/), which 
+are far more reliable when having the LLM return code in a structured output.)
+
+
+```python
+from pydantic import BaseModel
+
+class CityTemperature(BaseModel):
+    city: str
+    temp: float
+
+class WeatherTool(lr.ToolMessage):
+    request: str = "weather_tool" #(1)!
+    purpose: str = "To extract <city_temp> info from text" #(2)!
+
+    city_temp: CityTemperature
+
+    # tool handler
+    def handle(self) -> CityTemperature:
+        return self.city_temp
+```
+
+1. When this tool is enabled for an agent, a method named `weather_tool` gets auto-inserted in the agent class, 
+   with body being the `handle` method -- this method handles the LLM's generation 
+   of this tool.
+2. The value of the `purpose` field is used to populate the system message to the LLM,
+   along with the Tool's schema derived from its Pydantic-based definition.
+
+Enable the Agent to use the `ToolMessage`, and set a system message describing the 
+agent's task:
+
+```python
+agent.enable_message(WeatherTool)
+agent.config.system_message = """
+ Your job is to extract city and temperature info from user input
+ and return it using the `weather_tool`.
+"""
+```
+
+Create specialized task that returns a `CityTemperature` object:
+
+```python
+# configure task to terminate after (a) LLM emits a tool, (b) tool is handled by Agent
+task_config = lr.TaskConfig(done_sequences=["T,A"])
+
+# create a task that returns a CityTemperature object
+task = lr.Task(agent, interactive=False, config=task_config)[CityTemperature]
+
+# run task, with built-in tool-handling loop
+data = task.run("It is 45 degrees F in Boston")
+
+assert data.city == "Boston"
+assert int(data.temp) == 45
+```
+
+## Chat with a document (RAG)
+
+Create a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent].
+
+```python
+doc_agent_config = lr.agent.special.DocChatAgentConfig(llm=llm_config)
+doc_agent = lr.agent.special.DocChatAgent(doc_agent_config)
+```
+
+Ingest the contents of a web page into the agent 
+(this involves chunking, indexing into a vector-database, etc.):
+
+```python
+doc_agent.ingest_doc_paths("https://en.wikipedia.org/wiki/Ludwig_van_Beethoven")
+```
+
+Ask a question:
+
+```
+result = doc_agent.llm_response("When did Beethoven move from Bonn to Vienna?")
+```
+
+You should see the streamed response with citations like this:
+
+![langroid-tour-beethoven.png](langroid-tour-beethoven.png)
+
+## Two-agent interaction
+
+Set up a teacher agent:
+
+```python
+from langroid.agent.tools.orchestration import DoneTool
+
+teacher = lr.ChatAgent(
+    lr.ChatAgentConfig(
+        llm=llm_config,
+        system_message=f"""
+        Ask a numbers-based question, and your student will answer.
+        You can then provide feedback or hints to the student to help them
+        arrive at the right answer. Once you receive the right answer,
+        use the `{DoneTool.name()}` tool to end the session.
+        """
+    )
+)
+
+teacher.enable_message(DoneTool)
+teacher_task = lr.Task(teacher, interactive=False)
+
+```
+
+Set up a student agent:
+
+```python
+student = lr.ChatAgent(
+    lr.ChatAgentConfig(
+        llm=llm_config,
+        system_message=f"""
+        You will receive a numbers-related question. Answer to the best of
+        your ability. If your answer is wrong, you will receive feedback or hints,
+        and you can revise your answer, and repeat this process until you get 
+        the right answer.
+        """
+    )
+)
+
+student_task = lr.Task(student, interactive=False, single_round=True)
+```
+
+Make the `student_task` a subtask of the `teacher_task`:
+
+```python
+teacher_task.add_sub_task(student_task)
+```
+
+Run the teacher task:
+
+```python
+teacher_task.run()
+```
+
+You should then see this type of interaction:
+
+![langroid-tour-teacher.png](langroid-tour-teacher.png)
 </file>
 
 <file path="issues/pydantic-v2-migration/examples-errors.md">
@@ -18604,72 +18941,6 @@ feedback: str
 suggested_fix: str
 </file>
 
-<file path="langroid/agent/special/relevance_extractor_agent.py">
-"""
-Agent to retrieve relevant segments from a body of text,
-that are relevant to a query.
-
-"""
-⋮----
-console = Console()
-logger = logging.getLogger(__name__)
-⋮----
-class RelevanceExtractorAgentConfig(ChatAgentConfig)
-⋮----
-llm: LLMConfig | None = OpenAIGPTConfig()
-segment_length: int = 1  # number of sentences per segment
-query: str = ""  # query for relevance extraction
-handle_llm_no_tool: str = """
-system_message: str = """
-⋮----
-class RelevanceExtractorAgent(ChatAgent)
-⋮----
-"""
-    Agent for extracting segments from text, that are relevant to a given query.
-    """
-⋮----
-def __init__(self, config: RelevanceExtractorAgentConfig)
-⋮----
-"""Compose a prompt asking to extract relevant segments from a passage.
-        Steps:
-        - number the segments in the passage
-        - compose prompt
-        - send to LLM
-        """
-⋮----
-message_str = message.content if isinstance(message, ChatDocument) else message
-# number the segments in the passage
-⋮----
-# compose prompt
-prompt = f"""
-# send to LLM
-response = super().llm_response(prompt)
-⋮----
-"""
-        Compose a prompt asking to extract relevant segments from a passage.
-        Steps:
-        - number the segments in the passage
-        - compose prompt
-        - send to LLM
-        The LLM is expected to generate a structured msg according to the
-        SegmentExtractTool schema, i.e. it should contain a `segment_list` field
-        whose value is a list of segment numbers or ranges, like "10,12,14-17".
-        """
-⋮----
-response = await super().llm_response_async(prompt)
-⋮----
-def extract_segments(self, msg: SegmentExtractTool) -> str
-⋮----
-"""Method to handle a segmentExtractTool message from LLM"""
-spec = msg.segment_list
-⋮----
-# assume this has numbered segments
-⋮----
-extracts = extract_numbered_segments(self.numbered_passage, spec)
-⋮----
-# this response ends the task by saying DONE
-</file>
-
 <file path="langroid/agent/special/table_chat_agent.py">
 """
 Agent that supports asking queries about a tabular dataset, internally
@@ -19575,6 +19846,116 @@ content = msg if isinstance(msg, str) else msg.content
 # save the content as a class-variable, so that
 # we can construct the ChatDocument once the LLM specifies a recipient.
 # This avoids having to re-generate the entire message, saving time + cost.
+</file>
+
+<file path="langroid/agent/done_sequence_parser.py">
+"""Parser for done sequence DSL (Domain Specific Language).
+
+Converts string patterns into DoneSequence objects for convenient task completion
+configuration.
+
+Examples:
+    "T, A" -> Tool followed by Agent response
+    "T[calculator], A" -> Specific tool 'calculator' followed by Agent response
+    "L, T, A, L" -> LLM, Tool, Agent, LLM sequence
+    "C[quit|exit]" -> Content matching regex pattern
+"""
+⋮----
+"""Parse a string pattern or return existing DoneSequence unchanged.
+
+    Args:
+        sequence: Either a DoneSequence object or a string pattern to parse
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
+
+    Returns:
+        DoneSequence object
+
+    Raises:
+        ValueError: If the string pattern is invalid
+    """
+⋮----
+events = _parse_string_pattern(sequence, tools_map)
+⋮----
+"""Parse a string pattern into a list of AgentEvent objects.
+
+    Pattern format:
+        - Single letter codes: T, A, L, U, N, C
+        - Specific tools: T[tool_name] or T[ToolClass]
+        - Content match: C[regex_pattern]
+        - Separated by commas, spaces allowed
+
+    Args:
+        pattern: String pattern to parse
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
+
+    Returns:
+        List of AgentEvent objects
+
+    Raises:
+        ValueError: If pattern is invalid
+    """
+events = []
+⋮----
+# Split by comma and strip whitespace
+parts = [p.strip() for p in pattern.split(",")]
+⋮----
+event = _parse_event_token(part, tools_map)
+⋮----
+"""Parse a single event token into an AgentEvent.
+
+    Args:
+        token: Single event token (e.g., "T", "T[calc]", "C[quit|exit]")
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
+
+    Returns:
+        AgentEvent object
+
+    Raises:
+        ValueError: If token is invalid
+    """
+# Check for bracket notation
+bracket_match = re.match(r"^([A-Z])\[([^\]]+)\]$", token)
+⋮----
+event_code = bracket_match.group(1)
+param = bracket_match.group(2)
+⋮----
+# Specific tool: T[tool_name] or T[ToolClass]
+tool_class = None
+tool_name = param
+⋮----
+# First try direct lookup in tools_map by the param (tool name)
+⋮----
+tool_class = tools_map[param]
+⋮----
+# If not found, loop through tools_map to find a tool class
+# whose __name__ matches param
+⋮----
+tool_class = cls
+tool_name = name
+⋮----
+# Content match: C[regex_pattern]
+⋮----
+# Simple single-letter codes
+event_map = {
+⋮----
+"C": EventType.CONTENT_MATCH,  # C without brackets matches any content
+⋮----
+# If not a single letter, could be a full event type name
+token_upper = token.upper()
+⋮----
+"""Parse a list of mixed string patterns and DoneSequence objects.
+
+    Args:
+        sequences: List containing strings and/or DoneSequence objects
+        tools_map: Optional dict mapping tool names to tool classes
+            (e.g., agent.llm_tools_map)
+
+    Returns:
+        List of DoneSequence objects
+    """
 </file>
 
 <file path="langroid/agent/openai_assistant.py">
@@ -20866,7 +21247,49 @@ def generate_embedding(self, text: str) -> List[int | float]
 data = {"content": text}
 response = requests.post(self.embedding_url, json=data)
 ⋮----
-embeddings = response.json()["embedding"]
+embeddings = self._extract_embedding(response.json())
+⋮----
+"""
+        Extract embedding vector from llama.cpp response.
+
+        Handles multiple response formats:
+        1. Native /embedding: {"embedding": [floats]}
+        2. Array format: [{"embedding": [floats]}]
+        3. Double-nested: [{"embedding": [[floats]]}]
+        4. OpenAI /v1/embeddings: {"data": [{"embedding": [floats]}]}
+        5. Nested in dict: {"embedding": [[floats]]}
+
+        Args:
+            response_json: The JSON response from llama.cpp server
+
+        Returns:
+            List of floats representing the embedding vector
+
+        Raises:
+            ValueError: If response format is not recognized
+        """
+⋮----
+# Try native format first: {"embedding": [floats]}
+⋮----
+embeddings = response_json["embedding"]
+# Check if it's [floats]
+⋮----
+# Might be nested: {"embedding": [[floats]]}
+⋮----
+# Try OpenAI format: {"data": [{"embedding": [floats]}]}
+⋮----
+data = response_json["data"]
+⋮----
+embeddings = data[0]["embedding"]
+⋮----
+# Try array format: [{"embedding": [floats]}] or [{"embedding": [[floats]]}]
+⋮----
+first_item = response_json[0]
+⋮----
+embeddings = first_item["embedding"]
+# Check if it's [floats]
+⋮----
+# Check if it's [[floats]]
 ⋮----
 class GeminiEmbeddings(EmbeddingModel)
 ⋮----
@@ -25249,45 +25672,6 @@ Added a new HTML logger that creates self-contained HTML files with collapsible 
 - All existing tests pass with modifications
 </file>
 
-<file path="scripts/fix-pydantic-imports.sh">
-#!/bin/bash
-
-# Langroid currently has pydantic v2 compatibility, but internally uses v1,
-# via langroid.pydantic_v1. However since `import pydantic` brings in v2,
-# this script replaces all instances of 'from pydantic' and 'import pydantic' in
-# Python files with 'from langroid.pydantic_v1' and 'import langroid.pydantic_v1'.
-#
-# It makes an exception if the line contains '# keep', and leaves the
-# import untouched. Of course this should be used mainly in tests and examples,
-# since we don't want to mix pydantic v1 and v2 within core langroid code.
-
-# Define the directories to search in
-directories=("langroid" "examples" "tests")
-
-# Function to perform replacements and log changes
-replace_and_log() {
-    # Use find to locate all .py files in the specified directories, excluding .venv directories
-    find "${directories[@]}" -type f -name '*.py' -not -path '*/.venv/*' | while read -r file; do
-        # Check and replace lines starting with specific patterns
-        if grep -q '^from pydantic ' "$file" && grep -v '# keep' "$file" | grep -q '^from pydantic '; then
-            sed -i'' -e  '/^from pydantic .*# keep/!s/^from pydantic /from langroid.pydantic_v1 /' "$file"
-            echo "Replaced 'from pydantic ' in $file"
-        fi
-        if grep -q '^from pydantic.v1 ' "$file" && grep -v '# keep' "$file" | grep -q '^from pydantic.v1 '; then
-            sed -i'' -e '/^from pydantic .*# keep/s/^from pydantic.v1 /from langroid.pydantic_v1 /' "$file"
-            echo "Replaced 'from pydantic.v1 ' in $file"
-        fi
-        if grep -q '^import pydantic' "$file" && grep -v '# keep' "$file" | grep -q '^import pydantic'; then
-            sed -i'' -e '/^from pydantic .*# keep/!s/^import pydantic/import langroid.pydantic_v1/' "$file"
-            echo "Replaced 'import pydantic' in $file"
-        fi
-    done
-}
-
-# Call the function to perform the replacements and logging
-replace_and_log
-</file>
-
 <file path="CLAUDE.md">
 # CLAUDE.md
 
@@ -26746,114 +27130,391 @@ This provides better type safety and makes refactoring easier.
 The `done_sequences` feature provides a powerful, declarative way to control task termination based on conversation patterns. The DSL syntax makes common cases simple while the full object syntax provides complete control when needed. This approach eliminates the need to subclass `Task` and override `done()` for most use cases, leading to cleaner, more maintainable code.
 </file>
 
-<file path="langroid/agent/done_sequence_parser.py">
-"""Parser for done sequence DSL (Domain Specific Language).
+<file path="langroid/agent/special/relevance_extractor_agent.py">
+"""
+Agent to retrieve relevant segments from a body of text,
+that are relevant to a query.
 
-Converts string patterns into DoneSequence objects for convenient task completion
-configuration.
-
-Examples:
-    "T, A" -> Tool followed by Agent response
-    "T[calculator], A" -> Specific tool 'calculator' followed by Agent response
-    "L, T, A, L" -> LLM, Tool, Agent, LLM sequence
-    "C[quit|exit]" -> Content matching regex pattern
 """
 ⋮----
-"""Parse a string pattern or return existing DoneSequence unchanged.
-
-    Args:
-        sequence: Either a DoneSequence object or a string pattern to parse
-        tools_map: Optional dict mapping tool names to tool classes
-            (e.g., agent.llm_tools_map)
-
-    Returns:
-        DoneSequence object
-
-    Raises:
-        ValueError: If the string pattern is invalid
+console = Console()
+logger = logging.getLogger(__name__)
+⋮----
+class RelevanceExtractorAgentConfig(ChatAgentConfig)
+⋮----
+llm: LLMConfig | None = OpenAIGPTConfig()
+segment_length: int = 1  # number of sentences per segment
+query: str = ""  # query for relevance extraction
+handle_llm_no_tool: str = """
+system_message: str = """
+⋮----
+class RelevanceExtractorAgent(ChatAgent)
+⋮----
+"""
+    Agent for extracting segments from text, that are relevant to a given query.
     """
 ⋮----
-events = _parse_string_pattern(sequence, tools_map)
+def __init__(self, config: RelevanceExtractorAgentConfig)
 ⋮----
-"""Parse a string pattern into a list of AgentEvent objects.
+"""Compose a prompt asking to extract relevant segments from a passage.
+        Steps:
+        - number the segments in the passage
+        - compose prompt
+        - send to LLM
+        """
+⋮----
+message_str = message.content if isinstance(message, ChatDocument) else message
+# number the segments in the passage
+⋮----
+# compose prompt
+prompt = f"""
+# send to LLM
+response = super().llm_response(prompt)
+⋮----
+"""
+        Compose a prompt asking to extract relevant segments from a passage.
+        Steps:
+        - number the segments in the passage
+        - compose prompt
+        - send to LLM
+        The LLM is expected to generate a structured msg according to the
+        SegmentExtractTool schema, i.e. it should contain a `segment_list` field
+        whose value is a list of segment numbers or ranges, like "10,12,14-17".
+        """
+⋮----
+response = await super().llm_response_async(prompt)
+⋮----
+def extract_segments(self, msg: SegmentExtractTool) -> str
+⋮----
+"""Method to handle a segmentExtractTool message from LLM"""
+spec = msg.segment_list
+⋮----
+# assume this has numbered segments
+⋮----
+extracts = extract_numbered_segments(self.numbered_passage, spec)
+⋮----
+# this response ends the task by saying DONE
+</file>
 
-    Pattern format:
-        - Single letter codes: T, A, L, U, N, C
-        - Specific tools: T[tool_name] or T[ToolClass]
-        - Content match: C[regex_pattern]
-        - Separated by commas, spaces allowed
+<file path="langroid/agent/chat_document.py">
+class ChatDocAttachment(BaseModel)
+⋮----
+# any additional data that should be attached to the document
+model_config = ConfigDict(extra="allow")
+⋮----
+class StatusCode(str, Enum)
+⋮----
+"""Codes meant to be returned by task.run(). Some are not used yet."""
+⋮----
+OK = "OK"
+ERROR = "ERROR"
+DONE = "DONE"
+STALLED = "STALLED"
+INF_LOOP = "INF_LOOP"
+KILL = "KILL"
+FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
+MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
+MAX_COST = "MAX_COST"
+MAX_TOKENS = "MAX_TOKENS"
+TIMEOUT = "TIMEOUT"
+NO_ANSWER = "NO_ANSWER"
+USER_QUIT = "USER_QUIT"
+⋮----
+class ChatDocMetaData(DocMetaData)
+⋮----
+parent_id: str = ""  # msg (ChatDocument) to which this is a response
+child_id: str = ""  # ChatDocument that has response to this message
+agent_id: str = ""  # ChatAgent that generated this message
+msg_idx: int = -1  # index of this message in the agent `message_history`
+sender: Entity  # sender of the message
+# tool_id corresponding to single tool result in ChatDocument.content
+oai_tool_id: str | None = None
+tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
+block: None | Entity = None
+sender_name: str = ""
+recipient: str = ""
+usage: Optional[LLMTokenUsage] = None
+cached: bool = False
+displayed: bool = False
+has_citation: bool = False
+status: Optional[StatusCode] = None
+⋮----
+@property
+    def parent(self) -> Optional["ChatDocument"]
+⋮----
+@property
+    def child(self) -> Optional["ChatDocument"]
+⋮----
+class ChatDocLoggerFields(BaseModel)
+⋮----
+sender_entity: Entity = Entity.USER
+⋮----
+block: Entity | None = None
+tool_type: str = ""
+tool: str = ""
+content: str = ""
+⋮----
+@classmethod
+    def tsv_header(cls) -> str
+⋮----
+field_names = cls().model_dump().keys()
+⋮----
+class ChatDocument(Document)
+⋮----
+"""
+    Represents a message in a conversation among agents. All responders of an agent
+    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
+    and so does the Task.run() method.
 
-    Args:
-        pattern: String pattern to parse
-        tools_map: Optional dict mapping tool names to tool classes
-            (e.g., agent.llm_tools_map)
-
-    Returns:
-        List of AgentEvent objects
-
-    Raises:
-        ValueError: If pattern is invalid
+    Attributes:
+        oai_tool_calls (Optional[List[OpenAIToolCall]]):
+            Tool-calls from an OpenAI-compatible API
+        oai_tool_id2results (Optional[OrderedDict[str, str]]):
+            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
+        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
+            LLM should choose tool-use in its response
+            (auto, none, required, or a specific tool)
+        function_call (Optional[LLMFunctionCall]):
+            Function-call from an OpenAI-compatible API
+                (deprecated by OpenAI, in favor of tool-calls)
+        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
+            - `content` field (via JSON parsing),
+            - `oai_tool_calls`, or
+            - `function_call`
+        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
+        attachment (None | ChatDocAttachment): Any additional data attached.
     """
-events = []
 ⋮----
-# Split by comma and strip whitespace
-parts = [p.strip() for p in pattern.split(",")]
+reasoning: str = ""  # reasoning produced by a reasoning LLM
+content_any: Any = None  # to hold arbitrary data returned by responders
+files: List[FileAttachment] = []  # list of file attachments
+oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+oai_tool_id2result: Optional[OrderedDict[str, str]] = None
+oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
+function_call: Optional[LLMFunctionCall] = None
+# tools that are explicitly added by agent response/handler,
+# or tools recognized in the ChatDocument as handle-able tools
+tool_messages: List[ToolMessage] = []
+# all known tools in the msg that are in an agent's llm_tools_known list,
+# even if non-used/handled
+all_tool_messages: List[ToolMessage] = []
 ⋮----
-event = _parse_event_token(part, tools_map)
+metadata: ChatDocMetaData
+attachment: None | ChatDocAttachment = None
 ⋮----
-"""Parse a single event token into an AgentEvent.
+def __init__(self, **data: Any)
+⋮----
+@staticmethod
+    def deepcopy(doc: ChatDocument) -> ChatDocument
+⋮----
+new_doc = copy.deepcopy(doc)
+⋮----
+@staticmethod
+    def from_id(id: str) -> Optional["ChatDocument"]
+⋮----
+@staticmethod
+    def delete_id(id: str) -> None
+⋮----
+"""Remove ChatDocument with given id from ObjectRegistry,
+        and all its descendants.
+        """
+chat_doc = ChatDocument.from_id(id)
+# first delete all descendants
+⋮----
+next_chat_doc = chat_doc.child
+⋮----
+chat_doc = next_chat_doc
+⋮----
+def __str__(self) -> str
+⋮----
+fields = self.log_fields()
+tool_str = ""
+⋮----
+tool_str = f"{fields.tool_type}[{fields.tool}]: "
+recipient_str = ""
+⋮----
+recipient_str = f"=>{fields.recipient}: "
+⋮----
+def get_tool_names(self) -> List[str]
+⋮----
+"""
+        Get names of attempted tool usages (JSON or non-JSON) in the content
+            of the message.
+        Returns:
+            List[str]: list of *attempted* tool names
+            (We say "attempted" since we ONLY look at the `request` component of the
+            tool-call representation, and we're not fully parsing it into the
+            corresponding tool message class)
 
-    Args:
-        token: Single event token (e.g., "T", "T[calc]", "C[quit|exit]")
-        tools_map: Optional dict mapping tool names to tool classes
-            (e.g., agent.llm_tools_map)
+        """
+tool_candidates = XMLToolMessage.find_candidates(self.content)
+⋮----
+tool_candidates = extract_top_level_json(self.content)
+⋮----
+tools = [json.loads(tc).get("request") for tc in tool_candidates]
+⋮----
+tool_dicts = [
+tools = [td.get("request") for td in tool_dicts if td is not None]
+⋮----
+def log_fields(self) -> ChatDocLoggerFields
+⋮----
+"""
+        Fields for logging in csv/tsv logger
+        Returns:
+            List[str]: list of fields
+        """
+tool_type = ""  # FUNC or TOOL
+tool = ""  # tool name or function name
+⋮----
+# Skip tool detection for system messages - they contain tool instructions,
+# not actual tool calls
+⋮----
+oai_tools = (
+⋮----
+tool_type = "FUNC"
+tool = self.function_call.name
+⋮----
+tool_type = "OAI_TOOL"
+tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
+⋮----
+json_tools = self.get_tool_names()
+⋮----
+json_tools = []
+⋮----
+tool_type = "TOOL"
+tool = json_tools[0]
+recipient = self.metadata.recipient
+content = self.content
+sender_entity = self.metadata.sender
+sender_name = self.metadata.sender_name
+⋮----
+def tsv_str(self) -> str
+⋮----
+field_values = fields.model_dump().values()
+⋮----
+def pop_tool_ids(self) -> None
+⋮----
+"""
+        Pop the last tool_id from the stack of tool_ids.
+        """
+⋮----
+@staticmethod
+    def _clean_fn_call(fc: LLMFunctionCall | None) -> None
+⋮----
+# Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
+# with oddities:
+# (a) the `name` is set, as well as `arguments.request` is set,
+#  and in langroid we use the `request` value as the `name`.
+#  In this case we override the `name` with the `request` value.
+# (b) the `name` looks like "functions blah" or just "functions"
+#   In this case we strip the "functions" part.
+⋮----
+request = fc.arguments.get("request")
+⋮----
+"""
+        Convert LLMResponse to ChatDocument.
+        Args:
+            response (LLMResponse): LLMResponse to convert.
+            displayed (bool): Whether this response was displayed to the user.
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMResponse.
+        """
+⋮----
+message = message.strip()
+⋮----
+message = ""
+⋮----
+# there must be at least one if it's not None
+⋮----
+@staticmethod
+    def from_str(msg: str) -> "ChatDocument"
+⋮----
+# first check whether msg is structured as TO <recipient>: <message>
+⋮----
+# check if any top level json specifies a 'recipient'
+recipient = top_level_json_field(msg, "recipient")
+message = msg  # retain the whole msg in this case
+⋮----
+"""
+        Convert LLMMessage to ChatDocument.
 
-    Returns:
-        AgentEvent object
+        Args:
+            message (LLMMessage): LLMMessage to convert.
+            sender_name (str): Name of the sender. Defaults to "".
+            recipient (str): Name of the recipient. Defaults to "".
 
-    Raises:
-        ValueError: If token is invalid
-    """
-# Check for bracket notation
-bracket_match = re.match(r"^([A-Z])\[([^\]]+)\]$", token)
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMMessage.
+        """
+# Map LLMMessage Role to ChatDocument Entity
+role_to_entity = {
 ⋮----
-event_code = bracket_match.group(1)
-param = bracket_match.group(2)
+sender_entity = role_to_entity.get(message.role, Entity.USER)
 ⋮----
-# Specific tool: T[tool_name] or T[ToolClass]
-tool_class = None
-tool_name = param
-⋮----
-# First try direct lookup in tools_map by the param (tool name)
-⋮----
-tool_class = tools_map[param]
-⋮----
-# If not found, loop through tools_map to find a tool class
-# whose __name__ matches param
-⋮----
-tool_class = cls
-tool_name = name
-⋮----
-# Content match: C[regex_pattern]
-⋮----
-# Simple single-letter codes
-event_map = {
-⋮----
-"C": EventType.CONTENT_MATCH,  # C without brackets matches any content
-⋮----
-# If not a single letter, could be a full event type name
-token_upper = token.upper()
-⋮----
-"""Parse a list of mixed string patterns and DoneSequence objects.
+"""
+        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
+        Usually there will be just a single LLMMessage, but when the ChatDocument
+        contains results from multiple OpenAI tool-calls, we would have a sequence
+        LLMMessages, one per tool-call result.
 
-    Args:
-        sequences: List containing strings and/or DoneSequence objects
-        tools_map: Optional dict mapping tool names to tool classes
-            (e.g., agent.llm_tools_map)
-
-    Returns:
-        List of DoneSequence objects
-    """
+        Args:
+            message (str|ChatDocument): Message to convert.
+            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
+                response, from the ChatAgent's latest message.
+        Returns:
+            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
+        """
+⋮----
+sender_role = Role.USER
+⋮----
+message = ChatDocument.from_str(message)
+content = message.content or to_string(message.content_any) or ""
+fun_call = message.function_call
+oai_tool_calls = message.oai_tool_calls
+⋮----
+# This may happen when a (parent agent's) LLM generates a
+# a Function-call, and it ends up being sent to the current task's
+# LLM (possibly because the function-call is mis-named or has other
+# issues and couldn't be handled by handler methods).
+# But a function-call can only be generated by an entity with
+# Role.ASSISTANT, so we instead put the content of the function-call
+# in the content of the message.
+⋮----
+fun_call = None
+⋮----
+# same reasoning as for function-call above
+⋮----
+oai_tool_calls = None
+# some LLM APIs (e.g. gemini) don't like empty msg
+content = content or " "
+sender_name = message.metadata.sender_name
+tool_ids = message.metadata.tool_ids
+tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
+chat_document_id = message.id()
+⋮----
+sender_role = Role.SYSTEM
+⋮----
+# This is a response to a function call, so set the role to FUNCTION.
+sender_role = Role.FUNCTION
+sender_name = message.metadata.parent.function_call.name
+⋮----
+pending_tool_ids = [tc.id for tc in oai_tools]
+# The ChatAgent has pending OpenAI tool-call(s),
+# so the current ChatDocument contains
+# results for some/all/none of them.
+⋮----
+# Case 1:
+# There was exactly 1 pending tool-call, and in this case
+# the result would be a plain string in `content`
+⋮----
+# Case 2:
+# ChatDocument.content has result of a single tool-call
+⋮----
+# There were > 1 tool-calls awaiting response,
+⋮----
+sender_role = Role.ASSISTANT
+⋮----
+tool_id=tool_id,  # for OpenAI Assistant
 </file>
 
 <file path="langroid/language_models/client_cache.py">
@@ -27588,325 +28249,295 @@ Thanks to the contributors who helped improve this release, especially the integ
 **Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
 </file>
 
-<file path="langroid/agent/chat_document.py">
-class ChatDocAttachment(BaseModel)
-⋮----
-# any additional data that should be attached to the document
-model_config = ConfigDict(extra="allow")
-⋮----
-class StatusCode(str, Enum)
-⋮----
-"""Codes meant to be returned by task.run(). Some are not used yet."""
-⋮----
-OK = "OK"
-ERROR = "ERROR"
-DONE = "DONE"
-STALLED = "STALLED"
-INF_LOOP = "INF_LOOP"
-KILL = "KILL"
-FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
-MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
-MAX_COST = "MAX_COST"
-MAX_TOKENS = "MAX_TOKENS"
-TIMEOUT = "TIMEOUT"
-NO_ANSWER = "NO_ANSWER"
-USER_QUIT = "USER_QUIT"
-⋮----
-class ChatDocMetaData(DocMetaData)
-⋮----
-parent_id: str = ""  # msg (ChatDocument) to which this is a response
-child_id: str = ""  # ChatDocument that has response to this message
-agent_id: str = ""  # ChatAgent that generated this message
-msg_idx: int = -1  # index of this message in the agent `message_history`
-sender: Entity  # sender of the message
-# tool_id corresponding to single tool result in ChatDocument.content
-oai_tool_id: str | None = None
-tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
-block: None | Entity = None
-sender_name: str = ""
-recipient: str = ""
-usage: Optional[LLMTokenUsage] = None
-cached: bool = False
-displayed: bool = False
-has_citation: bool = False
-status: Optional[StatusCode] = None
-⋮----
-@property
-    def parent(self) -> Optional["ChatDocument"]
-⋮----
-@property
-    def child(self) -> Optional["ChatDocument"]
-⋮----
-class ChatDocLoggerFields(BaseModel)
-⋮----
-sender_entity: Entity = Entity.USER
-⋮----
-block: Entity | None = None
-tool_type: str = ""
-tool: str = ""
-content: str = ""
-⋮----
-@classmethod
-    def tsv_header(cls) -> str
-⋮----
-field_names = cls().model_dump().keys()
-⋮----
-class ChatDocument(Document)
-⋮----
-"""
-    Represents a message in a conversation among agents. All responders of an agent
-    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
-    and so does the Task.run() method.
+<file path=".gitignore">
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-    Attributes:
-        oai_tool_calls (Optional[List[OpenAIToolCall]]):
-            Tool-calls from an OpenAI-compatible API
-        oai_tool_id2results (Optional[OrderedDict[str, str]]):
-            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
-        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
-            LLM should choose tool-use in its response
-            (auto, none, required, or a specific tool)
-        function_call (Optional[LLMFunctionCall]):
-            Function-call from an OpenAI-compatible API
-                (deprecated by OpenAI, in favor of tool-calls)
-        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
-            - `content` field (via JSON parsing),
-            - `oai_tool_calls`, or
-            - `function_call`
-        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
-        attachment (None | ChatDocAttachment): Any additional data attached.
-    """
-⋮----
-reasoning: str = ""  # reasoning produced by a reasoning LLM
-content_any: Any = None  # to hold arbitrary data returned by responders
-files: List[FileAttachment] = []  # list of file attachments
-oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-oai_tool_id2result: Optional[OrderedDict[str, str]] = None
-oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
-function_call: Optional[LLMFunctionCall] = None
-# tools that are explicitly added by agent response/handler,
-# or tools recognized in the ChatDocument as handle-able tools
-tool_messages: List[ToolMessage] = []
-# all known tools in the msg that are in an agent's llm_tools_known list,
-# even if non-used/handled
-all_tool_messages: List[ToolMessage] = []
-⋮----
-metadata: ChatDocMetaData
-attachment: None | ChatDocAttachment = None
-⋮----
-def __init__(self, **data: Any)
-⋮----
-@staticmethod
-    def deepcopy(doc: ChatDocument) -> ChatDocument
-⋮----
-new_doc = copy.deepcopy(doc)
-⋮----
-@staticmethod
-    def from_id(id: str) -> Optional["ChatDocument"]
-⋮----
-@staticmethod
-    def delete_id(id: str) -> None
-⋮----
-"""Remove ChatDocument with given id from ObjectRegistry,
-        and all its descendants.
-        """
-chat_doc = ChatDocument.from_id(id)
-# first delete all descendants
-⋮----
-next_chat_doc = chat_doc.child
-⋮----
-chat_doc = next_chat_doc
-⋮----
-def __str__(self) -> str
-⋮----
-fields = self.log_fields()
-tool_str = ""
-⋮----
-tool_str = f"{fields.tool_type}[{fields.tool}]: "
-recipient_str = ""
-⋮----
-recipient_str = f"=>{fields.recipient}: "
-⋮----
-def get_tool_names(self) -> List[str]
-⋮----
-"""
-        Get names of attempted tool usages (JSON or non-JSON) in the content
-            of the message.
-        Returns:
-            List[str]: list of *attempted* tool names
-            (We say "attempted" since we ONLY look at the `request` component of the
-            tool-call representation, and we're not fully parsing it into the
-            corresponding tool message class)
+# C extensions
+*.so
 
-        """
-tool_candidates = XMLToolMessage.find_candidates(self.content)
-⋮----
-tool_candidates = extract_top_level_json(self.content)
-⋮----
-tools = [json.loads(tc).get("request") for tc in tool_candidates]
-⋮----
-tool_dicts = [
-tools = [td.get("request") for td in tool_dicts if td is not None]
-⋮----
-def log_fields(self) -> ChatDocLoggerFields
-⋮----
-"""
-        Fields for logging in csv/tsv logger
-        Returns:
-            List[str]: list of fields
-        """
-tool_type = ""  # FUNC or TOOL
-tool = ""  # tool name or function name
-⋮----
-# Skip tool detection for system messages - they contain tool instructions,
-# not actual tool calls
-⋮----
-oai_tools = (
-⋮----
-tool_type = "FUNC"
-tool = self.function_call.name
-⋮----
-tool_type = "OAI_TOOL"
-tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
-⋮----
-json_tools = self.get_tool_names()
-⋮----
-json_tools = []
-⋮----
-tool_type = "TOOL"
-tool = json_tools[0]
-recipient = self.metadata.recipient
-content = self.content
-sender_entity = self.metadata.sender
-sender_name = self.metadata.sender_name
-⋮----
-def tsv_str(self) -> str
-⋮----
-field_values = fields.model_dump().values()
-⋮----
-def pop_tool_ids(self) -> None
-⋮----
-"""
-        Pop the last tool_id from the stack of tool_ids.
-        """
-⋮----
-@staticmethod
-    def _clean_fn_call(fc: LLMFunctionCall | None) -> None
-⋮----
-# Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
-# with oddities:
-# (a) the `name` is set, as well as `arguments.request` is set,
-#  and in langroid we use the `request` value as the `name`.
-#  In this case we override the `name` with the `request` value.
-# (b) the `name` looks like "functions blah" or just "functions"
-#   In this case we strip the "functions" part.
-⋮----
-request = fc.arguments.get("request")
-⋮----
-"""
-        Convert LLMResponse to ChatDocument.
-        Args:
-            response (LLMResponse): LLMResponse to convert.
-            displayed (bool): Whether this response was displayed to the user.
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMResponse.
-        """
-⋮----
-message = message.strip()
-⋮----
-message = ""
-⋮----
-# there must be at least one if it's not None
-⋮----
-@staticmethod
-    def from_str(msg: str) -> "ChatDocument"
-⋮----
-# first check whether msg is structured as TO <recipient>: <message>
-⋮----
-# check if any top level json specifies a 'recipient'
-recipient = top_level_json_field(msg, "recipient")
-message = msg  # retain the whole msg in this case
-⋮----
-"""
-        Convert LLMMessage to ChatDocument.
+.logs/
+**/logs/
+**/*.log
+.idea/
+.qdrant/
+.DS_Store
 
-        Args:
-            message (LLMMessage): LLMMessage to convert.
-            sender_name (str): Name of the sender. Defaults to "".
-            recipient (str): Name of the recipient. Defaults to "".
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMMessage.
-        """
-# Map LLMMessage Role to ChatDocument Entity
-role_to_entity = {
-⋮----
-sender_entity = role_to_entity.get(message.role, Entity.USER)
-⋮----
-"""
-        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
-        Usually there will be just a single LLMMessage, but when the ChatDocument
-        contains results from multiple OpenAI tool-calls, we would have a sequence
-        LLMMessages, one per tool-call result.
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
 
-        Args:
-            message (str|ChatDocument): Message to convert.
-            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
-                response, from the ChatAgent's latest message.
-        Returns:
-            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
-        """
-⋮----
-sender_role = Role.USER
-⋮----
-message = ChatDocument.from_str(message)
-content = message.content or to_string(message.content_any) or ""
-fun_call = message.function_call
-oai_tool_calls = message.oai_tool_calls
-⋮----
-# This may happen when a (parent agent's) LLM generates a
-# a Function-call, and it ends up being sent to the current task's
-# LLM (possibly because the function-call is mis-named or has other
-# issues and couldn't be handled by handler methods).
-# But a function-call can only be generated by an entity with
-# Role.ASSISTANT, so we instead put the content of the function-call
-# in the content of the message.
-⋮----
-fun_call = None
-⋮----
-# same reasoning as for function-call above
-⋮----
-oai_tool_calls = None
-# some LLM APIs (e.g. gemini) don't like empty msg
-content = content or " "
-sender_name = message.metadata.sender_name
-tool_ids = message.metadata.tool_ids
-tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
-chat_document_id = message.id()
-⋮----
-sender_role = Role.SYSTEM
-⋮----
-# This is a response to a function call, so set the role to FUNCTION.
-sender_role = Role.FUNCTION
-sender_name = message.metadata.parent.function_call.name
-⋮----
-pending_tool_ids = [tc.id for tc in oai_tools]
-# The ChatAgent has pending OpenAI tool-call(s),
-# so the current ChatDocument contains
-# results for some/all/none of them.
-⋮----
-# Case 1:
-# There was exactly 1 pending tool-call, and in this case
-# the result would be a plain string in `content`
-⋮----
-# Case 2:
-# ChatDocument.content has result of a single tool-call
-⋮----
-# There were > 1 tool-calls awaiting response,
-⋮----
-sender_role = Role.ASSISTANT
-⋮----
-tool_id=tool_id,  # for OpenAI Assistant
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+**/*.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Chainlit
+.chainlit/
+
+.vscode
+
+# Emacs
+*~
+\#*\#
+.\#*
+sessions/
+commands/
+.claude/
+
+# Temporary files
+to-be-deleted.md
+test_debug.py
+test_minimal.py
+test_debug_full.py
+test_agent_difference.py
+test_isolated.py
+</file>
+
+<file path="docs/notes/task-tool.md">
+# TaskTool: Spawning Sub-Agents for Task Delegation
+
+## Overview
+
+`TaskTool` allows agents to **spawn sub-agents** to handle specific tasks. When an agent encounters a task that requires specialized tools or isolated execution, it can spawn a new sub-agent with exactly the capabilities needed for that task.
+
+This enables agents to dynamically create a hierarchy of specialized workers, each focused on their specific subtask with only the tools they need.
+
+## When to Use TaskTool
+
+TaskTool is useful when:
+- Different parts of a task require different specialized tools
+- You want to isolate tool access for specific operations  
+- A task involves recursive or nested operations
+- You need different LLM models for different subtasks
+
+## How It Works
+
+1. The parent agent decides to spawn a sub-agent and specifies:
+   - A system message defining the sub-agent's role
+   - A prompt for the sub-agent to process
+   - Which tools the sub-agent should have access to
+   - Optional model and iteration limits
+
+2. TaskTool spawns the new sub-agent, runs the task, and returns the result to the parent.
+
+## Async Support
+
+TaskTool fully supports both synchronous and asynchronous execution. The tool automatically handles async contexts when the parent task is running asynchronously.
+
+## Usage Example
+
+```python
+from langroid.agent.tools.task_tool import TaskTool
+
+# Enable TaskTool for your agent
+agent.enable_message([TaskTool, YourCustomTool], use=True, handle=True)
+
+# Agent can now spawn sub-agents for tasks when the LLM generates a task_tool request:
+
+response = {
+    "request": "task_tool",
+    "system_message": "You are a calculator. Use the multiply_tool to compute products.",
+    "prompt": "Calculate 5 * 7",
+    "tools": ["multiply_tool"],
+    "model": "gpt-4o-mini",   # optional
+    "max_iterations": 5,      # optional
+    "agent_name": "calculator-agent"  # optional
+}
+```
+
+## Field Reference
+
+**Required fields:**
+- `system_message`: Instructions for the sub-agent's role and behavior
+- `prompt`: The specific task/question for the sub-agent
+- `tools`: List of tool names. Special values: `["ALL"]` or `["NONE"]`
+
+**Optional fields:**
+- `model`: LLM model name (default: "gpt-4o-mini")
+- `max_iterations`: Task iteration limit (default: 10)
+- `agent_name`: Name for the sub-agent (default: auto-generated as "agent-{uuid}")
+
+## Example: Nested Operations
+
+Consider computing `Nebrowski(10, Nebrowski(3, 2))` where Nebrowski is a custom operation. The main agent spawns sub-agents to handle each operation:
+
+```python
+# Main agent spawns first sub-agent for inner operation:
+{
+    "request": "task_tool",
+    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
+    "prompt": "Compute Nebrowski(3, 2)",
+    "tools": ["nebrowski_tool"]
+}
+
+# Then spawns another sub-agent for outer operation:
+{
+    "request": "task_tool",
+    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
+    "prompt": "Compute Nebrowski(10, 11)",  # where 11 is the previous result
+    "tools": ["nebrowski_tool"]
+}
+```
+
+## Working Examples
+
+See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py) for complete examples including:
+- Basic task delegation with mock agents
+- Nested operations with custom tools
+- Both sync and async usage patterns
+
+## Important Notes
+
+- Spawned sub-agents run non-interactively (no human input)
+- `DoneTool` is automatically enabled for all sub-agents
+- Results are returned as `ChatDocument` objects. The Langroid framework takes care
+  of converting them to a suitable format for the parent agent's LLM to consume and 
+  respond to.
+- Sub-agents can be given custom names via the `agent_name` parameter, which helps with 
+  logging and debugging. If not specified, a unique name is auto-generated in the format 
+  "agent-{uuid}"
+- Only tools "known" to the parent agent can be enabled for sub-agents. This is an 
+  important aspect of the current mechanism. The `TaskTool` handler method in
+  the sub-agent only has access to tools that are known to the parent agent.
+  If there are tools that are only relevant to the sub-agent but not the parent,
+  you must still enable them in the parent agent, but you can set `use=False`
+  and `handle=False` when you enable them, e.g.:
+
+```python
+agent.enable_message(MySubAgentTool, use=False, handle=False)
+```
+  Since we are letting the main agent's LLM "decide" when to spawn a sub-agent,
+  your system message of the main agent should contain instructions clarifying that
+  it can decide which tools to enable for the sub-agent, as well as a list of 
+  all tools that might possibly be relevant to the sub-agent. This is particularly
+  important for tools that have been enabled with `use=False`, since instructions for
+  such tools would not be auto-inserted into the agent's system message. 
+
+
+
+## Best Practices
+
+1. **Clear Instructions**: Provide specific system messages that explain the sub-agent's role and tool usage
+2. **Tool Availability**: Ensure delegated tools are enabled for the parent agent
+3. **Appropriate Models**: Use simpler/faster models for simple subtasks
+4. **Iteration Limits**: Set reasonable limits based on task complexity
 </file>
 
 <file path="langroid/language_models/base.py">
@@ -28709,165 +29340,114 @@ big_doc_chunks = self.split_para_sentence(big_docs)
 big_doc_chunks = self.split_simple(big_docs)
 </file>
 
-<file path=".gitignore">
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+<file path="langroid/agent/tools/task_tool.py">
+"""
+TaskTool: A tool that allows agents to delegate a task to a sub-agent with
+    specific tools enabled.
+"""
+⋮----
+class TaskTool(ToolMessage)
+⋮----
+"""
+    Tool that spawns a sub-agent with specified tools to handle a task.
 
-# C extensions
-*.so
+    The sub-agent can be given a custom name for identification in logs.
+    If no name is provided, a random unique name starting with 'agent'
+    will be generated.
+    """
+⋮----
+# TODO: setting up termination conditions of sub-task needs to be improved
+request: str = "task_tool"
+purpose: str = """
+⋮----
+# Parameters for the agent tool
+⋮----
+system_message: Optional[str] = Field(
+⋮----
+prompt: str = Field(
+⋮----
+tools: List[str] = Field(
+# TODO: ensure valid model name
+model: Optional[str] = Field(
+max_iterations: Optional[int] = Field(
+agent_name: Optional[str] = Field(
+⋮----
+def _set_up_task(self, agent: ChatAgent) -> Task
+⋮----
+"""
+        Helper method to set up a task for the sub-agent.
 
-.logs/
-**/logs/
-**/*.log
-.idea/
-.qdrant/
-.DS_Store
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+        """
+# Generate a random name if not provided
+agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
+⋮----
+# Create chat agent config with system message if provided
+# TODO: Maybe we just copy the parent agent's config and override chat_model?
+#   -- but what if parent agent has a MockLMConfig?
+llm_config = lm.OpenAIGPTConfig(
+config = ChatAgentConfig(
+⋮----
+# Create the sub-agent
+sub_agent = ChatAgent(config)
+⋮----
+# Enable the specified tools for the sub-agent
+# Convert tool names to actual tool classes using parent agent's tools_map
+⋮----
+# Enable all tools from the parent agent:
+# This is the list of all tools KNOWN (whether usable or handle-able or not)
+tool_classes = []
+⋮----
+tool_class = agent.llm_tools_map[t]
+allow_llm_use = tool_class._allow_llm_use
+⋮----
+allow_llm_use = allow_llm_use.default
+⋮----
+# No tools enabled
+⋮----
+# Enable only specified tools
+⋮----
+tool_class = agent.llm_tools_map[tool_name]
+⋮----
+# always enable the DoneTool to signal task completion
+⋮----
+# Create a non-interactive task
+task = Task(sub_agent, interactive=False)
+⋮----
+"""
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+        Handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+⋮----
+task = self._set_up_task(agent)
+⋮----
+# Create a ChatDocument for the prompt with parent pointer
+prompt_doc = None
+⋮----
+prompt_doc = ChatDocument(
+# Set bidirectional parent-child relationship
+⋮----
+# Run the task with the ChatDocument or string prompt
+result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
+⋮----
+"""
+        Async method to handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-**/*.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# Chainlit
-.chainlit/
-
-.vscode
-
-# Emacs
-*~
-\#*\#
-.\#*
-sessions/
-commands/
-.claude/
-
-# Temporary files
-to-be-deleted.md
-test_debug.py
-test_minimal.py
-test_debug_full.py
-test_agent_difference.py
-test_isolated.py
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+⋮----
+# TODO eventually allow the various task setup configs,
+#  including termination conditions
+result = await task.run_async(
 </file>
 
 <file path="langroid/agent/task.py">
@@ -31730,136 +32310,6 @@ Your support will help build Langroid's momentum and community.
 - [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
 </file>
 
-<file path="docs/notes/task-tool.md">
-# TaskTool: Spawning Sub-Agents for Task Delegation
-
-## Overview
-
-`TaskTool` allows agents to **spawn sub-agents** to handle specific tasks. When an agent encounters a task that requires specialized tools or isolated execution, it can spawn a new sub-agent with exactly the capabilities needed for that task.
-
-This enables agents to dynamically create a hierarchy of specialized workers, each focused on their specific subtask with only the tools they need.
-
-## When to Use TaskTool
-
-TaskTool is useful when:
-- Different parts of a task require different specialized tools
-- You want to isolate tool access for specific operations  
-- A task involves recursive or nested operations
-- You need different LLM models for different subtasks
-
-## How It Works
-
-1. The parent agent decides to spawn a sub-agent and specifies:
-   - A system message defining the sub-agent's role
-   - A prompt for the sub-agent to process
-   - Which tools the sub-agent should have access to
-   - Optional model and iteration limits
-
-2. TaskTool spawns the new sub-agent, runs the task, and returns the result to the parent.
-
-## Async Support
-
-TaskTool fully supports both synchronous and asynchronous execution. The tool automatically handles async contexts when the parent task is running asynchronously.
-
-## Usage Example
-
-```python
-from langroid.agent.tools.task_tool import TaskTool
-
-# Enable TaskTool for your agent
-agent.enable_message([TaskTool, YourCustomTool], use=True, handle=True)
-
-# Agent can now spawn sub-agents for tasks when the LLM generates a task_tool request:
-
-response = {
-    "request": "task_tool",
-    "system_message": "You are a calculator. Use the multiply_tool to compute products.",
-    "prompt": "Calculate 5 * 7",
-    "tools": ["multiply_tool"],
-    "model": "gpt-4o-mini",   # optional
-    "max_iterations": 5,      # optional
-    "agent_name": "calculator-agent"  # optional
-}
-```
-
-## Field Reference
-
-**Required fields:**
-- `system_message`: Instructions for the sub-agent's role and behavior
-- `prompt`: The specific task/question for the sub-agent
-- `tools`: List of tool names. Special values: `["ALL"]` or `["NONE"]`
-
-**Optional fields:**
-- `model`: LLM model name (default: "gpt-4o-mini")
-- `max_iterations`: Task iteration limit (default: 10)
-- `agent_name`: Name for the sub-agent (default: auto-generated as "agent-{uuid}")
-
-## Example: Nested Operations
-
-Consider computing `Nebrowski(10, Nebrowski(3, 2))` where Nebrowski is a custom operation. The main agent spawns sub-agents to handle each operation:
-
-```python
-# Main agent spawns first sub-agent for inner operation:
-{
-    "request": "task_tool",
-    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
-    "prompt": "Compute Nebrowski(3, 2)",
-    "tools": ["nebrowski_tool"]
-}
-
-# Then spawns another sub-agent for outer operation:
-{
-    "request": "task_tool",
-    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
-    "prompt": "Compute Nebrowski(10, 11)",  # where 11 is the previous result
-    "tools": ["nebrowski_tool"]
-}
-```
-
-## Working Examples
-
-See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py) for complete examples including:
-- Basic task delegation with mock agents
-- Nested operations with custom tools
-- Both sync and async usage patterns
-
-## Important Notes
-
-- Spawned sub-agents run non-interactively (no human input)
-- `DoneTool` is automatically enabled for all sub-agents
-- Results are returned as `ChatDocument` objects. The Langroid framework takes care
-  of converting them to a suitable format for the parent agent's LLM to consume and 
-  respond to.
-- Sub-agents can be given custom names via the `agent_name` parameter, which helps with 
-  logging and debugging. If not specified, a unique name is auto-generated in the format 
-  "agent-{uuid}"
-- Only tools "known" to the parent agent can be enabled for sub-agents. This is an 
-  important aspect of the current mechanism. The `TaskTool` handler method in
-  the sub-agent only has access to tools that are known to the parent agent.
-  If there are tools that are only relevant to the sub-agent but not the parent,
-  you must still enable them in the parent agent, but you can set `use=False`
-  and `handle=False` when you enable them, e.g.:
-
-```python
-agent.enable_message(MySubAgentTool, use=False, handle=False)
-```
-  Since we are letting the main agent's LLM "decide" when to spawn a sub-agent,
-  your system message of the main agent should contain instructions clarifying that
-  it can decide which tools to enable for the sub-agent, as well as a list of 
-  all tools that might possibly be relevant to the sub-agent. This is particularly
-  important for tools that have been enabled with `use=False`, since instructions for
-  such tools would not be auto-inserted into the agent's system message. 
-
-
-
-## Best Practices
-
-1. **Clear Instructions**: Provide specific system messages that explain the sub-agent's role and tool usage
-2. **Tool Availability**: Ensure delegated tools are enabled for the parent agent
-3. **Appropriate Models**: Use simpler/faster models for simple subtasks
-4. **Iteration Limits**: Set reasonable limits based on task complexity
-</file>
-
 <file path="langroid/agent/special/doc_chat_agent.py">
 # # langroid/agent/special/doc_chat_agent.py
 """
@@ -33753,123 +34203,191 @@ def __del__(self) -> None
 # Clients are now managed centrally in langroid.language_models.client_cache
 </file>
 
-<file path="langroid/agent/tools/task_tool.py">
-"""
-TaskTool: A tool that allows agents to delegate a task to a sub-agent with
-    specific tools enabled.
-"""
-⋮----
-class TaskTool(ToolMessage)
-⋮----
-"""
-    Tool that spawns a sub-agent with specified tools to handle a task.
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
 
-    The sub-agent can be given a custom name for identification in logs.
-    If no name is provided, a random unique name starting with 'agent'
-    will be generated.
-    """
-⋮----
-# TODO: setting up termination conditions of sub-task needs to be improved
-request: str = "task_tool"
-purpose: str = """
-⋮----
-# Parameters for the agent tool
-⋮----
-system_message: Optional[str] = Field(
-⋮----
-prompt: str = Field(
-⋮----
-tools: List[str] = Field(
-# TODO: ensure valid model name
-model: Optional[str] = Field(
-max_iterations: Optional[int] = Field(
-agent_name: Optional[str] = Field(
-⋮----
-def _set_up_task(self, agent: ChatAgent) -> Task
-⋮----
-"""
-        Helper method to set up a task for the sub-agent.
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
 
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-        """
-# Generate a random name if not provided
-agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
-⋮----
-# Create chat agent config with system message if provided
-# TODO: Maybe we just copy the parent agent's config and override chat_model?
-#   -- but what if parent agent has a MockLMConfig?
-llm_config = lm.OpenAIGPTConfig(
-config = ChatAgentConfig(
-⋮----
-# Create the sub-agent
-sub_agent = ChatAgent(config)
-⋮----
-# Enable the specified tools for the sub-agent
-# Convert tool names to actual tool classes using parent agent's tools_map
-⋮----
-# Enable all tools from the parent agent:
-# This is the list of all tools KNOWN (whether usable or handle-able or not)
-tool_classes = []
-⋮----
-tool_class = agent.llm_tools_map[t]
-allow_llm_use = tool_class._allow_llm_use
-⋮----
-allow_llm_use = allow_llm_use.default
-⋮----
-# No tools enabled
-⋮----
-# Enable only specified tools
-⋮----
-tool_class = agent.llm_tools_map[tool_name]
-⋮----
-# always enable the DoneTool to signal task completion
-⋮----
-# Create a non-interactive task
-task = Task(sub_agent, interactive=False)
-⋮----
-"""
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
 
-        Handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
 
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-⋮----
-task = self._set_up_task(agent)
-⋮----
-# Create a ChatDocument for the prompt with parent pointer
-prompt_doc = None
-⋮----
-prompt_doc = ChatDocument(
-# Set bidirectional parent-child relationship
-⋮----
-# Run the task with the ChatDocument or string prompt
-result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
-⋮----
-"""
-        Async method to handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
 
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-⋮----
-# TODO eventually allow the various task setup configs,
-#  including termination conditions
-result = await task.run_async(
-</file>
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
 
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.13.2
-  hooks:
-    - id: ruff
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path="langroid/agent/base.py">
@@ -35099,191 +35617,13 @@ None,  # Default value if the iterator is exhausted (no valid info found)
 def _get_model_info(model: str | ModelName) -> ModelInfo | None
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.14.0
+  hooks:
+    - id: ruff
 </file>
 
 <file path="langroid/language_models/openai_gpt.py">
@@ -36256,7 +36596,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.8"
+version = "0.59.9"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
