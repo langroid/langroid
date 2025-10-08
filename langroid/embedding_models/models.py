@@ -463,12 +463,12 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.embedding_url, json=data)
 
         if response.status_code == 200:
-            embeddings = response.json()["embedding"]
+            embeddings = self._extract_embedding(response.json())
             if not (
                 isinstance(embeddings, list) and isinstance(embeddings[0], (int, float))
             ):
                 raise ValueError(
-                    """Embedding endpoint has not returned the correct format. 
+                    """Embedding endpoint has not returned the correct format.
                    Is the URL correct?
                 """
                 )
@@ -479,6 +479,71 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
                 response.status_code,
                 "Failed to connect to embedding provider",
             )
+
+    def _extract_embedding(
+        self, response_json: dict[str, Any] | list[Any]
+    ) -> List[int | float]:
+        """
+        Extract embedding vector from llama.cpp response.
+
+        Handles multiple response formats:
+        1. Native /embedding: {"embedding": [floats]}
+        2. Array format: [{"embedding": [floats]}]
+        3. Double-nested: [{"embedding": [[floats]]}]
+        4. OpenAI /v1/embeddings: {"data": [{"embedding": [floats]}]}
+        5. Nested in dict: {"embedding": [[floats]]}
+
+        Args:
+            response_json: The JSON response from llama.cpp server
+
+        Returns:
+            List of floats representing the embedding vector
+
+        Raises:
+            ValueError: If response format is not recognized
+        """
+        import json
+
+        # Try native format first: {"embedding": [floats]}
+        if isinstance(response_json, dict) and "embedding" in response_json:
+            embeddings = response_json["embedding"]
+            # Check if it's [floats]
+            if isinstance(embeddings, list) and len(embeddings) > 0:
+                if isinstance(embeddings[0], (int, float)):
+                    return embeddings
+                # Might be nested: {"embedding": [[floats]]}
+                if isinstance(embeddings[0], list) and len(embeddings[0]) > 0:
+                    if isinstance(embeddings[0][0], (int, float)):
+                        return embeddings[0]
+
+        # Try OpenAI format: {"data": [{"embedding": [floats]}]}
+        if isinstance(response_json, dict) and "data" in response_json:
+            data = response_json["data"]
+            if isinstance(data, list) and len(data) > 0:
+                if isinstance(data[0], dict) and "embedding" in data[0]:
+                    embeddings = data[0]["embedding"]
+                    if isinstance(embeddings, list) and len(embeddings) > 0:
+                        if isinstance(embeddings[0], (int, float)):
+                            return embeddings
+
+        # Try array format: [{"embedding": [floats]}] or [{"embedding": [[floats]]}]
+        if isinstance(response_json, list) and len(response_json) > 0:
+            first_item = response_json[0]
+            if isinstance(first_item, dict) and "embedding" in first_item:
+                embeddings = first_item["embedding"]
+                # Check if it's [floats]
+                if isinstance(embeddings, list) and len(embeddings) > 0:
+                    if isinstance(embeddings[0], (int, float)):
+                        return embeddings
+                    # Check if it's [[floats]]
+                    if isinstance(embeddings[0], list) and len(embeddings[0]) > 0:
+                        if isinstance(embeddings[0][0], (int, float)):
+                            return embeddings[0]
+
+        raise ValueError(
+            f"Unsupported embedding response format from {self.embedding_url}. "
+            f"Response: {json.dumps(response_json)[:500]}"
+        )
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         return EmbeddingFunctionCallable(self, self.config.batch_size)
