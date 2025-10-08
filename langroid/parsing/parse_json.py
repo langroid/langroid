@@ -142,8 +142,14 @@ def top_level_json_field(s: str, f: str) -> Any:
         return ""
     for j in jsons:
         json_data = json.loads(j)
-        if f in json_data:
-            return json_data[f]
+        if isinstance(json_data, dict):
+            if f in json_data:
+                return json_data[f]
+        elif isinstance(json_data, list):
+            # Some responses wrap candidate JSON objects in a list; scan them.
+            for item in json_data:
+                if isinstance(item, dict) and f in item:
+                    return item[f]
 
     return ""
 
