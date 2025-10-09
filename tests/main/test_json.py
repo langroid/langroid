@@ -172,3 +172,24 @@ def test_invalid_json_raises_error(invalid_input):
 )
 def test_top_level_json_field(s, field, expected):
     assert top_level_json_field(s, field) == expected
+
+
+def test_top_level_json_field_never_crashes():
+    """Test that top_level_json_field never crashes with malformed inputs."""
+    # Test cases that should not crash, just return ""
+    malformed_inputs = [
+        "",  # Empty string
+        "not json at all",  # No JSON
+        "{broken json",  # Incomplete JSON
+        '{"key": undefined}',  # JavaScript-style undefined (gets repaired)
+        "{\"malformed\": 'quotes'}",  # Wrong quotes
+        "}{",  # Backwards braces
+        "{{{",  # Nested unclosed
+        '{"key": null, "key2": }',  # Trailing comma with no value
+        '{"recipient": }',  # Field exists but no value
+    ]
+
+    for malformed in malformed_inputs:
+        # Should never crash, just return empty string or found value
+        result = top_level_json_field(malformed, "recipient")
+        assert isinstance(result, (str, int, float, bool, type(None)))
