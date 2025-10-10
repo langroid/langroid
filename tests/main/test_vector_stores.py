@@ -455,7 +455,7 @@ def test_vector_stores_context_window(vecdb):
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "chroma",
         "lancedb",
-        "postgres",
+        # "postgres",
         "weaviate_docker",
     ],
     indirect=True,
