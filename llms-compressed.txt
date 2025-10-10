@@ -269,6 +269,7 @@ examples/
     oai-multi-extract.py
     oai-retrieval-2.py
     oai-retrieval-assistant.py
+    rag-concurrent.py
     rag-local-simple.py
   extract/
     capitals.py
@@ -363,6 +364,7 @@ issues/
     PYDANTIC_V2_MIGRATION_TASK_SPECIFICATION.md
     pydantic-migration-checking-instructions.md
     PYRANTIC-V2-MIGRATION-PLAN.md
+  20251010-concurrent-rag.md
   898-implementation.md
   html-logger-implementation.md
   html-logger.md
@@ -4965,6 +4967,136 @@ and show that `typed_agent_response("Show me an example of two Presidents", Pres
 In addition to Pydantic models, `ToolMessage`s, and simple Python types are supported. For instance, `typed_agent_response("What is the value of pi?", float)` correctly returns $\pi$ to several decimal places.
 
 The following two detailed examples show how structured output can be used to improve the reliability of the [chat-tree example](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree.py): [this](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree-structured.py) shows how we can use output formats to force the agent to make the correct tool call in each situation and [this](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree-structured-simple.py) shows how we can simplify by using structured outputs to extract typed intermediate values and expressing the control flow between LLM calls and agents explicitly.
+</file>
+
+<file path="docs/notes/task-tool.md">
+# TaskTool: Spawning Sub-Agents for Task Delegation
+
+## Overview
+
+`TaskTool` allows agents to **spawn sub-agents** to handle specific tasks. When an agent encounters a task that requires specialized tools or isolated execution, it can spawn a new sub-agent with exactly the capabilities needed for that task.
+
+This enables agents to dynamically create a hierarchy of specialized workers, each focused on their specific subtask with only the tools they need.
+
+## When to Use TaskTool
+
+TaskTool is useful when:
+- Different parts of a task require different specialized tools
+- You want to isolate tool access for specific operations  
+- A task involves recursive or nested operations
+- You need different LLM models for different subtasks
+
+## How It Works
+
+1. The parent agent decides to spawn a sub-agent and specifies:
+   - A system message defining the sub-agent's role
+   - A prompt for the sub-agent to process
+   - Which tools the sub-agent should have access to
+   - Optional model and iteration limits
+
+2. TaskTool spawns the new sub-agent, runs the task, and returns the result to the parent.
+
+## Async Support
+
+TaskTool fully supports both synchronous and asynchronous execution. The tool automatically handles async contexts when the parent task is running asynchronously.
+
+## Usage Example
+
+```python
+from langroid.agent.tools.task_tool import TaskTool
+
+# Enable TaskTool for your agent
+agent.enable_message([TaskTool, YourCustomTool], use=True, handle=True)
+
+# Agent can now spawn sub-agents for tasks when the LLM generates a task_tool request:
+
+response = {
+    "request": "task_tool",
+    "system_message": "You are a calculator. Use the multiply_tool to compute products.",
+    "prompt": "Calculate 5 * 7",
+    "tools": ["multiply_tool"],
+    "model": "gpt-4o-mini",   # optional
+    "max_iterations": 5,      # optional
+    "agent_name": "calculator-agent"  # optional
+}
+```
+
+## Field Reference
+
+**Required fields:**
+- `system_message`: Instructions for the sub-agent's role and behavior
+- `prompt`: The specific task/question for the sub-agent
+- `tools`: List of tool names. Special values: `["ALL"]` or `["NONE"]`
+
+**Optional fields:**
+- `model`: LLM model name (default: "gpt-4o-mini")
+- `max_iterations`: Task iteration limit (default: 10)
+- `agent_name`: Name for the sub-agent (default: auto-generated as "agent-{uuid}")
+
+## Example: Nested Operations
+
+Consider computing `Nebrowski(10, Nebrowski(3, 2))` where Nebrowski is a custom operation. The main agent spawns sub-agents to handle each operation:
+
+```python
+# Main agent spawns first sub-agent for inner operation:
+{
+    "request": "task_tool",
+    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
+    "prompt": "Compute Nebrowski(3, 2)",
+    "tools": ["nebrowski_tool"]
+}
+
+# Then spawns another sub-agent for outer operation:
+{
+    "request": "task_tool",
+    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
+    "prompt": "Compute Nebrowski(10, 11)",  # where 11 is the previous result
+    "tools": ["nebrowski_tool"]
+}
+```
+
+## Working Examples
+
+See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py) for complete examples including:
+- Basic task delegation with mock agents
+- Nested operations with custom tools
+- Both sync and async usage patterns
+
+## Important Notes
+
+- Spawned sub-agents run non-interactively (no human input)
+- `DoneTool` is automatically enabled for all sub-agents
+- Results are returned as `ChatDocument` objects. The Langroid framework takes care
+  of converting them to a suitable format for the parent agent's LLM to consume and 
+  respond to.
+- Sub-agents can be given custom names via the `agent_name` parameter, which helps with 
+  logging and debugging. If not specified, a unique name is auto-generated in the format 
+  "agent-{uuid}"
+- Only tools "known" to the parent agent can be enabled for sub-agents. This is an 
+  important aspect of the current mechanism. The `TaskTool` handler method in
+  the sub-agent only has access to tools that are known to the parent agent.
+  If there are tools that are only relevant to the sub-agent but not the parent,
+  you must still enable them in the parent agent, but you can set `use=False`
+  and `handle=False` when you enable them, e.g.:
+
+```python
+agent.enable_message(MySubAgentTool, use=False, handle=False)
+```
+  Since we are letting the main agent's LLM "decide" when to spawn a sub-agent,
+  your system message of the main agent should contain instructions clarifying that
+  it can decide which tools to enable for the sub-agent, as well as a list of 
+  all tools that might possibly be relevant to the sub-agent. This is particularly
+  important for tools that have been enabled with `use=False`, since instructions for
+  such tools would not be auto-inserted into the agent's system message. 
+
+
+
+## Best Practices
+
+1. **Clear Instructions**: Provide specific system messages that explain the sub-agent's role and tool usage
+2. **Tool Availability**: Ensure delegated tools are enabled for the parent agent
+3. **Appropriate Models**: Use simpler/faster models for simple subtasks
+4. **Iteration Limits**: Set reasonable limits based on task complexity
 </file>
 
 <file path="docs/notes/tavily_search.md">
@@ -12561,6 +12693,173 @@ def ingest(self) -> None
 records = self.get_records()
 </file>
 
+<file path="langroid/agent/special/table_chat_agent.py">
+"""
+Agent that supports asking queries about a tabular dataset, internally
+represented as a Pandas dataframe. The `TableChatAgent` is configured with a
+dataset, which can be a Pandas df, file or URL. The delimiter/separator
+is auto-detected. In response to a user query, the Agent's LLM generates a Pandas
+expression (involving a dataframe `df`) to answer the query.
+The expression is passed via the `pandas_eval` tool/function-call,
+which is handled by the Agent's `pandas_eval` method. This method evaluates
+the expression and returns the result as a string.
+
+WARNING: This Agent should be used only with trusted input, as it can execute system
+commands. 
+
+The `full_eval` flag is false by default, which means that the input is sanitized
+against most common code injection attack vectors. `full_eval` may be set to True to 
+disable sanitization at all. Both cases should be used with caution.
+"""
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+console = Console()
+⋮----
+DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = f"""
+⋮----
+@no_type_check
+def dataframe_summary(df: pd.DataFrame) -> str
+⋮----
+"""
+    Generate a structured summary for a pandas DataFrame containing numerical
+    and categorical values.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame to summarize.
+
+    Returns:
+        str: A nicely structured and formatted summary string.
+    """
+⋮----
+# Column names display
+col_names_str = (
+⋮----
+# Numerical data summary
+num_summary = df.describe().map(lambda x: "{:.2f}".format(x))
+num_str = "Numerical Column Summary:\n" + num_summary.to_string() + "\n\n"
+⋮----
+# Categorical data summary
+cat_columns = df.select_dtypes(include=[np.object_]).columns
+cat_summary_list = []
+⋮----
+unique_values = df[col].unique()
+⋮----
+cat_str = "Categorical Column Summary:\n" + "\n".join(cat_summary_list) + "\n\n"
+⋮----
+# Missing values summary
+nan_summary = df.isnull().sum().rename("missing_values").to_frame()
+nan_str = "Missing Values Column Summary:\n" + nan_summary.to_string() + "\n"
+⋮----
+# Combine the summaries into one structured string
+summary_str = col_names_str + num_str + cat_str + nan_str
+⋮----
+class TableChatAgentConfig(ChatAgentConfig)
+⋮----
+system_message: str = DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE
+user_message: None | str = None
+cache: bool = True  # cache results
+debug: bool = False
+stream: bool = True  # allow streaming where needed
+full_eval: bool = (
+⋮----
+False  # runs eval without sanitization. Use only on trusted input!
+⋮----
+data: str | pd.DataFrame  # data file, URL, or DataFrame
+separator: None | str = None  # separator for data file
+vecdb: None | VectorStoreConfig = None
+llm: OpenAIGPTConfig = OpenAIGPTConfig(
+prompts: PromptsConfig = PromptsConfig(
+⋮----
+class PandasEvalTool(ToolMessage)
+⋮----
+"""Tool/function to evaluate a pandas expression involving a dataframe `df`"""
+⋮----
+request: str = "pandas_eval"
+purpose: str = """
+expression: str
+⋮----
+@classmethod
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]
+⋮----
+@classmethod
+    def instructions(cls) -> str
+⋮----
+class TableChatAgent(ChatAgent)
+⋮----
+"""
+    Agent for chatting with a collection of documents.
+    """
+⋮----
+sent_expression: bool = False
+⋮----
+def __init__(self, config: TableChatAgentConfig)
+⋮----
+df = config.data
+⋮----
+df = read_tabular_data(config.data, config.separator)
+⋮----
+summary = dataframe_summary(df)
+⋮----
+# enable the agent to use and handle the PandasEvalTool
+⋮----
+response = super().user_response(msg)
+⋮----
+def pandas_eval(self, msg: PandasEvalTool) -> str
+⋮----
+"""
+        Handle a PandasEvalTool message by evaluating the `expression` field
+            and returning the result.
+        Args:
+            msg (PandasEvalTool): The tool-message to handle.
+
+        Returns:
+            str: The result of running the code along with any print output.
+        """
+⋮----
+exprn = msg.expression
+vars = {"df": self.df}
+# Create a string-based I/O stream
+code_out = io.StringIO()
+⋮----
+# Temporarily redirect standard output to our string-based I/O stream
+⋮----
+# Evaluate the last line and get the result;
+# SECURITY MITIGATION: Eval input is sanitized by default to prevent most
+# common code injection attack vectors.
+⋮----
+exprn = sanitize_command(exprn)
+code = compile(exprn, "<calc>", "eval")
+eval_result = eval(code, vars, {})
+⋮----
+eval_result = f"ERROR: {type(e)}: {e}"
+⋮----
+eval_result = ""
+⋮----
+# Always restore the original standard output
+⋮----
+# If df has been modified in-place, save the changes back to self.df
+⋮----
+# Get the resulting string from the I/O stream
+print_result = code_out.getvalue() or ""
+sep = "\n" if print_result else ""
+# Combine the print and eval results
+result = f"{print_result}{sep}{eval_result}"
+⋮----
+result = "No result"
+# Return the result
+⋮----
+"""Handle various LLM deviations"""
+⋮----
+# LLM sent an expression (i.e. used the `pandas_eval` tool)
+# but upon receiving the results, simply said DONE without
+# narrating the result as instructed.
+⋮----
+# LLM forgot to say DONE
+⋮----
+# LLM forgot to use the `pandas_eval` tool
+</file>
+
 <file path="langroid/agent/tools/mcp/__init__.py">
 __all__ = [
 </file>
@@ -15711,6 +16010,97 @@ commits = list(repo.iter_commits(paths=filepath, max_count=2))
 diff = repo.git.diff(commits[1].hexsha, commits[0].hexsha, filepath)
 </file>
 
+<file path="langroid/utils/pandas_utils.py">
+COMMON_USE_DF_METHODS = {
+⋮----
+POTENTIALLY_DANGEROUS_DF_METHODS = {
+⋮----
+WHITELISTED_DF_METHODS = COMMON_USE_DF_METHODS - POTENTIALLY_DANGEROUS_DF_METHODS
+⋮----
+BLOCKED_KW = {
+MAX_CHAIN = 6
+MAX_DEPTH = 25
+NUMERIC_LIMIT = 1_000_000_000
+⋮----
+class UnsafeCommandError(ValueError)
+⋮----
+"""Raised when a command string violates security policy."""
+⋮----
+def _literal_ok(node: ast.AST) -> bool
+⋮----
+"""Return True if *node* is a safe literal (and within numeric limit)."""
+⋮----
+class CommandValidator(ast.NodeVisitor)
+⋮----
+"""AST walker that enforces the security policy."""
+⋮----
+# Comparison operators we allow
+ALLOWED_CMPOP = (ast.Gt, ast.GtE, ast.Lt, ast.LtE, ast.Eq, ast.NotEq)
+⋮----
+# Arithmetic operators we allow (power ** intentionally omitted)
+ALLOWED_BINOP = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod)
+ALLOWED_UNARY = (ast.UAdd, ast.USub)
+⋮----
+# Node whitelist
+ALLOWED_NODES = (
+⋮----
+def __init__(self, df_name: str = "df")
+⋮----
+# Depth guard
+def generic_visit(self, node: ast.AST) -> None
+⋮----
+# Literal validation
+def visit_Constant(self, node: ast.Constant) -> None
+⋮----
+# Arithmetic
+def visit_BinOp(self, node: ast.BinOp) -> None
+⋮----
+def visit_UnaryOp(self, node: ast.UnaryOp) -> None
+⋮----
+# Comparisons
+def visit_Compare(self, node: ast.Compare) -> None
+⋮----
+# Subscripts
+def visit_Subscript(self, node: ast.Subscript) -> None
+⋮----
+# Method calls
+def visit_Call(self, node: ast.Call) -> None
+⋮----
+method = node.func.attr
+⋮----
+# kwarg / arg checks
+⋮----
+# Names
+def visit_Name(self, node: ast.Name) -> None
+⋮----
+# Top-level gate
+def visit(self, node: ast.AST) -> None
+⋮----
+def sanitize_command(expr: str, df_name: str = "df") -> str
+⋮----
+"""
+    Validate *expr*; return it unchanged if it passes all rules,
+    else raise UnsafeCommandError with the first violation encountered.
+    """
+tree = ast.parse(expr, mode="eval")
+⋮----
+def stringify(x: Any) -> str
+⋮----
+# Convert x to DataFrame if it is not one already
+⋮----
+df = x.to_frame()
+⋮----
+df = x
+⋮----
+# Truncate long text columns to 1000 characters
+⋮----
+# Limit to 10 rows
+df = df.head(10)
+⋮----
+# Convert to string
+return df.to_string(index=False)  # type: ignore
+</file>
+
 <file path="langroid/utils/system.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -16031,6 +16421,99 @@ Main langroid package
 """
 ⋮----
 __all__ = [
+</file>
+
+<file path="release-notes/v0-56-0-task-tool.md">
+# Release Notes: TaskTool
+
+## New Feature: `TaskTool` for Spawning Sub-Agents
+
+We've added `TaskTool`, a new tool that enables agents to spawn sub-agents for handling specific tasks. This allows for dynamic task delegation with controlled tool access.
+
+### Key Features:
+- Agents can spawn sub-agents with specific tools and configurations
+- Sub-agents run non-interactively and return results to the parent
+- Supports nested operations and recursive task delegation
+- Flexible tool access: delegate specific tools, all tools, or no tools
+
+### Example Usage:
+```python
+# Agent spawns a sub-agent to handle a calculation
+{
+    "request": "task_tool",
+    "system_message": "You are a calculator. Use multiply_tool to compute products.",
+    "prompt": "Calculate 5 * 7",
+    "tools": ["multiply_tool"],
+    "model": "gpt-4o-mini"
+}
+```
+
+### Documentation:
+Full documentation with examples: [TaskTool Documentation](https://langroid.github.io/langroid/notes/task-tool/)
+
+### Testing:
+See working examples in [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py)
+
+## Update v0.56.3: Agent Naming Support
+
+### Enhancement:
+- Added optional `agent_name` parameter to TaskTool
+- Sub-agents can now be given custom names for better logging and debugging
+- If not specified, auto-generates unique names in format `agent-{uuid}`
+
+### Example:
+```python
+{
+    "request": "task_tool",
+    "system_message": "You are a calculator.",
+    "prompt": "Calculate 5 * 7",
+    "tools": ["multiply_tool"],
+    "agent_name": "calculator-agent"  # Optional: custom name for logging
+}
+```
+</file>
+
+<file path="release-notes/v0-56-2-table-chat-fix.md">
+# Release Notes - v0.56.2
+
+## TableChatAgent Enhancement: Data Cleaning Support with `df.assign()`
+
+### Overview
+This release enhances the TableChatAgent to better support data cleaning operations while maintaining security. Users can now perform column transformations using the safe `df.assign()` method.
+
+### Key Changes
+
+#### 1. Enabled `df.assign()` Method
+- Added `assign` to the whitelist of allowed DataFrame methods
+- Provides a secure way to create modified DataFrames without allowing arbitrary assignments
+- Maintains the existing security model while enabling common data cleaning tasks
+
+#### 2. Improved Agent Guidance
+- Updated system message to proactively explain that assignment statements (`df['col'] = ...`) are not allowed
+- Clear guidance to use `df.assign()` for data modifications
+- Agent now correctly uses `df.assign()` on first attempt, avoiding error-correction cycles
+
+### Example Usage
+When asked to clean data, the agent will now use:
+```python
+df.assign(airline=df['airline'].str.replace('*', ''))
+```
+Instead of attempting:
+```python
+df['airline'] = df['airline'].str.replace('*', '')  # This would fail
+```
+
+### Security Considerations
+- The `assign` method is safe as it returns a new DataFrame without side effects
+- Cannot be used for arbitrary code execution, file I/O, or network access
+- Expressions passed to `assign` still go through the same sanitization process
+- Maintains the eval-only security model (no exec)
+
+### Testing
+- Added comprehensive test coverage for self-correction behavior
+- Verified agent successfully handles data cleaning requests
+
+This addresses issue #867 and improves the TableChatAgent's utility for data cleaning workflows.
 </file>
 
 <file path="scripts/fix-pydantic-imports.sh">
@@ -19183,6 +19666,110 @@ file2 = tmp_path / "file2.txt"
 diff = diff_files(str(file1), str(file2))
 </file>
 
+<file path="tests/main/test_table_chat_agent.py">
+DATA_STRING = """age,gender,income,state,,,,
+⋮----
+@pytest.fixture
+def mock_data_frame_blanks()
+⋮----
+@pytest.fixture
+def mock_data_file_blanks(tmpdir)
+⋮----
+file_path = tmpdir.join("mock_data.csv")
+⋮----
+def generate_data(size: int) -> str
+⋮----
+# Create a list of states
+states = ["CA", "TX"]
+⋮----
+# Generate random age between 18 and 100
+ages = np.random.randint(18, 50, size)
+⋮----
+# Generate random gender
+genders = np.random.choice(["Male", "Female"], size)
+⋮----
+# Generate random state
+states_col = np.random.choice(states, size)
+⋮----
+# Generate random income between 30000 and 150000
+incomes = np.random.randint(30000, 150001, size)
+⋮----
+# use spaces, mixed cases to make it tricker
+data = {"age ": ages, "GenDer": genders, "State ": states_col, "income": incomes}
+⋮----
+@pytest.fixture
+def mock_dataframe() -> pd.DataFrame
+⋮----
+data = generate_data(200)  # generate data for 1000 rows
+⋮----
+@pytest.fixture
+def mock_data_file(tmp_path: Path) -> str
+⋮----
+df = generate_data(100)  # generate data for 1000 rows
+file_path = tmp_path / "mock_data.csv"
+⋮----
+"""
+    Test the TableChatAgent with a file as data source
+    """
+agent = TableChatAgent(
+⋮----
+full_eval=True,  # Allow full evaluation in tests
+⋮----
+task = Task(
+⋮----
+# run until LLM says DONE and shows answer,
+# at which point the task loop ends.
+⋮----
+# try 3 times to get non-empty result
+result = task.run("What is the average income of men under 40 in CA?", turns=6)
+⋮----
+age_col = closest_string("age", agent.df.columns)
+state_col = closest_string("state", agent.df.columns)
+gender_col = closest_string("gender", agent.df.columns)
+income_col = closest_string("income", agent.df.columns)
+answer = agent.df[
+⋮----
+# TODO - there are intermittent failures here; address this, see issue #288
+⋮----
+@pytest.mark.parametrize("fn_api", [True, False])
+def test_table_chat_agent_dataframe(test_settings: Settings, fn_api, mock_dataframe)
+⋮----
+@pytest.mark.parametrize("fn_api", [True, False])
+def test_table_chat_agent_file(test_settings: Settings, fn_api, mock_data_file)
+⋮----
+def test_table_chat_agent_assignment_self_correction(test_settings: Settings) -> None
+⋮----
+"""
+    Test that TableChatAgent self-corrects when trying to use assignment syntax
+    and uses df.assign() instead
+    """
+⋮----
+# Create a simple dataframe with data that needs cleaning
+df = pd.DataFrame(
+⋮----
+full_eval=False,  # Keep security restrictions to test self-correction
+⋮----
+# Ask to clean the airline column - this should trigger assignment attempt
+result = task.run(
+⋮----
+# Check that the result indicates success
+⋮----
+# The agent successfully cleaned the data (it says so in the message)
+⋮----
+@pytest.mark.parametrize("fn_api", [True, False])
+def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None
+⋮----
+"""
+    Test the TableChatAgent with a URL of a csv file as data source
+    """
+⋮----
+URL = "https://raw.githubusercontent.com/plotly/datasets/master/2011_us_ag_exports.csv"
+⋮----
+df = agent.df
+# directly get the answer
+answer = df[df["cotton"] < 500]["poultry"].mean()
+</file>
+
 <file path="tests/main/test_task_inf_loop.py">
 """
 Specific tests of the Task class for infinite loops.
@@ -21784,136 +22371,6 @@ This is especially important in scenarios where:
 
 This only affects local storage (`cloud=False`). When using Qdrant cloud service,
 the lock file mechanism is not used.
-</file>
-
-<file path="docs/notes/task-tool.md">
-# TaskTool: Spawning Sub-Agents for Task Delegation
-
-## Overview
-
-`TaskTool` allows agents to **spawn sub-agents** to handle specific tasks. When an agent encounters a task that requires specialized tools or isolated execution, it can spawn a new sub-agent with exactly the capabilities needed for that task.
-
-This enables agents to dynamically create a hierarchy of specialized workers, each focused on their specific subtask with only the tools they need.
-
-## When to Use TaskTool
-
-TaskTool is useful when:
-- Different parts of a task require different specialized tools
-- You want to isolate tool access for specific operations  
-- A task involves recursive or nested operations
-- You need different LLM models for different subtasks
-
-## How It Works
-
-1. The parent agent decides to spawn a sub-agent and specifies:
-   - A system message defining the sub-agent's role
-   - A prompt for the sub-agent to process
-   - Which tools the sub-agent should have access to
-   - Optional model and iteration limits
-
-2. TaskTool spawns the new sub-agent, runs the task, and returns the result to the parent.
-
-## Async Support
-
-TaskTool fully supports both synchronous and asynchronous execution. The tool automatically handles async contexts when the parent task is running asynchronously.
-
-## Usage Example
-
-```python
-from langroid.agent.tools.task_tool import TaskTool
-
-# Enable TaskTool for your agent
-agent.enable_message([TaskTool, YourCustomTool], use=True, handle=True)
-
-# Agent can now spawn sub-agents for tasks when the LLM generates a task_tool request:
-
-response = {
-    "request": "task_tool",
-    "system_message": "You are a calculator. Use the multiply_tool to compute products.",
-    "prompt": "Calculate 5 * 7",
-    "tools": ["multiply_tool"],
-    "model": "gpt-4o-mini",   # optional
-    "max_iterations": 5,      # optional
-    "agent_name": "calculator-agent"  # optional
-}
-```
-
-## Field Reference
-
-**Required fields:**
-- `system_message`: Instructions for the sub-agent's role and behavior
-- `prompt`: The specific task/question for the sub-agent
-- `tools`: List of tool names. Special values: `["ALL"]` or `["NONE"]`
-
-**Optional fields:**
-- `model`: LLM model name (default: "gpt-4o-mini")
-- `max_iterations`: Task iteration limit (default: 10)
-- `agent_name`: Name for the sub-agent (default: auto-generated as "agent-{uuid}")
-
-## Example: Nested Operations
-
-Consider computing `Nebrowski(10, Nebrowski(3, 2))` where Nebrowski is a custom operation. The main agent spawns sub-agents to handle each operation:
-
-```python
-# Main agent spawns first sub-agent for inner operation:
-{
-    "request": "task_tool",
-    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
-    "prompt": "Compute Nebrowski(3, 2)",
-    "tools": ["nebrowski_tool"]
-}
-
-# Then spawns another sub-agent for outer operation:
-{
-    "request": "task_tool",
-    "system_message": "Compute Nebrowski operations using the nebrowski_tool.",
-    "prompt": "Compute Nebrowski(10, 11)",  # where 11 is the previous result
-    "tools": ["nebrowski_tool"]
-}
-```
-
-## Working Examples
-
-See [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py) for complete examples including:
-- Basic task delegation with mock agents
-- Nested operations with custom tools
-- Both sync and async usage patterns
-
-## Important Notes
-
-- Spawned sub-agents run non-interactively (no human input)
-- `DoneTool` is automatically enabled for all sub-agents
-- Results are returned as `ChatDocument` objects. The Langroid framework takes care
-  of converting them to a suitable format for the parent agent's LLM to consume and 
-  respond to.
-- Sub-agents can be given custom names via the `agent_name` parameter, which helps with 
-  logging and debugging. If not specified, a unique name is auto-generated in the format 
-  "agent-{uuid}"
-- Only tools "known" to the parent agent can be enabled for sub-agents. This is an 
-  important aspect of the current mechanism. The `TaskTool` handler method in
-  the sub-agent only has access to tools that are known to the parent agent.
-  If there are tools that are only relevant to the sub-agent but not the parent,
-  you must still enable them in the parent agent, but you can set `use=False`
-  and `handle=False` when you enable them, e.g.:
-
-```python
-agent.enable_message(MySubAgentTool, use=False, handle=False)
-```
-  Since we are letting the main agent's LLM "decide" when to spawn a sub-agent,
-  your system message of the main agent should contain instructions clarifying that
-  it can decide which tools to enable for the sub-agent, as well as a list of 
-  all tools that might possibly be relevant to the sub-agent. This is particularly
-  important for tools that have been enabled with `use=False`, since instructions for
-  such tools would not be auto-inserted into the agent's system message. 
-
-
-
-## Best Practices
-
-1. **Clear Instructions**: Provide specific system messages that explain the sub-agent's role and tool usage
-2. **Tool Availability**: Ensure delegated tools are enabled for the parent agent
-3. **Appropriate Models**: Use simpler/faster models for simple subtasks
-4. **Iteration Limits**: Set reasonable limits based on task complexity
 </file>
 
 <file path="docs/notes/weaviate.md">
@@ -25038,6 +25495,159 @@ path = f.name
 if path:  # may be empty if continuing from previous session
 ⋮----
 task = Task(agent)
+</file>
+
+<file path="examples/docqa/rag-concurrent.py">
+"""
+Concurrent RAG example using DocChatAgent with custom asyncio harness
+
+This example demonstrates running multiple DocChat queries concurrently
+with detailed live logging that shows every task starting and finishing
+in real time (no waiting for gather() to return), making concurrency
+easy to verify at a glance.
+
+IMPORTANT: The --sequential flag runs tasks in a TRUE sequential loop
+(not asyncio's sequential mode), providing a baseline for comparison.
+
+Usage:
+
+# Run concurrently with asyncio (default)
+python3 examples/docqa/rag-concurrent.py
+
+# Run in TRUE sequential mode (simple loop) for baseline comparison
+python3 examples/docqa/rag-concurrent.py --sequential
+
+# With specific model
+python3 examples/docqa/rag-concurrent.py -m ollama/mistral:7b-instruct-v0.2-q8_0
+
+# Compare both modes to measure concurrency speedup
+python3 examples/docqa/rag-concurrent.py --sequential  # Baseline
+python3 examples/docqa/rag-concurrent.py  # Should be faster if truly concurrent
+
+# Show only concurrency logs (suppress long answers) and filter to START/WORKER lines
+python3 examples/docqa/rag-concurrent.py --num-questions=3 --log-only \\
+  | rg "Q[0-9]{2} (START|WORKER|COMPLETE)"
+
+The logs show:
+- Timestamps (HH:MM:SS.mmm) for each task start/complete
+- Thread IDs to verify parallel execution
+- Question numbers for tracking
+
+Expected patterns:
+- SEQUENTIAL: START->COMPLETE->START->COMPLETE (one at a time)
+- CONCURRENT: Multiple STARTs with close timestamps before any COMPLETEs
+
+If concurrent mode shows START->COMPLETE pattern, there's a bottleneck
+(e.g., shared vecdb client causing serialization).
+
+See here for more on how to set up a local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
+"""
+⋮----
+# Thread-safe logging with timestamps
+log_lock = threading.Lock()
+CURRENT_QUESTION: ContextVar[int | None] = ContextVar("CURRENT_QUESTION", default=None)
+EVENT_HISTORY: list[str] = []
+⋮----
+def log_event(event_type: str, question_num: int, message: str = "")
+⋮----
+"""Thread-safe logging with precise timestamps"""
+timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+thread_id = threading.get_ident() % 10000  # Short thread ID
+line = f"[{timestamp}] [{thread_id:04d}] Q{question_num:02d} {event_type:12s} {message}"
+⋮----
+# 10 questions about Borges' "The Library of Babel"
+ALL_QUESTIONS = [
+⋮----
+class LoggingDocChatAgent(DocChatAgent)
+⋮----
+"""DocChatAgent that reports worker-thread execution for visibility."""
+⋮----
+def answer_from_docs(self, query: str)
+⋮----
+q_num = CURRENT_QUESTION.get()
+⋮----
+start = time.time()
+result = super().answer_from_docs(query)
+⋮----
+elapsed = time.time() - start
+⋮----
+"""
+    Run DocChat queries on Library of Babel story.
+
+    Args:
+        m: Model name (default: GPT-4o)
+        sequential: If True, run truly sequentially (simple loop);
+                   if False, run with asyncio concurrency (default: False)
+        num_questions: Number of questions to run (max 10)
+        log_only: Suppress verbose answers and print a concise log summary
+    """
+num_questions = max(1, min(num_questions, len(ALL_QUESTIONS)))
+questions = ALL_QUESTIONS[:num_questions]
+mode = "TRULY SEQUENTIAL (simple loop)" if sequential else "CONCURRENT (asyncio)"
+⋮----
+# Create the llm config object
+llm_config = lm.OpenAIGPTConfig(
+⋮----
+stream=False,  # Disable streaming for batch processing
+⋮----
+# Configure DocChatAgent with Library of Babel story
+config = DocChatAgentConfig(
+⋮----
+# Create agent and ingest the document
+agent = LoggingDocChatAgent(config)
+url = "https://xpressenglish.com/our-stories/library-of-babel/"
+⋮----
+# Create a single task that will be cloned for each question
+⋮----
+task = lr.Task(
+⋮----
+# Run tasks and measure time
+⋮----
+start_time = time.time()
+⋮----
+# TRUE SEQUENTIAL: Simple loop, no async
+results = []
+⋮----
+)  # noqa: E501
+token = CURRENT_QUESTION.set(i)
+⋮----
+result = task.run(question, turns=1)
+⋮----
+final = (
+⋮----
+# CONCURRENT: Custom asyncio runner using task clones and as_completed
+⋮----
+async def run_question(clone_idx: int, question: str, base_task: lr.Task)
+⋮----
+"""Launch a clone of the base task and report progress live."""
+q_num = clone_idx + 1
+⋮----
+token = CURRENT_QUESTION.set(q_num)
+task_clone = base_task.clone(clone_idx)
+⋮----
+result = await task_clone.run_async(question, turns=1)
+⋮----
+length = 0
+⋮----
+length = len(result.content)
+⋮----
+length = len(str(result))
+⋮----
+async def run_all_concurrent()
+⋮----
+coros = [
+results_ordered = [None] * len(questions)
+⋮----
+results = asyncio.run(run_all_concurrent())
+⋮----
+elapsed_time = time.time() - start_time
+⋮----
+# Display results
+⋮----
+answer = result.content if hasattr(result, "content") else str(result)
+⋮----
+answer = "No response"
 </file>
 
 <file path="examples/docqa/rag-local-simple.py">
@@ -30446,6 +31056,258 @@ This migration plan provides a systematic, low-risk approach to migrating Langro
 The migration will unlock performance improvements, future-proof the codebase, and eliminate the maintenance burden of the compatibility layer while preserving all existing functionality.
 </file>
 
+<file path="issues/20251010-concurrent-rag.md">
+# Concurrent DocChatAgent Task Execution Investigation
+
+**Date:** 2025-10-10
+**Status:** In Progress - Root cause partially identified, fix implemented but incomplete
+**Priority:** Medium
+
+## Problem Statement
+
+When running multiple DocChatAgent tasks concurrently using Langroid's `run_batch_tasks` mechanism, the tasks execute **sequentially** rather than concurrently, despite being submitted to `asyncio.gather`. This results in no performance improvement over sequential execution.
+
+### Expected Behavior
+- 10 queries submitted concurrently should execute in parallel
+- Total time should be approximately equal to the slowest single query
+- Logs should show overlapping VecDB searches and LLM calls
+
+### Actual Behavior
+- All tasks are submitted together (START logs show same timestamp)
+- But they execute one after another with 4-5 second gaps between VecDB searches
+- Total time: ~60 seconds for 10 queries (~6 sec/query) - same as sequential
+- VecDB search logs show sequential pattern:
+  - Query 1: 11:56:21
+  - Query 2: 11:56:25 (4 sec later)
+  - Query 3: 11:56:30 (5 sec later)
+  - Query 4: 11:56:35 (5 sec later)
+
+## Investigation & Findings
+
+### Scripts Created
+
+#### 1. `examples/docqa/rag-concurrent.py`
+Main test script with timing instrumentation:
+- Loads Borges' "Library of Babel" story from URL
+- Runs 10 predefined questions about the story
+- Supports `--sequential` flag for true sequential baseline (simple loop)
+- Default mode uses `run_batch_tasks(..., sequential=False)` for asyncio concurrency
+- Includes timestamp logging (HH:MM:SS.mmm) and thread ID tracking
+- **Usage:**
+  ```bash
+  # Concurrent mode (default)
+  python3 examples/docqa/rag-concurrent.py
+
+  # True sequential baseline
+  python3 examples/docqa/rag-concurrent.py --sequential
+  ```
+
+#### 2. `examples/docqa/rag-concurrent-debug.py`
+Debug version with additional instrumentation:
+- Subclasses `DocChatAgent` to add timing to vecstore and LLM operations
+- Fewer questions (3 by default) for faster testing
+- Tracks phase-level timing (VECSTORE_START/END, LLM_CALL_START/END)
+- **Usage:**
+  ```bash
+  python3 examples/docqa/rag-concurrent-debug.py --num_questions=3
+  ```
+
+#### 3. `test_vecdb_clone.py`
+Minimal test to verify vecdb cloning behavior:
+- Creates a DocChatAgent with vecdb
+- Clones task 3 times
+- Prints vecdb and client IDs to verify separate instances
+- **Usage:**
+  ```bash
+  python3 test_vecdb_clone.py
+  ```
+
+### Root Cause Analysis
+
+#### Initial Hypothesis: Shared VecDB Instance
+**Code Location:** `langroid/agent/chat_agent.py:283` (line number before fix)
+
+Original clone() method did shallow copy:
+```python
+# OLD CODE - PROBLEM
+new_agent.vecdb = self.vecdb  # All clones share same vecdb!
+```
+
+**Impact:**
+- All cloned agents shared a single QdrantDB client instance
+- For local storage: `.lock` file prevents concurrent access
+- For cloud storage: shared connection pool may limit concurrency
+
+#### Fix Implemented
+**Code Location:** `langroid/agent/chat_agent.py:282-310`
+
+```python
+# NEW CODE - PARTIAL FIX
+if self.vecdb is not None:
+    from langroid.vector_store.base import VectorStore
+    from langroid.vector_store.qdrantdb import QdrantDBConfig
+    import os
+
+    vecdb_config = self.vecdb.config.model_copy(deep=True)
+    vecdb_config.replace_collection = False
+
+    # For local Qdrant storage, use separate paths for each clone
+    if isinstance(vecdb_config, QdrantDBConfig) and not vecdb_config.cloud:
+        base_path = vecdb_config.storage_path.rstrip('/')
+        clone_path = f"{base_path}_clone_{i}_{os.getpid()}"
+        vecdb_config.storage_path = clone_path
+        # Copy collection data to clone path
+        if not os.path.exists(clone_path):
+            import shutil
+            if os.path.exists(base_path):
+                shutil.copytree(base_path, clone_path)
+
+    new_agent.vecdb = VectorStore.create(vecdb_config)
+```
+
+**What This Fixes:**
+- ✅ Each clone gets its own vecdb instance and client
+- ✅ For local storage: separate `.qdrant_clone_*` directories avoid `.lock` contention
+- ✅ Verified working: `test_vecdb_clone.py` shows different IDs for each clone
+
+**What's Still Broken:**
+- ❌ Tasks still execute sequentially even with separate clients
+- ❌ The fix helps for local storage but doesn't solve cloud Qdrant serialization
+
+### Outstanding Issues
+
+#### Issue #1: Cloud Qdrant Serialization
+**Discovery:** Test environment uses `cloud=True` (remote Qdrant server)
+- Despite separate clients, execution is still sequential
+- Possible causes:
+  1. **Connection pool limits** on cloud Qdrant instance
+  2. **Rate limiting** on the Qdrant API
+  3. **Client-side connection manager** serializing requests
+  4. **Async/await pattern** in Qdrant client may not be truly concurrent
+
+**Evidence:**
+```
+🔧 Clone 0: vecdb type=QdrantDBConfig, cloud=True
+🔧 Clone 1: vecdb type=QdrantDBConfig, cloud=True
+🔧 Clone 2: vecdb type=QdrantDBConfig, cloud=True
+```
+
+#### Issue #2: Logging Artifacts
+The START/COMPLETE logging in `rag-concurrent.py` is misleading:
+- `input_map` logs START events (happens during task submission)
+- `output_map` logs COMPLETE events (called AFTER all tasks finish)
+- All COMPLETE logs show same timestamp because they're logged in a batch
+
+**Better indicators:**
+- VecDB INFO logs show actual execution timing
+- Look for "Searching VecDB" timestamps in the logs
+
+## Next Steps
+
+### Immediate Actions Needed
+
+1. **Investigate Qdrant Client Concurrency**
+   - File: `langroid/vector_store/qdrantdb.py`
+   - Check if `QdrantClient.search_batch()` is truly async
+   - Look for any locks, semaphores, or connection pooling
+   - Test: Create minimal script with just Qdrant queries (no DocChatAgent)
+
+2. **Test with Local Qdrant**
+   - Verify the clone-path fix works for local storage
+   - Set `cloud=False` in DocChatAgentConfig
+   - Confirm separate `.qdrant_clone_*` directories are created
+   - Verify no `.lock` contention
+
+3. **Profile Async Execution**
+   - Add more granular timing inside `run_batch_tasks`
+   - Check if `asyncio.gather` is actually creating concurrent tasks
+   - Use Python's `asyncio` debug mode
+   - Instrument the actual async chain: input_map → clone → run_async → output_map
+
+4. **Check LLM Client**
+   - Although not primary suspect, verify LLM client is concurrent
+   - File: `langroid/language_models/openai_gpt.py`
+   - Check for shared HTTP clients or connection pools
+
+### Testing Strategy
+
+```bash
+# 1. Test local storage fix
+python3 examples/docqa/rag-concurrent.py --sequential  # Baseline
+python3 examples/docqa/rag-concurrent.py               # With fix
+# Check for .qdrant_clone_* directories and timing improvement
+
+# 2. Test cloud Qdrant concurrency
+# (Current failing case)
+# Need to identify why separate clients don't help
+
+# 3. Minimal Qdrant concurrency test
+# Create standalone script that just does concurrent Qdrant searches
+# Isolate the vecdb layer from DocChatAgent complexity
+```
+
+### Files Modified
+
+1. `langroid/agent/chat_agent.py` - clone() method (lines 282-312)
+2. `examples/docqa/rag-concurrent.py` - NEW test script
+3. `examples/docqa/rag-concurrent-debug.py` - NEW debug script
+4. `test_vecdb_clone.py` - NEW minimal test (root directory)
+
+### Files to Investigate Next
+
+1. `langroid/vector_store/qdrantdb.py` - QdrantDB client implementation
+2. `langroid/agent/batch.py` - Batch task execution (already reviewed)
+3. `langroid/language_models/openai_gpt.py` - LLM client concurrency
+4. Qdrant client library itself - may need to check external dependency
+
+## Context for Next Agent
+
+### What Works
+- ✅ Vecdb cloning creates separate instances
+- ✅ Test scripts are functional and provide good visibility
+- ✅ Can see the sequential execution pattern in logs
+
+### What Doesn't Work
+- ❌ Concurrent execution still runs sequentially
+- ❌ ~60 seconds for 10 queries (no improvement over sequential)
+- ❌ Root cause for cloud Qdrant serialization unknown
+
+### Key Insight
+The problem is **NOT just the shallow vecdb copy**. That's fixed. The deeper issue is that even with separate QdrantDB clients accessing a cloud instance, the queries serialize. This suggests:
+- A shared resource deeper in the stack (connection pool, rate limiter, etc.)
+- Or the async pattern isn't actually concurrent
+- Or Qdrant cloud itself is serializing (unlikely but possible)
+
+### Recommended Approach
+1. Create minimal reproduction with just Qdrant (no DocChatAgent)
+2. Enable asyncio debug mode to see task scheduling
+3. Profile with `asyncio` task timing
+4. Consider testing with a different vector store (Chroma, etc.) to isolate Qdrant
+
+## References
+
+- Original issue report: User experiencing sequential execution when expecting concurrent
+- Test document: "The Library of Babel" by Jorge Luis Borges
+- URL: https://xpressenglish.com/our-stories/library-of-babel/
+- Langroid batch task mechanism: `langroid/agent/batch.py`
+- Qdrant lock file location: `.qdrant/doc-chat/.lock`
+
+## Additional Notes
+
+### Understanding `sequential` Parameter
+The `sequential` parameter in `run_batch_tasks` does NOT mean "use a simple loop":
+- `sequential=False`: Uses `asyncio.gather` for concurrent execution
+- `sequential=True`: Uses `await` in a loop (still async, just not concurrent)
+
+For TRUE sequential baseline, use a simple for-loop calling `task.run()` directly (as implemented in `rag-concurrent.py --sequential`).
+
+### Logging Best Practices
+- Don't trust START/COMPLETE logs from input_map/output_map
+- Look at actual operation logs (VecDB searches, LLM calls)
+- Use timestamps to verify overlapping execution windows
+- Thread IDs help identify parallel execution
+</file>
+
 <file path="issues/898-implementation.md">
 # Issue #898: OpenAI HTTP Client Support for SSL Certificate Verification
 
@@ -33750,173 +34612,6 @@ feedback: str
 suggested_fix: str
 </file>
 
-<file path="langroid/agent/special/table_chat_agent.py">
-"""
-Agent that supports asking queries about a tabular dataset, internally
-represented as a Pandas dataframe. The `TableChatAgent` is configured with a
-dataset, which can be a Pandas df, file or URL. The delimiter/separator
-is auto-detected. In response to a user query, the Agent's LLM generates a Pandas
-expression (involving a dataframe `df`) to answer the query.
-The expression is passed via the `pandas_eval` tool/function-call,
-which is handled by the Agent's `pandas_eval` method. This method evaluates
-the expression and returns the result as a string.
-
-WARNING: This Agent should be used only with trusted input, as it can execute system
-commands. 
-
-The `full_eval` flag is false by default, which means that the input is sanitized
-against most common code injection attack vectors. `full_eval` may be set to True to 
-disable sanitization at all. Both cases should be used with caution.
-"""
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-console = Console()
-⋮----
-DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = f"""
-⋮----
-@no_type_check
-def dataframe_summary(df: pd.DataFrame) -> str
-⋮----
-"""
-    Generate a structured summary for a pandas DataFrame containing numerical
-    and categorical values.
-
-    Args:
-        df (pd.DataFrame): The input DataFrame to summarize.
-
-    Returns:
-        str: A nicely structured and formatted summary string.
-    """
-⋮----
-# Column names display
-col_names_str = (
-⋮----
-# Numerical data summary
-num_summary = df.describe().map(lambda x: "{:.2f}".format(x))
-num_str = "Numerical Column Summary:\n" + num_summary.to_string() + "\n\n"
-⋮----
-# Categorical data summary
-cat_columns = df.select_dtypes(include=[np.object_]).columns
-cat_summary_list = []
-⋮----
-unique_values = df[col].unique()
-⋮----
-cat_str = "Categorical Column Summary:\n" + "\n".join(cat_summary_list) + "\n\n"
-⋮----
-# Missing values summary
-nan_summary = df.isnull().sum().rename("missing_values").to_frame()
-nan_str = "Missing Values Column Summary:\n" + nan_summary.to_string() + "\n"
-⋮----
-# Combine the summaries into one structured string
-summary_str = col_names_str + num_str + cat_str + nan_str
-⋮----
-class TableChatAgentConfig(ChatAgentConfig)
-⋮----
-system_message: str = DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE
-user_message: None | str = None
-cache: bool = True  # cache results
-debug: bool = False
-stream: bool = True  # allow streaming where needed
-full_eval: bool = (
-⋮----
-False  # runs eval without sanitization. Use only on trusted input!
-⋮----
-data: str | pd.DataFrame  # data file, URL, or DataFrame
-separator: None | str = None  # separator for data file
-vecdb: None | VectorStoreConfig = None
-llm: OpenAIGPTConfig = OpenAIGPTConfig(
-prompts: PromptsConfig = PromptsConfig(
-⋮----
-class PandasEvalTool(ToolMessage)
-⋮----
-"""Tool/function to evaluate a pandas expression involving a dataframe `df`"""
-⋮----
-request: str = "pandas_eval"
-purpose: str = """
-expression: str
-⋮----
-@classmethod
-    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]
-⋮----
-@classmethod
-    def instructions(cls) -> str
-⋮----
-class TableChatAgent(ChatAgent)
-⋮----
-"""
-    Agent for chatting with a collection of documents.
-    """
-⋮----
-sent_expression: bool = False
-⋮----
-def __init__(self, config: TableChatAgentConfig)
-⋮----
-df = config.data
-⋮----
-df = read_tabular_data(config.data, config.separator)
-⋮----
-summary = dataframe_summary(df)
-⋮----
-# enable the agent to use and handle the PandasEvalTool
-⋮----
-response = super().user_response(msg)
-⋮----
-def pandas_eval(self, msg: PandasEvalTool) -> str
-⋮----
-"""
-        Handle a PandasEvalTool message by evaluating the `expression` field
-            and returning the result.
-        Args:
-            msg (PandasEvalTool): The tool-message to handle.
-
-        Returns:
-            str: The result of running the code along with any print output.
-        """
-⋮----
-exprn = msg.expression
-vars = {"df": self.df}
-# Create a string-based I/O stream
-code_out = io.StringIO()
-⋮----
-# Temporarily redirect standard output to our string-based I/O stream
-⋮----
-# Evaluate the last line and get the result;
-# SECURITY MITIGATION: Eval input is sanitized by default to prevent most
-# common code injection attack vectors.
-⋮----
-exprn = sanitize_command(exprn)
-code = compile(exprn, "<calc>", "eval")
-eval_result = eval(code, vars, {})
-⋮----
-eval_result = f"ERROR: {type(e)}: {e}"
-⋮----
-eval_result = ""
-⋮----
-# Always restore the original standard output
-⋮----
-# If df has been modified in-place, save the changes back to self.df
-⋮----
-# Get the resulting string from the I/O stream
-print_result = code_out.getvalue() or ""
-sep = "\n" if print_result else ""
-# Combine the print and eval results
-result = f"{print_result}{sep}{eval_result}"
-⋮----
-result = "No result"
-# Return the result
-⋮----
-"""Handle various LLM deviations"""
-⋮----
-# LLM sent an expression (i.e. used the `pandas_eval` tool)
-# but upon receiving the results, simply said DONE without
-# narrating the result as instructed.
-⋮----
-# LLM forgot to say DONE
-⋮----
-# LLM forgot to use the `pandas_eval` tool
-</file>
-
 <file path="langroid/agent/tools/mcp/fastmcp_client.py">
 load_dotenv()  # load environment variables from .env
 ⋮----
@@ -36617,118 +37312,6 @@ chunks = chunk_markdown(markdown_text, config)
 # with rollup_chunk_tree we get entire doc as 1 chunk
 </file>
 
-<file path="langroid/parsing/parse_json.py">
-def is_valid_json(json_str: str) -> bool
-⋮----
-"""Check if the input string is a valid JSON.
-
-    Args:
-        json_str (str): The input string to check.
-
-    Returns:
-        bool: True if the input string is a valid JSON, False otherwise.
-    """
-⋮----
-def flatten(nested_list) -> Iterator[str]:  # type: ignore
-⋮----
-"""Flatten a nested list into a single list of strings"""
-⋮----
-def get_json_candidates(s: str) -> List[str]
-⋮----
-"""Get top-level JSON candidates, i.e. strings between curly braces."""
-# Define the grammar for matching curly braces
-curly_braces = originalTextFor(nestedExpr("{", "}"))
-⋮----
-# Parse the string
-⋮----
-results = curly_braces.searchString(s)
-# Properly convert nested lists to strings
-⋮----
-def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]
-⋮----
-# First, try parsing with ast.literal_eval
-⋮----
-result = ast.literal_eval(json_string)
-⋮----
-# If ast.literal_eval fails or returns non-dict/list, try repair_json
-json_repaired_obj = repair_json(json_string, return_objects=True)
-⋮----
-# fallback on yaml
-yaml_result = yaml.safe_load(json_string)
-⋮----
-# If all methods fail, raise ValueError
-⋮----
-def try_repair_json_yaml(s: str) -> str | None
-⋮----
-"""
-    Attempt to load as json, and if it fails, try repairing the JSON.
-    If that fails, replace any \n with space as a last resort.
-    NOTE - replacing \n with space will result in format loss,
-    which may matter in generated code (e.g. python, toml, etc)
-    """
-s_repaired_obj = repair_json(s, return_objects=True)
-⋮----
-s_repaired_obj = s_repaired_obj[0]
-⋮----
-s_repaired_obj = None
-⋮----
-return json.dumps(s_repaired_obj)  # type: ignore
-⋮----
-yaml_result = yaml.safe_load(s)
-⋮----
-# If it still fails, replace any \n with space as a last resort
-s = s.replace("\n", " ")
-⋮----
-return None  # all failed
-⋮----
-def extract_top_level_json(s: str) -> List[str]
-⋮----
-"""Extract all top-level JSON-formatted substrings from a given string.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-
-    Returns:
-        List[str]: A list of top-level JSON-formatted substrings.
-    """
-# Find JSON object and array candidates
-json_candidates = get_json_candidates(s)
-maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
-⋮----
-def top_level_json_field(s: str, f: str) -> Any
-⋮----
-"""
-    Extract the value of a field f from a top-level JSON object.
-    If there are multiple, just return the first.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-        f (str): The field to extract from the JSON object.
-
-    Returns:
-        str: The value of the field f in the top-level JSON object, if any.
-            Otherwise, return an empty string.
-
-    Note:
-        This function is designed to never crash. If any exception occurs during
-        JSON parsing or field extraction, it gracefully returns an empty string.
-    """
-⋮----
-jsons = extract_top_level_json(s)
-⋮----
-json_data = json.loads(j)
-⋮----
-# Some responses wrap candidate JSON objects in a list; scan them.
-⋮----
-# If this specific JSON fails to parse, continue to next candidate
-⋮----
-# Catch any unexpected errors to ensure we never crash
-⋮----
-def datetime_to_json(obj: Any) -> Any
-⋮----
-# Let json.dumps() handle the raising of TypeError for non-serializable objects
-</file>
-
 <file path="langroid/parsing/repo_loader.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -37892,97 +38475,6 @@ to_remove = [key for key, value in cls.registry.items() if value is None]
 def scheduled_cleanup(interval: int = 600) -> None
 ⋮----
 """Periodically cleans up the global registry every 'interval' seconds."""
-</file>
-
-<file path="langroid/utils/pandas_utils.py">
-COMMON_USE_DF_METHODS = {
-⋮----
-POTENTIALLY_DANGEROUS_DF_METHODS = {
-⋮----
-WHITELISTED_DF_METHODS = COMMON_USE_DF_METHODS - POTENTIALLY_DANGEROUS_DF_METHODS
-⋮----
-BLOCKED_KW = {
-MAX_CHAIN = 6
-MAX_DEPTH = 25
-NUMERIC_LIMIT = 1_000_000_000
-⋮----
-class UnsafeCommandError(ValueError)
-⋮----
-"""Raised when a command string violates security policy."""
-⋮----
-def _literal_ok(node: ast.AST) -> bool
-⋮----
-"""Return True if *node* is a safe literal (and within numeric limit)."""
-⋮----
-class CommandValidator(ast.NodeVisitor)
-⋮----
-"""AST walker that enforces the security policy."""
-⋮----
-# Comparison operators we allow
-ALLOWED_CMPOP = (ast.Gt, ast.GtE, ast.Lt, ast.LtE, ast.Eq, ast.NotEq)
-⋮----
-# Arithmetic operators we allow (power ** intentionally omitted)
-ALLOWED_BINOP = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod)
-ALLOWED_UNARY = (ast.UAdd, ast.USub)
-⋮----
-# Node whitelist
-ALLOWED_NODES = (
-⋮----
-def __init__(self, df_name: str = "df")
-⋮----
-# Depth guard
-def generic_visit(self, node: ast.AST) -> None
-⋮----
-# Literal validation
-def visit_Constant(self, node: ast.Constant) -> None
-⋮----
-# Arithmetic
-def visit_BinOp(self, node: ast.BinOp) -> None
-⋮----
-def visit_UnaryOp(self, node: ast.UnaryOp) -> None
-⋮----
-# Comparisons
-def visit_Compare(self, node: ast.Compare) -> None
-⋮----
-# Subscripts
-def visit_Subscript(self, node: ast.Subscript) -> None
-⋮----
-# Method calls
-def visit_Call(self, node: ast.Call) -> None
-⋮----
-method = node.func.attr
-⋮----
-# kwarg / arg checks
-⋮----
-# Names
-def visit_Name(self, node: ast.Name) -> None
-⋮----
-# Top-level gate
-def visit(self, node: ast.AST) -> None
-⋮----
-def sanitize_command(expr: str, df_name: str = "df") -> str
-⋮----
-"""
-    Validate *expr*; return it unchanged if it passes all rules,
-    else raise UnsafeCommandError with the first violation encountered.
-    """
-tree = ast.parse(expr, mode="eval")
-⋮----
-def stringify(x: Any) -> str
-⋮----
-# Convert x to DataFrame if it is not one already
-⋮----
-df = x.to_frame()
-⋮----
-df = x
-⋮----
-# Truncate long text columns to 1000 characters
-⋮----
-# Limit to 10 rows
-df = df.head(10)
-⋮----
-# Convert to string
-return df.to_string(index=False)  # type: ignore
 </file>
 
 <file path="langroid/utils/pydantic_utils.py">
@@ -39664,56 +40156,6 @@ FORWARD_USER = "user"  # forward msg to user
 DONE = "done"  # task done
 </file>
 
-<file path="release-notes/v0-56-0-task-tool.md">
-# Release Notes: TaskTool
-
-## New Feature: `TaskTool` for Spawning Sub-Agents
-
-We've added `TaskTool`, a new tool that enables agents to spawn sub-agents for handling specific tasks. This allows for dynamic task delegation with controlled tool access.
-
-### Key Features:
-- Agents can spawn sub-agents with specific tools and configurations
-- Sub-agents run non-interactively and return results to the parent
-- Supports nested operations and recursive task delegation
-- Flexible tool access: delegate specific tools, all tools, or no tools
-
-### Example Usage:
-```python
-# Agent spawns a sub-agent to handle a calculation
-{
-    "request": "task_tool",
-    "system_message": "You are a calculator. Use multiply_tool to compute products.",
-    "prompt": "Calculate 5 * 7",
-    "tools": ["multiply_tool"],
-    "model": "gpt-4o-mini"
-}
-```
-
-### Documentation:
-Full documentation with examples: [TaskTool Documentation](https://langroid.github.io/langroid/notes/task-tool/)
-
-### Testing:
-See working examples in [`tests/main/test_task_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_task_tool.py)
-
-## Update v0.56.3: Agent Naming Support
-
-### Enhancement:
-- Added optional `agent_name` parameter to TaskTool
-- Sub-agents can now be given custom names for better logging and debugging
-- If not specified, auto-generates unique names in format `agent-{uuid}`
-
-### Example:
-```python
-{
-    "request": "task_tool",
-    "system_message": "You are a calculator.",
-    "prompt": "Calculate 5 * 7",
-    "tools": ["multiply_tool"],
-    "agent_name": "calculator-agent"  # Optional: custom name for logging
-}
-```
-</file>
-
 <file path="release-notes/v0-56-11-openai-client-caching.md">
 # Release Notes - v0.56.11
 
@@ -39947,49 +40389,6 @@ Improved DoneSequence implementation by introducing response sequence tracking a
 
 ## Testing
 All existing done sequence tests pass without modification, confirming backward compatibility.
-</file>
-
-<file path="release-notes/v0-56-2-table-chat-fix.md">
-# Release Notes - v0.56.2
-
-## TableChatAgent Enhancement: Data Cleaning Support with `df.assign()`
-
-### Overview
-This release enhances the TableChatAgent to better support data cleaning operations while maintaining security. Users can now perform column transformations using the safe `df.assign()` method.
-
-### Key Changes
-
-#### 1. Enabled `df.assign()` Method
-- Added `assign` to the whitelist of allowed DataFrame methods
-- Provides a secure way to create modified DataFrames without allowing arbitrary assignments
-- Maintains the existing security model while enabling common data cleaning tasks
-
-#### 2. Improved Agent Guidance
-- Updated system message to proactively explain that assignment statements (`df['col'] = ...`) are not allowed
-- Clear guidance to use `df.assign()` for data modifications
-- Agent now correctly uses `df.assign()` on first attempt, avoiding error-correction cycles
-
-### Example Usage
-When asked to clean data, the agent will now use:
-```python
-df.assign(airline=df['airline'].str.replace('*', ''))
-```
-Instead of attempting:
-```python
-df['airline'] = df['airline'].str.replace('*', '')  # This would fail
-```
-
-### Security Considerations
-- The `assign` method is safe as it returns a new DataFrame without side effects
-- Cannot be used for arbitrary code execution, file I/O, or network access
-- Expressions passed to `assign` still go through the same sanitization process
-- Maintains the eval-only security model (no exec)
-
-### Testing
-- Added comprehensive test coverage for self-correction behavior
-- Verified agent successfully handles data cleaning requests
-
-This addresses issue #867 and improves the TableChatAgent's utility for data cleaning workflows.
 </file>
 
 <file path="release-notes/v0-56-4-handler-params.md">
@@ -41731,63 +42130,6 @@ task3 = Task(agent2, config=config3, interactive=False)[CalculatorTool]
 result3: CalculatorTool | None = task3.run("Calculate")
 </file>
 
-<file path="tests/main/test_json.py">
-),  # should not recognize array as json
-# The below case has lots of json headaches/failures:
-# trailing commans and forgotten quotes
-⋮----
-def test_extract_top_level_json(s, expected)
-⋮----
-top_level_jsons = extract_top_level_json(s)
-top_level_jsons = [json.loads(s.replace("'", '"')) for s in top_level_jsons]
-expected = [json.loads(s.replace("'", '"')) for s in expected]
-⋮----
-# TODO - this aspect of parse_imperfect_json is NOT used anywhere --
-# if we do want to use it, how do we rationalize this behavior?
-⋮----
-),  # extra comma
-⋮----
-'{"key": "you said "hello" yesterday"}',  # did not escape inner quotes
-⋮----
-def test_parse_imperfect_json(input_json, expected_output)
-⋮----
-"True",  # This is a valid Python literal, but not a dict or list
-"42",  # This is a valid Python literal, but not a dict or list
-⋮----
-def test_invalid_json_raises_error(invalid_input)
-⋮----
-# Scalar JSON should return "" (no crash)
-⋮----
-# Dict with field
-⋮----
-# List of dicts
-⋮----
-# Mixed text with dict
-⋮----
-# Field not found
-⋮----
-def test_top_level_json_field(s, field, expected)
-⋮----
-def test_top_level_json_field_never_crashes()
-⋮----
-"""Test that top_level_json_field never crashes with malformed inputs."""
-# Test cases that should not crash, just return ""
-malformed_inputs = [
-⋮----
-"",  # Empty string
-"not json at all",  # No JSON
-"{broken json",  # Incomplete JSON
-'{"key": undefined}',  # JavaScript-style undefined (gets repaired)
-"{\"malformed\": 'quotes'}",  # Wrong quotes
-"}{",  # Backwards braces
-"{{{",  # Nested unclosed
-'{"key": null, "key2": }',  # Trailing comma with no value
-'{"recipient": }',  # Field exists but no value
-⋮----
-# Should never crash, just return empty string or found value
-result = top_level_json_field(malformed, "recipient")
-</file>
-
 <file path="tests/main/test_llm_pdf_parser.py">
 @pytest.mark.parametrize("split_on_page", [True, False])
 @pytest.mark.parametrize("pdf_file", ["imagenet.pdf"])
@@ -43387,110 +43729,6 @@ def test_output_format_instructions(instructions: bool, use: bool)
 ⋮----
 # The tool is already enabled and we do not add the schema to the
 # instructions
-</file>
-
-<file path="tests/main/test_table_chat_agent.py">
-DATA_STRING = """age,gender,income,state,,,,
-⋮----
-@pytest.fixture
-def mock_data_frame_blanks()
-⋮----
-@pytest.fixture
-def mock_data_file_blanks(tmpdir)
-⋮----
-file_path = tmpdir.join("mock_data.csv")
-⋮----
-def generate_data(size: int) -> str
-⋮----
-# Create a list of states
-states = ["CA", "TX"]
-⋮----
-# Generate random age between 18 and 100
-ages = np.random.randint(18, 50, size)
-⋮----
-# Generate random gender
-genders = np.random.choice(["Male", "Female"], size)
-⋮----
-# Generate random state
-states_col = np.random.choice(states, size)
-⋮----
-# Generate random income between 30000 and 150000
-incomes = np.random.randint(30000, 150001, size)
-⋮----
-# use spaces, mixed cases to make it tricker
-data = {"age ": ages, "GenDer": genders, "State ": states_col, "income": incomes}
-⋮----
-@pytest.fixture
-def mock_dataframe() -> pd.DataFrame
-⋮----
-data = generate_data(200)  # generate data for 1000 rows
-⋮----
-@pytest.fixture
-def mock_data_file(tmp_path: Path) -> str
-⋮----
-df = generate_data(100)  # generate data for 1000 rows
-file_path = tmp_path / "mock_data.csv"
-⋮----
-"""
-    Test the TableChatAgent with a file as data source
-    """
-agent = TableChatAgent(
-⋮----
-full_eval=True,  # Allow full evaluation in tests
-⋮----
-task = Task(
-⋮----
-# run until LLM says DONE and shows answer,
-# at which point the task loop ends.
-⋮----
-# try 3 times to get non-empty result
-result = task.run("What is the average income of men under 40 in CA?", turns=6)
-⋮----
-age_col = closest_string("age", agent.df.columns)
-state_col = closest_string("state", agent.df.columns)
-gender_col = closest_string("gender", agent.df.columns)
-income_col = closest_string("income", agent.df.columns)
-answer = agent.df[
-⋮----
-# TODO - there are intermittent failures here; address this, see issue #288
-⋮----
-@pytest.mark.parametrize("fn_api", [True, False])
-def test_table_chat_agent_dataframe(test_settings: Settings, fn_api, mock_dataframe)
-⋮----
-@pytest.mark.parametrize("fn_api", [True, False])
-def test_table_chat_agent_file(test_settings: Settings, fn_api, mock_data_file)
-⋮----
-def test_table_chat_agent_assignment_self_correction(test_settings: Settings) -> None
-⋮----
-"""
-    Test that TableChatAgent self-corrects when trying to use assignment syntax
-    and uses df.assign() instead
-    """
-⋮----
-# Create a simple dataframe with data that needs cleaning
-df = pd.DataFrame(
-⋮----
-full_eval=False,  # Keep security restrictions to test self-correction
-⋮----
-# Ask to clean the airline column - this should trigger assignment attempt
-result = task.run(
-⋮----
-# Check that the result indicates success
-⋮----
-# The agent successfully cleaned the data (it says so in the message)
-⋮----
-@pytest.mark.parametrize("fn_api", [True, False])
-def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None
-⋮----
-"""
-    Test the TableChatAgent with a URL of a csv file as data source
-    """
-⋮----
-URL = "https://raw.githubusercontent.com/plotly/datasets/master/2011_us_ag_exports.csv"
-⋮----
-df = agent.df
-# directly get the answer
-answer = df[df["cotton"] < 500]["poultry"].mean()
 </file>
 
 <file path="tests/main/test_task_run_polymorphic.py">
@@ -51614,6 +51852,118 @@ def _clear_cache() -> None
 """Clear the client cache. Only for testing."""
 </file>
 
+<file path="langroid/parsing/parse_json.py">
+def is_valid_json(json_str: str) -> bool
+⋮----
+"""Check if the input string is a valid JSON.
+
+    Args:
+        json_str (str): The input string to check.
+
+    Returns:
+        bool: True if the input string is a valid JSON, False otherwise.
+    """
+⋮----
+def flatten(nested_list) -> Iterator[str]:  # type: ignore
+⋮----
+"""Flatten a nested list into a single list of strings"""
+⋮----
+def get_json_candidates(s: str) -> List[str]
+⋮----
+"""Get top-level JSON candidates, i.e. strings between curly braces."""
+# Define the grammar for matching curly braces
+curly_braces = originalTextFor(nestedExpr("{", "}"))
+⋮----
+# Parse the string
+⋮----
+results = curly_braces.searchString(s)
+# Properly convert nested lists to strings
+⋮----
+def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]
+⋮----
+# First, try parsing with ast.literal_eval
+⋮----
+result = ast.literal_eval(json_string)
+⋮----
+# If ast.literal_eval fails or returns non-dict/list, try repair_json
+json_repaired_obj = repair_json(json_string, return_objects=True)
+⋮----
+# fallback on yaml
+yaml_result = yaml.safe_load(json_string)
+⋮----
+# If all methods fail, raise ValueError
+⋮----
+def try_repair_json_yaml(s: str) -> str | None
+⋮----
+"""
+    Attempt to load as json, and if it fails, try repairing the JSON.
+    If that fails, replace any \n with space as a last resort.
+    NOTE - replacing \n with space will result in format loss,
+    which may matter in generated code (e.g. python, toml, etc)
+    """
+s_repaired_obj = repair_json(s, return_objects=True)
+⋮----
+s_repaired_obj = s_repaired_obj[0]
+⋮----
+s_repaired_obj = None
+⋮----
+return json.dumps(s_repaired_obj)  # type: ignore
+⋮----
+yaml_result = yaml.safe_load(s)
+⋮----
+# If it still fails, replace any \n with space as a last resort
+s = s.replace("\n", " ")
+⋮----
+return None  # all failed
+⋮----
+def extract_top_level_json(s: str) -> List[str]
+⋮----
+"""Extract all top-level JSON-formatted substrings from a given string.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+
+    Returns:
+        List[str]: A list of top-level JSON-formatted substrings.
+    """
+# Find JSON object and array candidates
+json_candidates = get_json_candidates(s)
+maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
+⋮----
+def top_level_json_field(s: str, f: str) -> Any
+⋮----
+"""
+    Extract the value of a field f from a top-level JSON object.
+    If there are multiple, just return the first.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+        f (str): The field to extract from the JSON object.
+
+    Returns:
+        str: The value of the field f in the top-level JSON object, if any.
+            Otherwise, return an empty string.
+
+    Note:
+        This function is designed to never crash. If any exception occurs during
+        JSON parsing or field extraction, it gracefully returns an empty string.
+    """
+⋮----
+jsons = extract_top_level_json(s)
+⋮----
+json_data = json.loads(j)
+⋮----
+# Some responses wrap candidate JSON objects in a list; scan them.
+⋮----
+# If this specific JSON fails to parse, continue to next candidate
+⋮----
+# Catch any unexpected errors to ensure we never crash
+⋮----
+def datetime_to_json(obj: Any) -> Any
+⋮----
+# Let json.dumps() handle the raising of TypeError for non-serializable objects
+</file>
+
 <file path="langroid/utils/html_logger.py">
 """HTML Logger for Langroid Task System.
 
@@ -52356,6 +52706,63 @@ log_path = Path(temp_dir) / "test_escape.html"
 # Should be escaped
 ⋮----
 # Should not contain raw script
+</file>
+
+<file path="tests/main/test_json.py">
+),  # should not recognize array as json
+# The below case has lots of json headaches/failures:
+# trailing commans and forgotten quotes
+⋮----
+def test_extract_top_level_json(s, expected)
+⋮----
+top_level_jsons = extract_top_level_json(s)
+top_level_jsons = [json.loads(s.replace("'", '"')) for s in top_level_jsons]
+expected = [json.loads(s.replace("'", '"')) for s in expected]
+⋮----
+# TODO - this aspect of parse_imperfect_json is NOT used anywhere --
+# if we do want to use it, how do we rationalize this behavior?
+⋮----
+),  # extra comma
+⋮----
+'{"key": "you said "hello" yesterday"}',  # did not escape inner quotes
+⋮----
+def test_parse_imperfect_json(input_json, expected_output)
+⋮----
+"True",  # This is a valid Python literal, but not a dict or list
+"42",  # This is a valid Python literal, but not a dict or list
+⋮----
+def test_invalid_json_raises_error(invalid_input)
+⋮----
+# Scalar JSON should return "" (no crash)
+⋮----
+# Dict with field
+⋮----
+# List of dicts
+⋮----
+# Mixed text with dict
+⋮----
+# Field not found
+⋮----
+def test_top_level_json_field(s, field, expected)
+⋮----
+def test_top_level_json_field_never_crashes()
+⋮----
+"""Test that top_level_json_field never crashes with malformed inputs."""
+# Test cases that should not crash, just return ""
+malformed_inputs = [
+⋮----
+"",  # Empty string
+"not json at all",  # No JSON
+"{broken json",  # Incomplete JSON
+'{"key": undefined}',  # JavaScript-style undefined (gets repaired)
+"{\"malformed\": 'quotes'}",  # Wrong quotes
+"}{",  # Backwards braces
+"{{{",  # Nested unclosed
+'{"key": null, "key2": }',  # Trailing comma with no value
+'{"recipient": }',  # Field exists but no value
+⋮----
+# Should never crash, just return empty string or found value
+result = top_level_json_field(malformed, "recipient")
 </file>
 
 <file path="tests/main/test_lance_doc_chat_agent.py">
@@ -54865,6 +55272,116 @@ create_collection = False
 [paths[musician]],  # all chunks of this doc will have same metadata
 ⋮----
 task = lr.Task(agent, interactive=True)
+</file>
+
+<file path="langroid/agent/tools/task_tool.py">
+"""
+TaskTool: A tool that allows agents to delegate a task to a sub-agent with
+    specific tools enabled.
+"""
+⋮----
+class TaskTool(ToolMessage)
+⋮----
+"""
+    Tool that spawns a sub-agent with specified tools to handle a task.
+
+    The sub-agent can be given a custom name for identification in logs.
+    If no name is provided, a random unique name starting with 'agent'
+    will be generated.
+    """
+⋮----
+# TODO: setting up termination conditions of sub-task needs to be improved
+request: str = "task_tool"
+purpose: str = """
+⋮----
+# Parameters for the agent tool
+⋮----
+system_message: Optional[str] = Field(
+⋮----
+prompt: str = Field(
+⋮----
+tools: List[str] = Field(
+# TODO: ensure valid model name
+model: Optional[str] = Field(
+max_iterations: Optional[int] = Field(
+agent_name: Optional[str] = Field(
+⋮----
+def _set_up_task(self, agent: ChatAgent) -> Task
+⋮----
+"""
+        Helper method to set up a task for the sub-agent.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+        """
+# Generate a random name if not provided
+agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
+⋮----
+# Create chat agent config with system message if provided
+# TODO: Maybe we just copy the parent agent's config and override chat_model?
+#   -- but what if parent agent has a MockLMConfig?
+llm_config = lm.OpenAIGPTConfig(
+config = ChatAgentConfig(
+⋮----
+# Create the sub-agent
+sub_agent = ChatAgent(config)
+⋮----
+# Enable the specified tools for the sub-agent
+# Convert tool names to actual tool classes using parent agent's tools_map
+⋮----
+# Enable all tools from the parent agent:
+# This is the list of all tools KNOWN (whether usable or handle-able or not)
+tool_classes = []
+⋮----
+tool_class = agent.llm_tools_map[t]
+allow_llm_use = tool_class._allow_llm_use
+⋮----
+allow_llm_use = allow_llm_use.default
+⋮----
+# No tools enabled
+⋮----
+# Enable only specified tools
+⋮----
+tool_class = agent.llm_tools_map[tool_name]
+⋮----
+# always enable the DoneTool to signal task completion
+⋮----
+# Create a non-interactive task
+task = Task(sub_agent, interactive=False)
+⋮----
+"""
+
+        Handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+⋮----
+task = self._set_up_task(agent)
+⋮----
+# Create a ChatDocument for the prompt with parent pointer
+prompt_doc = None
+⋮----
+prompt_doc = ChatDocument(
+# Set bidirectional parent-child relationship
+⋮----
+# Run the task with the ChatDocument or string prompt
+result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
+⋮----
+"""
+        Async method to handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+⋮----
+# TODO eventually allow the various task setup configs,
+#  including termination conditions
+result = await task.run_async(
 </file>
 
 <file path="langroid/language_models/base.py">
@@ -58282,116 +58799,6 @@ replace = (
 task = Task(agent, interactive=False)
 </file>
 
-<file path="langroid/agent/tools/task_tool.py">
-"""
-TaskTool: A tool that allows agents to delegate a task to a sub-agent with
-    specific tools enabled.
-"""
-⋮----
-class TaskTool(ToolMessage)
-⋮----
-"""
-    Tool that spawns a sub-agent with specified tools to handle a task.
-
-    The sub-agent can be given a custom name for identification in logs.
-    If no name is provided, a random unique name starting with 'agent'
-    will be generated.
-    """
-⋮----
-# TODO: setting up termination conditions of sub-task needs to be improved
-request: str = "task_tool"
-purpose: str = """
-⋮----
-# Parameters for the agent tool
-⋮----
-system_message: Optional[str] = Field(
-⋮----
-prompt: str = Field(
-⋮----
-tools: List[str] = Field(
-# TODO: ensure valid model name
-model: Optional[str] = Field(
-max_iterations: Optional[int] = Field(
-agent_name: Optional[str] = Field(
-⋮----
-def _set_up_task(self, agent: ChatAgent) -> Task
-⋮----
-"""
-        Helper method to set up a task for the sub-agent.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-        """
-# Generate a random name if not provided
-agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
-⋮----
-# Create chat agent config with system message if provided
-# TODO: Maybe we just copy the parent agent's config and override chat_model?
-#   -- but what if parent agent has a MockLMConfig?
-llm_config = lm.OpenAIGPTConfig(
-config = ChatAgentConfig(
-⋮----
-# Create the sub-agent
-sub_agent = ChatAgent(config)
-⋮----
-# Enable the specified tools for the sub-agent
-# Convert tool names to actual tool classes using parent agent's tools_map
-⋮----
-# Enable all tools from the parent agent:
-# This is the list of all tools KNOWN (whether usable or handle-able or not)
-tool_classes = []
-⋮----
-tool_class = agent.llm_tools_map[t]
-allow_llm_use = tool_class._allow_llm_use
-⋮----
-allow_llm_use = allow_llm_use.default
-⋮----
-# No tools enabled
-⋮----
-# Enable only specified tools
-⋮----
-tool_class = agent.llm_tools_map[tool_name]
-⋮----
-# always enable the DoneTool to signal task completion
-⋮----
-# Create a non-interactive task
-task = Task(sub_agent, interactive=False)
-⋮----
-"""
-
-        Handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-⋮----
-task = self._set_up_task(agent)
-⋮----
-# Create a ChatDocument for the prompt with parent pointer
-prompt_doc = None
-⋮----
-prompt_doc = ChatDocument(
-# Set bidirectional parent-child relationship
-⋮----
-# Run the task with the ChatDocument or string prompt
-result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
-⋮----
-"""
-        Async method to handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-⋮----
-# TODO eventually allow the various task setup configs,
-#  including termination conditions
-result = await task.run_async(
-</file>
-
 <file path="langroid/agent/task.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -60643,6 +61050,10 @@ response = self.answer_from_docs(query_str)
 # so render them here
 ⋮----
 response = await super().llm_response_async(query_str)
+⋮----
+# Offload blocking retrieval/LLM work to default thread pool so
+# asyncio batch runners can make progress concurrently.
+response = await asyncio.to_thread(self.answer_from_docs, query_str)
 ⋮----
 @staticmethod
     def doc_string(docs: List[Document]) -> str
@@ -64515,7 +64926,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.10"
+version = "0.59.11"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
