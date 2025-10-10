@@ -149,6 +149,7 @@ issues/
     PYDANTIC_V2_MIGRATION_TASK_SPECIFICATION.md
     pydantic-migration-checking-instructions.md
     PYRANTIC-V2-MIGRATION-PLAN.md
+  20251010-concurrent-rag.md
   898-implementation.md
   html-logger-implementation.md
   html-logger.md
@@ -8133,6 +8134,258 @@ The [Getting Started Guide](quick-start/index.md) and subsequent pages
 will help you get up to speed.
 </file>
 
+<file path="issues/20251010-concurrent-rag.md">
+# Concurrent DocChatAgent Task Execution Investigation
+
+**Date:** 2025-10-10
+**Status:** In Progress - Root cause partially identified, fix implemented but incomplete
+**Priority:** Medium
+
+## Problem Statement
+
+When running multiple DocChatAgent tasks concurrently using Langroid's `run_batch_tasks` mechanism, the tasks execute **sequentially** rather than concurrently, despite being submitted to `asyncio.gather`. This results in no performance improvement over sequential execution.
+
+### Expected Behavior
+- 10 queries submitted concurrently should execute in parallel
+- Total time should be approximately equal to the slowest single query
+- Logs should show overlapping VecDB searches and LLM calls
+
+### Actual Behavior
+- All tasks are submitted together (START logs show same timestamp)
+- But they execute one after another with 4-5 second gaps between VecDB searches
+- Total time: ~60 seconds for 10 queries (~6 sec/query) - same as sequential
+- VecDB search logs show sequential pattern:
+  - Query 1: 11:56:21
+  - Query 2: 11:56:25 (4 sec later)
+  - Query 3: 11:56:30 (5 sec later)
+  - Query 4: 11:56:35 (5 sec later)
+
+## Investigation & Findings
+
+### Scripts Created
+
+#### 1. `examples/docqa/rag-concurrent.py`
+Main test script with timing instrumentation:
+- Loads Borges' "Library of Babel" story from URL
+- Runs 10 predefined questions about the story
+- Supports `--sequential` flag for true sequential baseline (simple loop)
+- Default mode uses `run_batch_tasks(..., sequential=False)` for asyncio concurrency
+- Includes timestamp logging (HH:MM:SS.mmm) and thread ID tracking
+- **Usage:**
+  ```bash
+  # Concurrent mode (default)
+  python3 examples/docqa/rag-concurrent.py
+
+  # True sequential baseline
+  python3 examples/docqa/rag-concurrent.py --sequential
+  ```
+
+#### 2. `examples/docqa/rag-concurrent-debug.py`
+Debug version with additional instrumentation:
+- Subclasses `DocChatAgent` to add timing to vecstore and LLM operations
+- Fewer questions (3 by default) for faster testing
+- Tracks phase-level timing (VECSTORE_START/END, LLM_CALL_START/END)
+- **Usage:**
+  ```bash
+  python3 examples/docqa/rag-concurrent-debug.py --num_questions=3
+  ```
+
+#### 3. `test_vecdb_clone.py`
+Minimal test to verify vecdb cloning behavior:
+- Creates a DocChatAgent with vecdb
+- Clones task 3 times
+- Prints vecdb and client IDs to verify separate instances
+- **Usage:**
+  ```bash
+  python3 test_vecdb_clone.py
+  ```
+
+### Root Cause Analysis
+
+#### Initial Hypothesis: Shared VecDB Instance
+**Code Location:** `langroid/agent/chat_agent.py:283` (line number before fix)
+
+Original clone() method did shallow copy:
+```python
+# OLD CODE - PROBLEM
+new_agent.vecdb = self.vecdb  # All clones share same vecdb!
+```
+
+**Impact:**
+- All cloned agents shared a single QdrantDB client instance
+- For local storage: `.lock` file prevents concurrent access
+- For cloud storage: shared connection pool may limit concurrency
+
+#### Fix Implemented
+**Code Location:** `langroid/agent/chat_agent.py:282-310`
+
+```python
+# NEW CODE - PARTIAL FIX
+if self.vecdb is not None:
+    from langroid.vector_store.base import VectorStore
+    from langroid.vector_store.qdrantdb import QdrantDBConfig
+    import os
+
+    vecdb_config = self.vecdb.config.model_copy(deep=True)
+    vecdb_config.replace_collection = False
+
+    # For local Qdrant storage, use separate paths for each clone
+    if isinstance(vecdb_config, QdrantDBConfig) and not vecdb_config.cloud:
+        base_path = vecdb_config.storage_path.rstrip('/')
+        clone_path = f"{base_path}_clone_{i}_{os.getpid()}"
+        vecdb_config.storage_path = clone_path
+        # Copy collection data to clone path
+        if not os.path.exists(clone_path):
+            import shutil
+            if os.path.exists(base_path):
+                shutil.copytree(base_path, clone_path)
+
+    new_agent.vecdb = VectorStore.create(vecdb_config)
+```
+
+**What This Fixes:**
+- ✅ Each clone gets its own vecdb instance and client
+- ✅ For local storage: separate `.qdrant_clone_*` directories avoid `.lock` contention
+- ✅ Verified working: `test_vecdb_clone.py` shows different IDs for each clone
+
+**What's Still Broken:**
+- ❌ Tasks still execute sequentially even with separate clients
+- ❌ The fix helps for local storage but doesn't solve cloud Qdrant serialization
+
+### Outstanding Issues
+
+#### Issue #1: Cloud Qdrant Serialization
+**Discovery:** Test environment uses `cloud=True` (remote Qdrant server)
+- Despite separate clients, execution is still sequential
+- Possible causes:
+  1. **Connection pool limits** on cloud Qdrant instance
+  2. **Rate limiting** on the Qdrant API
+  3. **Client-side connection manager** serializing requests
+  4. **Async/await pattern** in Qdrant client may not be truly concurrent
+
+**Evidence:**
+```
+🔧 Clone 0: vecdb type=QdrantDBConfig, cloud=True
+🔧 Clone 1: vecdb type=QdrantDBConfig, cloud=True
+🔧 Clone 2: vecdb type=QdrantDBConfig, cloud=True
+```
+
+#### Issue #2: Logging Artifacts
+The START/COMPLETE logging in `rag-concurrent.py` is misleading:
+- `input_map` logs START events (happens during task submission)
+- `output_map` logs COMPLETE events (called AFTER all tasks finish)
+- All COMPLETE logs show same timestamp because they're logged in a batch
+
+**Better indicators:**
+- VecDB INFO logs show actual execution timing
+- Look for "Searching VecDB" timestamps in the logs
+
+## Next Steps
+
+### Immediate Actions Needed
+
+1. **Investigate Qdrant Client Concurrency**
+   - File: `langroid/vector_store/qdrantdb.py`
+   - Check if `QdrantClient.search_batch()` is truly async
+   - Look for any locks, semaphores, or connection pooling
+   - Test: Create minimal script with just Qdrant queries (no DocChatAgent)
+
+2. **Test with Local Qdrant**
+   - Verify the clone-path fix works for local storage
+   - Set `cloud=False` in DocChatAgentConfig
+   - Confirm separate `.qdrant_clone_*` directories are created
+   - Verify no `.lock` contention
+
+3. **Profile Async Execution**
+   - Add more granular timing inside `run_batch_tasks`
+   - Check if `asyncio.gather` is actually creating concurrent tasks
+   - Use Python's `asyncio` debug mode
+   - Instrument the actual async chain: input_map → clone → run_async → output_map
+
+4. **Check LLM Client**
+   - Although not primary suspect, verify LLM client is concurrent
+   - File: `langroid/language_models/openai_gpt.py`
+   - Check for shared HTTP clients or connection pools
+
+### Testing Strategy
+
+```bash
+# 1. Test local storage fix
+python3 examples/docqa/rag-concurrent.py --sequential  # Baseline
+python3 examples/docqa/rag-concurrent.py               # With fix
+# Check for .qdrant_clone_* directories and timing improvement
+
+# 2. Test cloud Qdrant concurrency
+# (Current failing case)
+# Need to identify why separate clients don't help
+
+# 3. Minimal Qdrant concurrency test
+# Create standalone script that just does concurrent Qdrant searches
+# Isolate the vecdb layer from DocChatAgent complexity
+```
+
+### Files Modified
+
+1. `langroid/agent/chat_agent.py` - clone() method (lines 282-312)
+2. `examples/docqa/rag-concurrent.py` - NEW test script
+3. `examples/docqa/rag-concurrent-debug.py` - NEW debug script
+4. `test_vecdb_clone.py` - NEW minimal test (root directory)
+
+### Files to Investigate Next
+
+1. `langroid/vector_store/qdrantdb.py` - QdrantDB client implementation
+2. `langroid/agent/batch.py` - Batch task execution (already reviewed)
+3. `langroid/language_models/openai_gpt.py` - LLM client concurrency
+4. Qdrant client library itself - may need to check external dependency
+
+## Context for Next Agent
+
+### What Works
+- ✅ Vecdb cloning creates separate instances
+- ✅ Test scripts are functional and provide good visibility
+- ✅ Can see the sequential execution pattern in logs
+
+### What Doesn't Work
+- ❌ Concurrent execution still runs sequentially
+- ❌ ~60 seconds for 10 queries (no improvement over sequential)
+- ❌ Root cause for cloud Qdrant serialization unknown
+
+### Key Insight
+The problem is **NOT just the shallow vecdb copy**. That's fixed. The deeper issue is that even with separate QdrantDB clients accessing a cloud instance, the queries serialize. This suggests:
+- A shared resource deeper in the stack (connection pool, rate limiter, etc.)
+- Or the async pattern isn't actually concurrent
+- Or Qdrant cloud itself is serializing (unlikely but possible)
+
+### Recommended Approach
+1. Create minimal reproduction with just Qdrant (no DocChatAgent)
+2. Enable asyncio debug mode to see task scheduling
+3. Profile with `asyncio` task timing
+4. Consider testing with a different vector store (Chroma, etc.) to isolate Qdrant
+
+## References
+
+- Original issue report: User experiencing sequential execution when expecting concurrent
+- Test document: "The Library of Babel" by Jorge Luis Borges
+- URL: https://xpressenglish.com/our-stories/library-of-babel/
+- Langroid batch task mechanism: `langroid/agent/batch.py`
+- Qdrant lock file location: `.qdrant/doc-chat/.lock`
+
+## Additional Notes
+
+### Understanding `sequential` Parameter
+The `sequential` parameter in `run_batch_tasks` does NOT mean "use a simple loop":
+- `sequential=False`: Uses `asyncio.gather` for concurrent execution
+- `sequential=True`: Uses `await` in a loop (still async, just not concurrent)
+
+For TRUE sequential baseline, use a simple for-loop calling `task.run()` directly (as implemented in `rag-concurrent.py --sequential`).
+
+### Logging Best Practices
+- Don't trust START/COMPLETE logs from input_map/output_map
+- Look at actual operation logs (VecDB searches, LLM calls)
+- Use timestamps to verify overlapping execution windows
+- Thread IDs help identify parallel execution
+</file>
+
 <file path="langroid/agent/special/arangodb/system_messages.py">
 from langroid.agent.special.arangodb.tools import (
     aql_creation_tool_name,
@@ -9344,6 +9597,295 @@ class RetrieverAgent(DocChatAgent):
             logger.warning("Vector store not configured. Cannot ingest records.")
         else:
             self.vecdb.add_documents(records)
+</file>
+
+<file path="langroid/agent/special/table_chat_agent.py">
+"""
+Agent that supports asking queries about a tabular dataset, internally
+represented as a Pandas dataframe. The `TableChatAgent` is configured with a
+dataset, which can be a Pandas df, file or URL. The delimiter/separator
+is auto-detected. In response to a user query, the Agent's LLM generates a Pandas
+expression (involving a dataframe `df`) to answer the query.
+The expression is passed via the `pandas_eval` tool/function-call,
+which is handled by the Agent's `pandas_eval` method. This method evaluates
+the expression and returns the result as a string.
+
+WARNING: This Agent should be used only with trusted input, as it can execute system
+commands. 
+
+The `full_eval` flag is false by default, which means that the input is sanitized
+against most common code injection attack vectors. `full_eval` may be set to True to 
+disable sanitization at all. Both cases should be used with caution.
+"""
+
+import io
+import logging
+import sys
+from typing import List, Optional, Tuple, no_type_check
+
+import numpy as np
+import pandas as pd
+from rich.console import Console
+
+import langroid as lr
+from langroid.agent import ChatDocument
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.tool_message import ToolMessage
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.parsing.table_loader import read_tabular_data
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.constants import DONE, PASS
+from langroid.utils.pandas_utils import sanitize_command
+from langroid.vector_store.base import VectorStoreConfig
+
+logger = logging.getLogger(__name__)
+
+console = Console()
+
+DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = f"""
+You are a savvy data scientist, with expertise in analyzing tabular datasets,
+using Python and the Pandas library for dataframe manipulation.
+Since you do not have access to the dataframe 'df', you
+will need to use the `pandas_eval` tool/function-call to answer my questions.
+Here is a summary of the dataframe:
+{{summary}}
+Do not assume any columns other than those shown.
+In the expression you submit to the `pandas_eval` tool/function, 
+you are allowed to use the variable 'df' to refer to the dataframe.
+IMPORTANT: You can only use expressions that return a value - assignment statements 
+(like df['col'] = value or temp = df['col']) are NOT allowed for security reasons.
+To modify data, use methods like df.assign() that return a new dataframe.
+
+Sometimes you may not be able to answer the question in a single call to `pandas_eval`,
+so you can use a series of calls to `pandas_eval` to build up the answer. 
+For example you may first want to know something about the possible values in a column.
+
+If you receive a null or other unexpected result, see if you have made an assumption
+in your code, and try another way, or use `pandas_eval` to explore the dataframe 
+before submitting your final code. 
+
+Once you have the answer to the question, possibly after a few steps,
+say {DONE} and PRESENT THE ANSWER TO ME; do not just say {DONE}.
+If you receive an error message, 
+try using the `pandas_eval` tool/function again with the corrected code. 
+If the error is due to an assignment statement (e.g., df['col'] = ...), 
+use df.assign(col=...) instead, which returns a new dataframe with the modified column.
+For example: instead of df['airline'] = df['airline'].str.replace('*', ''), 
+use df.assign(airline=df['airline'].str.replace('*', '')). 
+
+VERY IMPORTANT: When using the `pandas_eval` tool/function, DO NOT EXPLAIN ANYTHING,
+   SIMPLY USE THE TOOL, with the CODE.
+Start by asking me what I want to know about the data.
+"""
+
+
+@no_type_check
+def dataframe_summary(df: pd.DataFrame) -> str:
+    """
+    Generate a structured summary for a pandas DataFrame containing numerical
+    and categorical values.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame to summarize.
+
+    Returns:
+        str: A nicely structured and formatted summary string.
+    """
+
+    # Column names display
+    col_names_str = (
+        "COLUMN NAMES:\n" + " ".join([f"'{col}'" for col in df.columns]) + "\n\n"
+    )
+
+    # Numerical data summary
+    num_summary = df.describe().map(lambda x: "{:.2f}".format(x))
+    num_str = "Numerical Column Summary:\n" + num_summary.to_string() + "\n\n"
+
+    # Categorical data summary
+    cat_columns = df.select_dtypes(include=[np.object_]).columns
+    cat_summary_list = []
+
+    for col in cat_columns:
+        unique_values = df[col].unique()
+        if len(unique_values) < 10:
+            cat_summary_list.append(f"'{col}': {', '.join(map(str, unique_values))}")
+        else:
+            cat_summary_list.append(f"'{col}': {df[col].nunique()} unique values")
+
+    cat_str = "Categorical Column Summary:\n" + "\n".join(cat_summary_list) + "\n\n"
+
+    # Missing values summary
+    nan_summary = df.isnull().sum().rename("missing_values").to_frame()
+    nan_str = "Missing Values Column Summary:\n" + nan_summary.to_string() + "\n"
+
+    # Combine the summaries into one structured string
+    summary_str = col_names_str + num_str + cat_str + nan_str
+
+    return summary_str
+
+
+class TableChatAgentConfig(ChatAgentConfig):
+    system_message: str = DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE
+    user_message: None | str = None
+    cache: bool = True  # cache results
+    debug: bool = False
+    stream: bool = True  # allow streaming where needed
+    full_eval: bool = (
+        False  # runs eval without sanitization. Use only on trusted input!
+    )
+    data: str | pd.DataFrame  # data file, URL, or DataFrame
+    separator: None | str = None  # separator for data file
+    vecdb: None | VectorStoreConfig = None
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        type="openai",
+        chat_model=OpenAIChatModel.GPT4o,
+        completion_model=OpenAIChatModel.GPT4o,
+    )
+    prompts: PromptsConfig = PromptsConfig(
+        max_tokens=1000,
+    )
+
+
+class PandasEvalTool(ToolMessage):
+    """Tool/function to evaluate a pandas expression involving a dataframe `df`"""
+
+    request: str = "pandas_eval"
+    purpose: str = """
+            To eval a pandas <expression> on the dataframe 'df' and 
+            return the results to answer a question.
+            IMPORTANT: the <expression> field should be a valid pandas expression.
+            """
+    expression: str
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
+        return [
+            cls(expression="df.head()"),
+            cls(expression="df[(df['gender'] == 'Male')]['income'].mean()"),
+        ]
+
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+            Use the `pandas_eval` tool/function to evaluate a pandas expression
+            involving the dataframe 'df' to answer the user's question.
+            """
+
+
+class TableChatAgent(ChatAgent):
+    """
+    Agent for chatting with a collection of documents.
+    """
+
+    sent_expression: bool = False
+
+    def __init__(self, config: TableChatAgentConfig):
+        if isinstance(config.data, pd.DataFrame):
+            df = config.data
+        else:
+            df = read_tabular_data(config.data, config.separator)
+
+        df.columns = df.columns.str.strip().str.replace(" +", "_", regex=True)
+
+        self.df = df
+        summary = dataframe_summary(df)
+        config.system_message = config.system_message.format(summary=summary)
+
+        super().__init__(config)
+        self.config: TableChatAgentConfig = config
+
+        logger.info(
+            f"""TableChatAgent initialized with dataframe of shape {self.df.shape}
+            and columns: 
+            {self.df.columns}
+            """
+        )
+        # enable the agent to use and handle the PandasEvalTool
+        self.enable_message(PandasEvalTool)
+
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        response = super().user_response(msg)
+        if response is not None and response.content != "":
+            self.sent_expression = False
+        return response
+
+    def pandas_eval(self, msg: PandasEvalTool) -> str:
+        """
+        Handle a PandasEvalTool message by evaluating the `expression` field
+            and returning the result.
+        Args:
+            msg (PandasEvalTool): The tool-message to handle.
+
+        Returns:
+            str: The result of running the code along with any print output.
+        """
+        self.sent_expression = True
+        exprn = msg.expression
+        vars = {"df": self.df}
+        # Create a string-based I/O stream
+        code_out = io.StringIO()
+
+        # Temporarily redirect standard output to our string-based I/O stream
+        sys.stdout = code_out
+
+        # Evaluate the last line and get the result;
+        # SECURITY MITIGATION: Eval input is sanitized by default to prevent most
+        # common code injection attack vectors.
+        try:
+            if not self.config.full_eval:
+                exprn = sanitize_command(exprn)
+            code = compile(exprn, "<calc>", "eval")
+            eval_result = eval(code, vars, {})
+        except Exception as e:
+            eval_result = f"ERROR: {type(e)}: {e}"
+
+        if eval_result is None:
+            eval_result = ""
+
+        # Always restore the original standard output
+        sys.stdout = sys.__stdout__
+
+        # If df has been modified in-place, save the changes back to self.df
+        self.df = vars["df"]
+
+        # Get the resulting string from the I/O stream
+        print_result = code_out.getvalue() or ""
+        sep = "\n" if print_result else ""
+        # Combine the print and eval results
+        result = f"{print_result}{sep}{eval_result}"
+        if result == "":
+            result = "No result"
+        # Return the result
+        return result
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        """Handle various LLM deviations"""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
+            if msg.content.strip() == DONE and self.sent_expression:
+                # LLM sent an expression (i.e. used the `pandas_eval` tool)
+                # but upon receiving the results, simply said DONE without
+                # narrating the result as instructed.
+                return """
+                    You forgot to PRESENT the answer to the user's query
+                    based on the results from `pandas_eval` tool.
+                """
+            if self.sent_expression:
+                # LLM forgot to say DONE
+                self.sent_expression = False
+                return DONE + " " + PASS
+            else:
+                # LLM forgot to use the `pandas_eval` tool
+                return """
+                    You forgot to use the `pandas_eval` tool/function 
+                    to find the answer.
+                    Try again using the `pandas_eval` tool/function.
+                    """
+        return None
 </file>
 
 <file path="langroid/agent/tools/mcp/__init__.py">
@@ -15363,6 +15905,320 @@ def git_diff_file(repo: git.Repo, filepath: str) -> str:
     except git.GitCommandError as e:
         logger.error(f"An error occurred while getting diff: {e}")
         return f"Error: {str(e)}"
+</file>
+
+<file path="langroid/utils/pandas_utils.py">
+import ast
+from typing import Any
+
+import pandas as pd
+
+COMMON_USE_DF_METHODS = {
+    "T",
+    "abs",
+    "add",
+    "add_prefix",
+    "add_suffix",
+    "agg",
+    "aggregate",
+    "align",
+    "all",
+    "any",
+    "apply",
+    "applymap",
+    "assign",
+    "at",
+    "at_time",
+    "between_time",
+    "bfill",
+    "clip",
+    "combine",
+    "combine_first",
+    "convert_dtypes",
+    "corr",
+    "corrwith",
+    "count",
+    "cov",
+    "cummax",
+    "cummin",
+    "cumprod",
+    "cumsum",
+    "describe",
+    "diff",
+    "dot",
+    "drop_duplicates",
+    "duplicated",
+    "eq",
+    "eval",
+    "ewm",
+    "expanding",
+    "explode",
+    "filter",
+    "first",
+    "groupby",
+    "head",
+    "idxmax",
+    "idxmin",
+    "infer_objects",
+    "interpolate",
+    "isin",
+    "kurt",
+    "kurtosis",
+    "last",
+    "le",
+    "loc",
+    "lt",
+    "gt",
+    "ge",
+    "iloc",
+    "mask",
+    "max",
+    "mean",
+    "median",
+    "melt",
+    "min",
+    "mode",
+    "mul",
+    "nlargest",
+    "nsmallest",
+    "notna",
+    "notnull",
+    "nunique",
+    "pct_change",
+    "pipe",
+    "pivot",
+    "pivot_table",
+    "prod",
+    "product",
+    "quantile",
+    "query",
+    "rank",
+    "replace",
+    "resample",
+    "rolling",
+    "round",
+    "sample",
+    "select_dtypes",
+    "sem",
+    "shift",
+    "skew",
+    "sort_index",
+    "sort_values",
+    "squeeze",
+    "stack",
+    "std",
+    "sum",
+    "tail",
+    "transform",
+    "transpose",
+    "unstack",
+    "value_counts",
+    "var",
+    "where",
+    "xs",
+}
+
+POTENTIALLY_DANGEROUS_DF_METHODS = {
+    "eval",
+    "query",
+    "apply",
+    "applymap",
+    "pipe",
+    "agg",
+    "aggregate",
+    "transform",
+    "rolling",
+    "expanding",
+    "resample",
+}
+
+WHITELISTED_DF_METHODS = COMMON_USE_DF_METHODS - POTENTIALLY_DANGEROUS_DF_METHODS
+
+
+BLOCKED_KW = {
+    "engine",
+    "parser",
+    "inplace",
+    "regex",
+    "dtype",
+    "converters",
+    "eval",
+}
+MAX_CHAIN = 6
+MAX_DEPTH = 25
+NUMERIC_LIMIT = 1_000_000_000
+
+
+class UnsafeCommandError(ValueError):
+    """Raised when a command string violates security policy."""
+
+    pass
+
+
+def _literal_ok(node: ast.AST) -> bool:
+    """Return True if *node* is a safe literal (and within numeric limit)."""
+    if isinstance(node, ast.Constant):
+        if (
+            isinstance(node.value, (int, float, complex))
+            and abs(node.value) > NUMERIC_LIMIT
+        ):
+            raise UnsafeCommandError("numeric constant exceeds limit")
+        return True
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return all(_literal_ok(elt) for elt in node.elts)
+    if isinstance(node, ast.Slice):
+        return all(
+            sub is None or _literal_ok(sub)
+            for sub in (node.lower, node.upper, node.step)
+        )
+    return False
+
+
+class CommandValidator(ast.NodeVisitor):
+    """AST walker that enforces the security policy."""
+
+    # Comparison operators we allow
+    ALLOWED_CMPOP = (ast.Gt, ast.GtE, ast.Lt, ast.LtE, ast.Eq, ast.NotEq)
+
+    # Arithmetic operators we allow (power ** intentionally omitted)
+    ALLOWED_BINOP = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod)
+    ALLOWED_UNARY = (ast.UAdd, ast.USub)
+
+    # Node whitelist
+    ALLOWED_NODES = (
+        ast.Expression,
+        ast.Attribute,
+        ast.Name,
+        ast.Load,
+        ast.Call,
+        ast.Subscript,
+        ast.Constant,
+        ast.Tuple,
+        ast.List,
+        ast.Slice,
+        ast.keyword,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.Compare,
+        *ALLOWED_BINOP,
+        *ALLOWED_UNARY,
+        *ALLOWED_CMPOP,
+    )
+
+    def __init__(self, df_name: str = "df"):
+        self.df_name = df_name
+        self.depth = 0
+        self.chain = 0
+
+    # Depth guard
+    def generic_visit(self, node: ast.AST) -> None:
+        self.depth += 1
+        if self.depth > MAX_DEPTH:
+            raise UnsafeCommandError("AST nesting too deep")
+        super().generic_visit(node)
+        self.depth -= 1
+
+    # Literal validation
+    def visit_Constant(self, node: ast.Constant) -> None:
+        _literal_ok(node)
+
+    # Arithmetic
+    def visit_BinOp(self, node: ast.BinOp) -> None:
+        if not isinstance(node.op, self.ALLOWED_BINOP):
+            raise UnsafeCommandError("operator not allowed")
+        self.generic_visit(node)
+
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> None:
+        if not isinstance(node.op, self.ALLOWED_UNARY):
+            raise UnsafeCommandError("unary operator not allowed")
+        self.generic_visit(node)
+
+    # Comparisons
+    def visit_Compare(self, node: ast.Compare) -> None:
+        if not all(isinstance(op, self.ALLOWED_CMPOP) for op in node.ops):
+            raise UnsafeCommandError("comparison operator not allowed")
+        for comp in node.comparators:
+            _literal_ok(comp)
+        self.generic_visit(node)
+
+    # Subscripts
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        if not _literal_ok(node.slice):
+            raise UnsafeCommandError("subscript must be literal")
+        self.generic_visit(node)
+
+    # Method calls
+    def visit_Call(self, node: ast.Call) -> None:
+        if not isinstance(node.func, ast.Attribute):
+            raise UnsafeCommandError("only DataFrame method calls allowed")
+
+        method = node.func.attr
+        self.chain += 1
+        if self.chain > MAX_CHAIN:
+            raise UnsafeCommandError("method-chain too long")
+        if method not in WHITELISTED_DF_METHODS:
+            raise UnsafeCommandError(f"method '{method}' not permitted")
+
+        # kwarg / arg checks
+        for kw in node.keywords:
+            if kw.arg in BLOCKED_KW:
+                raise UnsafeCommandError(f"kwarg '{kw.arg}' is blocked")
+            _literal_ok(kw.value)
+        for arg in node.args:
+            _literal_ok(arg)
+
+        try:
+            self.generic_visit(node)
+        finally:
+            self.chain -= 1
+
+    # Names
+    def visit_Name(self, node: ast.Name) -> None:
+        if node.id != self.df_name:
+            raise UnsafeCommandError(f"unexpected variable '{node.id}'")
+
+    # Top-level gate
+    def visit(self, node: ast.AST) -> None:
+        if not isinstance(node, self.ALLOWED_NODES):
+            raise UnsafeCommandError(f"disallowed node {type(node).__name__}")
+        super().visit(node)
+
+
+def sanitize_command(expr: str, df_name: str = "df") -> str:
+    """
+    Validate *expr*; return it unchanged if it passes all rules,
+    else raise UnsafeCommandError with the first violation encountered.
+    """
+    tree = ast.parse(expr, mode="eval")
+    CommandValidator(df_name).visit(tree)
+    return expr
+
+
+def stringify(x: Any) -> str:
+    # Convert x to DataFrame if it is not one already
+    if isinstance(x, pd.Series):
+        df = x.to_frame()
+    elif not isinstance(x, pd.DataFrame):
+        return str(x)
+    else:
+        df = x
+
+    # Truncate long text columns to 1000 characters
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].apply(
+                lambda item: (
+                    (item[:1000] + "...")
+                    if isinstance(item, str) and len(item) > 1000
+                    else item
+                )
+            )
+
+    # Limit to 10 rows
+    df = df.head(10)
+
+    # Convert to string
+    return df.to_string(index=False)  # type: ignore
 </file>
 
 <file path="langroid/utils/system.py">
@@ -25070,295 +25926,6 @@ class QueryPlanFeedbackTool(ToolMessage):
     suggested_fix: str
 </file>
 
-<file path="langroid/agent/special/table_chat_agent.py">
-"""
-Agent that supports asking queries about a tabular dataset, internally
-represented as a Pandas dataframe. The `TableChatAgent` is configured with a
-dataset, which can be a Pandas df, file or URL. The delimiter/separator
-is auto-detected. In response to a user query, the Agent's LLM generates a Pandas
-expression (involving a dataframe `df`) to answer the query.
-The expression is passed via the `pandas_eval` tool/function-call,
-which is handled by the Agent's `pandas_eval` method. This method evaluates
-the expression and returns the result as a string.
-
-WARNING: This Agent should be used only with trusted input, as it can execute system
-commands. 
-
-The `full_eval` flag is false by default, which means that the input is sanitized
-against most common code injection attack vectors. `full_eval` may be set to True to 
-disable sanitization at all. Both cases should be used with caution.
-"""
-
-import io
-import logging
-import sys
-from typing import List, Optional, Tuple, no_type_check
-
-import numpy as np
-import pandas as pd
-from rich.console import Console
-
-import langroid as lr
-from langroid.agent import ChatDocument
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.tool_message import ToolMessage
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.parsing.table_loader import read_tabular_data
-from langroid.prompts.prompts_config import PromptsConfig
-from langroid.utils.constants import DONE, PASS
-from langroid.utils.pandas_utils import sanitize_command
-from langroid.vector_store.base import VectorStoreConfig
-
-logger = logging.getLogger(__name__)
-
-console = Console()
-
-DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = f"""
-You are a savvy data scientist, with expertise in analyzing tabular datasets,
-using Python and the Pandas library for dataframe manipulation.
-Since you do not have access to the dataframe 'df', you
-will need to use the `pandas_eval` tool/function-call to answer my questions.
-Here is a summary of the dataframe:
-{{summary}}
-Do not assume any columns other than those shown.
-In the expression you submit to the `pandas_eval` tool/function, 
-you are allowed to use the variable 'df' to refer to the dataframe.
-IMPORTANT: You can only use expressions that return a value - assignment statements 
-(like df['col'] = value or temp = df['col']) are NOT allowed for security reasons.
-To modify data, use methods like df.assign() that return a new dataframe.
-
-Sometimes you may not be able to answer the question in a single call to `pandas_eval`,
-so you can use a series of calls to `pandas_eval` to build up the answer. 
-For example you may first want to know something about the possible values in a column.
-
-If you receive a null or other unexpected result, see if you have made an assumption
-in your code, and try another way, or use `pandas_eval` to explore the dataframe 
-before submitting your final code. 
-
-Once you have the answer to the question, possibly after a few steps,
-say {DONE} and PRESENT THE ANSWER TO ME; do not just say {DONE}.
-If you receive an error message, 
-try using the `pandas_eval` tool/function again with the corrected code. 
-If the error is due to an assignment statement (e.g., df['col'] = ...), 
-use df.assign(col=...) instead, which returns a new dataframe with the modified column.
-For example: instead of df['airline'] = df['airline'].str.replace('*', ''), 
-use df.assign(airline=df['airline'].str.replace('*', '')). 
-
-VERY IMPORTANT: When using the `pandas_eval` tool/function, DO NOT EXPLAIN ANYTHING,
-   SIMPLY USE THE TOOL, with the CODE.
-Start by asking me what I want to know about the data.
-"""
-
-
-@no_type_check
-def dataframe_summary(df: pd.DataFrame) -> str:
-    """
-    Generate a structured summary for a pandas DataFrame containing numerical
-    and categorical values.
-
-    Args:
-        df (pd.DataFrame): The input DataFrame to summarize.
-
-    Returns:
-        str: A nicely structured and formatted summary string.
-    """
-
-    # Column names display
-    col_names_str = (
-        "COLUMN NAMES:\n" + " ".join([f"'{col}'" for col in df.columns]) + "\n\n"
-    )
-
-    # Numerical data summary
-    num_summary = df.describe().map(lambda x: "{:.2f}".format(x))
-    num_str = "Numerical Column Summary:\n" + num_summary.to_string() + "\n\n"
-
-    # Categorical data summary
-    cat_columns = df.select_dtypes(include=[np.object_]).columns
-    cat_summary_list = []
-
-    for col in cat_columns:
-        unique_values = df[col].unique()
-        if len(unique_values) < 10:
-            cat_summary_list.append(f"'{col}': {', '.join(map(str, unique_values))}")
-        else:
-            cat_summary_list.append(f"'{col}': {df[col].nunique()} unique values")
-
-    cat_str = "Categorical Column Summary:\n" + "\n".join(cat_summary_list) + "\n\n"
-
-    # Missing values summary
-    nan_summary = df.isnull().sum().rename("missing_values").to_frame()
-    nan_str = "Missing Values Column Summary:\n" + nan_summary.to_string() + "\n"
-
-    # Combine the summaries into one structured string
-    summary_str = col_names_str + num_str + cat_str + nan_str
-
-    return summary_str
-
-
-class TableChatAgentConfig(ChatAgentConfig):
-    system_message: str = DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE
-    user_message: None | str = None
-    cache: bool = True  # cache results
-    debug: bool = False
-    stream: bool = True  # allow streaming where needed
-    full_eval: bool = (
-        False  # runs eval without sanitization. Use only on trusted input!
-    )
-    data: str | pd.DataFrame  # data file, URL, or DataFrame
-    separator: None | str = None  # separator for data file
-    vecdb: None | VectorStoreConfig = None
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        type="openai",
-        chat_model=OpenAIChatModel.GPT4o,
-        completion_model=OpenAIChatModel.GPT4o,
-    )
-    prompts: PromptsConfig = PromptsConfig(
-        max_tokens=1000,
-    )
-
-
-class PandasEvalTool(ToolMessage):
-    """Tool/function to evaluate a pandas expression involving a dataframe `df`"""
-
-    request: str = "pandas_eval"
-    purpose: str = """
-            To eval a pandas <expression> on the dataframe 'df' and 
-            return the results to answer a question.
-            IMPORTANT: the <expression> field should be a valid pandas expression.
-            """
-    expression: str
-
-    @classmethod
-    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
-        return [
-            cls(expression="df.head()"),
-            cls(expression="df[(df['gender'] == 'Male')]['income'].mean()"),
-        ]
-
-    @classmethod
-    def instructions(cls) -> str:
-        return """
-            Use the `pandas_eval` tool/function to evaluate a pandas expression
-            involving the dataframe 'df' to answer the user's question.
-            """
-
-
-class TableChatAgent(ChatAgent):
-    """
-    Agent for chatting with a collection of documents.
-    """
-
-    sent_expression: bool = False
-
-    def __init__(self, config: TableChatAgentConfig):
-        if isinstance(config.data, pd.DataFrame):
-            df = config.data
-        else:
-            df = read_tabular_data(config.data, config.separator)
-
-        df.columns = df.columns.str.strip().str.replace(" +", "_", regex=True)
-
-        self.df = df
-        summary = dataframe_summary(df)
-        config.system_message = config.system_message.format(summary=summary)
-
-        super().__init__(config)
-        self.config: TableChatAgentConfig = config
-
-        logger.info(
-            f"""TableChatAgent initialized with dataframe of shape {self.df.shape}
-            and columns: 
-            {self.df.columns}
-            """
-        )
-        # enable the agent to use and handle the PandasEvalTool
-        self.enable_message(PandasEvalTool)
-
-    def user_response(
-        self,
-        msg: Optional[str | ChatDocument] = None,
-    ) -> Optional[ChatDocument]:
-        response = super().user_response(msg)
-        if response is not None and response.content != "":
-            self.sent_expression = False
-        return response
-
-    def pandas_eval(self, msg: PandasEvalTool) -> str:
-        """
-        Handle a PandasEvalTool message by evaluating the `expression` field
-            and returning the result.
-        Args:
-            msg (PandasEvalTool): The tool-message to handle.
-
-        Returns:
-            str: The result of running the code along with any print output.
-        """
-        self.sent_expression = True
-        exprn = msg.expression
-        vars = {"df": self.df}
-        # Create a string-based I/O stream
-        code_out = io.StringIO()
-
-        # Temporarily redirect standard output to our string-based I/O stream
-        sys.stdout = code_out
-
-        # Evaluate the last line and get the result;
-        # SECURITY MITIGATION: Eval input is sanitized by default to prevent most
-        # common code injection attack vectors.
-        try:
-            if not self.config.full_eval:
-                exprn = sanitize_command(exprn)
-            code = compile(exprn, "<calc>", "eval")
-            eval_result = eval(code, vars, {})
-        except Exception as e:
-            eval_result = f"ERROR: {type(e)}: {e}"
-
-        if eval_result is None:
-            eval_result = ""
-
-        # Always restore the original standard output
-        sys.stdout = sys.__stdout__
-
-        # If df has been modified in-place, save the changes back to self.df
-        self.df = vars["df"]
-
-        # Get the resulting string from the I/O stream
-        print_result = code_out.getvalue() or ""
-        sep = "\n" if print_result else ""
-        # Combine the print and eval results
-        result = f"{print_result}{sep}{eval_result}"
-        if result == "":
-            result = "No result"
-        # Return the result
-        return result
-
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        """Handle various LLM deviations"""
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-            if msg.content.strip() == DONE and self.sent_expression:
-                # LLM sent an expression (i.e. used the `pandas_eval` tool)
-                # but upon receiving the results, simply said DONE without
-                # narrating the result as instructed.
-                return """
-                    You forgot to PRESENT the answer to the user's query
-                    based on the results from `pandas_eval` tool.
-                """
-            if self.sent_expression:
-                # LLM forgot to say DONE
-                self.sent_expression = False
-                return DONE + " " + PASS
-            else:
-                # LLM forgot to use the `pandas_eval` tool
-                return """
-                    You forgot to use the `pandas_eval` tool/function 
-                    to find the answer.
-                    Try again using the `pandas_eval` tool/function.
-                    """
-        return None
-</file>
-
 <file path="langroid/agent/tools/mcp/fastmcp_client.py">
 import asyncio
 import datetime
@@ -30094,181 +30661,6 @@ getting split.
         print()
 </file>
 
-<file path="langroid/parsing/parse_json.py">
-import ast
-import json
-from datetime import datetime
-from typing import Any, Dict, Iterator, List, Union
-
-import yaml
-from json_repair import repair_json
-from pyparsing import nestedExpr, originalTextFor
-
-
-def is_valid_json(json_str: str) -> bool:
-    """Check if the input string is a valid JSON.
-
-    Args:
-        json_str (str): The input string to check.
-
-    Returns:
-        bool: True if the input string is a valid JSON, False otherwise.
-    """
-    try:
-        json.loads(json_str)
-        return True
-    except ValueError:
-        return False
-
-
-def flatten(nested_list) -> Iterator[str]:  # type: ignore
-    """Flatten a nested list into a single list of strings"""
-    for item in nested_list:
-        if isinstance(item, (list, tuple)):
-            for subitem in flatten(item):
-                yield subitem
-        else:
-            yield item
-
-
-def get_json_candidates(s: str) -> List[str]:
-    """Get top-level JSON candidates, i.e. strings between curly braces."""
-    # Define the grammar for matching curly braces
-    curly_braces = originalTextFor(nestedExpr("{", "}"))
-
-    # Parse the string
-    try:
-        results = curly_braces.searchString(s)
-        # Properly convert nested lists to strings
-        return [r[0] for r in results]
-    except Exception:
-        return []
-
-
-def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
-    if not json_string.strip():
-        raise ValueError("Empty string is not valid JSON")
-
-    # First, try parsing with ast.literal_eval
-    try:
-        result = ast.literal_eval(json_string)
-        if isinstance(result, (dict, list)):
-            return result
-    except (ValueError, SyntaxError):
-        pass
-
-    # If ast.literal_eval fails or returns non-dict/list, try repair_json
-    json_repaired_obj = repair_json(json_string, return_objects=True)
-    if isinstance(json_repaired_obj, (dict, list)):
-        return json_repaired_obj
-    else:
-        try:
-            # fallback on yaml
-            yaml_result = yaml.safe_load(json_string)
-            if isinstance(yaml_result, (dict, list)):
-                return yaml_result
-        except yaml.YAMLError:
-            pass
-
-    # If all methods fail, raise ValueError
-    raise ValueError(f"Unable to parse as JSON: {json_string}")
-
-
-def try_repair_json_yaml(s: str) -> str | None:
-    """
-    Attempt to load as json, and if it fails, try repairing the JSON.
-    If that fails, replace any \n with space as a last resort.
-    NOTE - replacing \n with space will result in format loss,
-    which may matter in generated code (e.g. python, toml, etc)
-    """
-    s_repaired_obj = repair_json(s, return_objects=True)
-    if isinstance(s_repaired_obj, list):
-        if len(s_repaired_obj) > 0:
-            s_repaired_obj = s_repaired_obj[0]
-        else:
-            s_repaired_obj = None
-    if s_repaired_obj is not None:
-        return json.dumps(s_repaired_obj)  # type: ignore
-    else:
-        try:
-            yaml_result = yaml.safe_load(s)
-            if isinstance(yaml_result, dict):
-                return json.dumps(yaml_result)
-        except yaml.YAMLError:
-            pass
-        # If it still fails, replace any \n with space as a last resort
-        s = s.replace("\n", " ")
-        if is_valid_json(s):
-            return s
-        else:
-            return None  # all failed
-
-
-def extract_top_level_json(s: str) -> List[str]:
-    """Extract all top-level JSON-formatted substrings from a given string.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-
-    Returns:
-        List[str]: A list of top-level JSON-formatted substrings.
-    """
-    # Find JSON object and array candidates
-    json_candidates = get_json_candidates(s)
-    maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
-
-    return [candidate for candidate in maybe_repaired_jsons if candidate is not None]
-
-
-def top_level_json_field(s: str, f: str) -> Any:
-    """
-    Extract the value of a field f from a top-level JSON object.
-    If there are multiple, just return the first.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-        f (str): The field to extract from the JSON object.
-
-    Returns:
-        str: The value of the field f in the top-level JSON object, if any.
-            Otherwise, return an empty string.
-
-    Note:
-        This function is designed to never crash. If any exception occurs during
-        JSON parsing or field extraction, it gracefully returns an empty string.
-    """
-    try:
-        jsons = extract_top_level_json(s)
-        if len(jsons) == 0:
-            return ""
-        for j in jsons:
-            try:
-                json_data = json.loads(j)
-                if isinstance(json_data, dict):
-                    if f in json_data:
-                        return json_data[f]
-                elif isinstance(json_data, list):
-                    # Some responses wrap candidate JSON objects in a list; scan them.
-                    for item in json_data:
-                        if isinstance(item, dict) and f in item:
-                            return item[f]
-            except (json.JSONDecodeError, TypeError, KeyError):
-                # If this specific JSON fails to parse, continue to next candidate
-                continue
-    except Exception:
-        # Catch any unexpected errors to ensure we never crash
-        pass
-
-    return ""
-
-
-def datetime_to_json(obj: Any) -> Any:
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    # Let json.dumps() handle the raising of TypeError for non-serializable objects
-    return obj
-</file>
-
 <file path="langroid/parsing/repo_loader.py">
 import itertools
 import json
@@ -32279,320 +32671,6 @@ def scheduled_cleanup(interval: int = 600) -> None:
     while True:
         ObjectRegistry.cleanup()
         time.sleep(interval)
-</file>
-
-<file path="langroid/utils/pandas_utils.py">
-import ast
-from typing import Any
-
-import pandas as pd
-
-COMMON_USE_DF_METHODS = {
-    "T",
-    "abs",
-    "add",
-    "add_prefix",
-    "add_suffix",
-    "agg",
-    "aggregate",
-    "align",
-    "all",
-    "any",
-    "apply",
-    "applymap",
-    "assign",
-    "at",
-    "at_time",
-    "between_time",
-    "bfill",
-    "clip",
-    "combine",
-    "combine_first",
-    "convert_dtypes",
-    "corr",
-    "corrwith",
-    "count",
-    "cov",
-    "cummax",
-    "cummin",
-    "cumprod",
-    "cumsum",
-    "describe",
-    "diff",
-    "dot",
-    "drop_duplicates",
-    "duplicated",
-    "eq",
-    "eval",
-    "ewm",
-    "expanding",
-    "explode",
-    "filter",
-    "first",
-    "groupby",
-    "head",
-    "idxmax",
-    "idxmin",
-    "infer_objects",
-    "interpolate",
-    "isin",
-    "kurt",
-    "kurtosis",
-    "last",
-    "le",
-    "loc",
-    "lt",
-    "gt",
-    "ge",
-    "iloc",
-    "mask",
-    "max",
-    "mean",
-    "median",
-    "melt",
-    "min",
-    "mode",
-    "mul",
-    "nlargest",
-    "nsmallest",
-    "notna",
-    "notnull",
-    "nunique",
-    "pct_change",
-    "pipe",
-    "pivot",
-    "pivot_table",
-    "prod",
-    "product",
-    "quantile",
-    "query",
-    "rank",
-    "replace",
-    "resample",
-    "rolling",
-    "round",
-    "sample",
-    "select_dtypes",
-    "sem",
-    "shift",
-    "skew",
-    "sort_index",
-    "sort_values",
-    "squeeze",
-    "stack",
-    "std",
-    "sum",
-    "tail",
-    "transform",
-    "transpose",
-    "unstack",
-    "value_counts",
-    "var",
-    "where",
-    "xs",
-}
-
-POTENTIALLY_DANGEROUS_DF_METHODS = {
-    "eval",
-    "query",
-    "apply",
-    "applymap",
-    "pipe",
-    "agg",
-    "aggregate",
-    "transform",
-    "rolling",
-    "expanding",
-    "resample",
-}
-
-WHITELISTED_DF_METHODS = COMMON_USE_DF_METHODS - POTENTIALLY_DANGEROUS_DF_METHODS
-
-
-BLOCKED_KW = {
-    "engine",
-    "parser",
-    "inplace",
-    "regex",
-    "dtype",
-    "converters",
-    "eval",
-}
-MAX_CHAIN = 6
-MAX_DEPTH = 25
-NUMERIC_LIMIT = 1_000_000_000
-
-
-class UnsafeCommandError(ValueError):
-    """Raised when a command string violates security policy."""
-
-    pass
-
-
-def _literal_ok(node: ast.AST) -> bool:
-    """Return True if *node* is a safe literal (and within numeric limit)."""
-    if isinstance(node, ast.Constant):
-        if (
-            isinstance(node.value, (int, float, complex))
-            and abs(node.value) > NUMERIC_LIMIT
-        ):
-            raise UnsafeCommandError("numeric constant exceeds limit")
-        return True
-    if isinstance(node, (ast.Tuple, ast.List)):
-        return all(_literal_ok(elt) for elt in node.elts)
-    if isinstance(node, ast.Slice):
-        return all(
-            sub is None or _literal_ok(sub)
-            for sub in (node.lower, node.upper, node.step)
-        )
-    return False
-
-
-class CommandValidator(ast.NodeVisitor):
-    """AST walker that enforces the security policy."""
-
-    # Comparison operators we allow
-    ALLOWED_CMPOP = (ast.Gt, ast.GtE, ast.Lt, ast.LtE, ast.Eq, ast.NotEq)
-
-    # Arithmetic operators we allow (power ** intentionally omitted)
-    ALLOWED_BINOP = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod)
-    ALLOWED_UNARY = (ast.UAdd, ast.USub)
-
-    # Node whitelist
-    ALLOWED_NODES = (
-        ast.Expression,
-        ast.Attribute,
-        ast.Name,
-        ast.Load,
-        ast.Call,
-        ast.Subscript,
-        ast.Constant,
-        ast.Tuple,
-        ast.List,
-        ast.Slice,
-        ast.keyword,
-        ast.BinOp,
-        ast.UnaryOp,
-        ast.Compare,
-        *ALLOWED_BINOP,
-        *ALLOWED_UNARY,
-        *ALLOWED_CMPOP,
-    )
-
-    def __init__(self, df_name: str = "df"):
-        self.df_name = df_name
-        self.depth = 0
-        self.chain = 0
-
-    # Depth guard
-    def generic_visit(self, node: ast.AST) -> None:
-        self.depth += 1
-        if self.depth > MAX_DEPTH:
-            raise UnsafeCommandError("AST nesting too deep")
-        super().generic_visit(node)
-        self.depth -= 1
-
-    # Literal validation
-    def visit_Constant(self, node: ast.Constant) -> None:
-        _literal_ok(node)
-
-    # Arithmetic
-    def visit_BinOp(self, node: ast.BinOp) -> None:
-        if not isinstance(node.op, self.ALLOWED_BINOP):
-            raise UnsafeCommandError("operator not allowed")
-        self.generic_visit(node)
-
-    def visit_UnaryOp(self, node: ast.UnaryOp) -> None:
-        if not isinstance(node.op, self.ALLOWED_UNARY):
-            raise UnsafeCommandError("unary operator not allowed")
-        self.generic_visit(node)
-
-    # Comparisons
-    def visit_Compare(self, node: ast.Compare) -> None:
-        if not all(isinstance(op, self.ALLOWED_CMPOP) for op in node.ops):
-            raise UnsafeCommandError("comparison operator not allowed")
-        for comp in node.comparators:
-            _literal_ok(comp)
-        self.generic_visit(node)
-
-    # Subscripts
-    def visit_Subscript(self, node: ast.Subscript) -> None:
-        if not _literal_ok(node.slice):
-            raise UnsafeCommandError("subscript must be literal")
-        self.generic_visit(node)
-
-    # Method calls
-    def visit_Call(self, node: ast.Call) -> None:
-        if not isinstance(node.func, ast.Attribute):
-            raise UnsafeCommandError("only DataFrame method calls allowed")
-
-        method = node.func.attr
-        self.chain += 1
-        if self.chain > MAX_CHAIN:
-            raise UnsafeCommandError("method-chain too long")
-        if method not in WHITELISTED_DF_METHODS:
-            raise UnsafeCommandError(f"method '{method}' not permitted")
-
-        # kwarg / arg checks
-        for kw in node.keywords:
-            if kw.arg in BLOCKED_KW:
-                raise UnsafeCommandError(f"kwarg '{kw.arg}' is blocked")
-            _literal_ok(kw.value)
-        for arg in node.args:
-            _literal_ok(arg)
-
-        try:
-            self.generic_visit(node)
-        finally:
-            self.chain -= 1
-
-    # Names
-    def visit_Name(self, node: ast.Name) -> None:
-        if node.id != self.df_name:
-            raise UnsafeCommandError(f"unexpected variable '{node.id}'")
-
-    # Top-level gate
-    def visit(self, node: ast.AST) -> None:
-        if not isinstance(node, self.ALLOWED_NODES):
-            raise UnsafeCommandError(f"disallowed node {type(node).__name__}")
-        super().visit(node)
-
-
-def sanitize_command(expr: str, df_name: str = "df") -> str:
-    """
-    Validate *expr*; return it unchanged if it passes all rules,
-    else raise UnsafeCommandError with the first violation encountered.
-    """
-    tree = ast.parse(expr, mode="eval")
-    CommandValidator(df_name).visit(tree)
-    return expr
-
-
-def stringify(x: Any) -> str:
-    # Convert x to DataFrame if it is not one already
-    if isinstance(x, pd.Series):
-        df = x.to_frame()
-    elif not isinstance(x, pd.DataFrame):
-        return str(x)
-    else:
-        df = x
-
-    # Truncate long text columns to 1000 characters
-    for col in df.columns:
-        if df[col].dtype == object:
-            df[col] = df[col].apply(
-                lambda item: (
-                    (item[:1000] + "...")
-                    if isinstance(item, str) and len(item) > 1000
-                    else item
-                )
-            )
-
-    # Limit to 10 rows
-    df = df.head(10)
-
-    # Convert to string
-    return df.to_string(index=False)  # type: ignore
 </file>
 
 <file path="langroid/utils/pydantic_utils.py">
@@ -39499,6 +39577,181 @@ atexit.register(_cleanup_clients)
 def _clear_cache() -> None:
     """Clear the client cache. Only for testing."""
     _client_cache.clear()
+</file>
+
+<file path="langroid/parsing/parse_json.py">
+import ast
+import json
+from datetime import datetime
+from typing import Any, Dict, Iterator, List, Union
+
+import yaml
+from json_repair import repair_json
+from pyparsing import nestedExpr, originalTextFor
+
+
+def is_valid_json(json_str: str) -> bool:
+    """Check if the input string is a valid JSON.
+
+    Args:
+        json_str (str): The input string to check.
+
+    Returns:
+        bool: True if the input string is a valid JSON, False otherwise.
+    """
+    try:
+        json.loads(json_str)
+        return True
+    except ValueError:
+        return False
+
+
+def flatten(nested_list) -> Iterator[str]:  # type: ignore
+    """Flatten a nested list into a single list of strings"""
+    for item in nested_list:
+        if isinstance(item, (list, tuple)):
+            for subitem in flatten(item):
+                yield subitem
+        else:
+            yield item
+
+
+def get_json_candidates(s: str) -> List[str]:
+    """Get top-level JSON candidates, i.e. strings between curly braces."""
+    # Define the grammar for matching curly braces
+    curly_braces = originalTextFor(nestedExpr("{", "}"))
+
+    # Parse the string
+    try:
+        results = curly_braces.searchString(s)
+        # Properly convert nested lists to strings
+        return [r[0] for r in results]
+    except Exception:
+        return []
+
+
+def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
+    if not json_string.strip():
+        raise ValueError("Empty string is not valid JSON")
+
+    # First, try parsing with ast.literal_eval
+    try:
+        result = ast.literal_eval(json_string)
+        if isinstance(result, (dict, list)):
+            return result
+    except (ValueError, SyntaxError):
+        pass
+
+    # If ast.literal_eval fails or returns non-dict/list, try repair_json
+    json_repaired_obj = repair_json(json_string, return_objects=True)
+    if isinstance(json_repaired_obj, (dict, list)):
+        return json_repaired_obj
+    else:
+        try:
+            # fallback on yaml
+            yaml_result = yaml.safe_load(json_string)
+            if isinstance(yaml_result, (dict, list)):
+                return yaml_result
+        except yaml.YAMLError:
+            pass
+
+    # If all methods fail, raise ValueError
+    raise ValueError(f"Unable to parse as JSON: {json_string}")
+
+
+def try_repair_json_yaml(s: str) -> str | None:
+    """
+    Attempt to load as json, and if it fails, try repairing the JSON.
+    If that fails, replace any \n with space as a last resort.
+    NOTE - replacing \n with space will result in format loss,
+    which may matter in generated code (e.g. python, toml, etc)
+    """
+    s_repaired_obj = repair_json(s, return_objects=True)
+    if isinstance(s_repaired_obj, list):
+        if len(s_repaired_obj) > 0:
+            s_repaired_obj = s_repaired_obj[0]
+        else:
+            s_repaired_obj = None
+    if s_repaired_obj is not None:
+        return json.dumps(s_repaired_obj)  # type: ignore
+    else:
+        try:
+            yaml_result = yaml.safe_load(s)
+            if isinstance(yaml_result, dict):
+                return json.dumps(yaml_result)
+        except yaml.YAMLError:
+            pass
+        # If it still fails, replace any \n with space as a last resort
+        s = s.replace("\n", " ")
+        if is_valid_json(s):
+            return s
+        else:
+            return None  # all failed
+
+
+def extract_top_level_json(s: str) -> List[str]:
+    """Extract all top-level JSON-formatted substrings from a given string.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+
+    Returns:
+        List[str]: A list of top-level JSON-formatted substrings.
+    """
+    # Find JSON object and array candidates
+    json_candidates = get_json_candidates(s)
+    maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
+
+    return [candidate for candidate in maybe_repaired_jsons if candidate is not None]
+
+
+def top_level_json_field(s: str, f: str) -> Any:
+    """
+    Extract the value of a field f from a top-level JSON object.
+    If there are multiple, just return the first.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+        f (str): The field to extract from the JSON object.
+
+    Returns:
+        str: The value of the field f in the top-level JSON object, if any.
+            Otherwise, return an empty string.
+
+    Note:
+        This function is designed to never crash. If any exception occurs during
+        JSON parsing or field extraction, it gracefully returns an empty string.
+    """
+    try:
+        jsons = extract_top_level_json(s)
+        if len(jsons) == 0:
+            return ""
+        for j in jsons:
+            try:
+                json_data = json.loads(j)
+                if isinstance(json_data, dict):
+                    if f in json_data:
+                        return json_data[f]
+                elif isinstance(json_data, list):
+                    # Some responses wrap candidate JSON objects in a list; scan them.
+                    for item in json_data:
+                        if isinstance(item, dict) and f in item:
+                            return item[f]
+            except (json.JSONDecodeError, TypeError, KeyError):
+                # If this specific JSON fails to parse, continue to next candidate
+                continue
+    except Exception:
+        # Catch any unexpected errors to ensure we never crash
+        pass
+
+    return ""
+
+
+def datetime_to_json(obj: Any) -> Any:
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    # Let json.dumps() handle the raising of TypeError for non-serializable objects
+    return obj
 </file>
 
 <file path="langroid/utils/html_logger.py">
@@ -47052,6 +47305,7 @@ pip install "langroid[hf-embeddings]"
 
 """
 
+import asyncio
 import importlib
 import logging
 from collections import OrderedDict
@@ -47896,7 +48150,7 @@ class DocChatAgent(ChatAgent):
             return self.summarize_docs()
         else:
             self.callbacks.show_start_response(entity="llm")
-            response = self.answer_from_docs(query_str)
+            response = await asyncio.to_thread(self.answer_from_docs, query_str)
             self._render_llm_response(response, citation_only=True)
             return ChatDocument(
                 content=response.content,
@@ -56112,7 +56366,7 @@ class OpenAIGPT(LanguageModel):
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.10"
+version = "0.59.11"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
