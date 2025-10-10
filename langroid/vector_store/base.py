@@ -95,6 +95,37 @@ class VectorStore(ABC):
     def embedding_dim(self) -> int:
         return len(self.embedding_fn(["test"])[0])
 
+    def clone(self) -> "VectorStore":
+        """Return a vector-store clone suitable for agent cloning.
+
+        The default implementation deep-copies the configuration, reuses any
+        existing embedding model, and instantiates a fresh store of the same
+        type. Subclasses can override when sharing the instance is required
+        (e.g., embedded/local stores that rely on file locks).
+        """
+
+        config_copy = self.config.model_copy(deep=True)
+        # Preserve the calculated collection contents without forcing replaces
+        if hasattr(config_copy, "replace_collection"):
+            config_copy.replace_collection = False  # type: ignore[attr-defined]
+        if hasattr(config_copy, "embedding_model"):
+            config_copy.embedding_model = getattr(self.config, "embedding_model", None)
+        # Fall back to the existing embedding model instance if config lacks it
+        if getattr(config_copy, "embedding_model", None) is None:
+            setattr(
+                config_copy, "embedding_model", getattr(self, "embedding_model", None)
+            )
+
+        cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+        # Some stores might not honour replace_collection; ensure same collection
+        if getattr(self.config, "collection_name", None) is not None:
+            setattr(
+                cloned_store.config,
+                "collection_name",
+                getattr(self.config, "collection_name", None),
+            )
+        return cloned_store
+
     @abstractmethod
     def clear_empty_collections(self) -> int:
         """Clear all empty collections in the vector store.

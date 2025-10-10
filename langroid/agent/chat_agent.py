@@ -279,8 +279,8 @@ class ChatAgent(Agent):
         new_agent.llm_functions_handled = self.llm_functions_handled
         new_agent.llm_functions_usable = self.llm_functions_usable
         new_agent.llm_function_force = self.llm_function_force
-        # Caution - we are copying the vector-db, maybe we don't always want this?
-        new_agent.vecdb = self.vecdb
+        # Ensure each clone gets its own vecdb client when supported.
+        new_agent.vecdb = None if self.vecdb is None else self.vecdb.clone()
         new_agent.id = ObjectRegistry.new_id()
         if self.config.add_to_registry:
             ObjectRegistry.register_object(new_agent)

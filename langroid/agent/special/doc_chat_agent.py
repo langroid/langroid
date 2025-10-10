@@ -1414,6 +1414,7 @@ class DocChatAgent(ChatAgent):
             )
 
         if len(passages) == 0:
+            logger.debug("No passages retrieved for query '%s'", query)
             return []
 
         if self.config.rerank_after_adding_context:
