@@ -24,6 +24,9 @@ python3 examples/docqa/rag-concurrent.py -m ollama/mistral:7b-instruct-v0.2-q8_0
 python3 examples/docqa/rag-concurrent.py --sequential  # Baseline
 python3 examples/docqa/rag-concurrent.py  # Should be faster if truly concurrent
 
+# Use Langroid's built-in run_batch_tasks harness instead of the custom one
+python3 examples/docqa/rag-concurrent.py --use-builtin-batch
+
 # Show only concurrency logs (suppress long answers) and filter to START/WORKER lines
 python3 examples/docqa/rag-concurrent.py --num-questions=3 --log-only \\
   | rg "Q[0-9]{2} (START|WORKER|COMPLETE)"
@@ -50,11 +53,13 @@ import time
 import threading
 from datetime import datetime
 from contextvars import ContextVar
+from typing import Dict
 
 import fire
 
 import langroid as lr
 import langroid.language_models as lm
+from langroid.agent.batch import run_batch_tasks
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -63,6 +68,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 log_lock = threading.Lock()
 CURRENT_QUESTION: ContextVar[int | None] = ContextVar("CURRENT_QUESTION", default=None)
 EVENT_HISTORY: list[str] = []
+QUESTION_TO_INDEX: Dict[str, int] = {}
 
 
 def log_event(event_type: str, question_num: int, message: str = ""):
@@ -95,6 +101,8 @@ class LoggingDocChatAgent(DocChatAgent):
 
     def answer_from_docs(self, query: str):
         q_num = CURRENT_QUESTION.get()
+        if q_num is None:
+            q_num = QUESTION_TO_INDEX.get(query)
         if q_num is not None:
             log_event(
                 "WORKER_START", q_num, f"Vec/LLM on T{threading.get_ident()%10000:04d}"
@@ -116,6 +124,7 @@ def app(
     sequential: bool = False,
     num_questions: int = 10,
     log_only: bool = False,
+    use_builtin_batch: bool = False,
 ):
     """
     Run DocChat queries on Library of Babel story.
@@ -126,9 +135,13 @@ def app(
                    if False, run with asyncio concurrency (default: False)
         num_questions: Number of questions to run (max 10)
         log_only: Suppress verbose answers and print a concise log summary
+        use_builtin_batch: Use Langroid's run_batch_tasks instead of the custom harness
     """
     num_questions = max(1, min(num_questions, len(ALL_QUESTIONS)))
     questions = ALL_QUESTIONS[:num_questions]
+    QUESTION_TO_INDEX.clear()
+    QUESTION_TO_INDEX.update({q: i + 1 for i, q in enumerate(questions)})
+    EVENT_HISTORY.clear()
     mode = "TRULY SEQUENTIAL (simple loop)" if sequential else "CONCURRENT (asyncio)"
     print(f"\n{'='*80}")
     print(f"Running in {mode} mode")
@@ -197,43 +210,77 @@ def app(
             )  # noqa: E501
             results.append(final)
     else:
-        # CONCURRENT: Custom asyncio runner using task clones and as_completed
+        if use_builtin_batch:
 
-        async def run_question(clone_idx: int, question: str, base_task: lr.Task):
-            """Launch a clone of the base task and report progress live."""
-            q_num = clone_idx + 1
-            log_event(
-                "START",
-                q_num,
-                question[:50] + "..." if len(question) > 50 else question,
+            def input_map(question: str) -> str:
+                q_num = QUESTION_TO_INDEX[question]
+                log_event(
+                    "START",
+                    q_num,
+                    question[:50] + "..." if len(question) > 50 else question,
+                )
+                return question
+
+            # run_batch_tasks keeps result ordering; worker logs show actual completion timing
+            raw_results = run_batch_tasks(
+                task=task,
+                items=questions,
+                input_map=input_map,
+                output_map=lambda x: x,
+                sequential=False,
+                turns=1,
             )
-            token = CURRENT_QUESTION.set(q_num)
-            task_clone = base_task.clone(clone_idx)
-            try:
-                result = await task_clone.run_async(question, turns=1)
-            finally:
-                CURRENT_QUESTION.reset(token)
-            if result is None:
-                length = 0
-            elif hasattr(result, "content"):
-                length = len(result.content)
-            else:
-                length = len(str(result))
-            log_event("COMPLETE", q_num, f"Got response ({length} chars)")
-            return q_num, result
+            results = []
+            for i, result in enumerate(raw_results, 1):
+                if result is None:
+                    length = 0
+                    results.append("")
+                elif hasattr(result, "content"):
+                    length = len(result.content)
+                    results.append(result)
+                else:
+                    text = str(result)
+                    length = len(text)
+                    results.append(text)
+                log_event("COMPLETE", i, f"Got response ({length} chars)")
+        else:
+            # CONCURRENT: Custom asyncio runner using task clones and as_completed
 
-        async def run_all_concurrent():
-            coros = [
-                run_question(idx, question, task)
-                for idx, question in enumerate(questions)
-            ]
-            results_ordered = [None] * len(questions)
-            for coro in asyncio.as_completed(coros):
-                q_num, result = await coro
-                results_ordered[q_num - 1] = result
-            return results_ordered
+            async def run_question(clone_idx: int, question: str, base_task: lr.Task):
+                """Launch a clone of the base task and report progress live."""
+                q_num = clone_idx + 1
+                log_event(
+                    "START",
+                    q_num,
+                    question[:50] + "..." if len(question) > 50 else question,
+                )
+                token = CURRENT_QUESTION.set(q_num)
+                task_clone = base_task.clone(clone_idx)
+                try:
+                    result = await task_clone.run_async(question, turns=1)
+                finally:
+                    CURRENT_QUESTION.reset(token)
+                if result is None:
+                    length = 0
+                elif hasattr(result, "content"):
+                    length = len(result.content)
+                else:
+                    length = len(str(result))
+                log_event("COMPLETE", q_num, f"Got response ({length} chars)")
+                return q_num, result
 
-        results = asyncio.run(run_all_concurrent())
+            async def run_all_concurrent():
+                coros = [
+                    run_question(idx, question, task)
+                    for idx, question in enumerate(questions)
+                ]
+                results_ordered = [None] * len(questions)
+                for coro in asyncio.as_completed(coros):
+                    q_num, result = await coro
+                    results_ordered[q_num - 1] = result
+                return results_ordered
+
+            results = asyncio.run(run_all_concurrent())
 
     elapsed_time = time.time() - start_time
     print(f"\n{'='*80}")
@@ -279,6 +326,7 @@ def app(
             print(f"A{i}: {answer}")
             print(f"{'='*80}")
 
+    QUESTION_TO_INDEX.clear()
     return results
 
 

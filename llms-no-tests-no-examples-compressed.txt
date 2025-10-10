@@ -16148,255 +16148,29 @@ The migration will unlock performance improvements, future-proof the codebase, a
 </file>
 
 <file path="issues/20251010-concurrent-rag.md">
-# Concurrent DocChatAgent Task Execution Investigation
+# Concurrent DocChatAgent Batch Execution
 
-**Date:** 2025-10-10
-**Status:** In Progress - Root cause partially identified, fix implemented but incomplete
+**Date:** 2025-10-10  
+**Status:** Resolved  
 **Priority:** Medium
 
-## Problem Statement
+## Summary
+Batch DocChatAgent runs submitted via `run_batch_tasks(..., sequential=False)` were completing one-by-one because `DocChatAgent.llm_response_async` awaited the fully synchronous `answer_from_docs`, blocking the event loop. Cloned tasks therefore serialized on retrieval/LLM work even though `asyncio.gather` was used.
 
-When running multiple DocChatAgent tasks concurrently using Langroid's `run_batch_tasks` mechanism, the tasks execute **sequentially** rather than concurrently, despite being submitted to `asyncio.gather`. This results in no performance improvement over sequential execution.
+## Fix
+- Wrap `answer_from_docs` with `asyncio.to_thread` inside `DocChatAgent.llm_response_async`, letting each request execute on the default thread pool while the event loop schedules other tasks.
+- Generalize vector-store cloning: `ChatAgent.clone()` now delegates to `vecdb.clone()`, the base `VectorStore` deep-copies config and instantiates a fresh store, and `QdrantDB.clone()` simply relies on the base behaviour to spin up independent clients for cloud deployments while keeping local instances shared for file-lock safety.
+- Rework `examples/docqa/rag-concurrent.py` to drive task clones with `asyncio.as_completed`, capture per-question START/WORKER/COMPLETE events (including thread IDs and timings), add a `--log-only` mode plus filtering instructions for clean concurrency proof, and expose a `--use-builtin-batch` flag to exercise the original `run_batch_tasks` harness.
+- Update the debug script to pass through `query_proxies`, keeping its instrumentation compatible with the main agent, and add a DocChat `run_batch_tasks` regression test covering multiple vector stores.
 
-### Expected Behavior
-- 10 queries submitted concurrently should execute in parallel
-- Total time should be approximately equal to the slowest single query
-- Logs should show overlapping VecDB searches and LLM calls
+## Verification
+- `uv run python examples/docqa/rag-concurrent.py --num-questions=3`
+- `uv run python examples/docqa/rag-concurrent.py --sequential --num-questions=3`
+- `uv run python examples/docqa/rag-concurrent.py --num-questions=3 --log-only`
+- `uv run python examples/docqa/rag-concurrent.py --use-builtin-batch --num-questions=3 --log-only`
+- `uv run python examples/docqa/rag-concurrent-debug.py --num_questions=3`
 
-### Actual Behavior
-- All tasks are submitted together (START logs show same timestamp)
-- But they execute one after another with 4-5 second gaps between VecDB searches
-- Total time: ~60 seconds for 10 queries (~6 sec/query) - same as sequential
-- VecDB search logs show sequential pattern:
-  - Query 1: 11:56:21
-  - Query 2: 11:56:25 (4 sec later)
-  - Query 3: 11:56:30 (5 sec later)
-  - Query 4: 11:56:35 (5 sec later)
-
-## Investigation & Findings
-
-### Scripts Created
-
-#### 1. `examples/docqa/rag-concurrent.py`
-Main test script with timing instrumentation:
-- Loads Borges' "Library of Babel" story from URL
-- Runs 10 predefined questions about the story
-- Supports `--sequential` flag for true sequential baseline (simple loop)
-- Default mode uses `run_batch_tasks(..., sequential=False)` for asyncio concurrency
-- Includes timestamp logging (HH:MM:SS.mmm) and thread ID tracking
-- **Usage:**
-  ```bash
-  # Concurrent mode (default)
-  python3 examples/docqa/rag-concurrent.py
-
-  # True sequential baseline
-  python3 examples/docqa/rag-concurrent.py --sequential
-  ```
-
-#### 2. `examples/docqa/rag-concurrent-debug.py`
-Debug version with additional instrumentation:
-- Subclasses `DocChatAgent` to add timing to vecstore and LLM operations
-- Fewer questions (3 by default) for faster testing
-- Tracks phase-level timing (VECSTORE_START/END, LLM_CALL_START/END)
-- **Usage:**
-  ```bash
-  python3 examples/docqa/rag-concurrent-debug.py --num_questions=3
-  ```
-
-#### 3. `test_vecdb_clone.py`
-Minimal test to verify vecdb cloning behavior:
-- Creates a DocChatAgent with vecdb
-- Clones task 3 times
-- Prints vecdb and client IDs to verify separate instances
-- **Usage:**
-  ```bash
-  python3 test_vecdb_clone.py
-  ```
-
-### Root Cause Analysis
-
-#### Initial Hypothesis: Shared VecDB Instance
-**Code Location:** `langroid/agent/chat_agent.py:283` (line number before fix)
-
-Original clone() method did shallow copy:
-```python
-# OLD CODE - PROBLEM
-new_agent.vecdb = self.vecdb  # All clones share same vecdb!
-```
-
-**Impact:**
-- All cloned agents shared a single QdrantDB client instance
-- For local storage: `.lock` file prevents concurrent access
-- For cloud storage: shared connection pool may limit concurrency
-
-#### Fix Implemented
-**Code Location:** `langroid/agent/chat_agent.py:282-310`
-
-```python
-# NEW CODE - PARTIAL FIX
-if self.vecdb is not None:
-    from langroid.vector_store.base import VectorStore
-    from langroid.vector_store.qdrantdb import QdrantDBConfig
-    import os
-
-    vecdb_config = self.vecdb.config.model_copy(deep=True)
-    vecdb_config.replace_collection = False
-
-    # For local Qdrant storage, use separate paths for each clone
-    if isinstance(vecdb_config, QdrantDBConfig) and not vecdb_config.cloud:
-        base_path = vecdb_config.storage_path.rstrip('/')
-        clone_path = f"{base_path}_clone_{i}_{os.getpid()}"
-        vecdb_config.storage_path = clone_path
-        # Copy collection data to clone path
-        if not os.path.exists(clone_path):
-            import shutil
-            if os.path.exists(base_path):
-                shutil.copytree(base_path, clone_path)
-
-    new_agent.vecdb = VectorStore.create(vecdb_config)
-```
-
-**What This Fixes:**
-- ✅ Each clone gets its own vecdb instance and client
-- ✅ For local storage: separate `.qdrant_clone_*` directories avoid `.lock` contention
-- ✅ Verified working: `test_vecdb_clone.py` shows different IDs for each clone
-
-**What's Still Broken:**
-- ❌ Tasks still execute sequentially even with separate clients
-- ❌ The fix helps for local storage but doesn't solve cloud Qdrant serialization
-
-### Outstanding Issues
-
-#### Issue #1: Cloud Qdrant Serialization
-**Discovery:** Test environment uses `cloud=True` (remote Qdrant server)
-- Despite separate clients, execution is still sequential
-- Possible causes:
-  1. **Connection pool limits** on cloud Qdrant instance
-  2. **Rate limiting** on the Qdrant API
-  3. **Client-side connection manager** serializing requests
-  4. **Async/await pattern** in Qdrant client may not be truly concurrent
-
-**Evidence:**
-```
-🔧 Clone 0: vecdb type=QdrantDBConfig, cloud=True
-🔧 Clone 1: vecdb type=QdrantDBConfig, cloud=True
-🔧 Clone 2: vecdb type=QdrantDBConfig, cloud=True
-```
-
-#### Issue #2: Logging Artifacts
-The START/COMPLETE logging in `rag-concurrent.py` is misleading:
-- `input_map` logs START events (happens during task submission)
-- `output_map` logs COMPLETE events (called AFTER all tasks finish)
-- All COMPLETE logs show same timestamp because they're logged in a batch
-
-**Better indicators:**
-- VecDB INFO logs show actual execution timing
-- Look for "Searching VecDB" timestamps in the logs
-
-## Next Steps
-
-### Immediate Actions Needed
-
-1. **Investigate Qdrant Client Concurrency**
-   - File: `langroid/vector_store/qdrantdb.py`
-   - Check if `QdrantClient.search_batch()` is truly async
-   - Look for any locks, semaphores, or connection pooling
-   - Test: Create minimal script with just Qdrant queries (no DocChatAgent)
-
-2. **Test with Local Qdrant**
-   - Verify the clone-path fix works for local storage
-   - Set `cloud=False` in DocChatAgentConfig
-   - Confirm separate `.qdrant_clone_*` directories are created
-   - Verify no `.lock` contention
-
-3. **Profile Async Execution**
-   - Add more granular timing inside `run_batch_tasks`
-   - Check if `asyncio.gather` is actually creating concurrent tasks
-   - Use Python's `asyncio` debug mode
-   - Instrument the actual async chain: input_map → clone → run_async → output_map
-
-4. **Check LLM Client**
-   - Although not primary suspect, verify LLM client is concurrent
-   - File: `langroid/language_models/openai_gpt.py`
-   - Check for shared HTTP clients or connection pools
-
-### Testing Strategy
-
-```bash
-# 1. Test local storage fix
-python3 examples/docqa/rag-concurrent.py --sequential  # Baseline
-python3 examples/docqa/rag-concurrent.py               # With fix
-# Check for .qdrant_clone_* directories and timing improvement
-
-# 2. Test cloud Qdrant concurrency
-# (Current failing case)
-# Need to identify why separate clients don't help
-
-# 3. Minimal Qdrant concurrency test
-# Create standalone script that just does concurrent Qdrant searches
-# Isolate the vecdb layer from DocChatAgent complexity
-```
-
-### Files Modified
-
-1. `langroid/agent/chat_agent.py` - clone() method (lines 282-312)
-2. `examples/docqa/rag-concurrent.py` - NEW test script
-3. `examples/docqa/rag-concurrent-debug.py` - NEW debug script
-4. `test_vecdb_clone.py` - NEW minimal test (root directory)
-
-### Files to Investigate Next
-
-1. `langroid/vector_store/qdrantdb.py` - QdrantDB client implementation
-2. `langroid/agent/batch.py` - Batch task execution (already reviewed)
-3. `langroid/language_models/openai_gpt.py` - LLM client concurrency
-4. Qdrant client library itself - may need to check external dependency
-
-## Context for Next Agent
-
-### What Works
-- ✅ Vecdb cloning creates separate instances
-- ✅ Test scripts are functional and provide good visibility
-- ✅ Can see the sequential execution pattern in logs
-
-### What Doesn't Work
-- ❌ Concurrent execution still runs sequentially
-- ❌ ~60 seconds for 10 queries (no improvement over sequential)
-- ❌ Root cause for cloud Qdrant serialization unknown
-
-### Key Insight
-The problem is **NOT just the shallow vecdb copy**. That's fixed. The deeper issue is that even with separate QdrantDB clients accessing a cloud instance, the queries serialize. This suggests:
-- A shared resource deeper in the stack (connection pool, rate limiter, etc.)
-- Or the async pattern isn't actually concurrent
-- Or Qdrant cloud itself is serializing (unlikely but possible)
-
-### Recommended Approach
-1. Create minimal reproduction with just Qdrant (no DocChatAgent)
-2. Enable asyncio debug mode to see task scheduling
-3. Profile with `asyncio` task timing
-4. Consider testing with a different vector store (Chroma, etc.) to isolate Qdrant
-
-## References
-
-- Original issue report: User experiencing sequential execution when expecting concurrent
-- Test document: "The Library of Babel" by Jorge Luis Borges
-- URL: https://xpressenglish.com/our-stories/library-of-babel/
-- Langroid batch task mechanism: `langroid/agent/batch.py`
-- Qdrant lock file location: `.qdrant/doc-chat/.lock`
-
-## Additional Notes
-
-### Understanding `sequential` Parameter
-The `sequential` parameter in `run_batch_tasks` does NOT mean "use a simple loop":
-- `sequential=False`: Uses `asyncio.gather` for concurrent execution
-- `sequential=True`: Uses `await` in a loop (still async, just not concurrent)
-
-For TRUE sequential baseline, use a simple for-loop calling `task.run()` directly (as implemented in `rag-concurrent.py --sequential`).
-
-### Logging Best Practices
-- Don't trust START/COMPLETE logs from input_map/output_map
-- Look at actual operation logs (VecDB searches, LLM calls)
-- Use timestamps to verify overlapping execution windows
-- Thread IDs help identify parallel execution
+Concurrent runs now finish ~2× faster than the sequential baseline, the log summary shows overlapping worker threads, and the new regression test (`pytest tests/main/test_vector_stores.py::test_doc_chat_batch_with_vecdb_cloning[...]`) passes across supported vector stores, confirming both concurrency and cloned-store isolation.*** End Patch
 </file>
 
 <file path="issues/898-implementation.md">
@@ -24022,6 +23796,26 @@ def __init__(self, config: VectorStoreConfig)
 @property
     def embedding_dim(self) -> int
 ⋮----
+def clone(self) -> "VectorStore"
+⋮----
+"""Return a vector-store clone suitable for agent cloning.
+
+        The default implementation deep-copies the configuration, reuses any
+        existing embedding model, and instantiates a fresh store of the same
+        type. Subclasses can override when sharing the instance is required
+        (e.g., embedded/local stores that rely on file locks).
+        """
+⋮----
+config_copy = self.config.model_copy(deep=True)
+# Preserve the calculated collection contents without forcing replaces
+⋮----
+config_copy.replace_collection = False  # type: ignore[attr-defined]
+⋮----
+# Fall back to the existing embedding model instance if config lacks it
+⋮----
+cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+# Some stores might not honour replace_collection; ensure same collection
+⋮----
 @abstractmethod
     def clear_empty_collections(self) -> int
 ⋮----
@@ -28490,6 +28284,12 @@ new_storage_path = config.storage_path + ".new"
 # This is useful to delay creation of vecdb until we have a suitable
 # collection name (e.g. we could get it from the url or folder path).
 ⋮----
+def clone(self) -> "QdrantDB"
+⋮----
+"""Create an independent Qdrant client when running against Qdrant Cloud."""
+⋮----
+cloned = super().clone()
+⋮----
 def close(self) -> None
 ⋮----
 """
@@ -32703,6 +32503,1016 @@ publish:
 	uv publish
 </file>
 
+<file path="langroid/agent/chat_agent.py">
+console = Console()
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+class ChatAgentConfig(AgentConfig)
+⋮----
+"""
+    Configuration for ChatAgent
+
+    Attributes:
+        system_message: system message to include in message sequence
+             (typically defines role and task of agent).
+             Used only if `task` is not specified in the constructor.
+        user_message: user message to include in message sequence.
+             Used only if `task` is not specified in the constructor.
+        use_tools: whether to use our own ToolMessages mechanism
+        handle_llm_no_tool (Any): desired agent_response when
+            LLM generates non-tool msg.
+        use_functions_api: whether to use functions/tools native to the LLM API
+                (e.g. OpenAI's `function_call` or `tool_call` mechanism)
+        use_tools_api: When `use_functions_api` is True, if this is also True,
+            the OpenAI tool-call API is used, rather than the older/deprecated
+            function-call API. However the tool-call API has some tricky aspects,
+            hence we set this to False by default.
+        strict_recovery: whether to enable strict schema recovery when there
+            is a tool-generation error.
+        enable_orchestration_tool_handling: whether to enable handling of orchestration
+            tools, e.g. ForwardTool, DoneTool, PassTool, etc.
+        output_format: When supported by the LLM (certain OpenAI LLMs
+            and local LLMs served by providers such as vLLM), ensures
+            that the output is a JSON matching the corresponding
+            schema via grammar-based decoding
+        handle_output_format: When `output_format` is a `ToolMessage` T,
+            controls whether T is "enabled for handling".
+        use_output_format: When `output_format` is a `ToolMessage` T,
+            controls whether T is "enabled for use" (by LLM) and
+            instructions on using T are added to the system message.
+        instructions_output_format: Controls whether we generate instructions for
+            `output_format` in the system message.
+        use_tools_on_output_format: Controls whether to automatically switch
+            to the Langroid-native tools mechanism when `output_format` is set.
+            Note that LLMs may generate tool calls which do not belong to
+            `output_format` even when strict JSON mode is enabled, so this should be
+            enabled when such tool calls are not desired.
+        output_format_include_defaults: Whether to include fields with default arguments
+            in the output schema
+        full_citations: Whether to show source reference citation + content for each
+            citation, or just the main reference citation.
+    """
+⋮----
+system_message: str = "You are a helpful assistant."
+user_message: Optional[str] = None
+handle_llm_no_tool: Any = None
+use_tools: bool = True
+use_functions_api: bool = False
+use_tools_api: bool = True
+strict_recovery: bool = True
+enable_orchestration_tool_handling: bool = True
+output_format: Optional[type] = None
+handle_output_format: bool = True
+use_output_format: bool = True
+instructions_output_format: bool = True
+output_format_include_defaults: bool = True
+use_tools_on_output_format: bool = True
+full_citations: bool = True  # show source + content for each citation?
+⋮----
+def _set_fn_or_tools(self) -> None
+⋮----
+"""
+        Enable Langroid Tool or OpenAI-like fn-calling,
+        depending on config settings.
+        """
+⋮----
+class ChatAgent(Agent)
+⋮----
+"""
+    Chat Agent interacting with external env
+    (could be human, or external tools).
+    The agent (the LLM actually) is provided with an optional "Task Spec",
+    which is a sequence of `LLMMessage`s. These are used to initialize
+    the `task_messages` of the agent.
+    In most applications we will use a `ChatAgent` rather than a bare `Agent`.
+    The `Agent` class mainly exists to hold various common methods and attributes.
+    One difference between `ChatAgent` and `Agent` is that `ChatAgent`'s
+    `llm_response` method uses "chat mode" API (i.e. one that takes a
+    message sequence rather than a single message),
+    whereas the same method in the `Agent` class uses "completion mode" API (i.e. one
+    that takes a single message).
+    """
+⋮----
+"""
+        Chat-mode agent initialized with task spec as the initial message sequence
+        Args:
+            config: settings for the agent
+
+        """
+⋮----
+# An agent's "task" is defined by a system msg and an optional user msg;
+# These are "priming" messages that kick off the agent's conversation.
+⋮----
+# if task contains a system msg, we override the config system msg
+⋮----
+# if task contains a user msg, we override the config user msg
+⋮----
+# system-level instructions for using tools/functions:
+# We maintain these as tools/functions are enabled/disabled,
+# and whenever an LLM response is sought, these are used to
+# recreate the system message (via `_create_system_and_tools_message`)
+# each time, so it reflects the current set of enabled tools/functions.
+# (a) these are general instructions on using certain tools/functions,
+#   if they are specified in a ToolMessage class as a classmethod `instructions`
+⋮----
+# (b) these are only for the builtin in Langroid TOOLS mechanism:
+⋮----
+# This variable is not None and equals a `ToolMessage` T, if and only if:
+# (a) T has been set as the output_format of this agent, AND
+# (b) T has been "enabled for use" ONLY for enforcing this output format, AND
+# (c) T has NOT been explicitly "enabled for use" by this Agent.
+⋮----
+# As above but deals with "enabled for handling" instead of "enabled for use".
+⋮----
+# instructions specifically related to enforcing `output_format`
+⋮----
+# controls whether to disable strict schemas for this agent if
+# strict mode causes exception
+⋮----
+# Tracks whether any strict tool is enabled; used to determine whether to set
+# `self.disable_strict` on an exception
+⋮----
+# Tracks the set of tools on which we force-disable strict decoding
+⋮----
+# Only enable HANDLING by `agent_response`, NOT LLM generation of these.
+# This is useful where tool-handlers or agent_response generate these
+# tools, and need to be handled.
+# We don't want enable orch tool GENERATION by default, since that
+# might clutter-up the LLM system message unnecessarily.
+⋮----
+def init_state(self) -> None
+⋮----
+"""
+        Initialize the state of the agent. Just conversation state here,
+        but subclasses can override this to initialize other state.
+        """
+⋮----
+@staticmethod
+    def from_id(id: str) -> "ChatAgent"
+⋮----
+"""
+        Get an agent from its ID
+        Args:
+            agent_id (str): ID of the agent
+        Returns:
+            ChatAgent: The agent with the given ID
+        """
+⋮----
+def clone(self, i: int = 0) -> "ChatAgent"
+⋮----
+"""Create i'th clone of this agent, ensuring tool use/handling is cloned.
+        Important: We assume all member variables are in the __init__ method here
+        and in the Agent class.
+        TODO: We are attempting to clone an agent after its state has been
+        changed in possibly many ways. Below is an imperfect solution. Caution advised.
+        Revisit later.
+        """
+agent_cls = type(self)
+# Use model_copy to preserve Pydantic subclass types (like MockLMConfig)
+# instead of deepcopy which loses subclass information
+config_copy = self.config.model_copy(deep=True)
+⋮----
+new_agent = agent_cls(config_copy)
+⋮----
+# Ensure each clone gets its own vecdb client when supported.
+⋮----
+def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool
+⋮----
+"""Should we enable strict mode for a given tool?"""
+⋮----
+tool_class = self.llm_tools_map[tool]
+⋮----
+tool_class = tool
+name = tool_class.default_value("request")
+⋮----
+strict: Optional[bool] = tool_class.default_value("strict")
+⋮----
+strict = self._strict_tools_available()
+⋮----
+def _fn_call_available(self) -> bool
+⋮----
+"""Does this agent's LLM support function calling?"""
+⋮----
+def _strict_tools_available(self) -> bool
+⋮----
+"""Does this agent's LLM support strict tools?"""
+⋮----
+def _json_schema_available(self) -> bool
+⋮----
+"""Does this agent's LLM support strict JSON schema output format?"""
+⋮----
+def set_system_message(self, msg: str) -> None
+⋮----
+# if there is message history, update the system message in it
+⋮----
+def set_user_message(self, msg: str) -> None
+⋮----
+@property
+    def task_messages(self) -> List[LLMMessage]
+⋮----
+"""
+        The task messages are the initial messages that define the task
+        of the agent. There will be at least a system message plus possibly a user msg.
+        Returns:
+            List[LLMMessage]: the task messages
+        """
+msgs = [self._create_system_and_tools_message()]
+⋮----
+def _drop_msg_update_tool_calls(self, msg: LLMMessage) -> None
+⋮----
+id2idx = {t.id: i for i, t in enumerate(self.oai_tool_calls)}
+⋮----
+# dropping tool result, so ADD the corresponding tool-call back
+# to the list of pending calls!
+id = msg.tool_call_id
+⋮----
+# dropping a msg with tool-calls, so DROP these from pending list
+# as well as from id -> call map
+⋮----
+def clear_history(self, start: int = -2, end: int = -1) -> None
+⋮----
+"""
+        Clear the message history, deleting  messages from index `start`,
+        up to index `end`.
+
+        Args:
+            start (int): index of first message to delete; default = -2
+                    (i.e. delete last 2 messages, typically these
+                    are the last user and assistant messages)
+            end (int): index of last message to delete; Default = -1
+                    (i.e. delete all messages up to the last one)
+        """
+n = len(self.message_history)
+⋮----
+start = max(0, n + start)
+end_ = n if end == -1 else end + 1
+dropped = self.message_history[start:end_]
+# consider the dropped msgs in REVERSE order, so we are
+# carefully updating self.oai_tool_calls
+⋮----
+# clear out the chat document from the ObjectRegistry
+⋮----
+def update_history(self, message: str, response: str) -> None
+⋮----
+"""
+        Update the message history with the latest user message and LLM response.
+        Args:
+            message (str): user message
+            response: (str): LLM response
+        """
+⋮----
+def tool_format_rules(self) -> str
+⋮----
+"""
+        Specification of tool formatting rules
+        (typically JSON-based but can be non-JSON, e.g. XMLToolMessage),
+        based on the currently enabled usable `ToolMessage`s
+
+        Returns:
+            str: formatting rules
+        """
+# ONLY Usable tools (i.e. LLM-generation allowed),
+usable_tool_classes: List[Type[ToolMessage]] = [
+⋮----
+format_instructions = "\n\n".join(
+# if any of the enabled classes has json_group_instructions, then use that,
+# else fall back to ToolMessage.json_group_instructions
+⋮----
+def tool_instructions(self) -> str
+⋮----
+"""
+        Instructions for tools or function-calls, for enabled and usable Tools.
+        These are inserted into system prompt regardless of whether we are using
+        our own ToolMessage mechanism or the LLM's function-call mechanism.
+
+        Returns:
+            str: concatenation of instructions for all usable tools
+        """
+enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
+⋮----
+instructions = []
+⋮----
+class_instructions = ""
+⋮----
+class_instructions = msg_cls.instructions()
+⋮----
+# example will be shown in tool_format_rules() when using TOOLs,
+# so we don't need to show it here.
+example = "" if self.config.use_tools else (msg_cls.usage_examples())
+⋮----
+example = "EXAMPLES:\n" + example
+guidance = (
+⋮----
+instructions_str = "\n\n".join(instructions)
+⋮----
+def augment_system_message(self, message: str) -> None
+⋮----
+"""
+        Augment the system message with the given message.
+        Args:
+            message (str): system message
+        """
+⋮----
+def last_message_with_role(self, role: Role) -> LLMMessage | None
+⋮----
+"""from `message_history`, return the last message with role `role`"""
+n_role_msgs = len([m for m in self.message_history if m.role == role])
+⋮----
+idx = self.nth_message_idx_with_role(role, n_role_msgs)
+⋮----
+def last_message_idx_with_role(self, role: Role) -> int
+⋮----
+"""Index of last message in message_history, with specified role.
+        Return -1 if not found. Index = 0 is the first message in the history.
+        """
+indices_with_role = [
+⋮----
+def nth_message_idx_with_role(self, role: Role, n: int) -> int
+⋮----
+"""Index of `n`th message in message_history, with specified role.
+        (n is assumed to be 1-based, i.e. 1 is the first message with that role).
+        Return -1 if not found. Index = 0 is the first message in the history.
+        """
+⋮----
+def update_last_message(self, message: str, role: str = Role.USER) -> None
+⋮----
+"""
+        Update the last message that has role `role` in the message history.
+        Useful when we want to replace a long user prompt, that may contain context
+        documents plus a question, with just the question.
+        Args:
+            message (str): new message to replace with
+            role (str): role of message to replace
+        """
+⋮----
+# find last message in self.message_history with role `role`
+⋮----
+def delete_last_message(self, role: str = Role.USER) -> None
+⋮----
+"""
+        Delete the last message that has role `role` from the message history.
+        Args:
+            role (str): role of message to delete
+        """
+⋮----
+def _create_system_and_tools_message(self) -> LLMMessage
+⋮----
+"""
+        (Re-)Create the system message for the LLM of the agent,
+        taking into account any tool instructions that have been added
+        after the agent was initialized.
+
+        The system message will consist of:
+        (a) the system message from the `task` arg in constructor, if any,
+            otherwise the default system message from the config
+        (b) the system tool instructions, if any
+        (c) the system json tool instructions, if any
+
+        Returns:
+            LLMMessage object
+        """
+content = self.system_message
+⋮----
+# remove leading and trailing newlines and other whitespace
+⋮----
+def handle_message_fallback(self, msg: str | ChatDocument) -> Any
+⋮----
+"""
+        Fallback method for the "no-tools" scenario, i.e., the current `msg`
+        (presumably emitted by the LLM) does not have any tool that the agent
+        can handle.
+        NOTE: The `msg` may contain tools but either (a) the agent is not
+        enabled to handle them, or (b) there's an explicit `recipient` field
+        in the tool that doesn't match the agent's name.
+
+        Uses the self.config.non_tool_routing to determine the action to take.
+
+        This method can be overridden by subclasses, e.g.,
+        to create a "reminder" message when a tool is expected but the LLM "forgot"
+        to generate one.
+
+        Args:
+            msg (str | ChatDocument): The input msg to handle
+        Returns:
+            Any: The result of the handler method
+        """
+⋮----
+# we ONLY use the `handle_llm_no_tool` config option when
+# the msg is from LLM and does not contain ANY tools at all.
+⋮----
+no_tool_option = self.config.handle_llm_no_tool
+⋮----
+# in case the `no_tool_option` is one of the special NonToolAction vals
+⋮----
+# Otherwise just return `no_tool_option` as is:
+# This can be any string, such as a specific nudge/reminder to the LLM,
+# or even something like ResultTool etc.
+⋮----
+def unhandled_tools(self) -> set[str]
+⋮----
+"""The set of tools that are known but not handled.
+        Useful in task flow: an agent can refuse to accept an incoming msg
+        when it only has unhandled tools.
+        """
+⋮----
+"""
+        Add the tool (message class) to the agent, and enable either
+        - tool USE (i.e. the LLM can generate JSON to use this tool),
+        - tool HANDLING (i.e. the agent can handle JSON from this tool),
+
+        Args:
+            message_class: The ToolMessage class OR List of such classes to enable,
+                for USE, or HANDLING, or both.
+                If this is a list of ToolMessage classes, then the remain args are
+                applied to all classes.
+                Optional; if None, then apply the enabling to all tools in the
+                agent's toolset that have been enabled so far.
+            use: IF True, allow the agent (LLM) to use this tool (or all tools),
+                else disallow
+            handle: if True, allow the agent (LLM) to handle (i.e. respond to) this
+                tool (or all tools)
+            force: whether to FORCE the agent (LLM) to USE the specific
+                 tool represented by `message_class`.
+                 `force` is ignored if `message_class` is None.
+            require_recipient: whether to require that recipient be specified
+                when using the tool message (only applies if `use` is True).
+            include_defaults: whether to include fields that have default values,
+                in the "properties" section of the JSON format instructions.
+                (Normally the OpenAI completion API ignores these fields,
+                but the Assistant fn-calling seems to pay attn to these,
+                and if we don't want this, we should set this to False.)
+        """
+⋮----
+message_class = message_class.require_recipient()
+⋮----
+# XMLToolMessage is not compatible with OpenAI's Tools/functions API,
+# so we disable use of functions API, enable langroid-native Tools,
+# which are prompt-based.
+⋮----
+super().enable_message_handling(message_class)  # enables handling only
+tools = self._get_tool_list(message_class)
+⋮----
+request = message_class.default_value("request")
+⋮----
+llm_function = message_class.llm_function_schema(defaults=include_defaults)
+⋮----
+# `t` was designated as "enabled for handling" ONLY for
+# output_format enforcement, but we are explicitly ]
+# enabling it for handling here, so we set the variable to None.
+⋮----
+tool_class = self.llm_tools_map[t]
+allow_llm_use = tool_class._allow_llm_use
+⋮----
+allow_llm_use = allow_llm_use.default
+⋮----
+# `t` was designated as "enabled for use" ONLY for output_format
+# enforcement, but we are explicitly enabling it for use here,
+# so we set the variable to None.
+⋮----
+def _update_tool_instructions(self) -> None
+⋮----
+# Set tool instructions and JSON format instructions,
+# in case Tools have been enabled/disabled.
+⋮----
+def _requests_and_tool_settings(self) -> tuple[Optional[set[str]], bool, bool]
+⋮----
+"""
+        Returns the current set of enabled requests for inference and tools configs.
+        Used for restoring setings overriden by `set_output_format`.
+        """
+⋮----
+@property
+    def all_llm_tools_known(self) -> set[str]
+⋮----
+"""All known tools; we include `output_format` if it is a `ToolMessage`."""
+known = self.llm_tools_known
+⋮----
+"""
+        Sets `output_format` to `output_type` and, if `force_tools` is enabled,
+        switches to the native Langroid tools mechanism to ensure that no tool
+        calls not of `output_type` are generated. By default, `force_tools`
+        follows the `use_tools_on_output_format` parameter in the config.
+
+        If `output_type` is None, restores to the state prior to setting
+        `output_format`.
+
+        If `use`, we enable use of `output_type` when it is a subclass
+        of `ToolMesage`. Note that this primarily controls instruction
+        generation: the model will always generate `output_type` regardless
+        of whether `use` is set. Defaults to the `use_output_format`
+        parameter in the config. Similarly, handling of `output_type` is
+        controlled by `handle`, which defaults to the
+        `handle_output_format` parameter in the config.
+
+        `instructions` controls whether we generate instructions specifying
+        the output format schema. Defaults to the `instructions_output_format`
+        parameter in the config.
+
+        `is_copy` is set when called via `__getitem__`. In that case, we must
+        copy certain fields to ensure that we do not overwrite the main agent's
+        setings.
+        """
+# Disable usage of an output format which was not specifically enabled
+# by `enable_message`
+⋮----
+# Disable handling of an output format which did not specifically have
+# handling enabled via `enable_message`
+⋮----
+# Reset any previous instructions
+⋮----
+force_tools = self.config.use_tools_on_output_format
+⋮----
+output_type = get_pydantic_wrapper(output_type)
+⋮----
+name = output_type.default_value("request")
+⋮----
+use = self.config.use_output_format
+⋮----
+handle = self.config.handle_output_format
+⋮----
+is_usable = name in self.llm_tools_usable.union(
+is_handled = name in self.llm_tools_handled.union(
+⋮----
+# We must copy `llm_tools_usable` so the base agent
+# is unmodified
+⋮----
+# If handling the tool, do the same for `llm_tools_handled`
+⋮----
+# Enable `output_type`
+⋮----
+# Do not override existing settings
+⋮----
+# If the `output_type` ToilMessage was not already enabled for
+# use, this means we are ONLY enabling it for use specifically
+# for enforcing this output format, so we set the
+# `enabled_use_output_forma  to this output_type, to
+# record that it should be disabled when `output_format` is changed
+⋮----
+# (same reasoning as for use-enabling)
+⋮----
+generated_tool_instructions = name in self.llm_tools_usable.union(
+⋮----
+generated_tool_instructions = False
+⋮----
+instructions = self.config.instructions_output_format
+⋮----
+# Already generated tool instructions as part of "enabling for use",
+# so only need to generate a reminder to use this tool.
+name = cast(ToolMessage, output_type).default_value("request")
+⋮----
+output_format_schema = output_type.llm_function_schema(
+⋮----
+output_format_schema = output_type.model_json_schema()
+⋮----
+def __getitem__(self, output_type: type) -> Self
+⋮----
+"""
+        Returns a (shallow) copy of `self` with a forced output type.
+        """
+clone = copy.copy(self)
+⋮----
+"""
+        Disable this agent from RESPONDING to a `message_class` (Tool). If
+            `message_class` is None, then disable this agent from responding to ALL.
+        Args:
+            message_class: The ToolMessage class to disable; Optional.
+        """
+⋮----
+"""
+        Disable this agent from USING a message class (Tool).
+        If `message_class` is None, then disable this agent from USING ALL tools.
+        Args:
+            message_class: The ToolMessage class to disable.
+                If None, disable all.
+        """
+⋮----
+def disable_message_use_except(self, message_class: Type[ToolMessage]) -> None
+⋮----
+"""
+        Disable this agent from USING ALL messages EXCEPT a message class (Tool)
+        Args:
+            message_class: The only ToolMessage class to allow
+        """
+request = message_class.model_fields["request"].default
+to_remove = [r for r in self.llm_tools_usable if r != request]
+⋮----
+def _load_output_format(self, message: ChatDocument) -> None
+⋮----
+"""
+        If set, attempts to parse a value of type `self.output_format` from the message
+        contents or any tool/function call and assigns it to `content_any`.
+        """
+⋮----
+any_succeeded = False
+attempts: list[str | LLMFunctionCall] = [
+⋮----
+content = json.loads(attempt)
+⋮----
+content = attempt.arguments
+⋮----
+content_any = self.output_format.model_validate(content)
+⋮----
+message.content_any = content_any.value  # type: ignore
+⋮----
+any_succeeded = True
+⋮----
+"""
+        Extracts messages and tracks whether any errors occurred. If strict mode
+        was enabled, disables it for the tool, else triggers strict recovery.
+        """
+⋮----
+most_recent_sent_by_llm = (
+was_llm = most_recent_sent_by_llm or (
+⋮----
+tools = super().get_tool_messages(msg, all_tools)
+⋮----
+# Check if tool class was attached to the exception
+⋮----
+tool_class = ve.tool_class  # type: ignore
+⋮----
+was_strict = (
+# If the result of strict output for a tool using the
+# OpenAI tools API fails to parse, we infer that the
+# schema edits necessary for compatibility prevented
+# adherence to the underlying `ToolMessage` schema and
+# disable strict output for the tool
+⋮----
+# We will trigger the strict recovery mechanism to force
+# the LLM to correct its output, allowing us to parse
+⋮----
+def _get_any_tool_message(self, optional: bool = True) -> type[ToolMessage] | None
+⋮----
+"""
+        Returns a `ToolMessage` which wraps all enabled tools, excluding those
+        where strict recovery is disabled. Used in strict recovery.
+        """
+possible_tools = tuple(
+⋮----
+any_tool_type = Union.__getitem__(possible_tools)  # type ignore
+⋮----
+maybe_optional_type = Optional[any_tool_type] if optional else any_tool_type
+⋮----
+class AnyTool(ToolMessage)
+⋮----
+purpose: str = "To call a tool/function."
+request: str = "tool_or_function"
+tool: maybe_optional_type  # type: ignore
+⋮----
+def response(self, agent: ChatAgent) -> None | str | ChatDocument
+⋮----
+# One-time use
+⋮----
+# As the ToolMessage schema accepts invalid
+# `tool.request` values, reparse with the
+# corresponding tool
+request = self.tool.request
+⋮----
+tool = agent.llm_tools_map[request].model_validate_json(
+⋮----
+"""Returns instructions for strict recovery."""
+optional_instructions = (
+response_prefix = "If you intended to make such a call, r" if optional else "R"
+instruction_prefix = "If you do so, b" if optional else "B"
+⋮----
+schema_instructions = (
+⋮----
+"""
+        Truncate message at idx in msg history to `tokens` tokens.
+
+        If inplace is True, the message is truncated in place, else
+        it LEAVES the original message INTACT and returns a new message
+        """
+⋮----
+llm_msg = self.message_history[idx]
+⋮----
+llm_msg = copy.deepcopy(self.message_history[idx])
+orig_content = llm_msg.content
+new_content = (
+⋮----
+else orig_content[: tokens * 4]  # approx truncation
+⋮----
+def _reduce_raw_tool_results(self, message: ChatDocument) -> None
+⋮----
+"""
+        If message is the result of a ToolMessage that had
+        a `_max_retained_tokens` set to a non-None value, then we replace contents
+        with a placeholder message.
+        """
+parent_message: ChatDocument | None = message.parent
+tools = [] if parent_message is None else parent_message.tool_messages
+truncate_tools = []
+⋮----
+max_retained_tokens = t._max_retained_tokens
+⋮----
+max_retained_tokens = max_retained_tokens.default
+⋮----
+limiting_tool = truncate_tools[0] if len(truncate_tools) > 0 else None
+⋮----
+max_retained_tokens = limiting_tool._max_retained_tokens
+⋮----
+tool_name = limiting_tool.default_value("request")
+max_tokens: int = max_retained_tokens
+truncation_warning = f"""
+⋮----
+"""
+        Respond to a single user message, appended to the message history,
+        in "chat" mode
+        Args:
+            message (str|ChatDocument): message or ChatDocument object to respond to.
+                If None, use the self.task_messages
+        Returns:
+            LLM response as a ChatDocument object
+        """
+⋮----
+# If enabled and a tool error occurred, we recover by generating the tool in
+# strict json mode
+⋮----
+AnyTool = self._get_any_tool_message()
+⋮----
+recovery_message = self._strict_recovery_instructions(AnyTool)
+augmented_message = message
+⋮----
+augmented_message = recovery_message
+⋮----
+augmented_message = augmented_message + recovery_message
+⋮----
+# only use the augmented message for this one response...
+result = self.llm_response(augmented_message)
+# ... restore the original user message so that the AnyTool recover
+# instructions don't persist in the message history
+# (this can cause the LLM to use the AnyTool directly as a tool)
+⋮----
+msg = message if isinstance(message, str) else message.content
+⋮----
+tool_choice = (
+⋮----
+response = self.llm_response_messages(hist, output_len, tool_choice)
+⋮----
+# Preserve trail of tool_ids for OpenAI Assistant fn-calls
+⋮----
+"""
+        Async version of `llm_response`. See there for details.
+        """
+⋮----
+response = await self.llm_response_messages_async(
+⋮----
+def init_message_history(self) -> None
+⋮----
+"""
+        Initialize the message history with the system message and user message
+        """
+⋮----
+"""
+        Prepare messages to be sent to self.llm_response_messages,
+            which is the main method that calls the LLM API to get a response.
+            If desired output tokens + message history exceeds the model context length,
+            then first the max output tokens is reduced to fit, and if that is not
+            possible, older messages may be truncated to accommodate at least
+            self.config.llm.min_output_tokens of output.
+
+        Returns:
+            Tuple[List[LLMMessage], int]: (messages, output_len)
+                messages = Full list of messages to send
+                output_len = max expected number of tokens in response
+        """
+⋮----
+# this means agent has been used to get LLM response already,
+# and so the last message is an "assistant" response.
+# We delete this last assistant response and re-generate it.
+⋮----
+# initial messages have not yet been loaded, so load them
+⋮----
+# for debugging, show the initial message history
+⋮----
+# update the system message with the latest tool instructions
+⋮----
+# either the message is a str, or it is a fresh ChatDocument
+# different from the last message in the history
+llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
+# LLM only responds to the content, so only those msgs with
+# non-empty content should be kept
+llm_msgs = [m for m in llm_msgs if m.content.strip() != ""]
+⋮----
+# process tools if any
+done_tools = [m.tool_call_id for m in llm_msgs if m.role == Role.TOOL]
+⋮----
+hist = self.message_history
+output_len = self.config.llm.model_max_output_tokens
+⋮----
+CHAT_HISTORY_BUFFER = 300
+# chat + output > max context length,
+# so first try to shorten requested output len to fit;
+# use an extra margin of CHAT_HISTORY_BUFFER tokens
+# in case our calcs are off (and to allow for some extra tokens)
+output_len = (
+⋮----
+# unacceptably small output len, so compress early parts of conv
+# history if output_len is still too long.
+# TODO we should really be doing summarization or other types of
+#   prompt-size reduction
+msg_idx_to_compress = 1  # don't touch system msg
+# we will try compressing msg indices up to but not including
+# last user msg
+last_msg_idx_to_compress = (
+n_truncated = 0
+⋮----
+# try dropping early parts of conv history
+# TODO we should really be doing summarization or other types of
+#   prompt-size reduction
+⋮----
+# We want to preserve the first message (typically system msg)
+# and last message (user msg).
+⋮----
+# compress the msg at idx `msg_idx_to_compress`
+⋮----
+output_len = min(
+⋮----
+# we MUST have truncated at least one msg
+msg_tokens = self.chat_num_tokens()
+⋮----
+# record the position of the corresponding LLMMessage in
+# the message_history
+⋮----
+"""
+        Get function/tool spec/output format arguments for
+        OpenAI-compatible LLM API call
+        """
+functions: Optional[List[LLMFunctionSpec]] = None
+fun_call: str | Dict[str, str] = "none"
+tools: Optional[List[OpenAIToolSpec]] = None
+force_tool: Optional[Dict[str, Dict[str, str] | str]] = None
+⋮----
+functions = [
+fun_call = (
+⋮----
+def to_maybe_strict_spec(function: str) -> OpenAIToolSpec
+⋮----
+spec = self.llm_functions_map[function]
+strict = self._strict_mode_for_tool(function)
+⋮----
+strict_spec = copy.deepcopy(spec)
+⋮----
+strict_spec = spec
+⋮----
+tools = [to_maybe_strict_spec(f) for f in self.llm_functions_usable]
+force_tool = (
+output_format = None
+⋮----
+spec = self.output_format.llm_function_schema(
+⋮----
+output_format = OpenAIJsonSchemaSpec(
+⋮----
+# We always require that outputs strictly match the schema
+⋮----
+param_spec = self.output_format.model_json_schema()
+⋮----
+"""
+        Respond to a series of messages, e.g. with OpenAI ChatCompletion
+        Args:
+            messages: seq of messages (with role, content fields) sent to LLM
+            output_len: max number of tokens expected in response.
+                    If None, use the LLM's default model_max_output_tokens.
+        Returns:
+            Document (i.e. with fields "content", "metadata")
+        """
+⋮----
+output_len = output_len or self.config.llm.model_max_output_tokens
+streamer = noop_fn
+⋮----
+streamer = self.callbacks.start_llm_stream()
+⋮----
+with ExitStack() as stack:  # for conditionally using rich spinner
+⋮----
+# show rich spinner only if not streaming!
+# (Why? b/c the intent of showing a spinner is to "show progress",
+# and we don't need to do that when streaming, since
+# streaming output already shows progress.)
+cm = status(
+⋮----
+response = self.llm.chat(
+⋮----
+response,  # .usage attrib is updated!
+⋮----
+chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+⋮----
+# If using strict output format, parse the output JSON
+⋮----
+"""
+        Async version of `llm_response_messages`. See there for details.
+        """
+⋮----
+streamer_async = async_noop_fn
+⋮----
+streamer_async = await self.callbacks.start_llm_stream_async()
+⋮----
+response = await self.llm.achat(
+⋮----
+is_cached = (
+⋮----
+# We would have already displayed the msg "live" ONLY if
+# streaming was enabled, AND we did not find a cached response.
+# If we are here, it means the response has not yet been displayed.
+cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
+chat_doc = (
+# TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
+⋮----
+# we are in the context immediately after an LLM responded,
+# we won't have citations yet, so we're done
+⋮----
+citation = (
+⋮----
+def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument
+⋮----
+"""
+        Get LLM response to `prompt` (which presumably includes the `message`
+        somewhere, along with possible large "context" passages),
+        but only include `message` as the USER message, and not the
+        full `prompt`, in the message history.
+        Args:
+            message: the original, relatively short, user request or query
+            prompt: the full prompt potentially containing `message` plus context
+
+        Returns:
+            Document object containing the response.
+        """
+# we explicitly call THIS class's respond method,
+# not a derived class's (or else there would be infinite recursion!)
+with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
+answer_doc = cast(ChatDocument, ChatAgent.llm_response(self, prompt))
+⋮----
+"""
+        Async version of `_llm_response_temp_context`. See there for details.
+        """
+⋮----
+answer_doc = cast(
+⋮----
+"""
+        LLM Response to single message, and restore message_history.
+        In effect a "one-off" message & response that leaves agent
+        message history state intact.
+
+        Args:
+            message (str|ChatDocument): message to respond to.
+
+        Returns:
+            A Document object with the response.
+
+        """
+# explicitly call THIS class's respond method,
+⋮----
+n_msgs = len(self.message_history)
+⋮----
+response = cast(ChatDocument, ChatAgent.llm_response(self, message))
+# If there is a response, then we will have two additional
+# messages in the message history, i.e. the user message and the
+# assistant response. We want to (carefully) remove these two messages.
+⋮----
+msg = self.message_history.pop()
+⋮----
+"""
+        Async version of `llm_response_forget`. See there for details.
+        """
+⋮----
+response = cast(
+⋮----
+def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int
+⋮----
+"""
+        Total number of tokens in the message history so far.
+
+        Args:
+            messages: if provided, compute the number of tokens in this list of
+                messages, rather than the current message history.
+        Returns:
+            int: number of tokens in message history
+        """
+⋮----
+hist = messages if messages is not None else self.message_history
+⋮----
+def message_history_str(self, i: Optional[int] = None) -> str
+⋮----
+"""
+        Return a string representation of the message history
+        Args:
+            i: if provided, return only the i-th message when i is postive,
+                or last k messages when i = -k.
+        Returns:
+        """
+⋮----
+def __del__(self) -> None
+⋮----
+"""
+        Cleanup method called when the ChatAgent is garbage collected.
+        Note: We don't close LLM clients here because they may be shared
+        across multiple agents when client caching is enabled.
+        The clients are managed centrally and cleaned up via atexit hooks.
+        """
+# Previously we closed clients here, but this caused issues when
+# multiple agents shared the same cached client instance.
+# Clients are now managed centrally in langroid.language_models.client_cache
+</file>
+
 <file path="langroid/agent/special/doc_chat_agent.py">
 # # langroid/agent/special/doc_chat_agent.py
 """
@@ -33588,1016 +34398,6 @@ def justify_response(self) -> ChatDocument | None
 """Show evidence for last response"""
 ⋮----
 source = self.response.metadata.source
-</file>
-
-<file path="langroid/agent/chat_agent.py">
-console = Console()
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-class ChatAgentConfig(AgentConfig)
-⋮----
-"""
-    Configuration for ChatAgent
-
-    Attributes:
-        system_message: system message to include in message sequence
-             (typically defines role and task of agent).
-             Used only if `task` is not specified in the constructor.
-        user_message: user message to include in message sequence.
-             Used only if `task` is not specified in the constructor.
-        use_tools: whether to use our own ToolMessages mechanism
-        handle_llm_no_tool (Any): desired agent_response when
-            LLM generates non-tool msg.
-        use_functions_api: whether to use functions/tools native to the LLM API
-                (e.g. OpenAI's `function_call` or `tool_call` mechanism)
-        use_tools_api: When `use_functions_api` is True, if this is also True,
-            the OpenAI tool-call API is used, rather than the older/deprecated
-            function-call API. However the tool-call API has some tricky aspects,
-            hence we set this to False by default.
-        strict_recovery: whether to enable strict schema recovery when there
-            is a tool-generation error.
-        enable_orchestration_tool_handling: whether to enable handling of orchestration
-            tools, e.g. ForwardTool, DoneTool, PassTool, etc.
-        output_format: When supported by the LLM (certain OpenAI LLMs
-            and local LLMs served by providers such as vLLM), ensures
-            that the output is a JSON matching the corresponding
-            schema via grammar-based decoding
-        handle_output_format: When `output_format` is a `ToolMessage` T,
-            controls whether T is "enabled for handling".
-        use_output_format: When `output_format` is a `ToolMessage` T,
-            controls whether T is "enabled for use" (by LLM) and
-            instructions on using T are added to the system message.
-        instructions_output_format: Controls whether we generate instructions for
-            `output_format` in the system message.
-        use_tools_on_output_format: Controls whether to automatically switch
-            to the Langroid-native tools mechanism when `output_format` is set.
-            Note that LLMs may generate tool calls which do not belong to
-            `output_format` even when strict JSON mode is enabled, so this should be
-            enabled when such tool calls are not desired.
-        output_format_include_defaults: Whether to include fields with default arguments
-            in the output schema
-        full_citations: Whether to show source reference citation + content for each
-            citation, or just the main reference citation.
-    """
-⋮----
-system_message: str = "You are a helpful assistant."
-user_message: Optional[str] = None
-handle_llm_no_tool: Any = None
-use_tools: bool = True
-use_functions_api: bool = False
-use_tools_api: bool = True
-strict_recovery: bool = True
-enable_orchestration_tool_handling: bool = True
-output_format: Optional[type] = None
-handle_output_format: bool = True
-use_output_format: bool = True
-instructions_output_format: bool = True
-output_format_include_defaults: bool = True
-use_tools_on_output_format: bool = True
-full_citations: bool = True  # show source + content for each citation?
-⋮----
-def _set_fn_or_tools(self) -> None
-⋮----
-"""
-        Enable Langroid Tool or OpenAI-like fn-calling,
-        depending on config settings.
-        """
-⋮----
-class ChatAgent(Agent)
-⋮----
-"""
-    Chat Agent interacting with external env
-    (could be human, or external tools).
-    The agent (the LLM actually) is provided with an optional "Task Spec",
-    which is a sequence of `LLMMessage`s. These are used to initialize
-    the `task_messages` of the agent.
-    In most applications we will use a `ChatAgent` rather than a bare `Agent`.
-    The `Agent` class mainly exists to hold various common methods and attributes.
-    One difference between `ChatAgent` and `Agent` is that `ChatAgent`'s
-    `llm_response` method uses "chat mode" API (i.e. one that takes a
-    message sequence rather than a single message),
-    whereas the same method in the `Agent` class uses "completion mode" API (i.e. one
-    that takes a single message).
-    """
-⋮----
-"""
-        Chat-mode agent initialized with task spec as the initial message sequence
-        Args:
-            config: settings for the agent
-
-        """
-⋮----
-# An agent's "task" is defined by a system msg and an optional user msg;
-# These are "priming" messages that kick off the agent's conversation.
-⋮----
-# if task contains a system msg, we override the config system msg
-⋮----
-# if task contains a user msg, we override the config user msg
-⋮----
-# system-level instructions for using tools/functions:
-# We maintain these as tools/functions are enabled/disabled,
-# and whenever an LLM response is sought, these are used to
-# recreate the system message (via `_create_system_and_tools_message`)
-# each time, so it reflects the current set of enabled tools/functions.
-# (a) these are general instructions on using certain tools/functions,
-#   if they are specified in a ToolMessage class as a classmethod `instructions`
-⋮----
-# (b) these are only for the builtin in Langroid TOOLS mechanism:
-⋮----
-# This variable is not None and equals a `ToolMessage` T, if and only if:
-# (a) T has been set as the output_format of this agent, AND
-# (b) T has been "enabled for use" ONLY for enforcing this output format, AND
-# (c) T has NOT been explicitly "enabled for use" by this Agent.
-⋮----
-# As above but deals with "enabled for handling" instead of "enabled for use".
-⋮----
-# instructions specifically related to enforcing `output_format`
-⋮----
-# controls whether to disable strict schemas for this agent if
-# strict mode causes exception
-⋮----
-# Tracks whether any strict tool is enabled; used to determine whether to set
-# `self.disable_strict` on an exception
-⋮----
-# Tracks the set of tools on which we force-disable strict decoding
-⋮----
-# Only enable HANDLING by `agent_response`, NOT LLM generation of these.
-# This is useful where tool-handlers or agent_response generate these
-# tools, and need to be handled.
-# We don't want enable orch tool GENERATION by default, since that
-# might clutter-up the LLM system message unnecessarily.
-⋮----
-def init_state(self) -> None
-⋮----
-"""
-        Initialize the state of the agent. Just conversation state here,
-        but subclasses can override this to initialize other state.
-        """
-⋮----
-@staticmethod
-    def from_id(id: str) -> "ChatAgent"
-⋮----
-"""
-        Get an agent from its ID
-        Args:
-            agent_id (str): ID of the agent
-        Returns:
-            ChatAgent: The agent with the given ID
-        """
-⋮----
-def clone(self, i: int = 0) -> "ChatAgent"
-⋮----
-"""Create i'th clone of this agent, ensuring tool use/handling is cloned.
-        Important: We assume all member variables are in the __init__ method here
-        and in the Agent class.
-        TODO: We are attempting to clone an agent after its state has been
-        changed in possibly many ways. Below is an imperfect solution. Caution advised.
-        Revisit later.
-        """
-agent_cls = type(self)
-# Use model_copy to preserve Pydantic subclass types (like MockLMConfig)
-# instead of deepcopy which loses subclass information
-config_copy = self.config.model_copy(deep=True)
-⋮----
-new_agent = agent_cls(config_copy)
-⋮----
-# Caution - we are copying the vector-db, maybe we don't always want this?
-⋮----
-def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool
-⋮----
-"""Should we enable strict mode for a given tool?"""
-⋮----
-tool_class = self.llm_tools_map[tool]
-⋮----
-tool_class = tool
-name = tool_class.default_value("request")
-⋮----
-strict: Optional[bool] = tool_class.default_value("strict")
-⋮----
-strict = self._strict_tools_available()
-⋮----
-def _fn_call_available(self) -> bool
-⋮----
-"""Does this agent's LLM support function calling?"""
-⋮----
-def _strict_tools_available(self) -> bool
-⋮----
-"""Does this agent's LLM support strict tools?"""
-⋮----
-def _json_schema_available(self) -> bool
-⋮----
-"""Does this agent's LLM support strict JSON schema output format?"""
-⋮----
-def set_system_message(self, msg: str) -> None
-⋮----
-# if there is message history, update the system message in it
-⋮----
-def set_user_message(self, msg: str) -> None
-⋮----
-@property
-    def task_messages(self) -> List[LLMMessage]
-⋮----
-"""
-        The task messages are the initial messages that define the task
-        of the agent. There will be at least a system message plus possibly a user msg.
-        Returns:
-            List[LLMMessage]: the task messages
-        """
-msgs = [self._create_system_and_tools_message()]
-⋮----
-def _drop_msg_update_tool_calls(self, msg: LLMMessage) -> None
-⋮----
-id2idx = {t.id: i for i, t in enumerate(self.oai_tool_calls)}
-⋮----
-# dropping tool result, so ADD the corresponding tool-call back
-# to the list of pending calls!
-id = msg.tool_call_id
-⋮----
-# dropping a msg with tool-calls, so DROP these from pending list
-# as well as from id -> call map
-⋮----
-def clear_history(self, start: int = -2, end: int = -1) -> None
-⋮----
-"""
-        Clear the message history, deleting  messages from index `start`,
-        up to index `end`.
-
-        Args:
-            start (int): index of first message to delete; default = -2
-                    (i.e. delete last 2 messages, typically these
-                    are the last user and assistant messages)
-            end (int): index of last message to delete; Default = -1
-                    (i.e. delete all messages up to the last one)
-        """
-n = len(self.message_history)
-⋮----
-start = max(0, n + start)
-end_ = n if end == -1 else end + 1
-dropped = self.message_history[start:end_]
-# consider the dropped msgs in REVERSE order, so we are
-# carefully updating self.oai_tool_calls
-⋮----
-# clear out the chat document from the ObjectRegistry
-⋮----
-def update_history(self, message: str, response: str) -> None
-⋮----
-"""
-        Update the message history with the latest user message and LLM response.
-        Args:
-            message (str): user message
-            response: (str): LLM response
-        """
-⋮----
-def tool_format_rules(self) -> str
-⋮----
-"""
-        Specification of tool formatting rules
-        (typically JSON-based but can be non-JSON, e.g. XMLToolMessage),
-        based on the currently enabled usable `ToolMessage`s
-
-        Returns:
-            str: formatting rules
-        """
-# ONLY Usable tools (i.e. LLM-generation allowed),
-usable_tool_classes: List[Type[ToolMessage]] = [
-⋮----
-format_instructions = "\n\n".join(
-# if any of the enabled classes has json_group_instructions, then use that,
-# else fall back to ToolMessage.json_group_instructions
-⋮----
-def tool_instructions(self) -> str
-⋮----
-"""
-        Instructions for tools or function-calls, for enabled and usable Tools.
-        These are inserted into system prompt regardless of whether we are using
-        our own ToolMessage mechanism or the LLM's function-call mechanism.
-
-        Returns:
-            str: concatenation of instructions for all usable tools
-        """
-enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
-⋮----
-instructions = []
-⋮----
-class_instructions = ""
-⋮----
-class_instructions = msg_cls.instructions()
-⋮----
-# example will be shown in tool_format_rules() when using TOOLs,
-# so we don't need to show it here.
-example = "" if self.config.use_tools else (msg_cls.usage_examples())
-⋮----
-example = "EXAMPLES:\n" + example
-guidance = (
-⋮----
-instructions_str = "\n\n".join(instructions)
-⋮----
-def augment_system_message(self, message: str) -> None
-⋮----
-"""
-        Augment the system message with the given message.
-        Args:
-            message (str): system message
-        """
-⋮----
-def last_message_with_role(self, role: Role) -> LLMMessage | None
-⋮----
-"""from `message_history`, return the last message with role `role`"""
-n_role_msgs = len([m for m in self.message_history if m.role == role])
-⋮----
-idx = self.nth_message_idx_with_role(role, n_role_msgs)
-⋮----
-def last_message_idx_with_role(self, role: Role) -> int
-⋮----
-"""Index of last message in message_history, with specified role.
-        Return -1 if not found. Index = 0 is the first message in the history.
-        """
-indices_with_role = [
-⋮----
-def nth_message_idx_with_role(self, role: Role, n: int) -> int
-⋮----
-"""Index of `n`th message in message_history, with specified role.
-        (n is assumed to be 1-based, i.e. 1 is the first message with that role).
-        Return -1 if not found. Index = 0 is the first message in the history.
-        """
-⋮----
-def update_last_message(self, message: str, role: str = Role.USER) -> None
-⋮----
-"""
-        Update the last message that has role `role` in the message history.
-        Useful when we want to replace a long user prompt, that may contain context
-        documents plus a question, with just the question.
-        Args:
-            message (str): new message to replace with
-            role (str): role of message to replace
-        """
-⋮----
-# find last message in self.message_history with role `role`
-⋮----
-def delete_last_message(self, role: str = Role.USER) -> None
-⋮----
-"""
-        Delete the last message that has role `role` from the message history.
-        Args:
-            role (str): role of message to delete
-        """
-⋮----
-def _create_system_and_tools_message(self) -> LLMMessage
-⋮----
-"""
-        (Re-)Create the system message for the LLM of the agent,
-        taking into account any tool instructions that have been added
-        after the agent was initialized.
-
-        The system message will consist of:
-        (a) the system message from the `task` arg in constructor, if any,
-            otherwise the default system message from the config
-        (b) the system tool instructions, if any
-        (c) the system json tool instructions, if any
-
-        Returns:
-            LLMMessage object
-        """
-content = self.system_message
-⋮----
-# remove leading and trailing newlines and other whitespace
-⋮----
-def handle_message_fallback(self, msg: str | ChatDocument) -> Any
-⋮----
-"""
-        Fallback method for the "no-tools" scenario, i.e., the current `msg`
-        (presumably emitted by the LLM) does not have any tool that the agent
-        can handle.
-        NOTE: The `msg` may contain tools but either (a) the agent is not
-        enabled to handle them, or (b) there's an explicit `recipient` field
-        in the tool that doesn't match the agent's name.
-
-        Uses the self.config.non_tool_routing to determine the action to take.
-
-        This method can be overridden by subclasses, e.g.,
-        to create a "reminder" message when a tool is expected but the LLM "forgot"
-        to generate one.
-
-        Args:
-            msg (str | ChatDocument): The input msg to handle
-        Returns:
-            Any: The result of the handler method
-        """
-⋮----
-# we ONLY use the `handle_llm_no_tool` config option when
-# the msg is from LLM and does not contain ANY tools at all.
-⋮----
-no_tool_option = self.config.handle_llm_no_tool
-⋮----
-# in case the `no_tool_option` is one of the special NonToolAction vals
-⋮----
-# Otherwise just return `no_tool_option` as is:
-# This can be any string, such as a specific nudge/reminder to the LLM,
-# or even something like ResultTool etc.
-⋮----
-def unhandled_tools(self) -> set[str]
-⋮----
-"""The set of tools that are known but not handled.
-        Useful in task flow: an agent can refuse to accept an incoming msg
-        when it only has unhandled tools.
-        """
-⋮----
-"""
-        Add the tool (message class) to the agent, and enable either
-        - tool USE (i.e. the LLM can generate JSON to use this tool),
-        - tool HANDLING (i.e. the agent can handle JSON from this tool),
-
-        Args:
-            message_class: The ToolMessage class OR List of such classes to enable,
-                for USE, or HANDLING, or both.
-                If this is a list of ToolMessage classes, then the remain args are
-                applied to all classes.
-                Optional; if None, then apply the enabling to all tools in the
-                agent's toolset that have been enabled so far.
-            use: IF True, allow the agent (LLM) to use this tool (or all tools),
-                else disallow
-            handle: if True, allow the agent (LLM) to handle (i.e. respond to) this
-                tool (or all tools)
-            force: whether to FORCE the agent (LLM) to USE the specific
-                 tool represented by `message_class`.
-                 `force` is ignored if `message_class` is None.
-            require_recipient: whether to require that recipient be specified
-                when using the tool message (only applies if `use` is True).
-            include_defaults: whether to include fields that have default values,
-                in the "properties" section of the JSON format instructions.
-                (Normally the OpenAI completion API ignores these fields,
-                but the Assistant fn-calling seems to pay attn to these,
-                and if we don't want this, we should set this to False.)
-        """
-⋮----
-message_class = message_class.require_recipient()
-⋮----
-# XMLToolMessage is not compatible with OpenAI's Tools/functions API,
-# so we disable use of functions API, enable langroid-native Tools,
-# which are prompt-based.
-⋮----
-super().enable_message_handling(message_class)  # enables handling only
-tools = self._get_tool_list(message_class)
-⋮----
-request = message_class.default_value("request")
-⋮----
-llm_function = message_class.llm_function_schema(defaults=include_defaults)
-⋮----
-# `t` was designated as "enabled for handling" ONLY for
-# output_format enforcement, but we are explicitly ]
-# enabling it for handling here, so we set the variable to None.
-⋮----
-tool_class = self.llm_tools_map[t]
-allow_llm_use = tool_class._allow_llm_use
-⋮----
-allow_llm_use = allow_llm_use.default
-⋮----
-# `t` was designated as "enabled for use" ONLY for output_format
-# enforcement, but we are explicitly enabling it for use here,
-# so we set the variable to None.
-⋮----
-def _update_tool_instructions(self) -> None
-⋮----
-# Set tool instructions and JSON format instructions,
-# in case Tools have been enabled/disabled.
-⋮----
-def _requests_and_tool_settings(self) -> tuple[Optional[set[str]], bool, bool]
-⋮----
-"""
-        Returns the current set of enabled requests for inference and tools configs.
-        Used for restoring setings overriden by `set_output_format`.
-        """
-⋮----
-@property
-    def all_llm_tools_known(self) -> set[str]
-⋮----
-"""All known tools; we include `output_format` if it is a `ToolMessage`."""
-known = self.llm_tools_known
-⋮----
-"""
-        Sets `output_format` to `output_type` and, if `force_tools` is enabled,
-        switches to the native Langroid tools mechanism to ensure that no tool
-        calls not of `output_type` are generated. By default, `force_tools`
-        follows the `use_tools_on_output_format` parameter in the config.
-
-        If `output_type` is None, restores to the state prior to setting
-        `output_format`.
-
-        If `use`, we enable use of `output_type` when it is a subclass
-        of `ToolMesage`. Note that this primarily controls instruction
-        generation: the model will always generate `output_type` regardless
-        of whether `use` is set. Defaults to the `use_output_format`
-        parameter in the config. Similarly, handling of `output_type` is
-        controlled by `handle`, which defaults to the
-        `handle_output_format` parameter in the config.
-
-        `instructions` controls whether we generate instructions specifying
-        the output format schema. Defaults to the `instructions_output_format`
-        parameter in the config.
-
-        `is_copy` is set when called via `__getitem__`. In that case, we must
-        copy certain fields to ensure that we do not overwrite the main agent's
-        setings.
-        """
-# Disable usage of an output format which was not specifically enabled
-# by `enable_message`
-⋮----
-# Disable handling of an output format which did not specifically have
-# handling enabled via `enable_message`
-⋮----
-# Reset any previous instructions
-⋮----
-force_tools = self.config.use_tools_on_output_format
-⋮----
-output_type = get_pydantic_wrapper(output_type)
-⋮----
-name = output_type.default_value("request")
-⋮----
-use = self.config.use_output_format
-⋮----
-handle = self.config.handle_output_format
-⋮----
-is_usable = name in self.llm_tools_usable.union(
-is_handled = name in self.llm_tools_handled.union(
-⋮----
-# We must copy `llm_tools_usable` so the base agent
-# is unmodified
-⋮----
-# If handling the tool, do the same for `llm_tools_handled`
-⋮----
-# Enable `output_type`
-⋮----
-# Do not override existing settings
-⋮----
-# If the `output_type` ToilMessage was not already enabled for
-# use, this means we are ONLY enabling it for use specifically
-# for enforcing this output format, so we set the
-# `enabled_use_output_forma  to this output_type, to
-# record that it should be disabled when `output_format` is changed
-⋮----
-# (same reasoning as for use-enabling)
-⋮----
-generated_tool_instructions = name in self.llm_tools_usable.union(
-⋮----
-generated_tool_instructions = False
-⋮----
-instructions = self.config.instructions_output_format
-⋮----
-# Already generated tool instructions as part of "enabling for use",
-# so only need to generate a reminder to use this tool.
-name = cast(ToolMessage, output_type).default_value("request")
-⋮----
-output_format_schema = output_type.llm_function_schema(
-⋮----
-output_format_schema = output_type.model_json_schema()
-⋮----
-def __getitem__(self, output_type: type) -> Self
-⋮----
-"""
-        Returns a (shallow) copy of `self` with a forced output type.
-        """
-clone = copy.copy(self)
-⋮----
-"""
-        Disable this agent from RESPONDING to a `message_class` (Tool). If
-            `message_class` is None, then disable this agent from responding to ALL.
-        Args:
-            message_class: The ToolMessage class to disable; Optional.
-        """
-⋮----
-"""
-        Disable this agent from USING a message class (Tool).
-        If `message_class` is None, then disable this agent from USING ALL tools.
-        Args:
-            message_class: The ToolMessage class to disable.
-                If None, disable all.
-        """
-⋮----
-def disable_message_use_except(self, message_class: Type[ToolMessage]) -> None
-⋮----
-"""
-        Disable this agent from USING ALL messages EXCEPT a message class (Tool)
-        Args:
-            message_class: The only ToolMessage class to allow
-        """
-request = message_class.model_fields["request"].default
-to_remove = [r for r in self.llm_tools_usable if r != request]
-⋮----
-def _load_output_format(self, message: ChatDocument) -> None
-⋮----
-"""
-        If set, attempts to parse a value of type `self.output_format` from the message
-        contents or any tool/function call and assigns it to `content_any`.
-        """
-⋮----
-any_succeeded = False
-attempts: list[str | LLMFunctionCall] = [
-⋮----
-content = json.loads(attempt)
-⋮----
-content = attempt.arguments
-⋮----
-content_any = self.output_format.model_validate(content)
-⋮----
-message.content_any = content_any.value  # type: ignore
-⋮----
-any_succeeded = True
-⋮----
-"""
-        Extracts messages and tracks whether any errors occurred. If strict mode
-        was enabled, disables it for the tool, else triggers strict recovery.
-        """
-⋮----
-most_recent_sent_by_llm = (
-was_llm = most_recent_sent_by_llm or (
-⋮----
-tools = super().get_tool_messages(msg, all_tools)
-⋮----
-# Check if tool class was attached to the exception
-⋮----
-tool_class = ve.tool_class  # type: ignore
-⋮----
-was_strict = (
-# If the result of strict output for a tool using the
-# OpenAI tools API fails to parse, we infer that the
-# schema edits necessary for compatibility prevented
-# adherence to the underlying `ToolMessage` schema and
-# disable strict output for the tool
-⋮----
-# We will trigger the strict recovery mechanism to force
-# the LLM to correct its output, allowing us to parse
-⋮----
-def _get_any_tool_message(self, optional: bool = True) -> type[ToolMessage] | None
-⋮----
-"""
-        Returns a `ToolMessage` which wraps all enabled tools, excluding those
-        where strict recovery is disabled. Used in strict recovery.
-        """
-possible_tools = tuple(
-⋮----
-any_tool_type = Union.__getitem__(possible_tools)  # type ignore
-⋮----
-maybe_optional_type = Optional[any_tool_type] if optional else any_tool_type
-⋮----
-class AnyTool(ToolMessage)
-⋮----
-purpose: str = "To call a tool/function."
-request: str = "tool_or_function"
-tool: maybe_optional_type  # type: ignore
-⋮----
-def response(self, agent: ChatAgent) -> None | str | ChatDocument
-⋮----
-# One-time use
-⋮----
-# As the ToolMessage schema accepts invalid
-# `tool.request` values, reparse with the
-# corresponding tool
-request = self.tool.request
-⋮----
-tool = agent.llm_tools_map[request].model_validate_json(
-⋮----
-"""Returns instructions for strict recovery."""
-optional_instructions = (
-response_prefix = "If you intended to make such a call, r" if optional else "R"
-instruction_prefix = "If you do so, b" if optional else "B"
-⋮----
-schema_instructions = (
-⋮----
-"""
-        Truncate message at idx in msg history to `tokens` tokens.
-
-        If inplace is True, the message is truncated in place, else
-        it LEAVES the original message INTACT and returns a new message
-        """
-⋮----
-llm_msg = self.message_history[idx]
-⋮----
-llm_msg = copy.deepcopy(self.message_history[idx])
-orig_content = llm_msg.content
-new_content = (
-⋮----
-else orig_content[: tokens * 4]  # approx truncation
-⋮----
-def _reduce_raw_tool_results(self, message: ChatDocument) -> None
-⋮----
-"""
-        If message is the result of a ToolMessage that had
-        a `_max_retained_tokens` set to a non-None value, then we replace contents
-        with a placeholder message.
-        """
-parent_message: ChatDocument | None = message.parent
-tools = [] if parent_message is None else parent_message.tool_messages
-truncate_tools = []
-⋮----
-max_retained_tokens = t._max_retained_tokens
-⋮----
-max_retained_tokens = max_retained_tokens.default
-⋮----
-limiting_tool = truncate_tools[0] if len(truncate_tools) > 0 else None
-⋮----
-max_retained_tokens = limiting_tool._max_retained_tokens
-⋮----
-tool_name = limiting_tool.default_value("request")
-max_tokens: int = max_retained_tokens
-truncation_warning = f"""
-⋮----
-"""
-        Respond to a single user message, appended to the message history,
-        in "chat" mode
-        Args:
-            message (str|ChatDocument): message or ChatDocument object to respond to.
-                If None, use the self.task_messages
-        Returns:
-            LLM response as a ChatDocument object
-        """
-⋮----
-# If enabled and a tool error occurred, we recover by generating the tool in
-# strict json mode
-⋮----
-AnyTool = self._get_any_tool_message()
-⋮----
-recovery_message = self._strict_recovery_instructions(AnyTool)
-augmented_message = message
-⋮----
-augmented_message = recovery_message
-⋮----
-augmented_message = augmented_message + recovery_message
-⋮----
-# only use the augmented message for this one response...
-result = self.llm_response(augmented_message)
-# ... restore the original user message so that the AnyTool recover
-# instructions don't persist in the message history
-# (this can cause the LLM to use the AnyTool directly as a tool)
-⋮----
-msg = message if isinstance(message, str) else message.content
-⋮----
-tool_choice = (
-⋮----
-response = self.llm_response_messages(hist, output_len, tool_choice)
-⋮----
-# Preserve trail of tool_ids for OpenAI Assistant fn-calls
-⋮----
-"""
-        Async version of `llm_response`. See there for details.
-        """
-⋮----
-response = await self.llm_response_messages_async(
-⋮----
-def init_message_history(self) -> None
-⋮----
-"""
-        Initialize the message history with the system message and user message
-        """
-⋮----
-"""
-        Prepare messages to be sent to self.llm_response_messages,
-            which is the main method that calls the LLM API to get a response.
-            If desired output tokens + message history exceeds the model context length,
-            then first the max output tokens is reduced to fit, and if that is not
-            possible, older messages may be truncated to accommodate at least
-            self.config.llm.min_output_tokens of output.
-
-        Returns:
-            Tuple[List[LLMMessage], int]: (messages, output_len)
-                messages = Full list of messages to send
-                output_len = max expected number of tokens in response
-        """
-⋮----
-# this means agent has been used to get LLM response already,
-# and so the last message is an "assistant" response.
-# We delete this last assistant response and re-generate it.
-⋮----
-# initial messages have not yet been loaded, so load them
-⋮----
-# for debugging, show the initial message history
-⋮----
-# update the system message with the latest tool instructions
-⋮----
-# either the message is a str, or it is a fresh ChatDocument
-# different from the last message in the history
-llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
-# LLM only responds to the content, so only those msgs with
-# non-empty content should be kept
-llm_msgs = [m for m in llm_msgs if m.content.strip() != ""]
-⋮----
-# process tools if any
-done_tools = [m.tool_call_id for m in llm_msgs if m.role == Role.TOOL]
-⋮----
-hist = self.message_history
-output_len = self.config.llm.model_max_output_tokens
-⋮----
-CHAT_HISTORY_BUFFER = 300
-# chat + output > max context length,
-# so first try to shorten requested output len to fit;
-# use an extra margin of CHAT_HISTORY_BUFFER tokens
-# in case our calcs are off (and to allow for some extra tokens)
-output_len = (
-⋮----
-# unacceptably small output len, so compress early parts of conv
-# history if output_len is still too long.
-# TODO we should really be doing summarization or other types of
-#   prompt-size reduction
-msg_idx_to_compress = 1  # don't touch system msg
-# we will try compressing msg indices up to but not including
-# last user msg
-last_msg_idx_to_compress = (
-n_truncated = 0
-⋮----
-# try dropping early parts of conv history
-# TODO we should really be doing summarization or other types of
-#   prompt-size reduction
-⋮----
-# We want to preserve the first message (typically system msg)
-# and last message (user msg).
-⋮----
-# compress the msg at idx `msg_idx_to_compress`
-⋮----
-output_len = min(
-⋮----
-# we MUST have truncated at least one msg
-msg_tokens = self.chat_num_tokens()
-⋮----
-# record the position of the corresponding LLMMessage in
-# the message_history
-⋮----
-"""
-        Get function/tool spec/output format arguments for
-        OpenAI-compatible LLM API call
-        """
-functions: Optional[List[LLMFunctionSpec]] = None
-fun_call: str | Dict[str, str] = "none"
-tools: Optional[List[OpenAIToolSpec]] = None
-force_tool: Optional[Dict[str, Dict[str, str] | str]] = None
-⋮----
-functions = [
-fun_call = (
-⋮----
-def to_maybe_strict_spec(function: str) -> OpenAIToolSpec
-⋮----
-spec = self.llm_functions_map[function]
-strict = self._strict_mode_for_tool(function)
-⋮----
-strict_spec = copy.deepcopy(spec)
-⋮----
-strict_spec = spec
-⋮----
-tools = [to_maybe_strict_spec(f) for f in self.llm_functions_usable]
-force_tool = (
-output_format = None
-⋮----
-spec = self.output_format.llm_function_schema(
-⋮----
-output_format = OpenAIJsonSchemaSpec(
-⋮----
-# We always require that outputs strictly match the schema
-⋮----
-param_spec = self.output_format.model_json_schema()
-⋮----
-"""
-        Respond to a series of messages, e.g. with OpenAI ChatCompletion
-        Args:
-            messages: seq of messages (with role, content fields) sent to LLM
-            output_len: max number of tokens expected in response.
-                    If None, use the LLM's default model_max_output_tokens.
-        Returns:
-            Document (i.e. with fields "content", "metadata")
-        """
-⋮----
-output_len = output_len or self.config.llm.model_max_output_tokens
-streamer = noop_fn
-⋮----
-streamer = self.callbacks.start_llm_stream()
-⋮----
-with ExitStack() as stack:  # for conditionally using rich spinner
-⋮----
-# show rich spinner only if not streaming!
-# (Why? b/c the intent of showing a spinner is to "show progress",
-# and we don't need to do that when streaming, since
-# streaming output already shows progress.)
-cm = status(
-⋮----
-response = self.llm.chat(
-⋮----
-response,  # .usage attrib is updated!
-⋮----
-chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
-⋮----
-# If using strict output format, parse the output JSON
-⋮----
-"""
-        Async version of `llm_response_messages`. See there for details.
-        """
-⋮----
-streamer_async = async_noop_fn
-⋮----
-streamer_async = await self.callbacks.start_llm_stream_async()
-⋮----
-response = await self.llm.achat(
-⋮----
-is_cached = (
-⋮----
-# We would have already displayed the msg "live" ONLY if
-# streaming was enabled, AND we did not find a cached response.
-# If we are here, it means the response has not yet been displayed.
-cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
-chat_doc = (
-# TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
-⋮----
-# we are in the context immediately after an LLM responded,
-# we won't have citations yet, so we're done
-⋮----
-citation = (
-⋮----
-def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument
-⋮----
-"""
-        Get LLM response to `prompt` (which presumably includes the `message`
-        somewhere, along with possible large "context" passages),
-        but only include `message` as the USER message, and not the
-        full `prompt`, in the message history.
-        Args:
-            message: the original, relatively short, user request or query
-            prompt: the full prompt potentially containing `message` plus context
-
-        Returns:
-            Document object containing the response.
-        """
-# we explicitly call THIS class's respond method,
-# not a derived class's (or else there would be infinite recursion!)
-with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
-answer_doc = cast(ChatDocument, ChatAgent.llm_response(self, prompt))
-⋮----
-"""
-        Async version of `_llm_response_temp_context`. See there for details.
-        """
-⋮----
-answer_doc = cast(
-⋮----
-"""
-        LLM Response to single message, and restore message_history.
-        In effect a "one-off" message & response that leaves agent
-        message history state intact.
-
-        Args:
-            message (str|ChatDocument): message to respond to.
-
-        Returns:
-            A Document object with the response.
-
-        """
-# explicitly call THIS class's respond method,
-⋮----
-n_msgs = len(self.message_history)
-⋮----
-response = cast(ChatDocument, ChatAgent.llm_response(self, message))
-# If there is a response, then we will have two additional
-# messages in the message history, i.e. the user message and the
-# assistant response. We want to (carefully) remove these two messages.
-⋮----
-msg = self.message_history.pop()
-⋮----
-"""
-        Async version of `llm_response_forget`. See there for details.
-        """
-⋮----
-response = cast(
-⋮----
-def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int
-⋮----
-"""
-        Total number of tokens in the message history so far.
-
-        Args:
-            messages: if provided, compute the number of tokens in this list of
-                messages, rather than the current message history.
-        Returns:
-            int: number of tokens in message history
-        """
-⋮----
-hist = messages if messages is not None else self.message_history
-⋮----
-def message_history_str(self, i: Optional[int] = None) -> str
-⋮----
-"""
-        Return a string representation of the message history
-        Args:
-            i: if provided, return only the i-th message when i is postive,
-                or last k messages when i = -k.
-        Returns:
-        """
-⋮----
-def __del__(self) -> None
-⋮----
-"""
-        Cleanup method called when the ChatAgent is garbage collected.
-        Note: We don't close LLM clients here because they may be shared
-        across multiple agents when client caching is enabled.
-        The clients are managed centrally and cleaned up via atexit hooks.
-        """
-# Previously we closed clients here, but this caused issues when
-# multiple agents shared the same cached client instance.
-# Clients are now managed centrally in langroid.language_models.client_cache
 </file>
 
 <file path="mkdocs.yml">
@@ -36993,7 +36793,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.11"
+version = "0.59.12"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
