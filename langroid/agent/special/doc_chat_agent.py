@@ -14,6 +14,7 @@ pip install "langroid[hf-embeddings]"
 
 """
 
+import asyncio
 import importlib
 import logging
 from collections import OrderedDict
@@ -858,7 +859,9 @@ class DocChatAgent(ChatAgent):
             return self.summarize_docs()
         else:
             self.callbacks.show_start_response(entity="llm")
-            response = self.answer_from_docs(query_str)
+            # Offload blocking retrieval/LLM work to default thread pool so
+            # asyncio batch runners can make progress concurrently.
+            response = await asyncio.to_thread(self.answer_from_docs, query_str)
             self._render_llm_response(response, citation_only=True)
             return ChatDocument(
                 content=response.content,
