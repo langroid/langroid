@@ -18,9 +18,21 @@ import asyncio
 import copy
 import importlib
 import logging
+import threading
 from collections import OrderedDict
+from dataclasses import dataclass
 from functools import cache
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, no_type_check
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    no_type_check,
+)
 
 import nest_asyncio
 import numpy as np
@@ -67,6 +79,9 @@ from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 from langroid.vector_store.qdrantdb import QdrantDBConfig
 
+if TYPE_CHECKING:
+    from sentence_transformers import CrossEncoder
+
 
 @cache
 def apply_nest_asyncio() -> None:
@@ -74,6 +89,43 @@ def apply_nest_asyncio() -> None:
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _CrossEncoderCacheEntry:
+    model: "CrossEncoder"
+    lock: threading.RLock
+
+
+_CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
+_CROSS_ENCODER_CACHE_LOCK = threading.Lock()
+
+
+def _get_cross_encoder_entry(model_name: str, device: str) -> _CrossEncoderCacheEntry:
+    cache_key = f"{model_name}::{device}"
+    entry = _CROSS_ENCODER_CACHE.get(cache_key)
+    if entry is not None:
+        return entry
+
+    with _CROSS_ENCODER_CACHE_LOCK:
+        entry = _CROSS_ENCODER_CACHE.get(cache_key)
+        if entry is not None:
+            return entry
+        try:
+            from sentence_transformers import CrossEncoder
+        except ImportError as exc:
+            raise ImportError(
+                """
+                To use cross-encoder re-ranking, you must install
+                langroid with the [hf-embeddings] extra, e.g.:
+                pip install "langroid[hf-embeddings]"
+                """
+            ) from exc
+
+        model = CrossEncoder(model_name, device=device)
+        entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
+        _CROSS_ENCODER_CACHE[cache_key] = entry
+        return entry
 
 
 DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
@@ -155,6 +207,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
     )
+    cross_encoder_device: Optional[str] = None  # default to CPU when None
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
     rerank_after_adding_context: bool = True  # rerank after adding context window?
@@ -1114,19 +1167,13 @@ class DocChatAgent(ChatAgent):
         self, query: str, passages: List[Document]
     ) -> List[Document]:
         with status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
-            try:
-                from sentence_transformers import CrossEncoder
-            except ImportError:
-                raise ImportError(
-                    """
-                    To use cross-encoder re-ranking, you must install
-                    langroid with the [hf-embeddings] extra, e.g.:
-                    pip install "langroid[hf-embeddings]"
-                    """
-                )
-
-            model = CrossEncoder(self.config.cross_encoder_reranking_model)
-            scores = model.predict([(query, p.content) for p in passages])
+            device = self.config.cross_encoder_device or "cpu"
+            entry = _get_cross_encoder_entry(
+                self.config.cross_encoder_reranking_model, device
+            )
+            pair_inputs = [(query, p.content) for p in passages]
+            with entry.lock:
+                scores = entry.model.predict(pair_inputs, show_progress_bar=False)
             # Convert to [0,1] so we might could use a cutoff later.
             scores = 1.0 / (1 + np.exp(-np.array(scores)))
             # get top k scoring passages

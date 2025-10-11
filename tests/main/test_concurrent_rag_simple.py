@@ -31,7 +31,16 @@ Root cause:
     Multiple threads in run_batch_task_gen() simultaneously call
     rerank_with_cross_encoder(), which tries to move the shared
     cross-encoder model to a device, causing a PyTorch race condition.
+
+GPU/MPS validation:
+    pytest tests/main/test_concurrent_rag_simple.py -k cross_encoder -x \
+        --cross-encoder-device=mps
 """
+
+import os
+from typing import Optional
+
+import pytest
 
 import langroid as lr
 import langroid.language_models as lm
@@ -47,6 +56,29 @@ COLLECTION_NAME = "borges-babel-test"
 BORGES_URL = "https://xpressenglish.com/our-stories/library-of-babel/"
 
 settings.cache = False
+
+
+DEVICE_OVERRIDE: Optional[str] = None
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--cross-encoder-device",
+        action="store",
+        default=None,
+        help=(
+            "Device string for cross-encoder reranker (e.g. 'cpu', 'cuda', 'mps'). "
+            "Overrides TEST_CROSS_ENCODER_DEVICE env var."
+        ),
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _set_device_override(request):
+    global DEVICE_OVERRIDE
+    cli_device = request.config.getoption("cross_encoder_device")
+    env_device = os.getenv("TEST_CROSS_ENCODER_DEVICE")
+    DEVICE_OVERRIDE = cli_device or env_device
 
 
 def setup_rag_agent() -> lr.Task:
@@ -74,6 +106,7 @@ def setup_rag_agent() -> lr.Task:
         n_relevant_chunks=10,  # Keep all 10 chunks after reranking
         # Enable cross-encoder reranking
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        cross_encoder_device=DEVICE_OVERRIDE,
         relevance_extractor_config=None,  # Disable LLM-based relevance extraction
         parsing=ParsingConfig(
             splitter=Splitter.TOKENS,
@@ -128,6 +161,7 @@ def create_rag_agent() -> lr.Task:
         n_relevant_chunks=10,  # Keep all 10 chunks after reranking
         # Enable cross-encoder reranking
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        cross_encoder_device=DEVICE_OVERRIDE,
         relevance_extractor_config=None,  # Disable LLM-based relevance extraction
         parsing=ParsingConfig(
             splitter=Splitter.TOKENS,

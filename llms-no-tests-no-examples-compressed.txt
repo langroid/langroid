@@ -152,6 +152,7 @@ issues/
     pydantic-migration-checking-instructions.md
     PYRANTIC-V2-MIGRATION-PLAN.md
   20251010-concurrent-rag.md
+  20251011-cross-encoder-race-bug.md
   898-implementation.md
   html-logger-implementation.md
   html-logger.md
@@ -8340,6 +8341,107 @@ Besides Agents, Langroid also provides simple ways to directly interact with LLM
 Don't worry if some of these terms are not clear to you. 
 The [Getting Started Guide](quick-start/index.md) and subsequent pages 
 will help you get up to speed.
+</file>
+
+<file path="issues/20251011-cross-encoder-race-bug.md">
+# Cross-Encoder Reranker Race Condition Plan
+
+## Summary
+
+Concurrent DocChatAgent tasks that enable `cross_encoder_reranking_model`
+raise a PyTorch `NotImplementedError` ("Cannot copy out of meta tensor; no data!")
+intermittently. The failure originates inside `CrossEncoder.predict()` when the
+underlying Hugging Face model is moved between devices while still in the meta
+state. Multiple threads instantiating and using the same cross encoder at once
+trigger this race.
+
+## Current Reproduction Status
+
+- `tests/main/test_concurrent_rag_simple.py` fails intermittently on `main` and
+  on the working branch when run several times in a row (10–20 iterations).
+- Failures occur only when `cross_encoder_reranking_model` is set and multiple
+  tasks run concurrently; sequential runs pass.
+
+## Root Cause Hypothesis
+
+1. Each DocChatAgent clone instantiates its own `CrossEncoder` inside
+   `rerank_with_cross_encoder()`.
+2. SentenceTransformers lazily initializes the underlying HF model on the first
+   call to `.predict()`. During initialization, `model.to(device)` tries to copy
+   tensors out of the “meta” device.
+3. When multiple clones call `.predict()` at the same time, they each try to
+   load/transfer shared parameters simultaneously, and one thread encounters the
+   `meta` tensor copy race, causing the `NotImplementedError`.
+
+## Investigation Tasks
+
+1. **Confirm shared-state behavior**
+   - Inspect `CrossEncoder.predict` to verify it performs `self.model.to(...)`
+     on each call, making it unsafe to invoke from multiple threads without
+     coordination.
+   - Capture concurrent stack traces/logs during failure to confirm multiple
+     threads enter the to() conversion simultaneously.
+
+2. **Reproduce in isolation**
+   - Write a minimal script that spawns several threads; each thread loads the
+     same cross-encoder model and immediately calls `.predict()` to reproduce
+     the meta-tensor race outside Langroid. This will clarify whether the bug
+     is entirely in PyTorch/HF or also in Langroid’s usage.
+
+3. **Benchmark loading cost**
+   - Measure time to instantiate `CrossEncoder` and to run `.predict()` so we
+     understand the overhead when caching the model vs. reloading on demand.
+
+## Proposed Fix
+
+Implement a per-model cache with synchronization so each process holds one
+`CrossEncoder` instance per model name:
+
+1. **Global cache**
+   - Introduce a module-level helper (e.g., `_get_cross_encoder(model_name)`) in
+     `doc_chat_agent.py` that stores models in a dictionary keyed by
+     `model_name`.
+   - Guard cache creation with a global `threading.Lock` to avoid double
+     instantiation.
+
+2. **Per-model execution lock**
+   - Associate each cached model with a reentrant `Lock`. Before calling
+     `predict`, acquire the lock to serialize access. This prevents concurrent
+     `.predict()` calls from moving the model between devices at the same time.
+
+3. **Stable device assignment**
+   - Force the cached model onto a specific device once (likely CPU unless
+     configured otherwise). Skip repeated `model.to()` calls inside the lock so
+     subsequent predictions reuse the initialized weights without touching the
+     meta tensors.
+
+4. **Agent changes**
+   - Update `DocChatAgent.rerank_with_cross_encoder` to fetch the cached
+     `(model, lock)` pair and run prediction inside the per-model lock.
+
+## Validation Plan
+
+1. Run `tests/main/test_concurrent_rag_simple.py` in a loop (e.g., 20 times) to
+   ensure the race no longer triggers.
+2. Execute the sequential control test and a small subset of the wider suite to
+   confirm no regressions.
+3. Optionally stress-test with more concurrent tasks and different
+   `cross_encoder_reranking_model` values to ensure the cache handles multiple
+   models correctly.
+
+## Follow-Up Considerations
+
+- Document the shared-model behavior near the config option so users know the
+  reranker is serialized per model.
+- Evaluate batching requests through the shared cross encoder in future work to
+  regain some concurrency while avoiding race conditions.
+
+## Progress Log
+
+- **2025-10-11:** Implemented thread-safe cross-encoder cache in `DocChatAgent` to reuse a single model instance per name and serialize `.predict()` calls. Adjusted reranker to disable the default progress bar for batch runs.
+- **2025-10-11:** Validated the fix by running `uv run pytest tests/main/test_concurrent_rag_simple.py -k cross_encoder -x` once and then in a 10× loop; all iterations passed without reproducing the meta-tensor error.
+- **2025-10-11:** Defaulted cached cross encoders to CPU but added `cross_encoder_device` override on `DocChatAgentConfig` so users with GPUs can opt in while keeping library-safe defaults.
+- **2025-10-11:** Added `--cross-encoder-device` pytest option (with optional `TEST_CROSS_ENCODER_DEVICE` env fallback) so the concurrency test can be run against CPU, CUDA, or MPS paths without code edits.
 </file>
 
 <file path="langroid/agent/special/arangodb/system_messages.py">
@@ -26669,133 +26771,6 @@ This provides better type safety and makes refactoring easier.
 The `done_sequences` feature provides a powerful, declarative way to control task termination based on conversation patterns. The DSL syntax makes common cases simple while the full object syntax provides complete control when needed. This approach eliminates the need to subclass `Task` and override `done()` for most use cases, leading to cleaner, more maintainable code.
 </file>
 
-<file path="issues/20251010-concurrent-rag.md">
-# Concurrent DocChatAgent Batch Execution
-
-**Date:** 2025-10-10  
-**Status:** Resolved  
-**Priority:** Medium
-
-## Summary
-Batch DocChatAgent runs submitted via `run_batch_tasks(..., sequential=False)` were completing one-by-one because `DocChatAgent.llm_response_async` awaited the fully synchronous `answer_from_docs`, blocking the event loop. Cloned tasks therefore serialized on retrieval/LLM work even though `asyncio.gather` was used.
-
-## Fix
-- Wrap `answer_from_docs` with `asyncio.to_thread` inside `DocChatAgent.llm_response_async`, letting each request execute on the default thread pool while the event loop schedules other tasks.
-- Generalize vector-store cloning: `ChatAgent.clone()` now delegates to `vecdb.clone()`, the base `VectorStore` deep-copies config and instantiates a fresh store, and `QdrantDB.clone()` simply relies on the base behaviour to spin up independent clients for cloud deployments while keeping local instances shared for file-lock safety.
-- Rework `examples/docqa/rag-concurrent.py` to drive task clones with `asyncio.as_completed`, capture per-question START/WORKER/COMPLETE events (including thread IDs and timings), add a `--log-only` mode plus filtering instructions for clean concurrency proof, and expose a `--use-builtin-batch` flag to exercise the original `run_batch_tasks` harness.
-- Update the debug script to pass through `query_proxies`, keeping its instrumentation compatible with the main agent, and add a DocChat `run_batch_tasks` regression test covering multiple vector stores.
-
-## Verification
-- `uv run python examples/docqa/rag-concurrent.py --num-questions=3`
-- `uv run python examples/docqa/rag-concurrent.py --sequential --num-questions=3`
-- `uv run python examples/docqa/rag-concurrent.py --num-questions=3 --log-only`
-- `uv run python examples/docqa/rag-concurrent.py --use-builtin-batch --num-questions=3 --log-only`
-- `uv run python examples/docqa/rag-concurrent-debug.py --num_questions=3`
-
-Concurrent runs now finish ~2× faster than the sequential baseline, the log summary shows overlapping worker threads, and the new regression test (`pytest tests/main/test_vector_stores.py::test_doc_chat_batch_with_vecdb_cloning[...]`) passes across supported vector stores, confirming both concurrency and cloned-store isolation.*** End Patch
-
-<!--AGENT -- look at this new error:-->
-## Update 2025-10-11: error involving cross-encoding re-ranker
-
-
-tests/test_concurrent_rag_simple.py:193:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-.venv/lib/python3.11/site-packages/langroid/agent/batch.py:354: in run_batch_task_gen
-    return run_batched_tasks(
-.venv/lib/python3.11/site-packages/langroid/agent/batch.py:265: in run_batched_tasks
-    return asyncio.run(run_all_batched_tasks(inputs, batch_size))
-../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/runners.py:190: in run
-    return runner.run(main)
-../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/runners.py:118: in run
-    return self._loop.run_until_complete(task)
-../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/base_events.py:650: in run_until_complete
-    return future.result()
-.venv/lib/python3.11/site-packages/langroid/agent/batch.py:231: in run_all_batched_tasks
-    results = await _process_batch_async(
-.venv/lib/python3.11/site-packages/langroid/agent/batch.py:179: in _process_batch_async
-    results = [handle_error(e) for _ in inputs]
-.venv/lib/python3.11/site-packages/langroid/agent/batch.py:179: in <listcomp>
-    results = [handle_error(e) for _ in inputs]
-.venv/lib/python3.11/site-packages/langroid/agent/batch.py:102: in handle_error
-    raise e
-.venv/lib/python3.11/site-packages/langroid/agent/batch.py:162: in _process_batch_async
-    await asyncio.gather(
-.venv/lib/python3.11/site-packages/langroid/agent/batch.py:330: in _do_task
-    result = await task_i.run_async(
-.venv/lib/python3.11/site-packages/langroid/agent/task.py:1020: in run_async
-    await self.step_async()
-.venv/lib/python3.11/site-packages/langroid/agent/task.py:1352: in step_async
-    result = await self.response_async(r, turns)
-.venv/lib/python3.11/site-packages/langroid/agent/task.py:1711: in response_async
-    result = await response_fn(self.pending_message)
-.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:864: in llm_response_async
-    response = await asyncio.to_thread(self.answer_from_docs, query_str)
-../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/threads.py:25: in to_thread
-    return await loop.run_in_executor(None, func_call)
-../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/futures.py:287: in __await__
-    yield self  # This tells Task to wait for completion.
-../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/futures.py:203: in result
-    raise self._exception.with_traceback(self._exception_tb)
-../../.pyenv/versions/3.11.0/lib/python3.11/concurrent/futures/thread.py:58: in run
-    result = self.fn(*self.args, **self.kwargs)
-.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:1605: in answer_from_docs
-    query, extracts = self.get_relevant_extracts(query)
-.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:1495: in get_relevant_extracts
-    passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
-.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:1433: in get_relevant_chunks
-    passages = self.rerank_with_cross_encoder(query, passages)
-.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:1115: in rerank_with_cross_encoder
-    scores = model.predict([(query, p.content) for p in passages])
-.venv/lib/python3.11/site-packages/sentence_transformers/cross_encoder/CrossEncoder.py:336: in predict
-    self.model.to(self._target_device)
-.venv/lib/python3.11/site-packages/transformers/modeling_utils.py:4110: in to
-    return super().to(*args, **kwargs)
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:1355: in to
-    return self._apply(convert)
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
-    module._apply(fn)
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
-    module._apply(fn)
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
-    module._apply(fn)
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
-    module._apply(fn)
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
-    module._apply(fn)
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
-    module._apply(fn)
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:942: in _apply
-    param_applied = fn(param)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-t = Parameter containing:
-tensor(..., device='meta', size=(1536, 384), requires_grad=True)
-
-    def convert(t):
-        try:
-            if convert_to_format is not None and t.dim() in (4, 5):
-                return t.to(
-                    device,
-                    dtype if t.is_floating_point() or t.is_complex() else None,
-                    non_blocking,
-                    memory_format=convert_to_format,
-                )
-            return t.to(
-                device,
-                dtype if t.is_floating_point() or t.is_complex() else None,
-                non_blocking,
-            )
-        except NotImplementedError as e:
-            if str(e) == "Cannot copy out of meta tensor; no data!":
->               raise NotImplementedError(
-                    f"{e} Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() "
-                    f"when moving module from meta to a different device."
-                ) from None
-E               NotImplementedError: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
-
-.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:1348: NotImplementedError
-</file>
-
 <file path="langroid/agent/special/relevance_extractor_agent.py">
 """
 Agent to retrieve relevant segments from a body of text,
@@ -28341,6 +28316,133 @@ test_agent_difference.py
 test_isolated.py
 </file>
 
+<file path="issues/20251010-concurrent-rag.md">
+# Concurrent DocChatAgent Batch Execution
+
+**Date:** 2025-10-10  
+**Status:** Resolved  
+**Priority:** Medium
+
+## Summary
+Batch DocChatAgent runs submitted via `run_batch_tasks(..., sequential=False)` were completing one-by-one because `DocChatAgent.llm_response_async` awaited the fully synchronous `answer_from_docs`, blocking the event loop. Cloned tasks therefore serialized on retrieval/LLM work even though `asyncio.gather` was used.
+
+## Fix
+- Wrap `answer_from_docs` with `asyncio.to_thread` inside `DocChatAgent.llm_response_async`, letting each request execute on the default thread pool while the event loop schedules other tasks.
+- Generalize vector-store cloning: `ChatAgent.clone()` now delegates to `vecdb.clone()`, the base `VectorStore` deep-copies config and instantiates a fresh store, and `QdrantDB.clone()` simply relies on the base behaviour to spin up independent clients for cloud deployments while keeping local instances shared for file-lock safety.
+- Rework `examples/docqa/rag-concurrent.py` to drive task clones with `asyncio.as_completed`, capture per-question START/WORKER/COMPLETE events (including thread IDs and timings), add a `--log-only` mode plus filtering instructions for clean concurrency proof, and expose a `--use-builtin-batch` flag to exercise the original `run_batch_tasks` harness.
+- Update the debug script to pass through `query_proxies`, keeping its instrumentation compatible with the main agent, and add a DocChat `run_batch_tasks` regression test covering multiple vector stores.
+
+## Verification
+- `uv run python examples/docqa/rag-concurrent.py --num-questions=3`
+- `uv run python examples/docqa/rag-concurrent.py --sequential --num-questions=3`
+- `uv run python examples/docqa/rag-concurrent.py --num-questions=3 --log-only`
+- `uv run python examples/docqa/rag-concurrent.py --use-builtin-batch --num-questions=3 --log-only`
+- `uv run python examples/docqa/rag-concurrent-debug.py --num_questions=3`
+
+Concurrent runs now finish ~2× faster than the sequential baseline, the log summary shows overlapping worker threads, and the new regression test (`pytest tests/main/test_vector_stores.py::test_doc_chat_batch_with_vecdb_cloning[...]`) passes across supported vector stores, confirming both concurrency and cloned-store isolation.*** End Patch
+
+<!--AGENT -- look at this new error:-->
+## Update 2025-10-11: error involving cross-encoding re-ranker
+
+
+tests/test_concurrent_rag_simple.py:193:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.11/site-packages/langroid/agent/batch.py:354: in run_batch_task_gen
+    return run_batched_tasks(
+.venv/lib/python3.11/site-packages/langroid/agent/batch.py:265: in run_batched_tasks
+    return asyncio.run(run_all_batched_tasks(inputs, batch_size))
+../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/base_events.py:650: in run_until_complete
+    return future.result()
+.venv/lib/python3.11/site-packages/langroid/agent/batch.py:231: in run_all_batched_tasks
+    results = await _process_batch_async(
+.venv/lib/python3.11/site-packages/langroid/agent/batch.py:179: in _process_batch_async
+    results = [handle_error(e) for _ in inputs]
+.venv/lib/python3.11/site-packages/langroid/agent/batch.py:179: in <listcomp>
+    results = [handle_error(e) for _ in inputs]
+.venv/lib/python3.11/site-packages/langroid/agent/batch.py:102: in handle_error
+    raise e
+.venv/lib/python3.11/site-packages/langroid/agent/batch.py:162: in _process_batch_async
+    await asyncio.gather(
+.venv/lib/python3.11/site-packages/langroid/agent/batch.py:330: in _do_task
+    result = await task_i.run_async(
+.venv/lib/python3.11/site-packages/langroid/agent/task.py:1020: in run_async
+    await self.step_async()
+.venv/lib/python3.11/site-packages/langroid/agent/task.py:1352: in step_async
+    result = await self.response_async(r, turns)
+.venv/lib/python3.11/site-packages/langroid/agent/task.py:1711: in response_async
+    result = await response_fn(self.pending_message)
+.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:864: in llm_response_async
+    response = await asyncio.to_thread(self.answer_from_docs, query_str)
+../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/futures.py:287: in __await__
+    yield self  # This tells Task to wait for completion.
+../../.pyenv/versions/3.11.0/lib/python3.11/asyncio/futures.py:203: in result
+    raise self._exception.with_traceback(self._exception_tb)
+../../.pyenv/versions/3.11.0/lib/python3.11/concurrent/futures/thread.py:58: in run
+    result = self.fn(*self.args, **self.kwargs)
+.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:1605: in answer_from_docs
+    query, extracts = self.get_relevant_extracts(query)
+.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:1495: in get_relevant_extracts
+    passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:1433: in get_relevant_chunks
+    passages = self.rerank_with_cross_encoder(query, passages)
+.venv/lib/python3.11/site-packages/langroid/agent/special/doc_chat_agent.py:1115: in rerank_with_cross_encoder
+    scores = model.predict([(query, p.content) for p in passages])
+.venv/lib/python3.11/site-packages/sentence_transformers/cross_encoder/CrossEncoder.py:336: in predict
+    self.model.to(self._target_device)
+.venv/lib/python3.11/site-packages/transformers/modeling_utils.py:4110: in to
+    return super().to(*args, **kwargs)
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:1355: in to
+    return self._apply(convert)
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
+    module._apply(fn)
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
+    module._apply(fn)
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
+    module._apply(fn)
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
+    module._apply(fn)
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
+    module._apply(fn)
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:915: in _apply
+    module._apply(fn)
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:942: in _apply
+    param_applied = fn(param)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+t = Parameter containing:
+tensor(..., device='meta', size=(1536, 384), requires_grad=True)
+
+    def convert(t):
+        try:
+            if convert_to_format is not None and t.dim() in (4, 5):
+                return t.to(
+                    device,
+                    dtype if t.is_floating_point() or t.is_complex() else None,
+                    non_blocking,
+                    memory_format=convert_to_format,
+                )
+            return t.to(
+                device,
+                dtype if t.is_floating_point() or t.is_complex() else None,
+                non_blocking,
+            )
+        except NotImplementedError as e:
+            if str(e) == "Cannot copy out of meta tensor; no data!":
+>               raise NotImplementedError(
+                    f"{e} Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() "
+                    f"when moving module from meta to a different device."
+                ) from None
+E               NotImplementedError: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+
+.venv/lib/python3.11/site-packages/torch/nn/modules/module.py:1348: NotImplementedError
+</file>
+
 <file path="langroid/agent/tools/task_tool.py">
 """
 TaskTool: A tool that allows agents to delegate a task to a sub-agent with
@@ -28449,6 +28551,1093 @@ result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
 # TODO eventually allow the various task setup configs,
 #  including termination conditions
 result = await task.run_async(
+</file>
+
+<file path="langroid/agent/base.py">
+ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
+console = Console(quiet=settings.quiet)
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+T = TypeVar("T")
+⋮----
+class AgentConfig(BaseSettings)
+⋮----
+"""
+    General config settings for an LLM agent. This is nested, combining configs of
+    various components.
+    """
+⋮----
+name: str = "LLM-Agent"
+debug: bool = False
+vecdb: Optional[VectorStoreConfig] = None
+llm: Optional[LLMConfig] = OpenAIGPTConfig()
+parsing: Optional[ParsingConfig] = ParsingConfig()
+prompts: Optional[PromptsConfig] = PromptsConfig()
+show_stats: bool = True  # show token usage/cost stats?
+hide_agent_response: bool = False  # hide agent response?
+add_to_registry: bool = True  # register agent in ObjectRegistry?
+respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
+# allow multiple tool messages in a single response?
+allow_multiple_tools: bool = True
+human_prompt: str = (
+⋮----
+@field_validator("name")
+@classmethod
+    def check_name_alphanum(cls, v: str) -> str
+⋮----
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
+⋮----
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
+⋮----
+async def async_lambda_noop_fn() -> Callable[..., Coroutine[Any, Any, None]]
+⋮----
+class Agent(ABC)
+⋮----
+"""
+    An Agent is an abstraction that typically (but not necessarily)
+    encapsulates an LLM.
+    """
+⋮----
+id: str = Field(default_factory=lambda: ObjectRegistry.new_id())
+# OpenAI tool-calls awaiting response; update when a tool result with Role.TOOL
+# is added to self.message_history
+oai_tool_calls: List[OpenAIToolCall] = []
+# Index of ALL tool calls generated by the agent
+oai_tool_id2call: Dict[str, OpenAIToolCall] = {}
+⋮----
+def __init__(self, config: AgentConfig = AgentConfig())
+⋮----
+self.id = ObjectRegistry.new_id()  # Initialize agent ID
+self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
+self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
+⋮----
+self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
+# Indicates which tool-names are allowed to be inferred when
+# the LLM "forgets" to include the request field in its tool-call.
+⋮----
+None  # If None, we allow all
+⋮----
+self.interactive: bool = True  # may be modified by Task wrapper
+⋮----
+# token_encoding_model is used to obtain the tokenizer,
+# so in case it's an OpenAI model, we ensure that the tokenizer
+# corresponding to the model is used.
+⋮----
+def init_state(self) -> None
+⋮----
+"""Initialize all state vars. Called by Task.run() if restart is True"""
+⋮----
+@staticmethod
+    def from_id(id: str) -> "Agent"
+⋮----
+@staticmethod
+    def delete_id(id: str) -> None
+⋮----
+"""
+        Sequence of (entity, response_method) pairs. This sequence is used
+            in a `Task` to respond to the current pending message.
+            See `Task.step()` for details.
+        Returns:
+            Sequence of (entity, response_method) pairs.
+        """
+⋮----
+"""
+        Async version of `entity_responders`. See there for details.
+        """
+⋮----
+@property
+    def indent(self) -> str
+⋮----
+"""Indentation to print before any responses from the agent's entities."""
+⋮----
+@indent.setter
+    def indent(self, value: str) -> None
+⋮----
+def update_dialog(self, prompt: str, output: str) -> None
+⋮----
+def get_dialog(self) -> List[Tuple[str, str]]
+⋮----
+def clear_dialog(self) -> None
+⋮----
+"""
+        Analyze parameters of a handler method to determine their types.
+
+        Returns:
+            Tuple of (has_annotations, agent_param_name, chat_doc_param_name)
+            - has_annotations: True if useful type annotations were found
+            - agent_param_name: Name of the agent parameter if found
+            - chat_doc_param_name: Name of the chat_doc parameter if found
+        """
+sig = inspect.signature(handler_method)
+params = list(sig.parameters.values())
+# Remove the first 'self' parameter
+params = params[1:]
+# Don't use name
+# [p for p in params if p.name != "self"]
+⋮----
+agent_param = None
+chat_doc_param = None
+has_annotations = False
+⋮----
+# First try type annotations
+⋮----
+ann_str = str(param.annotation)
+# Check for Agent-like types
+⋮----
+agent_param = param.name
+has_annotations = True
+# Check for ChatDocument-like types
+⋮----
+chat_doc_param = param.name
+⋮----
+# Fallback to parameter names
+⋮----
+"""
+        Create a wrapper function for a handler method based on its signature.
+
+        Args:
+            message_class: The ToolMessage class
+            handler_method: The handle/handle_async method
+            is_async: Whether this is for an async handler
+
+        Returns:
+            Appropriate wrapper function
+        """
+⋮----
+# params = [p for p in params if p.name != "self"]
+⋮----
+# Build wrapper based on found parameters
+⋮----
+async def wrapper(obj: Any) -> Any
+⋮----
+def wrapper(obj: Any) -> Any
+⋮----
+# Both parameters present - build wrapper respecting their order
+param_names = [p.name for p in params]
+⋮----
+# agent is first parameter
+⋮----
+async def wrapper(obj: Any, chat_doc: Any) -> Any
+⋮----
+def wrapper(obj: Any, chat_doc: Any) -> Any
+⋮----
+# chat_doc is first parameter
+⋮----
+# Only agent parameter
+⋮----
+# Only chat_doc parameter
+⋮----
+async def wrapper(obj: Any, chat_doc: Any) -> Any
+⋮----
+def wrapper(obj: Any, chat_doc: Any) -> Any
+⋮----
+# No recognized parameters - backward compatibility
+# Assume single parameter is chat_doc (legacy behavior)
+⋮----
+# Multiple unrecognized parameters - best guess
+⋮----
+"""
+        If `message_class` is None, return a list of all known tool names.
+        Otherwise, first add the tool name corresponding to the message class
+        (which is the value of the `request` field of the message class),
+        to the `self.llm_tools_map` dict, and then return a list
+        containing this tool name.
+
+        Args:
+            message_class (Optional[Type[ToolMessage]]): The message class whose tool
+                name is to be returned; Optional, default is None.
+                if None, return a list of all known tool names.
+
+        Returns:
+            List[str]: List of tool names: either just the tool name corresponding
+                to the message class, or all known tool names
+                (when `message_class` is None).
+
+        """
+⋮----
+tool = message_class.default_value("request")
+⋮----
+"""
+        if tool has handler method explicitly defined - use it,
+        otherwise use the tool name as the handler
+        """
+⋮----
+handler = getattr(message_class, "_handler", tool)
+⋮----
+handler = tool
+⋮----
+"""
+            If the message class has a `handle` method,
+            and agent does NOT have a tool handler method,
+            then we create a method for the agent whose name
+            is the value of `handler`, and whose body is the `handle` method.
+            This removes a separate step of having to define this method
+            for the agent, and also keeps the tool definition AND handling
+            in one place, i.e. in the message class.
+            See `tests/main/test_stateless_tool_messages.py` for an example.
+            """
+wrapper = self._create_handler_wrapper(
+⋮----
+has_chat_doc_arg = (
+⋮----
+def response_wrapper_with_chat_doc(obj: Any, chat_doc: Any) -> Any
+⋮----
+def response_wrapper_no_chat_doc(obj: Any) -> Any
+⋮----
+# When a ToolMessage has a `handle_message_fallback` method,
+# we inject it into the agent as a method, overriding the default
+# `handle_message_fallback` method (which does nothing).
+# It's possible multiple tool messages have a `handle_message_fallback`,
+# in which case, the last one inserted will be used.
+def fallback_wrapper(msg: Any) -> Any
+⋮----
+async_handler_name = f"{handler}_async"
+⋮----
+@no_type_check
+                async def handler(obj, chat_doc)
+⋮----
+@no_type_check
+                async def handler(obj)
+⋮----
+"""
+        Enable an agent to RESPOND (i.e. handle) a "tool" message of a specific type
+            from LLM. Also "registers" (i.e. adds) the `message_class` to the
+            `self.llm_tools_map` dict.
+
+        Args:
+            message_class (Optional[Type[ToolMessage]]): The message class to enable;
+                Optional; if None, all known message classes are enabled for handling.
+
+        """
+⋮----
+"""
+        Disable a message class from being handled by this Agent.
+
+        Args:
+            message_class (Optional[Type[ToolMessage]]): The message class to disable.
+                If None, all message classes are disabled.
+        """
+⋮----
+def sample_multi_round_dialog(self) -> str
+⋮----
+"""
+        Generate a sample multi-round dialog based on enabled message classes.
+        Returns:
+            str: The sample dialog string.
+        """
+enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
+# use at most 2 sample conversations, no need to be exhaustive;
+sample_convo = [
+⋮----
+msg_cls().usage_examples(random=True)  # type: ignore
+⋮----
+"""Template for agent_response."""
+⋮----
+"""
+        Render the response from the agent, typically from tool-handling.
+        Args:
+            results: results from tool-handling, which may be a string,
+                a dict of tool results, or a ChatDocument.
+        """
+⋮----
+results_str = results
+⋮----
+results_str = results.content
+⋮----
+results_str = json.dumps(results, indent=2)
+⋮----
+"""
+        Convert results to final response.
+        """
+⋮----
+maybe_json = len(extract_top_level_json(results_str)) > 0
+⋮----
+# Preserve trail of tool_ids for OpenAI Assistant fn-calls
+⋮----
+sender_name = self.config.name
+⋮----
+# if result was from handling an LLM `function_call`,
+# set sender_name to name of the function_call
+sender_name = msg.function_call.name
+⋮----
+# preserve trail of tool_ids for OpenAI Assistant fn-calls
+⋮----
+"""
+        Asynch version of `agent_response`. See there for details.
+        """
+⋮----
+results = await self.handle_message_async(msg)
+⋮----
+"""
+        Response from the "agent itself", typically (but not only)
+        used to handle LLM's "tool message" or `function_call`
+        (e.g. OpenAI `function_call`).
+        Args:
+            msg (str|ChatDocument): the input to respond to: if msg is a string,
+                and it contains a valid JSON-structured "tool message", or
+                if msg is a ChatDocument, and it contains a `function_call`.
+        Returns:
+            Optional[ChatDocument]: the response, packaged as a ChatDocument
+
+        """
+⋮----
+results = self.handle_message(msg)
+⋮----
+"""
+        Process results from a response, based on whether
+        they are results of OpenAI tool-calls from THIS agent, so that
+        we can construct an appropriate LLMMessage that contains tool results.
+
+        Args:
+            results (str): A possible string result from handling tool(s)
+            id2result (OrderedDict[str,str]|None): A dict of OpenAI tool id -> result,
+                if there are multiple tool results.
+            tool_calls (List[OpenAIToolCall]|None): List of OpenAI tool-calls that the
+                results are a response to.
+
+        Return:
+            - str: The response string
+            - Dict[str,str]|None: A dict of OpenAI tool id -> result, if there are
+                multiple tool results.
+            - str|None: tool_id if there was a single tool result
+
+        """
+id2result_ = copy.deepcopy(id2result) if id2result is not None else None
+results_str = ""
+oai_tool_id = None
+⋮----
+# in this case ignore id2result
+⋮----
+# We only have one result, so in case there is a
+# "pending" OpenAI tool-call, we expect no more than 1 such.
+⋮----
+# We record the tool_id of the tool-call that
+# the result is a response to, so that ChatDocument.to_LLMMessage
+# can properly set the `tool_call_id` field of the LLMMessage.
+oai_tool_id = self.oai_tool_calls[0].id
+elif id2result is not None and id2result_ is not None:  # appease mypy
+⋮----
+# if the number of pending tool calls equals the number of results,
+# then ignore the ids in id2result, and use the results in order,
+# which is preserved since id2result is an OrderedDict.
+⋮----
+id2result_ = OrderedDict(
+⋮----
+# This must be an OpenAI tool id -> result map;
+# However some ids may not correspond to the tool-calls in the list of
+# pending tool-calls (self.oai_tool_calls).
+# Such results are concatenated into a simple string, to store in the
+# ChatDocument.content, and the rest
+# (i.e. those that DO correspond to tools in self.oai_tool_calls)
+# are stored as a dict in ChatDocument.oai_tool_id2result.
+⋮----
+# OAI tools from THIS agent, awaiting response
+pending_tool_ids = [tc.id for tc in self.oai_tool_calls]
+# tool_calls that the results are a response to
+# (but these may have been sent from another agent, hence may not be in
+# self.oai_tool_calls)
+parent_tool_id2name = {
+⋮----
+# (id, result) for result NOT corresponding to self.oai_tool_calls,
+# i.e. these are results of EXTERNAL tool-calls from another agent.
+external_tool_id_results = []
+⋮----
+results_str = external_tool_id_results[0][1]
+⋮----
+results_str = "\n\n".join(
+⋮----
+id2result_ = None
+⋮----
+results_str = list(id2result_.values())[0]
+oai_tool_id = list(id2result_.keys())[0]
+⋮----
+"""Template for response from entity `e`."""
+⋮----
+"""Template for user_response."""
+⋮----
+def user_can_respond(self, msg: Optional[str | ChatDocument] = None) -> bool
+⋮----
+"""
+        Whether the user can respond to a message.
+
+        Args:
+            msg (str|ChatDocument): the string to respond to.
+
+        Returns:
+
+        """
+# When msg explicitly addressed to user, this means an actual human response
+# is being sought.
+need_human_response = (
+⋮----
+"""
+        Convert user_msg to final response.
+        """
+⋮----
+user_msg = (
+user_msg = user_msg.strip()
+⋮----
+tool_ids = []
+⋮----
+tool_ids = msg.metadata.tool_ids
+⋮----
+# only return non-None result if user_msg not empty
+⋮----
+user_msg = user_msg.replace("SYSTEM", "").strip()
+source = Entity.SYSTEM
+sender = Entity.SYSTEM
+⋮----
+source = Entity.USER
+sender = Entity.USER
+⋮----
+# preserve trail of tool_ids for OpenAI Assistant fn-calls
+⋮----
+"""
+        Asynch version of `user_response`. See there for details.
+        """
+⋮----
+user_msg = self.default_human_response
+⋮----
+user_msg = await self.callbacks.get_user_response_async(prompt="")
+⋮----
+user_msg = self.callbacks.get_user_response(prompt="")
+⋮----
+user_msg = Prompt.ask(
+⋮----
+"""
+        Get user response to current message. Could allow (human) user to intervene
+        with an actual answer, or quit using "q" or "x"
+
+        Args:
+            msg (str|ChatDocument): the string to respond to.
+
+        Returns:
+            (str) User response, packaged as a ChatDocument
+
+        """
+⋮----
+# ask user with empty prompt: no need for prompt
+# since user has seen the conversation so far.
+# But non-empty prompt can be useful when Agent
+# uses a tool that requires user input, or in other scenarios.
+⋮----
+@no_type_check
+    def llm_can_respond(self, message: Optional[str | ChatDocument] = None) -> bool
+⋮----
+"""
+        Whether the LLM can respond to a message.
+        Args:
+            message (str|ChatDocument): message or ChatDocument object to respond to.
+
+        Returns:
+
+        """
+⋮----
+# if there is a valid "tool" message (either JSON or via `function_call`)
+# then LLM cannot respond to it
+⋮----
+def can_respond(self, message: Optional[str | ChatDocument] = None) -> bool
+⋮----
+"""
+        Whether the agent can respond to a message.
+        Used in Task.py to skip a sub-task when we know it would not respond.
+        Args:
+            message (str|ChatDocument): message or ChatDocument object to respond to.
+        """
+tools = self.try_get_tool_messages(message)
+⋮----
+# The message has tools that are NOT enabled to be handled by this agent,
+# which means the agent cannot respond to it.
+⋮----
+"""Template for llm_response."""
+⋮----
+"""
+        Asynch version of `llm_response`. See there for details.
+        """
+⋮----
+prompt = message.content
+⋮----
+prompt = message
+⋮----
+output_len = self.config.llm.model_max_output_tokens
+⋮----
+output_len = self.llm.completion_context_length() - self.num_tokens(prompt)
+⋮----
+response = await self.llm.agenerate(prompt, output_len)
+⋮----
+# We would have already displayed the msg "live" ONLY if
+# streaming was enabled, AND we did not find a cached response.
+# If we are here, it means the response has not yet been displayed.
+cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+⋮----
+chat=False,  # i.e. it's a completion model not chat model
+⋮----
+cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
+# Preserve trail of tool_ids for OpenAI Assistant fn-calls
+⋮----
+"""
+        LLM response to a prompt.
+        Args:
+            message (str|ChatDocument): prompt string, or ChatDocument object
+
+        Returns:
+            Response from LLM, packaged as a ChatDocument
+        """
+⋮----
+with ExitStack() as stack:  # for conditionally using rich spinner
+⋮----
+# show rich spinner only if not streaming!
+cm = status("LLM responding to message...")
+⋮----
+output_len = self.llm.completion_context_length() - self.num_tokens(
+⋮----
+response = self.llm.generate(prompt, output_len)
+⋮----
+# we would have already displayed the msg "live" ONLY if
+# streaming was enabled, AND we did not find a cached response
+⋮----
+cached = "[red](cached)[/red]" if response.cached else ""
+⋮----
+chat=False,  # i.e. it's a completion model not chat model
+⋮----
+def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool
+⋮----
+"""
+        Check whether msg contains a Tool/fn-call attempt (by the LLM).
+
+        CAUTION: This uses self.get_tool_messages(msg) which as a side-effect
+        may update msg.tool_messages when msg is a ChatDocument, if there are
+        any tools in msg.
+        """
+⋮----
+tools = self.get_tool_messages(msg)
+⋮----
+# there is a tool/fn-call attempt but had a validation error,
+# so we still consider this a tool message "attempt"
+⋮----
+def _tool_recipient_match(self, tool: ToolMessage) -> bool
+⋮----
+"""Is tool enabled for handling by this agent and intended for this
+        agent to handle (i.e. if there's any explicit `recipient` field exists in
+        tool, then it matches this agent's name)?
+        """
+⋮----
+def has_only_unhandled_tools(self, msg: str | ChatDocument) -> bool
+⋮----
+"""
+        Does the msg have at least one tool, and none of the tools in the msg are
+        handleable by this agent?
+        """
+⋮----
+tools = self.try_get_tool_messages(msg, all_tools=True)
+⋮----
+"""
+        Get ToolMessages recognized in msg, handle-able by this agent.
+        NOTE: as a side-effect, this will update msg.tool_messages
+        when msg is a ChatDocument and msg contains tool messages.
+        The intent here is that update=True should be set ONLY within agent_response()
+        or agent_response_async() methods. In other words, we want to persist the
+        msg.tool_messages only AFTER the agent has had a chance to handle the tools.
+
+        Args:
+            msg (str|ChatDocument): the message to extract tools from.
+            all_tools (bool):
+                - if True, return all tools,
+                    i.e. any recognized tool in self.llm_tools_known,
+                    whether it is handled by this agent or not;
+                - otherwise, return only the tools handled by this agent.
+
+        Returns:
+            List[ToolMessage]: list of ToolMessage objects
+        """
+⋮----
+json_tools = self.get_formatted_tool_messages(msg)
+⋮----
+# We've already identified all_tool_messages in the msg;
+# return the corresponding ToolMessage objects
+⋮----
+# We've already found tool_messages,
+# (either via OpenAI Fn-call or Langroid-native ToolMessage);
+# or they were added by an agent_response.
+# note these could be from a forwarded msg from another agent,
+# so return ONLY the messages THIS agent to enabled to handle.
+⋮----
+tools = self.get_formatted_tool_messages(
+⋮----
+# filter for actually handle-able tools, and recipient is this agent
+my_tools = [t for t in tools if self._tool_recipient_match(t)]
+⋮----
+# otherwise, we look for `tool_calls` (possibly multiple)
+tools = self.get_oai_tool_calls_classes(msg)
+⋮----
+# otherwise, we look for a `function_call`
+fun_call_cls = self.get_function_call_class(msg)
+tools = [fun_call_cls] if fun_call_cls is not None else []
+⋮----
+"""
+        Returns ToolMessage objects (tools) corresponding to
+        tool-formatted substrings, if any.
+        ASSUMPTION - These tools are either ALL JSON-based, or ALL XML-based
+        (i.e. not a mix of both).
+        Terminology: a "formatted tool msg" is one which the LLM generates as
+            part of its raw string output, rather than within a JSON object
+            in the API response (i.e. this method does not extract tools/fns returned
+            by OpenAI's tools/fns API or similar APIs).
+
+        Args:
+            input_str (str): input string, typically a message sent by an LLM
+            from_llm (bool): whether the input was generated by the LLM. If so,
+                we track malformed tool calls.
+
+        Returns:
+            List[ToolMessage]: list of ToolMessage objects
+        """
+⋮----
+substrings = XMLToolMessage.find_candidates(input_str)
+is_json = False
+⋮----
+substrings = extract_top_level_json(input_str)
+is_json = len(substrings) > 0
+⋮----
+results = [self._get_one_tool_message(j, is_json, from_llm) for j in substrings]
+valid_results = [r for r in results if r is not None]
+# If any tool is correctly formed we do not set the flag
+⋮----
+def get_function_call_class(self, msg: ChatDocument) -> Optional[ToolMessage]
+⋮----
+"""
+        From ChatDocument (constructed from an LLM Response), get the `ToolMessage`
+        corresponding to the `function_call` if it exists.
+        """
+⋮----
+tool_name = msg.function_call.name
+tool_msg = msg.function_call.arguments or {}
+⋮----
+tool_class = self.llm_tools_map[tool_name]
+⋮----
+tool = tool_class.model_validate(tool_msg)
+⋮----
+# Store tool class as an attribute on the exception
+ve.tool_class = tool_class  # type: ignore
+⋮----
+def get_oai_tool_calls_classes(self, msg: ChatDocument) -> List[ToolMessage]
+⋮----
+"""
+        From ChatDocument (constructed from an LLM Response), get
+         a list of ToolMessages corresponding to the `tool_calls`, if any.
+        """
+⋮----
+tools = []
+all_errors = True
+⋮----
+tool_name = tc.function.name
+tool_msg = tc.function.arguments or {}
+⋮----
+all_errors = False
+⋮----
+# Store tool class as an attribute on the exception
+ve.tool_class = tool_class  # type: ignore
+⋮----
+# When no tool is valid and the message was produced
+# by the LLM, set the recovery flag
+⋮----
+"""
+        Handle a validation error raised when parsing a tool message,
+            when there is a legit tool name used, but it has missing/bad fields.
+        Args:
+            ve (ValidationError): The exception raised
+            tool_class (Optional[Type[ToolMessage]]): The tool class that
+                failed validation
+
+        Returns:
+            str: The error message to send back to the LLM
+        """
+# First try to get tool class from the exception itself
+⋮----
+tool_name = ve.tool_class.default_value("request")  # type: ignore
+⋮----
+tool_name = tool_class.default_value("request")
+⋮----
+# Fallback: try to extract from error context if available
+tool_name = "Unknown Tool"
+bad_field_errors = "\n".join(
+⋮----
+"""
+        Return error document if the message contains multiple orchestration tools
+        """
+# check whether there are multiple orchestration-tools (e.g. DoneTool etc),
+# in which case set result to error-string since we don't yet support
+# multi-tools with one or more orch tools.
+⋮----
+ORCHESTRATION_TOOLS = (
+⋮----
+has_orch = any(isinstance(t, ORCHESTRATION_TOOLS) for t in tools)
+⋮----
+"""
+        Convert results to final response
+        """
+# extract content from ChatDocument results so we have all str|None
+results = [r.content if isinstance(r, ChatDocument) else r for r in results]
+⋮----
+tool_names = [t.default_value("request") for t in tools]
+⋮----
+has_ids = all([t.id != "" for t in tools])
+⋮----
+id2result = OrderedDict(
+result_values = list(id2result.values())
+⋮----
+# Cannot support multi-tool results containing orchestration strings!
+# Replace results with err string to force LLM to retry
+err_str = "ERROR: Please use ONE tool at a time!"
+id2result = OrderedDict((id, err_str) for id in id2result.keys())
+⋮----
+name_results_list = [
+⋮----
+# there was a non-None result
+⋮----
+# if there are multiple OpenAI Tool results, return them as a dict
+⋮----
+# multi-results: prepend the tool name to each result
+str_results = [f"Result from {name}: {r}" for name, r in name_results_list]
+final = "\n\n".join(str_results)
+⋮----
+"""
+        Asynch version of `handle_message`. See there for details.
+        """
+⋮----
+tools = [t for t in tools if self._tool_recipient_match(t)]
+⋮----
+# correct tool name but bad fields
+⋮----
+except XMLException as xe:  # from XMLToolMessage parsing
+⋮----
+# invalid tool name
+# We return None since returning "invalid tool name" would
+# be considered a valid result in task loop, and would be treated
+# as a response to the tool message even though the tool was not intended
+# for this agent.
+⋮----
+fallback_result = self.handle_message_fallback(msg)
+⋮----
+chat_doc = msg if isinstance(msg, ChatDocument) else None
+⋮----
+results = self._get_multiple_orch_tool_errs(tools)
+⋮----
+results = [
+# if there's a solitary ChatDocument|str result, return it as is
+⋮----
+"""
+        Handle a "tool" message either a string containing one or more
+        valid "tool" JSON substrings,  or a
+        ChatDocument containing a `function_call` attribute.
+        Handle with the corresponding handler method, and return
+        the results as a combined string.
+
+        Args:
+            msg (str | ChatDocument): The string or ChatDocument to handle
+
+        Returns:
+            The result of the handler method can be:
+             - None if no tools successfully handled, or no tools present
+             - str if langroid-native JSON tools were handled, and results concatenated,
+                 OR there's a SINGLE OpenAI tool-call.
+                (We do this so the common scenario of a single tool/fn-call
+                 has a simple behavior).
+             - Dict[str, str] if multiple OpenAI tool-calls were handled
+                 (dict is an id->result map)
+             - ChatDocument if a handler returned a ChatDocument, intended to be the
+                 final response of the `agent_response` method.
+        """
+⋮----
+results: List[str | ChatDocument | None] = []
+⋮----
+results = ["ERROR: Use ONE tool at a time!"] * len(tools)
+⋮----
+results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
+⋮----
+@property
+    def all_llm_tools_known(self) -> set[str]
+⋮----
+"""All known tools; this may extend self.llm_tools_known."""
+⋮----
+def handle_message_fallback(self, msg: str | ChatDocument) -> Any
+⋮----
+"""
+        Fallback method for the case where the msg has no tools that
+        can be handled by this agent.
+        This method can be overridden by subclasses, e.g.,
+        to create a "reminder" message when a tool is expected but the LLM "forgot"
+        to generate one.
+
+        Args:
+            msg (str | ChatDocument): The input msg to handle
+        Returns:
+            Any: The result of the handler method
+        """
+⋮----
+"""
+        Parse the tool_candidate_str into ANY ToolMessage KNOWN to agent --
+        This includes non-used/handled tools, i.e. any tool in self.all_llm_tools_known.
+        The exception to this is below where we try our best to infer the tool
+        when the LLM has "forgotten" to include the "request" field in the tool str ---
+        in this case we ONLY look at the possible set of HANDLED tools, i.e.
+        self.llm_tools_handled.
+        """
+⋮----
+maybe_tool_dict = json.loads(tool_candidate_str)
+⋮----
+maybe_tool_dict = XMLToolMessage.extract_field_values(
+⋮----
+# check if the maybe_tool_dict contains a "properties" field
+# which further contains the actual tool-call
+# (some weak LLMs do this). E.g. gpt-4o sometimes generates this:
+# TOOL: {
+#     "type": "object",
+#     "properties": {
+#         "request": "square",
+#         "number": 9
+#     },
+#     "required": [
+#         "number",
+#         "request"
+#     ]
+# }
+⋮----
+properties = maybe_tool_dict.get("properties")
+⋮----
+maybe_tool_dict = properties
+request = maybe_tool_dict.get("request")
+⋮----
+possible = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+⋮----
+allowable = self.enabled_requests_for_inference.intersection(
+possible = [self.llm_tools_map[r] for r in allowable]
+⋮----
+default_keys = set(ToolMessage.model_fields.keys())
+request_keys = set(maybe_tool_dict.keys())
+⋮----
+def maybe_parse(tool: type[ToolMessage]) -> Optional[ToolMessage]
+⋮----
+all_keys = set(tool.model_fields.keys())
+non_inherited_keys = all_keys.difference(default_keys)
+# If the request has any keys not valid for the tool and
+# does not specify some key specific to the type
+# (e.g. not just `purpose`), the LLM must explicitly specify `request`
+⋮----
+candidate_tools = list(
+⋮----
+# If only one valid candidate exists, we infer
+# "request" to be the only possible value
+⋮----
+message_class = self.llm_tools_map.get(request)
+⋮----
+message = message_class.model_validate(maybe_tool_dict)
+⋮----
+ve.tool_class = message_class  # type: ignore
+⋮----
+"""
+        Convert result of a responder (agent_response or llm_response, or task.run()),
+        or tool handler, or handle_message_fallback,
+        to a ChatDocument, to enable handling by other
+        responders/tasks in a task loop possibly involving multiple agents.
+
+        Args:
+            msg (Any): The result of a responder or tool handler or task.run()
+            orig_tool_name (str): The original tool name that generated the response,
+                if any.
+            chat_doc (ChatDocument): The original ChatDocument object that `msg`
+                is a response to.
+            author_entity (Entity): The intended author of the result ChatDocument
+        """
+⋮----
+is_agent_author = author_entity == Entity.AGENT
+⋮----
+# result is a ToolMessage, so...
+result_tool_name = msg.default_value("request")
+⋮----
+# TODO: do we need to remove the tool message from the chat_doc?
+# if (chat_doc is not None and
+#     msg in chat_doc.tool_messages):
+#    chat_doc.tool_messages.remove(msg)
+# if we can handle it, do so
+result = self.handle_tool_message(msg, chat_doc=chat_doc)
+⋮----
+# else wrap it in an agent response and return it so
+# orchestrator can find a respondent
+⋮----
+result = to_string(msg)
+⋮----
+def from_ChatDocument(self, msg: ChatDocument, output_type: Type[T]) -> Optional[T]
+⋮----
+"""
+        Extract a desired output_type from a ChatDocument object.
+        We use this fallback order:
+        - if `msg.content_any` exists and matches the output_type, return it
+        - if `msg.content` exists and output_type is str return it
+        - if output_type is a ToolMessage, return the first tool in `msg.tool_messages`
+        - if output_type is a list of ToolMessage,
+            return all tools in `msg.tool_messages`
+        - search for a tool in `msg.tool_messages` that has a field of output_type,
+             and if found, return that field value
+        - return None if all the above fail
+        """
+content = msg.content
+⋮----
+content_any = msg.content_any
+⋮----
+list_element_type = get_args(output_type)[0]
+⋮----
+# list_element_type is a subclass of ToolMessage:
+# We output a list of objects derived from list_element_type
+⋮----
+# output_type is a subclass of ToolMessage:
+# return the first tool that has this specific output_type
+⋮----
+# attempt to get the output_type from the content,
+# if it's a primitive type
+primitive_value = from_string(content, output_type)  # type: ignore
+⋮----
+# then search for output_type as a field in a tool
+⋮----
+value = tool.get_value_of_type(output_type)
+⋮----
+"""
+        Truncate the result string to `max_tokens` tokens.
+        """
+⋮----
+result_str = result.content if isinstance(result, ChatDocument) else result
+num_tokens = (
+⋮----
+truncate_warning = f"""
+⋮----
+else result[: max_tokens * 4]  # approx truncate
+⋮----
+else result.content[: max_tokens * 4]  # approx truncate
+⋮----
+"""
+        Asynch version of `handle_tool_message`. See there for details.
+        """
+tool_name = tool.default_value("request")
+⋮----
+handler_name = getattr(tool, "_handler", tool_name)
+⋮----
+handler_name = tool_name
+handler_method = getattr(self, handler_name + "_async", None)
+⋮----
+maybe_result = await handler_method(tool, chat_doc=chat_doc)
+⋮----
+maybe_result = await handler_method(tool)
+result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
+⋮----
+# raise the error here since we are sure it's
+# not a pydantic validation error,
+# which we check in `handle_message`
+⋮----
+)  # type: ignore
+⋮----
+"""
+        Respond to a tool request from the LLM, in the form of an ToolMessage object.
+        Args:
+            tool: ToolMessage object representing the tool request.
+            chat_doc: Optional ChatDocument object containing the tool request.
+                This is passed to the tool-handler method only if it has a `chat_doc`
+                argument.
+
+        Returns:
+
+        """
+⋮----
+handler_method = getattr(self, handler_name, None)
+⋮----
+maybe_result = handler_method(tool, chat_doc=chat_doc)
+⋮----
+maybe_result = handler_method(tool)
+⋮----
+def num_tokens(self, prompt: str | List[LLMMessage]) -> int
+⋮----
+"""
+        Get LLM response stats as a string
+
+        Args:
+            chat_length (int): number of messages in the chat
+            tot_cost (float): total cost of the chat so far
+            response (LLMResponse): LLMResponse object
+        """
+⋮----
+in_tokens = response.usage.prompt_tokens
+out_tokens = response.usage.completion_tokens
+llm_response_cost = format(response.usage.cost, ".4f")
+cumul_cost = format(tot_cost, ".4f")
+⋮----
+context_length = self.llm.chat_context_length()
+max_out = self.config.llm.model_max_output_tokens
+⋮----
+llm_model = (
+# tot cost across all LLMs, agents
+all_cost = format(self.llm.tot_tokens_cost()[1], ".4f")
+⋮----
+"""
+        Updates `response.usage` obj (token usage and cost fields) if needed.
+        An update is needed only if:
+        - stream is True (i.e. streaming was enabled), and
+        - the response was NOT obtained from cached, and
+        - the API did NOT provide the usage/cost fields during streaming
+          (As of Sep 2024, the OpenAI API started providing these; for other APIs
+            this may not necessarily be the case).
+
+        Args:
+            response (LLMResponse): LLMResponse object
+            prompt (str | List[LLMMessage]): prompt or list of LLMMessage objects
+            stream (bool): whether to update the usage in the response object
+                if the response is not cached.
+            chat (bool): whether this is a chat model or a completion model
+            print_response_stats (bool): whether to print the response stats
+        """
+⋮----
+no_usage_info = response.usage is None or response.usage.prompt_tokens == 0
+# Note: If response was not streamed, then
+# `response.usage` would already have been set by the API,
+# so we only need to update in the stream case.
+⋮----
+# usage, cost = 0 when response is from cache
+prompt_tokens = 0
+completion_tokens = 0
+cost = 0.0
+⋮----
+prompt_tokens = self.num_tokens(prompt)
+completion_tokens = self.num_tokens(response.message)
+⋮----
+cost = self.compute_token_cost(prompt_tokens, 0, completion_tokens)
+⋮----
+# update total counters
+⋮----
+chat_length = 1 if isinstance(prompt, str) else len(prompt)
+⋮----
+def compute_token_cost(self, prompt: int, cached: int, completion: int) -> float
+⋮----
+price = cast(LanguageModel, self.llm).chat_cost()
+⋮----
+"""
+        Send a request to another agent, possibly after confirming with the user.
+        This is not currently used, since we rely on the task loop and
+        `RecipientTool` to address requests to other agents. It is generally best to
+        avoid using this method.
+
+        Args:
+            agent (Agent): agent to ask
+            request (str): request to send
+            no_answer (str): expected response when agent does not know the answer
+            user_confirm (bool): whether to gate the request with a human confirmation
+
+        Returns:
+            str: response from agent
+        """
+agent_type = type(agent).__name__
+⋮----
+user_response = Prompt.ask(
+⋮----
+answer = agent.llm_response(request)
 </file>
 
 <file path="langroid/language_models/base.py">
@@ -30781,1093 +31970,6 @@ Your support will help build Langroid's momentum and community.
 
 - [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
 - [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
-</file>
-
-<file path="langroid/agent/base.py">
-ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
-console = Console(quiet=settings.quiet)
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-T = TypeVar("T")
-⋮----
-class AgentConfig(BaseSettings)
-⋮----
-"""
-    General config settings for an LLM agent. This is nested, combining configs of
-    various components.
-    """
-⋮----
-name: str = "LLM-Agent"
-debug: bool = False
-vecdb: Optional[VectorStoreConfig] = None
-llm: Optional[LLMConfig] = OpenAIGPTConfig()
-parsing: Optional[ParsingConfig] = ParsingConfig()
-prompts: Optional[PromptsConfig] = PromptsConfig()
-show_stats: bool = True  # show token usage/cost stats?
-hide_agent_response: bool = False  # hide agent response?
-add_to_registry: bool = True  # register agent in ObjectRegistry?
-respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
-# allow multiple tool messages in a single response?
-allow_multiple_tools: bool = True
-human_prompt: str = (
-⋮----
-@field_validator("name")
-@classmethod
-    def check_name_alphanum(cls, v: str) -> str
-⋮----
-def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
-⋮----
-async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
-⋮----
-async def async_lambda_noop_fn() -> Callable[..., Coroutine[Any, Any, None]]
-⋮----
-class Agent(ABC)
-⋮----
-"""
-    An Agent is an abstraction that typically (but not necessarily)
-    encapsulates an LLM.
-    """
-⋮----
-id: str = Field(default_factory=lambda: ObjectRegistry.new_id())
-# OpenAI tool-calls awaiting response; update when a tool result with Role.TOOL
-# is added to self.message_history
-oai_tool_calls: List[OpenAIToolCall] = []
-# Index of ALL tool calls generated by the agent
-oai_tool_id2call: Dict[str, OpenAIToolCall] = {}
-⋮----
-def __init__(self, config: AgentConfig = AgentConfig())
-⋮----
-self.id = ObjectRegistry.new_id()  # Initialize agent ID
-self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
-self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
-⋮----
-self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
-# Indicates which tool-names are allowed to be inferred when
-# the LLM "forgets" to include the request field in its tool-call.
-⋮----
-None  # If None, we allow all
-⋮----
-self.interactive: bool = True  # may be modified by Task wrapper
-⋮----
-# token_encoding_model is used to obtain the tokenizer,
-# so in case it's an OpenAI model, we ensure that the tokenizer
-# corresponding to the model is used.
-⋮----
-def init_state(self) -> None
-⋮----
-"""Initialize all state vars. Called by Task.run() if restart is True"""
-⋮----
-@staticmethod
-    def from_id(id: str) -> "Agent"
-⋮----
-@staticmethod
-    def delete_id(id: str) -> None
-⋮----
-"""
-        Sequence of (entity, response_method) pairs. This sequence is used
-            in a `Task` to respond to the current pending message.
-            See `Task.step()` for details.
-        Returns:
-            Sequence of (entity, response_method) pairs.
-        """
-⋮----
-"""
-        Async version of `entity_responders`. See there for details.
-        """
-⋮----
-@property
-    def indent(self) -> str
-⋮----
-"""Indentation to print before any responses from the agent's entities."""
-⋮----
-@indent.setter
-    def indent(self, value: str) -> None
-⋮----
-def update_dialog(self, prompt: str, output: str) -> None
-⋮----
-def get_dialog(self) -> List[Tuple[str, str]]
-⋮----
-def clear_dialog(self) -> None
-⋮----
-"""
-        Analyze parameters of a handler method to determine their types.
-
-        Returns:
-            Tuple of (has_annotations, agent_param_name, chat_doc_param_name)
-            - has_annotations: True if useful type annotations were found
-            - agent_param_name: Name of the agent parameter if found
-            - chat_doc_param_name: Name of the chat_doc parameter if found
-        """
-sig = inspect.signature(handler_method)
-params = list(sig.parameters.values())
-# Remove the first 'self' parameter
-params = params[1:]
-# Don't use name
-# [p for p in params if p.name != "self"]
-⋮----
-agent_param = None
-chat_doc_param = None
-has_annotations = False
-⋮----
-# First try type annotations
-⋮----
-ann_str = str(param.annotation)
-# Check for Agent-like types
-⋮----
-agent_param = param.name
-has_annotations = True
-# Check for ChatDocument-like types
-⋮----
-chat_doc_param = param.name
-⋮----
-# Fallback to parameter names
-⋮----
-"""
-        Create a wrapper function for a handler method based on its signature.
-
-        Args:
-            message_class: The ToolMessage class
-            handler_method: The handle/handle_async method
-            is_async: Whether this is for an async handler
-
-        Returns:
-            Appropriate wrapper function
-        """
-⋮----
-# params = [p for p in params if p.name != "self"]
-⋮----
-# Build wrapper based on found parameters
-⋮----
-async def wrapper(obj: Any) -> Any
-⋮----
-def wrapper(obj: Any) -> Any
-⋮----
-# Both parameters present - build wrapper respecting their order
-param_names = [p.name for p in params]
-⋮----
-# agent is first parameter
-⋮----
-async def wrapper(obj: Any, chat_doc: Any) -> Any
-⋮----
-def wrapper(obj: Any, chat_doc: Any) -> Any
-⋮----
-# chat_doc is first parameter
-⋮----
-# Only agent parameter
-⋮----
-# Only chat_doc parameter
-⋮----
-async def wrapper(obj: Any, chat_doc: Any) -> Any
-⋮----
-def wrapper(obj: Any, chat_doc: Any) -> Any
-⋮----
-# No recognized parameters - backward compatibility
-# Assume single parameter is chat_doc (legacy behavior)
-⋮----
-# Multiple unrecognized parameters - best guess
-⋮----
-"""
-        If `message_class` is None, return a list of all known tool names.
-        Otherwise, first add the tool name corresponding to the message class
-        (which is the value of the `request` field of the message class),
-        to the `self.llm_tools_map` dict, and then return a list
-        containing this tool name.
-
-        Args:
-            message_class (Optional[Type[ToolMessage]]): The message class whose tool
-                name is to be returned; Optional, default is None.
-                if None, return a list of all known tool names.
-
-        Returns:
-            List[str]: List of tool names: either just the tool name corresponding
-                to the message class, or all known tool names
-                (when `message_class` is None).
-
-        """
-⋮----
-tool = message_class.default_value("request")
-⋮----
-"""
-        if tool has handler method explicitly defined - use it,
-        otherwise use the tool name as the handler
-        """
-⋮----
-handler = getattr(message_class, "_handler", tool)
-⋮----
-handler = tool
-⋮----
-"""
-            If the message class has a `handle` method,
-            and agent does NOT have a tool handler method,
-            then we create a method for the agent whose name
-            is the value of `handler`, and whose body is the `handle` method.
-            This removes a separate step of having to define this method
-            for the agent, and also keeps the tool definition AND handling
-            in one place, i.e. in the message class.
-            See `tests/main/test_stateless_tool_messages.py` for an example.
-            """
-wrapper = self._create_handler_wrapper(
-⋮----
-has_chat_doc_arg = (
-⋮----
-def response_wrapper_with_chat_doc(obj: Any, chat_doc: Any) -> Any
-⋮----
-def response_wrapper_no_chat_doc(obj: Any) -> Any
-⋮----
-# When a ToolMessage has a `handle_message_fallback` method,
-# we inject it into the agent as a method, overriding the default
-# `handle_message_fallback` method (which does nothing).
-# It's possible multiple tool messages have a `handle_message_fallback`,
-# in which case, the last one inserted will be used.
-def fallback_wrapper(msg: Any) -> Any
-⋮----
-async_handler_name = f"{handler}_async"
-⋮----
-@no_type_check
-                async def handler(obj, chat_doc)
-⋮----
-@no_type_check
-                async def handler(obj)
-⋮----
-"""
-        Enable an agent to RESPOND (i.e. handle) a "tool" message of a specific type
-            from LLM. Also "registers" (i.e. adds) the `message_class` to the
-            `self.llm_tools_map` dict.
-
-        Args:
-            message_class (Optional[Type[ToolMessage]]): The message class to enable;
-                Optional; if None, all known message classes are enabled for handling.
-
-        """
-⋮----
-"""
-        Disable a message class from being handled by this Agent.
-
-        Args:
-            message_class (Optional[Type[ToolMessage]]): The message class to disable.
-                If None, all message classes are disabled.
-        """
-⋮----
-def sample_multi_round_dialog(self) -> str
-⋮----
-"""
-        Generate a sample multi-round dialog based on enabled message classes.
-        Returns:
-            str: The sample dialog string.
-        """
-enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
-# use at most 2 sample conversations, no need to be exhaustive;
-sample_convo = [
-⋮----
-msg_cls().usage_examples(random=True)  # type: ignore
-⋮----
-"""Template for agent_response."""
-⋮----
-"""
-        Render the response from the agent, typically from tool-handling.
-        Args:
-            results: results from tool-handling, which may be a string,
-                a dict of tool results, or a ChatDocument.
-        """
-⋮----
-results_str = results
-⋮----
-results_str = results.content
-⋮----
-results_str = json.dumps(results, indent=2)
-⋮----
-"""
-        Convert results to final response.
-        """
-⋮----
-maybe_json = len(extract_top_level_json(results_str)) > 0
-⋮----
-# Preserve trail of tool_ids for OpenAI Assistant fn-calls
-⋮----
-sender_name = self.config.name
-⋮----
-# if result was from handling an LLM `function_call`,
-# set sender_name to name of the function_call
-sender_name = msg.function_call.name
-⋮----
-# preserve trail of tool_ids for OpenAI Assistant fn-calls
-⋮----
-"""
-        Asynch version of `agent_response`. See there for details.
-        """
-⋮----
-results = await self.handle_message_async(msg)
-⋮----
-"""
-        Response from the "agent itself", typically (but not only)
-        used to handle LLM's "tool message" or `function_call`
-        (e.g. OpenAI `function_call`).
-        Args:
-            msg (str|ChatDocument): the input to respond to: if msg is a string,
-                and it contains a valid JSON-structured "tool message", or
-                if msg is a ChatDocument, and it contains a `function_call`.
-        Returns:
-            Optional[ChatDocument]: the response, packaged as a ChatDocument
-
-        """
-⋮----
-results = self.handle_message(msg)
-⋮----
-"""
-        Process results from a response, based on whether
-        they are results of OpenAI tool-calls from THIS agent, so that
-        we can construct an appropriate LLMMessage that contains tool results.
-
-        Args:
-            results (str): A possible string result from handling tool(s)
-            id2result (OrderedDict[str,str]|None): A dict of OpenAI tool id -> result,
-                if there are multiple tool results.
-            tool_calls (List[OpenAIToolCall]|None): List of OpenAI tool-calls that the
-                results are a response to.
-
-        Return:
-            - str: The response string
-            - Dict[str,str]|None: A dict of OpenAI tool id -> result, if there are
-                multiple tool results.
-            - str|None: tool_id if there was a single tool result
-
-        """
-id2result_ = copy.deepcopy(id2result) if id2result is not None else None
-results_str = ""
-oai_tool_id = None
-⋮----
-# in this case ignore id2result
-⋮----
-# We only have one result, so in case there is a
-# "pending" OpenAI tool-call, we expect no more than 1 such.
-⋮----
-# We record the tool_id of the tool-call that
-# the result is a response to, so that ChatDocument.to_LLMMessage
-# can properly set the `tool_call_id` field of the LLMMessage.
-oai_tool_id = self.oai_tool_calls[0].id
-elif id2result is not None and id2result_ is not None:  # appease mypy
-⋮----
-# if the number of pending tool calls equals the number of results,
-# then ignore the ids in id2result, and use the results in order,
-# which is preserved since id2result is an OrderedDict.
-⋮----
-id2result_ = OrderedDict(
-⋮----
-# This must be an OpenAI tool id -> result map;
-# However some ids may not correspond to the tool-calls in the list of
-# pending tool-calls (self.oai_tool_calls).
-# Such results are concatenated into a simple string, to store in the
-# ChatDocument.content, and the rest
-# (i.e. those that DO correspond to tools in self.oai_tool_calls)
-# are stored as a dict in ChatDocument.oai_tool_id2result.
-⋮----
-# OAI tools from THIS agent, awaiting response
-pending_tool_ids = [tc.id for tc in self.oai_tool_calls]
-# tool_calls that the results are a response to
-# (but these may have been sent from another agent, hence may not be in
-# self.oai_tool_calls)
-parent_tool_id2name = {
-⋮----
-# (id, result) for result NOT corresponding to self.oai_tool_calls,
-# i.e. these are results of EXTERNAL tool-calls from another agent.
-external_tool_id_results = []
-⋮----
-results_str = external_tool_id_results[0][1]
-⋮----
-results_str = "\n\n".join(
-⋮----
-id2result_ = None
-⋮----
-results_str = list(id2result_.values())[0]
-oai_tool_id = list(id2result_.keys())[0]
-⋮----
-"""Template for response from entity `e`."""
-⋮----
-"""Template for user_response."""
-⋮----
-def user_can_respond(self, msg: Optional[str | ChatDocument] = None) -> bool
-⋮----
-"""
-        Whether the user can respond to a message.
-
-        Args:
-            msg (str|ChatDocument): the string to respond to.
-
-        Returns:
-
-        """
-# When msg explicitly addressed to user, this means an actual human response
-# is being sought.
-need_human_response = (
-⋮----
-"""
-        Convert user_msg to final response.
-        """
-⋮----
-user_msg = (
-user_msg = user_msg.strip()
-⋮----
-tool_ids = []
-⋮----
-tool_ids = msg.metadata.tool_ids
-⋮----
-# only return non-None result if user_msg not empty
-⋮----
-user_msg = user_msg.replace("SYSTEM", "").strip()
-source = Entity.SYSTEM
-sender = Entity.SYSTEM
-⋮----
-source = Entity.USER
-sender = Entity.USER
-⋮----
-# preserve trail of tool_ids for OpenAI Assistant fn-calls
-⋮----
-"""
-        Asynch version of `user_response`. See there for details.
-        """
-⋮----
-user_msg = self.default_human_response
-⋮----
-user_msg = await self.callbacks.get_user_response_async(prompt="")
-⋮----
-user_msg = self.callbacks.get_user_response(prompt="")
-⋮----
-user_msg = Prompt.ask(
-⋮----
-"""
-        Get user response to current message. Could allow (human) user to intervene
-        with an actual answer, or quit using "q" or "x"
-
-        Args:
-            msg (str|ChatDocument): the string to respond to.
-
-        Returns:
-            (str) User response, packaged as a ChatDocument
-
-        """
-⋮----
-# ask user with empty prompt: no need for prompt
-# since user has seen the conversation so far.
-# But non-empty prompt can be useful when Agent
-# uses a tool that requires user input, or in other scenarios.
-⋮----
-@no_type_check
-    def llm_can_respond(self, message: Optional[str | ChatDocument] = None) -> bool
-⋮----
-"""
-        Whether the LLM can respond to a message.
-        Args:
-            message (str|ChatDocument): message or ChatDocument object to respond to.
-
-        Returns:
-
-        """
-⋮----
-# if there is a valid "tool" message (either JSON or via `function_call`)
-# then LLM cannot respond to it
-⋮----
-def can_respond(self, message: Optional[str | ChatDocument] = None) -> bool
-⋮----
-"""
-        Whether the agent can respond to a message.
-        Used in Task.py to skip a sub-task when we know it would not respond.
-        Args:
-            message (str|ChatDocument): message or ChatDocument object to respond to.
-        """
-tools = self.try_get_tool_messages(message)
-⋮----
-# The message has tools that are NOT enabled to be handled by this agent,
-# which means the agent cannot respond to it.
-⋮----
-"""Template for llm_response."""
-⋮----
-"""
-        Asynch version of `llm_response`. See there for details.
-        """
-⋮----
-prompt = message.content
-⋮----
-prompt = message
-⋮----
-output_len = self.config.llm.model_max_output_tokens
-⋮----
-output_len = self.llm.completion_context_length() - self.num_tokens(prompt)
-⋮----
-response = await self.llm.agenerate(prompt, output_len)
-⋮----
-# We would have already displayed the msg "live" ONLY if
-# streaming was enabled, AND we did not find a cached response.
-# If we are here, it means the response has not yet been displayed.
-cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-⋮----
-chat=False,  # i.e. it's a completion model not chat model
-⋮----
-cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
-# Preserve trail of tool_ids for OpenAI Assistant fn-calls
-⋮----
-"""
-        LLM response to a prompt.
-        Args:
-            message (str|ChatDocument): prompt string, or ChatDocument object
-
-        Returns:
-            Response from LLM, packaged as a ChatDocument
-        """
-⋮----
-with ExitStack() as stack:  # for conditionally using rich spinner
-⋮----
-# show rich spinner only if not streaming!
-cm = status("LLM responding to message...")
-⋮----
-output_len = self.llm.completion_context_length() - self.num_tokens(
-⋮----
-response = self.llm.generate(prompt, output_len)
-⋮----
-# we would have already displayed the msg "live" ONLY if
-# streaming was enabled, AND we did not find a cached response
-⋮----
-cached = "[red](cached)[/red]" if response.cached else ""
-⋮----
-chat=False,  # i.e. it's a completion model not chat model
-⋮----
-def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool
-⋮----
-"""
-        Check whether msg contains a Tool/fn-call attempt (by the LLM).
-
-        CAUTION: This uses self.get_tool_messages(msg) which as a side-effect
-        may update msg.tool_messages when msg is a ChatDocument, if there are
-        any tools in msg.
-        """
-⋮----
-tools = self.get_tool_messages(msg)
-⋮----
-# there is a tool/fn-call attempt but had a validation error,
-# so we still consider this a tool message "attempt"
-⋮----
-def _tool_recipient_match(self, tool: ToolMessage) -> bool
-⋮----
-"""Is tool enabled for handling by this agent and intended for this
-        agent to handle (i.e. if there's any explicit `recipient` field exists in
-        tool, then it matches this agent's name)?
-        """
-⋮----
-def has_only_unhandled_tools(self, msg: str | ChatDocument) -> bool
-⋮----
-"""
-        Does the msg have at least one tool, and none of the tools in the msg are
-        handleable by this agent?
-        """
-⋮----
-tools = self.try_get_tool_messages(msg, all_tools=True)
-⋮----
-"""
-        Get ToolMessages recognized in msg, handle-able by this agent.
-        NOTE: as a side-effect, this will update msg.tool_messages
-        when msg is a ChatDocument and msg contains tool messages.
-        The intent here is that update=True should be set ONLY within agent_response()
-        or agent_response_async() methods. In other words, we want to persist the
-        msg.tool_messages only AFTER the agent has had a chance to handle the tools.
-
-        Args:
-            msg (str|ChatDocument): the message to extract tools from.
-            all_tools (bool):
-                - if True, return all tools,
-                    i.e. any recognized tool in self.llm_tools_known,
-                    whether it is handled by this agent or not;
-                - otherwise, return only the tools handled by this agent.
-
-        Returns:
-            List[ToolMessage]: list of ToolMessage objects
-        """
-⋮----
-json_tools = self.get_formatted_tool_messages(msg)
-⋮----
-# We've already identified all_tool_messages in the msg;
-# return the corresponding ToolMessage objects
-⋮----
-# We've already found tool_messages,
-# (either via OpenAI Fn-call or Langroid-native ToolMessage);
-# or they were added by an agent_response.
-# note these could be from a forwarded msg from another agent,
-# so return ONLY the messages THIS agent to enabled to handle.
-⋮----
-tools = self.get_formatted_tool_messages(
-⋮----
-# filter for actually handle-able tools, and recipient is this agent
-my_tools = [t for t in tools if self._tool_recipient_match(t)]
-⋮----
-# otherwise, we look for `tool_calls` (possibly multiple)
-tools = self.get_oai_tool_calls_classes(msg)
-⋮----
-# otherwise, we look for a `function_call`
-fun_call_cls = self.get_function_call_class(msg)
-tools = [fun_call_cls] if fun_call_cls is not None else []
-⋮----
-"""
-        Returns ToolMessage objects (tools) corresponding to
-        tool-formatted substrings, if any.
-        ASSUMPTION - These tools are either ALL JSON-based, or ALL XML-based
-        (i.e. not a mix of both).
-        Terminology: a "formatted tool msg" is one which the LLM generates as
-            part of its raw string output, rather than within a JSON object
-            in the API response (i.e. this method does not extract tools/fns returned
-            by OpenAI's tools/fns API or similar APIs).
-
-        Args:
-            input_str (str): input string, typically a message sent by an LLM
-            from_llm (bool): whether the input was generated by the LLM. If so,
-                we track malformed tool calls.
-
-        Returns:
-            List[ToolMessage]: list of ToolMessage objects
-        """
-⋮----
-substrings = XMLToolMessage.find_candidates(input_str)
-is_json = False
-⋮----
-substrings = extract_top_level_json(input_str)
-is_json = len(substrings) > 0
-⋮----
-results = [self._get_one_tool_message(j, is_json, from_llm) for j in substrings]
-valid_results = [r for r in results if r is not None]
-# If any tool is correctly formed we do not set the flag
-⋮----
-def get_function_call_class(self, msg: ChatDocument) -> Optional[ToolMessage]
-⋮----
-"""
-        From ChatDocument (constructed from an LLM Response), get the `ToolMessage`
-        corresponding to the `function_call` if it exists.
-        """
-⋮----
-tool_name = msg.function_call.name
-tool_msg = msg.function_call.arguments or {}
-⋮----
-tool_class = self.llm_tools_map[tool_name]
-⋮----
-tool = tool_class.model_validate(tool_msg)
-⋮----
-# Store tool class as an attribute on the exception
-ve.tool_class = tool_class  # type: ignore
-⋮----
-def get_oai_tool_calls_classes(self, msg: ChatDocument) -> List[ToolMessage]
-⋮----
-"""
-        From ChatDocument (constructed from an LLM Response), get
-         a list of ToolMessages corresponding to the `tool_calls`, if any.
-        """
-⋮----
-tools = []
-all_errors = True
-⋮----
-tool_name = tc.function.name
-tool_msg = tc.function.arguments or {}
-⋮----
-all_errors = False
-⋮----
-# Store tool class as an attribute on the exception
-ve.tool_class = tool_class  # type: ignore
-⋮----
-# When no tool is valid and the message was produced
-# by the LLM, set the recovery flag
-⋮----
-"""
-        Handle a validation error raised when parsing a tool message,
-            when there is a legit tool name used, but it has missing/bad fields.
-        Args:
-            ve (ValidationError): The exception raised
-            tool_class (Optional[Type[ToolMessage]]): The tool class that
-                failed validation
-
-        Returns:
-            str: The error message to send back to the LLM
-        """
-# First try to get tool class from the exception itself
-⋮----
-tool_name = ve.tool_class.default_value("request")  # type: ignore
-⋮----
-tool_name = tool_class.default_value("request")
-⋮----
-# Fallback: try to extract from error context if available
-tool_name = "Unknown Tool"
-bad_field_errors = "\n".join(
-⋮----
-"""
-        Return error document if the message contains multiple orchestration tools
-        """
-# check whether there are multiple orchestration-tools (e.g. DoneTool etc),
-# in which case set result to error-string since we don't yet support
-# multi-tools with one or more orch tools.
-⋮----
-ORCHESTRATION_TOOLS = (
-⋮----
-has_orch = any(isinstance(t, ORCHESTRATION_TOOLS) for t in tools)
-⋮----
-"""
-        Convert results to final response
-        """
-# extract content from ChatDocument results so we have all str|None
-results = [r.content if isinstance(r, ChatDocument) else r for r in results]
-⋮----
-tool_names = [t.default_value("request") for t in tools]
-⋮----
-has_ids = all([t.id != "" for t in tools])
-⋮----
-id2result = OrderedDict(
-result_values = list(id2result.values())
-⋮----
-# Cannot support multi-tool results containing orchestration strings!
-# Replace results with err string to force LLM to retry
-err_str = "ERROR: Please use ONE tool at a time!"
-id2result = OrderedDict((id, err_str) for id in id2result.keys())
-⋮----
-name_results_list = [
-⋮----
-# there was a non-None result
-⋮----
-# if there are multiple OpenAI Tool results, return them as a dict
-⋮----
-# multi-results: prepend the tool name to each result
-str_results = [f"Result from {name}: {r}" for name, r in name_results_list]
-final = "\n\n".join(str_results)
-⋮----
-"""
-        Asynch version of `handle_message`. See there for details.
-        """
-⋮----
-tools = [t for t in tools if self._tool_recipient_match(t)]
-⋮----
-# correct tool name but bad fields
-⋮----
-except XMLException as xe:  # from XMLToolMessage parsing
-⋮----
-# invalid tool name
-# We return None since returning "invalid tool name" would
-# be considered a valid result in task loop, and would be treated
-# as a response to the tool message even though the tool was not intended
-# for this agent.
-⋮----
-fallback_result = self.handle_message_fallback(msg)
-⋮----
-chat_doc = msg if isinstance(msg, ChatDocument) else None
-⋮----
-results = self._get_multiple_orch_tool_errs(tools)
-⋮----
-results = [
-# if there's a solitary ChatDocument|str result, return it as is
-⋮----
-"""
-        Handle a "tool" message either a string containing one or more
-        valid "tool" JSON substrings,  or a
-        ChatDocument containing a `function_call` attribute.
-        Handle with the corresponding handler method, and return
-        the results as a combined string.
-
-        Args:
-            msg (str | ChatDocument): The string or ChatDocument to handle
-
-        Returns:
-            The result of the handler method can be:
-             - None if no tools successfully handled, or no tools present
-             - str if langroid-native JSON tools were handled, and results concatenated,
-                 OR there's a SINGLE OpenAI tool-call.
-                (We do this so the common scenario of a single tool/fn-call
-                 has a simple behavior).
-             - Dict[str, str] if multiple OpenAI tool-calls were handled
-                 (dict is an id->result map)
-             - ChatDocument if a handler returned a ChatDocument, intended to be the
-                 final response of the `agent_response` method.
-        """
-⋮----
-results: List[str | ChatDocument | None] = []
-⋮----
-results = ["ERROR: Use ONE tool at a time!"] * len(tools)
-⋮----
-results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
-⋮----
-@property
-    def all_llm_tools_known(self) -> set[str]
-⋮----
-"""All known tools; this may extend self.llm_tools_known."""
-⋮----
-def handle_message_fallback(self, msg: str | ChatDocument) -> Any
-⋮----
-"""
-        Fallback method for the case where the msg has no tools that
-        can be handled by this agent.
-        This method can be overridden by subclasses, e.g.,
-        to create a "reminder" message when a tool is expected but the LLM "forgot"
-        to generate one.
-
-        Args:
-            msg (str | ChatDocument): The input msg to handle
-        Returns:
-            Any: The result of the handler method
-        """
-⋮----
-"""
-        Parse the tool_candidate_str into ANY ToolMessage KNOWN to agent --
-        This includes non-used/handled tools, i.e. any tool in self.all_llm_tools_known.
-        The exception to this is below where we try our best to infer the tool
-        when the LLM has "forgotten" to include the "request" field in the tool str ---
-        in this case we ONLY look at the possible set of HANDLED tools, i.e.
-        self.llm_tools_handled.
-        """
-⋮----
-maybe_tool_dict = json.loads(tool_candidate_str)
-⋮----
-maybe_tool_dict = XMLToolMessage.extract_field_values(
-⋮----
-# check if the maybe_tool_dict contains a "properties" field
-# which further contains the actual tool-call
-# (some weak LLMs do this). E.g. gpt-4o sometimes generates this:
-# TOOL: {
-#     "type": "object",
-#     "properties": {
-#         "request": "square",
-#         "number": 9
-#     },
-#     "required": [
-#         "number",
-#         "request"
-#     ]
-# }
-⋮----
-properties = maybe_tool_dict.get("properties")
-⋮----
-maybe_tool_dict = properties
-request = maybe_tool_dict.get("request")
-⋮----
-possible = [self.llm_tools_map[r] for r in self.llm_tools_handled]
-⋮----
-allowable = self.enabled_requests_for_inference.intersection(
-possible = [self.llm_tools_map[r] for r in allowable]
-⋮----
-default_keys = set(ToolMessage.model_fields.keys())
-request_keys = set(maybe_tool_dict.keys())
-⋮----
-def maybe_parse(tool: type[ToolMessage]) -> Optional[ToolMessage]
-⋮----
-all_keys = set(tool.model_fields.keys())
-non_inherited_keys = all_keys.difference(default_keys)
-# If the request has any keys not valid for the tool and
-# does not specify some key specific to the type
-# (e.g. not just `purpose`), the LLM must explicitly specify `request`
-⋮----
-candidate_tools = list(
-⋮----
-# If only one valid candidate exists, we infer
-# "request" to be the only possible value
-⋮----
-message_class = self.llm_tools_map.get(request)
-⋮----
-message = message_class.model_validate(maybe_tool_dict)
-⋮----
-ve.tool_class = message_class  # type: ignore
-⋮----
-"""
-        Convert result of a responder (agent_response or llm_response, or task.run()),
-        or tool handler, or handle_message_fallback,
-        to a ChatDocument, to enable handling by other
-        responders/tasks in a task loop possibly involving multiple agents.
-
-        Args:
-            msg (Any): The result of a responder or tool handler or task.run()
-            orig_tool_name (str): The original tool name that generated the response,
-                if any.
-            chat_doc (ChatDocument): The original ChatDocument object that `msg`
-                is a response to.
-            author_entity (Entity): The intended author of the result ChatDocument
-        """
-⋮----
-is_agent_author = author_entity == Entity.AGENT
-⋮----
-# result is a ToolMessage, so...
-result_tool_name = msg.default_value("request")
-⋮----
-# TODO: do we need to remove the tool message from the chat_doc?
-# if (chat_doc is not None and
-#     msg in chat_doc.tool_messages):
-#    chat_doc.tool_messages.remove(msg)
-# if we can handle it, do so
-result = self.handle_tool_message(msg, chat_doc=chat_doc)
-⋮----
-# else wrap it in an agent response and return it so
-# orchestrator can find a respondent
-⋮----
-result = to_string(msg)
-⋮----
-def from_ChatDocument(self, msg: ChatDocument, output_type: Type[T]) -> Optional[T]
-⋮----
-"""
-        Extract a desired output_type from a ChatDocument object.
-        We use this fallback order:
-        - if `msg.content_any` exists and matches the output_type, return it
-        - if `msg.content` exists and output_type is str return it
-        - if output_type is a ToolMessage, return the first tool in `msg.tool_messages`
-        - if output_type is a list of ToolMessage,
-            return all tools in `msg.tool_messages`
-        - search for a tool in `msg.tool_messages` that has a field of output_type,
-             and if found, return that field value
-        - return None if all the above fail
-        """
-content = msg.content
-⋮----
-content_any = msg.content_any
-⋮----
-list_element_type = get_args(output_type)[0]
-⋮----
-# list_element_type is a subclass of ToolMessage:
-# We output a list of objects derived from list_element_type
-⋮----
-# output_type is a subclass of ToolMessage:
-# return the first tool that has this specific output_type
-⋮----
-# attempt to get the output_type from the content,
-# if it's a primitive type
-primitive_value = from_string(content, output_type)  # type: ignore
-⋮----
-# then search for output_type as a field in a tool
-⋮----
-value = tool.get_value_of_type(output_type)
-⋮----
-"""
-        Truncate the result string to `max_tokens` tokens.
-        """
-⋮----
-result_str = result.content if isinstance(result, ChatDocument) else result
-num_tokens = (
-⋮----
-truncate_warning = f"""
-⋮----
-else result[: max_tokens * 4]  # approx truncate
-⋮----
-else result.content[: max_tokens * 4]  # approx truncate
-⋮----
-"""
-        Asynch version of `handle_tool_message`. See there for details.
-        """
-tool_name = tool.default_value("request")
-⋮----
-handler_name = getattr(tool, "_handler", tool_name)
-⋮----
-handler_name = tool_name
-handler_method = getattr(self, handler_name + "_async", None)
-⋮----
-maybe_result = await handler_method(tool, chat_doc=chat_doc)
-⋮----
-maybe_result = await handler_method(tool)
-result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
-⋮----
-# raise the error here since we are sure it's
-# not a pydantic validation error,
-# which we check in `handle_message`
-⋮----
-)  # type: ignore
-⋮----
-"""
-        Respond to a tool request from the LLM, in the form of an ToolMessage object.
-        Args:
-            tool: ToolMessage object representing the tool request.
-            chat_doc: Optional ChatDocument object containing the tool request.
-                This is passed to the tool-handler method only if it has a `chat_doc`
-                argument.
-
-        Returns:
-
-        """
-⋮----
-handler_method = getattr(self, handler_name, None)
-⋮----
-maybe_result = handler_method(tool, chat_doc=chat_doc)
-⋮----
-maybe_result = handler_method(tool)
-⋮----
-def num_tokens(self, prompt: str | List[LLMMessage]) -> int
-⋮----
-"""
-        Get LLM response stats as a string
-
-        Args:
-            chat_length (int): number of messages in the chat
-            tot_cost (float): total cost of the chat so far
-            response (LLMResponse): LLMResponse object
-        """
-⋮----
-in_tokens = response.usage.prompt_tokens
-out_tokens = response.usage.completion_tokens
-llm_response_cost = format(response.usage.cost, ".4f")
-cumul_cost = format(tot_cost, ".4f")
-⋮----
-context_length = self.llm.chat_context_length()
-max_out = self.config.llm.model_max_output_tokens
-⋮----
-llm_model = (
-# tot cost across all LLMs, agents
-all_cost = format(self.llm.tot_tokens_cost()[1], ".4f")
-⋮----
-"""
-        Updates `response.usage` obj (token usage and cost fields) if needed.
-        An update is needed only if:
-        - stream is True (i.e. streaming was enabled), and
-        - the response was NOT obtained from cached, and
-        - the API did NOT provide the usage/cost fields during streaming
-          (As of Sep 2024, the OpenAI API started providing these; for other APIs
-            this may not necessarily be the case).
-
-        Args:
-            response (LLMResponse): LLMResponse object
-            prompt (str | List[LLMMessage]): prompt or list of LLMMessage objects
-            stream (bool): whether to update the usage in the response object
-                if the response is not cached.
-            chat (bool): whether this is a chat model or a completion model
-            print_response_stats (bool): whether to print the response stats
-        """
-⋮----
-no_usage_info = response.usage is None or response.usage.prompt_tokens == 0
-# Note: If response was not streamed, then
-# `response.usage` would already have been set by the API,
-# so we only need to update in the stream case.
-⋮----
-# usage, cost = 0 when response is from cache
-prompt_tokens = 0
-completion_tokens = 0
-cost = 0.0
-⋮----
-prompt_tokens = self.num_tokens(prompt)
-completion_tokens = self.num_tokens(response.message)
-⋮----
-cost = self.compute_token_cost(prompt_tokens, 0, completion_tokens)
-⋮----
-# update total counters
-⋮----
-chat_length = 1 if isinstance(prompt, str) else len(prompt)
-⋮----
-def compute_token_cost(self, prompt: int, cached: int, completion: int) -> float
-⋮----
-price = cast(LanguageModel, self.llm).chat_cost()
-⋮----
-"""
-        Send a request to another agent, possibly after confirming with the user.
-        This is not currently used, since we rely on the task loop and
-        `RecipientTool` to address requests to other agents. It is generally best to
-        avoid using this method.
-
-        Args:
-            agent (Agent): agent to ask
-            request (str): request to send
-            no_answer (str): expected response when agent does not know the answer
-            user_confirm (bool): whether to gate the request with a human confirmation
-
-        Returns:
-            str: response from agent
-        """
-agent_type = type(agent).__name__
-⋮----
-user_response = Prompt.ask(
-⋮----
-answer = agent.llm_response(request)
 </file>
 
 <file path="langroid/agent/task.py">
@@ -35048,6 +35150,15 @@ None,  # Default value if the iterator is exhausted (no valid info found)
 def _get_model_info(model: str | ModelName) -> ModelInfo | None
 </file>
 
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.14.0
+  hooks:
+    - id: ruff
+</file>
+
 <file path="langroid/agent/special/doc_chat_agent.py">
 # # langroid/agent/special/doc_chat_agent.py
 """
@@ -35069,6 +35180,23 @@ pip install "langroid[hf-embeddings]"
 def apply_nest_asyncio() -> None
 ⋮----
 logger = logging.getLogger(__name__)
+⋮----
+@dataclass
+class _CrossEncoderCacheEntry
+⋮----
+model: "CrossEncoder"
+lock: threading.RLock
+⋮----
+_CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
+_CROSS_ENCODER_CACHE_LOCK = threading.Lock()
+⋮----
+def _get_cross_encoder_entry(model_name: str, device: str) -> _CrossEncoderCacheEntry
+⋮----
+cache_key = f"{model_name}::{device}"
+entry = _CROSS_ENCODER_CACHE.get(cache_key)
+⋮----
+model = CrossEncoder(model_name, device=device)
+entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
 ⋮----
 DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 ⋮----
@@ -35133,6 +35261,7 @@ use_fuzzy_match: bool = True
 use_bm25_search: bool = True
 use_reciprocal_rank_fusion: bool = False
 cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
+cross_encoder_device: Optional[str] = None  # default to CPU when None
 rerank_diversity: bool = True  # rerank to maximize diversity?
 rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
 rerank_after_adding_context: bool = True  # rerank after adding context window?
@@ -35582,8 +35711,11 @@ self.chunked_docs_clean,  # already pre-processed!
 ⋮----
 fuzzy_match_docs = find_fuzzy_matches_in_docs(
 ⋮----
-model = CrossEncoder(self.config.cross_encoder_reranking_model)
-scores = model.predict([(query, p.content) for p in passages])
+device = self.config.cross_encoder_device or "cpu"
+entry = _get_cross_encoder_entry(
+pair_inputs = [(query, p.content) for p in passages]
+⋮----
+scores = entry.model.predict(pair_inputs, show_progress_bar=False)
 # Convert to [0,1] so we might could use a cutoff later.
 scores = 1.0 / (1 + np.exp(-np.array(scores)))
 # get top k scoring passages
@@ -35939,15 +36071,6 @@ def justify_response(self) -> ChatDocument | None
 """Show evidence for last response"""
 ⋮----
 source = self.response.metadata.source
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.14.0
-  hooks:
-    - id: ruff
 </file>
 
 <file path="langroid/language_models/openai_gpt.py">
