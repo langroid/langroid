@@ -362,6 +362,7 @@ issues/
     PYDANTIC_V2_MIGRATION_TASK_SPECIFICATION.md
     pydantic-migration-checking-instructions.md
     PYRANTIC-V2-MIGRATION-PLAN.md
+  20251010-concurrent-rag-status.md
   20251010-concurrent-rag.md
   20251011-cross-encoder-race-bug.md
   898-implementation.md
@@ -13474,107 +13475,6 @@ if __name__ == "__main__":
 This directory is meant for illustrative/experimental code and notebooks.
 It is a playground area meant to try out new ideas, and once solid,
 move them to the main codebase.
-</file>
-
-<file path="issues/20251011-cross-encoder-race-bug.md">
-# Cross-Encoder Reranker Race Condition Plan
-
-## Summary
-
-Concurrent DocChatAgent tasks that enable `cross_encoder_reranking_model`
-raise a PyTorch `NotImplementedError` ("Cannot copy out of meta tensor; no data!")
-intermittently. The failure originates inside `CrossEncoder.predict()` when the
-underlying Hugging Face model is moved between devices while still in the meta
-state. Multiple threads instantiating and using the same cross encoder at once
-trigger this race.
-
-## Current Reproduction Status
-
-- `tests/main/test_concurrent_rag_simple.py` fails intermittently on `main` and
-  on the working branch when run several times in a row (10–20 iterations).
-- Failures occur only when `cross_encoder_reranking_model` is set and multiple
-  tasks run concurrently; sequential runs pass.
-
-## Root Cause Hypothesis
-
-1. Each DocChatAgent clone instantiates its own `CrossEncoder` inside
-   `rerank_with_cross_encoder()`.
-2. SentenceTransformers lazily initializes the underlying HF model on the first
-   call to `.predict()`. During initialization, `model.to(device)` tries to copy
-   tensors out of the “meta” device.
-3. When multiple clones call `.predict()` at the same time, they each try to
-   load/transfer shared parameters simultaneously, and one thread encounters the
-   `meta` tensor copy race, causing the `NotImplementedError`.
-
-## Investigation Tasks
-
-1. **Confirm shared-state behavior**
-   - Inspect `CrossEncoder.predict` to verify it performs `self.model.to(...)`
-     on each call, making it unsafe to invoke from multiple threads without
-     coordination.
-   - Capture concurrent stack traces/logs during failure to confirm multiple
-     threads enter the to() conversion simultaneously.
-
-2. **Reproduce in isolation**
-   - Write a minimal script that spawns several threads; each thread loads the
-     same cross-encoder model and immediately calls `.predict()` to reproduce
-     the meta-tensor race outside Langroid. This will clarify whether the bug
-     is entirely in PyTorch/HF or also in Langroid’s usage.
-
-3. **Benchmark loading cost**
-   - Measure time to instantiate `CrossEncoder` and to run `.predict()` so we
-     understand the overhead when caching the model vs. reloading on demand.
-
-## Proposed Fix
-
-Implement a per-model cache with synchronization so each process holds one
-`CrossEncoder` instance per model name:
-
-1. **Global cache**
-   - Introduce a module-level helper (e.g., `_get_cross_encoder(model_name)`) in
-     `doc_chat_agent.py` that stores models in a dictionary keyed by
-     `model_name`.
-   - Guard cache creation with a global `threading.Lock` to avoid double
-     instantiation.
-
-2. **Per-model execution lock**
-   - Associate each cached model with a reentrant `Lock`. Before calling
-     `predict`, acquire the lock to serialize access. This prevents concurrent
-     `.predict()` calls from moving the model between devices at the same time.
-
-3. **Stable device assignment**
-   - Force the cached model onto a specific device once (likely CPU unless
-     configured otherwise). Skip repeated `model.to()` calls inside the lock so
-     subsequent predictions reuse the initialized weights without touching the
-     meta tensors.
-
-4. **Agent changes**
-   - Update `DocChatAgent.rerank_with_cross_encoder` to fetch the cached
-     `(model, lock)` pair and run prediction inside the per-model lock.
-
-## Validation Plan
-
-1. Run `tests/main/test_concurrent_rag_simple.py` in a loop (e.g., 20 times) to
-   ensure the race no longer triggers.
-2. Execute the sequential control test and a small subset of the wider suite to
-   confirm no regressions.
-3. Optionally stress-test with more concurrent tasks and different
-   `cross_encoder_reranking_model` values to ensure the cache handles multiple
-   models correctly.
-
-## Follow-Up Considerations
-
-- Document the shared-model behavior near the config option so users know the
-  reranker is serialized per model.
-- Evaluate batching requests through the shared cross encoder in future work to
-  regain some concurrency while avoiding race conditions.
-
-## Progress Log
-
-- **2025-10-11:** Implemented thread-safe cross-encoder cache in `DocChatAgent` to reuse a single model instance per name and serialize `.predict()` calls. Adjusted reranker to disable the default progress bar for batch runs.
-- **2025-10-11:** Validated the fix by running `uv run pytest tests/main/test_concurrent_rag_simple.py -k cross_encoder -x` once and then in a 10× loop; all iterations passed without reproducing the meta-tensor error.
-- **2025-10-11:** Defaulted cached cross encoders to CPU but added `cross_encoder_device` override on `DocChatAgentConfig` so users with GPUs can opt in while keeping library-safe defaults.
-- **2025-10-11:** Added `--cross-encoder-device` pytest option (with optional `TEST_CROSS_ENCODER_DEVICE` env fallback) so the concurrency test can be run against CPU, CUDA, or MPS paths without code edits.
 </file>
 
 <file path="langroid/agent/special/arangodb/system_messages.py">
@@ -30639,200 +30539,6 @@ def test_agent_web_search_tool(
     )
 </file>
 
-<file path="tests/conftest.py">
-import logging
-import os
-import threading
-
-import pytest
-
-from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
-from langroid.language_models import GeminiModel, OpenAIChatModel
-from langroid.utils.configuration import Settings, set_global
-
-logger = logging.getLogger(__name__)
-
-
-def pytest_sessionfinish(session, exitstatus):
-    """Hook to terminate pytest forcefully after displaying all test stats."""
-
-    def terminate():
-        if exitstatus == 0:
-            print("All tests passed. Exiting cleanly.")
-            os._exit(0)  # Exit code 0 for success
-        else:
-            print("Some tests failed. Exiting with error.")
-            os._exit(1)  # Exit code 1 for error
-
-    # Only set the timer if on GitHub Actions or another
-    # CI environment where 'CI' is true
-    if os.getenv("CI") == "true":
-        threading.Timer(60, terminate).start()  # 60 seconds delay
-
-
-def pytest_addoption(parser) -> None:
-    parser.addoption(
-        "--show",
-        action="store_true",
-        default=False,
-        help="show intermediate details, e.g. for debug mode",
-    )
-    parser.addoption("--nc", action="store_true", default=False, help="don't use cache")
-    parser.addoption("--ns", action="store_true", default=False, help="no streaming")
-    parser.addoption("--ct", default="redis", help="redis, fakeredis")
-    parser.addoption(
-        "--m",
-        default=OpenAIChatModel.GPT4o,
-        help="""
-        language model name, e.g. litellm/ollama/llama2, or 
-        local or localhost:8000 or localhost:8000/v1
-        """,
-    )
-    parser.addoption(
-        "--turns",
-        default=100,
-        help="maximum number of turns in a task (to avoid inf loop)",
-    )
-    parser.addoption(
-        "--nof",
-        action="store_true",
-        default=False,
-        help="use model with no function_call",
-    )
-    # use multiple --first-test arguments to specify multiple tests to run first
-    parser.addoption(
-        "--first-test",
-        action="append",
-        default=[],
-        help="Specify test FUNCTION(s) to run first.",
-    )
-    # use multiple --first-test-file arguments to specify multiple files to run first
-    parser.addoption(
-        "--first-test-file",
-        action="append",
-        default=[],
-        help="Specify test FILE(s) to run first.",
-    )
-    parser.addoption(
-        "--cross-encoder-device",
-        action="store",
-        default=None,
-        help="Device for cross-encoder reranker (e.g. 'cpu', 'cuda', 'mps').",
-    )
-
-
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    outcome = yield
-    rep = outcome.get_result()
-    setattr(item, f"rep_{rep.when}", rep)
-
-
-def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "fallback: mark test to use fallback models on failure"
-    )
-
-
-@pytest.fixture(scope="function")
-def test_settings(request):
-    base_settings = dict(
-        debug=request.config.getoption("--show"),
-        cache_type=request.config.getoption("--ct"),
-        stream=not request.config.getoption("--ns"),
-        max_turns=request.config.getoption("--turns"),
-    )
-
-    if request.node.get_closest_marker("fallback"):
-        # we're in a test marked as requiring fallback,
-        # so we re-run with a sequence of settings, mainly
-        # on `chat_model` and `cache`.
-        logger.warning("Running test with fallback settings")
-        models = [request.config.getoption("--m")]
-        if OpenAIChatModel.GPT4o not in models:
-            # we may be using a weaker model, so add GPT4o as first fallback
-            models.append(OpenAIChatModel.GPT4o)
-        models.append(GeminiModel.GEMINI_2_FLASH)
-        caches = [True] + [False] * (len(models) - 1)
-        retry_count = getattr(request.node, "retry_count", 0)
-        model = (
-            models[retry_count]
-            if retry_count < len(models)
-            else request.config.getoption("--m")
-        )
-        cache = caches[retry_count] if retry_count < len(caches) else False
-        logger.warning(f"Retry count: {retry_count}, model: {model}, cache: {cache}")
-    else:
-        model = request.config.getoption("--m")
-        cache = not request.config.getoption("--nc")
-
-    yield Settings(**base_settings, chat_model=model, cache=cache)
-
-
-# Auto-inject this into every test, so we don't need to explicitly
-# have `test_settings` as a parameter in every test function!
-@pytest.fixture(autouse=True)
-def auto_set_global_settings(test_settings):
-    set_global(test_settings)
-    yield
-
-
-@pytest.fixture(scope="session")
-def redis_setup(redisdb):
-    os.environ["REDIS_HOST"] = redisdb.connection_pool.connection_kwargs["host"]
-    os.environ["REDIS_PORT"] = str(redisdb.connection_pool.connection_kwargs["port"])
-    os.environ["REDIS_PASSWORD"] = ""  # Assuming no password for testing
-    yield
-    # Reset or clean up environment variables after tests
-
-
-def pytest_collection_modifyitems(config, items):
-    # Get the lists of specified tests and files
-    first_tests = config.getoption("--first-test")
-    first_test_files = config.getoption("--first-test-file")
-
-    priority_items = []
-    other_items = list(items)  # Start with all items
-
-    # Prioritize individual tests specified by --first-test
-    for first_test in first_tests:
-        current_priority_items = [
-            item for item in other_items if first_test in item.nodeid
-        ]
-        priority_items.extend(current_priority_items)
-        other_items = [
-            item for item in other_items if item not in current_priority_items
-        ]
-
-    # Prioritize entire files specified by --first-test-file
-    for first_test_file in first_test_files:
-        current_priority_items = [
-            item for item in other_items if first_test_file in str(item.fspath)
-        ]
-        priority_items.extend(current_priority_items)
-        other_items = [
-            item for item in other_items if item not in current_priority_items
-        ]
-
-    # Replace the items list with priority items first, followed by others
-    items[:] = priority_items + other_items
-
-
-@pytest.fixture(autouse=True)
-def redis_close_connections():
-    """Close all redis connections after each test fn, to avoid
-    max connections exceeded error."""
-
-    # Setup code here (if necessary)
-    yield  # Yield to test execution
-    # Cleanup code here
-    redis = RedisCache(RedisCacheConfig(fake=False))
-    try:
-        redis.close_all_connections()
-    except Exception:
-        pass
-</file>
-
 <file path="tests/README.md">
 # Running tests with global settings
 
@@ -46760,6 +46466,140 @@ If critical issues are discovered:
 This migration plan provides a systematic, low-risk approach to migrating Langroid from Pydantic v1 to v2. The phased approach ensures thorough testing at each stage while maintaining complete backward compatibility for external users.
 
 The migration will unlock performance improvements, future-proof the codebase, and eliminate the maintenance burden of the compatibility layer while preserving all existing functionality.
+</file>
+
+<file path="issues/20251010-concurrent-rag-status.md">
+# Concurrent DocChat RAG – Current Status (2025-10-10)
+
+## Summary
+- Sequential DocChat queries work against both cloud and local (Docker) Qdrant backends.
+- Concurrent DocChat via `run_batch_tasks` now returns full answers instead of `DO-NOT-KNOW`; `examples/docqa/rag-concurrent.py --local-embeddings --use-builtin-batch` shows 900 char responses in concurrent mode.
+- Key fixes in place:
+  - `EmbeddingModel.clone()` + `VectorStore.clone()` ensure each clone gets an independent embedding model and leaves `replace_collection=False`.
+  - `ChatAgent.clone()` delegates to `_clone_extra_state`, with `DocChatAgent` copying `chunked_docs` and related caches.
+  - `DocChatAgent.get_relevant_extracts` now falls back to in-memory `chunked_docs` when the vector store collection is missing/empty, preventing premature `DO-NOT-KNOW`.
+  - Regression test `tests/main/test_concurrent_doc_chat_qdrant.py` passes on the fix branch (uses real Qdrant + SentenceTransformer embeddings + MockLM) and fails on main after we drop the backing collection to force the fallback path.
+
+## Findings
+1. **Guardrail gap** – The original `get_relevant_extracts` short-circuited whenever Qdrant reported `points_count=0`, even if `chunked_docs` were populated. Clones hit this path because a fresh client often reports zero points immediately after ingest. The fallback resolves this by using the cached chunks whenever the vector store hasn’t caught up yet.
+2. **Regression coverage** – The updated pytest harness no longer monkeypatches retrieval. It exercises the full `run_batch_tasks` flow against local Qdrant, with a `MockLM` to avoid external API calls. On main it fails at the `clone.chunked_docs` assertion, confirming the test’s regression behavior.
+3. **Example validation** – Running the concurrent example with `--use-builtin-batch` and `--local-embeddings` now yields overlapping worker logs and long-form answers; deleting the collection post-ingest reproduces the legacy failure on main but passes with the new fallback.
+
+## Outstanding Items
+- Ensure CI spins up Qdrant before running `tests/main/test_concurrent_doc_chat_qdrant.py` (workflow already starts the container; keep an eye on readiness timing).
+- Monitor for any cases where both vector store and `chunked_docs` are empty (e.g., ingest skipped). The new fallback will still produce `DO-NOT-KNOW` in that scenario, which is expected.
+- Verify cloud Qdrant regression: run the concurrent example against a remote collection to ensure the fallback doesn’t mask real empty collections.
+
+## Next Steps
+1. Add a short CI check (or doc note) to confirm Qdrant health before pytest kicks off.
+2. Evaluate whether we should log a debug message when the fallback path is used—helpful for diagnosing future data-sync delays.
+3. Consider extending regression coverage to include the cloud Qdrant path once a stable test fixture exists.
+
+## Fix Timeline (2025-10-08 → 2025-10-11)
+- **Async blocking in DocChatAgent** (see `issues/20251010-concurrent-rag.md`): `llm_response_async` waited on synchronous retrieval, so `asyncio.gather` serialized every task. We wrapped `answer_from_docs` with `asyncio.to_thread`, letting concurrent tasks progress while the main event loop stays free.
+- **Clone safety & retrieval fallback** (see `issues/20251010-concurrent-rag-codex.md`): cloned agents were reusing embedding models and losing access to cached chunks when Qdrant reported zero points. We taught embedding/vector-store configs to clone themselves and had `get_relevant_extracts` fall back to in-memory `chunked_docs`, restoring parallel runs with local embeddings.
+- **Cross-encoder race condition** (see `issues/20251011-cross-encoder-race-bug.md`): simultaneous reranker calls tried to move a shared `CrossEncoder` between devices, triggering the PyTorch “meta tensor” error. A per-model cache plus locking (defaulting to CPU, override via `cross_encoder_device`) now keeps concurrent reranks deterministic across CPU, CUDA, and MPS.
+</file>
+
+<file path="issues/20251011-cross-encoder-race-bug.md">
+# Cross-Encoder Reranker Race Condition Plan
+
+## Summary
+
+Concurrent DocChatAgent tasks that enable `cross_encoder_reranking_model`
+raise a PyTorch `NotImplementedError` ("Cannot copy out of meta tensor; no data!")
+intermittently. The failure originates inside `CrossEncoder.predict()` when the
+underlying Hugging Face model is moved between devices while still in the meta
+state. Multiple threads instantiating and using the same cross encoder at once
+trigger this race.
+
+## Current Reproduction Status
+
+- `tests/main/test_concurrent_rag_simple.py` fails intermittently on `main` and
+  on the working branch when run several times in a row (10–20 iterations).
+- Failures occur only when `cross_encoder_reranking_model` is set and multiple
+  tasks run concurrently; sequential runs pass.
+
+## Root Cause Hypothesis
+
+1. Each DocChatAgent clone instantiates its own `CrossEncoder` inside
+   `rerank_with_cross_encoder()`.
+2. SentenceTransformers lazily initializes the underlying HF model on the first
+   call to `.predict()`. During initialization, `model.to(device)` tries to copy
+   tensors out of the “meta” device.
+3. When multiple clones call `.predict()` at the same time, they each try to
+   load/transfer shared parameters simultaneously, and one thread encounters the
+   `meta` tensor copy race, causing the `NotImplementedError`.
+
+## Investigation Tasks
+
+1. **Confirm shared-state behavior**
+   - Inspect `CrossEncoder.predict` to verify it performs `self.model.to(...)`
+     on each call, making it unsafe to invoke from multiple threads without
+     coordination.
+   - Capture concurrent stack traces/logs during failure to confirm multiple
+     threads enter the to() conversion simultaneously.
+
+2. **Reproduce in isolation**
+   - Write a minimal script that spawns several threads; each thread loads the
+     same cross-encoder model and immediately calls `.predict()` to reproduce
+     the meta-tensor race outside Langroid. This will clarify whether the bug
+     is entirely in PyTorch/HF or also in Langroid’s usage.
+
+3. **Benchmark loading cost**
+   - Measure time to instantiate `CrossEncoder` and to run `.predict()` so we
+     understand the overhead when caching the model vs. reloading on demand.
+
+## Proposed Fix
+
+Implement a per-model cache with synchronization so each process holds one
+`CrossEncoder` instance per model name:
+
+1. **Global cache**
+   - Introduce a module-level helper (e.g., `_get_cross_encoder(model_name)`) in
+     `doc_chat_agent.py` that stores models in a dictionary keyed by
+     `model_name`.
+   - Guard cache creation with a global `threading.Lock` to avoid double
+     instantiation.
+
+2. **Per-model execution lock**
+   - Associate each cached model with a reentrant `Lock`. Before calling
+     `predict`, acquire the lock to serialize access. This prevents concurrent
+     `.predict()` calls from moving the model between devices at the same time.
+
+3. **Stable device assignment**
+   - Force the cached model onto a specific device once (likely CPU unless
+     configured otherwise). Skip repeated `model.to()` calls inside the lock so
+     subsequent predictions reuse the initialized weights without touching the
+     meta tensors.
+
+4. **Agent changes**
+   - Update `DocChatAgent.rerank_with_cross_encoder` to fetch the cached
+     `(model, lock)` pair and run prediction inside the per-model lock.
+
+## Validation Plan
+
+1. Run `tests/main/test_concurrent_rag_simple.py` in a loop (e.g., 20 times) to
+   ensure the race no longer triggers.
+2. Execute the sequential control test and a small subset of the wider suite to
+   confirm no regressions.
+3. Optionally stress-test with more concurrent tasks and different
+   `cross_encoder_reranking_model` values to ensure the cache handles multiple
+   models correctly.
+
+## Follow-Up Considerations
+
+- Document the shared-model behavior near the config option so users know the
+  reranker is serialized per model.
+- Evaluate batching requests through the shared cross encoder in future work to
+  regain some concurrency while avoiding race conditions.
+
+## Progress Log
+
+- **2025-10-11:** Implemented thread-safe cross-encoder cache in `DocChatAgent` to reuse a single model instance per name and serialize `.predict()` calls. Adjusted reranker to disable the default progress bar for batch runs.
+- **2025-10-11:** Validated the fix by running `uv run pytest tests/main/test_concurrent_rag_simple.py -k cross_encoder -x` once and then in a 10× loop; all iterations passed without reproducing the meta-tensor error.
+- **2025-10-11:** Defaulted cached cross encoders to CPU but added `cross_encoder_device` override on `DocChatAgentConfig` so users with GPUs can opt in while keeping library-safe defaults.
+- **2025-10-11:** Added `--cross-encoder-device` pytest option (with optional `TEST_CROSS_ENCODER_DEVICE` env fallback) so the concurrency test can be run against CPU, CUDA, or MPS paths without code edits.
 </file>
 
 <file path="issues/898-implementation.md">
@@ -65048,306 +64888,6 @@ def test_code_parser():
     assert joined_splits.strip() == joined_docs.strip()
 </file>
 
-<file path="tests/main/test_concurrent_rag_simple.py">
-"""
-Simplified standalone test to reproduce concurrent RAG cross-encoder race condition.
-
-This test uses the Borges "Library of Babel" story with auto-ingestion and 2 parallel
-tasks to trigger the cross-encoder race condition. Using n_similar_chunks=10 increases
-time spent in cross-encoder reranking, increasing collision probability.
-
-═══════════════════════════════════════════════════════════════════════════════
-DOCKER QDRANT SETUP (REQUIRED)
-═══════════════════════════════════════════════════════════════════════════════
-
-The bug is SPECIFIC to concurrent access to Docker Qdrant.
-
-Step 1: Create directory and start Docker Qdrant with volume mount
-    mkdir -p qdrantdb_docker
-    docker run -d \
-      --name test-qdrant \
-      -p 6333:6333 -p 6334:6334 \
-      -v $(pwd)/qdrantdb_docker:/qdrant/storage \
-      qdrant/qdrant
-
-Step 2: Run this test - it will auto-ingest the Borges story
-    pytest -xvs tests/test_concurrent_rag_simple.py
-
-═══════════════════════════════════════════════════════════════════════════════
-
-Error reproduced:
-    NotImplementedError: Cannot copy out of meta tensor; no data!
-
-Root cause:
-    Multiple threads in run_batch_task_gen() simultaneously call
-    rerank_with_cross_encoder(), which tries to move the shared
-    cross-encoder model to a device, causing a PyTorch race condition.
-"""
-
-import os
-from typing import Optional
-
-import pytest
-
-import langroid as lr
-import langroid.language_models as lm
-from langroid.agent.batch import run_batch_task_gen
-from langroid.agent.special.doc_chat_agent import (
-    DocChatAgent,
-    DocChatAgentConfig,
-)
-from langroid.parsing.parser import ParsingConfig, Splitter
-from langroid.utils.configuration import settings
-
-COLLECTION_NAME = "borges-babel-test"
-BORGES_URL = "https://xpressenglish.com/our-stories/library-of-babel/"
-
-settings.cache = False
-
-
-DEVICE_OVERRIDE: Optional[str] = None
-
-
-def pytest_addoption(parser):
-    parser.addoption(
-        "--cross-encoder-device",
-        action="store",
-        default=None,
-        help=(
-            "Device string for cross-encoder reranker (e.g. 'cpu', 'cuda', 'mps'). "
-            "Overrides TEST_CROSS_ENCODER_DEVICE env var."
-        ),
-    )
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _set_device_override(request):
-    global DEVICE_OVERRIDE
-    cli_device = request.config.getoption("cross_encoder_device")
-    env_device = os.getenv("TEST_CROSS_ENCODER_DEVICE")
-    DEVICE_OVERRIDE = cli_device or env_device
-
-
-def setup_rag_agent() -> lr.Task:
-    """
-    Create a DocChatAgent with the Borges story ingested.
-
-    Returns:
-        Langroid Task with DocChatAgent configured for RAG
-    """
-    llm_config = lm.OpenAIGPTConfig(chat_model="gemini/gemini-2.5-flash")
-
-    embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
-        model_type="sentence-transformer",
-        model_name="BAAI/bge-large-en-v1.5",
-    )
-
-    config = DocChatAgentConfig(
-        name="DocAgent",
-        llm=llm_config,
-        n_query_rephrases=0,
-        assistant_mode=True,
-        hypothetical_answer=False,
-        n_neighbor_chunks=1,
-        n_similar_chunks=10,  # Retrieve 10 chunks - increases cross-encoder workload
-        n_relevant_chunks=10,  # Keep all 10 chunks after reranking
-        # Enable cross-encoder reranking
-        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
-        cross_encoder_device=DEVICE_OVERRIDE,
-        relevance_extractor_config=None,  # Disable LLM-based relevance extraction
-        parsing=ParsingConfig(
-            splitter=Splitter.TOKENS,
-            chunk_size=200,
-            overlap=50,
-        ),
-        vecdb=lr.vector_store.QdrantDBConfig(
-            cloud=False,
-            docker=True,
-            collection_name=COLLECTION_NAME,
-            embedding=embed_cfg,
-            host="localhost",
-            port="6333",
-            replace_collection=True,  # Start fresh each time
-        ),
-    )
-
-    agent = DocChatAgent(config)
-    agent.vecdb.set_collection(COLLECTION_NAME)
-
-    # Ingest the Borges story
-    print(f"\nIngesting document: {BORGES_URL}")
-    agent.ingest_doc_paths([BORGES_URL])
-    print("Ingestion complete!")
-
-    task = lr.Task(agent, interactive=False, single_round=True)
-    return task
-
-
-def create_rag_agent() -> lr.Task:
-    """
-    Create a DocChatAgent that connects to existing Borges collection.
-
-    Returns:
-        Langroid Task with DocChatAgent
-    """
-    llm_config = lm.OpenAIGPTConfig(chat_model="gemini/gemini-2.5-flash")
-
-    embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
-        model_type="sentence-transformer",
-        model_name="BAAI/bge-large-en-v1.5",
-    )
-
-    config = DocChatAgentConfig(
-        name="DocAgent",
-        llm=llm_config,
-        n_query_rephrases=0,
-        assistant_mode=True,
-        hypothetical_answer=False,
-        n_neighbor_chunks=1,
-        n_similar_chunks=10,  # Retrieve 10 chunks - increases cross-encoder workload
-        n_relevant_chunks=10,  # Keep all 10 chunks after reranking
-        # Enable cross-encoder reranking
-        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
-        cross_encoder_device=DEVICE_OVERRIDE,
-        relevance_extractor_config=None,  # Disable LLM-based relevance extraction
-        parsing=ParsingConfig(
-            splitter=Splitter.TOKENS,
-            chunk_size=200,
-            overlap=50,
-        ),
-        vecdb=lr.vector_store.QdrantDBConfig(
-            cloud=False,
-            docker=True,
-            collection_name=COLLECTION_NAME,
-            embedding=embed_cfg,
-            host="localhost",
-            port="6333",
-            replace_collection=False,  # Reuse existing collection
-        ),
-    )
-
-    agent = DocChatAgent(config)
-    agent.vecdb.set_collection(COLLECTION_NAME)
-
-    task = lr.Task(agent, interactive=False, single_round=True)
-    return task
-
-
-def test_concurrent_rag_cross_encoder_race_condition():
-    """
-    Test that reproduces the cross-encoder race condition bug.
-
-    Two parallel tasks query the same Borges collection to trigger
-    concurrent access to the cross-encoder model.
-    """
-    print("\n" + "=" * 80)
-    print("SETUP: Creating first RAG agent and ingesting Borges story...")
-    print("=" * 80)
-
-    # First task ingests the document
-    setup_rag_agent()
-
-    # Second task reuses the collection
-    print("\nCreating more RAG agents (reusing collection)...")
-    N = 10  # large to increase chance of race condition
-
-    tasks = [create_rag_agent() for _ in range(N)]
-
-    # Same query for both tasks
-    query = "What is the Library of Babel?"
-
-    # Disable streaming on all tasks
-    # for task in tasks:
-    #     if hasattr(task.agent.config.llm, "stream"):
-    #         task.agent.config.llm.stream = False
-
-    # Generator function that returns DIFFERENT tasks based on index
-    def gen_task(idx: int) -> lr.Task:
-        print(f"[Test] Task {idx+1} running query...")
-        return tasks[idx]
-
-    print("\n" + "=" * 80)
-    print("TEST: Running queries in PARALLEL (should trigger race condition)...")
-    print("=" * 80)
-
-    # Run in PARALLEL - this triggers the bug
-    results_list = run_batch_task_gen(
-        gen_task=gen_task,
-        items=[query] * N,  # Same query for all tasks
-        sequential=False,  # PARALLEL execution triggers race condition
-        input_map=lambda q: q,
-        output_map=lambda result: (
-            result.content if result is not None else "DO-NOT-KNOW"
-        ),
-        handle_exceptions=False,  # Let exceptions propagate
-    )
-
-    # If we get here, bug didn't occur
-    print(f"\n[Test] Results received: {len(results_list)}")
-    for i, result in enumerate(results_list):
-        if result:
-            print(f"\nTask {i+1} answer: {result[:200]}...")
-
-    assert len(results_list) == len(tasks)
-    assert all(result is not None for result in results_list)
-
-
-def test_sequential_rag_no_race_condition():
-    """
-    Control test: running queries sequentially should NOT trigger the bug.
-    """
-    print("\n" + "=" * 80)
-    print("CONTROL TEST: Running queries SEQUENTIALLY...")
-    print("=" * 80)
-
-    task = setup_rag_agent()
-
-    queries = [
-        "What is the Library of Babel?",
-        "What do the books in the library contain?",
-    ]
-
-    if hasattr(task.agent.config.llm, "stream"):
-        task.agent.config.llm.stream = False
-
-    # Run SEQUENTIALLY using list comprehension - should NOT trigger the bug
-    results_list = []
-    for i, query in enumerate(queries):
-        print(f"[Test] Running query {i+1}: {query}")
-        result = task.run(query)
-        output = result.content if result is not None else "DO-NOT-KNOW"
-        results_list.append(output)
-
-    print(f"\n[Test] Sequential results received: {len(results_list)}")
-    for i, result in enumerate(results_list):
-        if result:
-            print(f"\nQuery {i+1}: {queries[i]}")
-            print(f"Answer: {result[:200]}...")
-
-    assert len(results_list) == len(queries)
-    assert all(result is not None for result in results_list)
-
-    print("\n✅ Control test passed - no race condition in sequential mode")
-
-
-if __name__ == "__main__":
-    print("=" * 80)
-    print("TEST 1: Concurrent queries (should trigger cross-encoder race condition)")
-    print("=" * 80)
-    try:
-        test_concurrent_rag_cross_encoder_race_condition()
-    except Exception as e:
-        print(f"\n❌ Test failed with error: {e}")
-
-    print("\n" + "=" * 80)
-    print("TEST 2: Sequential queries (control, should NOT trigger bug)")
-    print("=" * 80)
-    try:
-        test_sequential_rag_no_race_condition()
-    except Exception as e:
-        print(f"\n❌ Control test failed: {e}")
-</file>
-
 <file path="tests/main/test_done_sequences.py">
 """
 Tests for the done_sequences feature in Task.
@@ -74433,6 +73973,200 @@ def test_llm_complex_xml_tool_message(
 
 if __name__ == "__main__":
     pytest.main([__file__])
+</file>
+
+<file path="tests/conftest.py">
+import logging
+import os
+import threading
+
+import pytest
+
+from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
+from langroid.language_models import GeminiModel, OpenAIChatModel
+from langroid.utils.configuration import Settings, set_global
+
+logger = logging.getLogger(__name__)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Hook to terminate pytest forcefully after displaying all test stats."""
+
+    def terminate():
+        if exitstatus == 0:
+            print("All tests passed. Exiting cleanly.")
+            os._exit(0)  # Exit code 0 for success
+        else:
+            print("Some tests failed. Exiting with error.")
+            os._exit(1)  # Exit code 1 for error
+
+    # Only set the timer if on GitHub Actions or another
+    # CI environment where 'CI' is true
+    if os.getenv("CI") == "true":
+        threading.Timer(60, terminate).start()  # 60 seconds delay
+
+
+def pytest_addoption(parser) -> None:
+    parser.addoption(
+        "--show",
+        action="store_true",
+        default=False,
+        help="show intermediate details, e.g. for debug mode",
+    )
+    parser.addoption("--nc", action="store_true", default=False, help="don't use cache")
+    parser.addoption("--ns", action="store_true", default=False, help="no streaming")
+    parser.addoption("--ct", default="redis", help="redis, fakeredis")
+    parser.addoption(
+        "--m",
+        default=OpenAIChatModel.GPT4o,
+        help="""
+        language model name, e.g. litellm/ollama/llama2, or 
+        local or localhost:8000 or localhost:8000/v1
+        """,
+    )
+    parser.addoption(
+        "--turns",
+        default=100,
+        help="maximum number of turns in a task (to avoid inf loop)",
+    )
+    parser.addoption(
+        "--nof",
+        action="store_true",
+        default=False,
+        help="use model with no function_call",
+    )
+    # use multiple --first-test arguments to specify multiple tests to run first
+    parser.addoption(
+        "--first-test",
+        action="append",
+        default=[],
+        help="Specify test FUNCTION(s) to run first.",
+    )
+    # use multiple --first-test-file arguments to specify multiple files to run first
+    parser.addoption(
+        "--first-test-file",
+        action="append",
+        default=[],
+        help="Specify test FILE(s) to run first.",
+    )
+    parser.addoption(
+        "--cross-encoder-device",
+        action="store",
+        default=None,
+        help="Device for cross-encoder reranker (e.g. 'cpu', 'cuda', 'mps').",
+    )
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    setattr(item, f"rep_{rep.when}", rep)
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "fallback: mark test to use fallback models on failure"
+    )
+
+
+@pytest.fixture(scope="function")
+def test_settings(request):
+    base_settings = dict(
+        debug=request.config.getoption("--show"),
+        cache_type=request.config.getoption("--ct"),
+        stream=not request.config.getoption("--ns"),
+        max_turns=request.config.getoption("--turns"),
+    )
+
+    if request.node.get_closest_marker("fallback"):
+        # we're in a test marked as requiring fallback,
+        # so we re-run with a sequence of settings, mainly
+        # on `chat_model` and `cache`.
+        logger.warning("Running test with fallback settings")
+        models = [request.config.getoption("--m")]
+        if OpenAIChatModel.GPT4o not in models:
+            # we may be using a weaker model, so add GPT4o as first fallback
+            models.append(OpenAIChatModel.GPT4o)
+        models.append(GeminiModel.GEMINI_2_FLASH)
+        caches = [True] + [False] * (len(models) - 1)
+        retry_count = getattr(request.node, "retry_count", 0)
+        model = (
+            models[retry_count]
+            if retry_count < len(models)
+            else request.config.getoption("--m")
+        )
+        cache = caches[retry_count] if retry_count < len(caches) else False
+        logger.warning(f"Retry count: {retry_count}, model: {model}, cache: {cache}")
+    else:
+        model = request.config.getoption("--m")
+        cache = not request.config.getoption("--nc")
+
+    yield Settings(**base_settings, chat_model=model, cache=cache)
+
+
+# Auto-inject this into every test, so we don't need to explicitly
+# have `test_settings` as a parameter in every test function!
+@pytest.fixture(autouse=True)
+def auto_set_global_settings(test_settings):
+    set_global(test_settings)
+    yield
+
+
+@pytest.fixture(scope="session")
+def redis_setup(redisdb):
+    os.environ["REDIS_HOST"] = redisdb.connection_pool.connection_kwargs["host"]
+    os.environ["REDIS_PORT"] = str(redisdb.connection_pool.connection_kwargs["port"])
+    os.environ["REDIS_PASSWORD"] = ""  # Assuming no password for testing
+    yield
+    # Reset or clean up environment variables after tests
+
+
+def pytest_collection_modifyitems(config, items):
+    # Get the lists of specified tests and files
+    first_tests = config.getoption("--first-test")
+    first_test_files = config.getoption("--first-test-file")
+
+    priority_items = []
+    other_items = list(items)  # Start with all items
+
+    # Prioritize individual tests specified by --first-test
+    for first_test in first_tests:
+        current_priority_items = [
+            item for item in other_items if first_test in item.nodeid
+        ]
+        priority_items.extend(current_priority_items)
+        other_items = [
+            item for item in other_items if item not in current_priority_items
+        ]
+
+    # Prioritize entire files specified by --first-test-file
+    for first_test_file in first_test_files:
+        current_priority_items = [
+            item for item in other_items if first_test_file in str(item.fspath)
+        ]
+        priority_items.extend(current_priority_items)
+        other_items = [
+            item for item in other_items if item not in current_priority_items
+        ]
+
+    # Replace the items list with priority items first, followed by others
+    items[:] = priority_items + other_items
+
+
+@pytest.fixture(autouse=True)
+def redis_close_connections():
+    """Close all redis connections after each test fn, to avoid
+    max connections exceeded error."""
+
+    # Setup code here (if necessary)
+    yield  # Yield to test execution
+    # Cleanup code here
+    redis = RedisCache(RedisCacheConfig(fake=False))
+    try:
+        redis.close_all_connections()
+    except Exception:
+        pass
 </file>
 
 <file path="CLAUDE.md">
@@ -87360,6 +87094,310 @@ def test_doc_chat_concurrent_local_qdrant(local_qdrant_config):
     assert all(res is not None and "DO-NOT-KNOW" not in res.content for res in results)
 </file>
 
+<file path="tests/main/test_concurrent_rag_simple.py">
+"""
+Simplified standalone test to reproduce concurrent RAG cross-encoder race condition.
+
+This test uses the Borges "Library of Babel" story with auto-ingestion and 2 parallel
+tasks to trigger the cross-encoder race condition. Using n_similar_chunks=10 increases
+time spent in cross-encoder reranking, increasing collision probability.
+
+═══════════════════════════════════════════════════════════════════════════════
+DOCKER QDRANT SETUP (REQUIRED)
+═══════════════════════════════════════════════════════════════════════════════
+
+The bug is SPECIFIC to concurrent access to Docker Qdrant.
+
+Step 1: Create directory and start Docker Qdrant with volume mount
+    mkdir -p qdrantdb_docker
+    docker run -d \
+      --name test-qdrant \
+      -p 6333:6333 -p 6334:6334 \
+      -v $(pwd)/qdrantdb_docker:/qdrant/storage \
+      qdrant/qdrant
+
+Step 2: Run this test - it will auto-ingest the Borges story
+    pytest -xvs tests/test_concurrent_rag_simple.py
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Error reproduced:
+    NotImplementedError: Cannot copy out of meta tensor; no data!
+
+Root cause:
+    Multiple threads in run_batch_task_gen() simultaneously call
+    rerank_with_cross_encoder(), which tries to move the shared
+    cross-encoder model to a device, causing a PyTorch race condition.
+
+GPU/MPS validation:
+    pytest tests/main/test_concurrent_rag_simple.py -k cross_encoder -x \
+        --cross-encoder-device=mps
+"""
+
+import os
+from typing import Optional
+
+import pytest
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.batch import run_batch_task_gen
+from langroid.agent.special.doc_chat_agent import (
+    DocChatAgent,
+    DocChatAgentConfig,
+)
+from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.utils.configuration import settings
+
+COLLECTION_NAME = "borges-babel-test"
+BORGES_URL = "https://xpressenglish.com/our-stories/library-of-babel/"
+
+settings.cache = False
+
+
+DEVICE_OVERRIDE: Optional[str] = None
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--cross-encoder-device",
+        action="store",
+        default=None,
+        help=(
+            "Device string for cross-encoder reranker (e.g. 'cpu', 'cuda', 'mps'). "
+            "Overrides TEST_CROSS_ENCODER_DEVICE env var."
+        ),
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _set_device_override(request):
+    global DEVICE_OVERRIDE
+    cli_device = request.config.getoption("cross_encoder_device")
+    env_device = os.getenv("TEST_CROSS_ENCODER_DEVICE")
+    DEVICE_OVERRIDE = cli_device or env_device
+
+
+def setup_rag_agent() -> lr.Task:
+    """
+    Create a DocChatAgent with the Borges story ingested.
+
+    Returns:
+        Langroid Task with DocChatAgent configured for RAG
+    """
+    llm_config = lm.OpenAIGPTConfig(chat_model="gemini/gemini-2.5-flash")
+
+    embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
+        model_type="sentence-transformer",
+        model_name="BAAI/bge-large-en-v1.5",
+    )
+
+    config = DocChatAgentConfig(
+        name="DocAgent",
+        llm=llm_config,
+        n_query_rephrases=0,
+        assistant_mode=True,
+        hypothetical_answer=False,
+        n_neighbor_chunks=1,
+        n_similar_chunks=10,  # Retrieve 10 chunks - increases cross-encoder workload
+        n_relevant_chunks=10,  # Keep all 10 chunks after reranking
+        # Enable cross-encoder reranking
+        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        cross_encoder_device=DEVICE_OVERRIDE,
+        relevance_extractor_config=None,  # Disable LLM-based relevance extraction
+        parsing=ParsingConfig(
+            splitter=Splitter.TOKENS,
+            chunk_size=200,
+            overlap=50,
+        ),
+        vecdb=lr.vector_store.QdrantDBConfig(
+            cloud=False,
+            docker=True,
+            collection_name=COLLECTION_NAME,
+            embedding=embed_cfg,
+            host="localhost",
+            port="6333",
+            replace_collection=True,  # Start fresh each time
+        ),
+    )
+
+    agent = DocChatAgent(config)
+    agent.vecdb.set_collection(COLLECTION_NAME)
+
+    # Ingest the Borges story
+    print(f"\nIngesting document: {BORGES_URL}")
+    agent.ingest_doc_paths([BORGES_URL])
+    print("Ingestion complete!")
+
+    task = lr.Task(agent, interactive=False, single_round=True)
+    return task
+
+
+def create_rag_agent() -> lr.Task:
+    """
+    Create a DocChatAgent that connects to existing Borges collection.
+
+    Returns:
+        Langroid Task with DocChatAgent
+    """
+    llm_config = lm.OpenAIGPTConfig(chat_model="gemini/gemini-2.5-flash")
+
+    embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
+        model_type="sentence-transformer",
+        model_name="BAAI/bge-large-en-v1.5",
+    )
+
+    config = DocChatAgentConfig(
+        name="DocAgent",
+        llm=llm_config,
+        n_query_rephrases=0,
+        assistant_mode=True,
+        hypothetical_answer=False,
+        n_neighbor_chunks=1,
+        n_similar_chunks=10,  # Retrieve 10 chunks - increases cross-encoder workload
+        n_relevant_chunks=10,  # Keep all 10 chunks after reranking
+        # Enable cross-encoder reranking
+        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        cross_encoder_device=DEVICE_OVERRIDE,
+        relevance_extractor_config=None,  # Disable LLM-based relevance extraction
+        parsing=ParsingConfig(
+            splitter=Splitter.TOKENS,
+            chunk_size=200,
+            overlap=50,
+        ),
+        vecdb=lr.vector_store.QdrantDBConfig(
+            cloud=False,
+            docker=True,
+            collection_name=COLLECTION_NAME,
+            embedding=embed_cfg,
+            host="localhost",
+            port="6333",
+            replace_collection=False,  # Reuse existing collection
+        ),
+    )
+
+    agent = DocChatAgent(config)
+    agent.vecdb.set_collection(COLLECTION_NAME)
+
+    task = lr.Task(agent, interactive=False, single_round=True)
+    return task
+
+
+def test_concurrent_rag_cross_encoder_race_condition():
+    """
+    Test that reproduces the cross-encoder race condition bug.
+
+    Two parallel tasks query the same Borges collection to trigger
+    concurrent access to the cross-encoder model.
+    """
+    print("\n" + "=" * 80)
+    print("SETUP: Creating first RAG agent and ingesting Borges story...")
+    print("=" * 80)
+
+    # First task ingests the document
+    setup_rag_agent()
+
+    # Second task reuses the collection
+    print("\nCreating more RAG agents (reusing collection)...")
+    N = 10  # large to increase chance of race condition
+
+    tasks = [create_rag_agent() for _ in range(N)]
+
+    # Same query for both tasks
+    query = "What is the Library of Babel?"
+
+    # Disable streaming on all tasks
+    # for task in tasks:
+    #     if hasattr(task.agent.config.llm, "stream"):
+    #         task.agent.config.llm.stream = False
+
+    # Generator function that returns DIFFERENT tasks based on index
+    def gen_task(idx: int) -> lr.Task:
+        print(f"[Test] Task {idx+1} running query...")
+        return tasks[idx]
+
+    print("\n" + "=" * 80)
+    print("TEST: Running queries in PARALLEL (should trigger race condition)...")
+    print("=" * 80)
+
+    # Run in PARALLEL - this triggers the bug
+    results_list = run_batch_task_gen(
+        gen_task=gen_task,
+        items=[query] * N,  # Same query for all tasks
+        sequential=False,  # PARALLEL execution triggers race condition
+        input_map=lambda q: q,
+        output_map=lambda result: (
+            result.content if result is not None else "DO-NOT-KNOW"
+        ),
+        handle_exceptions=False,  # Let exceptions propagate
+    )
+
+    # If we get here, bug didn't occur
+    print(f"\n[Test] Results received: {len(results_list)}")
+    for i, result in enumerate(results_list):
+        if result:
+            print(f"\nTask {i+1} answer: {result[:200]}...")
+
+    assert len(results_list) == len(tasks)
+    assert all(result is not None for result in results_list)
+
+
+def test_sequential_rag_no_race_condition():
+    """
+    Control test: running queries sequentially should NOT trigger the bug.
+    """
+    print("\n" + "=" * 80)
+    print("CONTROL TEST: Running queries SEQUENTIALLY...")
+    print("=" * 80)
+
+    task = setup_rag_agent()
+
+    queries = [
+        "What is the Library of Babel?",
+        "What do the books in the library contain?",
+    ]
+
+    if hasattr(task.agent.config.llm, "stream"):
+        task.agent.config.llm.stream = False
+
+    # Run SEQUENTIALLY using list comprehension - should NOT trigger the bug
+    results_list = []
+    for i, query in enumerate(queries):
+        print(f"[Test] Running query {i+1}: {query}")
+        result = task.run(query)
+        output = result.content if result is not None else "DO-NOT-KNOW"
+        results_list.append(output)
+
+    print(f"\n[Test] Sequential results received: {len(results_list)}")
+    for i, result in enumerate(results_list):
+        if result:
+            print(f"\nQuery {i+1}: {queries[i]}")
+            print(f"Answer: {result[:200]}...")
+
+    assert len(results_list) == len(queries)
+    assert all(result is not None for result in results_list)
+
+    print("\n✅ Control test passed - no race condition in sequential mode")
+
+
+if __name__ == "__main__":
+    print("=" * 80)
+    print("TEST 1: Concurrent queries (should trigger cross-encoder race condition)")
+    print("=" * 80)
+    try:
+        test_concurrent_rag_cross_encoder_race_condition()
+    except Exception as e:
+        print(f"\n❌ Test failed with error: {e}")
+
+    print("\n" + "=" * 80)
+    print("TEST 2: Sequential queries (control, should NOT trigger bug)")
+    print("=" * 80)
+    try:
+        test_sequential_rag_no_race_condition()
+    except Exception as e:
+        print(f"\n❌ Control test failed: {e}")
+</file>
+
 <file path="tests/main/test_doc_chat_relevance.py">
 import warnings
 from types import SimpleNamespace
@@ -90496,7 +90534,7 @@ def test_vector_stores_context_window(vecdb):
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "chroma",
         "lancedb",
-        # "postgres",
+        "postgres",
         "weaviate_docker",
     ],
     indirect=True,
@@ -98875,7 +98913,8 @@ class VectorStore(ABC):
             self.embedding_model = EmbeddingModel.create(config.embedding)
         else:
             self.embedding_model = config.embedding_model
-        self.config.embedding_model = self.embedding_model
+        if hasattr(self.config, "embedding_model"):
+            self.config.embedding_model = None
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
 
     @staticmethod
@@ -98928,7 +98967,10 @@ class VectorStore(ABC):
         (e.g., embedded/local stores that rely on file locks).
         """
 
-        config_copy = self.config.model_copy(deep=True)
+        config_class = self.config.__class__
+        config_data = self.config.model_dump(mode="python")
+        config_data["embedding_model"] = None
+        config_copy = config_class.model_validate(config_data)
         logger.debug(
             "Cloning VectorStore %s: original collection=%s, copied collection=%s",
             type(self).__name__,
@@ -98944,16 +98986,12 @@ class VectorStore(ABC):
             and getattr(self, "embedding_model") is not None
         ):
             cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
-
-        if hasattr(config_copy, "embedding_model"):
-            config_copy.embedding_model = cloned_embedding
-        if (
-            getattr(config_copy, "embedding_model", None) is None
-            and cloned_embedding is not None
-        ):
-            setattr(config_copy, "embedding_model", cloned_embedding)
+            if hasattr(config_copy, "embedding_model"):
+                config_copy.embedding_model = cloned_embedding
 
         cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+        if hasattr(cloned_store.config, "embedding_model"):
+            cloned_store.config.embedding_model = None
         logger.debug(
             "Cloned VectorStore %s: cloned collection=%s",
             type(self).__name__,
@@ -107364,193 +107402,6 @@ publish:
 	uv publish
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="langroid/agent/chat_agent.py">
 import copy
 import inspect
@@ -110212,6 +110063,194 @@ def _get_model_info(model: str | ModelName) -> ModelInfo | None:
     if isinstance(model, str):
         return MODEL_INFO.get(model)
     return MODEL_INFO.get(model.value)
+</file>
+
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path=".pre-commit-config.yaml">

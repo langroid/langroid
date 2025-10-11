@@ -52,7 +52,8 @@ class VectorStore(ABC):
             self.embedding_model = EmbeddingModel.create(config.embedding)
         else:
             self.embedding_model = config.embedding_model
-        self.config.embedding_model = self.embedding_model
+        if hasattr(self.config, "embedding_model"):
+            self.config.embedding_model = None
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
 
     @staticmethod
@@ -105,7 +106,10 @@ class VectorStore(ABC):
         (e.g., embedded/local stores that rely on file locks).
         """
 
-        config_copy = self.config.model_copy(deep=True)
+        config_class = self.config.__class__
+        config_data = self.config.model_dump(mode="python")
+        config_data["embedding_model"] = None
+        config_copy = config_class.model_validate(config_data)
         logger.debug(
             "Cloning VectorStore %s: original collection=%s, copied collection=%s",
             type(self).__name__,
@@ -121,16 +125,12 @@ class VectorStore(ABC):
             and getattr(self, "embedding_model") is not None
         ):
             cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
-
-        if hasattr(config_copy, "embedding_model"):
-            config_copy.embedding_model = cloned_embedding
-        if (
-            getattr(config_copy, "embedding_model", None) is None
-            and cloned_embedding is not None
-        ):
-            setattr(config_copy, "embedding_model", cloned_embedding)
+            if hasattr(config_copy, "embedding_model"):
+                config_copy.embedding_model = cloned_embedding
 
         cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+        if hasattr(cloned_store.config, "embedding_model"):
+            cloned_store.config.embedding_model = None
         logger.debug(
             "Cloned VectorStore %s: cloned collection=%s",
             type(self).__name__,
