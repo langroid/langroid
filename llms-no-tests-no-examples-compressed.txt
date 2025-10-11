@@ -12624,6 +12624,47 @@ df['airline'] = df['airline'].str.replace('*', '')  # This would fail
 This addresses issue #867 and improves the TableChatAgent's utility for data cleaning workflows.
 </file>
 
+<file path="release-notes/v0-56-4-handler-params.md">
+# Langroid v0.56.4 Release Notes
+
+## Improved Handler Parameter Analysis for Tool Messages
+
+### Overview
+This release enhances the internal mechanism for analyzing handler method parameters in `ToolMessage` handlers, providing more robust and accurate type detection.
+
+### Key Improvements
+
+#### Direct Type Checking for Handler Parameters
+- **Agent parameter detection**: Now uses direct class checking with `inspect.isclass()` and `issubclass()` for more accurate detection of Agent-typed parameters
+- **ChatDocument detection**: Uses direct identity comparison (`param.annotation is ChatDocument`) for exact type matching
+- **Complex type support**: Maintains fallback to string-based detection for complex generic types like `Optional[Agent]`
+
+#### Better Parameter Extraction
+- Improved the method for removing the `self` parameter from handler signatures using index slicing instead of name-based filtering
+- More reliable parameter analysis for both synchronous and asynchronous handlers
+
+### Why This Matters
+These improvements make handler parameter detection more robust, especially when working with:
+- Subclasses of `Agent` 
+- Tools that require specific agent or chat document context
+- MCP (Model Context Protocol) tool handlers that use various parameter combinations
+
+### Backward Compatibility
+All existing handler patterns continue to work as before. The improvements are internal optimizations that enhance reliability without changing the API.
+
+### Developer Impact
+No code changes required. Handlers with type annotations like:
+```python
+def handle(self, agent: Agent, chat_doc: ChatDocument) -> str:
+    ...
+```
+will benefit from more accurate parameter detection and routing.
+
+### Related Changes
+- Removed debug print statement from `_analyze_handler_params` method
+- Enhanced test coverage for MCP tools with various handler signatures
+</file>
+
 <file path="scripts/fix-pydantic-imports.sh">
 #!/bin/bash
 
@@ -25065,47 +25106,6 @@ Improved DoneSequence implementation by introducing response sequence tracking a
 All existing done sequence tests pass without modification, confirming backward compatibility.
 </file>
 
-<file path="release-notes/v0-56-4-handler-params.md">
-# Langroid v0.56.4 Release Notes
-
-## Improved Handler Parameter Analysis for Tool Messages
-
-### Overview
-This release enhances the internal mechanism for analyzing handler method parameters in `ToolMessage` handlers, providing more robust and accurate type detection.
-
-### Key Improvements
-
-#### Direct Type Checking for Handler Parameters
-- **Agent parameter detection**: Now uses direct class checking with `inspect.isclass()` and `issubclass()` for more accurate detection of Agent-typed parameters
-- **ChatDocument detection**: Uses direct identity comparison (`param.annotation is ChatDocument`) for exact type matching
-- **Complex type support**: Maintains fallback to string-based detection for complex generic types like `Optional[Agent]`
-
-#### Better Parameter Extraction
-- Improved the method for removing the `self` parameter from handler signatures using index slicing instead of name-based filtering
-- More reliable parameter analysis for both synchronous and asynchronous handlers
-
-### Why This Matters
-These improvements make handler parameter detection more robust, especially when working with:
-- Subclasses of `Agent` 
-- Tools that require specific agent or chat document context
-- MCP (Model Context Protocol) tool handlers that use various parameter combinations
-
-### Backward Compatibility
-All existing handler patterns continue to work as before. The improvements are internal optimizations that enhance reliability without changing the API.
-
-### Developer Impact
-No code changes required. Handlers with type annotations like:
-```python
-def handle(self, agent: Agent, chat_doc: ChatDocument) -> str:
-    ...
-```
-will benefit from more accurate parameter detection and routing.
-
-### Related Changes
-- Removed debug print statement from `_analyze_handler_params` method
-- Enhanced test coverage for MCP tools with various handler signatures
-</file>
-
 <file path="release-notes/v0-56-6-doc-chat-refactor.md">
 # v0.56.6: DocChatAgent Retrieval Configuration Refactor and Critical Fixes
 
@@ -30474,292 +30474,6 @@ big_doc_chunks = self.split_para_sentence(big_docs)
 big_doc_chunks = self.split_simple(big_docs)
 </file>
 
-<file path="langroid/vector_store/base.py">
-logger = logging.getLogger(__name__)
-⋮----
-class VectorStoreConfig(BaseSettings)
-⋮----
-type: str = ""  # deprecated, keeping it for backward compatibility
-collection_name: str | None = "temp"
-replace_collection: bool = False  # replace collection if it already exists
-storage_path: str = ".qdrant/data"
-cloud: bool = False
-batch_size: int = 200
-embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig(
-embedding_model: Optional[EmbeddingModel] = None
-timeout: int = 60
-host: str = "127.0.0.1"
-port: int = 6333
-# used when parsing search results back as Document objects
-document_class: Type[Document] = Document
-metadata_class: Type[DocMetaData] = DocMetaData
-# compose_file: str = "langroid/vector_store/docker-compose-qdrant.yml"
-full_eval: bool = False  # runs eval without sanitization. Use only on trusted input
-⋮----
-class VectorStore(ABC)
-⋮----
-"""
-    Abstract base class for a vector store.
-    """
-⋮----
-def __init__(self, config: VectorStoreConfig)
-⋮----
-@staticmethod
-    def create(config: VectorStoreConfig) -> Optional["VectorStore"]
-⋮----
-@property
-    def embedding_dim(self) -> int
-⋮----
-def clone(self) -> "VectorStore"
-⋮----
-"""Return a vector-store clone suitable for agent cloning.
-
-        The default implementation deep-copies the configuration, reuses any
-        existing embedding model, and instantiates a fresh store of the same
-        type. Subclasses can override when sharing the instance is required
-        (e.g., embedded/local stores that rely on file locks).
-        """
-⋮----
-config_class = self.config.__class__
-config_data = self.config.model_dump(mode="python")
-⋮----
-config_copy = config_class.model_validate(config_data)
-⋮----
-# Preserve the calculated collection contents without forcing replaces
-⋮----
-config_copy.replace_collection = False  # type: ignore[attr-defined]
-cloned_embedding: Optional[EmbeddingModel] = None
-⋮----
-cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
-⋮----
-cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
-⋮----
-# Some stores might not honour replace_collection; ensure same collection
-⋮----
-@abstractmethod
-    def clear_empty_collections(self) -> int
-⋮----
-"""Clear all empty collections in the vector store.
-        Returns the number of collections deleted.
-        """
-⋮----
-@abstractmethod
-    def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-"""
-        Clear all collections in the vector store.
-
-        Args:
-            really (bool, optional): Whether to really clear all collections.
-                Defaults to False.
-            prefix (str, optional): Prefix of collections to clear.
-        Returns:
-            int: Number of collections deleted.
-        """
-⋮----
-@abstractmethod
-    def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-"""List all collections in the vector store
-        (only non empty collections if empty=False).
-        """
-⋮----
-def set_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-"""
-        Set the current collection to the given collection name.
-        Args:
-            collection_name (str): Name of the collection.
-            replace (bool, optional): Whether to replace the collection if it
-                already exists. Defaults to False.
-        """
-⋮----
-@abstractmethod
-    def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-"""Create a collection with the given name.
-        Args:
-            collection_name (str): Name of the collection.
-            replace (bool, optional): Whether to replace the
-                collection if it already exists. Defaults to False.
-        """
-⋮----
-@abstractmethod
-    def add_documents(self, documents: Sequence[Document]) -> None
-⋮----
-def compute_from_docs(self, docs: List[Document], calc: str) -> str
-⋮----
-"""Compute a result on a set of documents,
-        using a dataframe calc string like `df.groupby('state')['income'].mean()`.
-
-        If full_eval is False (default), the input expression is sanitized to prevent
-        most common code injection attack vectors.
-        If full_eval is True, sanitization is bypassed - use only with trusted input!
-        """
-# convert each doc to a dict, using dotted paths for nested fields
-dicts = [flatten_dict(doc.model_dump(by_alias=True)) for doc in docs]
-df = pd.DataFrame(dicts)
-⋮----
-# SECURITY MITIGATION: Eval input is sanitized to prevent most common
-# code injection attack vectors when full_eval is False.
-vars = {"df": df}
-⋮----
-calc = sanitize_command(calc)
-code = compile(calc, "<calc>", "eval")
-result = eval(code, vars, {})
-⋮----
-# return error message so LLM can fix the calc string if needed
-err = f"""
-⋮----
-# Pd.eval sometimes fails on a perfectly valid exprn like
-# df.loc[..., 'column'] with a KeyError.
-⋮----
-def maybe_add_ids(self, documents: Sequence[Document]) -> None
-⋮----
-"""Add ids to metadata if absent, since some
-        vecdbs don't like having blank ids."""
-⋮----
-"""
-        Find k most similar texts to the given text, in terms of vector distance metric
-        (e.g., cosine similarity).
-
-        Args:
-            text (str): The text to find similar texts for.
-            k (int, optional): Number of similar texts to retrieve. Defaults to 1.
-            where (Optional[str], optional): Where clause to filter the search.
-
-        Returns:
-            List[Tuple[Document,float]]: List of (Document, score) tuples.
-
-        """
-⋮----
-"""
-        In each doc's metadata, there may be a window_ids field indicating
-        the ids of the chunks around the current chunk.
-        These window_ids may overlap, so we
-        - coalesce each overlapping groups into a single window (maintaining ordering),
-        - create a new document for each part, preserving metadata,
-
-        We may have stored a longer set of window_ids than we need during chunking.
-        Now, we just want `neighbors` on each side of the center of the window_ids list.
-
-        Args:
-            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
-                to add context windows to together with their match scores.
-            neighbors (int, optional): Number of neighbors on "each side" of match to
-                retrieve. Defaults to 0.
-                "Each side" here means before and after the match,
-                in the original text.
-
-        Returns:
-            List[Tuple[Document, float]]: List of (Document, score) tuples.
-        """
-# We return a larger context around each match, i.e.
-# a window of `neighbors` on each side of the match.
-docs = [d for d, s in docs_scores]
-scores = [s for d, s in docs_scores]
-⋮----
-doc_chunks = [d for d in docs if d.metadata.is_chunk]
-⋮----
-window_ids_list = []
-id2metadata = {}
-# id -> highest score of a doc it appears in
-id2max_score: Dict[int | str, float] = {}
-⋮----
-window_ids = d.metadata.window_ids
-⋮----
-window_ids = [d.id()]
-⋮----
-n = len(window_ids)
-chunk_idx = window_ids.index(d.id())
-neighbor_ids = window_ids[
-⋮----
-# window_ids could be from different docs,
-# and they may overlap, so we coalesce overlapping groups into
-# separate windows.
-window_ids_list = self.remove_overlaps(window_ids_list)
-final_docs = []
-final_scores = []
-⋮----
-metadata = copy.deepcopy(id2metadata[w[0]])
-⋮----
-document = Document(
-# make a fresh id since content is in general different
-⋮----
-@staticmethod
-    def remove_overlaps(windows: List[List[str]]) -> List[List[str]]
-⋮----
-"""
-        Given a collection of windows, where each window is a sequence of ids,
-        identify groups of overlapping windows, and for each overlapping group,
-        order the chunk-ids using topological sort so they appear in the original
-        order in the text.
-
-        Args:
-            windows (List[int|str]): List of windows, where each window is a
-                sequence of ids.
-
-        Returns:
-            List[int|str]: List of windows, where each window is a sequence of ids,
-                and no two windows overlap.
-        """
-ids = set(id for w in windows for id in w)
-# id -> {win -> # pos}
-id2win2pos: Dict[str, Dict[int, int]] = {id: {} for id in ids}
-⋮----
-n = len(windows)
-# relation between windows:
-order = np.zeros((n, n), dtype=np.int8)
-⋮----
-id = list(set(w).intersection(x))[0]  # any common id
-⋮----
-order[i, j] = -1  # win i is before win j
-⋮----
-order[i, j] = 1  # win i is after win j
-⋮----
-# find groups of windows that overlap, like connected components in a graph
-groups = components(np.abs(order))
-⋮----
-# order the chunk-ids in each group using topological sort
-new_windows = []
-⋮----
-# find total ordering among windows in group based on order matrix
-# (this is a topological sort)
-_g = np.array(g)
-order_matrix = order[_g][:, _g]
-ordered_window_indices = topological_sort(order_matrix)
-ordered_window_ids = [windows[i] for i in _g[ordered_window_indices]]
-flattened = [id for w in ordered_window_ids for id in w]
-flattened_deduped = list(dict.fromkeys(flattened))
-# Note we are not going to split these, and instead we'll return
-# larger windows from concatenating the connected groups.
-# This ensures context is retained for LLM q/a
-⋮----
-@abstractmethod
-    def get_all_documents(self, where: str = "") -> List[Document]
-⋮----
-"""
-        Get all documents in the current collection, possibly filtered by `where`.
-        """
-⋮----
-@abstractmethod
-    def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-"""
-        Get documents by their ids.
-        Args:
-            ids (List[str]): List of document ids.
-
-        Returns:
-            List[Document]: List of documents
-        """
-⋮----
-@abstractmethod
-    def delete_collection(self, collection_name: str) -> None
-⋮----
-def show_if_debug(self, doc_score_pairs: List[Tuple[Document, float]]) -> None
-</file>
-
 <file path="langroid/vector_store/qdrantdb.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -33577,6 +33291,292 @@ def load(self) -> List[Document]
 """Load the URLs using the specified crawler."""
 </file>
 
+<file path="langroid/vector_store/base.py">
+logger = logging.getLogger(__name__)
+⋮----
+class VectorStoreConfig(BaseSettings)
+⋮----
+type: str = ""  # deprecated, keeping it for backward compatibility
+collection_name: str | None = "temp"
+replace_collection: bool = False  # replace collection if it already exists
+storage_path: str = ".qdrant/data"
+cloud: bool = False
+batch_size: int = 200
+embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig(
+embedding_model: Optional[EmbeddingModel] = None
+timeout: int = 60
+host: str = "127.0.0.1"
+port: int = 6333
+# used when parsing search results back as Document objects
+document_class: Type[Document] = Document
+metadata_class: Type[DocMetaData] = DocMetaData
+# compose_file: str = "langroid/vector_store/docker-compose-qdrant.yml"
+full_eval: bool = False  # runs eval without sanitization. Use only on trusted input
+⋮----
+class VectorStore(ABC)
+⋮----
+"""
+    Abstract base class for a vector store.
+    """
+⋮----
+def __init__(self, config: VectorStoreConfig)
+⋮----
+@staticmethod
+    def create(config: VectorStoreConfig) -> Optional["VectorStore"]
+⋮----
+@property
+    def embedding_dim(self) -> int
+⋮----
+def clone(self) -> "VectorStore"
+⋮----
+"""Return a vector-store clone suitable for agent cloning.
+
+        The default implementation deep-copies the configuration, reuses any
+        existing embedding model, and instantiates a fresh store of the same
+        type. Subclasses can override when sharing the instance is required
+        (e.g., embedded/local stores that rely on file locks).
+        """
+⋮----
+config_class = self.config.__class__
+config_data = self.config.model_dump(mode="python")
+⋮----
+config_copy = config_class.model_validate(config_data)
+⋮----
+# Preserve the calculated collection contents without forcing replaces
+⋮----
+config_copy.replace_collection = False  # type: ignore[attr-defined]
+cloned_embedding: Optional[EmbeddingModel] = None
+⋮----
+cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
+⋮----
+cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+⋮----
+# Some stores might not honour replace_collection; ensure same collection
+⋮----
+@abstractmethod
+    def clear_empty_collections(self) -> int
+⋮----
+"""Clear all empty collections in the vector store.
+        Returns the number of collections deleted.
+        """
+⋮----
+@abstractmethod
+    def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+"""
+        Clear all collections in the vector store.
+
+        Args:
+            really (bool, optional): Whether to really clear all collections.
+                Defaults to False.
+            prefix (str, optional): Prefix of collections to clear.
+        Returns:
+            int: Number of collections deleted.
+        """
+⋮----
+@abstractmethod
+    def list_collections(self, empty: bool = False) -> List[str]
+⋮----
+"""List all collections in the vector store
+        (only non empty collections if empty=False).
+        """
+⋮----
+def set_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+"""
+        Set the current collection to the given collection name.
+        Args:
+            collection_name (str): Name of the collection.
+            replace (bool, optional): Whether to replace the collection if it
+                already exists. Defaults to False.
+        """
+⋮----
+@abstractmethod
+    def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+"""Create a collection with the given name.
+        Args:
+            collection_name (str): Name of the collection.
+            replace (bool, optional): Whether to replace the
+                collection if it already exists. Defaults to False.
+        """
+⋮----
+@abstractmethod
+    def add_documents(self, documents: Sequence[Document]) -> None
+⋮----
+def compute_from_docs(self, docs: List[Document], calc: str) -> str
+⋮----
+"""Compute a result on a set of documents,
+        using a dataframe calc string like `df.groupby('state')['income'].mean()`.
+
+        If full_eval is False (default), the input expression is sanitized to prevent
+        most common code injection attack vectors.
+        If full_eval is True, sanitization is bypassed - use only with trusted input!
+        """
+# convert each doc to a dict, using dotted paths for nested fields
+dicts = [flatten_dict(doc.model_dump(by_alias=True)) for doc in docs]
+df = pd.DataFrame(dicts)
+⋮----
+# SECURITY MITIGATION: Eval input is sanitized to prevent most common
+# code injection attack vectors when full_eval is False.
+vars = {"df": df}
+⋮----
+calc = sanitize_command(calc)
+code = compile(calc, "<calc>", "eval")
+result = eval(code, vars, {})
+⋮----
+# return error message so LLM can fix the calc string if needed
+err = f"""
+⋮----
+# Pd.eval sometimes fails on a perfectly valid exprn like
+# df.loc[..., 'column'] with a KeyError.
+⋮----
+def maybe_add_ids(self, documents: Sequence[Document]) -> None
+⋮----
+"""Add ids to metadata if absent, since some
+        vecdbs don't like having blank ids."""
+⋮----
+"""
+        Find k most similar texts to the given text, in terms of vector distance metric
+        (e.g., cosine similarity).
+
+        Args:
+            text (str): The text to find similar texts for.
+            k (int, optional): Number of similar texts to retrieve. Defaults to 1.
+            where (Optional[str], optional): Where clause to filter the search.
+
+        Returns:
+            List[Tuple[Document,float]]: List of (Document, score) tuples.
+
+        """
+⋮----
+"""
+        In each doc's metadata, there may be a window_ids field indicating
+        the ids of the chunks around the current chunk.
+        These window_ids may overlap, so we
+        - coalesce each overlapping groups into a single window (maintaining ordering),
+        - create a new document for each part, preserving metadata,
+
+        We may have stored a longer set of window_ids than we need during chunking.
+        Now, we just want `neighbors` on each side of the center of the window_ids list.
+
+        Args:
+            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
+                to add context windows to together with their match scores.
+            neighbors (int, optional): Number of neighbors on "each side" of match to
+                retrieve. Defaults to 0.
+                "Each side" here means before and after the match,
+                in the original text.
+
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+# We return a larger context around each match, i.e.
+# a window of `neighbors` on each side of the match.
+docs = [d for d, s in docs_scores]
+scores = [s for d, s in docs_scores]
+⋮----
+doc_chunks = [d for d in docs if d.metadata.is_chunk]
+⋮----
+window_ids_list = []
+id2metadata = {}
+# id -> highest score of a doc it appears in
+id2max_score: Dict[int | str, float] = {}
+⋮----
+window_ids = d.metadata.window_ids
+⋮----
+window_ids = [d.id()]
+⋮----
+n = len(window_ids)
+chunk_idx = window_ids.index(d.id())
+neighbor_ids = window_ids[
+⋮----
+# window_ids could be from different docs,
+# and they may overlap, so we coalesce overlapping groups into
+# separate windows.
+window_ids_list = self.remove_overlaps(window_ids_list)
+final_docs = []
+final_scores = []
+⋮----
+metadata = copy.deepcopy(id2metadata[w[0]])
+⋮----
+document = Document(
+# make a fresh id since content is in general different
+⋮----
+@staticmethod
+    def remove_overlaps(windows: List[List[str]]) -> List[List[str]]
+⋮----
+"""
+        Given a collection of windows, where each window is a sequence of ids,
+        identify groups of overlapping windows, and for each overlapping group,
+        order the chunk-ids using topological sort so they appear in the original
+        order in the text.
+
+        Args:
+            windows (List[int|str]): List of windows, where each window is a
+                sequence of ids.
+
+        Returns:
+            List[int|str]: List of windows, where each window is a sequence of ids,
+                and no two windows overlap.
+        """
+ids = set(id for w in windows for id in w)
+# id -> {win -> # pos}
+id2win2pos: Dict[str, Dict[int, int]] = {id: {} for id in ids}
+⋮----
+n = len(windows)
+# relation between windows:
+order = np.zeros((n, n), dtype=np.int8)
+⋮----
+id = list(set(w).intersection(x))[0]  # any common id
+⋮----
+order[i, j] = -1  # win i is before win j
+⋮----
+order[i, j] = 1  # win i is after win j
+⋮----
+# find groups of windows that overlap, like connected components in a graph
+groups = components(np.abs(order))
+⋮----
+# order the chunk-ids in each group using topological sort
+new_windows = []
+⋮----
+# find total ordering among windows in group based on order matrix
+# (this is a topological sort)
+_g = np.array(g)
+order_matrix = order[_g][:, _g]
+ordered_window_indices = topological_sort(order_matrix)
+ordered_window_ids = [windows[i] for i in _g[ordered_window_indices]]
+flattened = [id for w in ordered_window_ids for id in w]
+flattened_deduped = list(dict.fromkeys(flattened))
+# Note we are not going to split these, and instead we'll return
+# larger windows from concatenating the connected groups.
+# This ensures context is retained for LLM q/a
+⋮----
+@abstractmethod
+    def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+"""
+        Get all documents in the current collection, possibly filtered by `where`.
+        """
+⋮----
+@abstractmethod
+    def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+"""
+        Get documents by their ids.
+        Args:
+            ids (List[str]): List of document ids.
+
+        Returns:
+            List[Document]: List of documents
+        """
+⋮----
+@abstractmethod
+    def delete_collection(self, collection_name: str) -> None
+⋮----
+def show_if_debug(self, doc_score_pairs: List[Tuple[Document, float]]) -> None
+</file>
+
 <file path="Makefile">
 .PHONY: setup check lint tests docs nodocs loc
 
@@ -35228,12 +35228,15 @@ lock: threading.RLock
 _CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
 _CROSS_ENCODER_CACHE_LOCK = threading.Lock()
 ⋮----
-def _get_cross_encoder_entry(model_name: str, device: str) -> _CrossEncoderCacheEntry
+def _auto_cross_encoder_device() -> str
 ⋮----
-cache_key = f"{model_name}::{device}"
+mps = getattr(torch.backends, "mps", None)
+⋮----
+actual_device = device or _auto_cross_encoder_device()
+cache_key = f"{model_name}::{actual_device}"
 entry = _CROSS_ENCODER_CACHE.get(cache_key)
 ⋮----
-model = CrossEncoder(model_name, device=device)
+model = CrossEncoder(model_name, device=actual_device)
 entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
 ⋮----
 DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
@@ -35749,7 +35752,7 @@ self.chunked_docs_clean,  # already pre-processed!
 ⋮----
 fuzzy_match_docs = find_fuzzy_matches_in_docs(
 ⋮----
-device = self.config.cross_encoder_device or "cpu"
+device = self.config.cross_encoder_device
 entry = _get_cross_encoder_entry(
 pair_inputs = [(query, p.content) for p in passages]
 ⋮----

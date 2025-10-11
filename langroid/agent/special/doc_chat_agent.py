@@ -101,8 +101,25 @@ _CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
 _CROSS_ENCODER_CACHE_LOCK = threading.Lock()
 
 
-def _get_cross_encoder_entry(model_name: str, device: str) -> _CrossEncoderCacheEntry:
-    cache_key = f"{model_name}::{device}"
+def _auto_cross_encoder_device() -> str:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return "cuda"
+        mps = getattr(torch.backends, "mps", None)
+        if mps is not None and mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return "cpu"
+
+
+def _get_cross_encoder_entry(
+    model_name: str, device: str | None
+) -> _CrossEncoderCacheEntry:
+    actual_device = device or _auto_cross_encoder_device()
+    cache_key = f"{model_name}::{actual_device}"
     entry = _CROSS_ENCODER_CACHE.get(cache_key)
     if entry is not None:
         return entry
@@ -122,7 +139,7 @@ def _get_cross_encoder_entry(model_name: str, device: str) -> _CrossEncoderCache
                 """
             ) from exc
 
-        model = CrossEncoder(model_name, device=device)
+        model = CrossEncoder(model_name, device=actual_device)
         entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
         _CROSS_ENCODER_CACHE[cache_key] = entry
         return entry
@@ -1167,7 +1184,7 @@ class DocChatAgent(ChatAgent):
         self, query: str, passages: List[Document]
     ) -> List[Document]:
         with status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
-            device = self.config.cross_encoder_device or "cpu"
+            device = self.config.cross_encoder_device
             entry = _get_cross_encoder_entry(
                 self.config.cross_encoder_reranking_model, device
             )
