@@ -4,6 +4,7 @@ from langroid.agent.batch import run_batch_tasks
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
+from langroid.language_models.mock_lm import MockLM, MockLMConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.vector_store.qdrantdb import QdrantDBConfig
 
@@ -34,7 +35,9 @@ def test_doc_chat_concurrent_local_qdrant(local_qdrant_config):
         relevance_extractor_config=None,
     )
     agent = DocChatAgent(cfg)
-    agent.llm = None
+    mock_llm_cfg = MockLMConfig(default_response="Mock response")
+    agent.config.llm = mock_llm_cfg
+    agent.llm = MockLM(mock_llm_cfg)
     docs = [
         Document(
             content=(
@@ -45,7 +48,11 @@ def test_doc_chat_concurrent_local_qdrant(local_qdrant_config):
         )
     ]
     agent.ingest_docs(docs)
-    agent.vecdb.config.replace_collection = False
+    # Force regression scenario: remove the backing collection so clones must rely
+    # on in-memory chunk caches (buggy baseline returns DO-NOT-KNOW here).
+    if agent.vecdb is not None and agent.vecdb.config.collection_name is not None:
+        agent.vecdb.delete_collection(agent.vecdb.config.collection_name)
+        agent.vecdb.config.replace_collection = False
 
     queries = [
         "What is the structure of the Library described in the story?",
@@ -53,9 +60,10 @@ def test_doc_chat_concurrent_local_qdrant(local_qdrant_config):
         "What is the significance of the hexagonal galleries?",
     ]
 
-    def retrieve(agent_obj, question: str) -> str:
-        chunks = agent_obj.get_relevant_chunks(question, [])
-        return "\n".join(chunk.content for chunk in chunks) if chunks else "DO-NOT-KNOW"
+    assert len(agent.chunked_docs) == len(docs)
+
+    clone = agent.clone(1)
+    assert len(clone.chunked_docs) == len(agent.chunked_docs)
 
     results = run_batch_tasks(
         Task(agent, interactive=False, single_round=True),
@@ -65,4 +73,4 @@ def test_doc_chat_concurrent_local_qdrant(local_qdrant_config):
         output_map=lambda x: x,
     )
 
-    assert all(res is not None and res.content != "DO-NOT-KNOW" for res in results)
+    assert all(res is not None and "DO-NOT-KNOW" not in res.content for res in results)

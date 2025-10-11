@@ -1482,11 +1482,17 @@ class DocChatAgent(ChatAgent):
             List[Document]: list of relevant extracts
 
         """
-        if (
-            self.vecdb is None
-            or self.vecdb.config.collection_name
-            not in self.vecdb.list_collections(empty=False)
-        ):
+        collection_name = (
+            None if self.vecdb is None else self.vecdb.config.collection_name
+        )
+        has_vecdb_collection = (
+            collection_name is not None
+            and collection_name in self.vecdb.list_collections(empty=False)
+            if self.vecdb is not None
+            else False
+        )
+
+        if not has_vecdb_collection and len(self.chunked_docs) == 0:
             return query, []
 
         if len(self.dialog) > 0 and not self.config.assistant_mode:
@@ -1506,7 +1512,10 @@ class DocChatAgent(ChatAgent):
         if self.config.n_query_rephrases > 0:
             rephrases = self.llm_rephrase_query(query)
             proxies += rephrases
-        passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+        if has_vecdb_collection:
+            passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+        else:
+            passages = self.chunked_docs
 
         if len(passages) == 0:
             return query, []
