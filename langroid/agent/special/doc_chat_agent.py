@@ -15,6 +15,7 @@ pip install "langroid[hf-embeddings]"
 """
 
 import asyncio
+import copy
 import importlib
 import logging
 from collections import OrderedDict
@@ -298,6 +299,19 @@ class DocChatAgent(ChatAgent):
             self.config.n_relevant_chunks = self.config.parsing.n_similar_docs
 
         self.ingest()
+
+    def _clone_extra_state(self, new_agent: "ChatAgent") -> None:
+        super()._clone_extra_state(new_agent)
+        for attr in [
+            "chunked_docs",
+            "chunked_docs_clean",
+            "original_docs",
+            "original_docs_length",
+            "from_dataframe",
+            "df_description",
+        ]:
+            if hasattr(self, attr):
+                setattr(new_agent, attr, copy.deepcopy(getattr(self, attr)))
 
     def clear(self) -> None:
         """Clear the document collection and the specific collection in vecdb"""

@@ -583,6 +583,7 @@ tests/
     test_chat_agent.py
     test_closest_string.py
     test_code_parser.py
+    test_concurrent_doc_chat_qdrant.py
     test_dataframe_docs.py
     test_doc_chat_agent.py
     test_doc_chat_relevance.py
@@ -17489,6 +17490,26 @@ result = sorted(result, key=lambda x: x["category"])
 def test_closest_string(query, string_list, expected)
 </file>
 
+<file path="tests/main/test_concurrent_doc_chat_qdrant.py">
+@pytest.fixture(scope="function")
+def local_qdrant_config(monkeypatch) -> QdrantDBConfig
+⋮----
+def test_doc_chat_concurrent_local_qdrant(local_qdrant_config)
+⋮----
+cfg = DocChatAgentConfig(
+agent = DocChatAgent(cfg)
+⋮----
+docs = [
+⋮----
+queries = [
+⋮----
+def retrieve(agent_obj, question: str) -> str
+⋮----
+chunks = agent_obj.get_relevant_chunks(question, [])
+⋮----
+results = run_batch_tasks(
+</file>
+
 <file path="tests/main/test_dataframe_docs.py">
 def test_df_to_documents(test_settings: Settings)
 ⋮----
@@ -20751,6 +20772,7 @@ SOFTWARE.
 markers =
     unit: marks tests as unit tests (deselect with '-m "not unit"')
     integration: marks tests as integration tests (deselect with '-m "not integration"')
+
     
 # MySQL configuration settings
 mysql_host = localhost
@@ -36087,6 +36109,18 @@ class EmbeddingModel(ABC)
     Abstract base class for an embedding model.
     """
 ⋮----
+def clone(self) -> "EmbeddingModel"
+⋮----
+"""
+        Return a copy of this embedding model suitable for use in cloned agents.
+        Default behaviour attempts to deep-copy the model configuration and
+        instantiate a fresh model of the same type; if that is not possible,
+        the original instance is reused.
+        """
+config = getattr(self, "config", None)
+⋮----
+return type(self)(config.model_copy(deep=True))  # type: ignore[call-arg]
+⋮----
 @classmethod
     def create(cls, config: EmbeddingModelsConfig) -> "EmbeddingModel"
 ⋮----
@@ -43212,6 +43246,293 @@ async def is_correct(n: int) -> bool
 result = await task.run_async(str(n))
 </file>
 
+<file path="tests/main/test_tool_handler.py">
+"""
+Test various handler method signatures for ToolMessage classes.
+Tests the new flexible handle method that can accept optional agent parameter.
+"""
+⋮----
+class HandleNoArgsMsg(ToolMessage)
+⋮----
+"""Tool with handle() method - no arguments"""
+⋮----
+request: str = "handle_no_args"
+purpose: str = "Test handle with no arguments"
+⋮----
+def handle(self) -> str
+⋮----
+class HandleChatDocMsg(ToolMessage)
+⋮----
+"""Tool with handle(chat_doc) method"""
+⋮----
+request: str = "handle_chat_doc"
+purpose: str = "Test handle with chat_doc"
+data: str
+⋮----
+def handle(self, chat_doc: ChatDocument) -> str
+⋮----
+# Actually use the chat_doc parameter
+⋮----
+class HandleAgentMsg(ToolMessage)
+⋮----
+"""Tool with handle(agent) method"""
+⋮----
+request: str = "handle_agent"
+purpose: str = "Test handle with agent"
+⋮----
+def handle(self, agent: ChatAgent) -> str
+⋮----
+class HandleAgentChatDocMsg(ToolMessage)
+⋮----
+"""Tool with handle(agent, chat_doc) method"""
+⋮----
+request: str = "handle_agent_chat_doc"
+purpose: str = "Test handle with agent and chat_doc"
+⋮----
+def handle(self, agent: ChatAgent, chat_doc: ChatDocument) -> str
+⋮----
+# Use both agent and chat_doc
+⋮----
+class HandleChatDocAgentMsg(ToolMessage)
+⋮----
+"""Tool with handle(chat_doc, agent) method - reversed order"""
+⋮----
+request: str = "handle_chat_doc_agent"
+purpose: str = "Test handle with chat_doc and agent in reverse order"
+⋮----
+def handle(self, chat_doc: ChatDocument, agent: ChatAgent) -> str
+⋮----
+# Use both parameters in the order they're defined
+⋮----
+class HandleNoAnnotationsMsg(ToolMessage)
+⋮----
+"""Tool with handle method but no type annotations - single param"""
+⋮----
+request: str = "handle_no_annotations"
+purpose: str = "Test handle without type annotations"
+⋮----
+def handle(self, chat_doc) -> str
+⋮----
+# Should fall back to duck typing - assume single arg is chat_doc
+# Access content attribute to verify it's actually a ChatDocument
+⋮----
+class HandleNoAnnotationsAgentMsg(ToolMessage)
+⋮----
+"""Tool with handle method expecting agent but no type annotations"""
+⋮----
+request: str = "handle_no_annotations_agent"
+purpose: str = "Test handle with agent but no annotations"
+⋮----
+def handle(self, agent) -> str
+⋮----
+# Parameter name 'agent' should be recognized even without annotations
+⋮----
+class HandleNoAnnotationsBothMsg(ToolMessage)
+⋮----
+"""Tool with handle method expecting both params but no type annotations"""
+⋮----
+request: str = "handle_no_annotations_both"
+purpose: str = "Test handle with both params but no annotations"
+⋮----
+def handle(self, agent, chat_doc) -> str
+⋮----
+# Parameter names 'agent' and 'chat_doc' should be recognized
+⋮----
+class HandleNoAnnotationsBothReversedMsg(ToolMessage)
+⋮----
+"""Tool with handle method with reversed parameter order but no type annotations"""
+⋮----
+request: str = "handle_no_annotations_both_reversed"
+purpose: str = "Test handle with reversed params but no annotations"
+⋮----
+def handle(self, chat_doc, agent) -> str
+⋮----
+# Parameter order should be respected based on names
+⋮----
+Foo = ChatDocument
+⋮----
+class Bar(ChatAgent)
+⋮----
+class HandleClassAnnotations(ToolMessage)
+⋮----
+"""
+    Tool with handle method with type annotations matched via
+    subclassing and non-standard self-parameter naming.
+    """
+⋮----
+request: str = "handle_class_annotations"
+purpose: str = "Test handle with annotations matched via subclassing."
+⋮----
+def handle(this, bar: Bar, foo: Foo)
+⋮----
+class HandleClassAnnotationsReversed(ToolMessage)
+⋮----
+"""
+    Tool with handle method with reversed parameter order and type
+    annotations matched via subclassing and non-standard
+    self-parameter naming.
+    """
+⋮----
+request: str = "handle_class_annotations_reversed"
+purpose: str = (
+⋮----
+def handle(this, foo: Foo, bar: Bar)
+⋮----
+class TestToolHandler
+⋮----
+"""Test the flexible tool handler extraction"""
+⋮----
+def test_handle_no_args(self)
+⋮----
+"""Test handle() with no arguments"""
+agent = ChatAgent(ChatAgentConfig())
+⋮----
+msg = HandleNoArgsMsg()
+result = agent.handle_no_args(msg)
+⋮----
+def test_handle_chat_doc(self)
+⋮----
+"""Test handle(chat_doc) with type annotation"""
+⋮----
+msg = HandleChatDocMsg(data="test data")
+chat_doc = agent.create_agent_response(content="test")
+result = agent.handle_chat_doc(msg, chat_doc)
+⋮----
+def test_handle_agent(self)
+⋮----
+"""Test handle(agent) with type annotation"""
+⋮----
+msg = HandleAgentMsg()
+result = agent.handle_agent(msg)
+⋮----
+def test_handle_agent_chat_doc(self)
+⋮----
+"""Test handle(agent, chat_doc) with type annotations"""
+⋮----
+msg = HandleAgentChatDocMsg(data="test data")
+⋮----
+result = agent.handle_agent_chat_doc(msg, chat_doc)
+⋮----
+def test_handle_chat_doc_agent(self)
+⋮----
+"""Test handle(chat_doc, agent) with reversed parameter order"""
+⋮----
+msg = HandleChatDocAgentMsg(data="test data")
+⋮----
+result = agent.handle_chat_doc_agent(msg, chat_doc)
+⋮----
+def test_handle_no_annotations(self)
+⋮----
+"""Test handle with no type annotations - should use duck typing"""
+⋮----
+msg = HandleNoAnnotationsMsg(data="test data")
+⋮----
+result = agent.handle_no_annotations(msg, chat_doc)
+⋮----
+def test_handle_no_annotations_agent(self)
+⋮----
+"""Test handle with agent param but no type annotations"""
+⋮----
+msg = HandleNoAnnotationsAgentMsg()
+# When called from agent, it won't pass chat_doc if the handler
+# only expects one parameter
+result = agent.handle_no_annotations_agent(msg)
+⋮----
+def test_handle_no_annotations_both(self)
+⋮----
+"""Test handle with both params but no type annotations"""
+⋮----
+msg = HandleNoAnnotationsBothMsg(data="test data")
+⋮----
+result = agent.handle_no_annotations_both(msg, chat_doc)
+⋮----
+def test_handle_no_annotations_both_reversed(self)
+⋮----
+"""Test handle with reversed params but no type annotations"""
+⋮----
+msg = HandleNoAnnotationsBothReversedMsg(data="test data")
+⋮----
+result = agent.handle_no_annotations_both_reversed(msg, chat_doc)
+⋮----
+def test_backward_compatibility(self)
+⋮----
+"""Test that existing tools with response() method still work"""
+⋮----
+# DoneTool uses response(agent) method
+msg = DoneTool(content="task complete")
+result = agent.done_tool(msg)
+⋮----
+def test_agent_response_with_tool_message(self)
+⋮----
+"""Test agent_response method with various tool messages"""
+⋮----
+# Create a tool message
+tool_msg = HandleAgentChatDocMsg(data="response test")
+⋮----
+# When using a handler that expects both agent and chat_doc,
+# we need to provide the tool message within a ChatDocument
+# so that chat_doc is available
+chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
+response = agent.agent_response(chat_doc)
+⋮----
+def test_agent_response_with_chat_document(self)
+⋮----
+"""Test agent_response with ChatDocument containing tool message"""
+⋮----
+tool_msg = HandleChatDocAgentMsg(data="chat doc test")
+⋮----
+# Create a ChatDocument with the tool message
+⋮----
+# Process through agent_response
+⋮----
+# Check that our handle method was called with both agent and chat_doc
+⋮----
+def test_agent_response_no_annotations(self)
+⋮----
+"""Test agent_response with handler that has no type annotations"""
+⋮----
+tool_msg = HandleNoAnnotationsBothMsg(data="no annotations test")
+⋮----
+# Since the handler expects both agent and chat_doc,
+# we need to provide it within a ChatDocument
+⋮----
+def test_agent_response_agent_only(self)
+⋮----
+"""Test agent_response with handler that only takes agent parameter"""
+⋮----
+tool_msg = HandleAgentMsg()
+⋮----
+# Test with tool message as JSON string
+json_msg = tool_msg.model_dump_json()
+response = agent.agent_response(json_msg)
+⋮----
+def test_agent_response_chat_doc_only(self)
+⋮----
+"""Test agent_response with handler that only takes chat_doc parameter"""
+⋮----
+tool_msg = HandleChatDocMsg(data="chat doc only test")
+⋮----
+# For handlers that only need chat_doc, we can pass as ChatDocument
+⋮----
+def test_agent_response_class_annotations(self)
+⋮----
+"""
+        Test agent_response with handler that requires annotation
+        processing via subclassing
+        """
+⋮----
+tool_msg = HandleClassAnnotations(data="class annotations test")
+⋮----
+def test_agent_response_class_annotations_reversed(self)
+⋮----
+"""
+        Test agent_response with handler that requires annotation
+        processing via subclassing and reversed order
+        """
+⋮----
+tool_msg = HandleClassAnnotationsReversed(
+</file>
+
 <file path="tests/main/test_tool_messages_async.py">
 class CountryCapitalMessage(ToolMessage)
 ⋮----
@@ -48994,6 +49315,9 @@ python3 examples/docqa/rag-concurrent.py --sequential
 # With specific model
 python3 examples/docqa/rag-concurrent.py -m ollama/mistral:7b-instruct-v0.2-q8_0
 
+# Use local SentenceTransformer embeddings with Docker Qdrant on localhost:6333
+python3 examples/docqa/rag-concurrent.py --local-embeddings
+
 # Compare both modes to measure concurrency speedup
 python3 examples/docqa/rag-concurrent.py --sequential  # Baseline
 python3 examples/docqa/rag-concurrent.py  # Should be faster if truly concurrent
@@ -49074,6 +49398,11 @@ llm_config = lm.OpenAIGPTConfig(
 stream=False,  # Disable streaming for batch processing
 ⋮----
 # Configure DocChatAgent with Library of Babel story
+vecdb_config = None
+⋮----
+sentence_cfg = SentenceTransformerEmbeddingsConfig(
+vecdb_config = QdrantDBConfig(
+⋮----
 config = DocChatAgentConfig(
 ⋮----
 # Create agent and ingest the document
@@ -49102,8 +49431,14 @@ def input_map(question: str) -> str
 ⋮----
 q_num = QUESTION_TO_INDEX[question]
 ⋮----
-# run_batch_tasks keeps result ordering; worker logs show actual completion timing
-raw_results = run_batch_tasks(
+# run_batch_task_gen allows handle_exceptions to crash on errors
+def gen_task(i: int) -> lr.Task
+⋮----
+raw_results_gen = run_batch_task_gen(
+⋮----
+handle_exceptions=False,  # Crash on errors to see what's failing
+⋮----
+raw_results = list(raw_results_gen)
 ⋮----
 length = 0
 ⋮----
@@ -51562,13 +51897,16 @@ def clone(self) -> "VectorStore"
         """
 ⋮----
 config_copy = self.config.model_copy(deep=True)
+⋮----
 # Preserve the calculated collection contents without forcing replaces
 ⋮----
 config_copy.replace_collection = False  # type: ignore[attr-defined]
+cloned_embedding: Optional[EmbeddingModel] = None
 ⋮----
-# Fall back to the existing embedding model instance if config lacks it
+cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
 ⋮----
 cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+⋮----
 # Some stores might not honour replace_collection; ensure same collection
 ⋮----
 @abstractmethod
@@ -52839,293 +53177,6 @@ usage = LLMTokenUsage(
 usage_str = str(usage)
 ⋮----
 # Test reset clears cached tokens
-</file>
-
-<file path="tests/main/test_tool_handler.py">
-"""
-Test various handler method signatures for ToolMessage classes.
-Tests the new flexible handle method that can accept optional agent parameter.
-"""
-⋮----
-class HandleNoArgsMsg(ToolMessage)
-⋮----
-"""Tool with handle() method - no arguments"""
-⋮----
-request: str = "handle_no_args"
-purpose: str = "Test handle with no arguments"
-⋮----
-def handle(self) -> str
-⋮----
-class HandleChatDocMsg(ToolMessage)
-⋮----
-"""Tool with handle(chat_doc) method"""
-⋮----
-request: str = "handle_chat_doc"
-purpose: str = "Test handle with chat_doc"
-data: str
-⋮----
-def handle(self, chat_doc: ChatDocument) -> str
-⋮----
-# Actually use the chat_doc parameter
-⋮----
-class HandleAgentMsg(ToolMessage)
-⋮----
-"""Tool with handle(agent) method"""
-⋮----
-request: str = "handle_agent"
-purpose: str = "Test handle with agent"
-⋮----
-def handle(self, agent: ChatAgent) -> str
-⋮----
-class HandleAgentChatDocMsg(ToolMessage)
-⋮----
-"""Tool with handle(agent, chat_doc) method"""
-⋮----
-request: str = "handle_agent_chat_doc"
-purpose: str = "Test handle with agent and chat_doc"
-⋮----
-def handle(self, agent: ChatAgent, chat_doc: ChatDocument) -> str
-⋮----
-# Use both agent and chat_doc
-⋮----
-class HandleChatDocAgentMsg(ToolMessage)
-⋮----
-"""Tool with handle(chat_doc, agent) method - reversed order"""
-⋮----
-request: str = "handle_chat_doc_agent"
-purpose: str = "Test handle with chat_doc and agent in reverse order"
-⋮----
-def handle(self, chat_doc: ChatDocument, agent: ChatAgent) -> str
-⋮----
-# Use both parameters in the order they're defined
-⋮----
-class HandleNoAnnotationsMsg(ToolMessage)
-⋮----
-"""Tool with handle method but no type annotations - single param"""
-⋮----
-request: str = "handle_no_annotations"
-purpose: str = "Test handle without type annotations"
-⋮----
-def handle(self, chat_doc) -> str
-⋮----
-# Should fall back to duck typing - assume single arg is chat_doc
-# Access content attribute to verify it's actually a ChatDocument
-⋮----
-class HandleNoAnnotationsAgentMsg(ToolMessage)
-⋮----
-"""Tool with handle method expecting agent but no type annotations"""
-⋮----
-request: str = "handle_no_annotations_agent"
-purpose: str = "Test handle with agent but no annotations"
-⋮----
-def handle(self, agent) -> str
-⋮----
-# Parameter name 'agent' should be recognized even without annotations
-⋮----
-class HandleNoAnnotationsBothMsg(ToolMessage)
-⋮----
-"""Tool with handle method expecting both params but no type annotations"""
-⋮----
-request: str = "handle_no_annotations_both"
-purpose: str = "Test handle with both params but no annotations"
-⋮----
-def handle(self, agent, chat_doc) -> str
-⋮----
-# Parameter names 'agent' and 'chat_doc' should be recognized
-⋮----
-class HandleNoAnnotationsBothReversedMsg(ToolMessage)
-⋮----
-"""Tool with handle method with reversed parameter order but no type annotations"""
-⋮----
-request: str = "handle_no_annotations_both_reversed"
-purpose: str = "Test handle with reversed params but no annotations"
-⋮----
-def handle(self, chat_doc, agent) -> str
-⋮----
-# Parameter order should be respected based on names
-⋮----
-Foo = ChatDocument
-⋮----
-class Bar(ChatAgent)
-⋮----
-class HandleClassAnnotations(ToolMessage)
-⋮----
-"""
-    Tool with handle method with type annotations matched via
-    subclassing and non-standard self-parameter naming.
-    """
-⋮----
-request: str = "handle_class_annotations"
-purpose: str = "Test handle with annotations matched via subclassing."
-⋮----
-def handle(this, bar: Bar, foo: Foo)
-⋮----
-class HandleClassAnnotationsReversed(ToolMessage)
-⋮----
-"""
-    Tool with handle method with reversed parameter order and type
-    annotations matched via subclassing and non-standard
-    self-parameter naming.
-    """
-⋮----
-request: str = "handle_class_annotations_reversed"
-purpose: str = (
-⋮----
-def handle(this, foo: Foo, bar: Bar)
-⋮----
-class TestToolHandler
-⋮----
-"""Test the flexible tool handler extraction"""
-⋮----
-def test_handle_no_args(self)
-⋮----
-"""Test handle() with no arguments"""
-agent = ChatAgent(ChatAgentConfig())
-⋮----
-msg = HandleNoArgsMsg()
-result = agent.handle_no_args(msg)
-⋮----
-def test_handle_chat_doc(self)
-⋮----
-"""Test handle(chat_doc) with type annotation"""
-⋮----
-msg = HandleChatDocMsg(data="test data")
-chat_doc = agent.create_agent_response(content="test")
-result = agent.handle_chat_doc(msg, chat_doc)
-⋮----
-def test_handle_agent(self)
-⋮----
-"""Test handle(agent) with type annotation"""
-⋮----
-msg = HandleAgentMsg()
-result = agent.handle_agent(msg)
-⋮----
-def test_handle_agent_chat_doc(self)
-⋮----
-"""Test handle(agent, chat_doc) with type annotations"""
-⋮----
-msg = HandleAgentChatDocMsg(data="test data")
-⋮----
-result = agent.handle_agent_chat_doc(msg, chat_doc)
-⋮----
-def test_handle_chat_doc_agent(self)
-⋮----
-"""Test handle(chat_doc, agent) with reversed parameter order"""
-⋮----
-msg = HandleChatDocAgentMsg(data="test data")
-⋮----
-result = agent.handle_chat_doc_agent(msg, chat_doc)
-⋮----
-def test_handle_no_annotations(self)
-⋮----
-"""Test handle with no type annotations - should use duck typing"""
-⋮----
-msg = HandleNoAnnotationsMsg(data="test data")
-⋮----
-result = agent.handle_no_annotations(msg, chat_doc)
-⋮----
-def test_handle_no_annotations_agent(self)
-⋮----
-"""Test handle with agent param but no type annotations"""
-⋮----
-msg = HandleNoAnnotationsAgentMsg()
-# When called from agent, it won't pass chat_doc if the handler
-# only expects one parameter
-result = agent.handle_no_annotations_agent(msg)
-⋮----
-def test_handle_no_annotations_both(self)
-⋮----
-"""Test handle with both params but no type annotations"""
-⋮----
-msg = HandleNoAnnotationsBothMsg(data="test data")
-⋮----
-result = agent.handle_no_annotations_both(msg, chat_doc)
-⋮----
-def test_handle_no_annotations_both_reversed(self)
-⋮----
-"""Test handle with reversed params but no type annotations"""
-⋮----
-msg = HandleNoAnnotationsBothReversedMsg(data="test data")
-⋮----
-result = agent.handle_no_annotations_both_reversed(msg, chat_doc)
-⋮----
-def test_backward_compatibility(self)
-⋮----
-"""Test that existing tools with response() method still work"""
-⋮----
-# DoneTool uses response(agent) method
-msg = DoneTool(content="task complete")
-result = agent.done_tool(msg)
-⋮----
-def test_agent_response_with_tool_message(self)
-⋮----
-"""Test agent_response method with various tool messages"""
-⋮----
-# Create a tool message
-tool_msg = HandleAgentChatDocMsg(data="response test")
-⋮----
-# When using a handler that expects both agent and chat_doc,
-# we need to provide the tool message within a ChatDocument
-# so that chat_doc is available
-chat_doc = agent.create_agent_response(content=tool_msg.model_dump_json())
-response = agent.agent_response(chat_doc)
-⋮----
-def test_agent_response_with_chat_document(self)
-⋮----
-"""Test agent_response with ChatDocument containing tool message"""
-⋮----
-tool_msg = HandleChatDocAgentMsg(data="chat doc test")
-⋮----
-# Create a ChatDocument with the tool message
-⋮----
-# Process through agent_response
-⋮----
-# Check that our handle method was called with both agent and chat_doc
-⋮----
-def test_agent_response_no_annotations(self)
-⋮----
-"""Test agent_response with handler that has no type annotations"""
-⋮----
-tool_msg = HandleNoAnnotationsBothMsg(data="no annotations test")
-⋮----
-# Since the handler expects both agent and chat_doc,
-# we need to provide it within a ChatDocument
-⋮----
-def test_agent_response_agent_only(self)
-⋮----
-"""Test agent_response with handler that only takes agent parameter"""
-⋮----
-tool_msg = HandleAgentMsg()
-⋮----
-# Test with tool message as JSON string
-json_msg = tool_msg.model_dump_json()
-response = agent.agent_response(json_msg)
-⋮----
-def test_agent_response_chat_doc_only(self)
-⋮----
-"""Test agent_response with handler that only takes chat_doc parameter"""
-⋮----
-tool_msg = HandleChatDocMsg(data="chat doc only test")
-⋮----
-# For handlers that only need chat_doc, we can pass as ChatDocument
-⋮----
-def test_agent_response_class_annotations(self)
-⋮----
-"""
-        Test agent_response with handler that requires annotation
-        processing via subclassing
-        """
-⋮----
-tool_msg = HandleClassAnnotations(data="class annotations test")
-⋮----
-def test_agent_response_class_annotations_reversed(self)
-⋮----
-"""
-        Test agent_response with handler that requires annotation
-        processing via subclassing and reversed order
-        """
-⋮----
-tool_msg = HandleClassAnnotationsReversed(
 </file>
 
 <file path="tests/main/test_url_loader.py">
@@ -61733,6 +61784,10 @@ new_agent = agent_cls(config_copy)
 ⋮----
 # Ensure each clone gets its own vecdb client when supported.
 ⋮----
+def _clone_extra_state(self, new_agent: "ChatAgent") -> None
+⋮----
+"""Hook for subclasses to copy additional state into clones."""
+⋮----
 def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool
 ⋮----
 """Should we enable strict mode for a given tool?"""
@@ -62894,6 +62949,8 @@ class DocChatAgent(ChatAgent)
 # Handle backward compatibility for deprecated n_similar_docs
 ⋮----
 # Use the deprecated value for both parameters
+⋮----
+def _clone_extra_state(self, new_agent: "ChatAgent") -> None
 ⋮----
 def clear(self) -> None
 ⋮----
@@ -64762,7 +64819,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.12"
+version = "0.59.13"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

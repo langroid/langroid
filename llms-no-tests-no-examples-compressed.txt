@@ -12841,6 +12841,7 @@ SOFTWARE.
 markers =
     unit: marks tests as unit tests (deselect with '-m "not unit"')
     integration: marks tests as integration tests (deselect with '-m "not integration"')
+
     
 # MySQL configuration settings
 mysql_host = localhost
@@ -21331,6 +21332,18 @@ class EmbeddingModel(ABC)
     Abstract base class for an embedding model.
     """
 ⋮----
+def clone(self) -> "EmbeddingModel"
+⋮----
+"""
+        Return a copy of this embedding model suitable for use in cloned agents.
+        Default behaviour attempts to deep-copy the model configuration and
+        instantiate a fresh model of the same type; if that is not possible,
+        the original instance is reused.
+        """
+config = getattr(self, "config", None)
+⋮----
+return type(self)(config.model_copy(deep=True))  # type: ignore[call-arg]
+⋮----
 @classmethod
     def create(cls, config: EmbeddingModelsConfig) -> "EmbeddingModel"
 ⋮----
@@ -28007,13 +28020,16 @@ def clone(self) -> "VectorStore"
         """
 ⋮----
 config_copy = self.config.model_copy(deep=True)
+⋮----
 # Preserve the calculated collection contents without forcing replaces
 ⋮----
 config_copy.replace_collection = False  # type: ignore[attr-defined]
+cloned_embedding: Optional[EmbeddingModel] = None
 ⋮----
-# Fall back to the existing embedding model instance if config lacks it
+cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
 ⋮----
 cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+⋮----
 # Some stores might not honour replace_collection; ensure same collection
 ⋮----
 @abstractmethod
@@ -33764,6 +33780,10 @@ new_agent = agent_cls(config_copy)
 ⋮----
 # Ensure each clone gets its own vecdb client when supported.
 ⋮----
+def _clone_extra_state(self, new_agent: "ChatAgent") -> None
+⋮----
+"""Hook for subclasses to copy additional state into clones."""
+⋮----
 def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool
 ⋮----
 """Should we enable strict mode for a given tool?"""
@@ -34925,6 +34945,8 @@ class DocChatAgent(ChatAgent)
 # Handle backward compatibility for deprecated n_similar_docs
 ⋮----
 # Use the deprecated value for both parameters
+⋮----
+def _clone_extra_state(self, new_agent: "ChatAgent") -> None
 ⋮----
 def clear(self) -> None
 ⋮----
@@ -36793,7 +36815,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.12"
+version = "0.59.13"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

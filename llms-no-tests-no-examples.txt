@@ -17212,6 +17212,7 @@ SOFTWARE.
 markers =
     unit: marks tests as unit tests (deselect with '-m "not unit"')
     integration: marks tests as integration tests (deselect with '-m "not integration"')
+
     
 # MySQL configuration settings
 mysql_host = localhost
@@ -29174,6 +29175,21 @@ class EmbeddingModel(ABC):
     Abstract base class for an embedding model.
     """
 
+    def clone(self) -> "EmbeddingModel":
+        """
+        Return a copy of this embedding model suitable for use in cloned agents.
+        Default behaviour attempts to deep-copy the model configuration and
+        instantiate a fresh model of the same type; if that is not possible,
+        the original instance is reused.
+        """
+        config = getattr(self, "config", None)
+        if config is not None and hasattr(config, "model_copy"):
+            try:
+                return type(self)(config.model_copy(deep=True))  # type: ignore[call-arg]
+            except Exception:
+                pass
+        return self
+
     @classmethod
     def create(cls, config: EmbeddingModelsConfig) -> "EmbeddingModel":
         from langroid.embedding_models.models import (
@@ -40033,6 +40049,7 @@ class VectorStore(ABC):
             self.embedding_model = EmbeddingModel.create(config.embedding)
         else:
             self.embedding_model = config.embedding_model
+        self.config.embedding_model = self.embedding_model
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
 
     @staticmethod
@@ -40086,18 +40103,38 @@ class VectorStore(ABC):
         """
 
         config_copy = self.config.model_copy(deep=True)
+        logger.debug(
+            "Cloning VectorStore %s: original collection=%s, copied collection=%s",
+            type(self).__name__,
+            getattr(self.config, "collection_name", None),
+            getattr(config_copy, "collection_name", None),
+        )
         # Preserve the calculated collection contents without forcing replaces
         if hasattr(config_copy, "replace_collection"):
             config_copy.replace_collection = False  # type: ignore[attr-defined]
+        cloned_embedding: Optional[EmbeddingModel] = None
+        if (
+            hasattr(self, "embedding_model")
+            and getattr(self, "embedding_model") is not None
+        ):
+            cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
+
         if hasattr(config_copy, "embedding_model"):
-            config_copy.embedding_model = getattr(self.config, "embedding_model", None)
-        # Fall back to the existing embedding model instance if config lacks it
-        if getattr(config_copy, "embedding_model", None) is None:
-            setattr(
-                config_copy, "embedding_model", getattr(self, "embedding_model", None)
-            )
+            config_copy.embedding_model = cloned_embedding
+        if (
+            getattr(config_copy, "embedding_model", None) is None
+            and cloned_embedding is not None
+        ):
+            setattr(config_copy, "embedding_model", cloned_embedding)
 
         cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+        logger.debug(
+            "Cloned VectorStore %s: cloned collection=%s",
+            type(self).__name__,
+            getattr(cloned_store.config, "collection_name", None),
+        )
+        if hasattr(cloned_store.config, "replace_collection"):
+            cloned_store.config.replace_collection = False
         # Some stores might not honour replace_collection; ensure same collection
         if getattr(self.config, "collection_name", None) is not None:
             setattr(
@@ -49625,10 +49662,14 @@ class ChatAgent(Agent):
         new_agent.llm_function_force = self.llm_function_force
         # Ensure each clone gets its own vecdb client when supported.
         new_agent.vecdb = None if self.vecdb is None else self.vecdb.clone()
+        self._clone_extra_state(new_agent)
         new_agent.id = ObjectRegistry.new_id()
         if self.config.add_to_registry:
             ObjectRegistry.register_object(new_agent)
         return new_agent
+
+    def _clone_extra_state(self, new_agent: "ChatAgent") -> None:
+        """Hook for subclasses to copy additional state into clones."""
 
     def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool:
         """Should we enable strict mode for a given tool?"""
@@ -51658,6 +51699,7 @@ pip install "langroid[hf-embeddings]"
 """
 
 import asyncio
+import copy
 import importlib
 import logging
 from collections import OrderedDict
@@ -51941,6 +51983,19 @@ class DocChatAgent(ChatAgent):
             self.config.n_relevant_chunks = self.config.parsing.n_similar_docs
 
         self.ingest()
+
+    def _clone_extra_state(self, new_agent: "ChatAgent") -> None:
+        super()._clone_extra_state(new_agent)
+        for attr in [
+            "chunked_docs",
+            "chunked_docs_clean",
+            "original_docs",
+            "original_docs_length",
+            "from_dataframe",
+            "df_description",
+        ]:
+            if hasattr(self, attr):
+                setattr(new_agent, attr, copy.deepcopy(getattr(self, attr)))
 
     def clear(self) -> None:
         """Clear the document collection and the specific collection in vecdb"""
@@ -56182,7 +56237,7 @@ class OpenAIGPT(LanguageModel):
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.12"
+version = "0.59.13"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
