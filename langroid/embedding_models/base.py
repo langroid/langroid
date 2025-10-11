@@ -21,6 +21,21 @@ class EmbeddingModel(ABC):
     Abstract base class for an embedding model.
     """
 
+    def clone(self) -> "EmbeddingModel":
+        """
+        Return a copy of this embedding model suitable for use in cloned agents.
+        Default behaviour attempts to deep-copy the model configuration and
+        instantiate a fresh model of the same type; if that is not possible,
+        the original instance is reused.
+        """
+        config = getattr(self, "config", None)
+        if config is not None and hasattr(config, "model_copy"):
+            try:
+                return type(self)(config.model_copy(deep=True))  # type: ignore[call-arg]
+            except Exception:
+                pass
+        return self
+
     @classmethod
     def create(cls, config: EmbeddingModelsConfig) -> "EmbeddingModel":
         from langroid.embedding_models.models import (

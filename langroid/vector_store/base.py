@@ -52,6 +52,7 @@ class VectorStore(ABC):
             self.embedding_model = EmbeddingModel.create(config.embedding)
         else:
             self.embedding_model = config.embedding_model
+        self.config.embedding_model = self.embedding_model
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
 
     @staticmethod
@@ -105,18 +106,38 @@ class VectorStore(ABC):
         """
 
         config_copy = self.config.model_copy(deep=True)
+        logger.debug(
+            "Cloning VectorStore %s: original collection=%s, copied collection=%s",
+            type(self).__name__,
+            getattr(self.config, "collection_name", None),
+            getattr(config_copy, "collection_name", None),
+        )
         # Preserve the calculated collection contents without forcing replaces
         if hasattr(config_copy, "replace_collection"):
             config_copy.replace_collection = False  # type: ignore[attr-defined]
+        cloned_embedding: Optional[EmbeddingModel] = None
+        if (
+            hasattr(self, "embedding_model")
+            and getattr(self, "embedding_model") is not None
+        ):
+            cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
+
         if hasattr(config_copy, "embedding_model"):
-            config_copy.embedding_model = getattr(self.config, "embedding_model", None)
-        # Fall back to the existing embedding model instance if config lacks it
-        if getattr(config_copy, "embedding_model", None) is None:
-            setattr(
-                config_copy, "embedding_model", getattr(self, "embedding_model", None)
-            )
+            config_copy.embedding_model = cloned_embedding
+        if (
+            getattr(config_copy, "embedding_model", None) is None
+            and cloned_embedding is not None
+        ):
+            setattr(config_copy, "embedding_model", cloned_embedding)
 
         cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+        logger.debug(
+            "Cloned VectorStore %s: cloned collection=%s",
+            type(self).__name__,
+            getattr(cloned_store.config, "collection_name", None),
+        )
+        if hasattr(cloned_store.config, "replace_collection"):
+            cloned_store.config.replace_collection = False
         # Some stores might not honour replace_collection; ensure same collection
         if getattr(self.config, "collection_name", None) is not None:
             setattr(

@@ -281,10 +281,14 @@ class ChatAgent(Agent):
         new_agent.llm_function_force = self.llm_function_force
         # Ensure each clone gets its own vecdb client when supported.
         new_agent.vecdb = None if self.vecdb is None else self.vecdb.clone()
+        self._clone_extra_state(new_agent)
         new_agent.id = ObjectRegistry.new_id()
         if self.config.add_to_registry:
             ObjectRegistry.register_object(new_agent)
         return new_agent
+
+    def _clone_extra_state(self, new_agent: "ChatAgent") -> None:
+        """Hook for subclasses to copy additional state into clones."""
 
     def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool:
         """Should we enable strict mode for a given tool?"""
