@@ -61,22 +61,11 @@ settings.cache = False
 DEVICE_OVERRIDE: Optional[str] = None
 
 
-def pytest_addoption(parser):
-    parser.addoption(
-        "--cross-encoder-device",
-        action="store",
-        default=None,
-        help=(
-            "Device string for cross-encoder reranker (e.g. 'cpu', 'cuda', 'mps'). "
-            "Overrides TEST_CROSS_ENCODER_DEVICE env var."
-        ),
-    )
-
-
 @pytest.fixture(scope="session", autouse=True)
 def _set_device_override(request):
     global DEVICE_OVERRIDE
-    cli_device = request.config.getoption("cross_encoder_device")
+    # option defined once in tests/conftest.py
+    cli_device = request.config.getoption("--cross-encoder-device")
     env_device = os.getenv("TEST_CROSS_ENCODER_DEVICE")
     DEVICE_OVERRIDE = cli_device or env_device
 
