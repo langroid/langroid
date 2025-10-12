@@ -88,7 +88,7 @@ def setup_rag_agent() -> lr.Task:
     Returns:
         Langroid Task with DocChatAgent configured for RAG
     """
-    llm_config = lm.OpenAIGPTConfig(chat_model="gemini/gemini-2.5-flash")
+    llm_config = lm.MockLMConfig(default_response="ok")
 
     embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
         model_type="sentence-transformer",
@@ -143,7 +143,7 @@ def create_rag_agent() -> lr.Task:
     Returns:
         Langroid Task with DocChatAgent
     """
-    llm_config = lm.OpenAIGPTConfig(chat_model="gemini/gemini-2.5-flash")
+    llm_config = lm.MockLMConfig(default_response="ok")
 
     embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
         model_type="sentence-transformer",

@@ -52,7 +52,7 @@ from langroid.embedding_models.models import (
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddingsConfig,
 )
-from langroid.language_models.base import StreamingIfAllowed
+from langroid.language_models.base import LLMConfig, StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.document_parser import DocumentType
@@ -280,7 +280,7 @@ class DocChatAgentConfig(ChatAgentConfig):
         embedding=hf_embed_config if has_sentence_transformers else oai_embed_config,
     )
 
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+    llm: LLMConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4o,
         completion_model=OpenAIChatModel.GPT4o,
