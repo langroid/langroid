@@ -15,11 +15,24 @@ pip install "langroid[hf-embeddings]"
 """
 
 import asyncio
+import copy
 import importlib
 import logging
+import threading
 from collections import OrderedDict
+from dataclasses import dataclass
 from functools import cache
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, no_type_check
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    no_type_check,
+)
 
 import nest_asyncio
 import numpy as np
@@ -39,7 +52,7 @@ from langroid.embedding_models.models import (
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddingsConfig,
 )
-from langroid.language_models.base import StreamingIfAllowed
+from langroid.language_models.base import LLMConfig, StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.document_parser import DocumentType
@@ -66,6 +79,9 @@ from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 from langroid.vector_store.qdrantdb import QdrantDBConfig
 
+if TYPE_CHECKING:
+    from sentence_transformers import CrossEncoder
+
 
 @cache
 def apply_nest_asyncio() -> None:
@@ -73,6 +89,60 @@ def apply_nest_asyncio() -> None:
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _CrossEncoderCacheEntry:
+    model: "CrossEncoder"
+    lock: threading.RLock
+
+
+_CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
+_CROSS_ENCODER_CACHE_LOCK = threading.Lock()
+
+
+def _auto_cross_encoder_device() -> str:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return "cuda"
+        mps = getattr(torch.backends, "mps", None)
+        if mps is not None and mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return "cpu"
+
+
+def _get_cross_encoder_entry(
+    model_name: str, device: str | None
+) -> _CrossEncoderCacheEntry:
+    actual_device = device or _auto_cross_encoder_device()
+    cache_key = f"{model_name}::{actual_device}"
+    entry = _CROSS_ENCODER_CACHE.get(cache_key)
+    if entry is not None:
+        return entry
+
+    with _CROSS_ENCODER_CACHE_LOCK:
+        entry = _CROSS_ENCODER_CACHE.get(cache_key)
+        if entry is not None:
+            return entry
+        try:
+            from sentence_transformers import CrossEncoder
+        except ImportError as exc:
+            raise ImportError(
+                """
+                To use cross-encoder re-ranking, you must install
+                langroid with the [hf-embeddings] extra, e.g.:
+                pip install "langroid[hf-embeddings]"
+                """
+            ) from exc
+
+        model = CrossEncoder(model_name, device=actual_device)
+        entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
+        _CROSS_ENCODER_CACHE[cache_key] = entry
+        return entry
 
 
 DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
@@ -154,6 +224,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
     )
+    cross_encoder_device: Optional[str] = None  # default to CPU when None
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
     rerank_after_adding_context: bool = True  # rerank after adding context window?
@@ -209,7 +280,7 @@ class DocChatAgentConfig(ChatAgentConfig):
         embedding=hf_embed_config if has_sentence_transformers else oai_embed_config,
     )
 
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+    llm: LLMConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4o,
         completion_model=OpenAIChatModel.GPT4o,
@@ -298,6 +369,19 @@ class DocChatAgent(ChatAgent):
             self.config.n_relevant_chunks = self.config.parsing.n_similar_docs
 
         self.ingest()
+
+    def _clone_extra_state(self, new_agent: "ChatAgent") -> None:
+        super()._clone_extra_state(new_agent)
+        for attr in [
+            "chunked_docs",
+            "chunked_docs_clean",
+            "original_docs",
+            "original_docs_length",
+            "from_dataframe",
+            "df_description",
+        ]:
+            if hasattr(self, attr):
+                setattr(new_agent, attr, copy.deepcopy(getattr(self, attr)))
 
     def clear(self) -> None:
         """Clear the document collection and the specific collection in vecdb"""
@@ -1100,19 +1184,13 @@ class DocChatAgent(ChatAgent):
         self, query: str, passages: List[Document]
     ) -> List[Document]:
         with status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
-            try:
-                from sentence_transformers import CrossEncoder
-            except ImportError:
-                raise ImportError(
-                    """
-                    To use cross-encoder re-ranking, you must install
-                    langroid with the [hf-embeddings] extra, e.g.:
-                    pip install "langroid[hf-embeddings]"
-                    """
-                )
-
-            model = CrossEncoder(self.config.cross_encoder_reranking_model)
-            scores = model.predict([(query, p.content) for p in passages])
+            device = self.config.cross_encoder_device
+            entry = _get_cross_encoder_entry(
+                self.config.cross_encoder_reranking_model, device
+            )
+            pair_inputs = [(query, p.content) for p in passages]
+            with entry.lock:
+                scores = entry.model.predict(pair_inputs, show_progress_bar=False)
             # Convert to [0,1] so we might could use a cutoff later.
             scores = 1.0 / (1 + np.exp(-np.array(scores)))
             # get top k scoring passages
@@ -1468,11 +1546,17 @@ class DocChatAgent(ChatAgent):
             List[Document]: list of relevant extracts
 
         """
-        if (
-            self.vecdb is None
-            or self.vecdb.config.collection_name
-            not in self.vecdb.list_collections(empty=False)
-        ):
+        collection_name = (
+            None if self.vecdb is None else self.vecdb.config.collection_name
+        )
+        has_vecdb_collection = (
+            collection_name is not None
+            and collection_name in self.vecdb.list_collections(empty=False)
+            if self.vecdb is not None
+            else False
+        )
+
+        if not has_vecdb_collection and len(self.chunked_docs) == 0:
             return query, []
 
         if len(self.dialog) > 0 and not self.config.assistant_mode:
@@ -1492,7 +1576,10 @@ class DocChatAgent(ChatAgent):
         if self.config.n_query_rephrases > 0:
             rephrases = self.llm_rephrase_query(query)
             proxies += rephrases
-        passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+        if has_vecdb_collection:
+            passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+        else:
+            passages = self.chunked_docs
 
         if len(passages) == 0:
             return query, []

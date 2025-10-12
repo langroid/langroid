@@ -71,6 +71,12 @@ def pytest_addoption(parser) -> None:
         default=[],
         help="Specify test FILE(s) to run first.",
     )
+    parser.addoption(
+        "--cross-encoder-device",
+        action="store",
+        default=None,
+        help="Device for cross-encoder reranker (e.g. 'cpu', 'cuda', 'mps').",
+    )
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)

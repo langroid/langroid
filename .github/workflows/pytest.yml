@@ -67,6 +67,12 @@ jobs:
           POSTGRES_DB: langroid 
         ports:
           - "5432:5432"
+      qdrant:
+        image: qdrant/qdrant:v1.15.5
+        ports:
+          - "6333:6333"
+        env:
+          QDRANT__SERVICE__API_KEY: local-dev-key
 
 
     env:

@@ -20,6 +20,13 @@ python3 examples/docqa/rag-concurrent.py --sequential
 # With specific model
 python3 examples/docqa/rag-concurrent.py -m ollama/mistral:7b-instruct-v0.2-q8_0
 
+# Use local SentenceTransformer embeddings with Docker Qdrant on localhost:6333
+python3 examples/docqa/rag-concurrent.py --local-embeddings
+
+# Turn on cross-encoder reranking (auto-picks CUDA/MPS/CPU; override with device flag)
+python3 examples/docqa/rag-concurrent.py --cross-encoder
+python3 examples/docqa/rag-concurrent.py --cross-encoder --cross-encoder-device=mps
+
 # Compare both modes to measure concurrency speedup
 python3 examples/docqa/rag-concurrent.py --sequential  # Baseline
 python3 examples/docqa/rag-concurrent.py  # Should be faster if truly concurrent
@@ -49,17 +56,17 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 import asyncio
 import os
-import time
 import threading
-from datetime import datetime
+import time
 from contextvars import ContextVar
+from datetime import datetime
 from typing import Dict
 
 import fire
 
 import langroid as lr
 import langroid.language_models as lm
-from langroid.agent.batch import run_batch_tasks
+from langroid.agent.batch import run_batch_task_gen
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -75,7 +82,10 @@ def log_event(event_type: str, question_num: int, message: str = ""):
     """Thread-safe logging with precise timestamps"""
     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     thread_id = threading.get_ident() % 10000  # Short thread ID
-    line = f"[{timestamp}] [{thread_id:04d}] Q{question_num:02d} {event_type:12s} {message}"
+    line = (
+        f"[{timestamp}] [{thread_id:04d}] "
+        f"Q{question_num:02d} {event_type:12s} {message}"
+    )
     EVENT_HISTORY.append(line)
     with log_lock:
         print(line)
@@ -125,6 +135,9 @@ def app(
     num_questions: int = 10,
     log_only: bool = False,
     use_builtin_batch: bool = False,
+    local_embeddings: bool = False,
+    cross_encoder: bool = False,
+    cross_encoder_device: str = "",
 ):
     """
     Run DocChat queries on Library of Babel story.
@@ -136,6 +149,8 @@ def app(
         num_questions: Number of questions to run (max 10)
         log_only: Suppress verbose answers and print a concise log summary
         use_builtin_batch: Use Langroid's run_batch_tasks instead of the custom harness
+        cross_encoder: Enable reranking via cross encoder (auto-picks CUDA/MPS/CPU)
+        cross_encoder_device: Optional explicit device override (e.g. "cuda", "mps")
     """
     num_questions = max(1, min(num_questions, len(ALL_QUESTIONS)))
     questions = ALL_QUESTIONS[:num_questions]
@@ -158,11 +173,49 @@ def app(
     )
 
     # Configure DocChatAgent with Library of Babel story
-    config = DocChatAgentConfig(
+    vecdb_config = None
+    if local_embeddings:
+        try:
+            from langroid.embedding_models.models import (
+                SentenceTransformerEmbeddingsConfig,
+            )
+            from langroid.vector_store.qdrantdb import QdrantDBConfig
+        except ImportError as exc:
+            raise RuntimeError(
+                "SentenceTransformer embeddings require the hf-embeddings extras"
+            ) from exc
+
+        os.environ.setdefault("QDRANT_API_URL", "http://localhost:6333")
+        os.environ.setdefault("QDRANT_API_KEY", "local-dev-key")
+
+        sentence_cfg = SentenceTransformerEmbeddingsConfig(
+            model_type="sentence-transformer",
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+        )
+        vecdb_config = QdrantDBConfig(
+            cloud=True,
+            collection_name="doc-chat-local-embeddings",
+            replace_collection=True,
+            embedding=sentence_cfg,
+        )
+
+    config_kwargs = dict(
         name="RagAgent",
         llm=llm_config,
         relevance_extractor_config=None,
     )
+    if vecdb_config is not None:
+        config_kwargs["vecdb"] = vecdb_config
+
+    if cross_encoder:
+        config_kwargs.update(
+            dict(
+                cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+                cross_encoder_device=cross_encoder_device or None,
+            )
+        )
+
+    config = DocChatAgentConfig(**config_kwargs)
 
     # Create agent and ingest the document
     agent = LoggingDocChatAgent(config)
@@ -170,6 +223,8 @@ def app(
     print(f"\nIngesting document: {url}")
     agent.ingest_doc_paths([url])
     print("Document ingested successfully.\n")
+    if local_embeddings and agent.vecdb is not None:
+        agent.vecdb.config.replace_collection = False
 
     # Create a single task that will be cloned for each question
     print(f"Creating task for concurrent execution of {len(questions)} queries...\n")
@@ -221,15 +276,19 @@ def app(
                 )
                 return question
 
-            # run_batch_tasks keeps result ordering; worker logs show actual completion timing
-            raw_results = run_batch_tasks(
-                task=task,
+            # run_batch_task_gen allows handle_exceptions to crash on errors
+            def gen_task(i: int) -> lr.Task:
+                return task.clone(i)
+
+            raw_results_gen = run_batch_task_gen(
+                gen_task=gen_task,
                 items=questions,
                 input_map=input_map,
-                output_map=lambda x: x,
                 sequential=False,
                 turns=1,
+                handle_exceptions=False,  # Crash on errors to see what's failing
             )
+            raw_results = list(raw_results_gen)
             results = []
             for i, result in enumerate(raw_results, 1):
                 if result is None:
@@ -304,8 +363,9 @@ def app(
         else:
             print("CONCURRENT MODE: Tasks should run in parallel with asyncio")
             print(
-                "Expected: Multiple 'START' events with close timestamps BEFORE any 'COMPLETE'"
-            )  # noqa: E501
+                "Expected: Multiple 'START' events with close timestamps "
+                "BEFORE any 'COMPLETE'"
+            )
             print("If you see START->COMPLETE->START->COMPLETE instead,")
             print(
                 "then there's a bottleneck preventing concurrency (e.g., shared vecdb)"
