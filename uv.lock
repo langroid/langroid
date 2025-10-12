@@ -7375,20 +7375,20 @@ wheels = [
 
 [[package]]
 name = "qdrant-client"
-version = "1.13.2"
+version = "1.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "grpcio" },
-    { name = "grpcio-tools" },
     { name = "httpx", extra = ["http2"] },
     { name = "numpy" },
     { name = "portalocker" },
+    { name = "protobuf" },
     { name = "pydantic" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1c/07/3eaf3777d524d555ba14e56a30c3e393ad78ed93f6c87c6a3ddc70ec2e49/qdrant_client-1.13.2.tar.gz", hash = "sha256:c8cce87ce67b006f49430a050a35c85b78e3b896c0c756dafc13bdeca543ec13", size = 266257 }
+sdist = { url = "https://files.pythonhosted.org/packages/79/8b/76c7d325e11d97cb8eb5e261c3759e9ed6664735afbf32fdded5b580690c/qdrant_client-1.15.1.tar.gz", hash = "sha256:631f1f3caebfad0fd0c1fba98f41be81d9962b7bf3ca653bed3b727c0e0cbe0e", size = 295297 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/26/89ebaee5fcbd99bf1c0a627a9447b440118b2d31dea423d074cb0481be5c/qdrant_client-1.13.2-py3-none-any.whl", hash = "sha256:db97e759bd3f8d483a383984ba4c2a158eef56f2188d83df7771591d43de2201", size = 306637 },
+    { url = "https://files.pythonhosted.org/packages/ef/33/d8df6a2b214ffbe4138db9a1efe3248f67dc3c671f82308bea1582ecbbb7/qdrant_client-1.15.1-py3-none-any.whl", hash = "sha256:2b975099b378382f6ca1cfb43f0d59e541be6e16a5892f282a4b8de7eff5cb63", size = 337331 },
 ]
 
 [[package]]
