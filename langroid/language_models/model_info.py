@@ -39,6 +39,8 @@ class OpenAIChatModel(ModelName):
     GPT5 = "gpt-5"
     GPT5_MINI = "gpt-5-mini"
     GPT5_NANO = "gpt-5-nano"
+    GPT_OSS_120b = "gpt-oss-120b"
+    GPT_OSS_20b = "gpt-oss-20b"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -95,6 +97,8 @@ class OpenAI_API_ParamInfo(BaseModel):
             OpenAIChatModel.GPT5.value,
             OpenAIChatModel.GPT5_MINI.value,
             OpenAIChatModel.GPT5_NANO.value,
+            OpenAIChatModel.GPT_OSS_120b.value,
+            OpenAIChatModel.GPT_OSS_20b.value,
             GeminiModel.GEMINI_2_5_PRO.value,
             GeminiModel.GEMINI_2_5_FLASH.value,
             GeminiModel.GEMINI_2_5_FLASH_LITE.value,
