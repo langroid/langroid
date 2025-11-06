@@ -131,7 +131,7 @@ class FastMCPClient:
             )
 
     def _schema_to_field(
-        self, name: str, schema: Dict[str, Any], prefix: str
+        self, name: str, schema: Dict[str, Any], prefix: str, is_required: bool = True
     ) -> Tuple[Any, Any]:
         """Convert a JSON Schema snippet into a (type, Field) tuple.
 
@@ -139,39 +139,58 @@ class FastMCPClient:
             name: Name of the field.
             schema: JSON Schema for this field.
             prefix: Prefix to use for nested model names.
+            is_required: Whether this field is required (from JSON Schema "required").
 
         Returns:
             A tuple of (python_type, Field(...)) for create_model.
         """
         t = schema.get("type")
-        default = schema.get("default", ...)
+        # Use schema default if present, otherwise:
+        # ... for required fields, None for optional fields
+        if "default" in schema:
+            default = schema["default"]
+        else:
+            default = ... if is_required else None
         desc = schema.get("description")
         # Object → nested BaseModel
         if t == "object" and "properties" in schema:
             sub_name = f"{prefix}_{name.capitalize()}"
             sub_fields: Dict[str, Tuple[type, Any]] = {}
+            # Get required fields for this nested object
+            nested_required = set(schema.get("required", []))
             for k, sub_s in schema["properties"].items():
-                ftype, fld = self._schema_to_field(sub_name + k, sub_s, sub_name)
+                ftype, fld = self._schema_to_field(
+                    sub_name + k, sub_s, sub_name, is_required=k in nested_required
+                )
                 sub_fields[k] = (ftype, fld)
             submodel = create_model(  # type: ignore
                 sub_name,
                 __base__=BaseModel,
                 **sub_fields,
             )
-            return submodel, Field(default=default, description=desc)  # type: ignore
+            # Wrap in Optional if not required
+            model_type = submodel if is_required else Optional[submodel]
+            return model_type, Field(default=default, description=desc)  # type: ignore
         # Array → List of items
         if t == "array" and "items" in schema:
             item_type, _ = self._schema_to_field(name, schema["items"], prefix)
-            return List[item_type], Field(default=default, description=desc)  # type: ignore
+            array_type = List[item_type]  # type: ignore
+            if not is_required:
+                array_type = Optional[array_type]  # type: ignore
+            return array_type, Field(default=default, description=desc)  # type: ignore
         # Primitive types
         if t == "string":
-            return str, Field(default=default, description=desc)
+            str_type = str if is_required else Optional[str]
+            return str_type, Field(default=default, description=desc)
         if t == "integer":
-            return int, Field(default=default, description=desc)
+            int_type = int if is_required else Optional[int]
+            return int_type, Field(default=default, description=desc)
         if t == "number":
-            return float, Field(default=default, description=desc)
+            float_type = float if is_required else Optional[float]
+            return float_type, Field(default=default, description=desc)
         if t == "boolean":
-            return bool, Field(default=default, description=desc)
+            bool_type = bool if is_required else Optional[bool]
+            return bool_type, Field(default=default, description=desc)
         # Fallback or unions
         if any(key in schema for key in ("oneOf", "anyOf", "allOf")):
             self.logger.warning("Unsupported union schema in field %s; using Any", name)
@@ -196,9 +215,13 @@ class FastMCPClient:
         if target is None:
             raise ValueError(f"No tool named {tool_name}")
         props = target.inputSchema.get("properties", {})
+        # Get the list of required fields from JSON Schema
+        required_fields = set(target.inputSchema.get("required", []))
         fields: Dict[str, Tuple[type, Any]] = {}
         for fname, schema in props.items():
-            ftype, fld = self._schema_to_field(fname, schema, target.name)
+            ftype, fld = self._schema_to_field(
+                fname, schema, target.name, is_required=fname in required_fields
+            )
             fields[fname] = (ftype, fld)
 
         # Convert target.name to CamelCase and add Tool suffix
@@ -270,7 +293,8 @@ class FastMCPClient:
             # Add standard excluded fields
             exclude_fields.update(["request", "purpose"])
 
-            payload = itself.model_dump(exclude=exclude_fields)
+            # Exclude None values - MCP servers don't expect None for optional params
+            payload = itself.model_dump(exclude=exclude_fields, exclude_none=True)
 
             # restore any renamed fields
             for orig, new in itself.__class__._renamed_fields.items():  # type: ignore

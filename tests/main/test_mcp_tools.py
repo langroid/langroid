@@ -567,7 +567,7 @@ async def test_complex_tool_decorator() -> None:
         val=2, multiplier=1.5
         val=3, multiplier=2.0
     """
-    response = await task.run_async(prompt, turns=3)
+    response = await task.run_async(prompt, turns=2)
     assert str(expected) in response.content
 
 
@@ -1043,3 +1043,154 @@ async def test_forward_blob_resources() -> None:
         # Should only have text content, no file attachments
         assert "Document with blob:" in content
         assert len(files) == 0
+
+
+@pytest.mark.asyncio
+async def test_optional_fields() -> None:
+    """Test MCP tools with optional fields can be instantiated with only
+    required fields.
+
+    This is the REAL bug: when an MCP tool has optional fields
+    (not in "required" array, no defaults), we should be able to create
+    an instance with ONLY the required fields.
+    Without the fix, this raises ValidationError.
+    """
+    from mcp.types import Tool
+
+    # Create a real MCP server
+    server = FastMCP("TestServer")
+
+    @server.tool()
+    def dummy_impl(
+        pattern: str,
+        path: str = ".",
+        case_insensitive: bool = False,
+        max_results: int = 100,
+    ) -> str:
+        return f"Searched for {pattern}"
+
+    # Create a Tool with the problematic schema
+    # (optional fields WITHOUT defaults in the schema)
+    problematic_tool = Tool(
+        name="grep_like_tool",
+        description="Search tool with optional fields",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "Search pattern"},
+                "path": {"type": "string", "description": "Path to search"},
+                "case_insensitive": {
+                    "type": "boolean",
+                    "description": "Case insensitive",
+                },
+                "max_results": {"type": "integer", "description": "Max results"},
+            },
+            # ONLY pattern is required - others have NO defaults
+            "required": ["pattern"],
+        },
+    )
+
+    # Convert this to a Langroid ToolMessage
+    async with FastMCPClient(server) as client:
+        # Replace the get_mcp_tool_async to return our problematic tool
+        async def get_problematic_tool(name: str):
+            return problematic_tool
+
+        client.get_mcp_tool_async = get_problematic_tool
+        SearchTool = await client.get_tool_async("grep_like_tool")
+
+    # CRITICAL TEST: Can we instantiate with ONLY the required field?
+    # WITHOUT the fix, this raises:
+    #   ValidationError: 4 validation errors for tool
+    #   path: Input should be a valid string
+    #   case_insensitive: Input should be a valid boolean
+    #   max_results: Input should be a valid integer
+    # WITH the fix, this works because optional fields are
+    #   Optional[type] = None
+    msg = SearchTool(pattern="test")
+    assert msg.pattern == "test"
+    assert msg.path is None
+    assert msg.case_insensitive is None
+    assert msg.max_results is None
+
+
+@pytest.mark.asyncio
+async def test_optional_fields_exclude_none_in_payload() -> None:
+    """Test that optional fields with None values are excluded from MCP payload.
+
+    When LLM provides only required fields, optional fields are None.
+    These None values must NOT be sent to the MCP server - they should be excluded.
+    Without exclude_none=True, the MCP server receives None values and may fail.
+    """
+    from unittest.mock import MagicMock
+
+    from mcp.types import Tool
+
+    # Create a real MCP server
+    server = FastMCP("TestServer")
+
+    @server.tool()
+    def grep_tool(
+        pattern: str,
+        path: str = ".",
+        case_insensitive: bool = False,
+    ) -> str:
+        return f"Found matches for {pattern}"
+
+    # Create Tool with optional fields
+    tool_def = Tool(
+        name="grep_tool",
+        description="Search tool",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string"},
+                "path": {"type": "string"},
+                "case_insensitive": {"type": "boolean"},
+            },
+            "required": ["pattern"],
+        },
+    )
+
+    # Create client with persist_connection=True to keep same client instance
+    captured_payload = {}
+
+    async with FastMCPClient(server, persist_connection=True) as client:
+        # Mock the session.call_tool to capture what payload is sent
+        async def mock_call_tool(tool_name: str, arguments: dict):
+            nonlocal captured_payload
+            captured_payload = arguments
+            # Return a valid result
+            return MagicMock(
+                isError=False,
+                content=[TextContent(type="text", text="Found 5 matches")],
+            )
+
+        client.client.session.call_tool = mock_call_tool
+
+        # Get the tool
+        async def get_tool(name: str):
+            return tool_def
+
+        client.get_mcp_tool_async = get_tool
+        GrepTool = await client.get_tool_async("grep_tool")
+
+        # Instantiate with only required field
+        msg = GrepTool(pattern="test")
+        assert msg.pattern == "test"
+        assert msg.path is None
+        assert msg.case_insensitive is None
+
+        # Call the tool - this will send payload to MCP server
+        await msg.handle_async()
+
+    # CRITICAL TEST: Payload should NOT contain None values
+    # WITHOUT exclude_none=True:
+    #   payload = {"pattern": "test", "path": None,
+    #              "case_insensitive": None}
+    # WITH exclude_none=True:
+    #   payload = {"pattern": "test"}
+    assert "pattern" in captured_payload
+    assert captured_payload["pattern"] == "test"
+    assert "path" not in captured_payload  # Should be excluded because it's None
+    assert "case_insensitive" not in captured_payload  # Should be excluded
