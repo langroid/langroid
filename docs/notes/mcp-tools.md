@@ -324,8 +324,7 @@ function as shown above, i.e.:
 ```python
 from langroid.agent.tools.mcp import get_tool_async
 
-ExaSearchTool = awwait
-get_tool_async(transport, "web_search_exa")
+ExaSearchTool = await get_tool_async(transport, "web_search_exa")
 ```
 
 We can now define our main function where we create our `ChatAgent`,
