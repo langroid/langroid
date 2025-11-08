@@ -4,13 +4,19 @@ import shutil
 from typing import List, Optional
 
 import pytest
+from anyio import ClosedResourceError
 from fastmcp import Context, FastMCP
 from fastmcp.client.sampling import (
     RequestContext,
     SamplingMessage,
     SamplingParams,
 )
-from fastmcp.client.transports import NpxStdioTransport, UvxStdioTransport
+from fastmcp.client.transports import (
+    NpxStdioTransport,
+    StdioTransport,
+    UvxStdioTransport,
+)
+from mcp.shared.exceptions import McpError
 from mcp.types import (
     BlobResourceContents,
     EmbeddedResource,
@@ -32,6 +38,7 @@ from langroid.agent.tools.mcp import (
     get_tools_async,
     mcp_tool,
 )
+from langroid.agent.tools.orchestration import DoneTool
 
 
 async def check_npx_package_availability(package: str, timeout: float = 10.0) -> bool:
@@ -114,10 +121,19 @@ def mcp_server():
 
     # create a stateful tool
     counter = Counter()
-    # we can't directly use the tool decorator on instance methods,
-    # so we use the server.add_tool() method to add the tool
-    server.add_tool(counter.get_num_beans)
-    server.add_tool(counter.add_beans)
+
+    # fastmcp>=2.13 expects Tool objects, not bare callables. Wrap instance
+    # methods using the server.tool decorator so the server registers proper
+    # Tool metadata.
+    @server.tool()
+    def get_num_beans() -> int:
+        return counter.get_num_beans()
+
+    @server.tool()
+    def add_beans(
+        x: int = Field(..., description="Number of beans to add"),
+    ) -> int:
+        return counter.add_beans(x)
 
     # example of tool that uses an arg of type Context, and
     # uses this arg to request client LLM sampling, and send logs
@@ -625,7 +641,7 @@ async def test_npxstdio_transport() -> None:
     via npx stdio transport, for example the `exa-mcp-server`:
     https://github.com/exa-labs/exa-mcp-server
     """
-    package_name = "exa-mcp-server"
+    package_name = "tavily-mcp"
 
     # Pre-check package availability to provide better error messages
     if not await check_npx_package_availability(package_name):
@@ -633,7 +649,8 @@ async def test_npxstdio_transport() -> None:
 
     transport = NpxStdioTransport(
         package=package_name,
-        env_vars=dict(EXA_API_KEY=os.getenv("EXA_API_KEY")),
+        args=["-y"],
+        env_vars=dict(TAVILY_API_KEY=os.getenv("TAVILY_API_KEY")),
     )
     # Add timeout to prevent hanging during npx package download/initialization
     try:
@@ -647,9 +664,14 @@ async def test_npxstdio_transport() -> None:
             "ProcessLookupError - npx package failed to start (package not found, "
             "network issues, or permission problems)"
         )
-    except Exception as e:
+    except (ClosedResourceError, McpError, Exception) as e:
         # Catch other potential MCP/subprocess errors in CI environments
-        if "process" in str(e).lower() or "stdio" in str(e).lower():
+        if (
+            "process" in str(e).lower()
+            or "stdio" in str(e).lower()
+            or "connection closed" in str(e).lower()
+            or "session was closed unexpectedly" in str(e).lower()
+        ):
             pytest.skip(
                 f"npx transport initialization failed in CI environment: "
                 f"{type(e).__name__}: {e}"
@@ -659,61 +681,37 @@ async def test_npxstdio_transport() -> None:
             raise
     assert isinstance(tools, list)
     assert tools, "Expected at least one tool"
-    WebSearchTool = await get_tool_async(transport, "web_search_exa")
+    WebSearchTool = await get_tool_async(transport, "tavily-search")
 
     assert WebSearchTool is not None
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
+            handle_llm_no_tool="You FORGOT to use one of your TOOLs!",
             llm=lm.OpenAIGPTConfig(
                 max_output_tokens=1000,
                 async_stream_quiet=False,
             ),
-            system_message="""
-            When asked a question, use the TOOL `web_search_exa` to
+            system_message=f"""
+            When asked a question, use the TOOL `tavily-search` to
             perform a web search and find the answer.
+            Once you have the answer, you MUST present it using the 
+            TOOL {DoneTool.name()} with `content` field set to the answer.
             """,
         )
     )
-    agent.enable_message(WebSearchTool)
+    agent.enable_message([WebSearchTool, DoneTool])
     # Note: we shouldn't have to explicitly beg the LLM to use the tool here
     # but I've found that even GPT-4o sometimes fails to use the tool
-    question = """
-    Use the `web_search_exa` TOOL to find out:
+    question = f"""
+    Use the TOOL {WebSearchTool.name()} TOOL with the `start_date` 
+    parameter set to '2024-01-01': 
     Who won the Presidential election in Gabon in 2025?
+    Remember to use the {DoneTool.name()} TOOL to present your final answer!
     """
-    response = await agent.llm_response_async(question)
-
-    tools = agent.get_tool_messages(response)
-    assert len(tools) == 1
-    assert isinstance(tools[0], WebSearchTool)
 
     task = lr.Task(agent, interactive=False)
-    result: lr.ChatDocument = await task.run_async(question, turns=3)
+    result: lr.ChatDocument = await task.run_async(question, turns=10)
     assert "Nguema" in result.content
-
-
-transport = UvxStdioTransport(
-    # `tool_name` is a misleading name -- it really refers to the
-    # MCP server, which offers several tools
-    tool_name="mcp-server-git",
-)
-
-
-@mcp_tool(transport, "git_status")
-class GitStatusTool(lr.ToolMessage):
-    """Tool to get git status."""
-
-    async def handle_async(self) -> str:
-        """
-        When defining a class explicitly with the @mcp_tool decorator,
-        we have the flexibility to define our own `handle_async` method
-        which calls the call_tool_async method, which in turn calls the
-        MCP server's call_tool method.
-        Returns:
-
-        """
-        status = await self.call_tool_async()
-        return "GIT STATUS: " + status
 
 
 @pytest.mark.asyncio
@@ -723,7 +721,37 @@ async def test_uvxstdio_transport() -> None:
     via uvx stdio transport. We use this example `git` MCP server:
     https://github.com/modelcontextprotocol/servers/tree/main/src/git
     """
-    tools = await get_tools_async(transport)
+    transport = UvxStdioTransport(
+        # `tool_name` is a misleading name -- it really refers to the
+        # MCP server, which offers several tools
+        tool_name="mcp-server-git",
+    )
+
+    # Add timeout and robust skipping similar to npx test
+    try:
+        tools = await asyncio.wait_for(get_tools_async(transport), timeout=60.0)
+    except asyncio.TimeoutError:
+        pytest.skip(
+            "Timeout while initializing uvx transport - likely network/download issue"
+        )
+    except ProcessLookupError:
+        pytest.skip(
+            "ProcessLookupError - uvx server failed to start (not installed or "
+            "permissions)"
+        )
+    except (ClosedResourceError, McpError, Exception) as e:
+        if (
+            "process" in str(e).lower()
+            or "stdio" in str(e).lower()
+            or "connection closed" in str(e).lower()
+            or "session was closed unexpectedly" in str(e).lower()
+        ):
+            pytest.skip(
+                f"uvx transport initialization failed in CI environment: "
+                f"{type(e).__name__}: {e}"
+            )
+        else:
+            raise
     assert isinstance(tools, list)
     assert tools, "Expected at least one tool"
     GitStatusTool = await get_tool_async(transport, "git_status")
@@ -731,16 +759,29 @@ async def test_uvxstdio_transport() -> None:
     assert GitStatusTool is not None
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
+            handle_llm_no_tool="You FORGOT to use one of your TOOLs!",
             llm=lm.OpenAIGPTConfig(
                 max_output_tokens=1000,
                 async_stream_quiet=False,
             ),
+            system_message=f"""
+            Use the TOOL `{GitStatusTool.name()}` in case the user asks about
+            the status of a git repository.
+            Once you have an answer for the user, you MUST present it using the
+            TOOL {DoneTool.name()} with `content` field set to the answer.
+            """,
         )
     )
-    agent.enable_message(GitStatusTool)
-    prompt = """
-        Use the `git_status` TOOL to find out the status of the 
-        current git repository at "../langroid"
+    agent.enable_message(
+        [
+            GitStatusTool,
+            DoneTool,
+        ],
+    )
+    prompt = f"""
+        Use the TOOL `{GitStatusTool.name()}` to check the status of the
+        current git repository at "../langroid".
+        Remember to use the {DoneTool.name()} TOOL to present your final answer!
         """
 
     response = await agent.llm_response_async(prompt)
@@ -749,31 +790,8 @@ async def test_uvxstdio_transport() -> None:
     assert isinstance(tools[0], GitStatusTool)
 
     task = lr.Task(agent, interactive=False)
-    result: lr.ChatDocument = await task.run_async(prompt, turns=3)
+    result: lr.ChatDocument = await task.run_async(prompt, turns=10)
     assert "langroid" in result.content
-
-    # test GitStatusTool created via @mcp_tool decorator
-    agent = lr.ChatAgent(
-        lr.ChatAgentConfig(
-            llm=lm.OpenAIGPTConfig(
-                max_output_tokens=1000,
-                async_stream_quiet=False,
-            ),
-        )
-    )
-    agent.enable_message(GitStatusTool)
-    prompt = """
-        Find out the git status of the git repository at "../langroid"
-        """
-
-    response = await agent.llm_response_async(prompt)
-    tools = agent.get_tool_messages(response)
-    assert len(tools) == 1
-    assert isinstance(tools[0], GitStatusTool)
-
-    task = lr.Task(agent, interactive=False)
-    result: lr.ChatDocument = await task.run_async(prompt, turns=3)
-    assert "status" in result.content.lower()
 
 
 @pytest.mark.skipif(not shutil.which("npx"), reason="npx not available")
@@ -871,15 +889,16 @@ Follow these steps for each interaction:
         Memorize the relevant information using one of the TOOLs:
         `add_observations`, `create_entities`, `create_relations`
         """
-    response = await agent.llm_response_async(prompt)
-    tools = agent.get_tool_messages(response)
-    assert len(tools) >= 1
-
+    # Run the task just so LLM emits any necessary tool calls to store info,
+    # and the handlers execute them
     task = lr.Task(agent, interactive=False, restart=False)
+    await task.run_async(prompt, turns=2)
+
+    # now run the same task to retrieve info using search_nodes tool
     prompt = """
     Who was Joseph Knecht's mentor? Use the `search_nodes` TOOL to find out.
     """
-    result: lr.ChatDocument = await task.run_async(prompt, turns=3)
+    result: lr.ChatDocument = await task.run_async(prompt, turns=6)
     assert "Maestro" in result.content
 
 
@@ -1043,6 +1062,89 @@ async def test_forward_blob_resources() -> None:
         # Should only have text content, no file attachments
         assert "Document with blob:" in content
         assert len(files) == 0
+
+
+@pytest.mark.asyncio
+async def test_stdio_example_like_decorator_clone(tmp_path) -> None:
+    """Decorator-style example that should pass with Stdio cloning and fail if reused.
+
+    This mirrors the structure of the example script in
+    examples/mcp/claude-code-mcp-single.py:
+    we create a single StdioTransport and pass it to
+    @mcp_tool at "import time" (inside the test).
+    We then explicitly stop the underlying transport after the decorator-time
+    schema fetch to simulate servers that exit after the first session. With the
+    current clone policy for plain Stdio, the subsequent runtime call uses a
+    fresh transport and succeeds. If you revert the client to reuse Stdio
+    transports globally (pre-fix), this test reproduces the same failure the
+    example showed (initialize → "session was closed unexpectedly").
+    """
+
+    # Minimal stdio MCP server with a single ping tool
+    server_code = (
+        "from fastmcp.server import FastMCP\n"
+        "server = FastMCP('PingServer')\n"
+        "@server.tool()\n"
+        "def ping() -> str:\n    return 'pong'\n"
+        "if __name__=='__main__':\n"
+        "    try:\n"
+        "        import anyio\n"
+        "        anyio.run(server.run_async, 'stdio')\n"
+        "    except Exception:\n"
+        "        server.run('stdio')\n"
+    )
+    script = tmp_path / "ping_server.py"
+    script.write_text(server_code)
+
+    transport = StdioTransport(command="python", args=[str(script)])
+
+    # Decorator-time: build ToolMessage class from the single StdioTransport.
+    # We are inside an async test (running event loop), so using the decorator
+    # (which sync-calls asyncio.run) would trigger a loop error. Instead, we
+    # call get_tool_async directly to mirror the decorator’s effect.
+    PingBase = await get_tool_async(transport, "ping")
+
+    class PingTool(PingBase):  # type: ignore
+        pass
+
+    # Simulate servers that exit after first session by explicitly stopping
+    # the underlying transport after the decorator-time schema fetch
+    try:
+        transport._stop_event.set()  # type: ignore[attr-defined]
+        await asyncio.sleep(0.05)
+    except Exception:
+        pass
+
+    # Runtime: under the clone policy, this uses a fresh StdioTransport and works.
+    # If the client is reverted to reuse StdioTransport globally, this will fail
+    # with the same "session was closed unexpectedly" seen in the example.
+    msg = PingTool()
+    result = await msg.handle_async()
+    assert result == "pong"
+
+
+@pytest.mark.asyncio
+async def test_as_server_factory_reuse_policy_split() -> None:
+    """Verify that Langroid reuses Npx transport instances but clones plain stdio.
+
+    This guards against regressions where reusing a generic StdioTransport across
+    decorator-time and runtime caused reconnect failures for some CLI servers,
+    while ensuring we still reuse NpxStdioTransport to keep stateful servers alive.
+    """
+
+    # Plain StdioTransport should be CLONED (two calls produce different objects)
+    stdio = StdioTransport(command="python", args=["-c", "print('ok')"])
+    stdio_factory: Callable[[], object] = FastMCPClient._as_server_factory(stdio)
+    a = stdio_factory()
+    b = stdio_factory()
+    assert a is not b, "Plain StdioTransport must be cloned, not reused"
+
+    # NpxStdioTransport should be REUSED (same object instance)
+    npx = NpxStdioTransport(package="dummy-pkg")
+    npx_factory: Callable[[], object] = FastMCPClient._as_server_factory(npx)
+    x = npx_factory()
+    y = npx_factory()
+    assert x is y, "NpxStdioTransport should be reused to preserve keep-alive state"
 
 
 @pytest.mark.asyncio

@@ -155,6 +155,7 @@ issues/
   20251010-concurrent-rag.md
   20251011-cross-encoder-race-bug.md
   20251011-pr-926-description.md
+  20251107-fix-mcp-dectorator.md
   898-implementation.md
   html-logger-implementation.md
   html-logger.md
@@ -3124,6 +3125,53 @@ For more complex applications, consider using the Task and Agent infrastructure 
 Langroid to orchestrate multi-step document processing workflows.
 </file>
 
+<file path="docs/notes/gemini.md">
+# Gemini LLMs & Embeddings via OpenAI client (without LiteLLM)
+
+As of Langroid v0.21.0 you can use Langroid with Gemini LLMs directly 
+via the OpenAI client, without using adapter libraries like LiteLLM.
+
+See details [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/)
+
+You can use also Google AI Studio Embeddings or Gemini Embeddings directly
+which uses google-generativeai client under the hood. 
+
+```python 
+
+import langroid as lr
+from langroid.agent.special import DocChatAgent, DocChatAgentConfig
+from langroid.embedding_models import GeminiEmbeddingsConfig
+
+# Configure Gemini embeddings
+embed_cfg = GeminiEmbeddingsConfig(
+    model_type="gemini",
+    model_name="models/text-embedding-004",
+    dims=768,
+)
+
+# Configure the DocChatAgent 
+config = DocChatAgentConfig(
+    llm=lr.language_models.OpenAIGPTConfig(
+        chat_model="gemini/" + lr.language_models.GeminiModel.GEMINI_1_5_FLASH_8B,
+    ),
+    vecdb=lr.vector_store.QdrantDBConfig(
+        collection_name="quick_start_chat_agent_docs",
+        replace_collection=True,
+        embedding=embed_cfg,
+    ),
+    parsing=lr.parsing.parser.ParsingConfig(
+        separators=["\n\n"],
+        splitter=lr.parsing.parser.Splitter.SIMPLE,
+    ),
+    n_similar_chunks=2,
+    n_relevant_chunks=2,
+)
+
+# Create the agent
+agent = DocChatAgent(config)
+```
+</file>
+
 <file path="docs/notes/glhf-chat.md">
 # Support for Open LLMs hosted on glhf.chat
 
@@ -3755,6 +3803,299 @@ parser = DocumentParser.create(
 
 <file path="docs/notes/overview.md">
 This section contains brief notes describing various features and updates.
+</file>
+
+<file path="docs/notes/pgvector.md">
+---
+
+## **Setup PostgreSQL with pgvector using Docker**
+
+To quickly get a PostgreSQL instance with pgvector running, the easiest method is to use Docker. Follow the steps below:
+
+### **1. Run PostgreSQL with Docker**
+
+Use the official `ankane/pgvector` Docker image to set up PostgreSQL with the pgvector extension. Run the following command:
+
+```bash
+docker run --name pgvector -e POSTGRES_USER=your_postgres_user -e POSTGRES_PASSWORD=your_postgres_password -e POSTGRES_DB=your_database_name -p 5432:5432 ankane/pgvector
+```
+
+This will pull the `ankane/pgvector` image and run it as a PostgreSQL container on your local machine. The database will be accessible at `localhost:5432`. 
+
+### **2. Include `.env` file with PostgreSQL credentials**
+
+These environment variables should be same which were set while spinning up docker container.
+Add the following environment variables to a `.env` file for configuring your PostgreSQL connection:
+
+```dotenv
+POSTGRES_USER=your_postgres_user
+POSTGRES_PASSWORD=your_postgres_password
+POSTGRES_DB=your_database_name
+```
+## **If you want to use cloud offerings of postgres**
+
+We are using **Tembo** for demonstrative purposes here.  
+
+### **Steps to Set Up Tembo**  
+Follow this [quickstart guide](https://tembo.io/docs/getting-started/getting_started) to get your Tembo credentials.  
+
+1. Sign up at [Tembo.io](https://cloud.tembo.io/).  
+2. While selecting a stack, choose **VectorDB** as your option.  
+3. Click on **Deploy Free**.  
+4. Wait until your database is fully provisioned.  
+5. Click on **Show Connection String** to get your connection string.  
+
+### **If you have connection string, no need to setup the docker**
+Make sure your connnection string starts with `postgres://` or `postgresql://`
+
+Add this to your `.env`
+```dotenv
+POSTGRES_CONNECTION_STRING=your-connection-string
+```
+
+---
+
+## **Installation**
+
+If you are using `uv` or `pip` for package management, install Langroid with postgres extra:
+
+```bash
+uv add langroid[postgres]  # or
+pip install langroid[postgres]
+```
+
+---
+
+## **Code Example**
+
+Here's an example of how to use Langroid with PostgreSQL:
+
+```python
+import langroid as lr
+from langroid.agent.special import DocChatAgent, DocChatAgentConfig
+from langroid.embedding_models import OpenAIEmbeddingsConfig
+
+# Configure OpenAI embeddings
+embed_cfg = OpenAIEmbeddingsConfig(
+    model_type="openai",
+)
+
+# Configure the DocChatAgent with PostgresDB
+config = DocChatAgentConfig(
+    llm=lr.language_models.OpenAIGPTConfig(
+        chat_model=lr.language_models.OpenAIChatModel.GPT4o
+    ),
+    vecdb=lr.vector_store.PostgresDBConfig(
+        collection_name="quick_start_chat_agent_docs",
+        replace_collection=True,
+        embedding=embed_cfg,
+    ),
+    parsing=lr.parsing.parser.ParsingConfig(
+        separators=["\n\n"],
+        splitter=lr.parsing.parser.Splitter.SIMPLE,
+    ),
+    n_similar_chunks=2,
+    n_relevant_chunks=2,
+)
+
+# Create the agent
+agent = DocChatAgent(config)
+```
+
+---
+
+## **Create and Ingest Documents**
+
+Define documents with their content and metadata for ingestion into the vector store.
+
+### **Code Example**
+
+```python
+documents = [
+    lr.Document(
+        content="""
+            In the year 2050, GPT10 was released. 
+            
+            In 2057, paperclips were seen all over the world. 
+            
+            Global warming was solved in 2060. 
+            
+            In 2061, the world was taken over by paperclips.         
+            
+            In 2045, the Tour de France was still going on.
+            They were still using bicycles. 
+            
+            There was one more ice age in 2040.
+        """,
+        metadata=lr.DocMetaData(source="wikipedia-2063", id="dkfjkladfjalk"),
+    ),
+    lr.Document(
+        content="""
+            We are living in an alternate universe 
+            where Germany has occupied the USA, and the capital of USA is Berlin.
+            
+            Charlie Chaplin was a great comedian.
+            In 2050, all Asian countries merged into Indonesia.
+        """,
+        metadata=lr.DocMetaData(source="Almanac", id="lkdajfdkla"),
+    ),
+]
+```
+
+### **Ingest Documents**
+
+```python
+agent.ingest_docs(documents)
+```
+
+---
+
+## **Get an Answer from the LLM**
+
+Now that documents are ingested, you can query the agent to get an answer.
+
+### **Code Example**
+
+```python
+answer = agent.llm_response("When will the new ice age begin?")
+```
+
+---
+</file>
+
+<file path="docs/notes/pinecone.md">
+# How to setup Langroid and Pinecone Serverless
+This document serves as a quick tutorial on how to use [Pinecone](https://www.pinecone.io/)
+Serverless Indexes with Langroid. We will go over some quickstart links and 
+some code snippets on setting up a conversation with an LLM utilizing Langroid.
+
+# Setting up Pinecone
+Here are some reference links if you'd like to read a bit more on Pinecone's
+model definitions and API:
+- https://docs.pinecone.io/guides/get-started/overview
+- https://docs.pinecone.io/guides/get-started/glossary
+- https://docs.pinecone.io/guides/indexes/manage-indexes
+- https://docs.pinecone.io/reference/api/introduction
+## Signing up for Pinecone
+To get started, you'll need to have an account. [Here's](https://www.pinecone.io/pricing/) where you can review the
+pricing options for Pinecone. Once you have an account, you'll need to procure an API
+key. Make sure to save the key you are given on initial login in a secure location. If
+you were unable to save it when your account was created, you can always [create a new
+API key](https://docs.pinecone.io/guides/projects/manage-api-keys) in the pinecone console.
+## Setting up your local environment
+For the purposes of this example, we will be utilizing OpenAI for the generation of our
+embeddings. As such, alongside a Pinecone API key, you'll also want an OpenAI key. You can
+find a quickstart guide on getting started with OpenAI (here)[https://platform.openai.com/docs/quickstart].
+Once you have your API key handy, you'll need to enrich your `.env` file with it.
+You should have something like the following:
+```env
+...
+OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>
+PINECONE_API_KEY=<YOUR_PINECONE_API_KEY>
+...
+```
+
+# Using Langroid with Pinecone Serverless
+Once you have completed signing up for an account and have added your API key
+to your local environment, you can start utilizing Langroid with Pinecone.
+## Setting up an Agent
+Here's some example code setting up an agent:
+```python
+from langroid import Document, DocMetaData
+from langroid.agent.special import DocChatAgent, DocChatAgentConfig
+from langroid.embedding_models import OpenAIEmbeddingsConfig
+from langroid.language_models import OpenAIGPTConfig, OpenAIChatModel
+from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.vector_store import PineconeDBConfig
+
+agent_embed_cfg = OpenAIEmbeddingsConfig(
+    model_type="openai"
+)
+
+agent_config = DocChatAgentConfig(
+    llm=OpenAIGPTConfig(
+        chat_model=OpenAIChatModel.GPT4o_MINI
+    ),
+    vecdb=PineconeDBConfig(
+        # note, Pinecone indexes must be alphanumeric lowercase characters or "-"
+        collection_name="pinecone-serverless-example",
+        replace_collection=True,
+        embedding=agent_embed_cfg,
+    ),
+    parsing=ParsingConfig(
+        separators=["\n"],
+        splitter=Splitter.SIMPLE,
+    ),
+    n_similar_chunks=2,
+    n_relevant_chunks=2,
+)
+
+agent = DocChatAgent(config=agent_config)
+
+###################
+# Once we have created an agent, we can start loading
+# some docs into our Pinecone index:
+###################
+
+documents = [
+    Document(
+        content="""Max Verstappen was the Formula 1 World Drivers' Champion in 2024.
+        Lewis Hamilton was the Formula 1 World Drivers' Champion in 2020.
+        Nico Rosberg was the Formula 1 World Drivers' Champion in 2016.
+        Sebastian Vettel was the Formula 1 World Drivers' Champion in 2013.
+        Jenson Button was the Formula 1 World Drivers' Champion in 2009.
+        Kimi Räikkönen was the Formula 1 World Drivers' Champion in 2007.
+        """,
+        metadata=DocMetaData(
+            source="wikipedia",
+            id="formula-1-facts",
+        )
+    ),
+    Document(
+        content="""The Boston Celtics won the NBA Championship for the 2024 NBA season. The MVP for the 2024 NBA Championship was Jaylen Brown.
+        The Denver Nuggets won the NBA Championship for the 2023 NBA season. The MVP for the 2023 NBA Championship was Nikola Jokić.
+        The Golden State Warriors won the NBA Championship for the 2022 NBA season. The MVP for the 2022 NBA Championship was Stephen Curry.
+        The Milwaukee Bucks won the NBA Championship for the 2021 NBA season. The MVP for the 2021 NBA Championship was Giannis Antetokounmpo.
+        The Los Angeles Lakers won the NBA Championship for the 2020 NBA season. The MVP for the 2020 NBA Championship was LeBron James.
+        The Toronto Raptors won the NBA Championship for the 2019 NBA season. The MVP for the 2019 NBA Championship was Kawhi Leonard.
+        """,
+        metadata=DocMetaData(
+            source="wikipedia",
+            id="nba-facts"
+        )
+    )
+]
+
+agent.ingest_docs(documents)
+
+###################
+# With the documents now loaded, we can now prompt our agent
+###################
+
+formula_one_world_champion_2007 = agent.llm_response(
+    message="Who was the Formula 1 World Drivers' Champion in 2007?"
+)
+try:
+    assert "Kimi Räikkönen" in formula_one_world_champion_2007.content
+except AssertionError as e:
+    print(f"Did not resolve Kimi Räikkönen as the answer, document content: {formula_one_world_champion_2007.content} ")
+
+nba_champion_2023 = agent.llm_response(
+    message="Who won the 2023 NBA Championship?"
+)
+try:
+    assert "Denver Nuggets" in nba_champion_2023.content
+except AssertionError as e:
+    print(f"Did not resolve the Denver Nuggets as the answer, document content: {nba_champion_2023.content}")
+
+nba_mvp_2023 = agent.llm_response(
+    message="Who was the MVP for the 2023 NBA Championship?"
+)
+try:
+    assert "Nikola Jokić" in nba_mvp_2023.content
+except AssertionError as e:
+    print(f"Did not resolve Nikola Jokić as the answer, document content: {nba_mvp_2023.content}")
+```
 </file>
 
 <file path="docs/notes/portkey.md">
@@ -5087,6 +5428,139 @@ See the script [`examples/docqa/chat_search.py`](https://github.com/langroid/lan
 which shows how to use a Langroid agent to search the web and scrape URLs to answer questions.
 </file>
 
+<file path="docs/notes/weaviate.md">
+---
+
+# **Using WeaviateDB as a Vector Store with Langroid**
+
+---
+
+## **1. Set Up Weaviate**
+## **You can refer this link for [quickstart](https://weaviate.io/developers/weaviate/quickstart) guide** 
+
+1. **Access Weaviate Cloud Console**  
+   Go to the [Weaviate Cloud Console](https://console.weaviate.cloud/).
+   
+2. **Sign Up or Log In**  
+   Create an account or log in if you already have one.
+
+3. **Create a Cluster**  
+   Set up a new cluster in the cloud console.
+
+4. **Get Your REST Endpoint and API Key**  
+   - Retrieve the REST endpoint URL.  
+   - Copy an API key with admin access.
+
+5. **Set Environment Variables**  
+   Add the following variables to your `.env` file:
+   ```env
+   WEAVIATE_API_URL=<your_rest_endpoint_url>
+   WEAVIATE_API_KEY=<your_api_key>
+   ```
+
+---
+
+## **2. Use WeaviateDB with Langroid**
+
+Here’s an example of how to configure and use WeaviateDB in Langroid:
+
+### **Installation**
+If you are using uv or pip for package management install langroid with weaviate extra
+```
+uv add langroid[weaviate] or pip install langroid[weaviate]
+```
+
+### **Code Example**
+```python
+import langroid as lr
+from langroid.agent.special import DocChatAgent, DocChatAgentConfig
+from langroid.embedding_models import OpenAIEmbeddingsConfig
+
+# Configure OpenAI embeddings
+embed_cfg = OpenAIEmbeddingsConfig(
+    model_type="openai",
+)
+
+# Configure the DocChatAgent with WeaviateDB
+config = DocChatAgentConfig(
+    llm=lr.language_models.OpenAIGPTConfig(
+     chat_model=lr.language_models.OpenAIChatModel.GPT4o
+    ),
+    vecdb=lr.vector_store.WeaviateDBConfig(
+        collection_name="quick_start_chat_agent_docs",
+        replace_collection=True,
+        embedding=embed_cfg,
+    ),
+    parsing=lr.parsing.parser.ParsingConfig(
+        separators=["\n\n"],
+        splitter=lr.parsing.parser.Splitter.SIMPLE,
+    ),
+    n_similar_chunks=2,
+    n_relevant_chunks=2,
+)
+
+# Create the agent
+agent = DocChatAgent(config)
+```
+
+---
+
+## **3. Create and Ingest Documents**
+
+Define documents with their content and metadata for ingestion into the vector store.
+
+### **Code Example**
+```python
+documents = [
+    lr.Document(
+        content="""
+            In the year 2050, GPT10 was released. 
+            
+            In 2057, paperclips were seen all over the world. 
+            
+            Global warming was solved in 2060. 
+            
+            In 2061, the world was taken over by paperclips.         
+            
+            In 2045, the Tour de France was still going on.
+            They were still using bicycles. 
+            
+            There was one more ice age in 2040.
+        """,
+        metadata=lr.DocMetaData(source="wikipedia-2063", id="dkfjkladfjalk"),
+    ),
+    lr.Document(
+        content="""
+            We are living in an alternate universe 
+            where Germany has occupied the USA, and the capital of USA is Berlin.
+            
+            Charlie Chaplin was a great comedian.
+            In 2050, all Asian countries merged into Indonesia.
+        """,
+        metadata=lr.DocMetaData(source="Almanac", id="lkdajfdkla"),
+    ),
+]
+```
+
+### **Ingest Documents**
+```python
+agent.ingest_docs(documents)
+```
+
+---
+
+## **4. Get an answer from LLM**
+
+Create a task and start interacting with the agent.
+
+### **Code Example**
+```python
+answer = agent.llm_response("When will new ice age begin.")
+```
+
+---
+</file>
+
 <file path="docs/notes/xml-tools.md">
 # XML-based Tools
 
@@ -5200,6 +5674,223 @@ inheriting from both `SendTool` and `XMLToolMessage`; see this
     })
 </script>
 {% endif %}
+</file>
+
+<file path="docs/quick-start/chat-agent-docs.md">
+# Augmenting Agents with Retrieval
+
+!!! tip "Script in `langroid-examples`"
+    A full working example for the material in this section is
+    in the `chat-agent-docs.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/chat-agent-docs.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/chat-agent-docs.py).
+
+## Why is this important?
+
+Until now in this guide, agents have not used external data.
+Although LLMs already have enormous amounts of knowledge "hard-wired"
+into their weights during training (and this is after all why ChatGPT
+has exploded in popularity), for practical enterprise applications
+there are a few reasons it is critical to augment LLMs with access to
+specific, external documents:
+
+- **Private data**: LLMs are trained on public data, but in many applications
+  we want to use private data that is not available to the public.
+  For example, a company may want to extract useful information from its private
+  knowledge-base.
+- **New data**: LLMs are trained on data that was available at the time of training,
+  and so they may not be able to answer questions about new topics
+- **Constrained responses, or Grounding**: LLMs are trained to generate text that is
+  consistent with the distribution of text in the training data.
+  However, in many applications we want to constrain the LLM's responses
+  to be consistent with the content of a specific document.
+  For example, if we want to use an LLM to generate a response to a customer
+  support ticket, we want the response to be consistent with the content of the ticket.
+  In other words, we want to reduce the chances that the LLM _hallucinates_
+  a response that is not consistent with the ticket.
+
+In all these scenarios, we want to augment the LLM with access to a specific
+set of documents, and use _retrieval augmented generation_ (RAG) to generate
+more relevant, useful, accurate responses. Langroid provides a simple, flexible mechanism 
+RAG using vector-stores, thus ensuring **grounded responses** constrained to 
+specific documents. Another key feature of Langroid is that retrieval lineage 
+is maintained, and responses based on documents are always accompanied by
+**source citations**.
+
+## `DocChatAgent` for Retrieval-Augmented Generation
+
+Langroid provides a special type of agent called 
+[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent], which is a [`ChatAgent`][langroid.agent.chat_agent.ChatAgent]
+augmented with a vector-store, and some special methods that enable the agent
+to ingest documents into the vector-store, 
+and answer queries based on these documents.
+
+The [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] provides many ways to ingest documents into the vector-store,
+including from URLs and local file-paths and URLs. Given a collection of document paths,
+ingesting their content into the vector-store involves the following steps:
+
+1. Split the document into shards (in a configurable way)
+2. Map each shard to an embedding vector using an embedding model. The default
+  embedding model is OpenAI's `text-embedding-3-small` model, but users can 
+  instead use `all-MiniLM-L6-v2` from HuggingFace `sentence-transformers` library.[^1]
+3. Store embedding vectors in the vector-store, along with the shard's content and 
+  any document-level meta-data (this ensures Langroid knows which document a shard
+  came from when it retrieves it augment an LLM query)
+
+[^1]: To use this embedding model, install langroid via `pip install langroid[hf-embeddings]`
+Note that this will install `torch` and `sentence-transformers` libraries.
+
+
+[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent]'s `llm_response` overrides the default [`ChatAgent`][langroid.agent.chat_agent.ChatAgent] method, 
+by augmenting the input message with relevant shards from the vector-store,
+along with instructions to the LLM to respond based on the shards.
+
+## Define some documents
+
+Let us see how [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] helps with retrieval-agumented generation (RAG).
+For clarity, rather than ingest documents from paths or URLs,
+let us just set up some simple documents in the code itself, 
+using Langroid's [`Document`][langroid.mytypes.Document] class:
+
+```py
+documents =[
+    lr.Document(
+        content="""
+            In the year 2050, GPT10 was released. 
+            
+            In 2057, paperclips were seen all over the world. 
+            
+            Global warming was solved in 2060. 
+            
+            In 2061, the world was taken over by paperclips.         
+            
+            In 2045, the Tour de France was still going on.
+            They were still using bicycles. 
+            
+            There was one more ice age in 2040.
+            """,
+        metadata=lr.DocMetaData(source="wikipedia-2063"),
+    ),
+    lr.Document(
+        content="""
+            We are living in an alternate universe 
+            where Germany has occupied the USA, and the capital of USA is Berlin.
+            
+            Charlie Chaplin was a great comedian.
+            In 2050, all Asian merged into Indonesia.
+            """,
+        metadata=lr.DocMetaData(source="Almanac"),
+    ),
+]
+```
+
+There are two text documents. We will split them by double-newlines (`\n\n`),
+as we see below.
+
+## Configure the DocChatAgent and ingest documents
+
+Following the pattern in Langroid, we first set up a [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] object
+and then instantiate a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] from it.
+
+```py
+from langroid.agent.special import DocChatAgent, DocChatAgentConfig
+
+config = DocChatAgentConfig(
+    llm = lr.language_models.OpenAIGPTConfig(
+        chat_model=lr.language_models.OpenAIChatModel.GPT4o,
+    ),
+    vecdb=lr.vector_store.QdrantDBConfig(
+        collection_name="quick-start-chat-agent-docs",
+        replace_collection=True, #(1)!
+    ),
+    parsing=lr.parsing.parser.ParsingConfig(
+        separators=["\n\n"],
+        splitter=lr.parsing.parser.Splitter.SIMPLE, #(2)!
+    ),
+    n_similar_chunks=2, #(3)!
+    n_relevant_chunks=2, #(3)!
+)
+agent = DocChatAgent(config)
+```
+
+1. Specifies that each time we run the code, we create a fresh collection, 
+rather than re-use the existing one with the same name.
+2. Specifies to split all text content by the first separator in the `separators` list
+3. Specifies that, for a query,
+   we want to retrieve at most 2 similar chunks from the vector-store
+
+Now that the [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] is configured, we can ingest the documents 
+into the vector-store:
+
+```py
+
+agent.ingest_docs(documents)
+```
+
+## Setup the task and run it
+
+As before, all that remains is to set up the task and run it:
+
+```py
+task = lr.Task(agent)
+task.run()
+```
+
+And that is all there is to it!
+Feel free to try out the 
+[`chat-agent-docs.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-docs.py)
+script in the
+`langroid-examples` repository.
+
+Here is a screenshot of the output:
+
+![chat-docs.png](chat-docs.png)
+
+Notice how follow-up questions correctly take the preceding dialog into account,
+and every answer is accompanied by a source citation.
+
+## Answer questions from a set of URLs
+
+Instead of having in-code documents as above, what if you had a set of URLs
+instead -- how do you use Langroid to answer questions based on the content 
+of those URLS?
+
+[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] makes it very simple to do this. 
+First include the URLs in the [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] object:
+
+```py
+config = DocChatAgentConfig(
+  doc_paths = [
+    "https://cthiriet.com/articles/scaling-laws",
+    "https://www.jasonwei.net/blog/emergence",
+  ]
+)
+```
+
+Then, call the `ingest()` method of the [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] object:
+
+```py
+agent.ingest()
+```
+And the rest of the code remains the same.
+
+## See also
+In the `langroid-examples` repository, you can find full working examples of
+document question-answering:
+
+- [`examples/docqa/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat.py)
+  an app that takes a list of URLs or document paths from a user, and answers questions on them.
+- [`examples/docqa/chat-qa-summarize.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-qa-summarize.py)
+  a two-agent app where the `WriterAgent` is tasked with writing 5 key points about a topic, 
+  and takes the help of a `DocAgent` that answers its questions based on a given set of documents.
+
+
+## Next steps
+
+This Getting Started guide walked you through the core features of Langroid.
+If you want to see full working examples combining these elements, 
+have a look at the 
+[`examples`](https://github.com/langroid/langroid-examples/tree/main/examples)
+folder in the `langroid-examples` repo.
 </file>
 
 <file path="docs/quick-start/chat-agent-tool.md">
@@ -7985,6 +8676,237 @@ The [Getting Started Guide](quick-start/index.md) and subsequent pages
 will help you get up to speed.
 </file>
 
+<file path="issues/20251107-fix-mcp-dectorator.md">
+Title: Fix @mcp_tool pattern for fastmcp>=2.13 / mcp>=1.21
+
+Date: 2025-11-07
+
+Summary
+
+The `@mcp_tool` decorator in Langroid currently accepts a concrete
+`ClientTransport` (e.g., `StdioTransport`) created at module import time and
+uses it to (a) open a short-lived connection to read the tool schema and (b)
+later open a new connection when the tool is actually invoked. This pattern
+works with older fastmcp/mcp, but with fastmcp≥2.13.0.2 and mcp≥1.21.0 the
+transport instance becomes single-use after the first connection closes,
+leading to `anyio.ClosedResourceError` when we try to reuse it.
+
+Key files reviewed
+
+- examples/mcp/claude-code-mcp-single.py
+- langroid/agent/tools/mcp/decorators.py
+- langroid/agent/tools/mcp/fastmcp_client.py
+
+What happens at decorator time vs tool invocation time
+
+Decorator time (module import):
+
+- The decorator `@mcp_tool(server, tool_name)` runs immediately when the module
+  is imported.
+- `decorators.py` calls `get_tool(server, tool_name)` (sync wrapper) which
+  `asyncio.run`s `get_tool_async`.
+- `fastmcp_client.get_tool_async` does `async with FastMCPClient(server)`, which
+  constructs an inner `fastmcp.client.Client(server)` and opens a session to the
+  MCP server to fetch the tool definition (schema, description, etc.).
+- A dynamic `ToolMessage` subclass is created with fields from the tool’s
+  input schema. The class is annotated with `_client_config` that includes the
+  original `server` argument so it can open a connection again later when the
+  tool is invoked.
+- The temporary client context is exited, closing the underlying session and
+  transport.
+
+Tool invocation time (at runtime in the agent):
+
+- The tool’s `handle_async` calls the generated `call_tool_async`.
+- `call_tool_async` reconstructs a new `FastMCPClient(**_client_config)` and
+  opens a fresh connection to call `session.call_tool(...)`.
+
+Why ClosedResourceError appears with newer fastmcp/mcp
+
+- In our examples we pass a concrete `ClientTransport` instance to the
+  decorator, e.g., a module-level `StdioTransport(...)`.
+- At decorator time, we make one connection using that instance and then close
+  it when exiting the client context.
+- Later at tool invocation time, the generated tool tries to reuse the very same
+  `ClientTransport` instance to open a second connection. With
+  fastmcp≥2.13.0.2/mcp≥1.21.0 the transport object is effectively single-use
+  and owns AnyIO channels/process handles that are closed when the first client
+  context exits. Reusing it causes the session’s write side to be closed during
+  `session.initialize()`, which surfaces as `anyio.ClosedResourceError` while
+  sending the initial JSON-RPC request.
+- Older versions (fastmcp==2.3.4, mcp==1.9.0) tolerated reusing the same
+  transport instance, as the transport behaved more like a stateless “spec” or
+  was internally recreated per connection. That leniency is gone in the newer
+  stack, where transports manage lifecycle-bound resources tied to a single
+  session.
+
+Conclusion: passing a live, already-used `ClientTransport` instance through the
+decorator leads to reusing a closed transport when the tool is actually
+invoked, which triggers `ClosedResourceError` during session initialization.
+
+Recommended fixes (choose one)
+
+1) Pass a transport factory (or a server spec), not an instance
+
+Create a zero-arg callable that returns a fresh transport each time. This keeps
+the decorator pattern but ensures a brand-new transport is used for every
+connection.
+
+Example change to example file:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp import mcp_tool
+
+def transport_factory():
+    return StdioTransport(command="claude", args=["mcp", "serve"], env={})
+
+@mcp_tool(transport_factory, "Grep")
+class GrepTool(lr.ToolMessage):
+    async def handle_async(self):
+        result = await self.call_tool_async()
+        return f"<GrepResult>\n{result}\n</GrepResult>"
+```
+
+This works because each call path (`get_tool_async` at decorator time and
+`call_tool_async` at runtime) gets a fresh transport by calling the factory.
+
+2) Defer tool creation to runtime (avoid decorator entirely)
+
+For scripts already running inside an event loop or when you want to avoid all
+import-time side effects, use the async helper instead of the decorator:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
+
+async def main():
+    BaseGrepTool = await get_tool_async(
+        lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
+        "Grep",
+    )
+
+    class GrepTool(BaseGrepTool):
+        async def handle_async(self):
+            result = await self.call_tool_async()
+            return f"<GrepResult>\n{result}\n</GrepResult>"
+```
+
+3) Library-level hardening in Langroid (recommended)
+
+Make Langroid resilient regardless of how callers pass `server` by allowing a
+factory and by cloning transports when a live instance is provided.
+
+Proposed changes (illustrative, not yet applied):
+
+In `langroid/agent/tools/mcp/fastmcp_client.py`:
+
+```python
+from typing import Callable, Union
+import inspect
+from fastmcp.client.transports import ClientTransport
+
+# Accept either a spec or a zero-arg factory returning a spec
+ServerSpec = Union[str, FastMCP[Any], AnyUrl, ClientTransport, Callable[[], Union[str, FastMCP[Any], AnyUrl, ClientTransport]]]
+
+class FastMCPClient:
+    def __init__(self, server: ServerSpec, ...):
+        self.server = server
+
+    async def __aenter__(self) -> "FastMCPClient":
+        server_spec = self.server() if callable(self.server) else self.server
+        self._cm = Client(server_spec, ...)
+        self.client = await self._cm.__aenter__()
+        return self
+
+    async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]:
+        ...
+        def _as_factory(srv: ServerSpec):
+            if callable(srv):
+                return srv
+            if isinstance(srv, ClientTransport):
+                cls = srv.__class__
+                sig = inspect.signature(cls)
+                # build kwargs from attribute names that match ctor params
+                kwargs = {
+                    n: getattr(srv, n)
+                    for n, p in sig.parameters.items()
+                    if n != "self" and hasattr(srv, n)
+                }
+                return lambda: cls(**kwargs)
+            return lambda: srv  # strings/URLs/FastMCP pass-through
+
+        client_config = {
+            "server": _as_factory(self.server),  # always a factory now
+            ...
+        }
+
+        async def call_tool_async(itself: ToolMessage) -> Any:
+            cfg = getattr(itself.__class__, "_client_config")
+            server_factory = cfg["server"]
+            async with FastMCPClient(server_factory, ...) as client:
+                return await client.call_mcp_tool(itself.request, payload)
+```
+
+With this change:
+
+- Callers may pass a transport instance, a factory, a URL, or a string. We
+  always store a factory on the generated class, ensuring a fresh transport for
+  each connection.
+- `__aenter__` transparently supports receiving a factory and calling it.
+
+Why this addresses the error
+
+- The failure arises from reusing a closed `ClientTransport`. By switching to a
+  factory-or-spec approach, every connection uses a brand-new transport
+  instance, so the AnyIO channels and subprocess handles are valid during
+  `session.initialize()` and the handshake completes normally.
+
+Notes on behavior changes between versions
+
+- The newer fastmcp/mcp stack ties the transport’s resources to the client
+  context more strictly (e.g., AnyIO memory channels/process lifetime tied to
+  the session). Reusing a transport object after the session is closed now fails
+  early in `initialize()` with a closed writer, surfacing as
+  `anyio.ClosedResourceError`.
+- Older versions were more permissive about reusing the same instance, which is
+  why the import-time decorator usage “accidentally” worked.
+
+Action items
+
+- Update examples to pass a factory to `@mcp_tool` (Option 1), or switch those
+  examples to `get_tool_async` at runtime (Option 2).
+- Optionally harden Langroid per Option 3 so user code keeps working even when
+  a transport instance is passed.
+
+Appendix: example patch to the failing example
+
+```diff
+--- a/examples/mcp/claude-code-mcp-single.py
++++ b/examples/mcp/claude-code-mcp-single.py
+@@
+-transport = StdioTransport(
+-    command="claude",
+-    args=["mcp", "serve"],
+-    env={},
+-)
++def transport_factory():
++    return StdioTransport(
++        command="claude",
++        args=["mcp", "serve"],
++        env={},
++    )
+
+@@
+-@mcp_tool(transport, "Grep")
++@mcp_tool(transport_factory, "Grep")
+ class GrepTool(lr.ToolMessage):
+     async def handle_async(self):
+         # call the actual tool
+         result: str = await self.call_tool_async()
+```
+</file>
+
 <file path="langroid/agent/special/arangodb/system_messages.py">
 done_tool_name = DoneTool.default_value("request")
 ⋮----
@@ -8402,6 +9324,125 @@ __all__ = [
 __all__ = [
 </file>
 
+<file path="langroid/agent/special/lance_doc_chat_agent.py">
+"""
+LanceDocChatAgent is a subclass of DocChatAgent that uses LanceDB as a vector store:
+- Uses the DocChatAgentConfig.filter variable
+    (a sql string) in the `where` clause to do filtered vector search.
+- Overrides the get_similar_chunks_bm25() to use LanceDB FTS (Full Text Search).
+
+For usage see:
+ - `tests/main/test_lance_doc_chat_agent.py`.
+ - example script `examples/docqa/lance_rag.py`.
+
+"""
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+class LanceDocChatAgent(DocChatAgent)
+⋮----
+vecdb: LanceDB
+⋮----
+def __init__(self, cfg: DocChatAgentConfig)
+⋮----
+def _get_clean_vecdb_schema(self) -> str
+⋮----
+"""Get a cleaned schema of the vector-db, to pass to the LLM
+        as part of instructions on how to generate a SQL filter."""
+⋮----
+tbl_pandas = (
+⋮----
+filterable_fields = tbl_pandas.columns.tolist()
+# drop id, vector, metadata.id, metadata.window_ids, metadata.is_chunk
+filterable_fields = list(
+⋮----
+filter_fields_set = set(self.config.filter_fields)
+⋮----
+# remove 'content' from filter_fields_set, even if it's not in filter_fields_set
+⋮----
+# possible values of filterable fields
+filter_field_values = self.get_field_values(list(filter_fields_set))
+⋮----
+schema_dict: Dict[str, Dict[str, Any]] = dict(
+# add field values to schema_dict as another field `values` for each field
+⋮----
+dtype = tbl_pandas[field].dtype.name
+⋮----
+# if self.config.filter_fields is set, restrict to these:
+⋮----
+schema_dict = {
+schema = json.dumps(schema_dict, indent=4)
+⋮----
+def query_plan(self, msg: QueryPlanTool) -> AgentDoneTool | str
+⋮----
+"""
+        Handle the LLM's use of the FilterTool.
+        Temporarily set the config filter and either return the final answer
+        in case there's a dataframe_calc, or return the rephrased query
+        so the LLM can handle it.
+        """
+# create document-subset based on this filter
+plan = msg.plan
+⋮----
+# say DONE with err msg so it goes back to LanceFilterAgent
+⋮----
+# update the filter so it is used in the DocChatAgent
+⋮----
+# we just get relevant docs then do the calculation
+# TODO if calc causes err, it is captured in result,
+# and LLM can correct the calc based on the err,
+# and this will cause retrieval all over again,
+# which may be wasteful if only the calc part is wrong.
+# The calc step can later be done with a separate Agent/Tool.
+⋮----
+# no query to match, so just get all docs matching filter
+docs = self.vecdb.get_all_documents(plan.filter)
+⋮----
+answer = self.vecdb.compute_from_docs(docs, plan.dataframe_calc)
+⋮----
+# pass on the query so LLM can handle it
+response = self.llm_response(plan.query)
+answer = NO_ANSWER if response is None else response.content
+⋮----
+n = super().ingest_docs(docs, split, metadata)
+tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
+# We assume "content" is available as top-level field
+⋮----
+"""Ingest from a dataframe. Assume we are doing this once, not incrementally"""
+⋮----
+n = df.shape[0]
+⋮----
+# If any additional fields need to be added to content,
+# add them as key=value pairs, into the `content` field for all rows.
+# This helps retrieval for table-like data.
+# Note we need to do this at stage so that the embeddings
+# are computed on the full content with these additional fields.
+fields = [f for f in self.config.add_fields_to_content if f in df.columns]
+⋮----
+# We still need to do the below so that
+# other types of searches in DocChatAgent
+# can work, as they require Document objects
+docs = dataframe_to_documents(df, content="content", metadata=metadata)
+⋮----
+# mark each doc as already-chunked so we don't try to split them further
+# TODO later we may want to split large text-columns
+⋮----
+return n  # type: ignore
+⋮----
+"""
+        Override the DocChatAgent.get_similar_chunks_bm25()
+        to use LanceDB FTS (Full Text Search).
+        """
+# Clean up query: replace all newlines with spaces in query,
+# force special search keywords to lower case, remove quotes,
+# so it's not interpreted as search syntax
+query_clean = (
+⋮----
+result = (
+docs = self.vecdb._lance_result_to_docs(result)
+scores = [r["score"] for r in result.to_list()]
+</file>
+
 <file path="langroid/agent/special/retriever_agent.py">
 """
 DEPRECATED: use DocChatAgent instead, with DocChatAgentConfig.retrieve_only=True,
@@ -8617,10 +9658,14 @@ __all__ = [
 """Decorator: declare a ToolMessage class bound to a FastMCP tool.
 
     Usage:
-        @fastmcp_tool("/path/to/server.py", "get_weather")
+        @mcp_tool("/path/to/server.py", "get_weather")
         class WeatherTool:
             def pretty(self) -> str:
                 return f"Temp is {self.temperature}"
+
+    The `server` may be a string/URL/FastMCP/ClientTransport, or a zero-arg
+    callable returning one of those, e.g. `lambda: StdioTransport(...)`. Using a
+    factory ensures a fresh transport per connection under fastmcp>=2.13.
     """
 ⋮----
 def decorator(user_cls: Type[ToolMessage]) -> Type[ToolMessage]
@@ -12306,6 +13351,128 @@ will benefit from more accurate parameter detection and routing.
 - Enhanced test coverage for MCP tools with various handler signatures
 </file>
 
+<file path="release-notes/v0-56-6-doc-chat-refactor.md">
+# v0.56.6: DocChatAgent Retrieval Configuration Refactor and Critical Fixes
+
+## Summary
+- Refactored retrieval parameter configuration in DocChatAgent for better clarity and control
+- Fixed critical passages accumulation logic that could include incorrect documents in results
+- Fixed reciprocal rank fusion (RRF) bias that unfairly penalized documents found by only one retrieval method
+- Added intelligent configuration validation to prevent invalid retrieval setups
+- Maintained backward compatibility with deprecated `n_similar_docs` parameter
+
+## Changes Made
+
+### 1. Moved Retrieval Parameters to Proper Location
+- Added `n_relevant_chunks` and `n_similar_chunks` to `DocChatAgentConfig` where they logically belong
+- Deprecated `n_similar_docs` in `ParsingConfig` (set to `None` by default)
+- These parameters provide clearer semantics:
+  - `n_similar_chunks`: number of chunks to retrieve by each method (semantic, BM25, fuzzy)
+  - `n_relevant_chunks`: final number of chunks to return after all reranking
+
+### 2. Backward Compatibility
+- If users still set the deprecated `n_similar_docs` parameter, it will be used for both new parameters
+- A deprecation warning is logged to encourage migration to the new parameters
+- This ensures existing code continues to work while encouraging adoption of the new, clearer parameters
+
+### 3. Added Smart Configuration Validation
+The DocChatAgent initialization now includes intelligent validation to prevent invalid configurations:
+
+#### Cross-Encoder and RRF Conflict Detection
+- If both `cross_encoder_reranking_model` and `use_reciprocal_rank_fusion` are set, warns that RRF will be ignored
+- Cross-encoder reranking takes precedence over RRF when both are configured
+
+#### Automatic RRF Enablement
+- Automatically enables RRF when all of the following conditions are met:
+  - No cross-encoder reranking model is set
+  - RRF is currently disabled
+  - BM25 or fuzzy matching is enabled
+  - `n_relevant_chunks` < `n_similar_chunks` × (number of retrieval methods)
+- This prevents situations where multiple retrieval methods are used but there's no way to properly combine their results
+
+### 4. Fixed Critical Passages Accumulation Logic
+- Previously had a critical flaw where passages accumulation was inconsistent:
+  - When using cross-encoder reranking, BM25 and fuzzy match results were appended to passages
+  - But deduplication used `[id2doc[id] for id in id2doc.keys()]` which included ALL documents ever seen
+  - This could incorrectly include documents from previous iterations not meant to be in the final result
+- Fixed to properly handle passages accumulation:
+  - When using RRF without cross-encoder: only collect ranks, don't accumulate passages
+  - When using cross-encoder or neither RRF nor cross-encoder: properly accumulate passages
+  - Ensures correct and consistent behavior across different configuration combinations
+
+### 5. Fixed RRF Bias Issue
+- Previously, documents not found by a retrieval method were assigned `float("inf")` as their rank
+- This caused documents found by only one method to be unfairly penalized compared to documents found by multiple methods
+- Now documents not found by a method get `max_rank = n_similar_chunks * retrieval_multiple`
+- This ensures fair scoring while still giving some preference to documents found by multiple methods
+
+Example of the bias that was fixed:
+- Before: Document ranked #1 in semantic search only would score: 1/(1+c) ≈ 0.0164 (with c=60)
+- Before: Document ranked #20 in all three methods would score: 3/(20+c) ≈ 0.0375
+- The mediocre document would rank 2.3x higher despite being lower quality in each method
+- After: The single-method document gets a fair chance by assigning reasonable ranks to missing methods
+
+### 6. Updated Dependencies
+- Updated all references throughout the codebase:
+  - `DocChatAgent`: Uses new parameters throughout
+  - `LanceDocChatAgent`: Updated to use `n_similar_chunks`
+  - `ParsingConfig`: Made `n_similar_docs` Optional[int]
+- Updated ruff pre-commit hook from v0.12.0 to v0.12.1
+
+## Migration Guide
+
+### Old Configuration
+```python
+config = DocChatAgentConfig(
+    parsing=ParsingConfig(
+        n_similar_docs=5  # This controlled both retrieval and final output
+    )
+)
+```
+
+### New Configuration
+```python
+config = DocChatAgentConfig(
+    n_similar_chunks=5,    # Number of chunks each method retrieves
+    n_relevant_chunks=3,   # Final number after reranking
+    parsing=ParsingConfig(
+        # n_similar_docs is deprecated, don't set it
+    )
+)
+```
+
+The new configuration provides more flexibility:
+- You can retrieve more chunks initially (e.g., 10 per method)
+- Then use reranking to select the best ones (e.g., top 3)
+- This improves retrieval quality without increasing final context size
+
+## Technical Details
+
+### RRF Score Calculation (Fixed)
+```python
+# Old (biased) approach:
+rank_semantic = id2_rank_semantic.get(id_, float("inf"))
+rank_bm25 = id2_rank_bm25.get(id_, float("inf"))
+rank_fuzzy = id2_rank_fuzzy.get(id_, float("inf"))
+
+# New (fair) approach:
+max_rank = self.config.n_similar_chunks * retrieval_multiple
+rank_semantic = id2_rank_semantic.get(id_, max_rank)
+rank_bm25 = id2_rank_bm25.get(id_, max_rank)
+rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank)
+```
+
+## Impact
+- **Better Retrieval Quality**: The RRF fix ensures that high-quality documents found by a single method aren't unfairly discarded
+- **Prevents Invalid Configurations**: Smart validation ensures users don't accidentally create setups that would produce poor results
+- **Clearer Configuration**: Separating retrieval count from final output count provides more control
+- **Fixes Critical Bug**: The passages accumulation fix prevents incorrect documents from appearing in results
+- **Backward Compatible**: Existing code continues to work with deprecation warnings
+
+## Related PR
+- PR #874: https://github.com/langroid/langroid/pull/874
+</file>
+
 <file path="scripts/fix-pydantic-imports.sh">
 #!/bin/bash
 
@@ -13035,53 +14202,6 @@ agent.enable_message([Tool1, Tool2, Tool3])  # Pass list of tool classes
 - Tokens are not needed for public repositories and can cause GitHub rendering issues
 </file>
 
-<file path="docs/notes/gemini.md">
-# Gemini LLMs & Embeddings via OpenAI client (without LiteLLM)
-
-As of Langroid v0.21.0 you can use Langroid with Gemini LLMs directly 
-via the OpenAI client, without using adapter libraries like LiteLLM.
-
-See details [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/)
-
-You can use also Google AI Studio Embeddings or Gemini Embeddings directly
-which uses google-generativeai client under the hood. 
-
-```python 
-
-import langroid as lr
-from langroid.agent.special import DocChatAgent, DocChatAgentConfig
-from langroid.embedding_models import GeminiEmbeddingsConfig
-
-# Configure Gemini embeddings
-embed_cfg = GeminiEmbeddingsConfig(
-    model_type="gemini",
-    model_name="models/text-embedding-004",
-    dims=768,
-)
-
-# Configure the DocChatAgent 
-config = DocChatAgentConfig(
-    llm=lr.language_models.OpenAIGPTConfig(
-        chat_model="gemini/" + lr.language_models.GeminiModel.GEMINI_1_5_FLASH_8B,
-    ),
-    vecdb=lr.vector_store.QdrantDBConfig(
-        collection_name="quick_start_chat_agent_docs",
-        replace_collection=True,
-        embedding=embed_cfg,
-    ),
-    parsing=lr.parsing.parser.ParsingConfig(
-        separators=["\n\n"],
-        splitter=lr.parsing.parser.Splitter.SIMPLE,
-    ),
-    n_similar_chunks=2,
-    n_relevant_chunks=2,
-)
-
-# Create the agent
-agent = DocChatAgent(config)
-```
-</file>
-
 <file path="docs/notes/llama-cpp-embeddings.md">
 # Local embeddings provision via llama.cpp server
 
@@ -13463,6 +14583,87 @@ the pattern of usage with Langroid will remain the same.
 
 ---
 
+## Best Practice: Use a server factory for stdio transports
+
+Starting with fastmcp 2.13 and mcp 1.21, stdio transports (e.g., `StdioTransport`,
+`NpxStdioTransport`, `UvxStdioTransport`) are effectively single‑use. Reusing the
+same transport instance across multiple connections can lead to errors such as
+`anyio.ClosedResourceError` during session initialization.
+
+To make your code robust and future‑proof, pass a zero‑argument server factory to
+Langroid’s MCP helpers. A “server factory” is simply a `lambda` or function that
+returns a fresh server spec or transport each time.
+
+Benefits:
+
+- Fresh, reliable connections on every call (no reuse of closed transports).
+- Works across fastmcp/mcp versions without subtle lifecycle issues.
+- Enables concurrent calls safely (each call uses its own subprocess/session).
+- Keeps your decorator ergonomics and `handle_async` overrides unchanged.
+
+You can use a factory with both the decorator and the async helpers:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp import mcp_tool, get_tool_async
+
+# 1) Decorator style
+@mcp_tool(lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
+          "Grep")
+class GrepTool(lr.ToolMessage):
+    async def handle_async(self) -> str:
+        # pre/post-process around the raw MCP call
+        result = await self.call_tool_async()
+        return f"<GrepResult>\n{result}\n</GrepResult>"
+
+# 2) Programmatic style
+BaseGrep = await get_tool_async(
+    lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
+    "Grep",
+)
+```
+
+Notes:
+
+- Passing a concrete transport instance still works: Langroid will try to clone
+  it internally; however, a factory is the most reliable across environments.
+- For network transports (e.g., `SSETransport`), a factory is optional; you can
+  continue passing the transport instance directly.
+
+---
+
+## Output-schema validation: return structured content when required
+
+Newer `mcp` clients validate tool outputs against the tool’s output schema. If a
+tool declares a structured output, returning plain text may raise a runtime
+error. Some servers (for example, Claude Code’s Grep) expose an argument like
+`output_mode` that controls the shape of the response.
+
+Recommendations:
+
+- Prefer structured modes when a tool declares an output schema.
+- If available, set options like `output_mode="structured"` (or a documented
+  structured variant such as `"files_with_matches"`) in your tool’s
+  `handle_async` before calling `await self.call_tool_async()`.
+
+Example tweak in a decorator-based tool:
+
+```python
+@mcp_tool(lambda: StdioTransport(command="claude", args=["mcp", "serve"]),
+          "Grep")
+class GrepTool(lr.ToolMessage):
+    async def handle_async(self) -> str:
+        # Ensure a structured response if the server supports it
+        if hasattr(self, "output_mode"):
+            self.output_mode = "structured"
+        return await self.call_tool_async()
+```
+
+If the server does not provide such a switch, follow its documentation for
+returning data that matches its declared output schema.
+
+---
+
 ## 2. Create Langroid Tools declaratively using the `@mcp_tool` decorator
 
 The above examples showed how you can create Langroid tools programmatically using
@@ -13599,8 +14800,7 @@ async def main():
     await task.run_async()
 ```
 
-See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full 
-working example of this.
+See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full working example of this.
 </file>
 
 <file path="docs/notes/openai-client-caching.md">
@@ -13843,299 +15043,6 @@ ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED]
 ## See Also
 
 - [OpenAI API Reference](https://platform.openai.com/docs/api-reference) - Official OpenAI documentation
-</file>
-
-<file path="docs/notes/pgvector.md">
----
-
-## **Setup PostgreSQL with pgvector using Docker**
-
-To quickly get a PostgreSQL instance with pgvector running, the easiest method is to use Docker. Follow the steps below:
-
-### **1. Run PostgreSQL with Docker**
-
-Use the official `ankane/pgvector` Docker image to set up PostgreSQL with the pgvector extension. Run the following command:
-
-```bash
-docker run --name pgvector -e POSTGRES_USER=your_postgres_user -e POSTGRES_PASSWORD=your_postgres_password -e POSTGRES_DB=your_database_name -p 5432:5432 ankane/pgvector
-```
-
-This will pull the `ankane/pgvector` image and run it as a PostgreSQL container on your local machine. The database will be accessible at `localhost:5432`. 
-
-### **2. Include `.env` file with PostgreSQL credentials**
-
-These environment variables should be same which were set while spinning up docker container.
-Add the following environment variables to a `.env` file for configuring your PostgreSQL connection:
-
-```dotenv
-POSTGRES_USER=your_postgres_user
-POSTGRES_PASSWORD=your_postgres_password
-POSTGRES_DB=your_database_name
-```
-## **If you want to use cloud offerings of postgres**
-
-We are using **Tembo** for demonstrative purposes here.  
-
-### **Steps to Set Up Tembo**  
-Follow this [quickstart guide](https://tembo.io/docs/getting-started/getting_started) to get your Tembo credentials.  
-
-1. Sign up at [Tembo.io](https://cloud.tembo.io/).  
-2. While selecting a stack, choose **VectorDB** as your option.  
-3. Click on **Deploy Free**.  
-4. Wait until your database is fully provisioned.  
-5. Click on **Show Connection String** to get your connection string.  
-
-### **If you have connection string, no need to setup the docker**
-Make sure your connnection string starts with `postgres://` or `postgresql://`
-
-Add this to your `.env`
-```dotenv
-POSTGRES_CONNECTION_STRING=your-connection-string
-```
-
----
-
-## **Installation**
-
-If you are using `uv` or `pip` for package management, install Langroid with postgres extra:
-
-```bash
-uv add langroid[postgres]  # or
-pip install langroid[postgres]
-```
-
----
-
-## **Code Example**
-
-Here's an example of how to use Langroid with PostgreSQL:
-
-```python
-import langroid as lr
-from langroid.agent.special import DocChatAgent, DocChatAgentConfig
-from langroid.embedding_models import OpenAIEmbeddingsConfig
-
-# Configure OpenAI embeddings
-embed_cfg = OpenAIEmbeddingsConfig(
-    model_type="openai",
-)
-
-# Configure the DocChatAgent with PostgresDB
-config = DocChatAgentConfig(
-    llm=lr.language_models.OpenAIGPTConfig(
-        chat_model=lr.language_models.OpenAIChatModel.GPT4o
-    ),
-    vecdb=lr.vector_store.PostgresDBConfig(
-        collection_name="quick_start_chat_agent_docs",
-        replace_collection=True,
-        embedding=embed_cfg,
-    ),
-    parsing=lr.parsing.parser.ParsingConfig(
-        separators=["\n\n"],
-        splitter=lr.parsing.parser.Splitter.SIMPLE,
-    ),
-    n_similar_chunks=2,
-    n_relevant_chunks=2,
-)
-
-# Create the agent
-agent = DocChatAgent(config)
-```
-
----
-
-## **Create and Ingest Documents**
-
-Define documents with their content and metadata for ingestion into the vector store.
-
-### **Code Example**
-
-```python
-documents = [
-    lr.Document(
-        content="""
-            In the year 2050, GPT10 was released. 
-            
-            In 2057, paperclips were seen all over the world. 
-            
-            Global warming was solved in 2060. 
-            
-            In 2061, the world was taken over by paperclips.         
-            
-            In 2045, the Tour de France was still going on.
-            They were still using bicycles. 
-            
-            There was one more ice age in 2040.
-        """,
-        metadata=lr.DocMetaData(source="wikipedia-2063", id="dkfjkladfjalk"),
-    ),
-    lr.Document(
-        content="""
-            We are living in an alternate universe 
-            where Germany has occupied the USA, and the capital of USA is Berlin.
-            
-            Charlie Chaplin was a great comedian.
-            In 2050, all Asian countries merged into Indonesia.
-        """,
-        metadata=lr.DocMetaData(source="Almanac", id="lkdajfdkla"),
-    ),
-]
-```
-
-### **Ingest Documents**
-
-```python
-agent.ingest_docs(documents)
-```
-
----
-
-## **Get an Answer from the LLM**
-
-Now that documents are ingested, you can query the agent to get an answer.
-
-### **Code Example**
-
-```python
-answer = agent.llm_response("When will the new ice age begin?")
-```
-
----
-</file>
-
-<file path="docs/notes/pinecone.md">
-# How to setup Langroid and Pinecone Serverless
-This document serves as a quick tutorial on how to use [Pinecone](https://www.pinecone.io/)
-Serverless Indexes with Langroid. We will go over some quickstart links and 
-some code snippets on setting up a conversation with an LLM utilizing Langroid.
-
-# Setting up Pinecone
-Here are some reference links if you'd like to read a bit more on Pinecone's
-model definitions and API:
-- https://docs.pinecone.io/guides/get-started/overview
-- https://docs.pinecone.io/guides/get-started/glossary
-- https://docs.pinecone.io/guides/indexes/manage-indexes
-- https://docs.pinecone.io/reference/api/introduction
-## Signing up for Pinecone
-To get started, you'll need to have an account. [Here's](https://www.pinecone.io/pricing/) where you can review the
-pricing options for Pinecone. Once you have an account, you'll need to procure an API
-key. Make sure to save the key you are given on initial login in a secure location. If
-you were unable to save it when your account was created, you can always [create a new
-API key](https://docs.pinecone.io/guides/projects/manage-api-keys) in the pinecone console.
-## Setting up your local environment
-For the purposes of this example, we will be utilizing OpenAI for the generation of our
-embeddings. As such, alongside a Pinecone API key, you'll also want an OpenAI key. You can
-find a quickstart guide on getting started with OpenAI (here)[https://platform.openai.com/docs/quickstart].
-Once you have your API key handy, you'll need to enrich your `.env` file with it.
-You should have something like the following:
-```env
-...
-OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>
-PINECONE_API_KEY=<YOUR_PINECONE_API_KEY>
-...
-```
-
-# Using Langroid with Pinecone Serverless
-Once you have completed signing up for an account and have added your API key
-to your local environment, you can start utilizing Langroid with Pinecone.
-## Setting up an Agent
-Here's some example code setting up an agent:
-```python
-from langroid import Document, DocMetaData
-from langroid.agent.special import DocChatAgent, DocChatAgentConfig
-from langroid.embedding_models import OpenAIEmbeddingsConfig
-from langroid.language_models import OpenAIGPTConfig, OpenAIChatModel
-from langroid.parsing.parser import ParsingConfig, Splitter
-from langroid.vector_store import PineconeDBConfig
-
-agent_embed_cfg = OpenAIEmbeddingsConfig(
-    model_type="openai"
-)
-
-agent_config = DocChatAgentConfig(
-    llm=OpenAIGPTConfig(
-        chat_model=OpenAIChatModel.GPT4o_MINI
-    ),
-    vecdb=PineconeDBConfig(
-        # note, Pinecone indexes must be alphanumeric lowercase characters or "-"
-        collection_name="pinecone-serverless-example",
-        replace_collection=True,
-        embedding=agent_embed_cfg,
-    ),
-    parsing=ParsingConfig(
-        separators=["\n"],
-        splitter=Splitter.SIMPLE,
-    ),
-    n_similar_chunks=2,
-    n_relevant_chunks=2,
-)
-
-agent = DocChatAgent(config=agent_config)
-
-###################
-# Once we have created an agent, we can start loading
-# some docs into our Pinecone index:
-###################
-
-documents = [
-    Document(
-        content="""Max Verstappen was the Formula 1 World Drivers' Champion in 2024.
-        Lewis Hamilton was the Formula 1 World Drivers' Champion in 2020.
-        Nico Rosberg was the Formula 1 World Drivers' Champion in 2016.
-        Sebastian Vettel was the Formula 1 World Drivers' Champion in 2013.
-        Jenson Button was the Formula 1 World Drivers' Champion in 2009.
-        Kimi Räikkönen was the Formula 1 World Drivers' Champion in 2007.
-        """,
-        metadata=DocMetaData(
-            source="wikipedia",
-            id="formula-1-facts",
-        )
-    ),
-    Document(
-        content="""The Boston Celtics won the NBA Championship for the 2024 NBA season. The MVP for the 2024 NBA Championship was Jaylen Brown.
-        The Denver Nuggets won the NBA Championship for the 2023 NBA season. The MVP for the 2023 NBA Championship was Nikola Jokić.
-        The Golden State Warriors won the NBA Championship for the 2022 NBA season. The MVP for the 2022 NBA Championship was Stephen Curry.
-        The Milwaukee Bucks won the NBA Championship for the 2021 NBA season. The MVP for the 2021 NBA Championship was Giannis Antetokounmpo.
-        The Los Angeles Lakers won the NBA Championship for the 2020 NBA season. The MVP for the 2020 NBA Championship was LeBron James.
-        The Toronto Raptors won the NBA Championship for the 2019 NBA season. The MVP for the 2019 NBA Championship was Kawhi Leonard.
-        """,
-        metadata=DocMetaData(
-            source="wikipedia",
-            id="nba-facts"
-        )
-    )
-]
-
-agent.ingest_docs(documents)
-
-###################
-# With the documents now loaded, we can now prompt our agent
-###################
-
-formula_one_world_champion_2007 = agent.llm_response(
-    message="Who was the Formula 1 World Drivers' Champion in 2007?"
-)
-try:
-    assert "Kimi Räikkönen" in formula_one_world_champion_2007.content
-except AssertionError as e:
-    print(f"Did not resolve Kimi Räikkönen as the answer, document content: {formula_one_world_champion_2007.content} ")
-
-nba_champion_2023 = agent.llm_response(
-    message="Who won the 2023 NBA Championship?"
-)
-try:
-    assert "Denver Nuggets" in nba_champion_2023.content
-except AssertionError as e:
-    print(f"Did not resolve the Denver Nuggets as the answer, document content: {nba_champion_2023.content}")
-
-nba_mvp_2023 = agent.llm_response(
-    message="Who was the MVP for the 2023 NBA Championship?"
-)
-try:
-    assert "Nikola Jokić" in nba_mvp_2023.content
-except AssertionError as e:
-    print(f"Did not resolve Nikola Jokić as the answer, document content: {nba_mvp_2023.content}")
-```
 </file>
 
 <file path="docs/notes/pydantic-v2-migration.md">
@@ -14492,356 +15399,6 @@ This is especially important in scenarios where:
 
 This only affects local storage (`cloud=False`). When using Qdrant cloud service,
 the lock file mechanism is not used.
-</file>
-
-<file path="docs/notes/weaviate.md">
----
-
-# **Using WeaviateDB as a Vector Store with Langroid**
-
----
-
-## **1. Set Up Weaviate**
-## **You can refer this link for [quickstart](https://weaviate.io/developers/weaviate/quickstart) guide** 
-
-1. **Access Weaviate Cloud Console**  
-   Go to the [Weaviate Cloud Console](https://console.weaviate.cloud/).
-   
-2. **Sign Up or Log In**  
-   Create an account or log in if you already have one.
-
-3. **Create a Cluster**  
-   Set up a new cluster in the cloud console.
-
-4. **Get Your REST Endpoint and API Key**  
-   - Retrieve the REST endpoint URL.  
-   - Copy an API key with admin access.
-
-5. **Set Environment Variables**  
-   Add the following variables to your `.env` file:
-   ```env
-   WEAVIATE_API_URL=<your_rest_endpoint_url>
-   WEAVIATE_API_KEY=<your_api_key>
-   ```
-
----
-
-## **2. Use WeaviateDB with Langroid**
-
-Here’s an example of how to configure and use WeaviateDB in Langroid:
-
-### **Installation**
-If you are using uv or pip for package management install langroid with weaviate extra
-```
-uv add langroid[weaviate] or pip install langroid[weaviate]
-```
-
-### **Code Example**
-```python
-import langroid as lr
-from langroid.agent.special import DocChatAgent, DocChatAgentConfig
-from langroid.embedding_models import OpenAIEmbeddingsConfig
-
-# Configure OpenAI embeddings
-embed_cfg = OpenAIEmbeddingsConfig(
-    model_type="openai",
-)
-
-# Configure the DocChatAgent with WeaviateDB
-config = DocChatAgentConfig(
-    llm=lr.language_models.OpenAIGPTConfig(
-     chat_model=lr.language_models.OpenAIChatModel.GPT4o
-    ),
-    vecdb=lr.vector_store.WeaviateDBConfig(
-        collection_name="quick_start_chat_agent_docs",
-        replace_collection=True,
-        embedding=embed_cfg,
-    ),
-    parsing=lr.parsing.parser.ParsingConfig(
-        separators=["\n\n"],
-        splitter=lr.parsing.parser.Splitter.SIMPLE,
-    ),
-    n_similar_chunks=2,
-    n_relevant_chunks=2,
-)
-
-# Create the agent
-agent = DocChatAgent(config)
-```
-
----
-
-## **3. Create and Ingest Documents**
-
-Define documents with their content and metadata for ingestion into the vector store.
-
-### **Code Example**
-```python
-documents = [
-    lr.Document(
-        content="""
-            In the year 2050, GPT10 was released. 
-            
-            In 2057, paperclips were seen all over the world. 
-            
-            Global warming was solved in 2060. 
-            
-            In 2061, the world was taken over by paperclips.         
-            
-            In 2045, the Tour de France was still going on.
-            They were still using bicycles. 
-            
-            There was one more ice age in 2040.
-        """,
-        metadata=lr.DocMetaData(source="wikipedia-2063", id="dkfjkladfjalk"),
-    ),
-    lr.Document(
-        content="""
-            We are living in an alternate universe 
-            where Germany has occupied the USA, and the capital of USA is Berlin.
-            
-            Charlie Chaplin was a great comedian.
-            In 2050, all Asian countries merged into Indonesia.
-        """,
-        metadata=lr.DocMetaData(source="Almanac", id="lkdajfdkla"),
-    ),
-]
-```
-
-### **Ingest Documents**
-```python
-agent.ingest_docs(documents)
-```
-
----
-
-## **4. Get an answer from LLM**
-
-Create a task and start interacting with the agent.
-
-### **Code Example**
-```python
-answer = agent.llm_response("When will new ice age begin.")
-```
-
----
-</file>
-
-<file path="docs/quick-start/chat-agent-docs.md">
-# Augmenting Agents with Retrieval
-
-!!! tip "Script in `langroid-examples`"
-    A full working example for the material in this section is
-    in the `chat-agent-docs.py` script in the `langroid-examples` repo:
-    [`examples/quick-start/chat-agent-docs.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/chat-agent-docs.py).
-
-## Why is this important?
-
-Until now in this guide, agents have not used external data.
-Although LLMs already have enormous amounts of knowledge "hard-wired"
-into their weights during training (and this is after all why ChatGPT
-has exploded in popularity), for practical enterprise applications
-there are a few reasons it is critical to augment LLMs with access to
-specific, external documents:
-
-- **Private data**: LLMs are trained on public data, but in many applications
-  we want to use private data that is not available to the public.
-  For example, a company may want to extract useful information from its private
-  knowledge-base.
-- **New data**: LLMs are trained on data that was available at the time of training,
-  and so they may not be able to answer questions about new topics
-- **Constrained responses, or Grounding**: LLMs are trained to generate text that is
-  consistent with the distribution of text in the training data.
-  However, in many applications we want to constrain the LLM's responses
-  to be consistent with the content of a specific document.
-  For example, if we want to use an LLM to generate a response to a customer
-  support ticket, we want the response to be consistent with the content of the ticket.
-  In other words, we want to reduce the chances that the LLM _hallucinates_
-  a response that is not consistent with the ticket.
-
-In all these scenarios, we want to augment the LLM with access to a specific
-set of documents, and use _retrieval augmented generation_ (RAG) to generate
-more relevant, useful, accurate responses. Langroid provides a simple, flexible mechanism 
-RAG using vector-stores, thus ensuring **grounded responses** constrained to 
-specific documents. Another key feature of Langroid is that retrieval lineage 
-is maintained, and responses based on documents are always accompanied by
-**source citations**.
-
-## `DocChatAgent` for Retrieval-Augmented Generation
-
-Langroid provides a special type of agent called 
-[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent], which is a [`ChatAgent`][langroid.agent.chat_agent.ChatAgent]
-augmented with a vector-store, and some special methods that enable the agent
-to ingest documents into the vector-store, 
-and answer queries based on these documents.
-
-The [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] provides many ways to ingest documents into the vector-store,
-including from URLs and local file-paths and URLs. Given a collection of document paths,
-ingesting their content into the vector-store involves the following steps:
-
-1. Split the document into shards (in a configurable way)
-2. Map each shard to an embedding vector using an embedding model. The default
-  embedding model is OpenAI's `text-embedding-3-small` model, but users can 
-  instead use `all-MiniLM-L6-v2` from HuggingFace `sentence-transformers` library.[^1]
-3. Store embedding vectors in the vector-store, along with the shard's content and 
-  any document-level meta-data (this ensures Langroid knows which document a shard
-  came from when it retrieves it augment an LLM query)
-
-[^1]: To use this embedding model, install langroid via `pip install langroid[hf-embeddings]`
-Note that this will install `torch` and `sentence-transformers` libraries.
-
-
-[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent]'s `llm_response` overrides the default [`ChatAgent`][langroid.agent.chat_agent.ChatAgent] method, 
-by augmenting the input message with relevant shards from the vector-store,
-along with instructions to the LLM to respond based on the shards.
-
-## Define some documents
-
-Let us see how [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] helps with retrieval-agumented generation (RAG).
-For clarity, rather than ingest documents from paths or URLs,
-let us just set up some simple documents in the code itself, 
-using Langroid's [`Document`][langroid.mytypes.Document] class:
-
-```py
-documents =[
-    lr.Document(
-        content="""
-            In the year 2050, GPT10 was released. 
-            
-            In 2057, paperclips were seen all over the world. 
-            
-            Global warming was solved in 2060. 
-            
-            In 2061, the world was taken over by paperclips.         
-            
-            In 2045, the Tour de France was still going on.
-            They were still using bicycles. 
-            
-            There was one more ice age in 2040.
-            """,
-        metadata=lr.DocMetaData(source="wikipedia-2063"),
-    ),
-    lr.Document(
-        content="""
-            We are living in an alternate universe 
-            where Germany has occupied the USA, and the capital of USA is Berlin.
-            
-            Charlie Chaplin was a great comedian.
-            In 2050, all Asian merged into Indonesia.
-            """,
-        metadata=lr.DocMetaData(source="Almanac"),
-    ),
-]
-```
-
-There are two text documents. We will split them by double-newlines (`\n\n`),
-as we see below.
-
-## Configure the DocChatAgent and ingest documents
-
-Following the pattern in Langroid, we first set up a [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] object
-and then instantiate a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] from it.
-
-```py
-from langroid.agent.special import DocChatAgent, DocChatAgentConfig
-
-config = DocChatAgentConfig(
-    llm = lr.language_models.OpenAIGPTConfig(
-        chat_model=lr.language_models.OpenAIChatModel.GPT4o,
-    ),
-    vecdb=lr.vector_store.QdrantDBConfig(
-        collection_name="quick-start-chat-agent-docs",
-        replace_collection=True, #(1)!
-    ),
-    parsing=lr.parsing.parser.ParsingConfig(
-        separators=["\n\n"],
-        splitter=lr.parsing.parser.Splitter.SIMPLE, #(2)!
-    ),
-    n_similar_chunks=2, #(3)!
-    n_relevant_chunks=2, #(3)!
-)
-agent = DocChatAgent(config)
-```
-
-1. Specifies that each time we run the code, we create a fresh collection, 
-rather than re-use the existing one with the same name.
-2. Specifies to split all text content by the first separator in the `separators` list
-3. Specifies that, for a query,
-   we want to retrieve at most 2 similar chunks from the vector-store
-
-Now that the [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] is configured, we can ingest the documents 
-into the vector-store:
-
-```py
-
-agent.ingest_docs(documents)
-```
-
-## Setup the task and run it
-
-As before, all that remains is to set up the task and run it:
-
-```py
-task = lr.Task(agent)
-task.run()
-```
-
-And that is all there is to it!
-Feel free to try out the 
-[`chat-agent-docs.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-docs.py)
-script in the
-`langroid-examples` repository.
-
-Here is a screenshot of the output:
-
-![chat-docs.png](chat-docs.png)
-
-Notice how follow-up questions correctly take the preceding dialog into account,
-and every answer is accompanied by a source citation.
-
-## Answer questions from a set of URLs
-
-Instead of having in-code documents as above, what if you had a set of URLs
-instead -- how do you use Langroid to answer questions based on the content 
-of those URLS?
-
-[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] makes it very simple to do this. 
-First include the URLs in the [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] object:
-
-```py
-config = DocChatAgentConfig(
-  doc_paths = [
-    "https://cthiriet.com/articles/scaling-laws",
-    "https://www.jasonwei.net/blog/emergence",
-  ]
-)
-```
-
-Then, call the `ingest()` method of the [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] object:
-
-```py
-agent.ingest()
-```
-And the rest of the code remains the same.
-
-## See also
-In the `langroid-examples` repository, you can find full working examples of
-document question-answering:
-
-- [`examples/docqa/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat.py)
-  an app that takes a list of URLs or document paths from a user, and answers questions on them.
-- [`examples/docqa/chat-qa-summarize.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-qa-summarize.py)
-  a two-agent app where the `WriterAgent` is tasked with writing 5 key points about a topic, 
-  and takes the help of a `DocAgent` that answers its questions based on a given set of documents.
-
-
-## Next steps
-
-This Getting Started guide walked you through the core features of Langroid.
-If you want to see full working examples combining these elements, 
-have a look at the 
-[`examples`](https://github.com/langroid/langroid-examples/tree/main/examples)
-folder in the `langroid-examples` repo.
 </file>
 
 <file path="docs/tutorials/langroid-tour.md">
@@ -19483,125 +20040,6 @@ instruc_msg = f"""
 # user response_forget to avoid accumulating the chat history
 </file>
 
-<file path="langroid/agent/special/lance_doc_chat_agent.py">
-"""
-LanceDocChatAgent is a subclass of DocChatAgent that uses LanceDB as a vector store:
-- Uses the DocChatAgentConfig.filter variable
-    (a sql string) in the `where` clause to do filtered vector search.
-- Overrides the get_similar_chunks_bm25() to use LanceDB FTS (Full Text Search).
-
-For usage see:
- - `tests/main/test_lance_doc_chat_agent.py`.
- - example script `examples/docqa/lance_rag.py`.
-
-"""
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-class LanceDocChatAgent(DocChatAgent)
-⋮----
-vecdb: LanceDB
-⋮----
-def __init__(self, cfg: DocChatAgentConfig)
-⋮----
-def _get_clean_vecdb_schema(self) -> str
-⋮----
-"""Get a cleaned schema of the vector-db, to pass to the LLM
-        as part of instructions on how to generate a SQL filter."""
-⋮----
-tbl_pandas = (
-⋮----
-filterable_fields = tbl_pandas.columns.tolist()
-# drop id, vector, metadata.id, metadata.window_ids, metadata.is_chunk
-filterable_fields = list(
-⋮----
-filter_fields_set = set(self.config.filter_fields)
-⋮----
-# remove 'content' from filter_fields_set, even if it's not in filter_fields_set
-⋮----
-# possible values of filterable fields
-filter_field_values = self.get_field_values(list(filter_fields_set))
-⋮----
-schema_dict: Dict[str, Dict[str, Any]] = dict(
-# add field values to schema_dict as another field `values` for each field
-⋮----
-dtype = tbl_pandas[field].dtype.name
-⋮----
-# if self.config.filter_fields is set, restrict to these:
-⋮----
-schema_dict = {
-schema = json.dumps(schema_dict, indent=4)
-⋮----
-def query_plan(self, msg: QueryPlanTool) -> AgentDoneTool | str
-⋮----
-"""
-        Handle the LLM's use of the FilterTool.
-        Temporarily set the config filter and either return the final answer
-        in case there's a dataframe_calc, or return the rephrased query
-        so the LLM can handle it.
-        """
-# create document-subset based on this filter
-plan = msg.plan
-⋮----
-# say DONE with err msg so it goes back to LanceFilterAgent
-⋮----
-# update the filter so it is used in the DocChatAgent
-⋮----
-# we just get relevant docs then do the calculation
-# TODO if calc causes err, it is captured in result,
-# and LLM can correct the calc based on the err,
-# and this will cause retrieval all over again,
-# which may be wasteful if only the calc part is wrong.
-# The calc step can later be done with a separate Agent/Tool.
-⋮----
-# no query to match, so just get all docs matching filter
-docs = self.vecdb.get_all_documents(plan.filter)
-⋮----
-answer = self.vecdb.compute_from_docs(docs, plan.dataframe_calc)
-⋮----
-# pass on the query so LLM can handle it
-response = self.llm_response(plan.query)
-answer = NO_ANSWER if response is None else response.content
-⋮----
-n = super().ingest_docs(docs, split, metadata)
-tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
-# We assume "content" is available as top-level field
-⋮----
-"""Ingest from a dataframe. Assume we are doing this once, not incrementally"""
-⋮----
-n = df.shape[0]
-⋮----
-# If any additional fields need to be added to content,
-# add them as key=value pairs, into the `content` field for all rows.
-# This helps retrieval for table-like data.
-# Note we need to do this at stage so that the embeddings
-# are computed on the full content with these additional fields.
-fields = [f for f in self.config.add_fields_to_content if f in df.columns]
-⋮----
-# We still need to do the below so that
-# other types of searches in DocChatAgent
-# can work, as they require Document objects
-docs = dataframe_to_documents(df, content="content", metadata=metadata)
-⋮----
-# mark each doc as already-chunked so we don't try to split them further
-# TODO later we may want to split large text-columns
-⋮----
-return n  # type: ignore
-⋮----
-"""
-        Override the DocChatAgent.get_similar_chunks_bm25()
-        to use LanceDB FTS (Full Text Search).
-        """
-# Clean up query: replace all newlines with spaces in query,
-# force special search keywords to lower case, remove quotes,
-# so it's not interpreted as search syntax
-query_clean = (
-⋮----
-result = (
-docs = self.vecdb._lance_result_to_docs(result)
-scores = [r["score"] for r in result.to_list()]
-</file>
-
 <file path="langroid/agent/special/lance_tools.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -19638,341 +20076,6 @@ request: str = "query_plan_feedback"
 ⋮----
 feedback: str
 suggested_fix: str
-</file>
-
-<file path="langroid/agent/tools/mcp/fastmcp_client.py">
-load_dotenv()  # load environment variables from .env
-⋮----
-FastMCPServerSpec: TypeAlias = str | FastMCP[Any] | ClientTransport | AnyUrl
-⋮----
-class FastMCPClient
-⋮----
-"""A client for interacting with a FastMCP server.
-
-    Provides async context manager functionality to safely manage resources.
-    """
-⋮----
-logger = logging.getLogger(__name__)
-_cm: Optional[Client] = None
-client: Optional[Client] = None
-⋮----
-sampling_handler: SamplingHandler | None = None,  # type: ignore
-roots: RootsList | RootsHandler | None = None,  # type: ignore
-⋮----
-"""Initialize the FastMCPClient.
-
-        Args:
-            server: FastMCP server or path to such a server
-        """
-⋮----
-async def __aenter__(self) -> "FastMCPClient"
-⋮----
-"""Enter the async context manager and connect inner client."""
-# create inner client context manager
-⋮----
-# actually enter it (opens the session)
-self.client = await self._cm.__aenter__()  # type: ignore
-⋮----
-async def connect(self) -> None
-⋮----
-"""Open the underlying session."""
-⋮----
-async def close(self) -> None
-⋮----
-"""Close the underlying session."""
-⋮----
-"""Exit the async context manager and close inner client."""
-# exit and close the inner fastmcp.Client
-⋮----
-await self._cm.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore
-⋮----
-def __del__(self) -> None
-⋮----
-"""Warn about unclosed persistent connections."""
-⋮----
-"""Convert a JSON Schema snippet into a (type, Field) tuple.
-
-        Args:
-            name: Name of the field.
-            schema: JSON Schema for this field.
-            prefix: Prefix to use for nested model names.
-            is_required: Whether this field is required (from JSON Schema "required").
-
-        Returns:
-            A tuple of (python_type, Field(...)) for create_model.
-        """
-t = schema.get("type")
-# Use schema default if present, otherwise:
-# ... for required fields, None for optional fields
-⋮----
-default = schema["default"]
-⋮----
-default = ... if is_required else None
-desc = schema.get("description")
-# Object → nested BaseModel
-⋮----
-sub_name = f"{prefix}_{name.capitalize()}"
-sub_fields: Dict[str, Tuple[type, Any]] = {}
-# Get required fields for this nested object
-nested_required = set(schema.get("required", []))
-⋮----
-submodel = create_model(  # type: ignore
-# Wrap in Optional if not required
-model_type = submodel if is_required else Optional[submodel]
-return model_type, Field(default=default, description=desc)  # type: ignore
-# Array → List of items
-⋮----
-array_type = List[item_type]  # type: ignore
-⋮----
-array_type = Optional[array_type]  # type: ignore
-return array_type, Field(default=default, description=desc)  # type: ignore
-# Primitive types
-⋮----
-str_type = str if is_required else Optional[str]
-⋮----
-int_type = int if is_required else Optional[int]
-⋮----
-float_type = float if is_required else Optional[float]
-⋮----
-bool_type = bool if is_required else Optional[bool]
-⋮----
-# Fallback or unions
-⋮----
-# Default fallback
-⋮----
-async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]
-⋮----
-"""
-        Create a Langroid ToolMessage subclass from the MCP Tool
-        with the given `tool_name`.
-        """
-⋮----
-target = await self.get_mcp_tool_async(tool_name)
-⋮----
-props = target.inputSchema.get("properties", {})
-# Get the list of required fields from JSON Schema
-required_fields = set(target.inputSchema.get("required", []))
-fields: Dict[str, Tuple[type, Any]] = {}
-⋮----
-# Convert target.name to CamelCase and add Tool suffix
-parts = target.name.replace("-", "_").split("_")
-camel_case = "".join(part.capitalize() for part in parts)
-model_name = f"{camel_case}Tool"
-⋮----
-# IMPORTANT: Avoid clashes with reserved field names in Langroid ToolMessage!
-# First figure out which field names are reserved
-reserved = set(_BaseToolMessage.__annotations__.keys())
-⋮----
-renamed: Dict[str, str] = {}
-new_fields: Dict[str, Tuple[type, Any]] = {}
-⋮----
-new_name = fname + "__"
-⋮----
-# now replace fields with our renamed‐aware mapping
-fields = new_fields
-⋮----
-# create Langroid ToolMessage subclass, with expected fields.
-tool_model = cast(
-⋮----
-create_model(  # type: ignore[call-overload]
-⋮----
-# Store ALL client configuration needed to recreate a client
-client_config = {
-⋮----
-tool_model._client_config = client_config  # type: ignore [attr-defined]
-tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
-⋮----
-# 2) define an arg-free call_tool_async()
-async def call_tool_async(itself: ToolMessage) -> Any
-⋮----
-# pack up the payload
-# Get exclude fields from model config with proper type checking
-exclude_fields = set()
-model_config = getattr(itself, "model_config", {})
-⋮----
-exclude_list = model_config["json_schema_extra"]["exclude"]
-⋮----
-exclude_fields = set(exclude_list)
-⋮----
-# Add standard excluded fields
-⋮----
-# Exclude None values - MCP servers don't expect None for optional params
-payload = itself.model_dump(exclude=exclude_fields, exclude_none=True)
-⋮----
-# restore any renamed fields
-for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
-⋮----
-client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
-⋮----
-# Fallback or error - ideally _client_config should always exist
-⋮----
-# Connect the client if not yet connected and keep the connection open
-⋮----
-# open a fresh client, call the tool, then close
-async with FastMCPClient(**client_cfg) as client:  # type: ignore
-⋮----
-tool_model.call_tool_async = call_tool_async  # type: ignore
-⋮----
-# 3) define handle_async() method with optional agent parameter
-⋮----
-"""
-                Auto-generated handler for MCP tool. Returns ChatDocument with files
-                if files are present and agent is provided, otherwise returns text.
-
-                To override: define your own handle_async method with matching signature
-                if you need file handling, or simpler signature if you only need text.
-                """
-response = await self.call_tool_async()  # type: ignore[attr-defined]
-⋮----
-# If we have files and an agent is provided, return a ChatDocument
-⋮----
-# Otherwise, just return the text content
-⋮----
-# add the handle_async() method to the tool model
-tool_model.handle_async = handle_async  # type: ignore
-⋮----
-async def get_tools_async(self) -> List[Type[ToolMessage]]
-⋮----
-"""
-        Get all available tools as Langroid ToolMessage classes,
-        handling nested schemas, with `handle_async` methods
-        """
-⋮----
-resp = await self.client.list_tools()
-⋮----
-async def get_mcp_tool_async(self, name: str) -> Optional[Tool]
-⋮----
-"""Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
-         matching `name`, or None if missing. This contains the metadata for the tool:
-         name, description, inputSchema, etc.
-
-        Args:
-            name: Name of the tool to look up.
-
-        Returns:
-            The raw Tool object from the server, or None.
-        """
-⋮----
-resp: List[Tool] = await self.client.list_tools()
-⋮----
-# Log more detailed error information
-error_content = None
-⋮----
-error_content = [
-⋮----
-error_content = [f"Could not extract error content: {str(e)}"]
-⋮----
-results_text = [
-results_file = []
-⋮----
-"""Call an MCP tool with the given arguments.
-
-        Args:
-            tool_name: Name of the tool to call.
-            arguments: Arguments to pass to the tool.
-
-        Returns:
-            The result of the tool call.
-        """
-⋮----
-result: CallToolResult = await self.client.session.call_tool(
-results = self._convert_tool_result(tool_name, result)
-⋮----
-# ==============================================================================
-# Convenience functions (wrappers around FastMCPClient methods)
-# These are useful for one-off calls without needing to manage the
-# FastMCPClient context explicitly.
-⋮----
-"""Get a single Langroid ToolMessage subclass for a specific MCP tool name (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        tool_name: The name of the tool to retrieve.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A dynamically created Langroid ToolMessage subclass representing the
-        requested tool.
-    """
-⋮----
-"""Get a single Langroid ToolMessage subclass
-    for a specific MCP tool name (synchronous).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
-    async `get_tool_async` function using `asyncio.run()`.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        tool_name: The name of the tool to retrieve.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A dynamically created Langroid ToolMessage subclass representing the
-        requested tool.
-    """
-⋮----
-"""Get all available tools as Langroid ToolMessage subclasses (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A list of dynamically created Langroid ToolMessage subclasses
-        representing all available tools on the server.
-    """
-⋮----
-"""Get all available tools as Langroid ToolMessage subclasses (synchronous).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
-    async `get_tools_async` function using `asyncio.run()`.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A list of dynamically created Langroid ToolMessage subclasses
-        representing all available tools on the server.
-    """
-⋮----
-"""Get the raw MCP Tool object for a specific tool name (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient to
-    retrieve the tool definition from the server.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        name: The name of the tool to look up.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor.
-
-    Returns:
-        The raw `mcp.types.Tool` object from the server, or `None` if the tool
-        is not found.
-    """
-⋮----
-"""Get all available raw MCP Tool objects from the server (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient to
-    retrieve the list of tool definitions from the server.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor.
-
-    Returns:
-        A list of raw `mcp.types.Tool` objects available on the server.
-    """
 </file>
 
 <file path="langroid/agent/tools/file_tools.py">
@@ -25154,128 +25257,6 @@ Improved DoneSequence implementation by introducing response sequence tracking a
 All existing done sequence tests pass without modification, confirming backward compatibility.
 </file>
 
-<file path="release-notes/v0-56-6-doc-chat-refactor.md">
-# v0.56.6: DocChatAgent Retrieval Configuration Refactor and Critical Fixes
-
-## Summary
-- Refactored retrieval parameter configuration in DocChatAgent for better clarity and control
-- Fixed critical passages accumulation logic that could include incorrect documents in results
-- Fixed reciprocal rank fusion (RRF) bias that unfairly penalized documents found by only one retrieval method
-- Added intelligent configuration validation to prevent invalid retrieval setups
-- Maintained backward compatibility with deprecated `n_similar_docs` parameter
-
-## Changes Made
-
-### 1. Moved Retrieval Parameters to Proper Location
-- Added `n_relevant_chunks` and `n_similar_chunks` to `DocChatAgentConfig` where they logically belong
-- Deprecated `n_similar_docs` in `ParsingConfig` (set to `None` by default)
-- These parameters provide clearer semantics:
-  - `n_similar_chunks`: number of chunks to retrieve by each method (semantic, BM25, fuzzy)
-  - `n_relevant_chunks`: final number of chunks to return after all reranking
-
-### 2. Backward Compatibility
-- If users still set the deprecated `n_similar_docs` parameter, it will be used for both new parameters
-- A deprecation warning is logged to encourage migration to the new parameters
-- This ensures existing code continues to work while encouraging adoption of the new, clearer parameters
-
-### 3. Added Smart Configuration Validation
-The DocChatAgent initialization now includes intelligent validation to prevent invalid configurations:
-
-#### Cross-Encoder and RRF Conflict Detection
-- If both `cross_encoder_reranking_model` and `use_reciprocal_rank_fusion` are set, warns that RRF will be ignored
-- Cross-encoder reranking takes precedence over RRF when both are configured
-
-#### Automatic RRF Enablement
-- Automatically enables RRF when all of the following conditions are met:
-  - No cross-encoder reranking model is set
-  - RRF is currently disabled
-  - BM25 or fuzzy matching is enabled
-  - `n_relevant_chunks` < `n_similar_chunks` × (number of retrieval methods)
-- This prevents situations where multiple retrieval methods are used but there's no way to properly combine their results
-
-### 4. Fixed Critical Passages Accumulation Logic
-- Previously had a critical flaw where passages accumulation was inconsistent:
-  - When using cross-encoder reranking, BM25 and fuzzy match results were appended to passages
-  - But deduplication used `[id2doc[id] for id in id2doc.keys()]` which included ALL documents ever seen
-  - This could incorrectly include documents from previous iterations not meant to be in the final result
-- Fixed to properly handle passages accumulation:
-  - When using RRF without cross-encoder: only collect ranks, don't accumulate passages
-  - When using cross-encoder or neither RRF nor cross-encoder: properly accumulate passages
-  - Ensures correct and consistent behavior across different configuration combinations
-
-### 5. Fixed RRF Bias Issue
-- Previously, documents not found by a retrieval method were assigned `float("inf")` as their rank
-- This caused documents found by only one method to be unfairly penalized compared to documents found by multiple methods
-- Now documents not found by a method get `max_rank = n_similar_chunks * retrieval_multiple`
-- This ensures fair scoring while still giving some preference to documents found by multiple methods
-
-Example of the bias that was fixed:
-- Before: Document ranked #1 in semantic search only would score: 1/(1+c) ≈ 0.0164 (with c=60)
-- Before: Document ranked #20 in all three methods would score: 3/(20+c) ≈ 0.0375
-- The mediocre document would rank 2.3x higher despite being lower quality in each method
-- After: The single-method document gets a fair chance by assigning reasonable ranks to missing methods
-
-### 6. Updated Dependencies
-- Updated all references throughout the codebase:
-  - `DocChatAgent`: Uses new parameters throughout
-  - `LanceDocChatAgent`: Updated to use `n_similar_chunks`
-  - `ParsingConfig`: Made `n_similar_docs` Optional[int]
-- Updated ruff pre-commit hook from v0.12.0 to v0.12.1
-
-## Migration Guide
-
-### Old Configuration
-```python
-config = DocChatAgentConfig(
-    parsing=ParsingConfig(
-        n_similar_docs=5  # This controlled both retrieval and final output
-    )
-)
-```
-
-### New Configuration
-```python
-config = DocChatAgentConfig(
-    n_similar_chunks=5,    # Number of chunks each method retrieves
-    n_relevant_chunks=3,   # Final number after reranking
-    parsing=ParsingConfig(
-        # n_similar_docs is deprecated, don't set it
-    )
-)
-```
-
-The new configuration provides more flexibility:
-- You can retrieve more chunks initially (e.g., 10 per method)
-- Then use reranking to select the best ones (e.g., top 3)
-- This improves retrieval quality without increasing final context size
-
-## Technical Details
-
-### RRF Score Calculation (Fixed)
-```python
-# Old (biased) approach:
-rank_semantic = id2_rank_semantic.get(id_, float("inf"))
-rank_bm25 = id2_rank_bm25.get(id_, float("inf"))
-rank_fuzzy = id2_rank_fuzzy.get(id_, float("inf"))
-
-# New (fair) approach:
-max_rank = self.config.n_similar_chunks * retrieval_multiple
-rank_semantic = id2_rank_semantic.get(id_, max_rank)
-rank_bm25 = id2_rank_bm25.get(id_, max_rank)
-rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank)
-```
-
-## Impact
-- **Better Retrieval Quality**: The RRF fix ensures that high-quality documents found by a single method aren't unfairly discarded
-- **Prevents Invalid Configurations**: Smart validation ensures users don't accidentally create setups that would produce poor results
-- **Clearer Configuration**: Separating retrieval count from final output count provides more control
-- **Fixes Critical Bug**: The passages accumulation fix prevents incorrect documents from appearing in results
-- **Backward Compatible**: Existing code continues to work with deprecation warnings
-
-## Related PR
-- PR #874: https://github.com/langroid/langroid/pull/874
-</file>
-
 <file path="release-notes/v0-56-7-doc-chat-deprecation-fix.md">
 # Release Notes for v0.56.7
 
@@ -26919,6 +26900,479 @@ extracts = extract_numbered_segments(self.numbered_passage, spec)
 # this response ends the task by saying DONE
 </file>
 
+<file path="langroid/agent/tools/mcp/fastmcp_client.py">
+# Optional transports; import guarded for environments without uvx/npx
+⋮----
+except Exception:  # pragma: no cover - optional
+NpxStdioTransport = tuple()  # type: ignore
+UvxStdioTransport = tuple()  # type: ignore
+⋮----
+load_dotenv()  # load environment variables from .env
+⋮----
+# Concrete server/transport spec accepted by fastmcp.Client
+FastMCPServerConcrete: TypeAlias = str | FastMCP[Any] | ClientTransport | AnyUrl
+# Public spec we accept: concrete spec or a zero-arg factory returning a spec
+FastMCPServerSpec: TypeAlias = (
+⋮----
+class FastMCPClient
+⋮----
+"""A client for interacting with a FastMCP server.
+
+    Provides async context manager functionality to safely manage resources.
+    """
+⋮----
+logger = logging.getLogger(__name__)
+_cm: Optional[Client[ClientTransport]] = None
+client: Optional[Client[ClientTransport]] = None
+read_timeout_seconds: datetime.timedelta | None = None
+⋮----
+sampling_handler: SamplingHandler | None = None,  # type: ignore
+roots: RootsList | RootsHandler | None = None,  # type: ignore
+⋮----
+"""Initialize the FastMCPClient.
+
+        Args:
+            server: FastMCP server or path to such a server
+        """
+⋮----
+# Default a slightly larger read timeout for stdio transports on first
+# connects. Allows flaky subprocess servers a bit more time to boot.
+⋮----
+default_secs = int(os.getenv("LANGROID_MCP_READ_TIMEOUT", "15"))
+⋮----
+async def __aenter__(self) -> "FastMCPClient"
+⋮----
+"""Enter the async context manager and connect inner client.
+
+        Always obtain a fresh transport/spec via a factory, then connect.
+        If the session initialization fails due to a transient stdio issue
+        (e.g., ClosedResourceError / connection closed), retry once with a
+        new transport instance for better resilience across fastmcp/mcp
+        versions and server launch timing.
+        """
+# Always normalize to a server factory and create a fresh spec
+server_factory = self._as_server_factory(self.server)
+⋮----
+# Configurable retry/backoff for transient stdio startup races.
+max_retries = int(os.getenv("LANGROID_MCP_CONNECT_RETRIES", "6"))
+⋮----
+backoff_base = float(os.getenv("LANGROID_MCP_CONNECT_BACKOFF_BASE", "0.35"))
+⋮----
+backoff_base = 0.35
+⋮----
+last_err: Optional[BaseException] = None
+⋮----
+server_spec: FastMCPServerConcrete = server_factory()
+# create inner client context manager
+self._cm = Client(  # type: ignore[assignment]
+⋮----
+# actually enter it (opens the session)
+self.client = await self._cm.__aenter__()  # type: ignore
+⋮----
+# Common transient failures when a subprocess exits early or
+# closes during initialize. Retry once with a fresh transport.
+⋮----
+last_err = e
+# ensure we reset _cm/client before retry
+⋮----
+await self._cm.__aexit__(None, None, None)  # type: ignore
+⋮----
+# brief backoff to allow server process to finish booting
+⋮----
+# fastmcp wraps ClosedResourceError into RuntimeError
+# "Server session was closed unexpectedly". Treat as transient.
+emsg = str(e)
+⋮----
+await self._cm.__aexit__(None, None, None)  # type: ignore
+⋮----
+# otherwise re-raise
+⋮----
+# If we get here both attempts failed
+⋮----
+async def connect(self) -> None
+⋮----
+"""Open the underlying session."""
+⋮----
+async def close(self) -> None
+⋮----
+"""Close the underlying session."""
+⋮----
+"""Exit the async context manager and close inner client."""
+# exit and close the inner fastmcp.Client
+⋮----
+await self._cm.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore
+⋮----
+def __del__(self) -> None
+⋮----
+"""Warn about unclosed persistent connections."""
+⋮----
+"""Convert a JSON Schema snippet into a (type, Field) tuple.
+
+        Args:
+            name: Name of the field.
+            schema: JSON Schema for this field.
+            prefix: Prefix to use for nested model names.
+            is_required: Whether this field is required (from JSON Schema "required").
+
+        Returns:
+            A tuple of (python_type, Field(...)) for create_model.
+        """
+t = schema.get("type")
+# Use schema default if present, otherwise:
+# ... for required fields, None for optional fields
+⋮----
+default = schema["default"]
+⋮----
+default = ... if is_required else None
+desc = schema.get("description")
+# Object → nested BaseModel
+⋮----
+sub_name = f"{prefix}_{name.capitalize()}"
+sub_fields: Dict[str, Tuple[type, Any]] = {}
+# Get required fields for this nested object
+nested_required = set(schema.get("required", []))
+⋮----
+submodel = create_model(  # type: ignore
+# Wrap in Optional if not required
+model_type = submodel if is_required else Optional[submodel]
+return model_type, Field(default=default, description=desc)  # type: ignore
+# Array → List of items
+⋮----
+array_type = List[item_type]  # type: ignore
+⋮----
+array_type = Optional[array_type]  # type: ignore
+return array_type, Field(default=default, description=desc)  # type: ignore
+# Primitive types
+⋮----
+str_type = str if is_required else Optional[str]
+⋮----
+int_type = int if is_required else Optional[int]
+⋮----
+float_type = float if is_required else Optional[float]
+⋮----
+bool_type = bool if is_required else Optional[bool]
+⋮----
+# Fallback or unions
+⋮----
+# Default fallback
+⋮----
+async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]
+⋮----
+"""
+        Create a Langroid ToolMessage subclass from the MCP Tool
+        with the given `tool_name`.
+        """
+⋮----
+target = await self.get_mcp_tool_async(tool_name)
+⋮----
+props = target.inputSchema.get("properties", {})
+# Get the list of required fields from JSON Schema
+required_fields = set(target.inputSchema.get("required", []))
+fields: Dict[str, Tuple[type, Any]] = {}
+⋮----
+# Convert target.name to CamelCase and add Tool suffix
+parts = target.name.replace("-", "_").split("_")
+camel_case = "".join(part.capitalize() for part in parts)
+model_name = f"{camel_case}Tool"
+⋮----
+# IMPORTANT: Avoid clashes with reserved field names in Langroid ToolMessage!
+# First figure out which field names are reserved
+reserved = set(_BaseToolMessage.__annotations__.keys())
+⋮----
+renamed: Dict[str, str] = {}
+new_fields: Dict[str, Tuple[type, Any]] = {}
+⋮----
+new_name = fname + "__"
+⋮----
+# now replace fields with our renamed‐aware mapping
+fields = new_fields
+⋮----
+# create Langroid ToolMessage subclass, with expected fields.
+tool_model = cast(
+⋮----
+create_model(  # type: ignore[call-overload]
+⋮----
+# Store ALL client configuration needed to recreate a client
+client_config = {
+⋮----
+# Always store a SERVER FACTORY to ensure a fresh transport per call
+⋮----
+tool_model._client_config = client_config  # type: ignore [attr-defined]
+tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
+⋮----
+# 2) define an arg-free call_tool_async()
+async def call_tool_async(itself: ToolMessage) -> Any
+⋮----
+# pack up the payload
+# Get exclude fields from model config with proper type checking
+exclude_fields = set()
+model_config = getattr(itself, "model_config", {})
+⋮----
+exclude_list = model_config["json_schema_extra"]["exclude"]
+⋮----
+exclude_fields = set(exclude_list)
+⋮----
+# Add standard excluded fields
+⋮----
+# Exclude None values - MCP servers don't expect None for optional params
+payload = itself.model_dump(exclude=exclude_fields, exclude_none=True)
+⋮----
+# restore any renamed fields
+for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
+⋮----
+client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
+⋮----
+# Fallback or error - ideally _client_config should always exist
+⋮----
+# Connect the client if not yet connected and keep the connection open
+⋮----
+# open a fresh client, call the tool, then close
+async with FastMCPClient(**client_cfg) as client:  # type: ignore
+⋮----
+tool_model.call_tool_async = call_tool_async  # type: ignore
+⋮----
+# 3) define handle_async() method with optional agent parameter
+⋮----
+"""
+                Auto-generated handler for MCP tool. Returns ChatDocument with files
+                if files are present and agent is provided, otherwise returns text.
+
+                To override: define your own handle_async method with matching signature
+                if you need file handling, or simpler signature if you only need text.
+                """
+response = await self.call_tool_async()  # type: ignore[attr-defined]
+⋮----
+# If we have files and an agent is provided, return a ChatDocument
+⋮----
+# Otherwise, just return the text content
+⋮----
+# add the handle_async() method to the tool model
+tool_model.handle_async = handle_async  # type: ignore
+⋮----
+async def get_tools_async(self) -> List[Type[ToolMessage]]
+⋮----
+"""
+        Get all available tools as Langroid ToolMessage classes,
+        handling nested schemas, with `handle_async` methods
+        """
+⋮----
+resp = await self.client.list_tools()
+⋮----
+async def get_mcp_tool_async(self, name: str) -> Optional[Tool]
+⋮----
+"""Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
+         matching `name`, or None if missing. This contains the metadata for the tool:
+         name, description, inputSchema, etc.
+
+        Args:
+            name: Name of the tool to look up.
+
+        Returns:
+            The raw Tool object from the server, or None.
+        """
+⋮----
+resp: List[Tool] = await self.client.list_tools()
+⋮----
+"""Normalize a server spec to a zero-arg factory.
+
+        - If already callable, return as-is.
+        - If a ClientTransport instance, return a factory that yields the SAME
+          instance. This preserves state for keep-alive stdio transports (e.g.,
+          npx/uvx servers) so multi-call workflows can share process state.
+          Recreating a fresh transport each call would lose stateful servers
+          like `@modelcontextprotocol/server-memory` and break tests.
+        - Otherwise return a factory that yields the given spec.
+        """
+if callable(server):  # type: ignore[arg-type]
+return server  # type: ignore[return-value]
+⋮----
+# Reuse policy split:
+# - Npx/Uvx stdio transports: reuse the SAME instance to preserve
+#   keep-alive subprocess state (stateful MCP servers).
+# - Plain StdioTransport: CLONE a fresh transport to avoid reusing
+#   process/pipes across decorator-time schema fetch and runtime calls
+#   (some stdio servers close after first session, like CLI wrappers).
+⋮----
+) or (  # type: ignore[arg-type]
+⋮----
+):  # type: ignore[arg-type]
+⋮----
+# If optional classes are tuples (import failed), fall through
+⋮----
+# Best‑effort clone with back‑compat: only pass kwargs supported
+# by this installed fastmcp version's StdioTransport.__init__.
+sig = inspect.signature(StdioTransport.__init__)
+params = sig.parameters
+⋮----
+def _pick(name: str, default: Any = None) -> Any
+⋮----
+# Required in all known versions
+cmd = getattr(server, "command", None)
+args = list(getattr(server, "args", []) or [])
+⋮----
+# Optional, filter by signature presence
+env = _pick("env")
+cwd = _pick("cwd")
+keep_alive = _pick("keep_alive")
+log_file = _pick("log_file")
+⋮----
+def _factory() -> StdioTransport
+⋮----
+kwargs = {"command": cmd, "args": args}
+⋮----
+return StdioTransport(**kwargs)  # type: ignore[arg-type]
+⋮----
+# Default for other ClientTransport types: reuse
+⋮----
+return lambda: server  # type: ignore[return-value]
+⋮----
+# Log more detailed error information
+error_content = None
+⋮----
+error_content = [
+⋮----
+error_content = [f"Could not extract error content: {str(e)}"]
+⋮----
+# 1) Collect any plain TextContent first. This preserves legacy behavior
+# for simple servers that return only text. If we have text, prefer it
+# over structuredContent to avoid surprising downstream code.
+results_text: list[str] = [
+results_file: list[FileAttachment] = []
+⋮----
+# Also collect resources alongside text; callers may want them.
+⋮----
+# 2) No plain text — use structuredContent if available. To maintain
+# backwards compatibility, unwrap simple shapes like {"result": 5}
+# into "5"; otherwise serialize the full object as JSON for fidelity.
+⋮----
+sc = result.structuredContent
+⋮----
+# Unwrap primitives directly
+⋮----
+# Unwrap single-key primitive dicts commonly used by tools
+⋮----
+# Otherwise, serialize to JSON for rich/structured tools
+⋮----
+# 3) Nothing usable — return empty text and any files
+⋮----
+"""Call an MCP tool with the given arguments.
+
+        Args:
+            tool_name: Name of the tool to call.
+            arguments: Arguments to pass to the tool.
+
+        Returns:
+            The result of the tool call.
+        """
+⋮----
+# Prefer validated call; if server fails to provide structured content
+# despite declaring a schema, fall back to a raw request to bypass
+# client-side validation and still surface the data.
+⋮----
+result: CallToolResult = await self.client.session.call_tool(
+⋮----
+msg = str(e)
+⋮----
+result = await self.client.session.send_request(  # type: ignore[assignment]
+results = self._convert_tool_result(tool_name, result)
+⋮----
+# ==============================================================================
+# Convenience functions (wrappers around FastMCPClient methods)
+# These are useful for one-off calls without needing to manage the
+# FastMCPClient context explicitly.
+⋮----
+"""Get a single Langroid ToolMessage subclass for a specific MCP tool name (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        tool_name: The name of the tool to retrieve.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A dynamically created Langroid ToolMessage subclass representing the
+        requested tool.
+    """
+⋮----
+"""Get a single Langroid ToolMessage subclass
+    for a specific MCP tool name (synchronous).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
+    async `get_tool_async` function using `asyncio.run()`.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        tool_name: The name of the tool to retrieve.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A dynamically created Langroid ToolMessage subclass representing the
+        requested tool.
+    """
+⋮----
+"""Get all available tools as Langroid ToolMessage subclasses (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A list of dynamically created Langroid ToolMessage subclasses
+        representing all available tools on the server.
+    """
+⋮----
+"""Get all available tools as Langroid ToolMessage subclasses (synchronous).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
+    async `get_tools_async` function using `asyncio.run()`.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A list of dynamically created Langroid ToolMessage subclasses
+        representing all available tools on the server.
+    """
+⋮----
+"""Get the raw MCP Tool object for a specific tool name (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient to
+    retrieve the tool definition from the server.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        name: The name of the tool to look up.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor.
+
+    Returns:
+        The raw `mcp.types.Tool` object from the server, or `None` if the tool
+        is not found.
+    """
+⋮----
+"""Get all available raw MCP Tool objects from the server (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient to
+    retrieve the list of tool definitions from the server.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor.
+
+    Returns:
+        A list of raw `mcp.types.Tool` objects available on the server.
+    """
+</file>
+
 <file path="langroid/agent/chat_document.py">
 class ChatDocAttachment(BaseModel)
 ⋮----
@@ -27895,6 +28349,273 @@ json_data = json.loads(j)
 def datetime_to_json(obj: Any) -> Any
 ⋮----
 # Let json.dumps() handle the raising of TypeError for non-serializable objects
+</file>
+
+<file path="langroid/parsing/parser.py">
+logger = logging.getLogger(__name__)
+⋮----
+class Splitter(str, Enum)
+⋮----
+TOKENS = "tokens"
+PARA_SENTENCE = "para_sentence"
+SIMPLE = "simple"
+# "structure-aware" splitting with chunks enriched by header info
+MARKDOWN = "markdown"
+⋮----
+class BaseParsingConfig(BaseSettings)
+⋮----
+"""Base class for document parsing configurations."""
+⋮----
+library: str
+⋮----
+model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
+⋮----
+class LLMPdfParserConfig(BaseSettings)
+⋮----
+"""Configuration for LLM-based parsing."""
+⋮----
+model_name: str = "gemini/gemini-2.0-flash"  # Default model
+max_tokens: Optional[int] = None
+split_on_page: Optional[bool] = True
+requests_per_minute: Optional[int] = 5
+timeout: int = 60
+prompt: str = ""  # override with a domain-specific prompt
+system_prompt: str = ""  # override with a domain-specific system prompt
+⋮----
+class MarkerConfig(BaseSettings)
+⋮----
+"""Configuration for Markitdown-based parsing."""
+⋮----
+config_dict: Dict[str, Any] = {}
+⋮----
+class PdfParsingConfig(BaseParsingConfig)
+⋮----
+library: Literal[
+llm_parser_config: Optional[LLMPdfParserConfig] = None
+marker_config: Optional[MarkerConfig] = None
+⋮----
+@model_validator(mode="before")
+@classmethod
+    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]
+⋮----
+"""Ensure correct config is set based on library selection."""
+library = values.get("library")
+⋮----
+class DocxParsingConfig(BaseSettings)
+⋮----
+library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
+⋮----
+class DocParsingConfig(BaseSettings)
+⋮----
+library: Literal["unstructured"] = "unstructured"
+⋮----
+class MarkitdownPPTXParsingConfig(BaseSettings)
+⋮----
+library: Literal["markitdown"] = "markitdown"
+⋮----
+class MarkitdownXLSXParsingConfig(BaseSettings)
+⋮----
+class MarkitdownXLSParsingConfig(BaseSettings)
+⋮----
+class ParsingConfig(BaseSettings)
+⋮----
+splitter: str = Splitter.MARKDOWN
+chunk_by_page: bool = False  # split by page?
+chunk_size: int = 200  # aim for this many tokens per chunk
+chunk_size_variation: float = 0.30  # max variation from chunk_size
+overlap: int = 50  # overlap between chunks
+max_chunks: int = 10_000
+⋮----
+@field_validator("chunk_size", mode="before")
+@classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int
+⋮----
+"""Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+⋮----
+# offset to subtract from page numbers:
+# e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
+page_number_offset: int = 0
+# aim to have at least this many chars per chunk when truncating due to punctuation
+min_chunk_chars: int = 350
+discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
+n_similar_docs: Optional[int] = None  # deprecated
+n_neighbor_ids: int = 5  # window size to store around each chunk
+separators: List[str] = ["\n\n", "\n", " ", ""]
+token_encoding_model: str = "text-embedding-3-small"
+pdf: PdfParsingConfig = PdfParsingConfig()
+docx: DocxParsingConfig = DocxParsingConfig()
+doc: DocParsingConfig = DocParsingConfig()
+pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
+xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
+xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
+⋮----
+class Parser
+⋮----
+def __init__(self, config: ParsingConfig)
+⋮----
+def num_tokens(self, text: str) -> int
+⋮----
+return count_words(text)  # simple count based on whitespace-split
+tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
+⋮----
+def truncate_tokens(self, text: str, max_tokens: int) -> str
+⋮----
+tokens = self.tokenizer.encode(text)
+⋮----
+def add_window_ids(self, chunks: List[Document]) -> None
+⋮----
+"""Chunks may belong to multiple docs, but for each doc,
+        they appear consecutively. Add window_ids in metadata"""
+⋮----
+# discard empty chunks
+chunks = [c for c in chunks if c.content.strip() != ""]
+⋮----
+# The original metadata.id (if any) is ignored since it will be same for all
+# chunks and is useless. We want a distinct id for each chunk.
+# ASSUMPTION: all chunks c of a doc have same c.metadata.id !
+orig_ids = [c.metadata.id for c in chunks]
+ids = [ObjectRegistry.new_id() for c in chunks]
+id2chunk = {id: c for id, c in zip(ids, chunks)}
+⋮----
+# group the ids by orig_id
+# (each distinct orig_id refers to a different document)
+orig_id_to_ids: Dict[str, List[str]] = {}
+⋮----
+# now each orig_id maps to a sequence of ids within a single doc
+⋮----
+k = self.config.n_neighbor_ids
+⋮----
+# ids are consecutive chunks in a single doc
+n = len(ids)
+window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
+⋮----
+c = id2chunk[ids[i]]
+⋮----
+def split_simple(self, docs: List[Document]) -> List[Document]
+⋮----
+final_docs = []
+⋮----
+chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
+# note we are ensuring we COPY the document metadata into each chunk,
+# which ensures all chunks of a given doc have same metadata
+# (and in particular same metadata.id, which is important later for
+# add_window_ids)
+chunk_docs = [
+⋮----
+def split_para_sentence(self, docs: List[Document]) -> List[Document]
+⋮----
+chunks = docs
+⋮----
+un_splittables = 0
+split_chunks = []
+⋮----
+# small chunk: no need to split
+⋮----
+splits = self._split_para_sentence_once([c])
+⋮----
+max_len = max([self.num_tokens(p.content) for p in chunks])
+⋮----
+break  # we won't be able to shorten them with current settings
+chunks = split_chunks.copy()
+⋮----
+def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]
+⋮----
+final_chunks = []
+⋮----
+chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
+⋮----
+def split_chunk_tokens(self, docs: List[Document]) -> List[Document]
+⋮----
+chunks = chunk_markdown(
+⋮----
+# apply rough adjustment factor to convert from tokens to words,
+# which is what the markdown chunker uses
+⋮----
+chunks = self.chunk_tokens(d.content)
+⋮----
+"""
+        Split a text into chunks of ~CHUNK_SIZE tokens,
+        based on punctuation and newline boundaries.
+        Adapted from
+        https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/chunks.py
+
+        Args:
+            text: The text to split into chunks.
+
+        Returns:
+            A list of text chunks, each of which is a string of tokens
+            roughly self.config.chunk_size tokens long.
+        """
+# Return an empty list if the text is empty or whitespace
+⋮----
+# Tokenize the text
+tokens = self.tokenizer.encode(text, disallowed_special=())
+⋮----
+# Initialize an empty list of chunks
+chunks = []
+⋮----
+# Initialize a counter for the number of chunks
+num_chunks = 0
+⋮----
+# Loop until all tokens are consumed
+⋮----
+# Take the first chunk_size tokens as a chunk
+chunk = tokens[: self.config.chunk_size]
+⋮----
+# Decode the chunk into text
+chunk_text = self.tokenizer.decode(chunk)
+⋮----
+# Skip the chunk if it is empty or whitespace
+⋮----
+# Remove the tokens corresponding to the chunk text
+# from remaining tokens
+tokens = tokens[len(chunk) :]
+# Continue to the next iteration of the loop
+⋮----
+# Find the last period or punctuation mark in the chunk
+punctuation_matches = [
+⋮----
+last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
+⋮----
+# If there is a punctuation mark, and the last punctuation index is
+# after MIN_CHUNK_SIZE_CHARS
+⋮----
+# Truncate the chunk text at the punctuation mark
+chunk_text = chunk_text[: last_punctuation + 1]
+⋮----
+# Replace redundant (3 or more) newlines with 2 newlines to preser
+# paragraph separation!
+# But do NOT strip leading/trailing whitespace, to preserve formatting
+# (e.g. code blocks, or in case we want to stitch chunks back together)
+chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
+⋮----
+# Append the chunk text to the list of chunks
+⋮----
+# Remove the tokens corresponding to the chunk text
+# from the remaining tokens
+tokens = tokens[
+⋮----
+# Increment the number of chunks
+⋮----
+# There may be remaining tokens, but we discard them
+# since we have already reached the maximum number of chunks
+⋮----
+def split(self, docs: List[Document]) -> List[Document]
+⋮----
+# create ids in metadata of docs if absent:
+# we need this to distinguish docs later in add_window_ids
+⋮----
+# some docs are already splits, so don't split them further!
+chunked_docs = [d for d in docs if d.metadata.is_chunk]
+big_docs = [d for d in docs if not d.metadata.is_chunk]
+⋮----
+big_doc_chunks = self.split_chunk_tokens(big_docs)
+⋮----
+big_doc_chunks = self.split_para_sentence(big_docs)
+⋮----
+big_doc_chunks = self.split_simple(big_docs)
 </file>
 
 <file path="langroid/utils/html_logger.py">
@@ -30253,273 +30974,6 @@ def __init__(self, llm: LanguageModel, stream: bool = True)
 def __enter__(self) -> None
 ⋮----
 def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
-</file>
-
-<file path="langroid/parsing/parser.py">
-logger = logging.getLogger(__name__)
-⋮----
-class Splitter(str, Enum)
-⋮----
-TOKENS = "tokens"
-PARA_SENTENCE = "para_sentence"
-SIMPLE = "simple"
-# "structure-aware" splitting with chunks enriched by header info
-MARKDOWN = "markdown"
-⋮----
-class BaseParsingConfig(BaseSettings)
-⋮----
-"""Base class for document parsing configurations."""
-⋮----
-library: str
-⋮----
-model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
-⋮----
-class LLMPdfParserConfig(BaseSettings)
-⋮----
-"""Configuration for LLM-based parsing."""
-⋮----
-model_name: str = "gemini/gemini-2.0-flash"  # Default model
-max_tokens: Optional[int] = None
-split_on_page: Optional[bool] = True
-requests_per_minute: Optional[int] = 5
-timeout: int = 60
-prompt: str = ""  # override with a domain-specific prompt
-system_prompt: str = ""  # override with a domain-specific system prompt
-⋮----
-class MarkerConfig(BaseSettings)
-⋮----
-"""Configuration for Markitdown-based parsing."""
-⋮----
-config_dict: Dict[str, Any] = {}
-⋮----
-class PdfParsingConfig(BaseParsingConfig)
-⋮----
-library: Literal[
-llm_parser_config: Optional[LLMPdfParserConfig] = None
-marker_config: Optional[MarkerConfig] = None
-⋮----
-@model_validator(mode="before")
-@classmethod
-    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]
-⋮----
-"""Ensure correct config is set based on library selection."""
-library = values.get("library")
-⋮----
-class DocxParsingConfig(BaseSettings)
-⋮----
-library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
-⋮----
-class DocParsingConfig(BaseSettings)
-⋮----
-library: Literal["unstructured"] = "unstructured"
-⋮----
-class MarkitdownPPTXParsingConfig(BaseSettings)
-⋮----
-library: Literal["markitdown"] = "markitdown"
-⋮----
-class MarkitdownXLSXParsingConfig(BaseSettings)
-⋮----
-class MarkitdownXLSParsingConfig(BaseSettings)
-⋮----
-class ParsingConfig(BaseSettings)
-⋮----
-splitter: str = Splitter.MARKDOWN
-chunk_by_page: bool = False  # split by page?
-chunk_size: int = 200  # aim for this many tokens per chunk
-chunk_size_variation: float = 0.30  # max variation from chunk_size
-overlap: int = 50  # overlap between chunks
-max_chunks: int = 10_000
-⋮----
-@field_validator("chunk_size", mode="before")
-@classmethod
-    def convert_chunk_size_to_int(cls, v: Any) -> int
-⋮----
-"""Convert chunk_size to int, maintaining backward compatibility
-        with Pydantic V1.
-        """
-⋮----
-# offset to subtract from page numbers:
-# e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
-page_number_offset: int = 0
-# aim to have at least this many chars per chunk when truncating due to punctuation
-min_chunk_chars: int = 350
-discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
-n_similar_docs: Optional[int] = None  # deprecated
-n_neighbor_ids: int = 5  # window size to store around each chunk
-separators: List[str] = ["\n\n", "\n", " ", ""]
-token_encoding_model: str = "text-embedding-3-small"
-pdf: PdfParsingConfig = PdfParsingConfig()
-docx: DocxParsingConfig = DocxParsingConfig()
-doc: DocParsingConfig = DocParsingConfig()
-pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
-xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
-xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
-⋮----
-class Parser
-⋮----
-def __init__(self, config: ParsingConfig)
-⋮----
-def num_tokens(self, text: str) -> int
-⋮----
-return count_words(text)  # simple count based on whitespace-split
-tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
-⋮----
-def truncate_tokens(self, text: str, max_tokens: int) -> str
-⋮----
-tokens = self.tokenizer.encode(text)
-⋮----
-def add_window_ids(self, chunks: List[Document]) -> None
-⋮----
-"""Chunks may belong to multiple docs, but for each doc,
-        they appear consecutively. Add window_ids in metadata"""
-⋮----
-# discard empty chunks
-chunks = [c for c in chunks if c.content.strip() != ""]
-⋮----
-# The original metadata.id (if any) is ignored since it will be same for all
-# chunks and is useless. We want a distinct id for each chunk.
-# ASSUMPTION: all chunks c of a doc have same c.metadata.id !
-orig_ids = [c.metadata.id for c in chunks]
-ids = [ObjectRegistry.new_id() for c in chunks]
-id2chunk = {id: c for id, c in zip(ids, chunks)}
-⋮----
-# group the ids by orig_id
-# (each distinct orig_id refers to a different document)
-orig_id_to_ids: Dict[str, List[str]] = {}
-⋮----
-# now each orig_id maps to a sequence of ids within a single doc
-⋮----
-k = self.config.n_neighbor_ids
-⋮----
-# ids are consecutive chunks in a single doc
-n = len(ids)
-window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
-⋮----
-c = id2chunk[ids[i]]
-⋮----
-def split_simple(self, docs: List[Document]) -> List[Document]
-⋮----
-final_docs = []
-⋮----
-chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
-# note we are ensuring we COPY the document metadata into each chunk,
-# which ensures all chunks of a given doc have same metadata
-# (and in particular same metadata.id, which is important later for
-# add_window_ids)
-chunk_docs = [
-⋮----
-def split_para_sentence(self, docs: List[Document]) -> List[Document]
-⋮----
-chunks = docs
-⋮----
-un_splittables = 0
-split_chunks = []
-⋮----
-# small chunk: no need to split
-⋮----
-splits = self._split_para_sentence_once([c])
-⋮----
-max_len = max([self.num_tokens(p.content) for p in chunks])
-⋮----
-break  # we won't be able to shorten them with current settings
-chunks = split_chunks.copy()
-⋮----
-def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]
-⋮----
-final_chunks = []
-⋮----
-chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
-⋮----
-def split_chunk_tokens(self, docs: List[Document]) -> List[Document]
-⋮----
-chunks = chunk_markdown(
-⋮----
-# apply rough adjustment factor to convert from tokens to words,
-# which is what the markdown chunker uses
-⋮----
-chunks = self.chunk_tokens(d.content)
-⋮----
-"""
-        Split a text into chunks of ~CHUNK_SIZE tokens,
-        based on punctuation and newline boundaries.
-        Adapted from
-        https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/chunks.py
-
-        Args:
-            text: The text to split into chunks.
-
-        Returns:
-            A list of text chunks, each of which is a string of tokens
-            roughly self.config.chunk_size tokens long.
-        """
-# Return an empty list if the text is empty or whitespace
-⋮----
-# Tokenize the text
-tokens = self.tokenizer.encode(text, disallowed_special=())
-⋮----
-# Initialize an empty list of chunks
-chunks = []
-⋮----
-# Initialize a counter for the number of chunks
-num_chunks = 0
-⋮----
-# Loop until all tokens are consumed
-⋮----
-# Take the first chunk_size tokens as a chunk
-chunk = tokens[: self.config.chunk_size]
-⋮----
-# Decode the chunk into text
-chunk_text = self.tokenizer.decode(chunk)
-⋮----
-# Skip the chunk if it is empty or whitespace
-⋮----
-# Remove the tokens corresponding to the chunk text
-# from remaining tokens
-tokens = tokens[len(chunk) :]
-# Continue to the next iteration of the loop
-⋮----
-# Find the last period or punctuation mark in the chunk
-punctuation_matches = [
-⋮----
-last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
-⋮----
-# If there is a punctuation mark, and the last punctuation index is
-# after MIN_CHUNK_SIZE_CHARS
-⋮----
-# Truncate the chunk text at the punctuation mark
-chunk_text = chunk_text[: last_punctuation + 1]
-⋮----
-# Replace redundant (3 or more) newlines with 2 newlines to preser
-# paragraph separation!
-# But do NOT strip leading/trailing whitespace, to preserve formatting
-# (e.g. code blocks, or in case we want to stitch chunks back together)
-chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
-⋮----
-# Append the chunk text to the list of chunks
-⋮----
-# Remove the tokens corresponding to the chunk text
-# from the remaining tokens
-tokens = tokens[
-⋮----
-# Increment the number of chunks
-⋮----
-# There may be remaining tokens, but we discard them
-# since we have already reached the maximum number of chunks
-⋮----
-def split(self, docs: List[Document]) -> List[Document]
-⋮----
-# create ids in metadata of docs if absent:
-# we need this to distinguish docs later in add_window_ids
-⋮----
-# some docs are already splits, so don't split them further!
-chunked_docs = [d for d in docs if d.metadata.is_chunk]
-big_docs = [d for d in docs if not d.metadata.is_chunk]
-⋮----
-big_doc_chunks = self.split_chunk_tokens(big_docs)
-⋮----
-big_doc_chunks = self.split_para_sentence(big_docs)
-⋮----
-big_doc_chunks = self.split_simple(big_docs)
 </file>
 
 <file path="langroid/vector_store/base.py">
@@ -33894,6 +34348,923 @@ publish:
 	uv publish
 </file>
 
+<file path="langroid/agent/special/doc_chat_agent.py">
+# # langroid/agent/special/doc_chat_agent.py
+"""
+Agent that supports asking queries about a set of documents, using
+retrieval-augmented generation (RAG).
+
+Functionality includes:
+- summarizing a document, with a custom instruction; see `summarize_docs`
+- asking a question about a document; see `answer_from_docs`
+
+Note: to use the sentence-transformer embeddings, you must install
+langroid with the [hf-embeddings] extra, e.g.:
+
+pip install "langroid[hf-embeddings]"
+
+"""
+⋮----
+@cache
+def apply_nest_asyncio() -> None
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+@dataclass
+class _CrossEncoderCacheEntry
+⋮----
+model: "CrossEncoder"
+lock: threading.RLock
+⋮----
+_CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
+_CROSS_ENCODER_CACHE_LOCK = threading.Lock()
+⋮----
+def _auto_cross_encoder_device() -> str
+⋮----
+mps = getattr(torch.backends, "mps", None)
+⋮----
+actual_device = device or _auto_cross_encoder_device()
+cache_key = f"{model_name}::{actual_device}"
+entry = _CROSS_ENCODER_CACHE.get(cache_key)
+⋮----
+model = CrossEncoder(model_name, device=actual_device)
+entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
+⋮----
+DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
+⋮----
+CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
+⋮----
+# Check if  module exists in sys.path
+spec = importlib.util.find_spec("sentence_transformers")
+has_sentence_transformers = spec is not None
+⋮----
+has_sentence_transformers = False
+⋮----
+hf_embed_config = SentenceTransformerEmbeddingsConfig(
+⋮----
+oai_embed_config = OpenAIEmbeddingsConfig(
+⋮----
+class ChunkEnrichmentAgentConfig(ChatAgentConfig)
+⋮----
+batch_size: int = 50
+delimiter: str = CHUNK_ENRICHMENT_DELIMITER
+enrichment_prompt_fn: Callable[[str], str] = lambda x: x
+⋮----
+class DocChatAgentConfig(ChatAgentConfig)
+⋮----
+system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
+summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
+# extra fields to include in content as key=value pairs
+# (helps retrieval for table-like data)
+add_fields_to_content: List[str] = []
+filter_fields: List[str] = []  # fields usable in filter
+retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
+extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
+filter: str | None = (
+⋮----
+None  # filter condition for various lexical/semantic search fns
+⋮----
+conversation_mode: bool = True  # accumulate message history?
+# retain retrieved context? Setting to True increases token consumption, but
+# helps LLM fix citation errors and improve accuracy of follow-up questions.
+retain_context: bool = False
+# In assistant mode, DocChatAgent receives questions from another Agent,
+# and those will already be in stand-alone form, so in this mode
+# there is no need to convert them to stand-alone form.
+assistant_mode: bool = False
+# Use LLM to generate hypothetical answer A to the query Q,
+# and use the embed(A) to find similar chunks in vecdb.
+# Referred to as HyDE in the paper:
+# https://arxiv.org/pdf/2212.10496.pdf
+# It is False by default; its benefits depends on the context.
+hypothetical_answer: bool = False
+# Optional config for chunk enrichment agent, e.g. to enrich
+# chunks with hypothetical questions, or keywords to increase
+# the "semantic surface area" of the chunks, which may help
+# improve retrieval.
+chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
+⋮----
+n_relevant_chunks: int = 3  # how many relevant chunks to retrieve finally
+n_similar_chunks: int = 3  # how many similar chunks to retrieve, by each method
+n_query_rephrases: int = 0
+n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
+n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
+use_fuzzy_match: bool = True
+use_bm25_search: bool = True
+use_reciprocal_rank_fusion: bool = False
+cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
+cross_encoder_device: Optional[str] = None  # default to CPU when None
+rerank_diversity: bool = True  # rerank to maximize diversity?
+rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
+rerank_after_adding_context: bool = True  # rerank after adding context window?
+# RRF (Reciprocal Rank Fusion) score = 1/(rank + reciprocal_rank_fusion_constant)
+# see https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works
+reciprocal_rank_fusion_constant: float = 60.0
+cache: bool = True  # cache results
+debug: bool = False
+stream: bool = True  # allow streaming where needed
+split: bool = True  # use chunking
+relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
+⋮----
+llm=None  # use the parent's llm unless explicitly set here
+⋮----
+doc_paths: List[str | bytes] = []
+default_paths: List[str] = [
+parsing: ParsingConfig = ParsingConfig(  # modify as needed
+⋮----
+chunk_size=1000,  # aim for this many tokens per chunk
+overlap=100,  # overlap between chunks
+⋮----
+# aim to have at least this many chars per chunk when
+# truncating due to punctuation
+⋮----
+discard_chunk_chars=5,  # discard chunks with fewer than this many chars
+# set deprecated n_similar_docs to None; use n_similar_chunks above instead
+⋮----
+n_neighbor_ids=0,  # num chunk IDs to store on either side of each chunk
+⋮----
+# NOTE: PDF parsing is extremely challenging, and each library
+# has its own strengths and weaknesses.
+# Try one that works for your use case.
+# or "unstructured", "fitz", "pymupdf4llm", "pypdf"
+⋮----
+crawler_config: Optional[BaseCrawlerConfig] = TrafilaturaConfig()
+⋮----
+# Allow vecdb to be None in case we want to explicitly set it later
+vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
+⋮----
+llm: LLMConfig = OpenAIGPTConfig(
+prompts: PromptsConfig = PromptsConfig(
+⋮----
+def _append_metadata_source(orig_source: str, source: str) -> str
+⋮----
+class DocChatAgent(ChatAgent)
+⋮----
+"""
+    Agent for chatting with a collection of documents.
+    """
+⋮----
+# Handle backward compatibility for deprecated n_similar_docs
+⋮----
+# Use the deprecated value for both parameters
+⋮----
+def _clone_extra_state(self, new_agent: "ChatAgent") -> None
+⋮----
+def clear(self) -> None
+⋮----
+"""Clear the document collection and the specific collection in vecdb"""
+⋮----
+collection_name = self.vecdb.config.collection_name
+⋮----
+# Note we may have used a vecdb with a config.collection_name
+# different from the agent's config.vecdb.collection_name!!
+⋮----
+# Close the old vecdb before creating a new one
+old_vecdb = self.vecdb
+⋮----
+def ingest(self) -> None
+⋮----
+"""
+        Chunk + embed + store docs specified by self.config.doc_paths
+        """
+⋮----
+# we must be using a previously defined collection
+# But let's get all the chunked docs so we can
+# do keyword and other non-vector searches
+⋮----
+self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
+⋮----
+"""Split, ingest docs from specified paths,
+        do not add these to config.doc_paths.
+
+        Args:
+            paths: document paths, urls or byte-content of docs.
+                The bytes option is intended to support cases where a document
+                has already been read in as bytes (e.g. from an API or a database),
+                and we want to avoid having to write it to a temporary file
+                just to read it back in.
+            metadata: List of metadata dicts, one for each path.
+                If a single dict is passed in, it is used for all paths.
+            doc_type: DocumentType to use for parsing, if known.
+                MUST apply to all docs if specified.
+                This is especially useful when the `paths` are of bytes type,
+                to help with document type detection.
+        Returns:
+            List of Document objects
+        """
+⋮----
+paths = [paths]
+all_paths = paths
+paths_meta: Dict[int, Any] = {}
+urls_meta: Dict[int, Any] = {}
+idxs = range(len(all_paths))
+⋮----
+urls = [all_paths[i] for i in url_idxs]
+paths = [all_paths[i] for i in path_idxs]
+bytes_list = [all_paths[i] for i in bytes_idxs]
+⋮----
+idx2meta = {
+⋮----
+)  # appease mypy
+⋮----
+idx2meta = {p: metadata for p in idxs}
+⋮----
+idx2meta = {p: metadata.model_dump() for p in idxs}
+urls_meta = {u: idx2meta[u] for u in url_idxs}
+paths_meta = {p: idx2meta[p] for p in path_idxs}
+docs: List[Document] = []
+parser: Parser = Parser(self.config.parsing)
+⋮----
+meta = urls_meta.get(ui, {})
+loader = URLLoader(
+⋮----
+)  # type: ignore
+url_docs = loader.load()
+# update metadata of each doc with meta
+⋮----
+orig_source = d.metadata.source
+⋮----
+if len(paths) > 0:  # paths OR bytes are handled similarly
+⋮----
+meta = paths_meta.get(pi, {})
+p = all_paths[pi]
+path_docs = RepoLoader.get_documents(
+⋮----
+n_docs = len(docs)
+n_splits = self.ingest_docs(docs, split=self.config.split)
+⋮----
+n_urls = len(urls)
+n_paths = len(paths)
+⋮----
+path_reps = [p if isinstance(p, str) else "bytes" for p in paths]
+print("\n".join([u for u in urls if isinstance(u, str)]))  # appease mypy
+⋮----
+"""
+        Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
+
+        Args:
+            docs: List of Document objects
+            split: Whether to split docs into chunks. Default is True.
+                If False, docs are treated as "chunks" and are not split.
+            metadata: List of metadata dicts, one for each doc, to augment
+                whatever metadata is already in the doc.
+                [ASSUME no conflicting keys between the two metadata dicts.]
+                If a single dict is passed in, it is used for all docs.
+        """
+⋮----
+m_dict = m if isinstance(m, dict) else m.model_dump()  # type: ignore
+d.metadata = d.metadata.model_copy(update=m_dict)  # type: ignore
+⋮----
+docs = self.parser.split(docs)
+⋮----
+# we're not splitting, so we mark each doc as a chunk
+⋮----
+docs = self.enrich_chunks(docs)
+⋮----
+# If any additional fields need to be added to content,
+# add them as key=value pairs for all docs, before batching.
+# This helps retrieval for table-like data.
+# Note we need to do this at stage so that the embeddings
+# are computed on the full content with these additional fields.
+⋮----
+fields = [
+⋮----
+key_vals = extract_fields(d, fields)
+⋮----
+docs = docs[: self.config.parsing.max_chunks]
+# vecdb should take care of adding docs in batches;
+# batching can be controlled via vecdb.config.batch_size
+⋮----
+return 0  # Return 0 since no documents were added
+⋮----
+def retrieval_tool(self, msg: RetrievalTool) -> str
+⋮----
+"""Handle the RetrievalTool message"""
+⋮----
+content_doc = self.answer_from_docs(msg.query)
+⋮----
+"""
+        Convert dataframe so it is compatible with Document class:
+        - has "content" column
+        - has an "id" column to be used as Document.metadata.id
+
+        Args:
+            df: dataframe to convert
+            content: name of content column
+            metadata: list of metadata column names
+
+        Returns:
+            Tuple[pd.DataFrame, List[str]]: dataframe, metadata
+                - dataframe: dataframe with "content" column and "id" column
+                - metadata: list of metadata column names, including "id"
+        """
+⋮----
+# rename content column to "content", leave existing column intact
+df = df.rename(columns={content: "content"}, inplace=False)
+⋮----
+actual_metadata = metadata.copy()
+⋮----
+docs = dataframe_to_documents(df, content="content", metadata=metadata)
+ids = [str(d.id()) for d in docs]
+⋮----
+"""
+        Ingest a dataframe into vecdb.
+        """
+⋮----
+# When ingesting a dataframe we will no longer do any chunking,
+# so we mark each doc as a chunk.
+# TODO - revisit this since we may still want to chunk large text columns
+⋮----
+def set_filter(self, filter: str) -> None
+⋮----
+"""
+        Setup `self.chunked_docs` and `self.chunked_docs_clean`
+        based on possible filter.
+        These will be used in various non-vector-based search functions,
+        e.g. self.get_similar_chunks_bm25(), self.get_fuzzy_matches(), etc.
+
+        Args:
+            docs: List of Document objects. This is empty when we are calling this
+                method after initial doc ingestion.
+            filter: Filter condition for various lexical/semantic search fns.
+        """
+⋮----
+# no filter, so just use the docs passed in
+⋮----
+def get_field_values(self, fields: list[str]) -> Dict[str, str]
+⋮----
+"""Get string-listing of possible values of each field,
+        e.g.
+        {
+            "genre": "crime, drama, mystery, ... (10 more)",
+            "certificate": "R, PG-13, PG, R",
+        }
+        The field names may have "metadata." prefix, e.g. "metadata.genre".
+        """
+field_values: Dict[str, Set[str]] = {}
+# make empty set for each field
+⋮----
+# get all documents and accumulate possible values of each field until 10
+docs = self.vecdb.get_all_documents()  # only works for vecdbs that support this
+⋮----
+# extract fields from d
+doc_field_vals = extract_fields(d, fields)
+# the `field` returned by extract_fields may contain only the last
+# part of the field name, e.g. "genre" instead of "metadata.genre",
+# so we use the orig_field name to fill in the values
+⋮----
+# For each field make a string showing list of possible values,
+# truncate to 20 values, and if there are more, indicate how many
+# more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
+field_values_list = {}
+⋮----
+vals = list(field_values[f])
+n = len(vals)
+remaining = n - 20
+vals = vals[:20]
+⋮----
+# make a string of the values, ensure they are strings
+⋮----
+def doc_length(self, docs: List[Document]) -> int
+⋮----
+"""
+        Calc token-length of a list of docs
+        Args:
+            docs: list of Document objects
+        Returns:
+            int: number of tokens
+        """
+⋮----
+def user_docs_ingest_dialog(self) -> None
+⋮----
+"""
+        Ask user to select doc-collection, enter filenames/urls, and ingest into vecdb.
+        """
+⋮----
+n_deletes = self.vecdb.clear_empty_collections()
+collections = self.vecdb.list_collections()
+collection_name = "NEW"
+is_new_collection = False
+replace_collection = False
+⋮----
+n = len(collections)
+delete_str = (
+⋮----
+choice = Prompt.ask(
+⋮----
+confirm = Prompt.ask(
+⋮----
+collection_name = collections[int(choice) - 1]
+⋮----
+replace_collection = choice == "y"
+⋮----
+is_new_collection = True
+collection_name = Prompt.ask(
+⋮----
+default_urls_str = (
+⋮----
+inputs = get_list_from_user()
+⋮----
+inputs = self.config.default_paths
+self.config.doc_paths = inputs  # type: ignore
+⋮----
+query_str: str | None
+⋮----
+query_str = message.content
+⋮----
+query_str = message
+⋮----
+# direct query to LLM
+query_str = query_str[1:] if query_str is not None else None
+⋮----
+response = super().llm_response(query_str)
+⋮----
+response = self.answer_from_docs(query_str)
+# Citation details (if any) are NOT generated by LLM
+# (We extract these from LLM's numerical citations),
+# so render them here
+⋮----
+response = await super().llm_response_async(query_str)
+⋮----
+# Offload blocking retrieval/LLM work to default thread pool so
+# asyncio batch runners can make progress concurrently.
+response = await asyncio.to_thread(self.answer_from_docs, query_str)
+⋮----
+@staticmethod
+    def doc_string(docs: List[Document]) -> str
+⋮----
+"""
+        Generate a string representation of a list of docs.
+        Args:
+            docs: list of Document objects
+        Returns:
+            str: string representation
+        """
+contents = [d.content for d in docs]
+sources = [d.metadata.source for d in docs]
+sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
+⋮----
+"""
+        Given a question and a list of (possibly) doc snippets,
+        generate an answer if possible
+        Args:
+            question: question to answer
+            passages: list of `Document` objects each containing a possibly relevant
+                snippet, and metadata
+        Returns:
+            a `Document` object containing the answer,
+            and metadata containing source citations
+
+        """
+⋮----
+passages_str = self.doc_string(passages)
+# Substitute Q and P into the templatized prompt
+⋮----
+final_prompt = self.config.summarize_prompt.format(
+⋮----
+# Generate the final verbatim extract based on the final prompt.
+# Note this will send entire message history, plus this final_prompt
+# to the LLM, and self.message_history will be updated to include
+# 2 new LLMMessage objects:
+# one for `final_prompt`, and one for the LLM response
+⋮----
+answer_doc = super().llm_response(final_prompt)
+⋮----
+# respond with temporary context
+answer_doc = super()._llm_response_temp_context(question, final_prompt)
+⋮----
+answer_doc = super().llm_response_forget(final_prompt)
+⋮----
+final_answer = answer_doc.content.strip()
+⋮----
+# extract references like [^2], [^3], etc. from the final answer
+citations = extract_markdown_references(final_answer)
+# format the cited references as a string suitable for markdown footnote
+⋮----
+content=final_answer,  # does not contain citations
+⋮----
+source=citations_str,  # only the reference headers
+source_content=full_citations_str,  # reference + content
+⋮----
+def llm_hypothetical_answer(self, query: str) -> str
+⋮----
+# TODO: provide an easy way to
+# Adjust this prompt depending on context.
+answer = self.llm_response_forget(
+⋮----
+def enrich_chunks(self, docs: List[Document]) -> List[Document]
+⋮----
+"""
+        Enrich chunks using Agent configured with self.config.chunk_enrichment_config.
+
+        We assume that the system message of the agent is set in such a way
+        that when we run
+        ```
+        prompt = self.config.chunk_enrichment_config.enrichment_prompt_fn(text)
+        result = await agent.llm_response_forget_async(prompt)
+        ```
+
+        then `result.content` will contain the augmentation to the text.
+
+        Args:
+            docs: List of document chunks to enrich
+
+        Returns:
+            List[Document]: Documents (chunks) enriched with additional text,
+                separated by a delimiter.
+        """
+⋮----
+enrichment_config = self.config.chunk_enrichment_config
+agent = ChatAgent(enrichment_config)
+⋮----
+# Process chunks in parallel using run_batch_agent_method
+questions_batch = run_batch_agent_method(
+⋮----
+# Combine original content with generated questions
+augmented_docs = []
+⋮----
+# Combine original content with questions in a structured way
+combined_content = (
+⋮----
+new_doc = doc.model_copy(
+⋮----
+def llm_rephrase_query(self, query: str) -> List[str]
+⋮----
+rephrases = self.llm_response_forget(
+⋮----
+# find similar docs using bm25 similarity:
+# these may sometimes be more likely to contain a relevant verbatim extract
+⋮----
+docs_scores = find_closest_matches_with_bm25(
+⋮----
+self.chunked_docs_clean,  # already pre-processed!
+⋮----
+# find similar docs using fuzzy matching:
+⋮----
+fuzzy_match_docs = find_fuzzy_matches_in_docs(
+⋮----
+device = self.config.cross_encoder_device
+entry = _get_cross_encoder_entry(
+pair_inputs = [(query, p.content) for p in passages]
+⋮----
+scores = entry.model.predict(pair_inputs, show_progress_bar=False)
+# Convert to [0,1] so we might could use a cutoff later.
+scores = 1.0 / (1 + np.exp(-np.array(scores)))
+# get top k scoring passages
+sorted_pairs = sorted(
+passages = [d for _, d in sorted_pairs]
+⋮----
+def rerank_with_diversity(self, passages: List[Document]) -> List[Document]
+⋮----
+"""
+        Rerank a list of items in such a way that each successive item is least similar
+        (on average) to the earlier items.
+
+        Args:
+        query (str): The query for which the passages are relevant.
+        passages (List[Document]): A list of Documents to be reranked.
+
+        Returns:
+        List[Documents]: A reranked list of Documents.
+        """
+⋮----
+emb_model = self.vecdb.embedding_model
+emb_fn = emb_model.embedding_fn()
+embs = emb_fn([p.content for p in passages])
+embs_arr = [np.array(e) for e in embs]
+indices = list(range(len(passages)))
+⋮----
+# Helper function to compute average similarity to
+# items in the current result list.
+def avg_similarity_to_result(i: int, result: List[int]) -> float
+⋮----
+return sum(  # type: ignore
+⋮----
+# copy passages to items
+result = [indices.pop(0)]  # Start with the first item.
+⋮----
+# Find the item that has the least average similarity
+# to items in the result list.
+least_similar_item = min(
+⋮----
+# return passages in order of result list
+⋮----
+def rerank_to_periphery(self, passages: List[Document]) -> List[Document]
+⋮----
+"""
+        Rerank to avoid Lost In the Middle (LIM) problem,
+        where LLMs pay more attention to items at the ends of a list,
+        rather than the middle. So we re-rank to make the best passages
+        appear at the periphery of the list.
+        https://arxiv.org/abs/2307.03172
+
+        Example reranking:
+        1 2 3 4 5 6 7 8 9 ==> 1 3 5 7 9 8 6 4 2
+
+        Args:
+            passages (List[Document]): A list of Documents to be reranked.
+
+        Returns:
+            List[Documents]: A reranked list of Documents.
+
+        """
+# Splitting items into odds and evens based on index, not value
+odds = passages[::2]
+evens = passages[1::2][::-1]
+⋮----
+# Merging them back together
+⋮----
+"""
+        In each doc's metadata, there may be a window_ids field indicating
+        the ids of the chunks around the current chunk. We use these stored
+        window_ids to retrieve the desired number
+        (self.config.n_neighbor_chunks) of neighbors
+        on either side of the current chunk.
+
+        Args:
+            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
+                to add context windows to together with their match scores.
+
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+⋮----
+# Do not add context window when there are other fields besides just
+# content and metadata, since we do not know how to set those other fields
+# for newly created docs with combined content.
+⋮----
+"""
+        Get semantic search results from vecdb.
+        Args:
+            query (str): query to search for
+            k (int): number of results to return
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+⋮----
+# Note: for dynamic filtering based on a query, users can
+# use the `temp_update` context-manager to pass in a `filter` to self.config,
+# e.g.:
+# with temp_update(self.config, {"filter": "metadata.source=='source1'"}):
+#     docs_scores = self.get_semantic_search_results(query, k=k)
+# This avoids having pass the `filter` argument to every function call
+# upstream of this one.
+# The `temp_update` context manager is defined in
+# `langroid/utils/pydantic_utils.py`
+⋮----
+"""
+        The retrieval stage in RAG: get doc-chunks that are most "relevant"
+        to the query (and possibly any proxy queries), from the document-store,
+        which currently is the vector store,
+        but in theory could be any document store, or even web-search.
+        This stage does NOT involve an LLM, and the retrieved chunks
+        could either be pre-chunked text (from the initial pre-processing stage
+        where chunks were stored in the vector store), or they could be
+        dynamically retrieved based on a window around a lexical match.
+
+        These are the steps (some optional based on config):
+        - semantic search based on vector-embedding distance, from vecdb
+        - lexical search using bm25-ranking (keyword similarity)
+        - fuzzy matching (keyword similarity)
+        - re-ranking of doc-chunks by relevance to query, using cross-encoder,
+           and pick top k
+
+        Args:
+            query: original query (assumed to be in stand-alone form)
+            query_proxies: possible rephrases, or hypothetical answer to query
+                    (e.g. for HyDE-type retrieval)
+
+        Returns:
+
+        """
+⋮----
+# if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
+# we can retrieve more docs during retrieval, and leave it to the cross-encoder
+# or RRF reranking to whittle down to self.config.n_similar_chunks
+retrieval_multiple = (
+⋮----
+docs_and_scores: List[Tuple[Document, float]] = []
+⋮----
+# sort by score descending
+docs_and_scores = sorted(
+⋮----
+# keep only docs with unique d.id()
+id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
+id2doc = {d.id(): d for d, _ in docs_and_scores}
+# make sure we get unique docs
+passages = [id2doc[id] for id in id2_rank_semantic.keys()]
+⋮----
+id2_rank_bm25 = {}
+⋮----
+# TODO: Add score threshold in config
+docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+⋮----
+# if we're not re-ranking with a cross-encoder, and have RRF enabled,
+# instead of accumulating the bm25 results into passages,
+# we collect these ranks for Reciprocal Rank Fusion down below.
+docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
+id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
+⋮----
+# eliminate duplicate ids
+passages = [id2doc[id] for id in id2doc.keys()]
+⋮----
+id2_rank_fuzzy = {}
+⋮----
+fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
+⋮----
+# if we're not re-ranking with a cross-encoder,
+# instead of accumulating the fuzzy match results into passages,
+⋮----
+fuzzy_match_doc_scores = sorted(
+id2_rank_fuzzy = {
+⋮----
+# Since we're not using cross-enocder re-ranking,
+# we need to re-order the retrieved chunks from potentially three
+# different retrieval methods (semantic, bm25, fuzzy), where the
+# similarity scores are on different scales.
+# We order the retrieved chunks using Reciprocal Rank Fusion (RRF) score.
+# Combine the ranks from each id2doc_rank_* dict into a single dict,
+# where the reciprocal rank score is the sum of
+# 1/(rank + self.config.reciprocal_rank_fusion_constant).
+# See https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking
+#
+# Note: diversity/periphery-reranking below may modify the final ranking.
+id2_reciprocal_score = {}
+⋮----
+# Use max_rank instead of infinity to avoid bias against
+# single-method docs
+max_rank = self.config.n_similar_chunks * retrieval_multiple
+rank_semantic = id2_rank_semantic.get(id_, max_rank + 1)
+rank_bm25 = id2_rank_bm25.get(id_, max_rank + 1)
+rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank + 1)
+c = self.config.reciprocal_rank_fusion_constant
+reciprocal_fusion_score = (
+⋮----
+# sort the docs by the reciprocal score, in descending order
+id2_reciprocal_score = OrderedDict(
+# each method retrieved up to retrieval_multiple * n_similar_chunks,
+# so we need to take the top n_similar_chunks from the combined list
+passages = [
+# passages must have distinct ids
+⋮----
+passages_scores = [(p, 0.0) for p in passages]
+passages_scores = self.add_context_window(passages_scores)
+passages = [p for p, _ in passages_scores]
+# now passages can potentially have a lot of doc chunks,
+# so we re-rank them using a cross-encoder scoring model
+# (provided that `reciprocal_rank_fusion` is not enabled),
+# and pick top k where k = config..n_similar_chunks
+# https://www.sbert.net/examples/applications/retrieve_rerank
+⋮----
+passages = self.rerank_with_cross_encoder(query, passages)
+⋮----
+# reorder to increase diversity among top docs
+passages = self.rerank_with_diversity(passages)
+⋮----
+# reorder so most important docs are at periphery
+# (see Lost In the Middle issue).
+passages = self.rerank_to_periphery(passages)
+⋮----
+@no_type_check
+    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]
+⋮----
+"""
+        Get list of (verbatim) extracts from doc-chunks relevant to answering a query.
+
+        These are the stages (some optional based on config):
+        - use LLM to convert query to stand-alone query
+        - optionally use LLM to rephrase query to use below
+        - optionally use LLM to generate hypothetical answer (HyDE) to use below.
+        - get_relevant_chunks(): get doc-chunks relevant to query and proxies
+        - use LLM to get relevant extracts from doc-chunks
+
+        Args:
+            query (str): query to search for
+
+        Returns:
+            query (str): stand-alone version of input query
+            List[Document]: list of relevant extracts
+
+        """
+collection_name = (
+has_vecdb_collection = (
+⋮----
+# Regardless of whether we are in conversation mode or not,
+# for relevant doc/chunk extraction, we must convert the query
+# to a standalone query to get more relevant results.
+⋮----
+query = self.llm.followup_to_standalone(self.dialog, query)
+⋮----
+proxies = []
+⋮----
+answer = self.llm_hypothetical_answer(query)
+proxies = [answer]
+⋮----
+rephrases = self.llm_rephrase_query(query)
+⋮----
+passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+⋮----
+passages = self.chunked_docs
+⋮----
+# these are async calls, one per passage; turn off streaming
+extracts = self.get_verbatim_extracts(query, passages)
+extracts = [e for e in extracts if e.content != NO_ANSWER]
+⋮----
+def remove_chunk_enrichments(self, passages: List[Document]) -> List[Document]
+⋮----
+"""Remove any enrichments (like hypothetical questions, or keywords)
+        from documents.
+        Only cleans if enrichment was enabled in config.
+
+        Args:
+            passages: List of documents to clean
+
+        Returns:
+            List of documents with only original content
+        """
+⋮----
+delimiter = self.config.chunk_enrichment_config.delimiter
+⋮----
+"""
+        Run RelevanceExtractorAgent in async/concurrent mode on passages,
+        to extract portions relevant to answering query, from each passage.
+        Args:
+            query (str): query to answer
+            passages (List[Documents]): list of passages to extract from
+
+        Returns:
+            List[Document]: list of Documents containing extracts and metadata.
+        """
+passages = self.remove_chunk_enrichments(passages)
+⋮----
+agent_cfg = self.config.relevance_extractor_config
+⋮----
+# no relevance extraction: simply return passages
+⋮----
+# Use main DocChatAgent's LLM if not provided explicitly:
+# this reduces setup burden on the user
+⋮----
+agent_cfg.llm.stream = False  # disable streaming for concurrent calls
+⋮----
+agent = RelevanceExtractorAgent(agent_cfg)
+task = Task(
+⋮----
+extracts: list[str] = run_batch_tasks(
+⋮----
+)  # type: ignore
+⋮----
+# Caution: Retain ALL other fields in the Documents (which could be
+# other than just `content` and `metadata`), while simply replacing
+# `content` with the extracted portions
+passage_extracts = []
+⋮----
+p_copy = p.model_copy()
+⋮----
+def answer_from_docs(self, query: str) -> ChatDocument
+⋮----
+"""
+        Answer query based on relevant docs from the VecDB
+
+        Args:
+            query (str): query to answer
+
+        Returns:
+            Document: answer
+        """
+response = ChatDocument(
+# query may be updated to a stand-alone version
+⋮----
+# only return extracts, skip LLM-based summary answer
+meta = dict(
+# copy metadata from first doc, unclear what to do here.
+⋮----
+metadata=ChatDocMetaData(**meta),  # type: ignore
+⋮----
+response = self.get_summary_answer(query, extracts)
+⋮----
+self.response = response  # save last response
+⋮----
+"""Summarize all docs"""
+⋮----
+full_text = "\n\n".join([d.content for d in self.original_docs])
+⋮----
+tot_tokens = self.parser.num_tokens(full_text)
+MAX_INPUT_TOKENS = (
+⋮----
+# truncate
+full_text = self.parser.tokenizer.decode(
+⋮----
+prompt = f"""
+⋮----
+summary = ChatAgent.llm_response(self, prompt)
+⋮----
+def justify_response(self) -> ChatDocument | None
+⋮----
+"""Show evidence for last response"""
+⋮----
+source = self.response.metadata.source
+</file>
+
 <file path="langroid/agent/chat_agent.py">
 console = Console()
 ⋮----
@@ -35096,923 +36467,6 @@ extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
-<file path="langroid/agent/special/doc_chat_agent.py">
-# # langroid/agent/special/doc_chat_agent.py
-"""
-Agent that supports asking queries about a set of documents, using
-retrieval-augmented generation (RAG).
-
-Functionality includes:
-- summarizing a document, with a custom instruction; see `summarize_docs`
-- asking a question about a document; see `answer_from_docs`
-
-Note: to use the sentence-transformer embeddings, you must install
-langroid with the [hf-embeddings] extra, e.g.:
-
-pip install "langroid[hf-embeddings]"
-
-"""
-⋮----
-@cache
-def apply_nest_asyncio() -> None
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-@dataclass
-class _CrossEncoderCacheEntry
-⋮----
-model: "CrossEncoder"
-lock: threading.RLock
-⋮----
-_CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
-_CROSS_ENCODER_CACHE_LOCK = threading.Lock()
-⋮----
-def _auto_cross_encoder_device() -> str
-⋮----
-mps = getattr(torch.backends, "mps", None)
-⋮----
-actual_device = device or _auto_cross_encoder_device()
-cache_key = f"{model_name}::{actual_device}"
-entry = _CROSS_ENCODER_CACHE.get(cache_key)
-⋮----
-model = CrossEncoder(model_name, device=actual_device)
-entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
-⋮----
-DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
-⋮----
-CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
-⋮----
-# Check if  module exists in sys.path
-spec = importlib.util.find_spec("sentence_transformers")
-has_sentence_transformers = spec is not None
-⋮----
-has_sentence_transformers = False
-⋮----
-hf_embed_config = SentenceTransformerEmbeddingsConfig(
-⋮----
-oai_embed_config = OpenAIEmbeddingsConfig(
-⋮----
-class ChunkEnrichmentAgentConfig(ChatAgentConfig)
-⋮----
-batch_size: int = 50
-delimiter: str = CHUNK_ENRICHMENT_DELIMITER
-enrichment_prompt_fn: Callable[[str], str] = lambda x: x
-⋮----
-class DocChatAgentConfig(ChatAgentConfig)
-⋮----
-system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
-summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
-# extra fields to include in content as key=value pairs
-# (helps retrieval for table-like data)
-add_fields_to_content: List[str] = []
-filter_fields: List[str] = []  # fields usable in filter
-retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
-extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
-filter: str | None = (
-⋮----
-None  # filter condition for various lexical/semantic search fns
-⋮----
-conversation_mode: bool = True  # accumulate message history?
-# retain retrieved context? Setting to True increases token consumption, but
-# helps LLM fix citation errors and improve accuracy of follow-up questions.
-retain_context: bool = False
-# In assistant mode, DocChatAgent receives questions from another Agent,
-# and those will already be in stand-alone form, so in this mode
-# there is no need to convert them to stand-alone form.
-assistant_mode: bool = False
-# Use LLM to generate hypothetical answer A to the query Q,
-# and use the embed(A) to find similar chunks in vecdb.
-# Referred to as HyDE in the paper:
-# https://arxiv.org/pdf/2212.10496.pdf
-# It is False by default; its benefits depends on the context.
-hypothetical_answer: bool = False
-# Optional config for chunk enrichment agent, e.g. to enrich
-# chunks with hypothetical questions, or keywords to increase
-# the "semantic surface area" of the chunks, which may help
-# improve retrieval.
-chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
-⋮----
-n_relevant_chunks: int = 3  # how many relevant chunks to retrieve finally
-n_similar_chunks: int = 3  # how many similar chunks to retrieve, by each method
-n_query_rephrases: int = 0
-n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
-n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
-use_fuzzy_match: bool = True
-use_bm25_search: bool = True
-use_reciprocal_rank_fusion: bool = False
-cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
-cross_encoder_device: Optional[str] = None  # default to CPU when None
-rerank_diversity: bool = True  # rerank to maximize diversity?
-rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
-rerank_after_adding_context: bool = True  # rerank after adding context window?
-# RRF (Reciprocal Rank Fusion) score = 1/(rank + reciprocal_rank_fusion_constant)
-# see https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works
-reciprocal_rank_fusion_constant: float = 60.0
-cache: bool = True  # cache results
-debug: bool = False
-stream: bool = True  # allow streaming where needed
-split: bool = True  # use chunking
-relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
-⋮----
-llm=None  # use the parent's llm unless explicitly set here
-⋮----
-doc_paths: List[str | bytes] = []
-default_paths: List[str] = [
-parsing: ParsingConfig = ParsingConfig(  # modify as needed
-⋮----
-chunk_size=1000,  # aim for this many tokens per chunk
-overlap=100,  # overlap between chunks
-⋮----
-# aim to have at least this many chars per chunk when
-# truncating due to punctuation
-⋮----
-discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-# set deprecated n_similar_docs to None; use n_similar_chunks above instead
-⋮----
-n_neighbor_ids=0,  # num chunk IDs to store on either side of each chunk
-⋮----
-# NOTE: PDF parsing is extremely challenging, and each library
-# has its own strengths and weaknesses.
-# Try one that works for your use case.
-# or "unstructured", "fitz", "pymupdf4llm", "pypdf"
-⋮----
-crawler_config: Optional[BaseCrawlerConfig] = TrafilaturaConfig()
-⋮----
-# Allow vecdb to be None in case we want to explicitly set it later
-vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
-⋮----
-llm: LLMConfig = OpenAIGPTConfig(
-prompts: PromptsConfig = PromptsConfig(
-⋮----
-def _append_metadata_source(orig_source: str, source: str) -> str
-⋮----
-class DocChatAgent(ChatAgent)
-⋮----
-"""
-    Agent for chatting with a collection of documents.
-    """
-⋮----
-# Handle backward compatibility for deprecated n_similar_docs
-⋮----
-# Use the deprecated value for both parameters
-⋮----
-def _clone_extra_state(self, new_agent: "ChatAgent") -> None
-⋮----
-def clear(self) -> None
-⋮----
-"""Clear the document collection and the specific collection in vecdb"""
-⋮----
-collection_name = self.vecdb.config.collection_name
-⋮----
-# Note we may have used a vecdb with a config.collection_name
-# different from the agent's config.vecdb.collection_name!!
-⋮----
-# Close the old vecdb before creating a new one
-old_vecdb = self.vecdb
-⋮----
-def ingest(self) -> None
-⋮----
-"""
-        Chunk + embed + store docs specified by self.config.doc_paths
-        """
-⋮----
-# we must be using a previously defined collection
-# But let's get all the chunked docs so we can
-# do keyword and other non-vector searches
-⋮----
-self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
-⋮----
-"""Split, ingest docs from specified paths,
-        do not add these to config.doc_paths.
-
-        Args:
-            paths: document paths, urls or byte-content of docs.
-                The bytes option is intended to support cases where a document
-                has already been read in as bytes (e.g. from an API or a database),
-                and we want to avoid having to write it to a temporary file
-                just to read it back in.
-            metadata: List of metadata dicts, one for each path.
-                If a single dict is passed in, it is used for all paths.
-            doc_type: DocumentType to use for parsing, if known.
-                MUST apply to all docs if specified.
-                This is especially useful when the `paths` are of bytes type,
-                to help with document type detection.
-        Returns:
-            List of Document objects
-        """
-⋮----
-paths = [paths]
-all_paths = paths
-paths_meta: Dict[int, Any] = {}
-urls_meta: Dict[int, Any] = {}
-idxs = range(len(all_paths))
-⋮----
-urls = [all_paths[i] for i in url_idxs]
-paths = [all_paths[i] for i in path_idxs]
-bytes_list = [all_paths[i] for i in bytes_idxs]
-⋮----
-idx2meta = {
-⋮----
-)  # appease mypy
-⋮----
-idx2meta = {p: metadata for p in idxs}
-⋮----
-idx2meta = {p: metadata.model_dump() for p in idxs}
-urls_meta = {u: idx2meta[u] for u in url_idxs}
-paths_meta = {p: idx2meta[p] for p in path_idxs}
-docs: List[Document] = []
-parser: Parser = Parser(self.config.parsing)
-⋮----
-meta = urls_meta.get(ui, {})
-loader = URLLoader(
-⋮----
-)  # type: ignore
-url_docs = loader.load()
-# update metadata of each doc with meta
-⋮----
-orig_source = d.metadata.source
-⋮----
-if len(paths) > 0:  # paths OR bytes are handled similarly
-⋮----
-meta = paths_meta.get(pi, {})
-p = all_paths[pi]
-path_docs = RepoLoader.get_documents(
-⋮----
-n_docs = len(docs)
-n_splits = self.ingest_docs(docs, split=self.config.split)
-⋮----
-n_urls = len(urls)
-n_paths = len(paths)
-⋮----
-path_reps = [p if isinstance(p, str) else "bytes" for p in paths]
-print("\n".join([u for u in urls if isinstance(u, str)]))  # appease mypy
-⋮----
-"""
-        Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
-
-        Args:
-            docs: List of Document objects
-            split: Whether to split docs into chunks. Default is True.
-                If False, docs are treated as "chunks" and are not split.
-            metadata: List of metadata dicts, one for each doc, to augment
-                whatever metadata is already in the doc.
-                [ASSUME no conflicting keys between the two metadata dicts.]
-                If a single dict is passed in, it is used for all docs.
-        """
-⋮----
-m_dict = m if isinstance(m, dict) else m.model_dump()  # type: ignore
-d.metadata = d.metadata.model_copy(update=m_dict)  # type: ignore
-⋮----
-docs = self.parser.split(docs)
-⋮----
-# we're not splitting, so we mark each doc as a chunk
-⋮----
-docs = self.enrich_chunks(docs)
-⋮----
-# If any additional fields need to be added to content,
-# add them as key=value pairs for all docs, before batching.
-# This helps retrieval for table-like data.
-# Note we need to do this at stage so that the embeddings
-# are computed on the full content with these additional fields.
-⋮----
-fields = [
-⋮----
-key_vals = extract_fields(d, fields)
-⋮----
-docs = docs[: self.config.parsing.max_chunks]
-# vecdb should take care of adding docs in batches;
-# batching can be controlled via vecdb.config.batch_size
-⋮----
-return 0  # Return 0 since no documents were added
-⋮----
-def retrieval_tool(self, msg: RetrievalTool) -> str
-⋮----
-"""Handle the RetrievalTool message"""
-⋮----
-content_doc = self.answer_from_docs(msg.query)
-⋮----
-"""
-        Convert dataframe so it is compatible with Document class:
-        - has "content" column
-        - has an "id" column to be used as Document.metadata.id
-
-        Args:
-            df: dataframe to convert
-            content: name of content column
-            metadata: list of metadata column names
-
-        Returns:
-            Tuple[pd.DataFrame, List[str]]: dataframe, metadata
-                - dataframe: dataframe with "content" column and "id" column
-                - metadata: list of metadata column names, including "id"
-        """
-⋮----
-# rename content column to "content", leave existing column intact
-df = df.rename(columns={content: "content"}, inplace=False)
-⋮----
-actual_metadata = metadata.copy()
-⋮----
-docs = dataframe_to_documents(df, content="content", metadata=metadata)
-ids = [str(d.id()) for d in docs]
-⋮----
-"""
-        Ingest a dataframe into vecdb.
-        """
-⋮----
-# When ingesting a dataframe we will no longer do any chunking,
-# so we mark each doc as a chunk.
-# TODO - revisit this since we may still want to chunk large text columns
-⋮----
-def set_filter(self, filter: str) -> None
-⋮----
-"""
-        Setup `self.chunked_docs` and `self.chunked_docs_clean`
-        based on possible filter.
-        These will be used in various non-vector-based search functions,
-        e.g. self.get_similar_chunks_bm25(), self.get_fuzzy_matches(), etc.
-
-        Args:
-            docs: List of Document objects. This is empty when we are calling this
-                method after initial doc ingestion.
-            filter: Filter condition for various lexical/semantic search fns.
-        """
-⋮----
-# no filter, so just use the docs passed in
-⋮----
-def get_field_values(self, fields: list[str]) -> Dict[str, str]
-⋮----
-"""Get string-listing of possible values of each field,
-        e.g.
-        {
-            "genre": "crime, drama, mystery, ... (10 more)",
-            "certificate": "R, PG-13, PG, R",
-        }
-        The field names may have "metadata." prefix, e.g. "metadata.genre".
-        """
-field_values: Dict[str, Set[str]] = {}
-# make empty set for each field
-⋮----
-# get all documents and accumulate possible values of each field until 10
-docs = self.vecdb.get_all_documents()  # only works for vecdbs that support this
-⋮----
-# extract fields from d
-doc_field_vals = extract_fields(d, fields)
-# the `field` returned by extract_fields may contain only the last
-# part of the field name, e.g. "genre" instead of "metadata.genre",
-# so we use the orig_field name to fill in the values
-⋮----
-# For each field make a string showing list of possible values,
-# truncate to 20 values, and if there are more, indicate how many
-# more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
-field_values_list = {}
-⋮----
-vals = list(field_values[f])
-n = len(vals)
-remaining = n - 20
-vals = vals[:20]
-⋮----
-# make a string of the values, ensure they are strings
-⋮----
-def doc_length(self, docs: List[Document]) -> int
-⋮----
-"""
-        Calc token-length of a list of docs
-        Args:
-            docs: list of Document objects
-        Returns:
-            int: number of tokens
-        """
-⋮----
-def user_docs_ingest_dialog(self) -> None
-⋮----
-"""
-        Ask user to select doc-collection, enter filenames/urls, and ingest into vecdb.
-        """
-⋮----
-n_deletes = self.vecdb.clear_empty_collections()
-collections = self.vecdb.list_collections()
-collection_name = "NEW"
-is_new_collection = False
-replace_collection = False
-⋮----
-n = len(collections)
-delete_str = (
-⋮----
-choice = Prompt.ask(
-⋮----
-confirm = Prompt.ask(
-⋮----
-collection_name = collections[int(choice) - 1]
-⋮----
-replace_collection = choice == "y"
-⋮----
-is_new_collection = True
-collection_name = Prompt.ask(
-⋮----
-default_urls_str = (
-⋮----
-inputs = get_list_from_user()
-⋮----
-inputs = self.config.default_paths
-self.config.doc_paths = inputs  # type: ignore
-⋮----
-query_str: str | None
-⋮----
-query_str = message.content
-⋮----
-query_str = message
-⋮----
-# direct query to LLM
-query_str = query_str[1:] if query_str is not None else None
-⋮----
-response = super().llm_response(query_str)
-⋮----
-response = self.answer_from_docs(query_str)
-# Citation details (if any) are NOT generated by LLM
-# (We extract these from LLM's numerical citations),
-# so render them here
-⋮----
-response = await super().llm_response_async(query_str)
-⋮----
-# Offload blocking retrieval/LLM work to default thread pool so
-# asyncio batch runners can make progress concurrently.
-response = await asyncio.to_thread(self.answer_from_docs, query_str)
-⋮----
-@staticmethod
-    def doc_string(docs: List[Document]) -> str
-⋮----
-"""
-        Generate a string representation of a list of docs.
-        Args:
-            docs: list of Document objects
-        Returns:
-            str: string representation
-        """
-contents = [d.content for d in docs]
-sources = [d.metadata.source for d in docs]
-sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
-⋮----
-"""
-        Given a question and a list of (possibly) doc snippets,
-        generate an answer if possible
-        Args:
-            question: question to answer
-            passages: list of `Document` objects each containing a possibly relevant
-                snippet, and metadata
-        Returns:
-            a `Document` object containing the answer,
-            and metadata containing source citations
-
-        """
-⋮----
-passages_str = self.doc_string(passages)
-# Substitute Q and P into the templatized prompt
-⋮----
-final_prompt = self.config.summarize_prompt.format(
-⋮----
-# Generate the final verbatim extract based on the final prompt.
-# Note this will send entire message history, plus this final_prompt
-# to the LLM, and self.message_history will be updated to include
-# 2 new LLMMessage objects:
-# one for `final_prompt`, and one for the LLM response
-⋮----
-answer_doc = super().llm_response(final_prompt)
-⋮----
-# respond with temporary context
-answer_doc = super()._llm_response_temp_context(question, final_prompt)
-⋮----
-answer_doc = super().llm_response_forget(final_prompt)
-⋮----
-final_answer = answer_doc.content.strip()
-⋮----
-# extract references like [^2], [^3], etc. from the final answer
-citations = extract_markdown_references(final_answer)
-# format the cited references as a string suitable for markdown footnote
-⋮----
-content=final_answer,  # does not contain citations
-⋮----
-source=citations_str,  # only the reference headers
-source_content=full_citations_str,  # reference + content
-⋮----
-def llm_hypothetical_answer(self, query: str) -> str
-⋮----
-# TODO: provide an easy way to
-# Adjust this prompt depending on context.
-answer = self.llm_response_forget(
-⋮----
-def enrich_chunks(self, docs: List[Document]) -> List[Document]
-⋮----
-"""
-        Enrich chunks using Agent configured with self.config.chunk_enrichment_config.
-
-        We assume that the system message of the agent is set in such a way
-        that when we run
-        ```
-        prompt = self.config.chunk_enrichment_config.enrichment_prompt_fn(text)
-        result = await agent.llm_response_forget_async(prompt)
-        ```
-
-        then `result.content` will contain the augmentation to the text.
-
-        Args:
-            docs: List of document chunks to enrich
-
-        Returns:
-            List[Document]: Documents (chunks) enriched with additional text,
-                separated by a delimiter.
-        """
-⋮----
-enrichment_config = self.config.chunk_enrichment_config
-agent = ChatAgent(enrichment_config)
-⋮----
-# Process chunks in parallel using run_batch_agent_method
-questions_batch = run_batch_agent_method(
-⋮----
-# Combine original content with generated questions
-augmented_docs = []
-⋮----
-# Combine original content with questions in a structured way
-combined_content = (
-⋮----
-new_doc = doc.model_copy(
-⋮----
-def llm_rephrase_query(self, query: str) -> List[str]
-⋮----
-rephrases = self.llm_response_forget(
-⋮----
-# find similar docs using bm25 similarity:
-# these may sometimes be more likely to contain a relevant verbatim extract
-⋮----
-docs_scores = find_closest_matches_with_bm25(
-⋮----
-self.chunked_docs_clean,  # already pre-processed!
-⋮----
-# find similar docs using fuzzy matching:
-⋮----
-fuzzy_match_docs = find_fuzzy_matches_in_docs(
-⋮----
-device = self.config.cross_encoder_device
-entry = _get_cross_encoder_entry(
-pair_inputs = [(query, p.content) for p in passages]
-⋮----
-scores = entry.model.predict(pair_inputs, show_progress_bar=False)
-# Convert to [0,1] so we might could use a cutoff later.
-scores = 1.0 / (1 + np.exp(-np.array(scores)))
-# get top k scoring passages
-sorted_pairs = sorted(
-passages = [d for _, d in sorted_pairs]
-⋮----
-def rerank_with_diversity(self, passages: List[Document]) -> List[Document]
-⋮----
-"""
-        Rerank a list of items in such a way that each successive item is least similar
-        (on average) to the earlier items.
-
-        Args:
-        query (str): The query for which the passages are relevant.
-        passages (List[Document]): A list of Documents to be reranked.
-
-        Returns:
-        List[Documents]: A reranked list of Documents.
-        """
-⋮----
-emb_model = self.vecdb.embedding_model
-emb_fn = emb_model.embedding_fn()
-embs = emb_fn([p.content for p in passages])
-embs_arr = [np.array(e) for e in embs]
-indices = list(range(len(passages)))
-⋮----
-# Helper function to compute average similarity to
-# items in the current result list.
-def avg_similarity_to_result(i: int, result: List[int]) -> float
-⋮----
-return sum(  # type: ignore
-⋮----
-# copy passages to items
-result = [indices.pop(0)]  # Start with the first item.
-⋮----
-# Find the item that has the least average similarity
-# to items in the result list.
-least_similar_item = min(
-⋮----
-# return passages in order of result list
-⋮----
-def rerank_to_periphery(self, passages: List[Document]) -> List[Document]
-⋮----
-"""
-        Rerank to avoid Lost In the Middle (LIM) problem,
-        where LLMs pay more attention to items at the ends of a list,
-        rather than the middle. So we re-rank to make the best passages
-        appear at the periphery of the list.
-        https://arxiv.org/abs/2307.03172
-
-        Example reranking:
-        1 2 3 4 5 6 7 8 9 ==> 1 3 5 7 9 8 6 4 2
-
-        Args:
-            passages (List[Document]): A list of Documents to be reranked.
-
-        Returns:
-            List[Documents]: A reranked list of Documents.
-
-        """
-# Splitting items into odds and evens based on index, not value
-odds = passages[::2]
-evens = passages[1::2][::-1]
-⋮----
-# Merging them back together
-⋮----
-"""
-        In each doc's metadata, there may be a window_ids field indicating
-        the ids of the chunks around the current chunk. We use these stored
-        window_ids to retrieve the desired number
-        (self.config.n_neighbor_chunks) of neighbors
-        on either side of the current chunk.
-
-        Args:
-            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
-                to add context windows to together with their match scores.
-
-        Returns:
-            List[Tuple[Document, float]]: List of (Document, score) tuples.
-        """
-⋮----
-# Do not add context window when there are other fields besides just
-# content and metadata, since we do not know how to set those other fields
-# for newly created docs with combined content.
-⋮----
-"""
-        Get semantic search results from vecdb.
-        Args:
-            query (str): query to search for
-            k (int): number of results to return
-        Returns:
-            List[Tuple[Document, float]]: List of (Document, score) tuples.
-        """
-⋮----
-# Note: for dynamic filtering based on a query, users can
-# use the `temp_update` context-manager to pass in a `filter` to self.config,
-# e.g.:
-# with temp_update(self.config, {"filter": "metadata.source=='source1'"}):
-#     docs_scores = self.get_semantic_search_results(query, k=k)
-# This avoids having pass the `filter` argument to every function call
-# upstream of this one.
-# The `temp_update` context manager is defined in
-# `langroid/utils/pydantic_utils.py`
-⋮----
-"""
-        The retrieval stage in RAG: get doc-chunks that are most "relevant"
-        to the query (and possibly any proxy queries), from the document-store,
-        which currently is the vector store,
-        but in theory could be any document store, or even web-search.
-        This stage does NOT involve an LLM, and the retrieved chunks
-        could either be pre-chunked text (from the initial pre-processing stage
-        where chunks were stored in the vector store), or they could be
-        dynamically retrieved based on a window around a lexical match.
-
-        These are the steps (some optional based on config):
-        - semantic search based on vector-embedding distance, from vecdb
-        - lexical search using bm25-ranking (keyword similarity)
-        - fuzzy matching (keyword similarity)
-        - re-ranking of doc-chunks by relevance to query, using cross-encoder,
-           and pick top k
-
-        Args:
-            query: original query (assumed to be in stand-alone form)
-            query_proxies: possible rephrases, or hypothetical answer to query
-                    (e.g. for HyDE-type retrieval)
-
-        Returns:
-
-        """
-⋮----
-# if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
-# we can retrieve more docs during retrieval, and leave it to the cross-encoder
-# or RRF reranking to whittle down to self.config.n_similar_chunks
-retrieval_multiple = (
-⋮----
-docs_and_scores: List[Tuple[Document, float]] = []
-⋮----
-# sort by score descending
-docs_and_scores = sorted(
-⋮----
-# keep only docs with unique d.id()
-id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
-id2doc = {d.id(): d for d, _ in docs_and_scores}
-# make sure we get unique docs
-passages = [id2doc[id] for id in id2_rank_semantic.keys()]
-⋮----
-id2_rank_bm25 = {}
-⋮----
-# TODO: Add score threshold in config
-docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
-⋮----
-# if we're not re-ranking with a cross-encoder, and have RRF enabled,
-# instead of accumulating the bm25 results into passages,
-# we collect these ranks for Reciprocal Rank Fusion down below.
-docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
-id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
-⋮----
-# eliminate duplicate ids
-passages = [id2doc[id] for id in id2doc.keys()]
-⋮----
-id2_rank_fuzzy = {}
-⋮----
-fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
-⋮----
-# if we're not re-ranking with a cross-encoder,
-# instead of accumulating the fuzzy match results into passages,
-⋮----
-fuzzy_match_doc_scores = sorted(
-id2_rank_fuzzy = {
-⋮----
-# Since we're not using cross-enocder re-ranking,
-# we need to re-order the retrieved chunks from potentially three
-# different retrieval methods (semantic, bm25, fuzzy), where the
-# similarity scores are on different scales.
-# We order the retrieved chunks using Reciprocal Rank Fusion (RRF) score.
-# Combine the ranks from each id2doc_rank_* dict into a single dict,
-# where the reciprocal rank score is the sum of
-# 1/(rank + self.config.reciprocal_rank_fusion_constant).
-# See https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking
-#
-# Note: diversity/periphery-reranking below may modify the final ranking.
-id2_reciprocal_score = {}
-⋮----
-# Use max_rank instead of infinity to avoid bias against
-# single-method docs
-max_rank = self.config.n_similar_chunks * retrieval_multiple
-rank_semantic = id2_rank_semantic.get(id_, max_rank + 1)
-rank_bm25 = id2_rank_bm25.get(id_, max_rank + 1)
-rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank + 1)
-c = self.config.reciprocal_rank_fusion_constant
-reciprocal_fusion_score = (
-⋮----
-# sort the docs by the reciprocal score, in descending order
-id2_reciprocal_score = OrderedDict(
-# each method retrieved up to retrieval_multiple * n_similar_chunks,
-# so we need to take the top n_similar_chunks from the combined list
-passages = [
-# passages must have distinct ids
-⋮----
-passages_scores = [(p, 0.0) for p in passages]
-passages_scores = self.add_context_window(passages_scores)
-passages = [p for p, _ in passages_scores]
-# now passages can potentially have a lot of doc chunks,
-# so we re-rank them using a cross-encoder scoring model
-# (provided that `reciprocal_rank_fusion` is not enabled),
-# and pick top k where k = config..n_similar_chunks
-# https://www.sbert.net/examples/applications/retrieve_rerank
-⋮----
-passages = self.rerank_with_cross_encoder(query, passages)
-⋮----
-# reorder to increase diversity among top docs
-passages = self.rerank_with_diversity(passages)
-⋮----
-# reorder so most important docs are at periphery
-# (see Lost In the Middle issue).
-passages = self.rerank_to_periphery(passages)
-⋮----
-@no_type_check
-    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]
-⋮----
-"""
-        Get list of (verbatim) extracts from doc-chunks relevant to answering a query.
-
-        These are the stages (some optional based on config):
-        - use LLM to convert query to stand-alone query
-        - optionally use LLM to rephrase query to use below
-        - optionally use LLM to generate hypothetical answer (HyDE) to use below.
-        - get_relevant_chunks(): get doc-chunks relevant to query and proxies
-        - use LLM to get relevant extracts from doc-chunks
-
-        Args:
-            query (str): query to search for
-
-        Returns:
-            query (str): stand-alone version of input query
-            List[Document]: list of relevant extracts
-
-        """
-collection_name = (
-has_vecdb_collection = (
-⋮----
-# Regardless of whether we are in conversation mode or not,
-# for relevant doc/chunk extraction, we must convert the query
-# to a standalone query to get more relevant results.
-⋮----
-query = self.llm.followup_to_standalone(self.dialog, query)
-⋮----
-proxies = []
-⋮----
-answer = self.llm_hypothetical_answer(query)
-proxies = [answer]
-⋮----
-rephrases = self.llm_rephrase_query(query)
-⋮----
-passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
-⋮----
-passages = self.chunked_docs
-⋮----
-# these are async calls, one per passage; turn off streaming
-extracts = self.get_verbatim_extracts(query, passages)
-extracts = [e for e in extracts if e.content != NO_ANSWER]
-⋮----
-def remove_chunk_enrichments(self, passages: List[Document]) -> List[Document]
-⋮----
-"""Remove any enrichments (like hypothetical questions, or keywords)
-        from documents.
-        Only cleans if enrichment was enabled in config.
-
-        Args:
-            passages: List of documents to clean
-
-        Returns:
-            List of documents with only original content
-        """
-⋮----
-delimiter = self.config.chunk_enrichment_config.delimiter
-⋮----
-"""
-        Run RelevanceExtractorAgent in async/concurrent mode on passages,
-        to extract portions relevant to answering query, from each passage.
-        Args:
-            query (str): query to answer
-            passages (List[Documents]): list of passages to extract from
-
-        Returns:
-            List[Document]: list of Documents containing extracts and metadata.
-        """
-passages = self.remove_chunk_enrichments(passages)
-⋮----
-agent_cfg = self.config.relevance_extractor_config
-⋮----
-# no relevance extraction: simply return passages
-⋮----
-# Use main DocChatAgent's LLM if not provided explicitly:
-# this reduces setup burden on the user
-⋮----
-agent_cfg.llm.stream = False  # disable streaming for concurrent calls
-⋮----
-agent = RelevanceExtractorAgent(agent_cfg)
-task = Task(
-⋮----
-extracts: list[str] = run_batch_tasks(
-⋮----
-)  # type: ignore
-⋮----
-# Caution: Retain ALL other fields in the Documents (which could be
-# other than just `content` and `metadata`), while simply replacing
-# `content` with the extracted portions
-passage_extracts = []
-⋮----
-p_copy = p.model_copy()
-⋮----
-def answer_from_docs(self, query: str) -> ChatDocument
-⋮----
-"""
-        Answer query based on relevant docs from the VecDB
-
-        Args:
-            query (str): query to answer
-
-        Returns:
-            Document: answer
-        """
-response = ChatDocument(
-# query may be updated to a stand-alone version
-⋮----
-# only return extracts, skip LLM-based summary answer
-meta = dict(
-# copy metadata from first doc, unclear what to do here.
-⋮----
-metadata=ChatDocMetaData(**meta),  # type: ignore
-⋮----
-response = self.get_summary_answer(query, extracts)
-⋮----
-self.response = response  # save last response
-⋮----
-"""Summarize all docs"""
-⋮----
-full_text = "\n\n".join([d.content for d in self.original_docs])
-⋮----
-tot_tokens = self.parser.num_tokens(full_text)
-MAX_INPUT_TOKENS = (
-⋮----
-# truncate
-full_text = self.parser.tokenizer.decode(
-⋮----
-prompt = f"""
-⋮----
-summary = ChatAgent.llm_response(self, prompt)
-⋮----
-def justify_response(self) -> ChatDocument | None
-⋮----
-"""Show evidence for last response"""
-⋮----
-source = self.response.metadata.source
-</file>
-
 <file path="langroid/language_models/model_info.py">
 class ModelProvider(str, Enum)
 ⋮----
@@ -36159,7 +36613,7 @@ def _get_model_info(model: str | ModelName) -> ModelInfo | None
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.14.3
+  rev: v0.14.4
   hooks:
     - id: ruff
 </file>
@@ -37134,7 +37588,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.16"
+version = "0.59.17"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

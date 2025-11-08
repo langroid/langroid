@@ -216,6 +216,87 @@ the pattern of usage with Langroid will remain the same.
 
 ---
 
+## Best Practice: Use a server factory for stdio transports
+
+Starting with fastmcp 2.13 and mcp 1.21, stdio transports (e.g., `StdioTransport`,
+`NpxStdioTransport`, `UvxStdioTransport`) are effectively single‑use. Reusing the
+same transport instance across multiple connections can lead to errors such as
+`anyio.ClosedResourceError` during session initialization.
+
+To make your code robust and future‑proof, pass a zero‑argument server factory to
+Langroid’s MCP helpers. A “server factory” is simply a `lambda` or function that
+returns a fresh server spec or transport each time.
+
+Benefits:
+
+- Fresh, reliable connections on every call (no reuse of closed transports).
+- Works across fastmcp/mcp versions without subtle lifecycle issues.
+- Enables concurrent calls safely (each call uses its own subprocess/session).
+- Keeps your decorator ergonomics and `handle_async` overrides unchanged.
+
+You can use a factory with both the decorator and the async helpers:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp import mcp_tool, get_tool_async
+
+# 1) Decorator style
+@mcp_tool(lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
+          "Grep")
+class GrepTool(lr.ToolMessage):
+    async def handle_async(self) -> str:
+        # pre/post-process around the raw MCP call
+        result = await self.call_tool_async()
+        return f"<GrepResult>\n{result}\n</GrepResult>"
+
+# 2) Programmatic style
+BaseGrep = await get_tool_async(
+    lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
+    "Grep",
+)
+```
+
+Notes:
+
+- Passing a concrete transport instance still works: Langroid will try to clone
+  it internally; however, a factory is the most reliable across environments.
+- For network transports (e.g., `SSETransport`), a factory is optional; you can
+  continue passing the transport instance directly.
+
+---
+
+## Output-schema validation: return structured content when required
+
+Newer `mcp` clients validate tool outputs against the tool’s output schema. If a
+tool declares a structured output, returning plain text may raise a runtime
+error. Some servers (for example, Claude Code’s Grep) expose an argument like
+`output_mode` that controls the shape of the response.
+
+Recommendations:
+
+- Prefer structured modes when a tool declares an output schema.
+- If available, set options like `output_mode="structured"` (or a documented
+  structured variant such as `"files_with_matches"`) in your tool’s
+  `handle_async` before calling `await self.call_tool_async()`.
+
+Example tweak in a decorator-based tool:
+
+```python
+@mcp_tool(lambda: StdioTransport(command="claude", args=["mcp", "serve"]),
+          "Grep")
+class GrepTool(lr.ToolMessage):
+    async def handle_async(self) -> str:
+        # Ensure a structured response if the server supports it
+        if hasattr(self, "output_mode"):
+            self.output_mode = "structured"
+        return await self.call_tool_async()
+```
+
+If the server does not provide such a switch, follow its documentation for
+returning data that matches its declared output schema.
+
+---
+
 ## 2. Create Langroid Tools declaratively using the `@mcp_tool` decorator
 
 The above examples showed how you can create Langroid tools programmatically using
@@ -352,5 +433,4 @@ async def main():
     await task.run_async()
 ```
 
-See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full 
-working example of this. 
+See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full working example of this. 
