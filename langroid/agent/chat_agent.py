@@ -697,6 +697,28 @@ class ChatAgent(Agent):
                     include_defaults=include_defaults,
                 )
             return None
+
+        # Validate that use/handle are booleans, not accidentally passed tool classes
+        if isclass(use) or isclass(handle):
+            param = "use" if isclass(use) else "handle"
+            raise TypeError(
+                textwrap.dedent(
+                    f"""
+                    Invalid arguments to enable_message().
+                    It appears you passed multiple ToolMessage classes as separate
+                    arguments instead of as a list.
+
+                    Correct usage:
+                        agent.enable_message([Tool1, Tool2, Tool3])
+
+                    Incorrect usage:
+                        agent.enable_message(Tool1, Tool2, Tool3)
+
+                    The '{param}' parameter must be a boolean, not a class.
+                    """
+                )
+            )
+
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
         if isinstance(message_class, XMLToolMessage):

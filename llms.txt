@@ -59453,6 +59453,433 @@ getting split.
         print()
 </file>
 
+<file path="langroid/parsing/parser.py">
+import logging
+import re
+from enum import Enum
+from typing import Any, Dict, List, Literal, Optional
+
+import tiktoken
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from langroid.mytypes import Document
+from langroid.parsing.md_parser import (
+    MarkdownChunkConfig,
+    chunk_markdown,
+    count_words,
+)
+from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
+from langroid.utils.object_registry import ObjectRegistry
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+
+
+class Splitter(str, Enum):
+    TOKENS = "tokens"
+    PARA_SENTENCE = "para_sentence"
+    SIMPLE = "simple"
+    # "structure-aware" splitting with chunks enriched by header info
+    MARKDOWN = "markdown"
+
+
+class BaseParsingConfig(BaseSettings):
+    """Base class for document parsing configurations."""
+
+    library: str
+
+    model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
+
+
+class LLMPdfParserConfig(BaseSettings):
+    """Configuration for LLM-based parsing."""
+
+    model_name: str = "gemini/gemini-2.0-flash"  # Default model
+    max_tokens: Optional[int] = None
+    split_on_page: Optional[bool] = True
+    requests_per_minute: Optional[int] = 5
+    timeout: int = 60
+    prompt: str = ""  # override with a domain-specific prompt
+    system_prompt: str = ""  # override with a domain-specific system prompt
+
+
+class MarkerConfig(BaseSettings):
+    """Configuration for Markitdown-based parsing."""
+
+    config_dict: Dict[str, Any] = {}
+
+
+class PdfParsingConfig(BaseParsingConfig):
+    library: Literal[
+        "fitz",
+        "pymupdf4llm",
+        "docling",
+        "pypdf",
+        "unstructured",
+        "pdf2image",
+        "markitdown",
+        "llm-pdf-parser",
+        "marker",
+    ] = "pymupdf4llm"
+    llm_parser_config: Optional[LLMPdfParserConfig] = None
+    marker_config: Optional[MarkerConfig] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure correct config is set based on library selection."""
+        library = values.get("library")
+
+        if library == "llm-pdf-parser":
+            values.setdefault("llm_parser_config", LLMPdfParserConfig())
+        else:
+            values["llm_parser_config"] = None
+
+        if library == "marker":
+            values.setdefault("marker_config", MarkerConfig())
+        else:
+            values["marker_config"] = None
+
+        return values
+
+
+class DocxParsingConfig(BaseSettings):
+    library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
+
+
+class DocParsingConfig(BaseSettings):
+    library: Literal["unstructured"] = "unstructured"
+
+
+class MarkitdownPPTXParsingConfig(BaseSettings):
+    library: Literal["markitdown"] = "markitdown"
+
+
+class MarkitdownXLSXParsingConfig(BaseSettings):
+    library: Literal["markitdown"] = "markitdown"
+
+
+class MarkitdownXLSParsingConfig(BaseSettings):
+    library: Literal["markitdown"] = "markitdown"
+
+
+class ParsingConfig(BaseSettings):
+    splitter: str = Splitter.MARKDOWN
+    chunk_by_page: bool = False  # split by page?
+    chunk_size: int = 200  # aim for this many tokens per chunk
+    chunk_size_variation: float = 0.30  # max variation from chunk_size
+    overlap: int = 50  # overlap between chunks
+    max_chunks: int = 10_000
+
+    @field_validator("chunk_size", mode="before")
+    @classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int:
+        """Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+        if isinstance(v, float):
+            return int(v)
+        return int(v)
+
+    # offset to subtract from page numbers:
+    # e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
+    page_number_offset: int = 0
+    # aim to have at least this many chars per chunk when truncating due to punctuation
+    min_chunk_chars: int = 350
+    discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
+    n_similar_docs: Optional[int] = None  # deprecated
+    n_neighbor_ids: int = 5  # window size to store around each chunk
+    separators: List[str] = ["\n\n", "\n", " ", ""]
+    token_encoding_model: str = "text-embedding-3-small"
+    pdf: PdfParsingConfig = PdfParsingConfig()
+    docx: DocxParsingConfig = DocxParsingConfig()
+    doc: DocParsingConfig = DocParsingConfig()
+    pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
+    xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
+    xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
+
+
+class Parser:
+    def __init__(self, config: ParsingConfig):
+        self.config = config
+        try:
+            self.tokenizer = tiktoken.encoding_for_model(config.token_encoding_model)
+        except Exception:
+            self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
+
+    def num_tokens(self, text: str) -> int:
+        if self.config.splitter == Splitter.MARKDOWN:
+            return count_words(text)  # simple count based on whitespace-split
+        tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
+        return len(tokens)
+
+    def truncate_tokens(self, text: str, max_tokens: int) -> str:
+        tokens = self.tokenizer.encode(text)
+        if len(tokens) <= max_tokens:
+            return text
+        return self.tokenizer.decode(tokens[:max_tokens])
+
+    def add_window_ids(self, chunks: List[Document]) -> None:
+        """Chunks may belong to multiple docs, but for each doc,
+        they appear consecutively. Add window_ids in metadata"""
+
+        # discard empty chunks
+        chunks = [c for c in chunks if c.content.strip() != ""]
+        if len(chunks) == 0:
+            return
+        # The original metadata.id (if any) is ignored since it will be same for all
+        # chunks and is useless. We want a distinct id for each chunk.
+        # ASSUMPTION: all chunks c of a doc have same c.metadata.id !
+        orig_ids = [c.metadata.id for c in chunks]
+        ids = [ObjectRegistry.new_id() for c in chunks]
+        id2chunk = {id: c for id, c in zip(ids, chunks)}
+
+        # group the ids by orig_id
+        # (each distinct orig_id refers to a different document)
+        orig_id_to_ids: Dict[str, List[str]] = {}
+        for orig_id, id in zip(orig_ids, ids):
+            if orig_id not in orig_id_to_ids:
+                orig_id_to_ids[orig_id] = []
+            orig_id_to_ids[orig_id].append(id)
+
+        # now each orig_id maps to a sequence of ids within a single doc
+
+        k = self.config.n_neighbor_ids
+        for orig, ids in orig_id_to_ids.items():
+            # ids are consecutive chunks in a single doc
+            n = len(ids)
+            window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
+            for i, _ in enumerate(ids):
+                c = id2chunk[ids[i]]
+                c.metadata.window_ids = window_ids[i]
+                c.metadata.id = ids[i]
+                c.metadata.is_chunk = True
+
+    def split_simple(self, docs: List[Document]) -> List[Document]:
+        if len(self.config.separators) == 0:
+            raise ValueError("Must have at least one separator")
+        final_docs = []
+
+        for d in docs:
+            if d.content.strip() == "":
+                continue
+            chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
+            # note we are ensuring we COPY the document metadata into each chunk,
+            # which ensures all chunks of a given doc have same metadata
+            # (and in particular same metadata.id, which is important later for
+            # add_window_ids)
+            chunk_docs = [
+                Document(
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
+                )
+                for c in chunks
+                if c.strip() != ""
+            ]
+            self.add_window_ids(chunk_docs)
+            final_docs += chunk_docs
+        return final_docs
+
+    def split_para_sentence(self, docs: List[Document]) -> List[Document]:
+        chunks = docs
+        while True:
+            un_splittables = 0
+            split_chunks = []
+            for c in chunks:
+                if c.content.strip() == "":
+                    continue
+                if self.num_tokens(c.content) <= 1.3 * self.config.chunk_size:
+                    # small chunk: no need to split
+                    split_chunks.append(c)
+                    continue
+                splits = self._split_para_sentence_once([c])
+                un_splittables += len(splits) == 1
+                split_chunks += splits
+            if len(split_chunks) == len(chunks):
+                if un_splittables > 0:
+                    max_len = max([self.num_tokens(p.content) for p in chunks])
+                    logger.warning(
+                        f"""
+                        Unable to split {un_splittables} chunks
+                        using chunk_size = {self.config.chunk_size}.
+                        Max chunk size is {max_len} tokens.
+                        """
+                    )
+                break  # we won't be able to shorten them with current settings
+            chunks = split_chunks.copy()
+
+        self.add_window_ids(chunks)
+        return chunks
+
+    def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]:
+        final_chunks = []
+        for d in docs:
+            if d.content.strip() == "":
+                continue
+            chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
+            # note we are ensuring we COPY the document metadata into each chunk,
+            # which ensures all chunks of a given doc have same metadata
+            # (and in particular same metadata.id, which is important later for
+            # add_window_ids)
+            chunk_docs = [
+                Document(
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
+                )
+                for c in chunks
+                if c.strip() != ""
+            ]
+            final_chunks += chunk_docs
+
+        return final_chunks
+
+    def split_chunk_tokens(self, docs: List[Document]) -> List[Document]:
+        final_docs = []
+        for d in docs:
+            if self.config.splitter == Splitter.MARKDOWN:
+                chunks = chunk_markdown(
+                    d.content,
+                    MarkdownChunkConfig(
+                        # apply rough adjustment factor to convert from tokens to words,
+                        # which is what the markdown chunker uses
+                        chunk_size=int(self.config.chunk_size * 0.75),
+                        overlap_tokens=int(self.config.overlap * 0.75),
+                        variation_percent=self.config.chunk_size_variation,
+                        rollup=True,
+                    ),
+                )
+            else:
+                chunks = self.chunk_tokens(d.content)
+            # note we are ensuring we COPY the document metadata into each chunk,
+            # which ensures all chunks of a given doc have same metadata
+            # (and in particular same metadata.id, which is important later for
+            # add_window_ids)
+            chunk_docs = [
+                Document(
+                    content=c,
+                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
+                )
+                for c in chunks
+                if c.strip() != ""
+            ]
+            self.add_window_ids(chunk_docs)
+            final_docs += chunk_docs
+        return final_docs
+
+    def chunk_tokens(
+        self,
+        text: str,
+    ) -> List[str]:
+        """
+        Split a text into chunks of ~CHUNK_SIZE tokens,
+        based on punctuation and newline boundaries.
+        Adapted from
+        https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/chunks.py
+
+        Args:
+            text: The text to split into chunks.
+
+        Returns:
+            A list of text chunks, each of which is a string of tokens
+            roughly self.config.chunk_size tokens long.
+        """
+        # Return an empty list if the text is empty or whitespace
+        if not text or text.isspace():
+            return []
+
+        # Tokenize the text
+        tokens = self.tokenizer.encode(text, disallowed_special=())
+
+        # Initialize an empty list of chunks
+        chunks = []
+
+        # Initialize a counter for the number of chunks
+        num_chunks = 0
+
+        # Loop until all tokens are consumed
+        while tokens and num_chunks < self.config.max_chunks:
+            # Take the first chunk_size tokens as a chunk
+            chunk = tokens[: self.config.chunk_size]
+
+            # Decode the chunk into text
+            chunk_text = self.tokenizer.decode(chunk)
+
+            # Skip the chunk if it is empty or whitespace
+            if not chunk_text or chunk_text.isspace():
+                # Remove the tokens corresponding to the chunk text
+                # from remaining tokens
+                tokens = tokens[len(chunk) :]
+                # Continue to the next iteration of the loop
+                continue
+
+            # Find the last period or punctuation mark in the chunk
+            punctuation_matches = [
+                (m.start(), m.group())
+                for m in re.finditer(r"(?:[.!?][\s\n]|\n)", chunk_text)
+            ]
+
+            last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
+
+            # If there is a punctuation mark, and the last punctuation index is
+            # after MIN_CHUNK_SIZE_CHARS
+            if (
+                last_punctuation != -1
+                and last_punctuation > self.config.min_chunk_chars
+            ):
+                # Truncate the chunk text at the punctuation mark
+                chunk_text = chunk_text[: last_punctuation + 1]
+
+            # Replace redundant (3 or more) newlines with 2 newlines to preser
+            # paragraph separation!
+            # But do NOT strip leading/trailing whitespace, to preserve formatting
+            # (e.g. code blocks, or in case we want to stitch chunks back together)
+            chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
+
+            if len(chunk_text_to_append) > self.config.discard_chunk_chars:
+                # Append the chunk text to the list of chunks
+                chunks.append(chunk_text_to_append)
+
+            # Remove the tokens corresponding to the chunk text
+            # from the remaining tokens
+            tokens = tokens[
+                len(self.tokenizer.encode(chunk_text, disallowed_special=())) :
+            ]
+
+            # Increment the number of chunks
+            num_chunks += 1
+
+        # There may be remaining tokens, but we discard them
+        # since we have already reached the maximum number of chunks
+
+        return chunks
+
+    def split(self, docs: List[Document]) -> List[Document]:
+        if len(docs) == 0:
+            return []
+        # create ids in metadata of docs if absent:
+        # we need this to distinguish docs later in add_window_ids
+        for d in docs:
+            if d.metadata.id in [None, ""]:
+                d.metadata.id = ObjectRegistry.new_id()
+        # some docs are already splits, so don't split them further!
+        chunked_docs = [d for d in docs if d.metadata.is_chunk]
+        big_docs = [d for d in docs if not d.metadata.is_chunk]
+        if len(big_docs) == 0:
+            return chunked_docs
+        match self.config.splitter:
+            case Splitter.MARKDOWN | Splitter.TOKENS:
+                big_doc_chunks = self.split_chunk_tokens(big_docs)
+            case Splitter.PARA_SENTENCE:
+                big_doc_chunks = self.split_para_sentence(big_docs)
+            case Splitter.SIMPLE:
+                big_doc_chunks = self.split_simple(big_docs)
+            case _:
+                raise ValueError(f"Unknown splitter: {self.config.splitter}")
+
+        return chunked_docs + big_doc_chunks
+</file>
+
 <file path="langroid/parsing/repo_loader.py">
 import itertools
 import json
@@ -67022,6 +67449,1377 @@ if __name__ == "__main__":
         test_sequential_rag_no_race_condition()
     except Exception as e:
         print(f"\n❌ Control test failed: {e}")
+</file>
+
+<file path="tests/main/test_doc_chat_agent.py">
+import os
+import warnings
+from types import SimpleNamespace
+from typing import List, Optional
+
+import pandas as pd
+import pytest
+
+from langroid import ChatDocument
+from langroid.agent.batch import run_batch_task_gen, run_batch_tasks
+from langroid.agent.chat_agent import ChatAgent
+from langroid.agent.special.doc_chat_agent import (
+    CHUNK_ENRICHMENT_DELIMITER,
+    ChunkEnrichmentAgentConfig,
+    DocChatAgent,
+    DocChatAgentConfig,
+    RetrievalTool,
+    _append_metadata_source,
+)
+from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
+from langroid.agent.task import Task
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.language_models.mock_lm import MockLMConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.mytypes import DocMetaData, Document, Entity
+from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.parsing.utils import generate_random_text
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE
+from langroid.utils.output.citations import extract_markdown_references
+from langroid.utils.system import rmdir
+from langroid.vector_store.base import VectorStore, VectorStoreConfig
+from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
+from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
+
+embed_cfg = OpenAIEmbeddingsConfig(
+    model_type="openai",
+)
+
+
+class MyDocMetaData(DocMetaData):
+    id: str
+
+
+class MyDoc(Document):
+    content: str
+    metadata: MyDocMetaData
+
+
+documents: List[Document] = [
+    Document(
+        content="""
+        In the year 2050, GPT10 was released. 
+        
+        In 2057, paperclips were seen all over the world. 
+        
+        Global warming was solved in 2060. 
+        
+        In 2045, the Tour de France was still going on.
+        They were still using bicycles. 
+        
+        There was one more ice age in 2040.
+        """,
+        metadata=DocMetaData(source="wikipedia"),
+    ),
+    Document(
+        content="""
+    Winegarten is the capital of a new country called NeoGlobal.
+        
+    Charlie Foster was a great comedian.
+        
+    Charlie Foster was born in 1889.
+        
+    Beethoven was born in 1770.
+        
+    In the year 2050, all countries merged into Lithuania.
+    """,
+        metadata=DocMetaData(source="almanac"),
+    ),
+]
+
+QUERY_EXPECTED_PAIRS = [
+    ("what is the capital of NeoGlobal?", "Winegarten"),
+    ("Who was Charlie Foster?", "comedian"),
+    ("When was global warming solved?", "2060"),
+    ("What do we know about paperclips?", "2057"),
+]
+
+for _ in range(100):
+    documents.append(
+        Document(
+            content=generate_random_text(5),
+            metadata=DocMetaData(source="random"),
+        )
+    )
+
+
+@pytest.fixture(scope="function")
+def vecdb(test_settings: Settings, request) -> VectorStore:
+    set_global(test_settings)
+    if request.param == "qdrant_local":
+        qd_dir = ":memory:"
+        qd_cfg = QdrantDBConfig(
+            cloud=False,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=qd_dir,
+            embedding=embed_cfg,
+        )
+        qd = QdrantDB(qd_cfg)
+        yield qd
+        return
+
+    if request.param == "qdrant_cloud":
+        qd_dir = ".qdrant/cloud/test-" + embed_cfg.model_type
+        qd_cfg_cloud = QdrantDBConfig(
+            cloud=True,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=qd_dir,
+            embedding=embed_cfg,
+        )
+        qd_cloud = QdrantDB(qd_cfg_cloud)
+        yield qd_cloud
+        return
+
+    if request.param == "chroma":
+        cd_dir = ".chroma/" + embed_cfg.model_type
+        rmdir(cd_dir)
+        cd_cfg = ChromaDBConfig(
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=cd_dir,
+            embedding=embed_cfg,
+        )
+        cd = ChromaDB(cd_cfg)
+        yield cd
+        rmdir(cd_dir)
+        return
+
+    if request.param == "lancedb":
+        ldb_dir = ".lancedb/data/" + embed_cfg.model_type
+        rmdir(ldb_dir)
+        ldb_cfg = LanceDBConfig(
+            cloud=False,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=ldb_dir,
+            embedding=embed_cfg,
+            document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
+        )
+        ldb = LanceDB(ldb_cfg)
+        yield ldb
+        rmdir(ldb_dir)
+        return
+
+
+class _TestDocChatAgentConfig(DocChatAgentConfig):
+    cross_encoder_reranking_model: str = ""
+    n_query_rephrases: int = 0
+    debug: bool = False
+    stream: bool = True  # allow streaming where needed
+    conversation_mode: bool = True
+    vecdb: VectorStoreConfig | None = None
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        stream=True,
+        cache_config=RedisCacheConfig(fake=False),
+        use_chat_for_completion=True,
+    )
+
+    n_similar_chunks: int = 3
+    n_relevant_chunks: int = 3
+    parsing: ParsingConfig = ParsingConfig(
+        splitter=Splitter.SIMPLE,
+    )
+
+    prompts: PromptsConfig = PromptsConfig(
+        max_tokens=1000,
+    )
+
+
+config = _TestDocChatAgentConfig()
+set_global(Settings(cache=True))  # allow cacheing
+
+
+@pytest.fixture(scope="function")
+def agent(test_settings: Settings, vecdb) -> DocChatAgent:
+    set_global(test_settings)
+    agent = DocChatAgent(config)
+    agent.vecdb = vecdb
+    agent.ingest_docs(documents)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    return agent
+
+
+warnings.filterwarnings(
+    "ignore",
+    message="Token indices sequence length.*",
+    # category=UserWarning,
+    module="transformers",
+)
+
+
+@pytest.mark.parametrize(
+    "vecdb", ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"], indirect=True
+)
+@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
+def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected: str):
+    """
+    Test directly using `llm_response` method of DocChatAgent.
+    """
+
+    # note that the (query, ans) pairs are accumulated into the
+    # internal dialog history of the agent.
+    set_global(test_settings)
+    agent.config.conversation_mode = False
+    result = agent.llm_response(query)
+    ans = result.content
+    refs = extract_markdown_references(ans)
+    sources = extract_markdown_references(result.metadata.source)
+    assert refs == sources
+    expected = [e.strip() for e in expected.split(",")]
+    assert all([e in ans for e in expected])
+
+
+@pytest.mark.parametrize(
+    "vecdb", ["lancedb", "qdrant_cloud", "qdrant_local", "chroma"], indirect=True
+)
+@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
+@pytest.mark.asyncio
+async def test_doc_chat_agent_llm_async(
+    test_settings: Settings, agent, query: str, expected: str
+):
+    """
+    Test directly using `llm_response_async` method of DocChatAgent.
+    """
+
+    # note that the (query, ans) pairs are accumulated into the
+    # internal dialog history of the agent.
+    set_global(test_settings)
+    agent.config.conversation_mode = False
+    ans = (await agent.llm_response_async(query)).content
+    expected = [e.strip() for e in expected.split(",")]
+    assert all([e in ans for e in expected])
+
+
+@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
+def test_doc_chat_agent_task(test_settings: Settings, agent, query, expected):
+    """
+    Test DocChatAgent wrapped in a Task.
+    """
+    set_global(test_settings)
+    agent.config.conversation_mode = True
+    task = Task(agent, restart=True)
+    task.init()
+    # LLM responds to Sys msg, initiates conv, says thank you, etc.
+    task.step()
+
+    agent.default_human_response = query
+    task.step()  # user asks query
+    task.step()  # LLM answers
+    ans = task.pending_message.content.lower()
+    expected = [e.strip() for e in expected.split(",")]
+    assert all([e.lower() in ans for e in expected])
+    assert task.pending_message.metadata.sender == Entity.LLM
+
+
+class RetrievalAgent(DocChatAgent):
+    def llm_response(
+        self,
+        message: None | str | ChatDocument = None,
+    ) -> Optional[ChatDocument]:
+        # override the DocChatAgent's LLM response,
+        # to just use ChatAgent's LLM response - this ensures that the system msg
+        # is respected, and it uses the `retrieval_tool` as instructed.
+        return ChatAgent.llm_response(self, message)
+
+
+@pytest.fixture(scope="function")
+def retrieval_agent(test_settings: Settings, vecdb) -> RetrievalAgent:
+    set_global(test_settings)
+    agent = RetrievalAgent(config)
+    agent.vecdb = vecdb
+    agent.ingest_docs(documents)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    return agent
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local"], indirect=True)
+@pytest.mark.parametrize(
+    "query, expected",
+    [
+        (
+            """
+            Use the retrieval_tool to find out the capital of
+            the fictional country NeoGlobal.
+            """,
+            "Winegarten",
+        ),
+        (
+            "Use the retrieval_tool to answer this:" " who was Charlie Foster?",
+            "comedian",
+        ),
+    ],
+)
+def test_retrieval_tool(
+    test_settings: Settings, retrieval_agent, query: str, expected: str
+):
+    set_global(test_settings)
+    retrieval_agent.enable_message(RetrievalTool)
+    task = Task(
+        retrieval_agent,
+        restart=True,
+        interactive=False,
+        system_message=f"""
+        To answer user's query, use the `retrieval_tool` to retrieve relevant passages, 
+        and ONLY then answer the query. 
+        In case the query is simply a topic or search phrase, 
+        guess what the user may want to know, and formulate it as a 
+        question to be answered, and use this as the `query` field in the 
+        `retrieval_tool`. 
+                
+        When you are ready to show your answer, say {DONE}, followed by the answer.
+        """,
+    )
+    # 3 turns:
+    # 1. LLM gen `retrieval_tool` request
+    # 2. Agent gen `retrieval_tool` response (i.e. returns relevant passages)
+    # 3. LLM gen answer based on passages
+    ans = task.run(query, turns=3).content
+    expected = [e.strip().lower() for e in expected.split(",")]
+    assert all([e in ans.lower() for e in expected])
+
+
+@pytest.fixture(scope="function")
+def new_agent(test_settings: Settings, vecdb) -> DocChatAgent:
+    set_global(test_settings)
+    agent = DocChatAgent(config)
+    agent.vecdb = vecdb
+    agent.ingest_docs(documents)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    return agent
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
+@pytest.mark.parametrize("conv_mode", [True, False])
+@pytest.mark.parametrize("retain_context", [True, False])
+def test_doc_chat_followup(
+    test_settings: Settings, new_agent, conv_mode: bool, retain_context: bool
+):
+    """
+    Test whether follow-up question is handled correctly.
+    """
+    new_agent.config.conversation_mode = conv_mode
+    new_agent.config.retain_context = retain_context
+    set_global(test_settings)
+    task = Task(
+        new_agent,
+        interactive=False,
+        restart=False,  # don't restart, so we can ask follow-up questions
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
+    )
+    result = task.run("Who was Charlie Foster?")
+    assert "comedian" in result.content.lower()
+
+    result = task.run("When was he born?")
+    assert "1889" in result.content
+
+    # test retain_context when conv_mode is True
+    new_agent.init_state()
+    question = "Who was Charlie Foster?"
+    response = new_agent.llm_response(question)
+    assert "comedian" in response.content.lower()
+    if conv_mode:
+        if retain_context:
+            # context is retained, i.e.,
+            # the user msg has both extracted chunks and the question itself
+            assert len(new_agent.message_history[-2].content) > 2 * len(question)
+        else:
+            # context is not retained, i.e., the user msg has only the question
+            assert len(new_agent.message_history[-2].content) < len(question) + 10
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
+@pytest.mark.parametrize("conv_mode", [True, False])
+@pytest.mark.parametrize("retain_context", [True, False])
+@pytest.mark.asyncio
+async def test_doc_chat_followup_async(
+    test_settings: Settings,
+    new_agent,
+    conv_mode: bool,
+    retain_context: bool,
+):
+    """
+    Test whether follow-up question is handled correctly (in async mode).
+    """
+    new_agent.config.conversation_mode = conv_mode
+    new_agent.config.retain_context = retain_context
+    set_global(test_settings)
+    task = Task(
+        new_agent,
+        interactive=False,
+        restart=False,  # don't restart, so we can ask follow-up questions
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
+    )
+    result = await task.run_async("Who was Charlie Foster?")
+    assert "comedian" in result.content.lower()
+
+    result = await task.run_async("When was he born?")
+    assert "1889" in result.content
+
+    # test retain_context when conv_mode is True
+    new_agent.init_state()
+    question = "Who was Charlie Foster?"
+    response = await new_agent.llm_response_async(question)
+    assert "comedian" in response.content.lower()
+    if conv_mode:
+        if retain_context:
+            # context is retained, i.e.,
+            # the user msg has both extracted chunks and the question itself
+            assert len(new_agent.message_history[-2].content) > 2 * len(question)
+        else:
+            # context is not retained, i.e., the user msg has only the question
+            assert len(new_agent.message_history[-2].content) < len(question) + 10
+
+
+# setup config for retrieval test, with n_neighbor_chunks=2
+# and parser.n_neighbor_ids = 5
+class _MyDocChatAgentConfig(DocChatAgentConfig):
+    cross_encoder_reranking_model: str = ""
+    n_query_rephrases: int = 0
+    n_neighbor_chunks: int = 2
+    debug: bool = False
+    stream: bool = True  # allow streaming where needed
+    conversation_mode: bool = True
+    vecdb: VectorStoreConfig | None = None
+
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        stream=True,
+        cache_config=RedisCacheConfig(fake=False),
+        use_chat_for_completion=True,
+    )
+
+    n_similar_chunks: int = 2
+    n_relevant_chunks: int = 2
+    parsing: ParsingConfig = ParsingConfig(
+        splitter=Splitter.SIMPLE,
+        n_neighbor_ids=5,
+    )
+
+
+@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
+@pytest.mark.parametrize(
+    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+)
+@pytest.mark.parametrize("conv_mode", [True, False])
+def test_doc_chat_retrieval(
+    test_settings: Settings, vecdb, splitter: Splitter, conv_mode: bool
+):
+    """
+    Test window retrieval of relevant doc-chunks.
+    Check that we are retrieving 2 neighbors around each match.
+    """
+    agent = DocChatAgent(
+        _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
+            parsing=ParsingConfig(
+                splitter=splitter,
+            ),
+        )
+    )
+    agent.config.conversation_mode = conv_mode
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are loud and messy.",
+        PIGS="Pigs cannot fly.",
+        GIRAFFES="Giraffes are tall and vegetarian.",
+        BATS="Bats are blind.",
+        COWS="Cows are peaceful.",
+        GIRAFFES2="Giraffes are really strange animals.",
+        HYENAS="Hyenas are dangerous and fast.",
+        ZEBRAS="Zebras are bizarre with stripes.",
+    )
+    text = "\n\n".join(vars(phrases).values())
+    agent.clear()
+    agent.ingest_docs([Document(content=text, metadata={"source": "animals"})])
+    results = agent.get_relevant_chunks("What are giraffes like?")
+
+    # All phrases except the CATS phrase should be in the results
+    # since they are all within 2 chunks of a giraffe phrase.
+    # (The CAT phrase is 3 chunks away, so it should not be in the results.)
+    all_but_cats = [p for p in vars(phrases).values() if "Cats" not in p]
+    # check that each phrases occurs in exactly one result
+    assert (
+        sum(p in r.content for p in all_but_cats for r in results)
+        == len(vars(phrases)) - 1
+    )
+
+    agent.clear()
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
+def test_doc_chat_rerank_diversity(test_settings: Settings, vecdb):
+    """
+    Test that reranking by diversity works.
+    """
+
+    cfg = _MyDocChatAgentConfig(
+        n_neighbor_chunks=0,
+    )
+    cfg.n_similar_chunks = 8
+    cfg.n_relevant_chunks = 8
+    agent = DocChatAgent(cfg)
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        g1="Giraffes are tall.",
+        g2="Giraffes are vegetarian.",
+        g3="Giraffes are strange.",
+        g4="Giraffes are fast.",
+        g5="Giraffes are known to be tall.",
+        g6="Giraffes are considered strange.",
+        g7="Giraffes move fast.",
+        g8="Giraffes are definitely vegetarian.",
+    )
+    docs = [
+        Document(content=p, metadata=DocMetaData(source="user"))
+        for p in vars(phrases).values()
+    ]
+    reranked = agent.rerank_with_diversity(docs)
+
+    # assert that each phrase tall, vegetarian, strange, fast
+    # occurs exactly once in top 4 phrases
+    for p in ["tall", "vegetarian", "strange", "fast"]:
+        assert sum(p in r.content for r in reranked[:4]) == 1
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
+def test_reciprocal_rank_fusion(test_settings: Settings, vecdb):
+    """
+    Test that RRF (Reciprocal Rank Fusion) works.
+    """
+
+    cfg = _MyDocChatAgentConfig(
+        n_neighbor_chunks=0,
+        cross_encoder_reranking_model="",
+        use_bm25_search=True,
+        use_fuzzy_match=True,
+        use_reciprocal_rank_fusion=True,
+        parsing=ParsingConfig(
+            splitter=Splitter.SIMPLE,
+            n_neighbor_ids=5,
+            n_similar_docs=None,  # Ensure we don't trigger backward compatibility
+        ),
+    )
+    cfg.n_similar_chunks = 3
+    cfg.n_relevant_chunks = 3
+    agent = DocChatAgent(cfg)
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        g1="time flies like an arrow",
+        g2="a fly is very small",
+        g3="we like apples",
+        g4="the river bank got flooded",
+        g5="there was a run on the bank",
+        g6="JPMChase is a bank",
+        g7="Chase is one of the banks",
+    )
+    docs = [
+        Document(content=p, metadata=DocMetaData(source="user"))
+        for p in vars(phrases).values()
+    ]
+    agent.ingest_docs(docs, split=False)
+    chunks = agent.get_relevant_chunks("I like to chase banks")
+    assert len(chunks) == 3
+    assert any(phrases.g7 in chunk.content for chunk in chunks)
+    assert any(phrases.g6 in chunk.content for chunk in chunks)
+
+    chunks = agent.get_relevant_chunks("I like oranges")
+    assert len(chunks) == 3
+    assert any(phrases.g3 in chunk.content for chunk in chunks)
+    assert any(phrases.g1 in chunk.content for chunk in chunks)
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
+def test_doc_chat_rerank_periphery(test_settings: Settings, vecdb):
+    """
+    Test that reranking to periphery works.
+    """
+
+    cfg = _MyDocChatAgentConfig(
+        n_neighbor_chunks=0,
+    )
+    cfg.n_similar_chunks = 8
+    cfg.n_relevant_chunks = 8
+    agent = DocChatAgent(cfg)
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    docs = [
+        Document(content=str(i), metadata=DocMetaData(source="user")) for i in range(10)
+    ]
+    reranked = agent.rerank_to_periphery(docs)
+    numbers = [int(d.content) for d in reranked]
+    assert numbers == [0, 2, 4, 6, 8, 9, 7, 5, 3, 1]
+
+
+data = {
+    "id": ["A100", "B200", "C300", "D400", "E500"],
+    "year": [1955, 1977, 1989, 2001, 2015],
+    "author": [
+        "Isaac Maximov",
+        "J.K. Bowling",
+        "George Morewell",
+        "J.R.R. Bolshine",
+        "Hugo Wellington",
+    ],
+    "title": [
+        "The Last Question",
+        "Harry Potter",
+        "2084",
+        "The Lord of the Rings",
+        "The Time Machine",
+    ],
+    "summary": [
+        "A story exploring the concept of entropy and the end of the universe.",
+        "The adventures of a young wizard and his friends at a magical school.",
+        "A dystopian novel about a totalitarian regime and the concept of freedom.",
+        "An epic fantasy tale of a quest to destroy a powerful ring.",
+        "A science fiction novel about time travel and its consequences.",
+    ],
+}
+
+df = pd.DataFrame(data)
+
+
+@pytest.mark.parametrize("metadata", [[], ["id", "year"], ["year"]])
+@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
+def test_doc_chat_ingest_df(
+    test_settings: Settings,
+    vecdb,
+    metadata,
+):
+    """Check we can ingest from a dataframe and run queries."""
+    set_global(test_settings)
+
+    sys_msg = "You will be asked to answer questions based on short book descriptions."
+    agent_cfg = DocChatAgentConfig(
+        system_message=sys_msg,
+        cross_encoder_reranking_model="",
+    )
+    if isinstance(vecdb, LanceDB):
+        agent = LanceDocChatAgent(agent_cfg)
+    else:
+        agent = DocChatAgent(agent_cfg)
+    agent.vecdb = vecdb
+    agent.clear()
+    agent.ingest_dataframe(df, content="summary", metadata=metadata)
+    response = agent.llm_response(
+        """
+        What concept does the book dealing with the end of the universe explore?
+        """
+    )
+    assert "entropy" in response.content.lower()
+
+
+@pytest.mark.parametrize("metadata", [[], ["id", "year"], ["year"]])
+@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
+def test_doc_chat_add_content_fields(
+    test_settings: Settings,
+    vecdb,
+    metadata,
+):
+    """Check we can ingest from a dataframe,
+    with additional fields inserted into content,
+    and run queries that refer to those fields."""
+
+    set_global(test_settings)
+
+    sys_msg = "You will be asked to answer questions based on short movie descriptions."
+    agent_cfg = DocChatAgentConfig(
+        system_message=sys_msg,
+        cross_encoder_reranking_model="",
+        add_fields_to_content=["year", "author", "title"],
+    )
+    if isinstance(vecdb, LanceDB):
+        agent = LanceDocChatAgent(agent_cfg)
+    else:
+        agent = DocChatAgent(agent_cfg)
+    agent.vecdb = vecdb
+    agent.clear()
+    agent.ingest_dataframe(df, content="summary", metadata=metadata)
+    response = agent.llm_response(
+        """
+        What was the title of the book by George Morewell and when was it written?
+        """
+    )
+    assert "2084" in response.content and "1989" in response.content
+
+
+@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
+@pytest.mark.parametrize(
+    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+)
+def test_doc_chat_incremental_ingest(
+    test_settings: Settings, vecdb, splitter: Splitter
+):
+    """
+    Check that we are able ingest documents incrementally.
+    """
+    agent = DocChatAgent(
+        _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
+            parsing=ParsingConfig(
+                splitter=splitter,
+            ),
+        )
+    )
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are loud and messy.",
+        PIGS="Pigs cannot fly.",
+        GIRAFFES="Giraffes are tall and vegetarian.",
+        BATS="Bats are blind.",
+        COWS="Cows are peaceful.",
+        GIRAFFES2="Giraffes are really strange animals.",
+        HYENAS="Hyenas are dangerous and fast.",
+        ZEBRAS="Zebras are bizarre with stripes.",
+    )
+    sentences = list(vars(phrases).values())
+    docs1 = [
+        Document(content=s, metadata=dict(source="animals")) for s in sentences[:4]
+    ]
+
+    docs2 = [
+        Document(content=s, metadata=dict(source="animals")) for s in sentences[4:]
+    ]
+    agent.ingest_docs(docs1)
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
+    agent.ingest_docs(docs2)
+    results = agent.get_relevant_chunks("What do we know about Pigs?")
+    assert any("fly" in r.content for r in results)
+
+    results = agent.get_relevant_chunks("What do we know about Hyenas?")
+    assert any("fast" in r.content for r in results) or any(
+        "dangerous" in r.content for r in results
+    )
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local"], indirect=True)
+@pytest.mark.parametrize(
+    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+)
+@pytest.mark.parametrize("source", ["bytes", "path"])
+def test_doc_chat_ingest_paths(
+    test_settings: Settings,
+    vecdb,
+    splitter: Splitter,
+    source,
+):
+    """
+    Test DocChatAgent.ingest_doc_paths
+    """
+    agent = DocChatAgent(
+        _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
+            parsing=ParsingConfig(
+                splitter=splitter,
+            ),
+        )
+    )
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are loud and messy.",
+        PIGS="Pigs cannot fly.",
+        GIRAFFES="Giraffes are tall and vegetarian.",
+        BATS="Bats are blind.",
+        COWS="Cows are peaceful.",
+        GIRAFFES2="Giraffes are really strange animals.",
+        HYENAS="Hyenas are dangerous and fast.",
+        ZEBRAS="Zebras are bizarre with stripes.",
+    )
+    sentences = list(vars(phrases).values())
+
+    # create temp files containing each sentence, using tempfile pkg
+    import tempfile
+
+    for s in sentences:
+        if source == "path":
+            with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+                f.write(s)
+                f.close()
+                agent.ingest_doc_paths([f.name])
+        else:
+            agent.ingest_doc_paths([s.encode()])
+
+    results = agent.get_relevant_chunks("What do we know about Pigs?")
+    assert any("fly" in r.content for r in results)
+
+    results = agent.get_relevant_chunks("What do we know about Hyenas?")
+    assert any("fast" in r.content for r in results) or any(
+        "dangerous" in r.content for r in results
+    )
+
+
+@pytest.mark.xfail(
+    condition=lambda: "lancedb" in vecdb,
+    reason="LanceDB may fail due to unknown flakiness",
+    run=True,
+    strict=False,
+)
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
+@pytest.mark.parametrize(
+    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+)
+@pytest.mark.parametrize("metadata_dict", [True, False])
+def test_doc_chat_ingest_path_metadata(
+    test_settings: Settings,
+    vecdb,
+    splitter: Splitter,
+    metadata_dict: bool,  # whether metadata is dict or DocMetaData
+):
+    """
+    Test DocChatAgent.ingest_doc_paths, with metadata
+    """
+    agent = DocChatAgent(
+        _MyDocChatAgentConfig(
+            n_similar_chunks=3,
+            n_relevant_chunks=3,
+            parsing=ParsingConfig(
+                splitter=splitter,
+            ),
+        )
+    )
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    # create a list of dicts, each containing a sentence about an animal
+    # and a metadata field indicating the animal's name, species, and diet
+    animals = [
+        {
+            "content": "Cats are quiet and clean.",
+            "metadata": {
+                "name": "cat",
+                "species": "feline",
+                "diet": "carnivore",
+            },
+        },
+        {
+            "content": "Dogs are loud and messy.",
+            "metadata": {
+                "name": "dog",
+                "species": "canine",
+                "diet": "omnivore",
+            },
+        },
+        {
+            "content": "Pigs cannot fly.",
+            "metadata": {
+                "name": "pig",
+                "species": "porcine",
+                "diet": "omnivore",
+            },
+        },
+    ]
+
+    class AnimalMetadata(DocMetaData):
+        name: str
+        species: str
+        diet: str
+
+    animal_metadata_list = [AnimalMetadata(**a["metadata"]) for a in animals]
+
+    # put each animal content in a separate file
+    import tempfile
+
+    for animal in animals:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+            f.write(animal["content"])
+            f.close()
+            animal["path"] = f.name
+
+    agent.clear()
+    # ingest with per-file metadata
+    agent.ingest_doc_paths(
+        [a["path"] for a in animals],
+        metadata=(
+            [a["metadata"] for a in animals] if metadata_dict else animal_metadata_list
+        ),
+    )
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
+
+    results = agent.get_relevant_chunks("What do we know about Pigs?")
+    assert any("fly" in r.content for r in results)
+    # assert about metadata
+    assert any("porcine" in r.metadata.species for r in results)
+
+    # clear out the agent docs and the underlying vecdb collection
+    agent.clear()
+
+    # ingest with single metadata for ALL animals
+    agent.ingest_doc_paths(
+        [a["path"] for a in animals],
+        metadata=(
+            dict(type="animal", category="living")
+            if metadata_dict
+            else DocMetaData(type="animal", category="living")
+        ),
+    )
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
+
+    results = agent.get_relevant_chunks("What do we know about dogs?")
+    assert any("messy" in r.content for r in results)
+    assert all(r.metadata.type == "animal" for r in results)
+
+    agent.clear()
+
+
+@pytest.mark.xfail(
+    condition=lambda: "lancedb" in vecdb,
+    reason="LanceDB may fail due to unknown flakiness",
+    run=True,
+    strict=False,
+)
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
+def test_doc_chat_batch(test_settings: Settings, vecdb):
+    """
+    Test batch run of queries to multiple instances of DocChatAgent,
+    which share the same vector-db.
+    """
+
+    set_global(test_settings)
+    doc_agents = [DocChatAgent(_MyDocChatAgentConfig()) for _ in range(2)]
+
+    # attach a common vector-db to all agents
+    for a in doc_agents:
+        a.vecdb = vecdb
+
+    docs = [
+        Document(
+            content="""
+            Filidor Dinkoyevsky wrote a book called "The Sisters Karenina".
+            It is loosely based on the life of the Anya Karvenina,
+            from a book by Tolsitoy a few years earlier.
+            """,
+            metadata=DocMetaData(source="tweakipedia"),
+        ),
+        Document(
+            content="""
+            The novel "Searching for Sebastian Night" was written by Vlad Nabikov.
+            It is an intriguing tale about the author's search for his lost brother,
+            and is a meditation on the nature of loss and memory.
+            """,
+            metadata=DocMetaData(source="tweakipedia"),
+        ),
+    ]
+
+    # note we only need to ingest docs using one of the agents,
+    # since they share the same vector-db
+    doc_agents[0].ingest_docs(docs, split=False)
+
+    questions = [
+        "What book did Vlad Nabikov write?",
+        "Who wrote the book about the Karenina sisters?",
+    ]
+
+    # (1) test that we can create a single task and use run_batch_tasks
+    task = Task(doc_agents[0], name="DocAgent", interactive=False, single_round=True)
+    results = run_batch_tasks(task, questions)
+
+    assert "Sebastian" in results[0].content
+    assert "Dinkoyevsky" in results[1].content
+
+    # (2) test that we can create a task-generator fn and use run_batch_task_gen
+
+    # create a task-generator fn, to create one per question
+    def gen_task(i: int):
+        return Task(
+            doc_agents[i],
+            name=f"DocAgent-{i}",
+            interactive=False,
+            single_round=True,
+        )
+
+    results = run_batch_task_gen(gen_task, questions)
+
+    assert "Sebastian" in results[0].content
+    assert "Dinkoyevsky" in results[1].content
+
+    for a in doc_agents:
+        a.clear()
+
+
+@pytest.mark.parametrize("enrichment, expect_cleaned", [(True, True), (False, False)])
+def test_remove_enrichments(
+    enrichment: bool,
+    expect_cleaned: bool,
+) -> None:
+    """
+    Test removal of generated enrichments from documents both if
+    they have enrichment or not.
+    """
+
+    original_content = "This is the original content"
+    sample_docs = [
+        Document(
+            content=f"""
+                {original_content}\n\n{CHUNK_ENRICHMENT_DELIMITER}
+                Some generated enrichments
+            """,
+            metadata=DocMetaData(source="one", has_enrichment=True),
+        ),
+        Document(
+            content="This is a normal document", metadata=DocMetaData(source="twp")
+        ),
+    ]
+
+    enrichment_config = ChunkEnrichmentAgentConfig() if enrichment else None
+    agent = DocChatAgent(
+        _TestDocChatAgentConfig(chunk_enrichment_config=enrichment_config)
+    )
+
+    cleaned_docs = agent.remove_chunk_enrichments(sample_docs)
+
+    assert len(cleaned_docs) == len(sample_docs)
+    # Document with questions should be cleaned
+    assert (cleaned_docs[0].content.strip() == original_content) is expect_cleaned
+    # Normal document should be unchanged
+    assert cleaned_docs[1].content == sample_docs[1].content
+
+
+def test_add_enrichments() -> None:
+    """Test generation of enrichments for documents"""
+
+    sample_docs = [
+        Document(content="Doc 1", metadata=DocMetaData(source="one")),
+        Document(content="Doc 2", metadata=DocMetaData(source="two")),
+    ]
+
+    enrichment_agent_config = ChunkEnrichmentAgentConfig(
+        llm=MockLMConfig(
+            response_fn=lambda x: "Keyword1, keyword2 " + x,
+        ),
+        enrichment_prompt_fn=lambda x: "Add keywords to " + x,
+    )
+    agent = DocChatAgent(
+        _TestDocChatAgentConfig(
+            chunk_enrichment_config=enrichment_agent_config,
+        )
+    )
+
+    augmented_docs = agent.enrich_chunks(sample_docs)
+
+    assert len(augmented_docs) == len(sample_docs)
+    for doc in augmented_docs:
+        assert CHUNK_ENRICHMENT_DELIMITER in doc.content
+        assert doc.metadata.has_enrichment
+        # Original content should be preserved before marker
+        assert (
+            doc.content.split(CHUNK_ENRICHMENT_DELIMITER)[0].strip()
+            in sample_docs[0].content + sample_docs[1].content
+        )
+        # Should have enrichment after marker
+        enrichment_part = doc.content.split(CHUNK_ENRICHMENT_DELIMITER)[1].strip()
+        assert len(enrichment_part) > 0
+
+
+def test_enrichments_disabled() -> None:
+    """Test that enrichments are not generated when disabled"""
+
+    sample_docs = [Document(content="Doc 1", metadata=DocMetaData(source="one"))]
+
+    agent = DocChatAgent(_TestDocChatAgentConfig(chunk_enrichment_config=None))
+
+    processed_docs = agent.enrich_chunks(sample_docs)
+    assert len(processed_docs) == len(sample_docs)
+    assert processed_docs[0].content == sample_docs[0].content
+    assert not hasattr(processed_docs[0].metadata, "has_enrichment")
+
+    cleaned_docs = agent.remove_chunk_enrichments(sample_docs)
+    assert len(cleaned_docs) == len(sample_docs)
+    assert cleaned_docs[0].content == sample_docs[0].content
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"],
+    indirect=True,
+)
+def test_enrichments_integration(vecdb: VectorStore) -> None:
+    """Integration test for chunk-enrichments in RAG pipeline"""
+
+    sample_docs = [
+        Document(
+            content="Blood Test name: BUN",
+            # Blood Urea Nitrogen test for kidney function
+            metadata=DocMetaData(source="blood-work", is_chunk=True),
+        ),
+        Document(
+            content="Blood test name: BNP",
+            # B-type natriuretic peptide test for heart function
+            metadata=DocMetaData(source="blood-work", is_chunk=True),
+        ),
+    ]
+
+    # add 20 random docs
+    sample_docs.extend(
+        [
+            Document(
+                content=generate_random_text(5),
+                metadata=DocMetaData(source="blood-work", is_chunk=True),
+            )
+            for _ in range(20)
+        ]
+    )
+
+    agent = DocChatAgent(
+        _TestDocChatAgentConfig(
+            rerank_diversity=False,
+            rerank_periphery=False,
+            relevance_extractor_config=None,
+            conversation_mode=False,
+            chunk_enrichment_config=ChunkEnrichmentAgentConfig(
+                system_message="""
+                You are an expert in medical tests, well-versed in 
+                test names and which organs they are associated with.
+                """,
+                enrichment_prompt_fn=lambda x: (
+                    f"""
+                    Which organ function or health is the following blood test
+                    most closely associated with? 
+                    (Answer in ONE WORD; if unsure, say UNKNOWN)
+                    
+                    {x}
+                    """
+                ),
+            ),
+        )
+    )
+    agent.vecdb = vecdb
+    agent.augment_system_message(
+        """
+        
+        You are an expert in medical tests, well-versed in 
+        test names and which organs they are associated with.
+        
+        You must answer questions based on the provided document-extracts,
+        combined with your medical knowledge.
+        """
+    )
+    # clear existing docs
+    agent.clear()
+    agent.ingest_docs(sample_docs)
+
+    # Verify questions were generated during ingestion
+    all_docs = agent.vecdb.get_all_documents()
+    assert all(
+        CHUNK_ENRICHMENT_DELIMITER in doc.content for doc in all_docs
+    ), "Generated enrichments not found in all docs"
+
+    # retrieve docs they should not contain generated enrichments
+    doc1 = agent.answer_from_docs("Which medical test is kidney-related?")
+    doc2 = agent.answer_from_docs("Which blood test is related to heart-function?")
+
+    # they are documents enriched with keywords
+    # but the keywords should be removed on retrieval
+    assert (
+        CHUNK_ENRICHMENT_DELIMITER not in doc1.content
+    ), f"Doc 1 has not been cleaned: {doc1.content}"
+    assert (
+        CHUNK_ENRICHMENT_DELIMITER not in doc2.content
+    ), f"Doc 2 has not been cleaned: {doc2.content}"
+
+    # check that the right content is in the docs
+    assert "BUN" in doc1.content
+    assert "BNP" in doc2.content
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
+def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
+    agent = DocChatAgent(_MyDocChatAgentConfig())
+    agent.vecdb = vecdb
+    agent.clear()  # clear the collection in the vector store
+
+    # Base documents with simple metadata
+    docs = [
+        Document(content="Doc 1", metadata=DocMetaData(source="original1")),
+        Document(content="Doc 2", metadata=DocMetaData(source="original2")),
+    ]
+
+    # Test case 1: List of metadata dicts
+    docs_copy = [d.model_copy() for d in docs]
+    meta_list = [
+        {"category": "A", "source": "new1"},
+        {"category": "B", "source": "new2"},
+    ]
+    agent.ingest_docs(docs_copy, metadata=meta_list)
+    stored = agent.vecdb.get_all_documents()
+    assert set([d.metadata.category for d in stored]) == {"A", "B"}
+
+    assert set(d.metadata.source for d in stored) == {
+        _append_metadata_source("original1", "new1"),
+        _append_metadata_source("original2", "new2"),
+    }
+
+    agent.clear()
+
+    # Test case 2: Single metadata dict for all docs
+    docs_copy = [d.model_copy() for d in docs]
+    meta_dict = {"category": "common", "source": "new"}
+    agent.ingest_docs(docs_copy, metadata=meta_dict)
+    stored = agent.vecdb.get_all_documents()
+    assert all(d.metadata.category == "common" for d in stored)
+
+    assert set(d.metadata.source for d in stored) == {
+        _append_metadata_source("original1", "new"),
+        _append_metadata_source("original2", "new"),
+    }
+    agent.clear()
+
+    # Test case 3: List of DocMetaData
+    docs_copy = [d.model_copy() for d in docs]
+    meta_docs = [
+        DocMetaData(category="X", source="new1"),
+        DocMetaData(category="Y", source="new2"),
+    ]
+    agent.ingest_docs(docs_copy, metadata=meta_docs)
+    stored = agent.vecdb.get_all_documents()
+    assert set([d.metadata.category for d in stored]) == {"X", "Y"}
+
+    assert set(d.metadata.source for d in stored) == {
+        _append_metadata_source("original1", "new1"),
+        _append_metadata_source("original2", "new2"),
+    }
+    agent.clear()
+
+    # Test case 4: Single DocMetaData for all docs
+    docs_copy = [d.model_copy() for d in docs]
+    meta_doc = DocMetaData(category="shared", source="new")
+    agent.ingest_docs(docs_copy, metadata=meta_doc)
+    stored = agent.vecdb.get_all_documents()
+    assert all(d.metadata.category == "shared" for d in stored)
+
+    assert set(d.metadata.source for d in stored) == {
+        _append_metadata_source("original1", "new"),
+        _append_metadata_source("original2", "new"),
+    }
+    agent.clear()
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
+def test_doc_chat_agent_ingest_paths(test_settings: Settings, vecdb):
+    agent = DocChatAgent(_MyDocChatAgentConfig())
+    agent.vecdb = vecdb
+    agent.clear()  # clear the collection in the vector store
+
+    # Create temp files and byte contents
+    import tempfile
+
+    # Create two temp files
+    file_contents = ["Content of file 1", "Content of file 2"]
+    temp_files = []
+    for content in file_contents:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+            f.write(content)
+            temp_files.append(f.name)
+
+    # Create two byte contents
+    byte_contents = [b"Bytes content 1", b"Bytes content 2"]
+
+    # Test case 1: List of metadata dicts
+    paths = temp_files + byte_contents
+    meta_list = [
+        {"category": "file", "source": "src1"},
+        {"category": "file", "source": "src2"},
+        {"category": "bytes", "source": "src3"},
+        {"category": "bytes", "source": "src4"},
+    ]
+    # ingest with no additional metadata so we can get the original source
+    docs = agent.ingest_doc_paths(paths)
+    orig_sources = [d.metadata.source for d in docs]
+    agent.clear()
+    # now ingest with additional metadata
+    agent.ingest_doc_paths(paths, metadata=meta_list)
+    stored = agent.vecdb.get_all_documents()
+
+    # Create sets of expected and actual metadata
+    expected_categories = {"file", "bytes"}
+    expected_sources = {
+        _append_metadata_source(s, f"src{i+1}") for i, s in enumerate(orig_sources)
+    }
+
+    actual_categories = {d.metadata.category for d in stored}
+    actual_sources = {d.metadata.source for d in stored}
+
+    assert expected_categories == actual_categories
+    assert expected_sources == actual_sources
+    agent.clear()
+
+    # Test case 2: Single metadata dict
+    meta_dict = {"category": "common", "source": "shared"}
+    # now ingest with additional metadata
+    agent.ingest_doc_paths(paths, metadata=meta_dict)
+    stored = agent.vecdb.get_all_documents()
+
+    assert all(d.metadata.category == "common" for d in stored)
+    expected_sources = {_append_metadata_source(s, "shared") for s in orig_sources}
+    actual_sources = {d.metadata.source for d in stored}
+    assert expected_sources == actual_sources
+    agent.clear()
+
+    # Test case 3: List of DocMetaData
+    meta_docs = [DocMetaData(category="X", source=f"src{i}") for i in range(len(paths))]
+
+    # now ingest with metadata
+    agent.ingest_doc_paths(paths, metadata=meta_docs)
+    stored = agent.vecdb.get_all_documents()
+
+    expected_categories = {"X"}
+    expected_sources = {
+        _append_metadata_source(s, f"src{i}") for i, s in enumerate(orig_sources)
+    }
+
+    actual_categories = {d.metadata.category for d in stored}
+    actual_sources = {d.metadata.source for d in stored}
+
+    assert expected_categories == actual_categories
+    assert expected_sources == actual_sources
+    agent.clear()
+
+    # Test case 4: Single DocMetaData
+    meta_doc = DocMetaData(category="shared", source="new")
+    docs = agent.ingest_doc_paths(paths, metadata=meta_doc)
+    stored = agent.vecdb.get_all_documents()
+
+    assert all(d.metadata.category == "shared" for d in stored)
+    expected_sources = {_append_metadata_source(s, "new") for s in orig_sources}
+    actual_sources = {d.metadata.source for d in stored}
+    assert expected_sources == actual_sources
+    agent.clear()
+
+    # Cleanup temp files
+    for f in temp_files:
+        os.remove(f)
 </file>
 
 <file path="tests/main/test_doc_chat_relevance.py">
@@ -76044,12 +77842,50 @@ def test_tool_handler_invoking_llm(use_fn_api: bool):
     task = Task(agent, interactive=False, single_round=False)
     result = task.run(
         f"""
-        Use the TOOL `{NabroskiTool.name()}` to compute the 
+        Use the TOOL `{NabroskiTool.name()}` to compute the
         Nabroski transform of 2 and 5.
         """
     )
 
     assert "7" in result.content
+
+
+def test_enable_message_validates_arguments(test_settings: Settings):
+    """Test that enable_message raises TypeError when tool classes are passed
+    as separate arguments instead of as a list."""
+    set_global(test_settings)
+
+    class Tool1(ToolMessage):
+        request: str = "tool1"
+        purpose: str = "First tool"
+
+    class Tool2(ToolMessage):
+        request: str = "tool2"
+        purpose: str = "Second tool"
+
+    class Tool3(ToolMessage):
+        request: str = "tool3"
+        purpose: str = "Third tool"
+
+    agent = ChatAgent(
+        ChatAgentConfig(
+            llm=MockLMConfig(default_response="test"),
+        )
+    )
+
+    # This should raise TypeError because Tool2 is passed as 'use' parameter
+    with pytest.raises(TypeError, match="'use' parameter must be a boolean"):
+        agent.enable_message(Tool1, Tool2)  # type: ignore
+
+    # This should raise TypeError because Tool3 is passed as 'handle' parameter
+    with pytest.raises(TypeError, match="'handle' parameter must be a boolean"):
+        agent.enable_message(Tool1, True, Tool3)  # type: ignore
+
+    # This should work correctly - passing tools as a list
+    agent.enable_message([Tool1, Tool2, Tool3])
+    assert "tool1" in agent.llm_tools_usable
+    assert "tool2" in agent.llm_tools_usable
+    assert "tool3" in agent.llm_tools_usable
 </file>
 
 <file path="tests/main/test_tool_orchestration.py">
@@ -90822,433 +92658,6 @@ def datetime_to_json(obj: Any) -> Any:
     return obj
 </file>
 
-<file path="langroid/parsing/parser.py">
-import logging
-import re
-from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
-
-import tiktoken
-from pydantic import field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from langroid.mytypes import Document
-from langroid.parsing.md_parser import (
-    MarkdownChunkConfig,
-    chunk_markdown,
-    count_words,
-)
-from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
-from langroid.utils.object_registry import ObjectRegistry
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
-
-
-class Splitter(str, Enum):
-    TOKENS = "tokens"
-    PARA_SENTENCE = "para_sentence"
-    SIMPLE = "simple"
-    # "structure-aware" splitting with chunks enriched by header info
-    MARKDOWN = "markdown"
-
-
-class BaseParsingConfig(BaseSettings):
-    """Base class for document parsing configurations."""
-
-    library: str
-
-    model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
-
-
-class LLMPdfParserConfig(BaseSettings):
-    """Configuration for LLM-based parsing."""
-
-    model_name: str = "gemini/gemini-2.0-flash"  # Default model
-    max_tokens: Optional[int] = None
-    split_on_page: Optional[bool] = True
-    requests_per_minute: Optional[int] = 5
-    timeout: int = 60
-    prompt: str = ""  # override with a domain-specific prompt
-    system_prompt: str = ""  # override with a domain-specific system prompt
-
-
-class MarkerConfig(BaseSettings):
-    """Configuration for Markitdown-based parsing."""
-
-    config_dict: Dict[str, Any] = {}
-
-
-class PdfParsingConfig(BaseParsingConfig):
-    library: Literal[
-        "fitz",
-        "pymupdf4llm",
-        "docling",
-        "pypdf",
-        "unstructured",
-        "pdf2image",
-        "markitdown",
-        "llm-pdf-parser",
-        "marker",
-    ] = "pymupdf4llm"
-    llm_parser_config: Optional[LLMPdfParserConfig] = None
-    marker_config: Optional[MarkerConfig] = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure correct config is set based on library selection."""
-        library = values.get("library")
-
-        if library == "llm-pdf-parser":
-            values.setdefault("llm_parser_config", LLMPdfParserConfig())
-        else:
-            values["llm_parser_config"] = None
-
-        if library == "marker":
-            values.setdefault("marker_config", MarkerConfig())
-        else:
-            values["marker_config"] = None
-
-        return values
-
-
-class DocxParsingConfig(BaseSettings):
-    library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
-
-
-class DocParsingConfig(BaseSettings):
-    library: Literal["unstructured"] = "unstructured"
-
-
-class MarkitdownPPTXParsingConfig(BaseSettings):
-    library: Literal["markitdown"] = "markitdown"
-
-
-class MarkitdownXLSXParsingConfig(BaseSettings):
-    library: Literal["markitdown"] = "markitdown"
-
-
-class MarkitdownXLSParsingConfig(BaseSettings):
-    library: Literal["markitdown"] = "markitdown"
-
-
-class ParsingConfig(BaseSettings):
-    splitter: str = Splitter.MARKDOWN
-    chunk_by_page: bool = False  # split by page?
-    chunk_size: int = 200  # aim for this many tokens per chunk
-    chunk_size_variation: float = 0.30  # max variation from chunk_size
-    overlap: int = 50  # overlap between chunks
-    max_chunks: int = 10_000
-
-    @field_validator("chunk_size", mode="before")
-    @classmethod
-    def convert_chunk_size_to_int(cls, v: Any) -> int:
-        """Convert chunk_size to int, maintaining backward compatibility
-        with Pydantic V1.
-        """
-        if isinstance(v, float):
-            return int(v)
-        return int(v)
-
-    # offset to subtract from page numbers:
-    # e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
-    page_number_offset: int = 0
-    # aim to have at least this many chars per chunk when truncating due to punctuation
-    min_chunk_chars: int = 350
-    discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
-    n_similar_docs: Optional[int] = None  # deprecated
-    n_neighbor_ids: int = 5  # window size to store around each chunk
-    separators: List[str] = ["\n\n", "\n", " ", ""]
-    token_encoding_model: str = "text-embedding-3-small"
-    pdf: PdfParsingConfig = PdfParsingConfig()
-    docx: DocxParsingConfig = DocxParsingConfig()
-    doc: DocParsingConfig = DocParsingConfig()
-    pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
-    xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
-    xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
-
-
-class Parser:
-    def __init__(self, config: ParsingConfig):
-        self.config = config
-        try:
-            self.tokenizer = tiktoken.encoding_for_model(config.token_encoding_model)
-        except Exception:
-            self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
-
-    def num_tokens(self, text: str) -> int:
-        if self.config.splitter == Splitter.MARKDOWN:
-            return count_words(text)  # simple count based on whitespace-split
-        tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
-        return len(tokens)
-
-    def truncate_tokens(self, text: str, max_tokens: int) -> str:
-        tokens = self.tokenizer.encode(text)
-        if len(tokens) <= max_tokens:
-            return text
-        return self.tokenizer.decode(tokens[:max_tokens])
-
-    def add_window_ids(self, chunks: List[Document]) -> None:
-        """Chunks may belong to multiple docs, but for each doc,
-        they appear consecutively. Add window_ids in metadata"""
-
-        # discard empty chunks
-        chunks = [c for c in chunks if c.content.strip() != ""]
-        if len(chunks) == 0:
-            return
-        # The original metadata.id (if any) is ignored since it will be same for all
-        # chunks and is useless. We want a distinct id for each chunk.
-        # ASSUMPTION: all chunks c of a doc have same c.metadata.id !
-        orig_ids = [c.metadata.id for c in chunks]
-        ids = [ObjectRegistry.new_id() for c in chunks]
-        id2chunk = {id: c for id, c in zip(ids, chunks)}
-
-        # group the ids by orig_id
-        # (each distinct orig_id refers to a different document)
-        orig_id_to_ids: Dict[str, List[str]] = {}
-        for orig_id, id in zip(orig_ids, ids):
-            if orig_id not in orig_id_to_ids:
-                orig_id_to_ids[orig_id] = []
-            orig_id_to_ids[orig_id].append(id)
-
-        # now each orig_id maps to a sequence of ids within a single doc
-
-        k = self.config.n_neighbor_ids
-        for orig, ids in orig_id_to_ids.items():
-            # ids are consecutive chunks in a single doc
-            n = len(ids)
-            window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
-            for i, _ in enumerate(ids):
-                c = id2chunk[ids[i]]
-                c.metadata.window_ids = window_ids[i]
-                c.metadata.id = ids[i]
-                c.metadata.is_chunk = True
-
-    def split_simple(self, docs: List[Document]) -> List[Document]:
-        if len(self.config.separators) == 0:
-            raise ValueError("Must have at least one separator")
-        final_docs = []
-
-        for d in docs:
-            if d.content.strip() == "":
-                continue
-            chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
-            # note we are ensuring we COPY the document metadata into each chunk,
-            # which ensures all chunks of a given doc have same metadata
-            # (and in particular same metadata.id, which is important later for
-            # add_window_ids)
-            chunk_docs = [
-                Document(
-                    content=c,
-                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
-                )
-                for c in chunks
-                if c.strip() != ""
-            ]
-            self.add_window_ids(chunk_docs)
-            final_docs += chunk_docs
-        return final_docs
-
-    def split_para_sentence(self, docs: List[Document]) -> List[Document]:
-        chunks = docs
-        while True:
-            un_splittables = 0
-            split_chunks = []
-            for c in chunks:
-                if c.content.strip() == "":
-                    continue
-                if self.num_tokens(c.content) <= 1.3 * self.config.chunk_size:
-                    # small chunk: no need to split
-                    split_chunks.append(c)
-                    continue
-                splits = self._split_para_sentence_once([c])
-                un_splittables += len(splits) == 1
-                split_chunks += splits
-            if len(split_chunks) == len(chunks):
-                if un_splittables > 0:
-                    max_len = max([self.num_tokens(p.content) for p in chunks])
-                    logger.warning(
-                        f"""
-                        Unable to split {un_splittables} chunks
-                        using chunk_size = {self.config.chunk_size}.
-                        Max chunk size is {max_len} tokens.
-                        """
-                    )
-                break  # we won't be able to shorten them with current settings
-            chunks = split_chunks.copy()
-
-        self.add_window_ids(chunks)
-        return chunks
-
-    def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]:
-        final_chunks = []
-        for d in docs:
-            if d.content.strip() == "":
-                continue
-            chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
-            # note we are ensuring we COPY the document metadata into each chunk,
-            # which ensures all chunks of a given doc have same metadata
-            # (and in particular same metadata.id, which is important later for
-            # add_window_ids)
-            chunk_docs = [
-                Document(
-                    content=c,
-                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
-                )
-                for c in chunks
-                if c.strip() != ""
-            ]
-            final_chunks += chunk_docs
-
-        return final_chunks
-
-    def split_chunk_tokens(self, docs: List[Document]) -> List[Document]:
-        final_docs = []
-        for d in docs:
-            if self.config.splitter == Splitter.MARKDOWN:
-                chunks = chunk_markdown(
-                    d.content,
-                    MarkdownChunkConfig(
-                        # apply rough adjustment factor to convert from tokens to words,
-                        # which is what the markdown chunker uses
-                        chunk_size=int(self.config.chunk_size * 0.75),
-                        overlap_tokens=int(self.config.overlap * 0.75),
-                        variation_percent=self.config.chunk_size_variation,
-                        rollup=True,
-                    ),
-                )
-            else:
-                chunks = self.chunk_tokens(d.content)
-            # note we are ensuring we COPY the document metadata into each chunk,
-            # which ensures all chunks of a given doc have same metadata
-            # (and in particular same metadata.id, which is important later for
-            # add_window_ids)
-            chunk_docs = [
-                Document(
-                    content=c,
-                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
-                )
-                for c in chunks
-                if c.strip() != ""
-            ]
-            self.add_window_ids(chunk_docs)
-            final_docs += chunk_docs
-        return final_docs
-
-    def chunk_tokens(
-        self,
-        text: str,
-    ) -> List[str]:
-        """
-        Split a text into chunks of ~CHUNK_SIZE tokens,
-        based on punctuation and newline boundaries.
-        Adapted from
-        https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/chunks.py
-
-        Args:
-            text: The text to split into chunks.
-
-        Returns:
-            A list of text chunks, each of which is a string of tokens
-            roughly self.config.chunk_size tokens long.
-        """
-        # Return an empty list if the text is empty or whitespace
-        if not text or text.isspace():
-            return []
-
-        # Tokenize the text
-        tokens = self.tokenizer.encode(text, disallowed_special=())
-
-        # Initialize an empty list of chunks
-        chunks = []
-
-        # Initialize a counter for the number of chunks
-        num_chunks = 0
-
-        # Loop until all tokens are consumed
-        while tokens and num_chunks < self.config.max_chunks:
-            # Take the first chunk_size tokens as a chunk
-            chunk = tokens[: self.config.chunk_size]
-
-            # Decode the chunk into text
-            chunk_text = self.tokenizer.decode(chunk)
-
-            # Skip the chunk if it is empty or whitespace
-            if not chunk_text or chunk_text.isspace():
-                # Remove the tokens corresponding to the chunk text
-                # from remaining tokens
-                tokens = tokens[len(chunk) :]
-                # Continue to the next iteration of the loop
-                continue
-
-            # Find the last period or punctuation mark in the chunk
-            punctuation_matches = [
-                (m.start(), m.group())
-                for m in re.finditer(r"(?:[.!?][\s\n]|\n)", chunk_text)
-            ]
-
-            last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
-
-            # If there is a punctuation mark, and the last punctuation index is
-            # after MIN_CHUNK_SIZE_CHARS
-            if (
-                last_punctuation != -1
-                and last_punctuation > self.config.min_chunk_chars
-            ):
-                # Truncate the chunk text at the punctuation mark
-                chunk_text = chunk_text[: last_punctuation + 1]
-
-            # Replace redundant (3 or more) newlines with 2 newlines to preser
-            # paragraph separation!
-            # But do NOT strip leading/trailing whitespace, to preserve formatting
-            # (e.g. code blocks, or in case we want to stitch chunks back together)
-            chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
-
-            if len(chunk_text_to_append) > self.config.discard_chunk_chars:
-                # Append the chunk text to the list of chunks
-                chunks.append(chunk_text_to_append)
-
-            # Remove the tokens corresponding to the chunk text
-            # from the remaining tokens
-            tokens = tokens[
-                len(self.tokenizer.encode(chunk_text, disallowed_special=())) :
-            ]
-
-            # Increment the number of chunks
-            num_chunks += 1
-
-        # There may be remaining tokens, but we discard them
-        # since we have already reached the maximum number of chunks
-
-        return chunks
-
-    def split(self, docs: List[Document]) -> List[Document]:
-        if len(docs) == 0:
-            return []
-        # create ids in metadata of docs if absent:
-        # we need this to distinguish docs later in add_window_ids
-        for d in docs:
-            if d.metadata.id in [None, ""]:
-                d.metadata.id = ObjectRegistry.new_id()
-        # some docs are already splits, so don't split them further!
-        chunked_docs = [d for d in docs if d.metadata.is_chunk]
-        big_docs = [d for d in docs if not d.metadata.is_chunk]
-        if len(big_docs) == 0:
-            return chunked_docs
-        match self.config.splitter:
-            case Splitter.MARKDOWN | Splitter.TOKENS:
-                big_doc_chunks = self.split_chunk_tokens(big_docs)
-            case Splitter.PARA_SENTENCE:
-                big_doc_chunks = self.split_para_sentence(big_docs)
-            case Splitter.SIMPLE:
-                big_doc_chunks = self.split_simple(big_docs)
-            case _:
-                raise ValueError(f"Unknown splitter: {self.config.splitter}")
-
-        return chunked_docs + big_doc_chunks
-</file>
-
 <file path="langroid/utils/html_logger.py">
 """HTML Logger for Langroid Task System.
 
@@ -92182,1377 +93591,6 @@ Thanks to the contributors who helped improve this release, especially the integ
 ---
 
 **Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
-</file>
-
-<file path="tests/main/test_doc_chat_agent.py">
-import os
-import warnings
-from types import SimpleNamespace
-from typing import List, Optional
-
-import pandas as pd
-import pytest
-
-from langroid import ChatDocument
-from langroid.agent.batch import run_batch_task_gen, run_batch_tasks
-from langroid.agent.chat_agent import ChatAgent
-from langroid.agent.special.doc_chat_agent import (
-    CHUNK_ENRICHMENT_DELIMITER,
-    ChunkEnrichmentAgentConfig,
-    DocChatAgent,
-    DocChatAgentConfig,
-    RetrievalTool,
-    _append_metadata_source,
-)
-from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
-from langroid.agent.task import Task
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.language_models.mock_lm import MockLMConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document, Entity
-from langroid.parsing.parser import ParsingConfig, Splitter
-from langroid.parsing.utils import generate_random_text
-from langroid.prompts.prompts_config import PromptsConfig
-from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import DONE
-from langroid.utils.output.citations import extract_markdown_references
-from langroid.utils.system import rmdir
-from langroid.vector_store.base import VectorStore, VectorStoreConfig
-from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
-from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
-from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
-
-embed_cfg = OpenAIEmbeddingsConfig(
-    model_type="openai",
-)
-
-
-class MyDocMetaData(DocMetaData):
-    id: str
-
-
-class MyDoc(Document):
-    content: str
-    metadata: MyDocMetaData
-
-
-documents: List[Document] = [
-    Document(
-        content="""
-        In the year 2050, GPT10 was released. 
-        
-        In 2057, paperclips were seen all over the world. 
-        
-        Global warming was solved in 2060. 
-        
-        In 2045, the Tour de France was still going on.
-        They were still using bicycles. 
-        
-        There was one more ice age in 2040.
-        """,
-        metadata=DocMetaData(source="wikipedia"),
-    ),
-    Document(
-        content="""
-    Winegarten is the capital of a new country called NeoGlobal.
-        
-    Charlie Foster was a great comedian.
-        
-    Charlie Foster was born in 1889.
-        
-    Beethoven was born in 1770.
-        
-    In the year 2050, all countries merged into Lithuania.
-    """,
-        metadata=DocMetaData(source="almanac"),
-    ),
-]
-
-QUERY_EXPECTED_PAIRS = [
-    ("what is the capital of NeoGlobal?", "Winegarten"),
-    ("Who was Charlie Foster?", "comedian"),
-    ("When was global warming solved?", "2060"),
-    ("What do we know about paperclips?", "2057"),
-]
-
-for _ in range(100):
-    documents.append(
-        Document(
-            content=generate_random_text(5),
-            metadata=DocMetaData(source="random"),
-        )
-    )
-
-
-@pytest.fixture(scope="function")
-def vecdb(test_settings: Settings, request) -> VectorStore:
-    set_global(test_settings)
-    if request.param == "qdrant_local":
-        qd_dir = ":memory:"
-        qd_cfg = QdrantDBConfig(
-            cloud=False,
-            collection_name="test-" + embed_cfg.model_type,
-            storage_path=qd_dir,
-            embedding=embed_cfg,
-        )
-        qd = QdrantDB(qd_cfg)
-        yield qd
-        return
-
-    if request.param == "qdrant_cloud":
-        qd_dir = ".qdrant/cloud/test-" + embed_cfg.model_type
-        qd_cfg_cloud = QdrantDBConfig(
-            cloud=True,
-            collection_name="test-" + embed_cfg.model_type,
-            storage_path=qd_dir,
-            embedding=embed_cfg,
-        )
-        qd_cloud = QdrantDB(qd_cfg_cloud)
-        yield qd_cloud
-        return
-
-    if request.param == "chroma":
-        cd_dir = ".chroma/" + embed_cfg.model_type
-        rmdir(cd_dir)
-        cd_cfg = ChromaDBConfig(
-            collection_name="test-" + embed_cfg.model_type,
-            storage_path=cd_dir,
-            embedding=embed_cfg,
-        )
-        cd = ChromaDB(cd_cfg)
-        yield cd
-        rmdir(cd_dir)
-        return
-
-    if request.param == "lancedb":
-        ldb_dir = ".lancedb/data/" + embed_cfg.model_type
-        rmdir(ldb_dir)
-        ldb_cfg = LanceDBConfig(
-            cloud=False,
-            collection_name="test-" + embed_cfg.model_type,
-            storage_path=ldb_dir,
-            embedding=embed_cfg,
-            document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
-        )
-        ldb = LanceDB(ldb_cfg)
-        yield ldb
-        rmdir(ldb_dir)
-        return
-
-
-class _TestDocChatAgentConfig(DocChatAgentConfig):
-    cross_encoder_reranking_model: str = ""
-    n_query_rephrases: int = 0
-    debug: bool = False
-    stream: bool = True  # allow streaming where needed
-    conversation_mode: bool = True
-    vecdb: VectorStoreConfig | None = None
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        stream=True,
-        cache_config=RedisCacheConfig(fake=False),
-        use_chat_for_completion=True,
-    )
-
-    n_similar_chunks: int = 3
-    n_relevant_chunks: int = 3
-    parsing: ParsingConfig = ParsingConfig(
-        splitter=Splitter.SIMPLE,
-    )
-
-    prompts: PromptsConfig = PromptsConfig(
-        max_tokens=1000,
-    )
-
-
-config = _TestDocChatAgentConfig()
-set_global(Settings(cache=True))  # allow cacheing
-
-
-@pytest.fixture(scope="function")
-def agent(test_settings: Settings, vecdb) -> DocChatAgent:
-    set_global(test_settings)
-    agent = DocChatAgent(config)
-    agent.vecdb = vecdb
-    agent.ingest_docs(documents)
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    return agent
-
-
-warnings.filterwarnings(
-    "ignore",
-    message="Token indices sequence length.*",
-    # category=UserWarning,
-    module="transformers",
-)
-
-
-@pytest.mark.parametrize(
-    "vecdb", ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"], indirect=True
-)
-@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
-def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected: str):
-    """
-    Test directly using `llm_response` method of DocChatAgent.
-    """
-
-    # note that the (query, ans) pairs are accumulated into the
-    # internal dialog history of the agent.
-    set_global(test_settings)
-    agent.config.conversation_mode = False
-    result = agent.llm_response(query)
-    ans = result.content
-    refs = extract_markdown_references(ans)
-    sources = extract_markdown_references(result.metadata.source)
-    assert refs == sources
-    expected = [e.strip() for e in expected.split(",")]
-    assert all([e in ans for e in expected])
-
-
-@pytest.mark.parametrize(
-    "vecdb", ["lancedb", "qdrant_cloud", "qdrant_local", "chroma"], indirect=True
-)
-@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
-@pytest.mark.asyncio
-async def test_doc_chat_agent_llm_async(
-    test_settings: Settings, agent, query: str, expected: str
-):
-    """
-    Test directly using `llm_response_async` method of DocChatAgent.
-    """
-
-    # note that the (query, ans) pairs are accumulated into the
-    # internal dialog history of the agent.
-    set_global(test_settings)
-    agent.config.conversation_mode = False
-    ans = (await agent.llm_response_async(query)).content
-    expected = [e.strip() for e in expected.split(",")]
-    assert all([e in ans for e in expected])
-
-
-@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
-def test_doc_chat_agent_task(test_settings: Settings, agent, query, expected):
-    """
-    Test DocChatAgent wrapped in a Task.
-    """
-    set_global(test_settings)
-    agent.config.conversation_mode = True
-    task = Task(agent, restart=True)
-    task.init()
-    # LLM responds to Sys msg, initiates conv, says thank you, etc.
-    task.step()
-
-    agent.default_human_response = query
-    task.step()  # user asks query
-    task.step()  # LLM answers
-    ans = task.pending_message.content.lower()
-    expected = [e.strip() for e in expected.split(",")]
-    assert all([e.lower() in ans for e in expected])
-    assert task.pending_message.metadata.sender == Entity.LLM
-
-
-class RetrievalAgent(DocChatAgent):
-    def llm_response(
-        self,
-        message: None | str | ChatDocument = None,
-    ) -> Optional[ChatDocument]:
-        # override the DocChatAgent's LLM response,
-        # to just use ChatAgent's LLM response - this ensures that the system msg
-        # is respected, and it uses the `retrieval_tool` as instructed.
-        return ChatAgent.llm_response(self, message)
-
-
-@pytest.fixture(scope="function")
-def retrieval_agent(test_settings: Settings, vecdb) -> RetrievalAgent:
-    set_global(test_settings)
-    agent = RetrievalAgent(config)
-    agent.vecdb = vecdb
-    agent.ingest_docs(documents)
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    return agent
-
-
-@pytest.mark.parametrize("vecdb", ["qdrant_local"], indirect=True)
-@pytest.mark.parametrize(
-    "query, expected",
-    [
-        (
-            """
-            Use the retrieval_tool to find out the capital of
-            the fictional country NeoGlobal.
-            """,
-            "Winegarten",
-        ),
-        (
-            "Use the retrieval_tool to answer this:" " who was Charlie Foster?",
-            "comedian",
-        ),
-    ],
-)
-def test_retrieval_tool(
-    test_settings: Settings, retrieval_agent, query: str, expected: str
-):
-    set_global(test_settings)
-    retrieval_agent.enable_message(RetrievalTool)
-    task = Task(
-        retrieval_agent,
-        restart=True,
-        interactive=False,
-        system_message=f"""
-        To answer user's query, use the `retrieval_tool` to retrieve relevant passages, 
-        and ONLY then answer the query. 
-        In case the query is simply a topic or search phrase, 
-        guess what the user may want to know, and formulate it as a 
-        question to be answered, and use this as the `query` field in the 
-        `retrieval_tool`. 
-                
-        When you are ready to show your answer, say {DONE}, followed by the answer.
-        """,
-    )
-    # 3 turns:
-    # 1. LLM gen `retrieval_tool` request
-    # 2. Agent gen `retrieval_tool` response (i.e. returns relevant passages)
-    # 3. LLM gen answer based on passages
-    ans = task.run(query, turns=3).content
-    expected = [e.strip().lower() for e in expected.split(",")]
-    assert all([e in ans.lower() for e in expected])
-
-
-@pytest.fixture(scope="function")
-def new_agent(test_settings: Settings, vecdb) -> DocChatAgent:
-    set_global(test_settings)
-    agent = DocChatAgent(config)
-    agent.vecdb = vecdb
-    agent.ingest_docs(documents)
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    return agent
-
-
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
-@pytest.mark.parametrize("conv_mode", [True, False])
-@pytest.mark.parametrize("retain_context", [True, False])
-def test_doc_chat_followup(
-    test_settings: Settings, new_agent, conv_mode: bool, retain_context: bool
-):
-    """
-    Test whether follow-up question is handled correctly.
-    """
-    new_agent.config.conversation_mode = conv_mode
-    new_agent.config.retain_context = retain_context
-    set_global(test_settings)
-    task = Task(
-        new_agent,
-        interactive=False,
-        restart=False,  # don't restart, so we can ask follow-up questions
-        done_if_response=[Entity.LLM],
-        done_if_no_response=[Entity.LLM],
-    )
-    result = task.run("Who was Charlie Foster?")
-    assert "comedian" in result.content.lower()
-
-    result = task.run("When was he born?")
-    assert "1889" in result.content
-
-    # test retain_context when conv_mode is True
-    new_agent.init_state()
-    question = "Who was Charlie Foster?"
-    response = new_agent.llm_response(question)
-    assert "comedian" in response.content.lower()
-    if conv_mode:
-        if retain_context:
-            # context is retained, i.e.,
-            # the user msg has both extracted chunks and the question itself
-            assert len(new_agent.message_history[-2].content) > 2 * len(question)
-        else:
-            # context is not retained, i.e., the user msg has only the question
-            assert len(new_agent.message_history[-2].content) < len(question) + 10
-
-
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
-@pytest.mark.parametrize("conv_mode", [True, False])
-@pytest.mark.parametrize("retain_context", [True, False])
-@pytest.mark.asyncio
-async def test_doc_chat_followup_async(
-    test_settings: Settings,
-    new_agent,
-    conv_mode: bool,
-    retain_context: bool,
-):
-    """
-    Test whether follow-up question is handled correctly (in async mode).
-    """
-    new_agent.config.conversation_mode = conv_mode
-    new_agent.config.retain_context = retain_context
-    set_global(test_settings)
-    task = Task(
-        new_agent,
-        interactive=False,
-        restart=False,  # don't restart, so we can ask follow-up questions
-        done_if_response=[Entity.LLM],
-        done_if_no_response=[Entity.LLM],
-    )
-    result = await task.run_async("Who was Charlie Foster?")
-    assert "comedian" in result.content.lower()
-
-    result = await task.run_async("When was he born?")
-    assert "1889" in result.content
-
-    # test retain_context when conv_mode is True
-    new_agent.init_state()
-    question = "Who was Charlie Foster?"
-    response = await new_agent.llm_response_async(question)
-    assert "comedian" in response.content.lower()
-    if conv_mode:
-        if retain_context:
-            # context is retained, i.e.,
-            # the user msg has both extracted chunks and the question itself
-            assert len(new_agent.message_history[-2].content) > 2 * len(question)
-        else:
-            # context is not retained, i.e., the user msg has only the question
-            assert len(new_agent.message_history[-2].content) < len(question) + 10
-
-
-# setup config for retrieval test, with n_neighbor_chunks=2
-# and parser.n_neighbor_ids = 5
-class _MyDocChatAgentConfig(DocChatAgentConfig):
-    cross_encoder_reranking_model: str = ""
-    n_query_rephrases: int = 0
-    n_neighbor_chunks: int = 2
-    debug: bool = False
-    stream: bool = True  # allow streaming where needed
-    conversation_mode: bool = True
-    vecdb: VectorStoreConfig | None = None
-
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        stream=True,
-        cache_config=RedisCacheConfig(fake=False),
-        use_chat_for_completion=True,
-    )
-
-    n_similar_chunks: int = 2
-    n_relevant_chunks: int = 2
-    parsing: ParsingConfig = ParsingConfig(
-        splitter=Splitter.SIMPLE,
-        n_neighbor_ids=5,
-    )
-
-
-@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
-@pytest.mark.parametrize(
-    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
-)
-@pytest.mark.parametrize("conv_mode", [True, False])
-def test_doc_chat_retrieval(
-    test_settings: Settings, vecdb, splitter: Splitter, conv_mode: bool
-):
-    """
-    Test window retrieval of relevant doc-chunks.
-    Check that we are retrieving 2 neighbors around each match.
-    """
-    agent = DocChatAgent(
-        _MyDocChatAgentConfig(
-            n_similar_chunks=3,
-            n_relevant_chunks=3,
-            parsing=ParsingConfig(
-                splitter=splitter,
-            ),
-        )
-    )
-    agent.config.conversation_mode = conv_mode
-    agent.vecdb = vecdb
-
-    set_global(test_settings)
-
-    phrases = SimpleNamespace(
-        CATS="Cats are quiet and clean.",
-        DOGS="Dogs are loud and messy.",
-        PIGS="Pigs cannot fly.",
-        GIRAFFES="Giraffes are tall and vegetarian.",
-        BATS="Bats are blind.",
-        COWS="Cows are peaceful.",
-        GIRAFFES2="Giraffes are really strange animals.",
-        HYENAS="Hyenas are dangerous and fast.",
-        ZEBRAS="Zebras are bizarre with stripes.",
-    )
-    text = "\n\n".join(vars(phrases).values())
-    agent.clear()
-    agent.ingest_docs([Document(content=text, metadata={"source": "animals"})])
-    results = agent.get_relevant_chunks("What are giraffes like?")
-
-    # All phrases except the CATS phrase should be in the results
-    # since they are all within 2 chunks of a giraffe phrase.
-    # (The CAT phrase is 3 chunks away, so it should not be in the results.)
-    all_but_cats = [p for p in vars(phrases).values() if "Cats" not in p]
-    # check that each phrases occurs in exactly one result
-    assert (
-        sum(p in r.content for p in all_but_cats for r in results)
-        == len(vars(phrases)) - 1
-    )
-
-    agent.clear()
-
-
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
-def test_doc_chat_rerank_diversity(test_settings: Settings, vecdb):
-    """
-    Test that reranking by diversity works.
-    """
-
-    cfg = _MyDocChatAgentConfig(
-        n_neighbor_chunks=0,
-    )
-    cfg.n_similar_chunks = 8
-    cfg.n_relevant_chunks = 8
-    agent = DocChatAgent(cfg)
-    agent.vecdb = vecdb
-
-    set_global(test_settings)
-
-    phrases = SimpleNamespace(
-        g1="Giraffes are tall.",
-        g2="Giraffes are vegetarian.",
-        g3="Giraffes are strange.",
-        g4="Giraffes are fast.",
-        g5="Giraffes are known to be tall.",
-        g6="Giraffes are considered strange.",
-        g7="Giraffes move fast.",
-        g8="Giraffes are definitely vegetarian.",
-    )
-    docs = [
-        Document(content=p, metadata=DocMetaData(source="user"))
-        for p in vars(phrases).values()
-    ]
-    reranked = agent.rerank_with_diversity(docs)
-
-    # assert that each phrase tall, vegetarian, strange, fast
-    # occurs exactly once in top 4 phrases
-    for p in ["tall", "vegetarian", "strange", "fast"]:
-        assert sum(p in r.content for r in reranked[:4]) == 1
-
-
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
-def test_reciprocal_rank_fusion(test_settings: Settings, vecdb):
-    """
-    Test that RRF (Reciprocal Rank Fusion) works.
-    """
-
-    cfg = _MyDocChatAgentConfig(
-        n_neighbor_chunks=0,
-        cross_encoder_reranking_model="",
-        use_bm25_search=True,
-        use_fuzzy_match=True,
-        use_reciprocal_rank_fusion=True,
-        parsing=ParsingConfig(
-            splitter=Splitter.SIMPLE,
-            n_neighbor_ids=5,
-            n_similar_docs=None,  # Ensure we don't trigger backward compatibility
-        ),
-    )
-    cfg.n_similar_chunks = 3
-    cfg.n_relevant_chunks = 3
-    agent = DocChatAgent(cfg)
-    agent.vecdb = vecdb
-
-    set_global(test_settings)
-
-    phrases = SimpleNamespace(
-        g1="time flies like an arrow",
-        g2="a fly is very small",
-        g3="we like apples",
-        g4="the river bank got flooded",
-        g5="there was a run on the bank",
-        g6="JPMChase is a bank",
-        g7="Chase is one of the banks",
-    )
-    docs = [
-        Document(content=p, metadata=DocMetaData(source="user"))
-        for p in vars(phrases).values()
-    ]
-    agent.ingest_docs(docs, split=False)
-    chunks = agent.get_relevant_chunks("I like to chase banks")
-    assert len(chunks) == 3
-    assert any(phrases.g7 in chunk.content for chunk in chunks)
-    assert any(phrases.g6 in chunk.content for chunk in chunks)
-
-    chunks = agent.get_relevant_chunks("I like oranges")
-    assert len(chunks) == 3
-    assert any(phrases.g3 in chunk.content for chunk in chunks)
-    assert any(phrases.g1 in chunk.content for chunk in chunks)
-
-
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
-def test_doc_chat_rerank_periphery(test_settings: Settings, vecdb):
-    """
-    Test that reranking to periphery works.
-    """
-
-    cfg = _MyDocChatAgentConfig(
-        n_neighbor_chunks=0,
-    )
-    cfg.n_similar_chunks = 8
-    cfg.n_relevant_chunks = 8
-    agent = DocChatAgent(cfg)
-    agent.vecdb = vecdb
-
-    set_global(test_settings)
-
-    docs = [
-        Document(content=str(i), metadata=DocMetaData(source="user")) for i in range(10)
-    ]
-    reranked = agent.rerank_to_periphery(docs)
-    numbers = [int(d.content) for d in reranked]
-    assert numbers == [0, 2, 4, 6, 8, 9, 7, 5, 3, 1]
-
-
-data = {
-    "id": ["A100", "B200", "C300", "D400", "E500"],
-    "year": [1955, 1977, 1989, 2001, 2015],
-    "author": [
-        "Isaac Maximov",
-        "J.K. Bowling",
-        "George Morewell",
-        "J.R.R. Bolshine",
-        "Hugo Wellington",
-    ],
-    "title": [
-        "The Last Question",
-        "Harry Potter",
-        "2084",
-        "The Lord of the Rings",
-        "The Time Machine",
-    ],
-    "summary": [
-        "A story exploring the concept of entropy and the end of the universe.",
-        "The adventures of a young wizard and his friends at a magical school.",
-        "A dystopian novel about a totalitarian regime and the concept of freedom.",
-        "An epic fantasy tale of a quest to destroy a powerful ring.",
-        "A science fiction novel about time travel and its consequences.",
-    ],
-}
-
-df = pd.DataFrame(data)
-
-
-@pytest.mark.parametrize("metadata", [[], ["id", "year"], ["year"]])
-@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
-def test_doc_chat_ingest_df(
-    test_settings: Settings,
-    vecdb,
-    metadata,
-):
-    """Check we can ingest from a dataframe and run queries."""
-    set_global(test_settings)
-
-    sys_msg = "You will be asked to answer questions based on short book descriptions."
-    agent_cfg = DocChatAgentConfig(
-        system_message=sys_msg,
-        cross_encoder_reranking_model="",
-    )
-    if isinstance(vecdb, LanceDB):
-        agent = LanceDocChatAgent(agent_cfg)
-    else:
-        agent = DocChatAgent(agent_cfg)
-    agent.vecdb = vecdb
-    agent.clear()
-    agent.ingest_dataframe(df, content="summary", metadata=metadata)
-    response = agent.llm_response(
-        """
-        What concept does the book dealing with the end of the universe explore?
-        """
-    )
-    assert "entropy" in response.content.lower()
-
-
-@pytest.mark.parametrize("metadata", [[], ["id", "year"], ["year"]])
-@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
-def test_doc_chat_add_content_fields(
-    test_settings: Settings,
-    vecdb,
-    metadata,
-):
-    """Check we can ingest from a dataframe,
-    with additional fields inserted into content,
-    and run queries that refer to those fields."""
-
-    set_global(test_settings)
-
-    sys_msg = "You will be asked to answer questions based on short movie descriptions."
-    agent_cfg = DocChatAgentConfig(
-        system_message=sys_msg,
-        cross_encoder_reranking_model="",
-        add_fields_to_content=["year", "author", "title"],
-    )
-    if isinstance(vecdb, LanceDB):
-        agent = LanceDocChatAgent(agent_cfg)
-    else:
-        agent = DocChatAgent(agent_cfg)
-    agent.vecdb = vecdb
-    agent.clear()
-    agent.ingest_dataframe(df, content="summary", metadata=metadata)
-    response = agent.llm_response(
-        """
-        What was the title of the book by George Morewell and when was it written?
-        """
-    )
-    assert "2084" in response.content and "1989" in response.content
-
-
-@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
-@pytest.mark.parametrize(
-    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
-)
-def test_doc_chat_incremental_ingest(
-    test_settings: Settings, vecdb, splitter: Splitter
-):
-    """
-    Check that we are able ingest documents incrementally.
-    """
-    agent = DocChatAgent(
-        _MyDocChatAgentConfig(
-            n_similar_chunks=3,
-            n_relevant_chunks=3,
-            parsing=ParsingConfig(
-                splitter=splitter,
-            ),
-        )
-    )
-    agent.vecdb = vecdb
-
-    set_global(test_settings)
-
-    phrases = SimpleNamespace(
-        CATS="Cats are quiet and clean.",
-        DOGS="Dogs are loud and messy.",
-        PIGS="Pigs cannot fly.",
-        GIRAFFES="Giraffes are tall and vegetarian.",
-        BATS="Bats are blind.",
-        COWS="Cows are peaceful.",
-        GIRAFFES2="Giraffes are really strange animals.",
-        HYENAS="Hyenas are dangerous and fast.",
-        ZEBRAS="Zebras are bizarre with stripes.",
-    )
-    sentences = list(vars(phrases).values())
-    docs1 = [
-        Document(content=s, metadata=dict(source="animals")) for s in sentences[:4]
-    ]
-
-    docs2 = [
-        Document(content=s, metadata=dict(source="animals")) for s in sentences[4:]
-    ]
-    agent.ingest_docs(docs1)
-    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
-    agent.ingest_docs(docs2)
-    results = agent.get_relevant_chunks("What do we know about Pigs?")
-    assert any("fly" in r.content for r in results)
-
-    results = agent.get_relevant_chunks("What do we know about Hyenas?")
-    assert any("fast" in r.content for r in results) or any(
-        "dangerous" in r.content for r in results
-    )
-
-
-@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local"], indirect=True)
-@pytest.mark.parametrize(
-    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
-)
-@pytest.mark.parametrize("source", ["bytes", "path"])
-def test_doc_chat_ingest_paths(
-    test_settings: Settings,
-    vecdb,
-    splitter: Splitter,
-    source,
-):
-    """
-    Test DocChatAgent.ingest_doc_paths
-    """
-    agent = DocChatAgent(
-        _MyDocChatAgentConfig(
-            n_similar_chunks=3,
-            n_relevant_chunks=3,
-            parsing=ParsingConfig(
-                splitter=splitter,
-            ),
-        )
-    )
-    agent.vecdb = vecdb
-
-    set_global(test_settings)
-
-    phrases = SimpleNamespace(
-        CATS="Cats are quiet and clean.",
-        DOGS="Dogs are loud and messy.",
-        PIGS="Pigs cannot fly.",
-        GIRAFFES="Giraffes are tall and vegetarian.",
-        BATS="Bats are blind.",
-        COWS="Cows are peaceful.",
-        GIRAFFES2="Giraffes are really strange animals.",
-        HYENAS="Hyenas are dangerous and fast.",
-        ZEBRAS="Zebras are bizarre with stripes.",
-    )
-    sentences = list(vars(phrases).values())
-
-    # create temp files containing each sentence, using tempfile pkg
-    import tempfile
-
-    for s in sentences:
-        if source == "path":
-            with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-                f.write(s)
-                f.close()
-                agent.ingest_doc_paths([f.name])
-        else:
-            agent.ingest_doc_paths([s.encode()])
-
-    results = agent.get_relevant_chunks("What do we know about Pigs?")
-    assert any("fly" in r.content for r in results)
-
-    results = agent.get_relevant_chunks("What do we know about Hyenas?")
-    assert any("fast" in r.content for r in results) or any(
-        "dangerous" in r.content for r in results
-    )
-
-
-@pytest.mark.xfail(
-    condition=lambda: "lancedb" in vecdb,
-    reason="LanceDB may fail due to unknown flakiness",
-    run=True,
-    strict=False,
-)
-@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
-@pytest.mark.parametrize(
-    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
-)
-@pytest.mark.parametrize("metadata_dict", [True, False])
-def test_doc_chat_ingest_path_metadata(
-    test_settings: Settings,
-    vecdb,
-    splitter: Splitter,
-    metadata_dict: bool,  # whether metadata is dict or DocMetaData
-):
-    """
-    Test DocChatAgent.ingest_doc_paths, with metadata
-    """
-    agent = DocChatAgent(
-        _MyDocChatAgentConfig(
-            n_similar_chunks=3,
-            n_relevant_chunks=3,
-            parsing=ParsingConfig(
-                splitter=splitter,
-            ),
-        )
-    )
-    agent.vecdb = vecdb
-
-    set_global(test_settings)
-
-    # create a list of dicts, each containing a sentence about an animal
-    # and a metadata field indicating the animal's name, species, and diet
-    animals = [
-        {
-            "content": "Cats are quiet and clean.",
-            "metadata": {
-                "name": "cat",
-                "species": "feline",
-                "diet": "carnivore",
-            },
-        },
-        {
-            "content": "Dogs are loud and messy.",
-            "metadata": {
-                "name": "dog",
-                "species": "canine",
-                "diet": "omnivore",
-            },
-        },
-        {
-            "content": "Pigs cannot fly.",
-            "metadata": {
-                "name": "pig",
-                "species": "porcine",
-                "diet": "omnivore",
-            },
-        },
-    ]
-
-    class AnimalMetadata(DocMetaData):
-        name: str
-        species: str
-        diet: str
-
-    animal_metadata_list = [AnimalMetadata(**a["metadata"]) for a in animals]
-
-    # put each animal content in a separate file
-    import tempfile
-
-    for animal in animals:
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-            f.write(animal["content"])
-            f.close()
-            animal["path"] = f.name
-
-    agent.clear()
-    # ingest with per-file metadata
-    agent.ingest_doc_paths(
-        [a["path"] for a in animals],
-        metadata=(
-            [a["metadata"] for a in animals] if metadata_dict else animal_metadata_list
-        ),
-    )
-    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
-
-    results = agent.get_relevant_chunks("What do we know about Pigs?")
-    assert any("fly" in r.content for r in results)
-    # assert about metadata
-    assert any("porcine" in r.metadata.species for r in results)
-
-    # clear out the agent docs and the underlying vecdb collection
-    agent.clear()
-
-    # ingest with single metadata for ALL animals
-    agent.ingest_doc_paths(
-        [a["path"] for a in animals],
-        metadata=(
-            dict(type="animal", category="living")
-            if metadata_dict
-            else DocMetaData(type="animal", category="living")
-        ),
-    )
-    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
-
-    results = agent.get_relevant_chunks("What do we know about dogs?")
-    assert any("messy" in r.content for r in results)
-    assert all(r.metadata.type == "animal" for r in results)
-
-    agent.clear()
-
-
-@pytest.mark.xfail(
-    condition=lambda: "lancedb" in vecdb,
-    reason="LanceDB may fail due to unknown flakiness",
-    run=True,
-    strict=False,
-)
-@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
-def test_doc_chat_batch(test_settings: Settings, vecdb):
-    """
-    Test batch run of queries to multiple instances of DocChatAgent,
-    which share the same vector-db.
-    """
-
-    set_global(test_settings)
-    doc_agents = [DocChatAgent(_MyDocChatAgentConfig()) for _ in range(2)]
-
-    # attach a common vector-db to all agents
-    for a in doc_agents:
-        a.vecdb = vecdb
-
-    docs = [
-        Document(
-            content="""
-            Filidor Dinkoyevsky wrote a book called "The Sisters Karenina".
-            It is loosely based on the life of the Anya Karvenina,
-            from a book by Tolsitoy a few years earlier.
-            """,
-            metadata=DocMetaData(source="tweakipedia"),
-        ),
-        Document(
-            content="""
-            The novel "Searching for Sebastian Night" was written by Vlad Nabikov.
-            It is an intriguing tale about the author's search for his lost brother,
-            and is a meditation on the nature of loss and memory.
-            """,
-            metadata=DocMetaData(source="tweakipedia"),
-        ),
-    ]
-
-    # note we only need to ingest docs using one of the agents,
-    # since they share the same vector-db
-    doc_agents[0].ingest_docs(docs, split=False)
-
-    questions = [
-        "What book did Vlad Nabikov write?",
-        "Who wrote the book about the Karenina sisters?",
-    ]
-
-    # (1) test that we can create a single task and use run_batch_tasks
-    task = Task(doc_agents[0], name="DocAgent", interactive=False, single_round=True)
-    results = run_batch_tasks(task, questions)
-
-    assert "Sebastian" in results[0].content
-    assert "Dinkoyevsky" in results[1].content
-
-    # (2) test that we can create a task-generator fn and use run_batch_task_gen
-
-    # create a task-generator fn, to create one per question
-    def gen_task(i: int):
-        return Task(
-            doc_agents[i],
-            name=f"DocAgent-{i}",
-            interactive=False,
-            single_round=True,
-        )
-
-    results = run_batch_task_gen(gen_task, questions)
-
-    assert "Sebastian" in results[0].content
-    assert "Dinkoyevsky" in results[1].content
-
-    for a in doc_agents:
-        a.clear()
-
-
-@pytest.mark.parametrize("enrichment, expect_cleaned", [(True, True), (False, False)])
-def test_remove_enrichments(
-    enrichment: bool,
-    expect_cleaned: bool,
-) -> None:
-    """
-    Test removal of generated enrichments from documents both if
-    they have enrichment or not.
-    """
-
-    original_content = "This is the original content"
-    sample_docs = [
-        Document(
-            content=f"""
-                {original_content}\n\n{CHUNK_ENRICHMENT_DELIMITER}
-                Some generated enrichments
-            """,
-            metadata=DocMetaData(source="one", has_enrichment=True),
-        ),
-        Document(
-            content="This is a normal document", metadata=DocMetaData(source="twp")
-        ),
-    ]
-
-    enrichment_config = ChunkEnrichmentAgentConfig() if enrichment else None
-    agent = DocChatAgent(
-        _TestDocChatAgentConfig(chunk_enrichment_config=enrichment_config)
-    )
-
-    cleaned_docs = agent.remove_chunk_enrichments(sample_docs)
-
-    assert len(cleaned_docs) == len(sample_docs)
-    # Document with questions should be cleaned
-    assert (cleaned_docs[0].content.strip() == original_content) is expect_cleaned
-    # Normal document should be unchanged
-    assert cleaned_docs[1].content == sample_docs[1].content
-
-
-def test_add_enrichments() -> None:
-    """Test generation of enrichments for documents"""
-
-    sample_docs = [
-        Document(content="Doc 1", metadata=DocMetaData(source="one")),
-        Document(content="Doc 2", metadata=DocMetaData(source="two")),
-    ]
-
-    enrichment_agent_config = ChunkEnrichmentAgentConfig(
-        llm=MockLMConfig(
-            response_fn=lambda x: "Keyword1, keyword2 " + x,
-        ),
-        enrichment_prompt_fn=lambda x: "Add keywords to " + x,
-    )
-    agent = DocChatAgent(
-        _TestDocChatAgentConfig(
-            chunk_enrichment_config=enrichment_agent_config,
-        )
-    )
-
-    augmented_docs = agent.enrich_chunks(sample_docs)
-
-    assert len(augmented_docs) == len(sample_docs)
-    for doc in augmented_docs:
-        assert CHUNK_ENRICHMENT_DELIMITER in doc.content
-        assert doc.metadata.has_enrichment
-        # Original content should be preserved before marker
-        assert (
-            doc.content.split(CHUNK_ENRICHMENT_DELIMITER)[0].strip()
-            in sample_docs[0].content + sample_docs[1].content
-        )
-        # Should have enrichment after marker
-        enrichment_part = doc.content.split(CHUNK_ENRICHMENT_DELIMITER)[1].strip()
-        assert len(enrichment_part) > 0
-
-
-def test_enrichments_disabled() -> None:
-    """Test that enrichments are not generated when disabled"""
-
-    sample_docs = [Document(content="Doc 1", metadata=DocMetaData(source="one"))]
-
-    agent = DocChatAgent(_TestDocChatAgentConfig(chunk_enrichment_config=None))
-
-    processed_docs = agent.enrich_chunks(sample_docs)
-    assert len(processed_docs) == len(sample_docs)
-    assert processed_docs[0].content == sample_docs[0].content
-    assert not hasattr(processed_docs[0].metadata, "has_enrichment")
-
-    cleaned_docs = agent.remove_chunk_enrichments(sample_docs)
-    assert len(cleaned_docs) == len(sample_docs)
-    assert cleaned_docs[0].content == sample_docs[0].content
-
-
-@pytest.mark.parametrize(
-    "vecdb",
-    ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"],
-    indirect=True,
-)
-def test_enrichments_integration(vecdb: VectorStore) -> None:
-    """Integration test for chunk-enrichments in RAG pipeline"""
-
-    sample_docs = [
-        Document(
-            content="Blood Test name: BUN",
-            # Blood Urea Nitrogen test for kidney function
-            metadata=DocMetaData(source="blood-work", is_chunk=True),
-        ),
-        Document(
-            content="Blood test name: BNP",
-            # B-type natriuretic peptide test for heart function
-            metadata=DocMetaData(source="blood-work", is_chunk=True),
-        ),
-    ]
-
-    # add 20 random docs
-    sample_docs.extend(
-        [
-            Document(
-                content=generate_random_text(5),
-                metadata=DocMetaData(source="blood-work", is_chunk=True),
-            )
-            for _ in range(20)
-        ]
-    )
-
-    agent = DocChatAgent(
-        _TestDocChatAgentConfig(
-            rerank_diversity=False,
-            rerank_periphery=False,
-            relevance_extractor_config=None,
-            conversation_mode=False,
-            chunk_enrichment_config=ChunkEnrichmentAgentConfig(
-                system_message="""
-                You are an expert in medical tests, well-versed in 
-                test names and which organs they are associated with.
-                """,
-                enrichment_prompt_fn=lambda x: (
-                    f"""
-                    Which organ function or health is the following blood test
-                    most closely associated with? 
-                    (Answer in ONE WORD; if unsure, say UNKNOWN)
-                    
-                    {x}
-                    """
-                ),
-            ),
-        )
-    )
-    agent.vecdb = vecdb
-    agent.augment_system_message(
-        """
-        
-        You are an expert in medical tests, well-versed in 
-        test names and which organs they are associated with.
-        
-        You must answer questions based on the provided document-extracts,
-        combined with your medical knowledge.
-        """
-    )
-    # clear existing docs
-    agent.clear()
-    agent.ingest_docs(sample_docs)
-
-    # Verify questions were generated during ingestion
-    all_docs = agent.vecdb.get_all_documents()
-    assert all(
-        CHUNK_ENRICHMENT_DELIMITER in doc.content for doc in all_docs
-    ), "Generated enrichments not found in all docs"
-
-    # retrieve docs they should not contain generated enrichments
-    doc1 = agent.answer_from_docs("Which medical test is kidney-related?")
-    doc2 = agent.answer_from_docs("Which blood test is related to heart-function?")
-
-    # they are documents enriched with keywords
-    # but the keywords should be removed on retrieval
-    assert (
-        CHUNK_ENRICHMENT_DELIMITER not in doc1.content
-    ), f"Doc 1 has not been cleaned: {doc1.content}"
-    assert (
-        CHUNK_ENRICHMENT_DELIMITER not in doc2.content
-    ), f"Doc 2 has not been cleaned: {doc2.content}"
-
-    # check that the right content is in the docs
-    assert "BUN" in doc1.content
-    assert "BNP" in doc2.content
-
-
-@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
-def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
-    agent = DocChatAgent(_MyDocChatAgentConfig())
-    agent.vecdb = vecdb
-    agent.clear()  # clear the collection in the vector store
-
-    # Base documents with simple metadata
-    docs = [
-        Document(content="Doc 1", metadata=DocMetaData(source="original1")),
-        Document(content="Doc 2", metadata=DocMetaData(source="original2")),
-    ]
-
-    # Test case 1: List of metadata dicts
-    docs_copy = [d.model_copy() for d in docs]
-    meta_list = [
-        {"category": "A", "source": "new1"},
-        {"category": "B", "source": "new2"},
-    ]
-    agent.ingest_docs(docs_copy, metadata=meta_list)
-    stored = agent.vecdb.get_all_documents()
-    assert set([d.metadata.category for d in stored]) == {"A", "B"}
-
-    assert set(d.metadata.source for d in stored) == {
-        _append_metadata_source("original1", "new1"),
-        _append_metadata_source("original2", "new2"),
-    }
-
-    agent.clear()
-
-    # Test case 2: Single metadata dict for all docs
-    docs_copy = [d.model_copy() for d in docs]
-    meta_dict = {"category": "common", "source": "new"}
-    agent.ingest_docs(docs_copy, metadata=meta_dict)
-    stored = agent.vecdb.get_all_documents()
-    assert all(d.metadata.category == "common" for d in stored)
-
-    assert set(d.metadata.source for d in stored) == {
-        _append_metadata_source("original1", "new"),
-        _append_metadata_source("original2", "new"),
-    }
-    agent.clear()
-
-    # Test case 3: List of DocMetaData
-    docs_copy = [d.model_copy() for d in docs]
-    meta_docs = [
-        DocMetaData(category="X", source="new1"),
-        DocMetaData(category="Y", source="new2"),
-    ]
-    agent.ingest_docs(docs_copy, metadata=meta_docs)
-    stored = agent.vecdb.get_all_documents()
-    assert set([d.metadata.category for d in stored]) == {"X", "Y"}
-
-    assert set(d.metadata.source for d in stored) == {
-        _append_metadata_source("original1", "new1"),
-        _append_metadata_source("original2", "new2"),
-    }
-    agent.clear()
-
-    # Test case 4: Single DocMetaData for all docs
-    docs_copy = [d.model_copy() for d in docs]
-    meta_doc = DocMetaData(category="shared", source="new")
-    agent.ingest_docs(docs_copy, metadata=meta_doc)
-    stored = agent.vecdb.get_all_documents()
-    assert all(d.metadata.category == "shared" for d in stored)
-
-    assert set(d.metadata.source for d in stored) == {
-        _append_metadata_source("original1", "new"),
-        _append_metadata_source("original2", "new"),
-    }
-    agent.clear()
-
-
-@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
-def test_doc_chat_agent_ingest_paths(test_settings: Settings, vecdb):
-    agent = DocChatAgent(_MyDocChatAgentConfig())
-    agent.vecdb = vecdb
-    agent.clear()  # clear the collection in the vector store
-
-    # Create temp files and byte contents
-    import tempfile
-
-    # Create two temp files
-    file_contents = ["Content of file 1", "Content of file 2"]
-    temp_files = []
-    for content in file_contents:
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-            f.write(content)
-            temp_files.append(f.name)
-
-    # Create two byte contents
-    byte_contents = [b"Bytes content 1", b"Bytes content 2"]
-
-    # Test case 1: List of metadata dicts
-    paths = temp_files + byte_contents
-    meta_list = [
-        {"category": "file", "source": "src1"},
-        {"category": "file", "source": "src2"},
-        {"category": "bytes", "source": "src3"},
-        {"category": "bytes", "source": "src4"},
-    ]
-    # ingest with no additional metadata so we can get the original source
-    docs = agent.ingest_doc_paths(paths)
-    orig_sources = [d.metadata.source for d in docs]
-    agent.clear()
-    # now ingest with additional metadata
-    agent.ingest_doc_paths(paths, metadata=meta_list)
-    stored = agent.vecdb.get_all_documents()
-
-    # Create sets of expected and actual metadata
-    expected_categories = {"file", "bytes"}
-    expected_sources = {
-        _append_metadata_source(s, f"src{i+1}") for i, s in enumerate(orig_sources)
-    }
-
-    actual_categories = {d.metadata.category for d in stored}
-    actual_sources = {d.metadata.source for d in stored}
-
-    assert expected_categories == actual_categories
-    assert expected_sources == actual_sources
-    agent.clear()
-
-    # Test case 2: Single metadata dict
-    meta_dict = {"category": "common", "source": "shared"}
-    # now ingest with additional metadata
-    agent.ingest_doc_paths(paths, metadata=meta_dict)
-    stored = agent.vecdb.get_all_documents()
-
-    assert all(d.metadata.category == "common" for d in stored)
-    expected_sources = {_append_metadata_source(s, "shared") for s in orig_sources}
-    actual_sources = {d.metadata.source for d in stored}
-    assert expected_sources == actual_sources
-    agent.clear()
-
-    # Test case 3: List of DocMetaData
-    meta_docs = [DocMetaData(category="X", source=f"src{i}") for i in range(len(paths))]
-
-    # now ingest with metadata
-    agent.ingest_doc_paths(paths, metadata=meta_docs)
-    stored = agent.vecdb.get_all_documents()
-
-    expected_categories = {"X"}
-    expected_sources = {
-        _append_metadata_source(s, f"src{i}") for i, s in enumerate(orig_sources)
-    }
-
-    actual_categories = {d.metadata.category for d in stored}
-    actual_sources = {d.metadata.source for d in stored}
-
-    assert expected_categories == actual_categories
-    assert expected_sources == actual_sources
-    agent.clear()
-
-    # Test case 4: Single DocMetaData
-    meta_doc = DocMetaData(category="shared", source="new")
-    docs = agent.ingest_doc_paths(paths, metadata=meta_doc)
-    stored = agent.vecdb.get_all_documents()
-
-    assert all(d.metadata.category == "shared" for d in stored)
-    expected_sources = {_append_metadata_source(s, "new") for s in orig_sources}
-    actual_sources = {d.metadata.source for d in stored}
-    assert expected_sources == actual_sources
-    agent.clear()
-
-    # Cleanup temp files
-    for f in temp_files:
-        os.remove(f)
 </file>
 
 <file path="tests/main/test_html_logger.py">
@@ -107241,7 +107279,7 @@ class Task:
 import asyncio
 import os
 import shutil
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import pytest
 from anyio import ClosedResourceError
@@ -111009,6 +111047,28 @@ class ChatAgent(Agent):
                     include_defaults=include_defaults,
                 )
             return None
+
+        # Validate that use/handle are booleans, not accidentally passed tool classes
+        if isclass(use) or isclass(handle):
+            param = "use" if isclass(use) else "handle"
+            raise TypeError(
+                textwrap.dedent(
+                    f"""
+                    Invalid arguments to enable_message().
+                    It appears you passed multiple ToolMessage classes as separate
+                    arguments instead of as a list.
+
+                    Correct usage:
+                        agent.enable_message([Tool1, Tool2, Tool3])
+
+                    Incorrect usage:
+                        agent.enable_message(Tool1, Tool2, Tool3)
+
+                    The '{param}' parameter must be a boolean, not a class.
+                    """
+                )
+            )
+
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
         if isinstance(message_class, XMLToolMessage):
@@ -115475,7 +115535,7 @@ class OpenAIGPT(LanguageModel):
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.17"
+version = "0.59.18"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
