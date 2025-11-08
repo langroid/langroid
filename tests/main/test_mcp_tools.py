@@ -1,7 +1,7 @@
 import asyncio
 import os
 import shutil
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import pytest
 from anyio import ClosedResourceError

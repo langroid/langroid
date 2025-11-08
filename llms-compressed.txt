@@ -12679,237 +12679,6 @@ It is a playground area meant to try out new ideas, and once solid,
 move them to the main codebase.
 </file>
 
-<file path="issues/20251107-fix-mcp-dectorator.md">
-Title: Fix @mcp_tool pattern for fastmcp>=2.13 / mcp>=1.21
-
-Date: 2025-11-07
-
-Summary
-
-The `@mcp_tool` decorator in Langroid currently accepts a concrete
-`ClientTransport` (e.g., `StdioTransport`) created at module import time and
-uses it to (a) open a short-lived connection to read the tool schema and (b)
-later open a new connection when the tool is actually invoked. This pattern
-works with older fastmcp/mcp, but with fastmcp≥2.13.0.2 and mcp≥1.21.0 the
-transport instance becomes single-use after the first connection closes,
-leading to `anyio.ClosedResourceError` when we try to reuse it.
-
-Key files reviewed
-
-- examples/mcp/claude-code-mcp-single.py
-- langroid/agent/tools/mcp/decorators.py
-- langroid/agent/tools/mcp/fastmcp_client.py
-
-What happens at decorator time vs tool invocation time
-
-Decorator time (module import):
-
-- The decorator `@mcp_tool(server, tool_name)` runs immediately when the module
-  is imported.
-- `decorators.py` calls `get_tool(server, tool_name)` (sync wrapper) which
-  `asyncio.run`s `get_tool_async`.
-- `fastmcp_client.get_tool_async` does `async with FastMCPClient(server)`, which
-  constructs an inner `fastmcp.client.Client(server)` and opens a session to the
-  MCP server to fetch the tool definition (schema, description, etc.).
-- A dynamic `ToolMessage` subclass is created with fields from the tool’s
-  input schema. The class is annotated with `_client_config` that includes the
-  original `server` argument so it can open a connection again later when the
-  tool is invoked.
-- The temporary client context is exited, closing the underlying session and
-  transport.
-
-Tool invocation time (at runtime in the agent):
-
-- The tool’s `handle_async` calls the generated `call_tool_async`.
-- `call_tool_async` reconstructs a new `FastMCPClient(**_client_config)` and
-  opens a fresh connection to call `session.call_tool(...)`.
-
-Why ClosedResourceError appears with newer fastmcp/mcp
-
-- In our examples we pass a concrete `ClientTransport` instance to the
-  decorator, e.g., a module-level `StdioTransport(...)`.
-- At decorator time, we make one connection using that instance and then close
-  it when exiting the client context.
-- Later at tool invocation time, the generated tool tries to reuse the very same
-  `ClientTransport` instance to open a second connection. With
-  fastmcp≥2.13.0.2/mcp≥1.21.0 the transport object is effectively single-use
-  and owns AnyIO channels/process handles that are closed when the first client
-  context exits. Reusing it causes the session’s write side to be closed during
-  `session.initialize()`, which surfaces as `anyio.ClosedResourceError` while
-  sending the initial JSON-RPC request.
-- Older versions (fastmcp==2.3.4, mcp==1.9.0) tolerated reusing the same
-  transport instance, as the transport behaved more like a stateless “spec” or
-  was internally recreated per connection. That leniency is gone in the newer
-  stack, where transports manage lifecycle-bound resources tied to a single
-  session.
-
-Conclusion: passing a live, already-used `ClientTransport` instance through the
-decorator leads to reusing a closed transport when the tool is actually
-invoked, which triggers `ClosedResourceError` during session initialization.
-
-Recommended fixes (choose one)
-
-1) Pass a transport factory (or a server spec), not an instance
-
-Create a zero-arg callable that returns a fresh transport each time. This keeps
-the decorator pattern but ensures a brand-new transport is used for every
-connection.
-
-Example change to example file:
-
-```python
-from fastmcp.client.transports import StdioTransport
-from langroid.agent.tools.mcp import mcp_tool
-
-def transport_factory():
-    return StdioTransport(command="claude", args=["mcp", "serve"], env={})
-
-@mcp_tool(transport_factory, "Grep")
-class GrepTool(lr.ToolMessage):
-    async def handle_async(self):
-        result = await self.call_tool_async()
-        return f"<GrepResult>\n{result}\n</GrepResult>"
-```
-
-This works because each call path (`get_tool_async` at decorator time and
-`call_tool_async` at runtime) gets a fresh transport by calling the factory.
-
-2) Defer tool creation to runtime (avoid decorator entirely)
-
-For scripts already running inside an event loop or when you want to avoid all
-import-time side effects, use the async helper instead of the decorator:
-
-```python
-from fastmcp.client.transports import StdioTransport
-from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
-
-async def main():
-    BaseGrepTool = await get_tool_async(
-        lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
-        "Grep",
-    )
-
-    class GrepTool(BaseGrepTool):
-        async def handle_async(self):
-            result = await self.call_tool_async()
-            return f"<GrepResult>\n{result}\n</GrepResult>"
-```
-
-3) Library-level hardening in Langroid (recommended)
-
-Make Langroid resilient regardless of how callers pass `server` by allowing a
-factory and by cloning transports when a live instance is provided.
-
-Proposed changes (illustrative, not yet applied):
-
-In `langroid/agent/tools/mcp/fastmcp_client.py`:
-
-```python
-from typing import Callable, Union
-import inspect
-from fastmcp.client.transports import ClientTransport
-
-# Accept either a spec or a zero-arg factory returning a spec
-ServerSpec = Union[str, FastMCP[Any], AnyUrl, ClientTransport, Callable[[], Union[str, FastMCP[Any], AnyUrl, ClientTransport]]]
-
-class FastMCPClient:
-    def __init__(self, server: ServerSpec, ...):
-        self.server = server
-
-    async def __aenter__(self) -> "FastMCPClient":
-        server_spec = self.server() if callable(self.server) else self.server
-        self._cm = Client(server_spec, ...)
-        self.client = await self._cm.__aenter__()
-        return self
-
-    async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]:
-        ...
-        def _as_factory(srv: ServerSpec):
-            if callable(srv):
-                return srv
-            if isinstance(srv, ClientTransport):
-                cls = srv.__class__
-                sig = inspect.signature(cls)
-                # build kwargs from attribute names that match ctor params
-                kwargs = {
-                    n: getattr(srv, n)
-                    for n, p in sig.parameters.items()
-                    if n != "self" and hasattr(srv, n)
-                }
-                return lambda: cls(**kwargs)
-            return lambda: srv  # strings/URLs/FastMCP pass-through
-
-        client_config = {
-            "server": _as_factory(self.server),  # always a factory now
-            ...
-        }
-
-        async def call_tool_async(itself: ToolMessage) -> Any:
-            cfg = getattr(itself.__class__, "_client_config")
-            server_factory = cfg["server"]
-            async with FastMCPClient(server_factory, ...) as client:
-                return await client.call_mcp_tool(itself.request, payload)
-```
-
-With this change:
-
-- Callers may pass a transport instance, a factory, a URL, or a string. We
-  always store a factory on the generated class, ensuring a fresh transport for
-  each connection.
-- `__aenter__` transparently supports receiving a factory and calling it.
-
-Why this addresses the error
-
-- The failure arises from reusing a closed `ClientTransport`. By switching to a
-  factory-or-spec approach, every connection uses a brand-new transport
-  instance, so the AnyIO channels and subprocess handles are valid during
-  `session.initialize()` and the handshake completes normally.
-
-Notes on behavior changes between versions
-
-- The newer fastmcp/mcp stack ties the transport’s resources to the client
-  context more strictly (e.g., AnyIO memory channels/process lifetime tied to
-  the session). Reusing a transport object after the session is closed now fails
-  early in `initialize()` with a closed writer, surfacing as
-  `anyio.ClosedResourceError`.
-- Older versions were more permissive about reusing the same instance, which is
-  why the import-time decorator usage “accidentally” worked.
-
-Action items
-
-- Update examples to pass a factory to `@mcp_tool` (Option 1), or switch those
-  examples to `get_tool_async` at runtime (Option 2).
-- Optionally harden Langroid per Option 3 so user code keeps working even when
-  a transport instance is passed.
-
-Appendix: example patch to the failing example
-
-```diff
---- a/examples/mcp/claude-code-mcp-single.py
-+++ b/examples/mcp/claude-code-mcp-single.py
-@@
--transport = StdioTransport(
--    command="claude",
--    args=["mcp", "serve"],
--    env={},
--)
-+def transport_factory():
-+    return StdioTransport(
-+        command="claude",
-+        args=["mcp", "serve"],
-+        env={},
-+    )
-
-@@
--@mcp_tool(transport, "Grep")
-+@mcp_tool(transport_factory, "Grep")
- class GrepTool(lr.ToolMessage):
-     async def handle_async(self):
-         # call the actual tool
-         result: str = await self.call_tool_async()
-```
-</file>
-
 <file path="langroid/agent/special/arangodb/system_messages.py">
 done_tool_name = DoneTool.default_value("request")
 ⋮----
@@ -13655,30 +13424,6 @@ result = "No result"
 
 <file path="langroid/agent/tools/mcp/__init__.py">
 __all__ = [
-</file>
-
-<file path="langroid/agent/tools/mcp/decorators.py">
-"""Decorator: declare a ToolMessage class bound to a FastMCP tool.
-
-    Usage:
-        @mcp_tool("/path/to/server.py", "get_weather")
-        class WeatherTool:
-            def pretty(self) -> str:
-                return f"Temp is {self.temperature}"
-
-    The `server` may be a string/URL/FastMCP/ClientTransport, or a zero-arg
-    callable returning one of those, e.g. `lambda: StdioTransport(...)`. Using a
-    factory ensures a fresh transport per connection under fastmcp>=2.13.
-    """
-⋮----
-def decorator(user_cls: Type[ToolMessage]) -> Type[ToolMessage]
-⋮----
-# build the “real” ToolMessage subclass for this server/tool
-RealTool: Type[ToolMessage] = get_tool(server, tool_name)
-⋮----
-# copy user‐defined methods / attributes onto RealTool
-⋮----
-# preserve the user’s original name if you like:
 </file>
 
 <file path="langroid/agent/tools/__init__.py">
@@ -18975,124 +18720,6 @@ seq = parse_done_sequence("T, A,")
 seq = parse_done_sequence(",T, A")
 </file>
 
-<file path="tests/main/test_done_sequences_dsl.py">
-"""Tests for done sequences DSL integration with Task."""
-⋮----
-class SimpleTool(ToolMessage)
-⋮----
-request: str = "simple_tool"
-purpose: str = "A simple tool for testing"
-value: str
-⋮----
-def handle(self) -> str
-⋮----
-"""Handle the tool and return a response"""
-⋮----
-# CLAUDE - make an async version of this test, using task.run_async() etc
-def test_dsl_simple_pattern(test_settings: Settings)
-⋮----
-"""Test that DSL pattern 'T, A' works like full DoneSequence."""
-⋮----
-# Mock LLM that always generates a tool
-agent = ChatAgent(
-⋮----
-# Use DSL string pattern
-config = TaskConfig(done_sequences=["T, A"])
-task = Task(agent, config=config, interactive=False)
-result = task.run("Generate a tool", turns=10)
-⋮----
-@pytest.mark.asyncio
-async def test_dsl_simple_pattern_async(test_settings: Settings)
-⋮----
-"""Test that DSL pattern 'T, A' works like full DoneSequence (async)."""
-⋮----
-result = await task.run_async("Generate a tool", turns=10)
-⋮----
-def test_dsl_specific_tool(test_settings: Settings)
-⋮----
-"""Test DSL pattern with specific tool name."""
-⋮----
-class AnotherTool(ToolMessage)
-⋮----
-request: str = "another_tool"
-purpose: str = "Another tool"
-data: str
-⋮----
-def handle(self) -> str
-⋮----
-# Mock LLM that generates specific tool
-⋮----
-# Use DSL with specific tool
-config = TaskConfig(done_sequences=["T[simple_tool], A"])
-⋮----
-result = task.run("Generate tool", turns=10)
-⋮----
-@pytest.mark.asyncio
-async def test_dsl_specific_tool_async(test_settings: Settings)
-⋮----
-"""Test DSL pattern with specific tool name (async)."""
-⋮----
-result = await task.run_async("Generate tool", turns=10)
-⋮----
-def test_dsl_content_match(test_settings: Settings)
-⋮----
-"""Test DSL pattern with content matching."""
-⋮----
-# Mock LLM that says "quit"
-⋮----
-# Use DSL with content match
-config = TaskConfig(done_sequences=["C[quit|exit]"])
-⋮----
-result = task.run("Do something", turns=10)
-⋮----
-@pytest.mark.asyncio
-async def test_dsl_content_match_async(test_settings: Settings)
-⋮----
-"""Test DSL pattern with content matching (async)."""
-⋮----
-result = await task.run_async("Do something", turns=10)
-⋮----
-def test_dsl_complex_pattern(test_settings: Settings)
-⋮----
-"""Test complex DSL pattern."""
-⋮----
-responses = [
-response_idx = 0
-⋮----
-def mock_response(x)
-⋮----
-resp = responses[response_idx % len(responses)]
-⋮----
-# Complex pattern: LLM, Tool, Agent, LLM
-config = TaskConfig(done_sequences=["L, T, A, L"])
-task = Task(
-result = task.run("Help me", turns=10)
-⋮----
-def test_dsl_mixed_with_done_sequence(test_settings: Settings)
-⋮----
-"""Test mixing DSL strings with DoneSequence objects."""
-⋮----
-# Mix DSL string and DoneSequence object
-config = TaskConfig(
-⋮----
-"T, A",  # DSL string
-DoneSequence(  # Full object
-⋮----
-def test_dsl_without_spaces(test_settings: Settings)
-⋮----
-"""Test DSL works without spaces."""
-⋮----
-# DSL without spaces
-config = TaskConfig(done_sequences=["T,A"])
-⋮----
-def test_dsl_word_tokens(test_settings: Settings)
-⋮----
-"""Test DSL with full word tokens."""
-⋮----
-# Full word tokens
-config = TaskConfig(done_sequences=["TOOL, AGENT"])
-</file>
-
 <file path="tests/main/test_embeddings.py">
 def test_openai_embeddings()
 ⋮----
@@ -22572,445 +22199,6 @@ agent = DocChatAgent(config)
 - [llama.cpp server documentation](https://github.com/ggml-org/llama.cpp/blob/master/examples/server/README.md)
 - [nomic-embed models on Hugging Face](https://huggingface.co/nomic-ai)
 - [Issue #919 - Implementation details](https://github.com/langroid/langroid/blob/main/issues/issue-919-llamacpp-embeddings.md)
-</file>
-
-<file path="docs/notes/mcp-tools.md">
-# Langroid MCP Integration
-
-Langroid provides seamless integration with Model Context Protocol (MCP) servers via 
-two methods, both of which involve creating Langroid `ToolMessage` subclasses
-corresponding to the MCP tools: 
-
-1. Programmatic creation of Langroid tools using `get_tool_async`, 
-   `get_tools_async` from the tool definitions defined on an MCP server.
-2. Declarative creation of Langroid tools using the **`@mcp_tool` decorator**, which allows
-   customizing the tool-handling behavior beyond what is provided by the MCP server.
-
-This integration allows _any_ LLM (that is good enough to do function-calling via prompts) to use any MCP server.
-See the following to understand the integration better:
-
-- example python scripts under [`examples/mcp`](https://github.com/langroid/langroid/tree/main/examples/mcp)
-- [`tests/main/test_mcp_tools.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_mcp_tools.py)
-
----
-
-## 1. Connecting to an MCP server via transport specification
-
-Before creating Langroid tools, we first need to define and connect to an MCP server
-via a [FastMCP](https://gofastmcp.com/getting-started/welcome) client. 
-There are several ways to connect to a server, depending on how it is defined. 
-Each of these uses a different type of [transport](https://gofastmcp.com/clients/transports).
-
-The typical pattern to use with Langroid is as follows:
-
-- define an MCP server transport
-- create a `ToolMessage` subclass using the `@mcp_tool` decorator or 
-  `get_tool_async()` function, with the transport as the first argument
-
-
-Langroid's MCP integration will work with any of [transports](https://gofastmcp.com/clients/transportsl) 
-supported by FastMCP.
-Below we go over some common ways to define transports and extract tools from the servers.
-
-1. **Local Python script**
-2. **In-memory FastMCP server** - useful for testing and for simple in-memory servers
-   that don't need to be run as a separate process.
-3. **NPX stdio transport**
-4. **UVX stdio transport**
-5. **Generic stdio transport** – launch any CLI‐based MCP server via stdin/stdout
-6. **Network SSE transport** – connect to HTTP/S MCP servers via `SSETransport`
-
-
-All examples below use the async helpers to create Langroid tools (`ToolMessage` subclasses):
-
-```python
-from langroid.agent.tools.mcp import (
-    get_tools_async,
-    get_tool_async,
-)
-```
-
----
-
-#### Path to a Python Script
-
-Point at your MCP‐server entrypoint, e.g., to the `weather.py` script in the 
-langroid repo (based on the [Anthropic quick-start guide](https://modelcontextprotocol.io/quickstart/server)):
-
-```python
-async def example_script_path() -> None:
-    server = "tests/main/mcp/weather-server-python/weather.py"
-    tools = await get_tools_async(server) # all tools available
-    AlertTool = await get_tool_async(server, "get_alerts") # specific tool
-
-    # instantiate the tool with a specific input
-    msg = AlertTool(state="CA")
-    
-    # Call the tool via handle_async()
-    alerts = await msg.handle_async()
-    print(alerts)
-```
-
----
-
-#### In-Memory FastMCP Server
-
-Define your server with `FastMCP(...)` and pass the instance:
-
-```python
-from fastmcp.server import FastMCP
-from pydantic import BaseModel, Field
-
-class CounterInput(BaseModel):
-    start: int = Field(...)
-
-def make_server() -> FastMCP:
-    server = FastMCP("CounterServer")
-
-    @server.tool()
-    def increment(data: CounterInput) -> int:
-        """Increment start by 1."""
-        return data.start + 1
-
-    return server
-
-async def example_in_memory() -> None:
-    server = make_server()
-    tools = await get_tools_async(server)
-    IncTool = await get_tool_async(server, "increment")
-
-    result = await IncTool(start=41).handle_async()
-    print(result)  # 42
-```
-
-See the [`mcp-file-system.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/mcp-file-system.py)
-script for a working example of this.
-
----
-
-#### NPX stdio Transport
-
-Use any npm-installed MCP server via `npx`, e.g., the 
-[Exa web-search MCP server](https://docs.exa.ai/examples/exa-mcp):
-
-```python
-from fastmcp.client.transports import NpxStdioTransport
-
-transport = NpxStdioTransport(
-    package="exa-mcp-server",
-    env_vars={"EXA_API_KEY": "…"},
-)
-
-async def example_npx() -> None:
-    tools = await get_tools_async(transport)
-    SearchTool = await get_tool_async(transport, "web_search_exa")
-
-    results = await SearchTool(
-        query="How does Langroid integrate with MCP?"
-    ).handle_async()
-    print(results)
-```
-
-For a fully working example, see the script [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py).
-
----
-
-#### UVX stdio Transport
-
-Connect to a UVX-based MCP server, e.g., the [Git MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/git)
-
-```python
-from fastmcp.client.transports import UvxStdioTransport
-
-transport = UvxStdioTransport(tool_name="mcp-server-git")
-
-async def example_uvx() -> None:
-    tools = await get_tools_async(transport)
-    GitStatus = await get_tool_async(transport, "git_status")
-
-    status = await GitStatus(path=".").handle_async()
-    print(status)
-```
-
---- 
-
-#### Generic stdio Transport
-
-Use `StdioTransport` to run any MCP server as a subprocess over stdio:
-
-```python
-from fastmcp.client.transports import StdioTransport
-from langroid.agent.tools.mcp import get_tools_async, get_tool_async
-
-
-async def example_stdio() -> None:
-    """Example: any CLI‐based MCP server via StdioTransport."""
-    transport: StdioTransport = StdioTransport(
-        command="uv",
-        args=["run", "--with", "biomcp-python", "biomcp", "run"],
-    )
-    tools: list[type] = await get_tools_async(transport)
-    BioTool = await get_tool_async(transport, "tool_name")
-    result: str = await BioTool(param="value").handle_async()
-    print(result)
-```
-
-See the full example in [`examples/mcp/biomcp.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/biomcp.py).
-
----
-
-#### Network SSE Transport
-
-Use `SSETransport` to connect to a FastMCP server over HTTP/S:
-
-```python
-from fastmcp.client.transports import SSETransport
-from langroid.agent.tools.mcp import (
-    get_tools_async,
-    get_tool_async,
-)
-
-
-async def example_sse() -> None:
-    """Example: connect to an HTTP/S MCP server via SSETransport."""
-    url: str = "https://localhost:8000/sse"
-    transport: SSETransport = SSETransport(
-        url=url, headers={"Authorization": "Bearer TOKEN"}
-    )
-    tools: list[type] = await get_tools_async(transport)
-    ExampleTool = await get_tool_async(transport, "tool_name")
-    result: str = await ExampleTool(param="value").handle_async()
-    print(result)
-```    
-
----
-
-With these patterns you can list tools, generate Pydantic-backed `ToolMessage` classes,
-and invoke them via `.handle_async()`, all with zero boilerplate client setup. 
-As the `FastMCP` library adds other types of transport (e.g., `StreamableHTTPTransport`),
-the pattern of usage with Langroid will remain the same.
-
-
----
-
-## Best Practice: Use a server factory for stdio transports
-
-Starting with fastmcp 2.13 and mcp 1.21, stdio transports (e.g., `StdioTransport`,
-`NpxStdioTransport`, `UvxStdioTransport`) are effectively single‑use. Reusing the
-same transport instance across multiple connections can lead to errors such as
-`anyio.ClosedResourceError` during session initialization.
-
-To make your code robust and future‑proof, pass a zero‑argument server factory to
-Langroid’s MCP helpers. A “server factory” is simply a `lambda` or function that
-returns a fresh server spec or transport each time.
-
-Benefits:
-
-- Fresh, reliable connections on every call (no reuse of closed transports).
-- Works across fastmcp/mcp versions without subtle lifecycle issues.
-- Enables concurrent calls safely (each call uses its own subprocess/session).
-- Keeps your decorator ergonomics and `handle_async` overrides unchanged.
-
-You can use a factory with both the decorator and the async helpers:
-
-```python
-from fastmcp.client.transports import StdioTransport
-from langroid.agent.tools.mcp import mcp_tool, get_tool_async
-
-# 1) Decorator style
-@mcp_tool(lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
-          "Grep")
-class GrepTool(lr.ToolMessage):
-    async def handle_async(self) -> str:
-        # pre/post-process around the raw MCP call
-        result = await self.call_tool_async()
-        return f"<GrepResult>\n{result}\n</GrepResult>"
-
-# 2) Programmatic style
-BaseGrep = await get_tool_async(
-    lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
-    "Grep",
-)
-```
-
-Notes:
-
-- Passing a concrete transport instance still works: Langroid will try to clone
-  it internally; however, a factory is the most reliable across environments.
-- For network transports (e.g., `SSETransport`), a factory is optional; you can
-  continue passing the transport instance directly.
-
----
-
-## Output-schema validation: return structured content when required
-
-Newer `mcp` clients validate tool outputs against the tool’s output schema. If a
-tool declares a structured output, returning plain text may raise a runtime
-error. Some servers (for example, Claude Code’s Grep) expose an argument like
-`output_mode` that controls the shape of the response.
-
-Recommendations:
-
-- Prefer structured modes when a tool declares an output schema.
-- If available, set options like `output_mode="structured"` (or a documented
-  structured variant such as `"files_with_matches"`) in your tool’s
-  `handle_async` before calling `await self.call_tool_async()`.
-
-Example tweak in a decorator-based tool:
-
-```python
-@mcp_tool(lambda: StdioTransport(command="claude", args=["mcp", "serve"]),
-          "Grep")
-class GrepTool(lr.ToolMessage):
-    async def handle_async(self) -> str:
-        # Ensure a structured response if the server supports it
-        if hasattr(self, "output_mode"):
-            self.output_mode = "structured"
-        return await self.call_tool_async()
-```
-
-If the server does not provide such a switch, follow its documentation for
-returning data that matches its declared output schema.
-
----
-
-## 2. Create Langroid Tools declaratively using the `@mcp_tool` decorator
-
-The above examples showed how you can create Langroid tools programmatically using
-the helper functions `get_tool_async()` and `get_tools_async()`,
-with the first argument being the transport to the MCP server. The `@mcp_tool` decorator
-works in the same way: 
-
-- **Arguments to the decorator**
-    1. `server_spec`: path/URL/`FastMCP`/`ClientTransport`, as mentioned above.
-    2. `tool_name`: name of a specific MCP tool
-
-- **Behavior**
-    - Generates a `ToolMessage` subclass with all input fields typed.
-    - Provides a `call_tool_async()` under the hood -- this is the "raw" MCP tool call,
-      returning a string.
-    - If you define your own `handle_async()`, it overrides the default. Typically,
-you would override it to customize either the input or the output of the tool call, or both.
-    - If you don't define your own `handle_async()`, it defaults to just returning the
-      value of the `call_tool_async()` method.
-
-Here is a simple example of using the `@mcp_tool` decorator to create a Langroid tool:
-
-```python
-from fastmcp.server import FastMCP
-from langroid.agent.tools.mcp import mcp_tool
-import langroid as lr
-
-# Define your MCP server (pydantic v2 for schema)
-server = FastMCP("MyServer")
-
-@mcp_tool(server, "greet")
-class GreetTool(lr.ToolMessage):
-    """Say hello to someone."""
-
-    async def handle_async(self) -> str:
-        # Customize post-processing
-        raw = await self.call_tool_async()
-        return f"💬 {raw}"
-```
-
-Using the decorator method allows you to customize the `handle_async` method of the
-tool, or add additional fields to the `ToolMessage`. 
-You may want to customize the input to the tool, or the tool result before it is sent back to 
-the LLM. If you don't override it, the default behavior is to simply return the value of 
-the "raw" MCP tool call `await self.call_tool_async()`. 
-
-```python
-@mcp_tool(server, "calculate")
-class CalcTool(ToolMessage):
-    """Perform complex calculation."""
-
-    async def handle_async(self) -> str:
-        result = await self.call_tool_async()
-        # Add context or emojis, etc.
-        return f"🧮 Result is *{result}*"
-```
-
----
-
-## 3. Enabling Tools in Your Agent
-
-Once you’ve created a Langroid `ToolMessage` subclass from an MCP server, 
-you can enable it on a `ChatAgent`, just like you normally would. Below is an example of using 
-the [Exa MCP server](https://docs.exa.ai/examples/exa-mcp) to create a 
-Langroid web search tool, enable a `ChatAgent` to use it, and then set up a `Task` to 
-run the agent loop.
-
-First we must define the appropriate `ClientTransport` for the MCP server:
-```python
-# define the transport
-transport = NpxStdioTransport(
-    package="exa-mcp-server",
-    env_vars=dict(EXA_API_KEY=os.getenv("EXA_API_KEY")),
-)
-```
-
-Then we use the `@mcp_tool` decorator to create a `ToolMessage` 
-subclass representing the web search tool. Note that one reason to use the decorator
-to define our tool is so we can specify a custom `handle_async` method that
-controls what is sent to the LLM after the actual raw MCP tool-call
-(the `call_tool_async` method) is made.
-
-```python
-# the second arg specifically refers to the `web_search_exa` tool available
-# on the server defined by the `transport` variable.
-@mcp_tool(transport, "web_search_exa")
-class ExaSearchTool(lr.ToolMessage):
-    async def handle_async(self):
-        result: str = await self.call_tool_async()
-        return f"""
-        Below are the results of the web search:
-        
-        <WebSearchResult>
-        {result}
-        </WebSearchResult>
-        
-        Use these results to answer the user's original question.
-        """
-
-```
-
-If we did not want to override the `handle_async` method, we could simply have
-created the `ExaSearchTool` class programmatically via the `get_tool_async` 
-function as shown above, i.e.:
-
-```python
-from langroid.agent.tools.mcp import get_tool_async
-
-ExaSearchTool = await get_tool_async(transport, "web_search_exa")
-```
-
-We can now define our main function where we create our `ChatAgent`,
-attach the `ExaSearchTool` to it, define the `Task`, and run the task loop.
-
-```python
-async def main():
-    agent = lr.ChatAgent(
-        lr.ChatAgentConfig(
-            # forward to user when LLM doesn't use a tool
-            handle_llm_no_tool=NonToolAction.FORWARD_USER,
-            llm=lm.OpenAIGPTConfig(
-                max_output_tokens=1000,
-                # this defaults to True, but we set it to False so we can see output
-                async_stream_quiet=False,
-            ),
-        )
-    )
-
-    # enable the agent to use the web-search tool
-    agent.enable_message(ExaSearchTool)
-    # make task with interactive=False =>
-    # waits for user only when LLM doesn't use a tool
-    task = lr.Task(agent, interactive=False)
-    await task.run_async()
-```
-
-See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full working example of this.
 </file>
 
 <file path="docs/notes/openai-client-caching.md">
@@ -28353,89 +27541,6 @@ agent = lr.ChatAgent(
 task = lr.Task(agent, interactive=False)
 </file>
 
-<file path="examples/mcp/claude-code-mcp-single.py">
-"""
-Enable a Langroid agent to use a SINGLE MCP Tool from 
-Claude Code's MCP server.
-
-Similar to claude-code-mcp.py but showing how to use a single tool, i.e.,
-Claude-Code's special Grep tool that is built on ripgrep.
-
-Run like this (omitting the `--model` argument will use the default gpt-5-mini):
-
-    uv run examples/mcp/claude-code-mcp-single.py --model gpt-5-mini
-
-
-"""
-⋮----
-transport = StdioTransport(
-⋮----
-# Illustrating how we can:
-# - use the MCP tool decorator to create a Langroid ToolMessage subclass
-# - override the handle_async() method to customize the output, sent to the LLM
-⋮----
-@mcp_tool(transport, "Grep")
-class GrepTool(lr.ToolMessage)
-⋮----
-async def handle_async(self)
-⋮----
-# Force a predictable, structured response shape from Grep so the
-# handler can parse and decide deterministically.
-# "content" mode returns matching lines along with numLines/numMatches.
-⋮----
-# CODEX: Minimal, readable post‑processing — parse the structured JSON
-# and present plain text fields (no JSON) so the LLM can skim quickly.
-# The task will terminate on the LLM’s non‑tool reply due to
-# handle_llm_no_tool=Done.
-# Call the actual tool. Langroid returns a tuple (text, files). Unpack
-# the text payload for presentation.
-result = await self.call_tool_async()
-⋮----
-summary = None
-lines = None
-⋮----
-data = json.loads(result_text) if isinstance(result_text, str) else {}
-⋮----
-mode = data.get("mode", "?")
-num_files = data.get("numFiles")
-filenames = data.get("filenames") or []
-num_lines = data.get("numLines")
-num_matches = data.get("numMatches")
-applied_limit = data.get("appliedLimit")
-applied_offset = data.get("appliedOffset")
-content_block = data.get("content", "")
-⋮----
-parts = [
-summary = "\n".join(p for p in parts if p)
-lines = str(content_block or "").rstrip()
-⋮----
-# Fallback: show raw payload if parsing failed
-⋮----
-async def main(model: str = "")
-⋮----
-agent = lr.ChatAgent(
-⋮----
-# when the LLM responds without a tool, finish with that content
-# (prevents waiting for user input in non-interactive mode)
-⋮----
-# this defaults to True, but we set it to False so we can see output
-⋮----
-# enable the agent to use the grep tool
-⋮----
-task = lr.Task(agent, interactive=False)
-user_prompt = """
-⋮----
-result = await task.run_async(user_prompt)
-⋮----
-def run_main(**kwargs) -> None
-⋮----
-"""Run the async main function with a proper event loop.
-
-        Args:
-            **kwargs: Keyword arguments to pass to the main function.
-        """
-</file>
-
 <file path="examples/mcp/exa-web-search.py">
 """
 Simple example of using the Exa Web Search MCP Server to
@@ -33056,6 +32161,237 @@ Implement a per-model cache with synchronization so each process holds one
 In short: embeddings are cloned per clone for isolation; the cross encoder is shared but guarded for thread-safe access.
 </file>
 
+<file path="issues/20251107-fix-mcp-dectorator.md">
+Title: Fix @mcp_tool pattern for fastmcp>=2.13 / mcp>=1.21
+
+Date: 2025-11-07
+
+Summary
+
+The `@mcp_tool` decorator in Langroid currently accepts a concrete
+`ClientTransport` (e.g., `StdioTransport`) created at module import time and
+uses it to (a) open a short-lived connection to read the tool schema and (b)
+later open a new connection when the tool is actually invoked. This pattern
+works with older fastmcp/mcp, but with fastmcp≥2.13.0.2 and mcp≥1.21.0 the
+transport instance becomes single-use after the first connection closes,
+leading to `anyio.ClosedResourceError` when we try to reuse it.
+
+Key files reviewed
+
+- examples/mcp/claude-code-mcp-single.py
+- langroid/agent/tools/mcp/decorators.py
+- langroid/agent/tools/mcp/fastmcp_client.py
+
+What happens at decorator time vs tool invocation time
+
+Decorator time (module import):
+
+- The decorator `@mcp_tool(server, tool_name)` runs immediately when the module
+  is imported.
+- `decorators.py` calls `get_tool(server, tool_name)` (sync wrapper) which
+  `asyncio.run`s `get_tool_async`.
+- `fastmcp_client.get_tool_async` does `async with FastMCPClient(server)`, which
+  constructs an inner `fastmcp.client.Client(server)` and opens a session to the
+  MCP server to fetch the tool definition (schema, description, etc.).
+- A dynamic `ToolMessage` subclass is created with fields from the tool’s
+  input schema. The class is annotated with `_client_config` that includes the
+  original `server` argument so it can open a connection again later when the
+  tool is invoked.
+- The temporary client context is exited, closing the underlying session and
+  transport.
+
+Tool invocation time (at runtime in the agent):
+
+- The tool’s `handle_async` calls the generated `call_tool_async`.
+- `call_tool_async` reconstructs a new `FastMCPClient(**_client_config)` and
+  opens a fresh connection to call `session.call_tool(...)`.
+
+Why ClosedResourceError appears with newer fastmcp/mcp
+
+- In our examples we pass a concrete `ClientTransport` instance to the
+  decorator, e.g., a module-level `StdioTransport(...)`.
+- At decorator time, we make one connection using that instance and then close
+  it when exiting the client context.
+- Later at tool invocation time, the generated tool tries to reuse the very same
+  `ClientTransport` instance to open a second connection. With
+  fastmcp≥2.13.0.2/mcp≥1.21.0 the transport object is effectively single-use
+  and owns AnyIO channels/process handles that are closed when the first client
+  context exits. Reusing it causes the session’s write side to be closed during
+  `session.initialize()`, which surfaces as `anyio.ClosedResourceError` while
+  sending the initial JSON-RPC request.
+- Older versions (fastmcp==2.3.4, mcp==1.9.0) tolerated reusing the same
+  transport instance, as the transport behaved more like a stateless “spec” or
+  was internally recreated per connection. That leniency is gone in the newer
+  stack, where transports manage lifecycle-bound resources tied to a single
+  session.
+
+Conclusion: passing a live, already-used `ClientTransport` instance through the
+decorator leads to reusing a closed transport when the tool is actually
+invoked, which triggers `ClosedResourceError` during session initialization.
+
+Recommended fixes (choose one)
+
+1) Pass a transport factory (or a server spec), not an instance
+
+Create a zero-arg callable that returns a fresh transport each time. This keeps
+the decorator pattern but ensures a brand-new transport is used for every
+connection.
+
+Example change to example file:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp import mcp_tool
+
+def transport_factory():
+    return StdioTransport(command="claude", args=["mcp", "serve"], env={})
+
+@mcp_tool(transport_factory, "Grep")
+class GrepTool(lr.ToolMessage):
+    async def handle_async(self):
+        result = await self.call_tool_async()
+        return f"<GrepResult>\n{result}\n</GrepResult>"
+```
+
+This works because each call path (`get_tool_async` at decorator time and
+`call_tool_async` at runtime) gets a fresh transport by calling the factory.
+
+2) Defer tool creation to runtime (avoid decorator entirely)
+
+For scripts already running inside an event loop or when you want to avoid all
+import-time side effects, use the async helper instead of the decorator:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
+
+async def main():
+    BaseGrepTool = await get_tool_async(
+        lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
+        "Grep",
+    )
+
+    class GrepTool(BaseGrepTool):
+        async def handle_async(self):
+            result = await self.call_tool_async()
+            return f"<GrepResult>\n{result}\n</GrepResult>"
+```
+
+3) Library-level hardening in Langroid (recommended)
+
+Make Langroid resilient regardless of how callers pass `server` by allowing a
+factory and by cloning transports when a live instance is provided.
+
+Proposed changes (illustrative, not yet applied):
+
+In `langroid/agent/tools/mcp/fastmcp_client.py`:
+
+```python
+from typing import Callable, Union
+import inspect
+from fastmcp.client.transports import ClientTransport
+
+# Accept either a spec or a zero-arg factory returning a spec
+ServerSpec = Union[str, FastMCP[Any], AnyUrl, ClientTransport, Callable[[], Union[str, FastMCP[Any], AnyUrl, ClientTransport]]]
+
+class FastMCPClient:
+    def __init__(self, server: ServerSpec, ...):
+        self.server = server
+
+    async def __aenter__(self) -> "FastMCPClient":
+        server_spec = self.server() if callable(self.server) else self.server
+        self._cm = Client(server_spec, ...)
+        self.client = await self._cm.__aenter__()
+        return self
+
+    async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]:
+        ...
+        def _as_factory(srv: ServerSpec):
+            if callable(srv):
+                return srv
+            if isinstance(srv, ClientTransport):
+                cls = srv.__class__
+                sig = inspect.signature(cls)
+                # build kwargs from attribute names that match ctor params
+                kwargs = {
+                    n: getattr(srv, n)
+                    for n, p in sig.parameters.items()
+                    if n != "self" and hasattr(srv, n)
+                }
+                return lambda: cls(**kwargs)
+            return lambda: srv  # strings/URLs/FastMCP pass-through
+
+        client_config = {
+            "server": _as_factory(self.server),  # always a factory now
+            ...
+        }
+
+        async def call_tool_async(itself: ToolMessage) -> Any:
+            cfg = getattr(itself.__class__, "_client_config")
+            server_factory = cfg["server"]
+            async with FastMCPClient(server_factory, ...) as client:
+                return await client.call_mcp_tool(itself.request, payload)
+```
+
+With this change:
+
+- Callers may pass a transport instance, a factory, a URL, or a string. We
+  always store a factory on the generated class, ensuring a fresh transport for
+  each connection.
+- `__aenter__` transparently supports receiving a factory and calling it.
+
+Why this addresses the error
+
+- The failure arises from reusing a closed `ClientTransport`. By switching to a
+  factory-or-spec approach, every connection uses a brand-new transport
+  instance, so the AnyIO channels and subprocess handles are valid during
+  `session.initialize()` and the handshake completes normally.
+
+Notes on behavior changes between versions
+
+- The newer fastmcp/mcp stack ties the transport’s resources to the client
+  context more strictly (e.g., AnyIO memory channels/process lifetime tied to
+  the session). Reusing a transport object after the session is closed now fails
+  early in `initialize()` with a closed writer, surfacing as
+  `anyio.ClosedResourceError`.
+- Older versions were more permissive about reusing the same instance, which is
+  why the import-time decorator usage “accidentally” worked.
+
+Action items
+
+- Update examples to pass a factory to `@mcp_tool` (Option 1), or switch those
+  examples to `get_tool_async` at runtime (Option 2).
+- Optionally harden Langroid per Option 3 so user code keeps working even when
+  a transport instance is passed.
+
+Appendix: example patch to the failing example
+
+```diff
+--- a/examples/mcp/claude-code-mcp-single.py
++++ b/examples/mcp/claude-code-mcp-single.py
+@@
+-transport = StdioTransport(
+-    command="claude",
+-    args=["mcp", "serve"],
+-    env={},
+-)
++def transport_factory():
++    return StdioTransport(
++        command="claude",
++        args=["mcp", "serve"],
++        env={},
++    )
+
+@@
+-@mcp_tool(transport, "Grep")
++@mcp_tool(transport_factory, "Grep")
+ class GrepTool(lr.ToolMessage):
+     async def handle_async(self):
+         # call the actual tool
+         result: str = await self.call_tool_async()
+```
+</file>
+
 <file path="issues/898-implementation.md">
 # Issue #898: OpenAI HTTP Client Support for SSL Certificate Verification
 
@@ -36239,6 +35575,30 @@ request: str = "query_plan_feedback"
 ⋮----
 feedback: str
 suggested_fix: str
+</file>
+
+<file path="langroid/agent/tools/mcp/decorators.py">
+"""Decorator: declare a ToolMessage class bound to a FastMCP tool.
+
+    Usage:
+        @mcp_tool("/path/to/server.py", "get_weather")
+        class WeatherTool:
+            def pretty(self) -> str:
+                return f"Temp is {self.temperature}"
+
+    The `server` may be a string/URL/FastMCP/ClientTransport, or a zero-arg
+    callable returning one of those, e.g. `lambda: StdioTransport(...)`. Using a
+    factory ensures a fresh transport per connection under fastmcp>=2.13.
+    """
+⋮----
+def decorator(user_cls: Type[ToolMessage]) -> Type[ToolMessage]
+⋮----
+# build the “real” ToolMessage subclass for this server/tool
+RealTool: Type[ToolMessage] = get_tool(server, tool_name)
+⋮----
+# copy user‐defined methods / attributes onto RealTool
+⋮----
+# preserve the user’s original name if you like:
 </file>
 
 <file path="langroid/agent/tools/file_tools.py">
@@ -42683,6 +42043,124 @@ reranked = agent.rerank_to_periphery(docs)
 numbers = [int(d.content) for d in reranked]
 </file>
 
+<file path="tests/main/test_done_sequences_dsl.py">
+"""Tests for done sequences DSL integration with Task."""
+⋮----
+class SimpleTool(ToolMessage)
+⋮----
+request: str = "simple_tool"
+purpose: str = "A simple tool for testing"
+value: str
+⋮----
+def handle(self) -> str
+⋮----
+"""Handle the tool and return a response"""
+⋮----
+# CLAUDE - make an async version of this test, using task.run_async() etc
+def test_dsl_simple_pattern(test_settings: Settings)
+⋮----
+"""Test that DSL pattern 'T, A' works like full DoneSequence."""
+⋮----
+# Mock LLM that always generates a tool
+agent = ChatAgent(
+⋮----
+# Use DSL string pattern
+config = TaskConfig(done_sequences=["T, A"])
+task = Task(agent, config=config, interactive=False)
+result = task.run("Generate a tool", turns=10)
+⋮----
+@pytest.mark.asyncio
+async def test_dsl_simple_pattern_async(test_settings: Settings)
+⋮----
+"""Test that DSL pattern 'T, A' works like full DoneSequence (async)."""
+⋮----
+result = await task.run_async("Generate a tool", turns=10)
+⋮----
+def test_dsl_specific_tool(test_settings: Settings)
+⋮----
+"""Test DSL pattern with specific tool name."""
+⋮----
+class AnotherTool(ToolMessage)
+⋮----
+request: str = "another_tool"
+purpose: str = "Another tool"
+data: str
+⋮----
+def handle(self) -> str
+⋮----
+# Mock LLM that generates specific tool
+⋮----
+# Use DSL with specific tool
+config = TaskConfig(done_sequences=["T[simple_tool], A"])
+⋮----
+result = task.run("Generate tool", turns=10)
+⋮----
+@pytest.mark.asyncio
+async def test_dsl_specific_tool_async(test_settings: Settings)
+⋮----
+"""Test DSL pattern with specific tool name (async)."""
+⋮----
+result = await task.run_async("Generate tool", turns=10)
+⋮----
+def test_dsl_content_match(test_settings: Settings)
+⋮----
+"""Test DSL pattern with content matching."""
+⋮----
+# Mock LLM that says "quit"
+⋮----
+# Use DSL with content match
+config = TaskConfig(done_sequences=["C[quit|exit]"])
+⋮----
+result = task.run("Do something", turns=10)
+⋮----
+@pytest.mark.asyncio
+async def test_dsl_content_match_async(test_settings: Settings)
+⋮----
+"""Test DSL pattern with content matching (async)."""
+⋮----
+result = await task.run_async("Do something", turns=10)
+⋮----
+def test_dsl_complex_pattern(test_settings: Settings)
+⋮----
+"""Test complex DSL pattern."""
+⋮----
+responses = [
+response_idx = 0
+⋮----
+def mock_response(x)
+⋮----
+resp = responses[response_idx % len(responses)]
+⋮----
+# Complex pattern: LLM, Tool, Agent, LLM
+config = TaskConfig(done_sequences=["L, T, A, L"])
+task = Task(
+result = task.run("Help me", turns=10)
+⋮----
+def test_dsl_mixed_with_done_sequence(test_settings: Settings)
+⋮----
+"""Test mixing DSL strings with DoneSequence objects."""
+⋮----
+# Mix DSL string and DoneSequence object
+config = TaskConfig(
+⋮----
+"T, A",  # DSL string
+DoneSequence(  # Full object
+⋮----
+def test_dsl_without_spaces(test_settings: Settings)
+⋮----
+"""Test DSL works without spaces."""
+⋮----
+# DSL without spaces
+config = TaskConfig(done_sequences=["T,A"])
+⋮----
+def test_dsl_word_tokens(test_settings: Settings)
+⋮----
+"""Test DSL with full word tokens."""
+⋮----
+# Full word tokens
+config = TaskConfig(done_sequences=["TOOL, AGENT"])
+</file>
+
 <file path="tests/main/test_done_sequences.py">
 """
 Tests for the done_sequences feature in Task.
@@ -47736,6 +47214,445 @@ In this example from `examples/basic/planner-workflow-simple.py`, you can see:
 4. **Filtered Views**: Use "Show only important responses" to hide intermediate steps
 </file>
 
+<file path="docs/notes/mcp-tools.md">
+# Langroid MCP Integration
+
+Langroid provides seamless integration with Model Context Protocol (MCP) servers via 
+two methods, both of which involve creating Langroid `ToolMessage` subclasses
+corresponding to the MCP tools: 
+
+1. Programmatic creation of Langroid tools using `get_tool_async`, 
+   `get_tools_async` from the tool definitions defined on an MCP server.
+2. Declarative creation of Langroid tools using the **`@mcp_tool` decorator**, which allows
+   customizing the tool-handling behavior beyond what is provided by the MCP server.
+
+This integration allows _any_ LLM (that is good enough to do function-calling via prompts) to use any MCP server.
+See the following to understand the integration better:
+
+- example python scripts under [`examples/mcp`](https://github.com/langroid/langroid/tree/main/examples/mcp)
+- [`tests/main/test_mcp_tools.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_mcp_tools.py)
+
+---
+
+## 1. Connecting to an MCP server via transport specification
+
+Before creating Langroid tools, we first need to define and connect to an MCP server
+via a [FastMCP](https://gofastmcp.com/getting-started/welcome) client. 
+There are several ways to connect to a server, depending on how it is defined. 
+Each of these uses a different type of [transport](https://gofastmcp.com/clients/transports).
+
+The typical pattern to use with Langroid is as follows:
+
+- define an MCP server transport
+- create a `ToolMessage` subclass using the `@mcp_tool` decorator or 
+  `get_tool_async()` function, with the transport as the first argument
+
+
+Langroid's MCP integration will work with any of [transports](https://gofastmcp.com/clients/transportsl) 
+supported by FastMCP.
+Below we go over some common ways to define transports and extract tools from the servers.
+
+1. **Local Python script**
+2. **In-memory FastMCP server** - useful for testing and for simple in-memory servers
+   that don't need to be run as a separate process.
+3. **NPX stdio transport**
+4. **UVX stdio transport**
+5. **Generic stdio transport** – launch any CLI‐based MCP server via stdin/stdout
+6. **Network SSE transport** – connect to HTTP/S MCP servers via `SSETransport`
+
+
+All examples below use the async helpers to create Langroid tools (`ToolMessage` subclasses):
+
+```python
+from langroid.agent.tools.mcp import (
+    get_tools_async,
+    get_tool_async,
+)
+```
+
+---
+
+#### Path to a Python Script
+
+Point at your MCP‐server entrypoint, e.g., to the `weather.py` script in the 
+langroid repo (based on the [Anthropic quick-start guide](https://modelcontextprotocol.io/quickstart/server)):
+
+```python
+async def example_script_path() -> None:
+    server = "tests/main/mcp/weather-server-python/weather.py"
+    tools = await get_tools_async(server) # all tools available
+    AlertTool = await get_tool_async(server, "get_alerts") # specific tool
+
+    # instantiate the tool with a specific input
+    msg = AlertTool(state="CA")
+    
+    # Call the tool via handle_async()
+    alerts = await msg.handle_async()
+    print(alerts)
+```
+
+---
+
+#### In-Memory FastMCP Server
+
+Define your server with `FastMCP(...)` and pass the instance:
+
+```python
+from fastmcp.server import FastMCP
+from pydantic import BaseModel, Field
+
+class CounterInput(BaseModel):
+    start: int = Field(...)
+
+def make_server() -> FastMCP:
+    server = FastMCP("CounterServer")
+
+    @server.tool()
+    def increment(data: CounterInput) -> int:
+        """Increment start by 1."""
+        return data.start + 1
+
+    return server
+
+async def example_in_memory() -> None:
+    server = make_server()
+    tools = await get_tools_async(server)
+    IncTool = await get_tool_async(server, "increment")
+
+    result = await IncTool(start=41).handle_async()
+    print(result)  # 42
+```
+
+See the [`mcp-file-system.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/mcp-file-system.py)
+script for a working example of this.
+
+---
+
+#### NPX stdio Transport
+
+Use any npm-installed MCP server via `npx`, e.g., the 
+[Exa web-search MCP server](https://docs.exa.ai/examples/exa-mcp):
+
+```python
+from fastmcp.client.transports import NpxStdioTransport
+
+transport = NpxStdioTransport(
+    package="exa-mcp-server",
+    env_vars={"EXA_API_KEY": "…"},
+)
+
+async def example_npx() -> None:
+    tools = await get_tools_async(transport)
+    SearchTool = await get_tool_async(transport, "web_search_exa")
+
+    results = await SearchTool(
+        query="How does Langroid integrate with MCP?"
+    ).handle_async()
+    print(results)
+```
+
+For a fully working example, see the script [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py).
+
+---
+
+#### UVX stdio Transport
+
+Connect to a UVX-based MCP server, e.g., the [Git MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/git)
+
+```python
+from fastmcp.client.transports import UvxStdioTransport
+
+transport = UvxStdioTransport(tool_name="mcp-server-git")
+
+async def example_uvx() -> None:
+    tools = await get_tools_async(transport)
+    GitStatus = await get_tool_async(transport, "git_status")
+
+    status = await GitStatus(path=".").handle_async()
+    print(status)
+```
+
+--- 
+
+#### Generic stdio Transport
+
+Use `StdioTransport` to run any MCP server as a subprocess over stdio:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp import get_tools_async, get_tool_async
+
+
+async def example_stdio() -> None:
+    """Example: any CLI‐based MCP server via StdioTransport."""
+    transport: StdioTransport = StdioTransport(
+        command="uv",
+        args=["run", "--with", "biomcp-python", "biomcp", "run"],
+    )
+    tools: list[type] = await get_tools_async(transport)
+    BioTool = await get_tool_async(transport, "tool_name")
+    result: str = await BioTool(param="value").handle_async()
+    print(result)
+```
+
+See the full example in [`examples/mcp/biomcp.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/biomcp.py).
+
+---
+
+#### Network SSE Transport
+
+Use `SSETransport` to connect to a FastMCP server over HTTP/S:
+
+```python
+from fastmcp.client.transports import SSETransport
+from langroid.agent.tools.mcp import (
+    get_tools_async,
+    get_tool_async,
+)
+
+
+async def example_sse() -> None:
+    """Example: connect to an HTTP/S MCP server via SSETransport."""
+    url: str = "https://localhost:8000/sse"
+    transport: SSETransport = SSETransport(
+        url=url, headers={"Authorization": "Bearer TOKEN"}
+    )
+    tools: list[type] = await get_tools_async(transport)
+    ExampleTool = await get_tool_async(transport, "tool_name")
+    result: str = await ExampleTool(param="value").handle_async()
+    print(result)
+```    
+
+---
+
+With these patterns you can list tools, generate Pydantic-backed `ToolMessage` classes,
+and invoke them via `.handle_async()`, all with zero boilerplate client setup. 
+As the `FastMCP` library adds other types of transport (e.g., `StreamableHTTPTransport`),
+the pattern of usage with Langroid will remain the same.
+
+
+---
+
+## Best Practice: Use a server factory for stdio transports
+
+Starting with fastmcp 2.13 and mcp 1.21, stdio transports (e.g., `StdioTransport`,
+`NpxStdioTransport`, `UvxStdioTransport`) are effectively single‑use. Reusing the
+same transport instance across multiple connections can lead to errors such as
+`anyio.ClosedResourceError` during session initialization.
+
+To make your code robust and future‑proof, pass a zero‑argument server factory to
+Langroid’s MCP helpers. A “server factory” is simply a `lambda` or function that
+returns a fresh server spec or transport each time.
+
+Benefits:
+
+- Fresh, reliable connections on every call (no reuse of closed transports).
+- Works across fastmcp/mcp versions without subtle lifecycle issues.
+- Enables concurrent calls safely (each call uses its own subprocess/session).
+- Keeps your decorator ergonomics and `handle_async` overrides unchanged.
+
+You can use a factory with both the decorator and the async helpers:
+
+```python
+from fastmcp.client.transports import StdioTransport
+from langroid.agent.tools.mcp import mcp_tool, get_tool_async
+
+# 1) Decorator style
+@mcp_tool(lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
+          "Grep")
+class GrepTool(lr.ToolMessage):
+    async def handle_async(self) -> str:
+        # pre/post-process around the raw MCP call
+        result = await self.call_tool_async()
+        return f"<GrepResult>\n{result}\n</GrepResult>"
+
+# 2) Programmatic style
+BaseGrep = await get_tool_async(
+    lambda: StdioTransport(command="claude", args=["mcp", "serve"], env={}),
+    "Grep",
+)
+```
+
+Notes:
+
+- Passing a concrete transport instance still works: Langroid will try to clone
+  it internally; however, a factory is the most reliable across environments.
+- For network transports (e.g., `SSETransport`), a factory is optional; you can
+  continue passing the transport instance directly.
+
+---
+
+## Output-schema validation: return structured content when required
+
+Newer `mcp` clients validate tool outputs against the tool’s output schema. If a
+tool declares a structured output, returning plain text may raise a runtime
+error. Some servers (for example, Claude Code’s Grep) expose an argument like
+`output_mode` that controls the shape of the response.
+
+Recommendations:
+
+- Prefer structured modes when a tool declares an output schema.
+- If available, set options like `output_mode="structured"` (or a documented
+  structured variant such as `"files_with_matches"`) in your tool’s
+  `handle_async` before calling `await self.call_tool_async()`.
+
+Example tweak in a decorator-based tool:
+
+```python
+@mcp_tool(lambda: StdioTransport(command="claude", args=["mcp", "serve"]),
+          "Grep")
+class GrepTool(lr.ToolMessage):
+    async def handle_async(self) -> str:
+        # Ensure a structured response if the server supports it
+        if hasattr(self, "output_mode"):
+            self.output_mode = "structured"
+        return await self.call_tool_async()
+```
+
+If the server does not provide such a switch, follow its documentation for
+returning data that matches its declared output schema.
+
+---
+
+## 2. Create Langroid Tools declaratively using the `@mcp_tool` decorator
+
+The above examples showed how you can create Langroid tools programmatically using
+the helper functions `get_tool_async()` and `get_tools_async()`,
+with the first argument being the transport to the MCP server. The `@mcp_tool` decorator
+works in the same way: 
+
+- **Arguments to the decorator**
+    1. `server_spec`: path/URL/`FastMCP`/`ClientTransport`, as mentioned above.
+    2. `tool_name`: name of a specific MCP tool
+
+- **Behavior**
+    - Generates a `ToolMessage` subclass with all input fields typed.
+    - Provides a `call_tool_async()` under the hood -- this is the "raw" MCP tool call,
+      returning a string.
+    - If you define your own `handle_async()`, it overrides the default. Typically,
+you would override it to customize either the input or the output of the tool call, or both.
+    - If you don't define your own `handle_async()`, it defaults to just returning the
+      value of the `call_tool_async()` method.
+
+Here is a simple example of using the `@mcp_tool` decorator to create a Langroid tool:
+
+```python
+from fastmcp.server import FastMCP
+from langroid.agent.tools.mcp import mcp_tool
+import langroid as lr
+
+# Define your MCP server (pydantic v2 for schema)
+server = FastMCP("MyServer")
+
+@mcp_tool(server, "greet")
+class GreetTool(lr.ToolMessage):
+    """Say hello to someone."""
+
+    async def handle_async(self) -> str:
+        # Customize post-processing
+        raw = await self.call_tool_async()
+        return f"💬 {raw}"
+```
+
+Using the decorator method allows you to customize the `handle_async` method of the
+tool, or add additional fields to the `ToolMessage`. 
+You may want to customize the input to the tool, or the tool result before it is sent back to 
+the LLM. If you don't override it, the default behavior is to simply return the value of 
+the "raw" MCP tool call `await self.call_tool_async()`. 
+
+```python
+@mcp_tool(server, "calculate")
+class CalcTool(ToolMessage):
+    """Perform complex calculation."""
+
+    async def handle_async(self) -> str:
+        result = await self.call_tool_async()
+        # Add context or emojis, etc.
+        return f"🧮 Result is *{result}*"
+```
+
+---
+
+## 3. Enabling Tools in Your Agent
+
+Once you’ve created a Langroid `ToolMessage` subclass from an MCP server, 
+you can enable it on a `ChatAgent`, just like you normally would. Below is an example of using 
+the [Exa MCP server](https://docs.exa.ai/examples/exa-mcp) to create a 
+Langroid web search tool, enable a `ChatAgent` to use it, and then set up a `Task` to 
+run the agent loop.
+
+First we must define the appropriate `ClientTransport` for the MCP server:
+```python
+# define the transport
+transport = NpxStdioTransport(
+    package="exa-mcp-server",
+    env_vars=dict(EXA_API_KEY=os.getenv("EXA_API_KEY")),
+)
+```
+
+Then we use the `@mcp_tool` decorator to create a `ToolMessage` 
+subclass representing the web search tool. Note that one reason to use the decorator
+to define our tool is so we can specify a custom `handle_async` method that
+controls what is sent to the LLM after the actual raw MCP tool-call
+(the `call_tool_async` method) is made.
+
+```python
+# the second arg specifically refers to the `web_search_exa` tool available
+# on the server defined by the `transport` variable.
+@mcp_tool(transport, "web_search_exa")
+class ExaSearchTool(lr.ToolMessage):
+    async def handle_async(self):
+        result: str = await self.call_tool_async()
+        return f"""
+        Below are the results of the web search:
+        
+        <WebSearchResult>
+        {result}
+        </WebSearchResult>
+        
+        Use these results to answer the user's original question.
+        """
+
+```
+
+If we did not want to override the `handle_async` method, we could simply have
+created the `ExaSearchTool` class programmatically via the `get_tool_async` 
+function as shown above, i.e.:
+
+```python
+from langroid.agent.tools.mcp import get_tool_async
+
+ExaSearchTool = await get_tool_async(transport, "web_search_exa")
+```
+
+We can now define our main function where we create our `ChatAgent`,
+attach the `ExaSearchTool` to it, define the `Task`, and run the task loop.
+
+```python
+async def main():
+    agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            # forward to user when LLM doesn't use a tool
+            handle_llm_no_tool=NonToolAction.FORWARD_USER,
+            llm=lm.OpenAIGPTConfig(
+                max_output_tokens=1000,
+                # this defaults to True, but we set it to False so we can see output
+                async_stream_quiet=False,
+            ),
+        )
+    )
+
+    # enable the agent to use the web-search tool
+    agent.enable_message(ExaSearchTool)
+    # make task with interactive=False =>
+    # waits for user only when LLM doesn't use a tool
+    task = lr.Task(agent, interactive=False)
+    await task.run_async()
+```
+
+See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full working example of this.
+</file>
+
 <file path="docs/notes/task-termination.md">
 # Task Termination in Langroid
 
@@ -52191,6 +52108,89 @@ task_cfg = lr.TaskConfig(recognize_string_signals=False)
 task = lr.Task(agent, config=task_cfg, interactive=False)
 </file>
 
+<file path="examples/mcp/claude-code-mcp-single.py">
+"""
+Enable a Langroid agent to use a SINGLE MCP Tool from 
+Claude Code's MCP server.
+
+Similar to claude-code-mcp.py but showing how to use a single tool, i.e.,
+Claude-Code's special Grep tool that is built on ripgrep.
+
+Run like this (omitting the `--model` argument will use the default gpt-5-mini):
+
+    uv run examples/mcp/claude-code-mcp-single.py --model gpt-5-mini
+
+
+"""
+⋮----
+transport = StdioTransport(
+⋮----
+# Illustrating how we can:
+# - use the MCP tool decorator to create a Langroid ToolMessage subclass
+# - override the handle_async() method to customize the output, sent to the LLM
+⋮----
+@mcp_tool(transport, "Grep")
+class GrepTool(lr.ToolMessage)
+⋮----
+async def handle_async(self)
+⋮----
+# Force a predictable, structured response shape from Grep so the
+# handler can parse and decide deterministically.
+# "content" mode returns matching lines along with numLines/numMatches.
+⋮----
+# CODEX: Minimal, readable post‑processing — parse the structured JSON
+# and present plain text fields (no JSON) so the LLM can skim quickly.
+# The task will terminate on the LLM’s non‑tool reply due to
+# handle_llm_no_tool=Done.
+# Call the actual tool. Langroid returns a tuple (text, files). Unpack
+# the text payload for presentation.
+result = await self.call_tool_async()
+⋮----
+summary = None
+lines = None
+⋮----
+data = json.loads(result_text) if isinstance(result_text, str) else {}
+⋮----
+mode = data.get("mode", "?")
+num_files = data.get("numFiles")
+filenames = data.get("filenames") or []
+num_lines = data.get("numLines")
+num_matches = data.get("numMatches")
+applied_limit = data.get("appliedLimit")
+applied_offset = data.get("appliedOffset")
+content_block = data.get("content", "")
+⋮----
+parts = [
+summary = "\n".join(p for p in parts if p)
+lines = str(content_block or "").rstrip()
+⋮----
+# Fallback: show raw payload if parsing failed
+⋮----
+async def main(model: str = "")
+⋮----
+agent = lr.ChatAgent(
+⋮----
+# when the LLM responds without a tool, finish with that content
+# (prevents waiting for user input in non-interactive mode)
+⋮----
+# this defaults to True, but we set it to False so we can see output
+⋮----
+# enable the agent to use the grep tool
+⋮----
+task = lr.Task(agent, interactive=False)
+user_prompt = """
+⋮----
+result = await task.run_async(user_prompt)
+⋮----
+def run_main(**kwargs) -> None
+⋮----
+"""Run the async main function with a proper event loop.
+
+        Args:
+            **kwargs: Keyword arguments to pass to the main function.
+        """
+</file>
+
 <file path="examples/mcp/claude-code-mcp.py">
 """
 Enable a Langroid agent to use all MCP Tools from 
@@ -52623,479 +52623,6 @@ spec = msg.segment_list
 extracts = extract_numbered_segments(self.numbered_passage, spec)
 ⋮----
 # this response ends the task by saying DONE
-</file>
-
-<file path="langroid/agent/tools/mcp/fastmcp_client.py">
-# Optional transports; import guarded for environments without uvx/npx
-⋮----
-except Exception:  # pragma: no cover - optional
-NpxStdioTransport = tuple()  # type: ignore
-UvxStdioTransport = tuple()  # type: ignore
-⋮----
-load_dotenv()  # load environment variables from .env
-⋮----
-# Concrete server/transport spec accepted by fastmcp.Client
-FastMCPServerConcrete: TypeAlias = str | FastMCP[Any] | ClientTransport | AnyUrl
-# Public spec we accept: concrete spec or a zero-arg factory returning a spec
-FastMCPServerSpec: TypeAlias = (
-⋮----
-class FastMCPClient
-⋮----
-"""A client for interacting with a FastMCP server.
-
-    Provides async context manager functionality to safely manage resources.
-    """
-⋮----
-logger = logging.getLogger(__name__)
-_cm: Optional[Client[ClientTransport]] = None
-client: Optional[Client[ClientTransport]] = None
-read_timeout_seconds: datetime.timedelta | None = None
-⋮----
-sampling_handler: SamplingHandler | None = None,  # type: ignore
-roots: RootsList | RootsHandler | None = None,  # type: ignore
-⋮----
-"""Initialize the FastMCPClient.
-
-        Args:
-            server: FastMCP server or path to such a server
-        """
-⋮----
-# Default a slightly larger read timeout for stdio transports on first
-# connects. Allows flaky subprocess servers a bit more time to boot.
-⋮----
-default_secs = int(os.getenv("LANGROID_MCP_READ_TIMEOUT", "15"))
-⋮----
-async def __aenter__(self) -> "FastMCPClient"
-⋮----
-"""Enter the async context manager and connect inner client.
-
-        Always obtain a fresh transport/spec via a factory, then connect.
-        If the session initialization fails due to a transient stdio issue
-        (e.g., ClosedResourceError / connection closed), retry once with a
-        new transport instance for better resilience across fastmcp/mcp
-        versions and server launch timing.
-        """
-# Always normalize to a server factory and create a fresh spec
-server_factory = self._as_server_factory(self.server)
-⋮----
-# Configurable retry/backoff for transient stdio startup races.
-max_retries = int(os.getenv("LANGROID_MCP_CONNECT_RETRIES", "6"))
-⋮----
-backoff_base = float(os.getenv("LANGROID_MCP_CONNECT_BACKOFF_BASE", "0.35"))
-⋮----
-backoff_base = 0.35
-⋮----
-last_err: Optional[BaseException] = None
-⋮----
-server_spec: FastMCPServerConcrete = server_factory()
-# create inner client context manager
-self._cm = Client(  # type: ignore[assignment]
-⋮----
-# actually enter it (opens the session)
-self.client = await self._cm.__aenter__()  # type: ignore
-⋮----
-# Common transient failures when a subprocess exits early or
-# closes during initialize. Retry once with a fresh transport.
-⋮----
-last_err = e
-# ensure we reset _cm/client before retry
-⋮----
-await self._cm.__aexit__(None, None, None)  # type: ignore
-⋮----
-# brief backoff to allow server process to finish booting
-⋮----
-# fastmcp wraps ClosedResourceError into RuntimeError
-# "Server session was closed unexpectedly". Treat as transient.
-emsg = str(e)
-⋮----
-await self._cm.__aexit__(None, None, None)  # type: ignore
-⋮----
-# otherwise re-raise
-⋮----
-# If we get here both attempts failed
-⋮----
-async def connect(self) -> None
-⋮----
-"""Open the underlying session."""
-⋮----
-async def close(self) -> None
-⋮----
-"""Close the underlying session."""
-⋮----
-"""Exit the async context manager and close inner client."""
-# exit and close the inner fastmcp.Client
-⋮----
-await self._cm.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore
-⋮----
-def __del__(self) -> None
-⋮----
-"""Warn about unclosed persistent connections."""
-⋮----
-"""Convert a JSON Schema snippet into a (type, Field) tuple.
-
-        Args:
-            name: Name of the field.
-            schema: JSON Schema for this field.
-            prefix: Prefix to use for nested model names.
-            is_required: Whether this field is required (from JSON Schema "required").
-
-        Returns:
-            A tuple of (python_type, Field(...)) for create_model.
-        """
-t = schema.get("type")
-# Use schema default if present, otherwise:
-# ... for required fields, None for optional fields
-⋮----
-default = schema["default"]
-⋮----
-default = ... if is_required else None
-desc = schema.get("description")
-# Object → nested BaseModel
-⋮----
-sub_name = f"{prefix}_{name.capitalize()}"
-sub_fields: Dict[str, Tuple[type, Any]] = {}
-# Get required fields for this nested object
-nested_required = set(schema.get("required", []))
-⋮----
-submodel = create_model(  # type: ignore
-# Wrap in Optional if not required
-model_type = submodel if is_required else Optional[submodel]
-return model_type, Field(default=default, description=desc)  # type: ignore
-# Array → List of items
-⋮----
-array_type = List[item_type]  # type: ignore
-⋮----
-array_type = Optional[array_type]  # type: ignore
-return array_type, Field(default=default, description=desc)  # type: ignore
-# Primitive types
-⋮----
-str_type = str if is_required else Optional[str]
-⋮----
-int_type = int if is_required else Optional[int]
-⋮----
-float_type = float if is_required else Optional[float]
-⋮----
-bool_type = bool if is_required else Optional[bool]
-⋮----
-# Fallback or unions
-⋮----
-# Default fallback
-⋮----
-async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]
-⋮----
-"""
-        Create a Langroid ToolMessage subclass from the MCP Tool
-        with the given `tool_name`.
-        """
-⋮----
-target = await self.get_mcp_tool_async(tool_name)
-⋮----
-props = target.inputSchema.get("properties", {})
-# Get the list of required fields from JSON Schema
-required_fields = set(target.inputSchema.get("required", []))
-fields: Dict[str, Tuple[type, Any]] = {}
-⋮----
-# Convert target.name to CamelCase and add Tool suffix
-parts = target.name.replace("-", "_").split("_")
-camel_case = "".join(part.capitalize() for part in parts)
-model_name = f"{camel_case}Tool"
-⋮----
-# IMPORTANT: Avoid clashes with reserved field names in Langroid ToolMessage!
-# First figure out which field names are reserved
-reserved = set(_BaseToolMessage.__annotations__.keys())
-⋮----
-renamed: Dict[str, str] = {}
-new_fields: Dict[str, Tuple[type, Any]] = {}
-⋮----
-new_name = fname + "__"
-⋮----
-# now replace fields with our renamed‐aware mapping
-fields = new_fields
-⋮----
-# create Langroid ToolMessage subclass, with expected fields.
-tool_model = cast(
-⋮----
-create_model(  # type: ignore[call-overload]
-⋮----
-# Store ALL client configuration needed to recreate a client
-client_config = {
-⋮----
-# Always store a SERVER FACTORY to ensure a fresh transport per call
-⋮----
-tool_model._client_config = client_config  # type: ignore [attr-defined]
-tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
-⋮----
-# 2) define an arg-free call_tool_async()
-async def call_tool_async(itself: ToolMessage) -> Any
-⋮----
-# pack up the payload
-# Get exclude fields from model config with proper type checking
-exclude_fields = set()
-model_config = getattr(itself, "model_config", {})
-⋮----
-exclude_list = model_config["json_schema_extra"]["exclude"]
-⋮----
-exclude_fields = set(exclude_list)
-⋮----
-# Add standard excluded fields
-⋮----
-# Exclude None values - MCP servers don't expect None for optional params
-payload = itself.model_dump(exclude=exclude_fields, exclude_none=True)
-⋮----
-# restore any renamed fields
-for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
-⋮----
-client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
-⋮----
-# Fallback or error - ideally _client_config should always exist
-⋮----
-# Connect the client if not yet connected and keep the connection open
-⋮----
-# open a fresh client, call the tool, then close
-async with FastMCPClient(**client_cfg) as client:  # type: ignore
-⋮----
-tool_model.call_tool_async = call_tool_async  # type: ignore
-⋮----
-# 3) define handle_async() method with optional agent parameter
-⋮----
-"""
-                Auto-generated handler for MCP tool. Returns ChatDocument with files
-                if files are present and agent is provided, otherwise returns text.
-
-                To override: define your own handle_async method with matching signature
-                if you need file handling, or simpler signature if you only need text.
-                """
-response = await self.call_tool_async()  # type: ignore[attr-defined]
-⋮----
-# If we have files and an agent is provided, return a ChatDocument
-⋮----
-# Otherwise, just return the text content
-⋮----
-# add the handle_async() method to the tool model
-tool_model.handle_async = handle_async  # type: ignore
-⋮----
-async def get_tools_async(self) -> List[Type[ToolMessage]]
-⋮----
-"""
-        Get all available tools as Langroid ToolMessage classes,
-        handling nested schemas, with `handle_async` methods
-        """
-⋮----
-resp = await self.client.list_tools()
-⋮----
-async def get_mcp_tool_async(self, name: str) -> Optional[Tool]
-⋮----
-"""Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
-         matching `name`, or None if missing. This contains the metadata for the tool:
-         name, description, inputSchema, etc.
-
-        Args:
-            name: Name of the tool to look up.
-
-        Returns:
-            The raw Tool object from the server, or None.
-        """
-⋮----
-resp: List[Tool] = await self.client.list_tools()
-⋮----
-"""Normalize a server spec to a zero-arg factory.
-
-        - If already callable, return as-is.
-        - If a ClientTransport instance, return a factory that yields the SAME
-          instance. This preserves state for keep-alive stdio transports (e.g.,
-          npx/uvx servers) so multi-call workflows can share process state.
-          Recreating a fresh transport each call would lose stateful servers
-          like `@modelcontextprotocol/server-memory` and break tests.
-        - Otherwise return a factory that yields the given spec.
-        """
-if callable(server):  # type: ignore[arg-type]
-return server  # type: ignore[return-value]
-⋮----
-# Reuse policy split:
-# - Npx/Uvx stdio transports: reuse the SAME instance to preserve
-#   keep-alive subprocess state (stateful MCP servers).
-# - Plain StdioTransport: CLONE a fresh transport to avoid reusing
-#   process/pipes across decorator-time schema fetch and runtime calls
-#   (some stdio servers close after first session, like CLI wrappers).
-⋮----
-) or (  # type: ignore[arg-type]
-⋮----
-):  # type: ignore[arg-type]
-⋮----
-# If optional classes are tuples (import failed), fall through
-⋮----
-# Best‑effort clone with back‑compat: only pass kwargs supported
-# by this installed fastmcp version's StdioTransport.__init__.
-sig = inspect.signature(StdioTransport.__init__)
-params = sig.parameters
-⋮----
-def _pick(name: str, default: Any = None) -> Any
-⋮----
-# Required in all known versions
-cmd = getattr(server, "command", None)
-args = list(getattr(server, "args", []) or [])
-⋮----
-# Optional, filter by signature presence
-env = _pick("env")
-cwd = _pick("cwd")
-keep_alive = _pick("keep_alive")
-log_file = _pick("log_file")
-⋮----
-def _factory() -> StdioTransport
-⋮----
-kwargs = {"command": cmd, "args": args}
-⋮----
-return StdioTransport(**kwargs)  # type: ignore[arg-type]
-⋮----
-# Default for other ClientTransport types: reuse
-⋮----
-return lambda: server  # type: ignore[return-value]
-⋮----
-# Log more detailed error information
-error_content = None
-⋮----
-error_content = [
-⋮----
-error_content = [f"Could not extract error content: {str(e)}"]
-⋮----
-# 1) Collect any plain TextContent first. This preserves legacy behavior
-# for simple servers that return only text. If we have text, prefer it
-# over structuredContent to avoid surprising downstream code.
-results_text: list[str] = [
-results_file: list[FileAttachment] = []
-⋮----
-# Also collect resources alongside text; callers may want them.
-⋮----
-# 2) No plain text — use structuredContent if available. To maintain
-# backwards compatibility, unwrap simple shapes like {"result": 5}
-# into "5"; otherwise serialize the full object as JSON for fidelity.
-⋮----
-sc = result.structuredContent
-⋮----
-# Unwrap primitives directly
-⋮----
-# Unwrap single-key primitive dicts commonly used by tools
-⋮----
-# Otherwise, serialize to JSON for rich/structured tools
-⋮----
-# 3) Nothing usable — return empty text and any files
-⋮----
-"""Call an MCP tool with the given arguments.
-
-        Args:
-            tool_name: Name of the tool to call.
-            arguments: Arguments to pass to the tool.
-
-        Returns:
-            The result of the tool call.
-        """
-⋮----
-# Prefer validated call; if server fails to provide structured content
-# despite declaring a schema, fall back to a raw request to bypass
-# client-side validation and still surface the data.
-⋮----
-result: CallToolResult = await self.client.session.call_tool(
-⋮----
-msg = str(e)
-⋮----
-result = await self.client.session.send_request(  # type: ignore[assignment]
-results = self._convert_tool_result(tool_name, result)
-⋮----
-# ==============================================================================
-# Convenience functions (wrappers around FastMCPClient methods)
-# These are useful for one-off calls without needing to manage the
-# FastMCPClient context explicitly.
-⋮----
-"""Get a single Langroid ToolMessage subclass for a specific MCP tool name (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        tool_name: The name of the tool to retrieve.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A dynamically created Langroid ToolMessage subclass representing the
-        requested tool.
-    """
-⋮----
-"""Get a single Langroid ToolMessage subclass
-    for a specific MCP tool name (synchronous).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
-    async `get_tool_async` function using `asyncio.run()`.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        tool_name: The name of the tool to retrieve.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A dynamically created Langroid ToolMessage subclass representing the
-        requested tool.
-    """
-⋮----
-"""Get all available tools as Langroid ToolMessage subclasses (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A list of dynamically created Langroid ToolMessage subclasses
-        representing all available tools on the server.
-    """
-⋮----
-"""Get all available tools as Langroid ToolMessage subclasses (synchronous).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
-    async `get_tools_async` function using `asyncio.run()`.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor (e.g., sampling_handler, roots).
-
-    Returns:
-        A list of dynamically created Langroid ToolMessage subclasses
-        representing all available tools on the server.
-    """
-⋮----
-"""Get the raw MCP Tool object for a specific tool name (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient to
-    retrieve the tool definition from the server.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        name: The name of the tool to look up.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor.
-
-    Returns:
-        The raw `mcp.types.Tool` object from the server, or `None` if the tool
-        is not found.
-    """
-⋮----
-"""Get all available raw MCP Tool objects from the server (async).
-
-    This is a convenience wrapper that creates a temporary FastMCPClient to
-    retrieve the list of tool definitions from the server.
-
-    Args:
-        server: Specification of the FastMCP server to connect to.
-        **client_kwargs: Additional keyword arguments to pass to the
-            FastMCPClient constructor.
-
-    Returns:
-        A list of raw `mcp.types.Tool` objects available on the server.
-    """
 </file>
 
 <file path="langroid/agent/chat_document.py">
@@ -56517,6 +56044,479 @@ tensor(..., device='meta', size=(1536, 384), requires_grad=True)
 E               NotImplementedError: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
 
 .venv/lib/python3.11/site-packages/torch/nn/modules/module.py:1348: NotImplementedError
+</file>
+
+<file path="langroid/agent/tools/mcp/fastmcp_client.py">
+# Optional transports; import guarded for environments without uvx/npx
+⋮----
+except Exception:  # pragma: no cover - optional
+NpxStdioTransport = tuple()  # type: ignore
+UvxStdioTransport = tuple()  # type: ignore
+⋮----
+load_dotenv()  # load environment variables from .env
+⋮----
+# Concrete server/transport spec accepted by fastmcp.Client
+FastMCPServerConcrete: TypeAlias = str | FastMCP[Any] | ClientTransport | AnyUrl
+# Public spec we accept: concrete spec or a zero-arg factory returning a spec
+FastMCPServerSpec: TypeAlias = (
+⋮----
+class FastMCPClient
+⋮----
+"""A client for interacting with a FastMCP server.
+
+    Provides async context manager functionality to safely manage resources.
+    """
+⋮----
+logger = logging.getLogger(__name__)
+_cm: Optional[Client[ClientTransport]] = None
+client: Optional[Client[ClientTransport]] = None
+read_timeout_seconds: datetime.timedelta | None = None
+⋮----
+sampling_handler: SamplingHandler | None = None,  # type: ignore
+roots: RootsList | RootsHandler | None = None,  # type: ignore
+⋮----
+"""Initialize the FastMCPClient.
+
+        Args:
+            server: FastMCP server or path to such a server
+        """
+⋮----
+# Default a slightly larger read timeout for stdio transports on first
+# connects. Allows flaky subprocess servers a bit more time to boot.
+⋮----
+default_secs = int(os.getenv("LANGROID_MCP_READ_TIMEOUT", "15"))
+⋮----
+async def __aenter__(self) -> "FastMCPClient"
+⋮----
+"""Enter the async context manager and connect inner client.
+
+        Always obtain a fresh transport/spec via a factory, then connect.
+        If the session initialization fails due to a transient stdio issue
+        (e.g., ClosedResourceError / connection closed), retry once with a
+        new transport instance for better resilience across fastmcp/mcp
+        versions and server launch timing.
+        """
+# Always normalize to a server factory and create a fresh spec
+server_factory = self._as_server_factory(self.server)
+⋮----
+# Configurable retry/backoff for transient stdio startup races.
+max_retries = int(os.getenv("LANGROID_MCP_CONNECT_RETRIES", "6"))
+⋮----
+backoff_base = float(os.getenv("LANGROID_MCP_CONNECT_BACKOFF_BASE", "0.35"))
+⋮----
+backoff_base = 0.35
+⋮----
+last_err: Optional[BaseException] = None
+⋮----
+server_spec: FastMCPServerConcrete = server_factory()
+# create inner client context manager
+self._cm = Client(  # type: ignore[assignment]
+⋮----
+# actually enter it (opens the session)
+self.client = await self._cm.__aenter__()  # type: ignore
+⋮----
+# Common transient failures when a subprocess exits early or
+# closes during initialize. Retry once with a fresh transport.
+⋮----
+last_err = e
+# ensure we reset _cm/client before retry
+⋮----
+await self._cm.__aexit__(None, None, None)  # type: ignore
+⋮----
+# brief backoff to allow server process to finish booting
+⋮----
+# fastmcp wraps ClosedResourceError into RuntimeError
+# "Server session was closed unexpectedly". Treat as transient.
+emsg = str(e)
+⋮----
+await self._cm.__aexit__(None, None, None)  # type: ignore
+⋮----
+# otherwise re-raise
+⋮----
+# If we get here both attempts failed
+⋮----
+async def connect(self) -> None
+⋮----
+"""Open the underlying session."""
+⋮----
+async def close(self) -> None
+⋮----
+"""Close the underlying session."""
+⋮----
+"""Exit the async context manager and close inner client."""
+# exit and close the inner fastmcp.Client
+⋮----
+await self._cm.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore
+⋮----
+def __del__(self) -> None
+⋮----
+"""Warn about unclosed persistent connections."""
+⋮----
+"""Convert a JSON Schema snippet into a (type, Field) tuple.
+
+        Args:
+            name: Name of the field.
+            schema: JSON Schema for this field.
+            prefix: Prefix to use for nested model names.
+            is_required: Whether this field is required (from JSON Schema "required").
+
+        Returns:
+            A tuple of (python_type, Field(...)) for create_model.
+        """
+t = schema.get("type")
+# Use schema default if present, otherwise:
+# ... for required fields, None for optional fields
+⋮----
+default = schema["default"]
+⋮----
+default = ... if is_required else None
+desc = schema.get("description")
+# Object → nested BaseModel
+⋮----
+sub_name = f"{prefix}_{name.capitalize()}"
+sub_fields: Dict[str, Tuple[type, Any]] = {}
+# Get required fields for this nested object
+nested_required = set(schema.get("required", []))
+⋮----
+submodel = create_model(  # type: ignore
+# Wrap in Optional if not required
+model_type = submodel if is_required else Optional[submodel]
+return model_type, Field(default=default, description=desc)  # type: ignore
+# Array → List of items
+⋮----
+array_type = List[item_type]  # type: ignore
+⋮----
+array_type = Optional[array_type]  # type: ignore
+return array_type, Field(default=default, description=desc)  # type: ignore
+# Primitive types
+⋮----
+str_type = str if is_required else Optional[str]
+⋮----
+int_type = int if is_required else Optional[int]
+⋮----
+float_type = float if is_required else Optional[float]
+⋮----
+bool_type = bool if is_required else Optional[bool]
+⋮----
+# Fallback or unions
+⋮----
+# Default fallback
+⋮----
+async def get_tool_async(self, tool_name: str) -> Type[ToolMessage]
+⋮----
+"""
+        Create a Langroid ToolMessage subclass from the MCP Tool
+        with the given `tool_name`.
+        """
+⋮----
+target = await self.get_mcp_tool_async(tool_name)
+⋮----
+props = target.inputSchema.get("properties", {})
+# Get the list of required fields from JSON Schema
+required_fields = set(target.inputSchema.get("required", []))
+fields: Dict[str, Tuple[type, Any]] = {}
+⋮----
+# Convert target.name to CamelCase and add Tool suffix
+parts = target.name.replace("-", "_").split("_")
+camel_case = "".join(part.capitalize() for part in parts)
+model_name = f"{camel_case}Tool"
+⋮----
+# IMPORTANT: Avoid clashes with reserved field names in Langroid ToolMessage!
+# First figure out which field names are reserved
+reserved = set(_BaseToolMessage.__annotations__.keys())
+⋮----
+renamed: Dict[str, str] = {}
+new_fields: Dict[str, Tuple[type, Any]] = {}
+⋮----
+new_name = fname + "__"
+⋮----
+# now replace fields with our renamed‐aware mapping
+fields = new_fields
+⋮----
+# create Langroid ToolMessage subclass, with expected fields.
+tool_model = cast(
+⋮----
+create_model(  # type: ignore[call-overload]
+⋮----
+# Store ALL client configuration needed to recreate a client
+client_config = {
+⋮----
+# Always store a SERVER FACTORY to ensure a fresh transport per call
+⋮----
+tool_model._client_config = client_config  # type: ignore [attr-defined]
+tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
+⋮----
+# 2) define an arg-free call_tool_async()
+async def call_tool_async(itself: ToolMessage) -> Any
+⋮----
+# pack up the payload
+# Get exclude fields from model config with proper type checking
+exclude_fields = set()
+model_config = getattr(itself, "model_config", {})
+⋮----
+exclude_list = model_config["json_schema_extra"]["exclude"]
+⋮----
+exclude_fields = set(exclude_list)
+⋮----
+# Add standard excluded fields
+⋮----
+# Exclude None values - MCP servers don't expect None for optional params
+payload = itself.model_dump(exclude=exclude_fields, exclude_none=True)
+⋮----
+# restore any renamed fields
+for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
+⋮----
+client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
+⋮----
+# Fallback or error - ideally _client_config should always exist
+⋮----
+# Connect the client if not yet connected and keep the connection open
+⋮----
+# open a fresh client, call the tool, then close
+async with FastMCPClient(**client_cfg) as client:  # type: ignore
+⋮----
+tool_model.call_tool_async = call_tool_async  # type: ignore
+⋮----
+# 3) define handle_async() method with optional agent parameter
+⋮----
+"""
+                Auto-generated handler for MCP tool. Returns ChatDocument with files
+                if files are present and agent is provided, otherwise returns text.
+
+                To override: define your own handle_async method with matching signature
+                if you need file handling, or simpler signature if you only need text.
+                """
+response = await self.call_tool_async()  # type: ignore[attr-defined]
+⋮----
+# If we have files and an agent is provided, return a ChatDocument
+⋮----
+# Otherwise, just return the text content
+⋮----
+# add the handle_async() method to the tool model
+tool_model.handle_async = handle_async  # type: ignore
+⋮----
+async def get_tools_async(self) -> List[Type[ToolMessage]]
+⋮----
+"""
+        Get all available tools as Langroid ToolMessage classes,
+        handling nested schemas, with `handle_async` methods
+        """
+⋮----
+resp = await self.client.list_tools()
+⋮----
+async def get_mcp_tool_async(self, name: str) -> Optional[Tool]
+⋮----
+"""Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
+         matching `name`, or None if missing. This contains the metadata for the tool:
+         name, description, inputSchema, etc.
+
+        Args:
+            name: Name of the tool to look up.
+
+        Returns:
+            The raw Tool object from the server, or None.
+        """
+⋮----
+resp: List[Tool] = await self.client.list_tools()
+⋮----
+"""Normalize a server spec to a zero-arg factory.
+
+        - If already callable, return as-is.
+        - If a ClientTransport instance, return a factory that yields the SAME
+          instance. This preserves state for keep-alive stdio transports (e.g.,
+          npx/uvx servers) so multi-call workflows can share process state.
+          Recreating a fresh transport each call would lose stateful servers
+          like `@modelcontextprotocol/server-memory` and break tests.
+        - Otherwise return a factory that yields the given spec.
+        """
+if callable(server):  # type: ignore[arg-type]
+return server  # type: ignore[return-value]
+⋮----
+# Reuse policy split:
+# - Npx/Uvx stdio transports: reuse the SAME instance to preserve
+#   keep-alive subprocess state (stateful MCP servers).
+# - Plain StdioTransport: CLONE a fresh transport to avoid reusing
+#   process/pipes across decorator-time schema fetch and runtime calls
+#   (some stdio servers close after first session, like CLI wrappers).
+⋮----
+) or (  # type: ignore[arg-type]
+⋮----
+):  # type: ignore[arg-type]
+⋮----
+# If optional classes are tuples (import failed), fall through
+⋮----
+# Best‑effort clone with back‑compat: only pass kwargs supported
+# by this installed fastmcp version's StdioTransport.__init__.
+sig = inspect.signature(StdioTransport.__init__)
+params = sig.parameters
+⋮----
+def _pick(name: str, default: Any = None) -> Any
+⋮----
+# Required in all known versions
+cmd = getattr(server, "command", None)
+args = list(getattr(server, "args", []) or [])
+⋮----
+# Optional, filter by signature presence
+env = _pick("env")
+cwd = _pick("cwd")
+keep_alive = _pick("keep_alive")
+log_file = _pick("log_file")
+⋮----
+def _factory() -> StdioTransport
+⋮----
+kwargs = {"command": cmd, "args": args}
+⋮----
+return StdioTransport(**kwargs)  # type: ignore[arg-type]
+⋮----
+# Default for other ClientTransport types: reuse
+⋮----
+return lambda: server  # type: ignore[return-value]
+⋮----
+# Log more detailed error information
+error_content = None
+⋮----
+error_content = [
+⋮----
+error_content = [f"Could not extract error content: {str(e)}"]
+⋮----
+# 1) Collect any plain TextContent first. This preserves legacy behavior
+# for simple servers that return only text. If we have text, prefer it
+# over structuredContent to avoid surprising downstream code.
+results_text: list[str] = [
+results_file: list[FileAttachment] = []
+⋮----
+# Also collect resources alongside text; callers may want them.
+⋮----
+# 2) No plain text — use structuredContent if available. To maintain
+# backwards compatibility, unwrap simple shapes like {"result": 5}
+# into "5"; otherwise serialize the full object as JSON for fidelity.
+⋮----
+sc = result.structuredContent
+⋮----
+# Unwrap primitives directly
+⋮----
+# Unwrap single-key primitive dicts commonly used by tools
+⋮----
+# Otherwise, serialize to JSON for rich/structured tools
+⋮----
+# 3) Nothing usable — return empty text and any files
+⋮----
+"""Call an MCP tool with the given arguments.
+
+        Args:
+            tool_name: Name of the tool to call.
+            arguments: Arguments to pass to the tool.
+
+        Returns:
+            The result of the tool call.
+        """
+⋮----
+# Prefer validated call; if server fails to provide structured content
+# despite declaring a schema, fall back to a raw request to bypass
+# client-side validation and still surface the data.
+⋮----
+result: CallToolResult = await self.client.session.call_tool(
+⋮----
+msg = str(e)
+⋮----
+result = await self.client.session.send_request(  # type: ignore[assignment]
+results = self._convert_tool_result(tool_name, result)
+⋮----
+# ==============================================================================
+# Convenience functions (wrappers around FastMCPClient methods)
+# These are useful for one-off calls without needing to manage the
+# FastMCPClient context explicitly.
+⋮----
+"""Get a single Langroid ToolMessage subclass for a specific MCP tool name (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        tool_name: The name of the tool to retrieve.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A dynamically created Langroid ToolMessage subclass representing the
+        requested tool.
+    """
+⋮----
+"""Get a single Langroid ToolMessage subclass
+    for a specific MCP tool name (synchronous).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
+    async `get_tool_async` function using `asyncio.run()`.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        tool_name: The name of the tool to retrieve.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A dynamically created Langroid ToolMessage subclass representing the
+        requested tool.
+    """
+⋮----
+"""Get all available tools as Langroid ToolMessage subclasses (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A list of dynamically created Langroid ToolMessage subclasses
+        representing all available tools on the server.
+    """
+⋮----
+"""Get all available tools as Langroid ToolMessage subclasses (synchronous).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient and runs the
+    async `get_tools_async` function using `asyncio.run()`.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor (e.g., sampling_handler, roots).
+
+    Returns:
+        A list of dynamically created Langroid ToolMessage subclasses
+        representing all available tools on the server.
+    """
+⋮----
+"""Get the raw MCP Tool object for a specific tool name (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient to
+    retrieve the tool definition from the server.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        name: The name of the tool to look up.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor.
+
+    Returns:
+        The raw `mcp.types.Tool` object from the server, or `None` if the tool
+        is not found.
+    """
+⋮----
+"""Get all available raw MCP Tool objects from the server (async).
+
+    This is a convenience wrapper that creates a temporary FastMCPClient to
+    retrieve the list of tool definitions from the server.
+
+    Args:
+        server: Specification of the FastMCP server to connect to.
+        **client_kwargs: Additional keyword arguments to pass to the
+            FastMCPClient constructor.
+
+    Returns:
+        A list of raw `mcp.types.Tool` objects available on the server.
+    """
 </file>
 
 <file path="langroid/agent/tools/task_tool.py">
@@ -60280,6 +60280,617 @@ replace = (
 task = Task(agent, interactive=False)
 </file>
 
+<file path="langroid/parsing/url_loader.py">
+# Base crawler config and specific configurations
+class BaseCrawlerConfig(BaseSettings)
+⋮----
+"""Base configuration for web crawlers."""
+⋮----
+parser: Optional[Parser] = None
+⋮----
+class TrafilaturaConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for Trafilatura crawler."""
+⋮----
+threads: int = 4
+format: str = "markdown"  # or "xml" or "txt"
+⋮----
+class FirecrawlConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for Firecrawl crawler."""
+⋮----
+api_key: str = ""
+mode: str = "scrape"
+params: Dict[str, Any] = {}
+timeout: Optional[int] = None
+⋮----
+model_config = SettingsConfigDict(env_prefix="FIRECRAWL_")
+⋮----
+class ExaCrawlerConfig(BaseCrawlerConfig)
+⋮----
+model_config = SettingsConfigDict(env_prefix="EXA_")
+⋮----
+class Crawl4aiConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for the Crawl4aiCrawler."""
+⋮----
+crawl_mode: Literal["simple", "deep"] = "simple"
+extraction_strategy: Optional["ExtractionStrategy"] = None
+markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
+deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
+scraping_strategy: Optional["ContentScrapingStrategy"] = None
+browser_config: Optional["BrowserConfig"] = None
+run_config: Optional["CrawlerRunConfig"] = None
+⋮----
+model_config = SettingsConfigDict(arbitrary_types_allowed=True)
+⋮----
+# Resolve forward references for Crawl4aiConfig after the class is defined
+⋮----
+# Rebuild the model with resolved references
+⋮----
+# If crawl4ai is not installed, leave forward refs as strings
+⋮----
+class BaseCrawler(ABC)
+⋮----
+"""Abstract base class for web crawlers."""
+⋮----
+def __init__(self, config: BaseCrawlerConfig)
+⋮----
+"""Initialize the base crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+@property
+@abstractmethod
+    def needs_parser(self) -> bool
+⋮----
+"""Indicates whether the crawler requires a parser."""
+⋮----
+@abstractmethod
+    def crawl(self, urls: List[str]) -> List[Document]
+⋮----
+def _process_document(self, url: str) -> List[Document]
+⋮----
+doc_parser = DocumentParser.create(url, self.parser.config)
+new_chunks = doc_parser.get_doc_chunks()
+⋮----
+# If the document is empty, try to extract images
+img_parser = ImagePdfParser(url, self.parser.config)
+new_chunks = img_parser.get_doc_chunks()
+⋮----
+headers = requests.head(url).headers
+⋮----
+headers = CaseInsensitiveDict()
+⋮----
+content_type = headers.get("Content-Type", "").lower()
+temp_file_suffix = None
+⋮----
+temp_file_suffix = ".pdf"
+⋮----
+temp_file_suffix = ".docx"
+⋮----
+temp_file_suffix = ".doc"
+⋮----
+response = requests.get(url)
+⋮----
+temp_file_path = temp_file.name
+doc_parser = DocumentParser.create(
+docs = doc_parser.get_doc_chunks()
+⋮----
+def _is_document_url(self, url: str) -> bool
+⋮----
+class CrawlerFactory
+⋮----
+"""Factory for creating web crawlers."""
+⋮----
+@staticmethod
+    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler
+⋮----
+"""Create a crawler instance based on configuration type.
+
+        Args:
+            config: Configuration for the crawler
+
+        Returns:
+            A BaseCrawler instance
+
+        Raises:
+            ValueError: If config type is not supported
+        """
+⋮----
+class TrafilaturaCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Trafilatura."""
+⋮----
+def __init__(self, config: TrafilaturaConfig)
+⋮----
+"""Initialize the Trafilatura crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+@property
+    def needs_parser(self) -> bool
+⋮----
+def crawl(self, urls: List[str]) -> List[Document]
+⋮----
+docs = []
+dl_dict = add_to_compressed_dict(urls)
+⋮----
+parsed_doc = self._process_document(url)
+⋮----
+text = trafilatura.extract(
+⋮----
+with_metadata=True,  # Title, date, author... at start of text
+⋮----
+# heading_style="ATX" for markdown headings, i.e. #, ##, etc.
+text = md.markdownify(text, heading_style="ATX")
+⋮----
+text = result
+⋮----
+class FirecrawlCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Firecrawl."""
+⋮----
+def __init__(self, config: FirecrawlConfig) -> None
+⋮----
+"""Initialize the Firecrawl crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+# Code used verbatim from firecrawl blog with few modifications
+# https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
+⋮----
+pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
+⋮----
+processed_urls: set[str] = set()
+⋮----
+# Check current status
+status = app.check_crawl_status(crawl_id)
+new_pages = 0
+⋮----
+# Save new pages
+⋮----
+url = page["metadata"]["url"]
+⋮----
+content = page.get("markdown", "")
+filename = f"{output_dir}/{len(processed_urls)}.md"
+⋮----
+pbar.model_copy(update=new_pages)  # Update progress bar with new pages
+⋮----
+# Break if crawl is complete
+⋮----
+time.sleep(5)  # Wait before checking again
+⋮----
+app = FirecrawlApp(api_key=self.config.api_key)
+⋮----
+params = self.config.params.copy()  # Create a copy of the existing params
+⋮----
+params["timeout"] = self.config.timeout  # Add/override timeout in params
+⋮----
+result = app.scrape_url(url, params=params)
+metadata = result.get(
+⋮----
+)  # Default to empty dict if missing
+status_code = metadata.get("statusCode")
+⋮----
+# Start the crawl
+crawl_status = app.async_crawl_url(url=urls[0], params=params)
+⋮----
+# Save results incrementally
+docs = self._return_save_incremental_results(app, crawl_status["id"])
+⋮----
+class ExaCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Exa API."""
+⋮----
+def __init__(self, config: ExaCrawlerConfig) -> None
+⋮----
+"""Initialize the Exa crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+"""Crawl the given URLs using Exa SDK.
+
+        Args:
+            urls: List of URLs to crawl
+
+        Returns:
+            List of Documents with content extracted from the URLs
+
+        Raises:
+            LangroidImportError: If the exa package is not installed
+            ValueError: If the Exa API key is not set
+        """
+⋮----
+exa = Exa(self.config.api_key)
+⋮----
+parsed_doc_chunks = self._process_document(url)
+⋮----
+results = exa.get_contents(
+result = results.results[0]
+⋮----
+md_text = md.markdownify(result.text, heading_style="ATX")
+# append a NON-chunked document
+# (metadata.is_chunk = False, so will be chunked downstream)
+⋮----
+class Crawl4aiCrawler(BaseCrawler)
+⋮----
+"""
+    Crawler implementation using the crawl4ai library.
+
+    This crawler intelligently dispatches URLs. Standard web pages are rendered
+    and scraped using the crawl4ai browser engine. Direct links to documents
+    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
+    """
+⋮----
+def __init__(self, config: Crawl4aiConfig) -> None
+⋮----
+"""Initialize the Crawl4ai crawler."""
+⋮----
+"""
+        Indicates that this crawler relies on the framework's DocumentParser
+        for handling specific file types like PDF, DOCX, etc., which
+        the browser engine cannot parse directly.
+        """
+⋮----
+"""
+        Executes the crawl by separating document URLs from web page URLs.
+
+        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
+        - Web page URLs are handled using the async crawl4ai engine.
+        """
+all_documents: List[Document] = []
+webpage_urls: List[str] = []
+⋮----
+# Step 1: Separate URLs into documents and web pages
+⋮----
+# Step 2: Process web page URLs asynchronously
+⋮----
+loop = asyncio.get_running_loop()
+⋮----
+web_docs = asyncio.run(self._async_crawl(webpage_urls))
+⋮----
+"""Converts a crawl4ai CrawlResult into the framework's Document format."""
+⋮----
+content = ""
+⋮----
+content = result.extracted_content
+⋮----
+content = result.markdown.fit_markdown
+⋮----
+content = result.markdown.raw_markdown
+⋮----
+content = str(result.markdown)
+⋮----
+# Extract metadata safely
+title = "Unknown Title"
+published_date = "Unknown Date"
+⋮----
+title = result.metadata.get("title", "Unknown Title")
+# Try common date field names
+⋮----
+published_date = result.metadata.get(date_field)
+⋮----
+meta = DocMetaData(
+⋮----
+# Note: source_content is meant for reference content, not metadata
+# Keeping it minimal as other crawlers don't populate it
+⋮----
+async def _async_crawl(self, urls: List[str]) -> List[Document]
+⋮----
+# Import configs here for lazy loading
+⋮----
+# CHANGE 2: Handle the new optional config fields.
+# Use the user-provided config if it exists, otherwise create a default one.
+browser_config = self.config.browser_config or BrowserConfig()
+run_config = self.config.run_config or CrawlerRunConfig()
+⋮----
+crawled_documents: List[Document] = []
+⋮----
+result = await crawler.arun(url, config=run_config)
+doc = self._translate_result_to_document(result)
+⋮----
+# In deep crawl mode, `crawl4ai` will discover and crawl pages
+# starting from the seed URL. It will not process direct document links
+# found during the deep crawl; it is designed to follow hyperlinks.
+crawl_results = await crawler.arun(urls[0], config=run_config)
+⋮----
+class URLLoader
+⋮----
+"""Loads URLs and extracts text using a specified crawler."""
+⋮----
+"""Initialize the URL loader.
+
+        Args:
+            urls: List of URLs to load
+            parsing_config: Configuration for parsing
+            crawler_config: Configuration for the crawler
+        """
+⋮----
+crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
+⋮----
+def load(self) -> List[Document]
+⋮----
+"""Load the URLs using the specified crawler."""
+</file>
+
+<file path="Makefile">
+.PHONY: setup check lint tests docs nodocs loc
+
+SHELL := /bin/bash
+
+.PHONY: setup update
+
+setup: ## Setup the git pre-commit hooks
+	uv run pre-commit install
+
+update: ## Update the git pre-commit hooks
+	uv run pre-commit autoupdate
+
+.PHONY: type-check
+type-check:
+	@uv run pre-commit install
+	@uv run pre-commit autoupdate
+	@uv run pre-commit run --all-files
+	@echo "Running black..."
+	@uv run black --check .
+	@echo "Running ruff check (without fix)..."
+	@uv run ruff check .
+	@echo "Running mypy...";
+	@uv run mypy -p langroid
+	@echo "All checks passed!"
+
+.PHONY: lint
+lint:
+	uv run black .
+	uv run ruff check . --fix
+	@echo "Auto-fixing issues in examples folder..."
+	@uv run ruff check examples/ --fix-only --no-force-exclude
+
+.PHONY: stubs
+stubs:
+	@echo "Generating Python stubs for the langroid package..."
+	@uv run stubgen -p langroid -o stubs
+	@echo "Stubs generated in the 'stubs' directory"
+
+.PHONY: tests
+tests:
+	pytest tests/main --basetemp=/tmp/pytest
+
+
+docs:
+	@# Kill any existing 'mkdocs serve' processes.
+	@pkill -f "mkdocs serve" 2>/dev/null || true
+	@# Build the documentation.
+	mkdocs build
+	@# Serve the documentation in the background.
+	mkdocs serve &
+	@echo "Documentation is being served in the background."
+	@echo "You can access the documentation at http://127.0.0.1:8000/"
+
+nodocs:
+	@# Kill any existing 'mkdocs serve' processes.
+	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
+	@echo "Stopped serving documentation."
+
+
+loc:
+	@echo "Lines in git-tracked files python files:"
+	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
+
+.PHONY: repomix repomix-no-tests repomix-all
+
+repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
+	@echo "Generating llms.txt (with tests)..."
+	@git ls-files | repomix --stdin
+	@echo "Generating llms-compressed.txt..."
+	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
+	@echo "Generated llms.txt and llms-compressed.txt"
+
+repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
+	@echo "Generating llms-no-tests.txt (without tests)..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
+	@echo "Generating llms-no-tests-compressed.txt..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
+	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
+
+repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
+	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
+	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
+	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
+
+repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
+
+.PHONY: check
+check: lint type-check repomix-all
+
+.PHONY: revert-tag
+revert-tag:
+	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
+	echo "Deleting tag: $$LATEST_TAG" && \
+	git tag -d $$LATEST_TAG
+
+.PHONY: revert-bump
+revert-bump:
+	@if git log -1 --pretty=%B | grep -q "bump"; then \
+		git reset --hard HEAD~1; \
+		echo "Reverted last commit (bump commit)"; \
+	else \
+		echo "Last commit was not a bump commit"; \
+	fi
+
+.PHONY: revert
+revert: revert-bump revert-tag
+	
+.PHONY: bump-patch
+bump-patch:
+	@cz bump --increment PATCH
+
+.PHONY: bump-minor
+bump-minor:
+	@cz bump --increment MINOR 
+
+.PHONY: bump-major
+bump-major:
+	@cz bump --increment MAJOR 
+
+.PHONY: build
+build:
+	@uv build
+
+.PHONY: push
+push:
+	@git push origin main
+	@git push origin --tags
+
+.PHONY: clean
+clean:
+	-rm -rf dist/*
+
+.PHONY: release
+release:
+	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+
+.PHONY: bump-rc
+bump-rc:
+	@cz bump --prerelease rc
+
+.PHONY: bump-beta
+bump-beta:
+	@cz bump --prerelease beta
+
+.PHONY: bump-alpha
+bump-alpha:
+	@cz bump --prerelease alpha
+
+.PHONY: all-patch
+all-patch: bump-patch clean build push release
+
+.PHONY: all-minor
+all-minor: bump-minor clean build push release
+
+.PHONY: all-major
+all-major: bump-major clean build push release
+
+.PHONY: all-rc
+all-rc: bump-rc clean build push release
+
+.PHONY: all-beta
+all-beta: bump-beta clean build push release
+
+.PHONY: all-alpha
+all-alpha: bump-alpha clean build push release
+
+.PHONY: pre-release-branch
+pre-release-branch: ## Create and push pre-release from current branch
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot create pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	PRERELEASE_TYPE=$${PRERELEASE_TYPE:-rc} && \
+	cz bump --prerelease "$$PRERELEASE_TYPE" && \
+	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	git push origin "$$CURRENT_BRANCH" --tags && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: pre-release-rc
+pre-release-rc: ## Create release candidate from current branch
+	@PRERELEASE_TYPE=rc make pre-release-branch
+
+.PHONY: pre-release-beta
+pre-release-beta: ## Create beta release from current branch
+	@PRERELEASE_TYPE=beta make pre-release-branch
+
+.PHONY: pre-release-alpha
+pre-release-alpha: ## Create alpha release from current branch
+	@PRERELEASE_TYPE=alpha make pre-release-branch
+
+.PHONY: pre-release-push
+pre-release-push: ## Push current branch and tags (for pre-releases)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot push pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	git push origin "$$CURRENT_BRANCH" --tags
+
+.PHONY: pre-release-release
+pre-release-release: ## Create GitHub pre-release (requires VERSION env var)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot create pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: bump-rc-patch
+bump-rc-patch: ## Bump to release candidate patch
+	@cz bump --increment PATCH --prerelease rc
+
+.PHONY: bump-rc-minor
+bump-rc-minor: ## Bump to release candidate minor
+	@cz bump --increment MINOR --prerelease rc
+
+.PHONY: bump-rc-major
+bump-rc-major: ## Bump to release candidate major
+	@cz bump --increment MAJOR --prerelease rc
+
+.PHONY: bump-beta-patch
+bump-beta-patch: ## Bump to beta patch
+	@cz bump --increment PATCH --prerelease beta
+
+.PHONY: bump-beta-minor
+bump-beta-minor: ## Bump to beta minor
+	@cz bump --increment MINOR --prerelease beta
+
+.PHONY: bump-alpha-patch
+bump-alpha-patch: ## Bump to alpha patch
+	@cz bump --increment PATCH --prerelease alpha
+
+.PHONY: bump-alpha-minor
+bump-alpha-minor: ## Bump to alpha minor
+	@cz bump --increment MINOR --prerelease alpha
+
+.PHONY: pre-release-rc-patch
+pre-release-rc-patch: bump-rc-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-rc-minor
+pre-release-rc-minor: bump-rc-minor clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-rc-major
+pre-release-rc-major: bump-rc-major clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-beta-patch
+pre-release-beta-patch: bump-beta-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-beta-minor
+pre-release-beta-minor: bump-beta-minor clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-alpha-patch
+pre-release-alpha-patch: bump-alpha-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-alpha-minor
+pre-release-alpha-minor: bump-alpha-minor clean build pre-release-push pre-release-release
+
+.PHONY: publish
+publish:
+	uv publish
+</file>
+
 <file path="langroid/agent/task.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -61506,348 +62117,6 @@ matched = False
 matched = True
 </file>
 
-<file path="langroid/parsing/url_loader.py">
-# Base crawler config and specific configurations
-class BaseCrawlerConfig(BaseSettings)
-⋮----
-"""Base configuration for web crawlers."""
-⋮----
-parser: Optional[Parser] = None
-⋮----
-class TrafilaturaConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for Trafilatura crawler."""
-⋮----
-threads: int = 4
-format: str = "markdown"  # or "xml" or "txt"
-⋮----
-class FirecrawlConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for Firecrawl crawler."""
-⋮----
-api_key: str = ""
-mode: str = "scrape"
-params: Dict[str, Any] = {}
-timeout: Optional[int] = None
-⋮----
-model_config = SettingsConfigDict(env_prefix="FIRECRAWL_")
-⋮----
-class ExaCrawlerConfig(BaseCrawlerConfig)
-⋮----
-model_config = SettingsConfigDict(env_prefix="EXA_")
-⋮----
-class Crawl4aiConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for the Crawl4aiCrawler."""
-⋮----
-crawl_mode: Literal["simple", "deep"] = "simple"
-extraction_strategy: Optional["ExtractionStrategy"] = None
-markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
-deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
-scraping_strategy: Optional["ContentScrapingStrategy"] = None
-browser_config: Optional["BrowserConfig"] = None
-run_config: Optional["CrawlerRunConfig"] = None
-⋮----
-model_config = SettingsConfigDict(arbitrary_types_allowed=True)
-⋮----
-# Resolve forward references for Crawl4aiConfig after the class is defined
-⋮----
-# Rebuild the model with resolved references
-⋮----
-# If crawl4ai is not installed, leave forward refs as strings
-⋮----
-class BaseCrawler(ABC)
-⋮----
-"""Abstract base class for web crawlers."""
-⋮----
-def __init__(self, config: BaseCrawlerConfig)
-⋮----
-"""Initialize the base crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-@property
-@abstractmethod
-    def needs_parser(self) -> bool
-⋮----
-"""Indicates whether the crawler requires a parser."""
-⋮----
-@abstractmethod
-    def crawl(self, urls: List[str]) -> List[Document]
-⋮----
-def _process_document(self, url: str) -> List[Document]
-⋮----
-doc_parser = DocumentParser.create(url, self.parser.config)
-new_chunks = doc_parser.get_doc_chunks()
-⋮----
-# If the document is empty, try to extract images
-img_parser = ImagePdfParser(url, self.parser.config)
-new_chunks = img_parser.get_doc_chunks()
-⋮----
-headers = requests.head(url).headers
-⋮----
-headers = CaseInsensitiveDict()
-⋮----
-content_type = headers.get("Content-Type", "").lower()
-temp_file_suffix = None
-⋮----
-temp_file_suffix = ".pdf"
-⋮----
-temp_file_suffix = ".docx"
-⋮----
-temp_file_suffix = ".doc"
-⋮----
-response = requests.get(url)
-⋮----
-temp_file_path = temp_file.name
-doc_parser = DocumentParser.create(
-docs = doc_parser.get_doc_chunks()
-⋮----
-def _is_document_url(self, url: str) -> bool
-⋮----
-class CrawlerFactory
-⋮----
-"""Factory for creating web crawlers."""
-⋮----
-@staticmethod
-    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler
-⋮----
-"""Create a crawler instance based on configuration type.
-
-        Args:
-            config: Configuration for the crawler
-
-        Returns:
-            A BaseCrawler instance
-
-        Raises:
-            ValueError: If config type is not supported
-        """
-⋮----
-class TrafilaturaCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Trafilatura."""
-⋮----
-def __init__(self, config: TrafilaturaConfig)
-⋮----
-"""Initialize the Trafilatura crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-@property
-    def needs_parser(self) -> bool
-⋮----
-def crawl(self, urls: List[str]) -> List[Document]
-⋮----
-docs = []
-dl_dict = add_to_compressed_dict(urls)
-⋮----
-parsed_doc = self._process_document(url)
-⋮----
-text = trafilatura.extract(
-⋮----
-with_metadata=True,  # Title, date, author... at start of text
-⋮----
-# heading_style="ATX" for markdown headings, i.e. #, ##, etc.
-text = md.markdownify(text, heading_style="ATX")
-⋮----
-text = result
-⋮----
-class FirecrawlCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Firecrawl."""
-⋮----
-def __init__(self, config: FirecrawlConfig) -> None
-⋮----
-"""Initialize the Firecrawl crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-# Code used verbatim from firecrawl blog with few modifications
-# https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
-⋮----
-pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
-⋮----
-processed_urls: set[str] = set()
-⋮----
-# Check current status
-status = app.check_crawl_status(crawl_id)
-new_pages = 0
-⋮----
-# Save new pages
-⋮----
-url = page["metadata"]["url"]
-⋮----
-content = page.get("markdown", "")
-filename = f"{output_dir}/{len(processed_urls)}.md"
-⋮----
-pbar.model_copy(update=new_pages)  # Update progress bar with new pages
-⋮----
-# Break if crawl is complete
-⋮----
-time.sleep(5)  # Wait before checking again
-⋮----
-app = FirecrawlApp(api_key=self.config.api_key)
-⋮----
-params = self.config.params.copy()  # Create a copy of the existing params
-⋮----
-params["timeout"] = self.config.timeout  # Add/override timeout in params
-⋮----
-result = app.scrape_url(url, params=params)
-metadata = result.get(
-⋮----
-)  # Default to empty dict if missing
-status_code = metadata.get("statusCode")
-⋮----
-# Start the crawl
-crawl_status = app.async_crawl_url(url=urls[0], params=params)
-⋮----
-# Save results incrementally
-docs = self._return_save_incremental_results(app, crawl_status["id"])
-⋮----
-class ExaCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Exa API."""
-⋮----
-def __init__(self, config: ExaCrawlerConfig) -> None
-⋮----
-"""Initialize the Exa crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-"""Crawl the given URLs using Exa SDK.
-
-        Args:
-            urls: List of URLs to crawl
-
-        Returns:
-            List of Documents with content extracted from the URLs
-
-        Raises:
-            LangroidImportError: If the exa package is not installed
-            ValueError: If the Exa API key is not set
-        """
-⋮----
-exa = Exa(self.config.api_key)
-⋮----
-parsed_doc_chunks = self._process_document(url)
-⋮----
-results = exa.get_contents(
-result = results.results[0]
-⋮----
-md_text = md.markdownify(result.text, heading_style="ATX")
-# append a NON-chunked document
-# (metadata.is_chunk = False, so will be chunked downstream)
-⋮----
-class Crawl4aiCrawler(BaseCrawler)
-⋮----
-"""
-    Crawler implementation using the crawl4ai library.
-
-    This crawler intelligently dispatches URLs. Standard web pages are rendered
-    and scraped using the crawl4ai browser engine. Direct links to documents
-    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
-    """
-⋮----
-def __init__(self, config: Crawl4aiConfig) -> None
-⋮----
-"""Initialize the Crawl4ai crawler."""
-⋮----
-"""
-        Indicates that this crawler relies on the framework's DocumentParser
-        for handling specific file types like PDF, DOCX, etc., which
-        the browser engine cannot parse directly.
-        """
-⋮----
-"""
-        Executes the crawl by separating document URLs from web page URLs.
-
-        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
-        - Web page URLs are handled using the async crawl4ai engine.
-        """
-all_documents: List[Document] = []
-webpage_urls: List[str] = []
-⋮----
-# Step 1: Separate URLs into documents and web pages
-⋮----
-# Step 2: Process web page URLs asynchronously
-⋮----
-loop = asyncio.get_running_loop()
-⋮----
-web_docs = asyncio.run(self._async_crawl(webpage_urls))
-⋮----
-"""Converts a crawl4ai CrawlResult into the framework's Document format."""
-⋮----
-content = ""
-⋮----
-content = result.extracted_content
-⋮----
-content = result.markdown.fit_markdown
-⋮----
-content = result.markdown.raw_markdown
-⋮----
-content = str(result.markdown)
-⋮----
-# Extract metadata safely
-title = "Unknown Title"
-published_date = "Unknown Date"
-⋮----
-title = result.metadata.get("title", "Unknown Title")
-# Try common date field names
-⋮----
-published_date = result.metadata.get(date_field)
-⋮----
-meta = DocMetaData(
-⋮----
-# Note: source_content is meant for reference content, not metadata
-# Keeping it minimal as other crawlers don't populate it
-⋮----
-async def _async_crawl(self, urls: List[str]) -> List[Document]
-⋮----
-# Import configs here for lazy loading
-⋮----
-# CHANGE 2: Handle the new optional config fields.
-# Use the user-provided config if it exists, otherwise create a default one.
-browser_config = self.config.browser_config or BrowserConfig()
-run_config = self.config.run_config or CrawlerRunConfig()
-⋮----
-crawled_documents: List[Document] = []
-⋮----
-result = await crawler.arun(url, config=run_config)
-doc = self._translate_result_to_document(result)
-⋮----
-# In deep crawl mode, `crawl4ai` will discover and crawl pages
-# starting from the seed URL. It will not process direct document links
-# found during the deep crawl; it is designed to follow hyperlinks.
-crawl_results = await crawler.arun(urls[0], config=run_config)
-⋮----
-class URLLoader
-⋮----
-"""Loads URLs and extracts text using a specified crawler."""
-⋮----
-"""Initialize the URL loader.
-
-        Args:
-            urls: List of URLs to load
-            parsing_config: Configuration for parsing
-            crawler_config: Configuration for the crawler
-        """
-⋮----
-crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
-⋮----
-def load(self) -> List[Document]
-⋮----
-"""Load the URLs using the specified crawler."""
-</file>
-
 <file path="tests/main/test_mcp_tools.py">
 # note we use pydantic v2 to define MCP server
 from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
@@ -62481,275 +62750,6 @@ msg = GrepTool(pattern="test")
 ⋮----
 assert "path" not in captured_payload  # Should be excluded because it's None
 assert "case_insensitive" not in captured_payload  # Should be excluded
-</file>
-
-<file path="Makefile">
-.PHONY: setup check lint tests docs nodocs loc
-
-SHELL := /bin/bash
-
-.PHONY: setup update
-
-setup: ## Setup the git pre-commit hooks
-	uv run pre-commit install
-
-update: ## Update the git pre-commit hooks
-	uv run pre-commit autoupdate
-
-.PHONY: type-check
-type-check:
-	@uv run pre-commit install
-	@uv run pre-commit autoupdate
-	@uv run pre-commit run --all-files
-	@echo "Running black..."
-	@uv run black --check .
-	@echo "Running ruff check (without fix)..."
-	@uv run ruff check .
-	@echo "Running mypy...";
-	@uv run mypy -p langroid
-	@echo "All checks passed!"
-
-.PHONY: lint
-lint:
-	uv run black .
-	uv run ruff check . --fix
-	@echo "Auto-fixing issues in examples folder..."
-	@uv run ruff check examples/ --fix-only --no-force-exclude
-
-.PHONY: stubs
-stubs:
-	@echo "Generating Python stubs for the langroid package..."
-	@uv run stubgen -p langroid -o stubs
-	@echo "Stubs generated in the 'stubs' directory"
-
-.PHONY: tests
-tests:
-	pytest tests/main --basetemp=/tmp/pytest
-
-
-docs:
-	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || true
-	@# Build the documentation.
-	mkdocs build
-	@# Serve the documentation in the background.
-	mkdocs serve &
-	@echo "Documentation is being served in the background."
-	@echo "You can access the documentation at http://127.0.0.1:8000/"
-
-nodocs:
-	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
-	@echo "Stopped serving documentation."
-
-
-loc:
-	@echo "Lines in git-tracked files python files:"
-	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
-
-.PHONY: repomix repomix-no-tests repomix-all
-
-repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
-	@echo "Generating llms.txt (with tests)..."
-	@git ls-files | repomix --stdin
-	@echo "Generating llms-compressed.txt..."
-	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
-	@echo "Generated llms.txt and llms-compressed.txt"
-
-repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
-	@echo "Generating llms-no-tests.txt (without tests)..."
-	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
-	@echo "Generating llms-no-tests-compressed.txt..."
-	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
-	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
-
-repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
-	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
-	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
-	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
-	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
-	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
-
-repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
-
-.PHONY: check
-check: lint type-check repomix-all
-
-.PHONY: revert-tag
-revert-tag:
-	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
-	echo "Deleting tag: $$LATEST_TAG" && \
-	git tag -d $$LATEST_TAG
-
-.PHONY: revert-bump
-revert-bump:
-	@if git log -1 --pretty=%B | grep -q "bump"; then \
-		git reset --hard HEAD~1; \
-		echo "Reverted last commit (bump commit)"; \
-	else \
-		echo "Last commit was not a bump commit"; \
-	fi
-
-.PHONY: revert
-revert: revert-bump revert-tag
-	
-.PHONY: bump-patch
-bump-patch:
-	@cz bump --increment PATCH
-
-.PHONY: bump-minor
-bump-minor:
-	@cz bump --increment MINOR 
-
-.PHONY: bump-major
-bump-major:
-	@cz bump --increment MAJOR 
-
-.PHONY: build
-build:
-	@uv build
-
-.PHONY: push
-push:
-	@git push origin main
-	@git push origin --tags
-
-.PHONY: clean
-clean:
-	-rm -rf dist/*
-
-.PHONY: release
-release:
-	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
-
-.PHONY: bump-rc
-bump-rc:
-	@cz bump --prerelease rc
-
-.PHONY: bump-beta
-bump-beta:
-	@cz bump --prerelease beta
-
-.PHONY: bump-alpha
-bump-alpha:
-	@cz bump --prerelease alpha
-
-.PHONY: all-patch
-all-patch: bump-patch clean build push release
-
-.PHONY: all-minor
-all-minor: bump-minor clean build push release
-
-.PHONY: all-major
-all-major: bump-major clean build push release
-
-.PHONY: all-rc
-all-rc: bump-rc clean build push release
-
-.PHONY: all-beta
-all-beta: bump-beta clean build push release
-
-.PHONY: all-alpha
-all-alpha: bump-alpha clean build push release
-
-.PHONY: pre-release-branch
-pre-release-branch: ## Create and push pre-release from current branch
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	PRERELEASE_TYPE=$${PRERELEASE_TYPE:-rc} && \
-	cz bump --prerelease "$$PRERELEASE_TYPE" && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
-
-.PHONY: pre-release-rc
-pre-release-rc: ## Create release candidate from current branch
-	@PRERELEASE_TYPE=rc make pre-release-branch
-
-.PHONY: pre-release-beta
-pre-release-beta: ## Create beta release from current branch
-	@PRERELEASE_TYPE=beta make pre-release-branch
-
-.PHONY: pre-release-alpha
-pre-release-alpha: ## Create alpha release from current branch
-	@PRERELEASE_TYPE=alpha make pre-release-branch
-
-.PHONY: pre-release-push
-pre-release-push: ## Push current branch and tags (for pre-releases)
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot push pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	git push origin "$$CURRENT_BRANCH" --tags
-
-.PHONY: pre-release-release
-pre-release-release: ## Create GitHub pre-release (requires VERSION env var)
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
-
-.PHONY: bump-rc-patch
-bump-rc-patch: ## Bump to release candidate patch
-	@cz bump --increment PATCH --prerelease rc
-
-.PHONY: bump-rc-minor
-bump-rc-minor: ## Bump to release candidate minor
-	@cz bump --increment MINOR --prerelease rc
-
-.PHONY: bump-rc-major
-bump-rc-major: ## Bump to release candidate major
-	@cz bump --increment MAJOR --prerelease rc
-
-.PHONY: bump-beta-patch
-bump-beta-patch: ## Bump to beta patch
-	@cz bump --increment PATCH --prerelease beta
-
-.PHONY: bump-beta-minor
-bump-beta-minor: ## Bump to beta minor
-	@cz bump --increment MINOR --prerelease beta
-
-.PHONY: bump-alpha-patch
-bump-alpha-patch: ## Bump to alpha patch
-	@cz bump --increment PATCH --prerelease alpha
-
-.PHONY: bump-alpha-minor
-bump-alpha-minor: ## Bump to alpha minor
-	@cz bump --increment MINOR --prerelease alpha
-
-.PHONY: pre-release-rc-patch
-pre-release-rc-patch: bump-rc-patch clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-rc-minor
-pre-release-rc-minor: bump-rc-minor clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-rc-major
-pre-release-rc-major: bump-rc-major clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-beta-patch
-pre-release-beta-patch: bump-beta-patch clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-beta-minor
-pre-release-beta-minor: bump-beta-minor clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-alpha-patch
-pre-release-alpha-patch: bump-alpha-patch clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-alpha-minor
-pre-release-alpha-minor: bump-alpha-minor clean build pre-release-push pre-release-release
-
-.PHONY: publish
-publish:
-	uv publish
 </file>
 
 <file path="langroid/agent/special/doc_chat_agent.py">
