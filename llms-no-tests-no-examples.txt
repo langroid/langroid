@@ -154,6 +154,7 @@ issues/
   20251011-cross-encoder-race-bug.md
   20251011-pr-926-description.md
   20251107-fix-mcp-dectorator.md
+  20251123-new-model-support-gpt51-gemini30.md
   898-implementation.md
   html-logger-implementation.md
   html-logger.md
@@ -17719,6 +17720,20 @@ rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank)
 - PR #874: https://github.com/langroid/langroid/pull/874
 </file>
 
+<file path="release-notes/v0-56-7-doc-chat-deprecation-fix.md">
+# Release Notes for v0.56.7
+
+## DocChatAgent Improvements
+
+- Fixed test failures caused by deprecated `n_similar_docs` parameter interfering with `n_similar_chunks` and `n_relevant_chunks` settings
+- Set `n_similar_docs` default to `None` to prevent backward compatibility code from overriding intended retrieval configurations
+- Optimized reciprocal rank fusion passage selection using list slicing for better performance
+
+## Bug Fixes
+
+- Resolved issue where `n_similar_docs=4` (old default) was silently overriding test configurations that expected 3 chunks
+</file>
+
 <file path="scripts/fix-pydantic-imports.sh">
 #!/bin/bash
 
@@ -20929,6 +20944,179 @@ Appendix: example patch to the failing example
          # call the actual tool
          result: str = await self.call_tool_async()
 ```
+</file>
+
+<file path="issues/20251123-new-model-support-gpt51-gemini30.md">
+# New Model Support: GPT-5.1 and Gemini 3.0
+
+## Objective
+
+Add support for newly released models to Langroid's `model_info.py`:
+
+- GPT-5.1 variants (gpt-5.1, gpt-5.1-chat, gpt-5.1-codex, gpt-5.1-codex-mini)
+- Gemini 3.0 variants (to be determined from models.dev)
+
+## Background
+
+New models have been released by OpenAI and Google that need to be added to
+Langroid's model registry. This ensures users can leverage these models with
+proper cost tracking, context length limits, and feature support.
+
+## Information Sources
+
+- Model specs (context length, costs): https://models.dev/
+- OpenAI feature support: https://platform.openai.com/docs/api-reference/chat
+- Assumption: GPT-5.1 features similar to GPT-5
+
+## GPT-5.1 Model Information
+
+Based on models.dev data (as of Nov 2025):
+
+### 1. gpt-5.1
+- **Context Length**: 272,000 tokens
+- **Max Output**: 128,000 tokens
+- **Input Cost**: $1.25 per 1M tokens
+- **Output Cost**: $10.00 per 1M tokens
+- **Cache Read Cost**: $0.13 per 1M tokens
+- **Notes**: Released 2024-09, Azure variant
+
+### 2. gpt-5.1-chat
+- **Context Length**: 128,000 tokens
+- **Max Output**: 16,384 tokens
+- **Input Cost**: $1.25 per 1M tokens
+- **Output Cost**: $10.00 per 1M tokens
+- **Cache Read Cost**: $0.13 per 1M tokens
+- **Notes**: Released 2024-09, Azure variant
+
+### 3. gpt-5.1-codex
+- **Context Length**: 400,000 tokens
+- **Max Output**: 128,000 tokens
+- **Input Cost**: $1.25 per 1M tokens
+- **Output Cost**: $10.00 per 1M tokens
+- **Cache Read Cost**: $0.13 per 1M tokens
+- **Notes**: Released 2024-09, Azure variant, code-optimized
+
+### 4. gpt-5.1-codex-mini
+- **Context Length**: 400,000 tokens
+- **Max Output**: 128,000 tokens
+- **Input Cost**: $0.25 per 1M tokens
+- **Output Cost**: $2.00 per 1M tokens
+- **Cache Read Cost**: $0.03 per 1M tokens
+- **Notes**: Released 2024-09, Azure variant, code-optimized, cheaper
+
+## GPT-5.1 Feature Support
+
+Based on similarity to GPT-5 (to be confirmed from OpenAI API reference):
+
+- **has_tools**: `False` (reasoning models typically don't support tools)
+- **has_structured_output**: `True` (likely similar to GPT-5)
+- **allows_streaming**: `True` (default)
+- **allows_system_message**: `True` (default)
+- **unsupported_params**: `["temperature"]` (likely similar to GPT-5)
+- **rename_params**: `{"max_tokens": "max_completion_tokens"}` (likely)
+- **Special parameters**: May support `reasoning_effort` (to be confirmed)
+
+## Gemini 3.0 Model Information
+
+**TO BE DETERMINED**: Need to fetch from models.dev
+
+Expected variants based on previous patterns:
+- gemini-3.0-pro
+- gemini-3.0-flash
+- gemini-3.0-flash-lite
+
+Information needed for each:
+- Context length
+- Max output tokens
+- Input/output costs
+- Cached input costs
+- Feature support flags
+
+## Implementation Tasks
+
+### 1. Add Enum Entries
+
+In `langroid/language_models/model_info.py`:
+
+**OpenAIChatModel enum** (add after existing GPT-5 models):
+```python
+class OpenAIChatModel(ModelName):
+    # ... existing models ...
+    GPT5_1 = "gpt-5.1"
+    GPT5_1_CHAT = "gpt-5.1-chat"
+    GPT5_1_CODEX = "gpt-5.1-codex"
+    GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
+```
+
+**GeminiModel enum** (add after existing Gemini 2.5 models):
+```python
+class GeminiModel(ModelName):
+    # ... existing models ...
+    GEMINI_3_0_PRO = "gemini-3.0-pro"  # if exists
+    GEMINI_3_0_FLASH = "gemini-3.0-flash"  # if exists
+    GEMINI_3_0_FLASH_LITE = "gemini-3.0-flash-lite"  # if exists
+```
+
+### 2. Add MODEL_INFO Entries
+
+Add comprehensive `ModelInfo` entries for each new model with:
+- Provider (OpenAI or Google)
+- Context length
+- Max output tokens
+- Costs (input, output, cached)
+- Feature flags
+- API parameter quirks
+- Description
+
+### 3. Update OpenAI_API_ParamInfo (if needed)
+
+If GPT-5.1 supports `reasoning_effort` or other special parameters, add to
+the appropriate parameter lists.
+
+### 4. Verification
+
+After implementation:
+- Run `make check` to ensure linting and type checking pass
+- Verify model names are accessible via the enums
+- Verify costs and limits are correctly set
+- Check that feature flags match OpenAI API capabilities
+
+## Questions/Clarifications Needed
+
+1. **Gemini 3.0**: Does this model exist yet? If so, what are the exact variant
+   names and specs?
+
+2. **GPT-5.1 Feature Support**: Should we confirm all feature flags from the
+   OpenAI API reference, or is assuming similarity to GPT-5 acceptable?
+
+3. **Special Parameters**: Do GPT-5.1 models support `reasoning_effort` or
+   other special parameters?
+
+4. **Provider**: The models.dev data shows these as "Azure" variants - should
+   they still use `ModelProvider.OPENAI`?
+
+## Files to Modify
+
+- `langroid/language_models/model_info.py`
+  - Add enum entries for new models
+  - Add MODEL_INFO dictionary entries
+  - Update OpenAI_API_ParamInfo if needed
+
+## Testing
+
+No specific unit tests are required for individual model definitions (per user
+guidance). The implementation focuses on:
+- Correct model name registration
+- Accurate API cost tracking
+- Proper context length limits
+- Correct feature support flags
+
+## References
+
+- models.dev: https://models.dev/
+- OpenAI Chat API: https://platform.openai.com/docs/api-reference/chat
+- Existing GPT-5 implementation: `langroid/language_models/model_info.py:323-364`
+- Existing Gemini 2.5 implementation: Similar location in same file
 </file>
 
 <file path="issues/898-implementation.md">
@@ -35549,20 +35737,6 @@ Improved DoneSequence implementation by introducing response sequence tracking a
 All existing done sequence tests pass without modification, confirming backward compatibility.
 </file>
 
-<file path="release-notes/v0-56-7-doc-chat-deprecation-fix.md">
-# Release Notes for v0.56.7
-
-## DocChatAgent Improvements
-
-- Fixed test failures caused by deprecated `n_similar_docs` parameter interfering with `n_similar_chunks` and `n_relevant_chunks` settings
-- Set `n_similar_docs` default to `None` to prevent backward compatibility code from overriding intended retrieval configurations
-- Optimized reciprocal rank fusion passage selection using list slicing for better performance
-
-## Bug Fixes
-
-- Resolved issue where `n_similar_docs=4` (old default) was silently overriding test configurations that expected 3 chunks
-</file>
-
 <file path="release-notes/v0-56-8-task-tool-spawn-example.md">
 # v0.56.8 Release Notes
 
@@ -37702,6 +37876,264 @@ class RelevanceExtractorAgent(ChatAgent):
         return DONE + " " + extracts
 </file>
 
+<file path="langroid/agent/tools/task_tool.py">
+"""
+TaskTool: A tool that allows agents to delegate a task to a sub-agent with
+    specific tools enabled.
+"""
+
+import uuid
+from typing import List, Optional
+
+from pydantic import Field
+from pydantic.fields import ModelPrivateAttr
+
+import langroid.language_models as lm
+from langroid import ChatDocument
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import DoneTool
+
+
+class TaskTool(ToolMessage):
+    """
+    Tool that spawns a sub-agent with specified tools to handle a task.
+
+    The sub-agent can be given a custom name for identification in logs.
+    If no name is provided, a random unique name starting with 'agent'
+    will be generated.
+    """
+
+    # TODO: setting up termination conditions of sub-task needs to be improved
+    request: str = "task_tool"
+    purpose: str = """
+        <HowToUse>
+        Use this tool to delegate a task to a sub-agent with specific tools enabled.
+        The sub-agent will be created with the specified tools and will run the task
+        non-interactively.
+    """
+
+    # Parameters for the agent tool
+
+    system_message: Optional[str] = Field(
+        ...,
+        description="""
+        Optional system message to configure the sub-agent's general behavior and 
+        to specify the task and its context.
+            A good system message will have these components:
+            - Inform the sub-agent of its role, e.g. "You are a financial analyst."
+            - Clear spec of the task, with sufficient context for the sub-agent to 
+              understand what it needs to do, since the sub-agent does 
+              NOT have access to your conversation history!
+            - Any additional general context needed for the task, such as a
+              (part of a) document, or data items, etc.
+            - Specify when to use certain tools, e.g. 
+                "You MUST use the 'stock_data' tool to extract stock information.
+        """,
+    )
+
+    prompt: str = Field(
+        ...,
+        description="""
+            The prompt to run the sub-agent with. This differs from the agent's
+            system message: Whereas the system message configures the sub-agent's
+            GENERAL role and goals, the `prompt` is the SPECIFIC input that the 
+            sub-agent will process. In LLM terms, the system message is sent to the 
+            LLM as the first message, with role = "system" or "developer", and 
+            the prompt is sent as a message with role = "user".
+            EXAMPLE: system_message = "You are a financial analyst, when the 
+                user asks about the share-price of a company, 
+                you must use your tools to do the research, and 
+                return the final answer to the user."
+            
+            prompt = "What is the share-price of Apple Inc.?"
+            """,
+    )
+
+    tools: List[str] = Field(
+        ...,
+        description="""
+        A list of tool names to enable for the sub-agent.
+        This must be a list of strings referring to the names of tools
+        that are known to you. 
+        If you want to enable all tools, or you do not have any preference
+        on what tools are enabled for the sub-agent, you can set 
+        this field to a singleton list ['ALL']
+        To disable all tools, set it to a singleton list ['NONE']
+        """,
+    )
+    # TODO: ensure valid model name
+    model: Optional[str] = Field(
+        default=None,
+        description="""
+            Optional name of the LLM model to use for the sub-agent, e.g. 'gpt-4.1'
+            If omitted, the sub-agent will use the same model as yours.
+            """,
+    )
+    max_iterations: Optional[int] = Field(
+        default=None,
+        description="Optional max iterations for the sub-agent to run the task",
+    )
+    agent_name: Optional[str] = Field(
+        default=None,
+        description="""
+            Optional name for the sub-agent. This will be used as the agent's name
+            in logs and for identification purposes. If not provided, a random unique
+            name starting with 'agent' will be generated.
+            """,
+    )
+
+    def _set_up_task(self, agent: ChatAgent) -> Task:
+        """
+        Helper method to set up a task for the sub-agent.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+        """
+        # Generate a random name if not provided
+        agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
+
+        # Create chat agent config with system message if provided
+        # TODO: Maybe we just copy the parent agent's config and override chat_model?
+        #   -- but what if parent agent has a MockLMConfig?
+        llm_config = lm.OpenAIGPTConfig(
+            chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
+        )
+        config = ChatAgentConfig(
+            name=agent_name,
+            llm=llm_config,
+            handle_llm_no_tool=f"""
+                You forgot to use one of your TOOLs! Remember that you must either:
+                - use a tool, or a sequence of tools, to complete your task, OR
+                - if you are done with your task, use the `{DoneTool.name()}` tool
+                to return the result.
+                
+                As a reminder, this was your task:
+                {self.prompt}
+                """,
+            system_message=f"""
+                {self.system_message}
+                
+                When you are finished with your task, you MUST
+                use the TOOL `{DoneTool.name()}` to end the task
+                and return the result.                
+            """,
+        )
+
+        # Create the sub-agent
+        sub_agent = ChatAgent(config)
+
+        # Enable the specified tools for the sub-agent
+        # Convert tool names to actual tool classes using parent agent's tools_map
+        if self.tools == ["ALL"]:
+            # Enable all tools from the parent agent:
+            # This is the list of all tools KNOWN (whether usable or handle-able or not)
+            tool_classes = []
+            for t in agent.llm_tools_known:
+                if t in agent.llm_tools_map and t != self.request:
+                    tool_class = agent.llm_tools_map[t]
+                    allow_llm_use = tool_class._allow_llm_use
+                    if isinstance(allow_llm_use, ModelPrivateAttr):
+                        allow_llm_use = allow_llm_use.default
+                    if allow_llm_use:
+                        tool_classes.append(tool_class)
+        elif self.tools == ["NONE"]:
+            # No tools enabled
+            tool_classes = []
+        else:
+            # Enable only specified tools
+            tool_classes = []
+            for tool_name in self.tools:
+                if tool_name in agent.llm_tools_map:
+                    tool_class = agent.llm_tools_map[tool_name]
+                    allow_llm_use = tool_class._allow_llm_use
+                    if isinstance(allow_llm_use, ModelPrivateAttr):
+                        allow_llm_use = allow_llm_use.default
+                    if allow_llm_use:
+                        tool_classes.append(tool_class)
+
+        # always enable the DoneTool to signal task completion
+        sub_agent.enable_message(tool_classes + [DoneTool], use=True, handle=True)
+
+        # Create a non-interactive task
+        task = Task(sub_agent, interactive=False)
+
+        return task
+
+    def handle(
+        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """
+
+        Handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+
+        task = self._set_up_task(agent)
+
+        # Create a ChatDocument for the prompt with parent pointer
+        prompt_doc = None
+        if chat_doc is not None:
+            from langroid.agent.chat_document import ChatDocMetaData
+
+            prompt_doc = ChatDocument(
+                content=self.prompt,
+                metadata=ChatDocMetaData(
+                    parent_id=chat_doc.id(),
+                    agent_id=agent.id,
+                    sender=chat_doc.metadata.sender,
+                ),
+            )
+            # Set bidirectional parent-child relationship
+            chat_doc.metadata.child_id = prompt_doc.id()
+
+        # Run the task with the ChatDocument or string prompt
+        result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
+        return result
+
+    async def handle_async(
+        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """
+        Async method to handle the TaskTool by creating a sub-agent with specified tools
+        and running the task non-interactively.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            chat_doc: The ChatDocument containing this tool message
+        """
+        task = self._set_up_task(agent)
+
+        # Create a ChatDocument for the prompt with parent pointer
+        prompt_doc = None
+        if chat_doc is not None:
+            from langroid.agent.chat_document import ChatDocMetaData
+
+            prompt_doc = ChatDocument(
+                content=self.prompt,
+                metadata=ChatDocMetaData(
+                    parent_id=chat_doc.id(),
+                    agent_id=agent.id,
+                    sender=chat_doc.metadata.sender,
+                ),
+            )
+            # Set bidirectional parent-child relationship
+            chat_doc.metadata.child_id = prompt_doc.id()
+
+        # Run the task with the ChatDocument or string prompt
+        # TODO eventually allow the various task setup configs,
+        #  including termination conditions
+        result = await task.run_async(
+            prompt_doc or self.prompt, turns=self.max_iterations or 10
+        )
+        return result
+</file>
+
 <file path="langroid/agent/chat_document.py">
 from __future__ import annotations
 
@@ -38946,6 +39378,820 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         return GeminiEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore
+</file>
+
+<file path="langroid/language_models/base.py">
+import json
+import logging
+from abc import ABC, abstractmethod
+from datetime import datetime
+from enum import Enum
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
+
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
+
+from langroid.cachedb.base import CacheDBConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.model_info import ModelInfo, get_model_info
+from langroid.parsing.agent_chats import parse_message
+from langroid.parsing.file_attachment import FileAttachment
+from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
+from langroid.prompts.dialog import collate_chat_history
+from langroid.utils.configuration import settings
+from langroid.utils.output.printing import show_if_debug
+
+logger = logging.getLogger(__name__)
+
+
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
+FunctionCallTypes = Literal["none", "auto"]
+ToolChoiceTypes = Literal["none", "auto", "required"]
+ToolTypes = Literal["function"]
+
+DEFAULT_CONTEXT_LENGTH = 16_000
+
+
+class StreamEventType(Enum):
+    TEXT = 1
+    FUNC_NAME = 2
+    FUNC_ARGS = 3
+    TOOL_NAME = 4
+    TOOL_ARGS = 5
+
+
+class RetryParams(BaseSettings):
+    max_retries: int = 5
+    initial_delay: float = 1.0
+    exponential_base: float = 1.3
+    jitter: bool = True
+
+
+class LLMConfig(BaseSettings):
+    """
+    Common configuration for all language models.
+    """
+
+    type: str = "openai"
+    streamer: Optional[Callable[[Any], None]] = noop_fn
+    streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
+    api_base: str | None = None
+    formatter: None | str = None
+    # specify None if you want to use the full max output tokens of the model
+    max_output_tokens: int | None = 8192
+    timeout: int = 20  # timeout for API requests
+    chat_model: str = ""
+    completion_model: str = ""
+    temperature: float = 0.0
+    chat_context_length: int | None = None
+    async_stream_quiet: bool = False  # suppress streaming output in async mode?
+    completion_context_length: int | None = None
+    # if input length + max_output_tokens > context length of model,
+    # we will try shortening requested output
+    min_output_tokens: int = 64
+    use_completion_for_chat: bool = False  # use completion model for chat?
+    # use chat model for completion? For OpenAI models, this MUST be set to True!
+    use_chat_for_completion: bool = True
+    stream: bool = True  # stream output from API?
+    # TODO: we could have a `stream_reasoning` flag here to control whether to show
+    # reasoning output from reasoning models
+    cache_config: None | CacheDBConfig = RedisCacheConfig()
+    thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
+    retry_params: RetryParams = RetryParams()
+
+    @property
+    def model_max_output_tokens(self) -> int:
+        return (
+            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
+        )
+
+
+class LLMFunctionCall(BaseModel):
+    """
+    Structure of LLM response indicating it "wants" to call a function.
+    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
+    """
+
+    name: str  # name of function to call
+    arguments: Optional[Dict[str, Any]] = None
+
+    @staticmethod
+    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall":
+        """
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+        fun_call = LLMFunctionCall(name=message["name"])
+        fun_args_str = message["arguments"]
+        # sometimes may be malformed with invalid indents,
+        # so we try to be safe by removing newlines.
+        if fun_args_str is not None:
+            fun_args_str = fun_args_str.replace("\n", "").strip()
+            dict_or_list = parse_imperfect_json(fun_args_str)
+
+            if not isinstance(dict_or_list, dict):
+                raise ValueError(
+                    f"""
+                        Invalid function args: {fun_args_str}
+                        parsed as {dict_or_list},
+                        which is not a valid dict.
+                        """
+                )
+            fun_args = dict_or_list
+        else:
+            fun_args = None
+        fun_call.arguments = fun_args
+
+        return fun_call
+
+    def __str__(self) -> str:
+        return "FUNC: " + json.dumps(self.model_dump(), indent=2)
+
+
+class LLMFunctionSpec(BaseModel):
+    """
+    Description of a function available for the LLM to use.
+    To be used when calling the LLM `chat()` method with the `functions` parameter.
+    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
+    """
+
+    name: str
+    description: str
+    parameters: Dict[str, Any]
+
+
+class OpenAIToolCall(BaseModel):
+    """
+    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
+    See https://platform.openai.com/docs/api-reference/chat/create
+
+    Attributes:
+        id: The id of the tool call.
+        type: The type of the tool call;
+            only "function" is currently possible (7/26/24).
+        function: The function call.
+    """
+
+    id: str | None = None
+    type: ToolTypes = "function"
+    function: LLMFunctionCall | None = None
+
+    @staticmethod
+    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall":
+        """
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+        id = message["id"]
+        type = message["type"]
+        function = LLMFunctionCall.from_dict(message["function"])
+        return OpenAIToolCall(id=id, type=type, function=function)
+
+    def __str__(self) -> str:
+        if self.function is None:
+            return ""
+        return "OAI-TOOL: " + json.dumps(self.function.model_dump(), indent=2)
+
+
+class OpenAIToolSpec(BaseModel):
+    type: ToolTypes
+    strict: Optional[bool] = None
+    function: LLMFunctionSpec
+
+
+class OpenAIJsonSchemaSpec(BaseModel):
+    strict: Optional[bool] = None
+    function: LLMFunctionSpec
+
+    def to_dict(self) -> Dict[str, Any]:
+        json_schema: Dict[str, Any] = {
+            "name": self.function.name,
+            "description": self.function.description,
+            "schema": self.function.parameters,
+        }
+        if self.strict is not None:
+            json_schema["strict"] = self.strict
+
+        return {
+            "type": "json_schema",
+            "json_schema": json_schema,
+        }
+
+
+class LLMTokenUsage(BaseModel):
+    """
+    Usage of tokens by an LLM.
+    """
+
+    prompt_tokens: int = 0
+    cached_tokens: int = 0
+    completion_tokens: int = 0
+    cost: float = 0.0
+    calls: int = 0  # how many API calls - not used as of 2025-04-04
+
+    def reset(self) -> None:
+        self.prompt_tokens = 0
+        self.cached_tokens = 0
+        self.completion_tokens = 0
+        self.cost = 0.0
+        self.calls = 0
+
+    def __str__(self) -> str:
+        return (
+            f"Tokens = "
+            f"(prompt {self.prompt_tokens}, cached {self.cached_tokens}, "
+            f"completion {self.completion_tokens}), "
+            f"Cost={self.cost}, Calls={self.calls}"
+        )
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
+class Role(str, Enum):
+    """
+    Possible roles for a message in a chat.
+    """
+
+    USER = "user"
+    SYSTEM = "system"
+    ASSISTANT = "assistant"
+    FUNCTION = "function"
+    TOOL = "tool"
+
+
+class LLMMessage(BaseModel):
+    """
+    Class representing an entry in the msg-history sent to the LLM API.
+    It could be one of these:
+    - a user message
+    - an LLM ("Assistant") response
+    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
+    - a result or results from executing a fn or tool-call(s)
+    """
+
+    role: Role
+    name: Optional[str] = None
+    tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
+    tool_id: str = ""  # used by OpenAIAssistant
+    content: str
+    files: List[FileAttachment] = []
+    function_call: Optional[LLMFunctionCall] = None
+    tool_calls: Optional[List[OpenAIToolCall]] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    # link to corresponding chat document, for provenance/rewind purposes
+    chat_document_id: str = ""
+
+    def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]:
+        """
+        Convert to dictionary for API request, keeping ONLY
+        the fields that are expected in an API call!
+        E.g., DROP the tool_id, since it is only for use in the Assistant API,
+            not the completion API.
+
+        Args:
+            has_system_role: whether the message has a system role (if not,
+                set to "user" role)
+        Returns:
+            dict: dictionary representation of LLM message
+        """
+        d = self.model_dump()
+        files: List[FileAttachment] = d.pop("files")
+        if len(files) > 0 and self.role == Role.USER:
+            # In there are files, then content is an array of
+            # different content-parts
+            d["content"] = [
+                dict(
+                    type="text",
+                    text=self.content,
+                )
+            ] + [f.to_dict(model) for f in self.files]
+
+        # if there is a key k = "role" with value "system", change to "user"
+        # in case has_system_role is False
+        if not has_system_role and "role" in d and d["role"] == "system":
+            d["role"] = "user"
+            if "content" in d:
+                d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
+        # drop None values since API doesn't accept them
+        dict_no_none = {k: v for k, v in d.items() if v is not None}
+        if "name" in dict_no_none and dict_no_none["name"] == "":
+            # OpenAI API does not like empty name
+            del dict_no_none["name"]
+        if "function_call" in dict_no_none:
+            # arguments must be a string
+            if "arguments" in dict_no_none["function_call"]:
+                dict_no_none["function_call"]["arguments"] = json.dumps(
+                    dict_no_none["function_call"]["arguments"]
+                )
+        if "tool_calls" in dict_no_none:
+            # convert tool calls to API format
+            for tc in dict_no_none["tool_calls"]:
+                if "arguments" in tc["function"]:
+                    # arguments must be a string
+                    tc["function"]["arguments"] = json.dumps(
+                        tc["function"]["arguments"]
+                    )
+        # IMPORTANT! drop fields that are not expected in API call
+        dict_no_none.pop("tool_id", None)
+        dict_no_none.pop("timestamp", None)
+        dict_no_none.pop("chat_document_id", None)
+        return dict_no_none
+
+    def __str__(self) -> str:
+        if self.function_call is not None:
+            content = "FUNC: " + json.dumps(self.function_call)
+        else:
+            content = self.content
+        name_str = f" ({self.name})" if self.name else ""
+        return f"{self.role} {name_str}: {content}"
+
+
+class LLMResponse(BaseModel):
+    """
+    Class representing response from LLM.
+    """
+
+    message: str
+    reasoning: str = ""  # optional reasoning text from reasoning models
+    # TODO tool_id needs to generalize to multi-tool calls
+    tool_id: str = ""  # used by OpenAIAssistant
+    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+    function_call: Optional[LLMFunctionCall] = None
+    usage: Optional[LLMTokenUsage] = None
+    cached: bool = False
+
+    def __str__(self) -> str:
+        if self.function_call is not None:
+            return str(self.function_call)
+        elif self.oai_tool_calls:
+            return "\n".join(str(tc) for tc in self.oai_tool_calls)
+        else:
+            return self.message
+
+    def to_LLMMessage(self) -> LLMMessage:
+        """Convert LLM response to an LLMMessage, to be included in the
+        message-list sent to the API.
+        This is currently NOT used in any significant way in the library, and is only
+        provided as a utility to construct a message list for the API when directly
+        working with an LLM object.
+
+        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
+        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
+        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
+        """
+        return LLMMessage(
+            role=Role.ASSISTANT,
+            content=self.message,
+            name=None if self.function_call is None else self.function_call.name,
+            function_call=self.function_call,
+            tool_calls=self.oai_tool_calls,
+        )
+
+    def get_recipient_and_message(
+        self,
+    ) -> Tuple[str, str]:
+        """
+        If `message` or `function_call` of an LLM response contains an explicit
+        recipient name, return this recipient name and `message` stripped
+        of the recipient name if specified.
+
+        Two cases:
+        (a) `message` contains addressing string "TO: <name> <content>", or
+        (b) `message` is empty and function_call/tool_call with explicit `recipient`
+
+
+        Returns:
+            (str): name of recipient, which may be empty string if no recipient
+            (str): content of message
+
+        """
+
+        if self.function_call is not None:
+            # in this case we ignore message, since all information is in function_call
+            msg = ""
+            args = self.function_call.arguments
+            recipient = ""
+            if isinstance(args, dict):
+                recipient = args.get("recipient", "")
+            return recipient, msg
+        else:
+            msg = self.message
+            if self.oai_tool_calls is not None:
+                # get the first tool that has a recipient field, if any
+                for tc in self.oai_tool_calls:
+                    if tc.function is not None and tc.function.arguments is not None:
+                        recipient = tc.function.arguments.get(
+                            "recipient"
+                        )  # type: ignore
+                        if recipient is not None and recipient != "":
+                            return recipient, ""
+
+        # It's not a function or tool call, so continue looking to see
+        # if a recipient is specified in the message.
+
+        # First check if message contains "TO: <recipient> <content>"
+        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
+        # check if there is a top level json that specifies 'recipient',
+        # and retain the entire message as content.
+        if recipient_name == "":
+            recipient_name = top_level_json_field(msg, "recipient") if msg else ""
+            content = msg
+        return recipient_name, content
+
+
+# Define an abstract base class for language models
+class LanguageModel(ABC):
+    """
+    Abstract base class for language models.
+    """
+
+    # usage cost by model, accumulates here
+    usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+
+    def __init__(self, config: LLMConfig = LLMConfig()):
+        self.config = config
+        self.chat_model_orig = config.chat_model
+
+    @staticmethod
+    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
+        """
+        Create a language model.
+        Args:
+            config: configuration for language model
+        Returns: instance of language model
+        """
+        if type(config) is LLMConfig:
+            raise ValueError(
+                """
+                Cannot create a Language Model object from LLMConfig.
+                Please specify a specific subclass of LLMConfig e.g.,
+                OpenAIGPTConfig. If you are creating a ChatAgent from
+                a ChatAgentConfig, please specify the `llm` field of this config
+                as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
+                """
+            )
+        from langroid.language_models.azure_openai import AzureGPT
+        from langroid.language_models.mock_lm import MockLM, MockLMConfig
+        from langroid.language_models.openai_gpt import OpenAIGPT
+
+        if config is None or config.type is None:
+            return None
+
+        if config.type == "mock":
+            return MockLM(cast(MockLMConfig, config))
+
+        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+
+        if config.type == "azure":
+            openai = AzureGPT
+        else:
+            openai = OpenAIGPT
+        cls = dict(
+            openai=openai,
+        ).get(config.type, openai)
+        return cls(config)  # type: ignore
+
+    @staticmethod
+    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]:
+        """
+        Given an even-length sequence of strings, split into a sequence of pairs
+
+        Args:
+            lst (List[str]): sequence of strings
+
+        Returns:
+            List[Tuple[str,str]]: sequence of pairs of strings
+        """
+        evens = lst[::2]
+        odds = lst[1::2]
+        return list(zip(evens, odds))
+
+    @staticmethod
+    def get_chat_history_components(
+        messages: List[LLMMessage],
+    ) -> Tuple[str, List[Tuple[str, str]], str]:
+        """
+        From the chat history, extract system prompt, user-assistant turns, and
+        final user msg.
+
+        Args:
+            messages (List[LLMMessage]): List of messages in the chat history
+
+        Returns:
+            Tuple[str, List[Tuple[str,str]], str]:
+                system prompt, user-assistant turns, final user msg
+
+        """
+        # Handle various degenerate cases
+        messages = [m for m in messages]  # copy
+        DUMMY_SYS_PROMPT = "You are a helpful assistant."
+        DUMMY_USER_PROMPT = "Follow the instructions above."
+        if len(messages) == 0 or messages[0].role != Role.SYSTEM:
+            logger.warning("No system msg, creating dummy system prompt")
+            messages.insert(0, LLMMessage(content=DUMMY_SYS_PROMPT, role=Role.SYSTEM))
+        system_prompt = messages[0].content
+
+        # now we have messages = [Sys,...]
+        if len(messages) == 1:
+            logger.warning(
+                "Got only system message in chat history, creating dummy user prompt"
+            )
+            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, msg, ...]
+
+        if messages[1].role != Role.USER:
+            messages.insert(1, LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, user, ...]
+        if messages[-1].role != Role.USER:
+            logger.warning(
+                "Last message in chat history is not a user message,"
+                " creating dummy user prompt"
+            )
+            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, user, ..., user]
+        # so we omit the first and last elements and make pairs of user-asst messages
+        conversation = [m.content for m in messages[1:-1]]
+        user_prompt = messages[-1].content
+        pairs = LanguageModel.user_assistant_pairs(conversation)
+        return system_prompt, pairs, user_prompt
+
+    @abstractmethod
+    def set_stream(self, stream: bool) -> bool:
+        """Enable or disable streaming output from API.
+        Return previous value of stream."""
+        pass
+
+    @abstractmethod
+    def get_stream(self) -> bool:
+        """Get streaming status"""
+        pass
+
+    @abstractmethod
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    def chat(
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
+    ) -> LLMResponse:
+        """
+        Get chat-completion response from LLM.
+
+        Args:
+            messages: message-history to send to the LLM
+            max_tokens: max tokens to generate
+            tools: tools available for the LLM to use in its response
+            tool_choice: tool call mode, one of "none", "auto", "required",
+                or a dict specifying a specific tool.
+            functions: functions available for LLM to call (deprecated)
+            function_call: function calling mode, "auto", "none", or a specific fn
+                    (deprecated)
+        """
+
+        pass
+
+    @abstractmethod
+    async def achat(
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
+    ) -> LLMResponse:
+        """Async version of `chat`. See `chat` for details."""
+        pass
+
+    def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
+        return self.generate(prompt, max_tokens)
+
+    @staticmethod
+    def _fallback_model_names(model: str) -> List[str]:
+        parts = model.split("/")
+        fallbacks = []
+        for i in range(1, len(parts)):
+            fallbacks.append("/".join(parts[i:]))
+        return fallbacks
+
+    def info(self) -> ModelInfo:
+        """Info of relevant chat model"""
+        orig_model = (
+            self.config.completion_model
+            if self.config.use_completion_for_chat
+            else self.chat_model_orig
+        )
+        return get_model_info(orig_model, self._fallback_model_names(orig_model))
+
+    def completion_info(self) -> ModelInfo:
+        """Info of relevant completion model"""
+        orig_model = (
+            self.chat_model_orig
+            if self.config.use_chat_for_completion
+            else self.config.completion_model
+        )
+        return get_model_info(orig_model, self._fallback_model_names(orig_model))
+
+    def supports_functions_or_tools(self) -> bool:
+        """
+        Does this Model's API support "native" tool-calling, i.e.
+        can we call the API with arguments that contain a list of available tools,
+        and their schemas?
+        Note that, given the plethora of LLM provider APIs this determination is
+        imperfect at best, and leans towards returning True.
+        When the API calls fails with an error indicating tools are not supported,
+        then users are encouraged to use the Langroid-based prompt-based
+        ToolMessage mechanism, which works with ANY LLM. To enable this,
+        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
+        """
+        return self.info().has_tools
+
+    def chat_context_length(self) -> int:
+        return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
+
+    def completion_context_length(self) -> int:
+        return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
+
+    def chat_cost(self) -> Tuple[float, float, float]:
+        """
+        Return the cost per 1000 tokens for chat completions.
+
+        Returns:
+            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
+                per 1000 tokens
+        """
+        return (0.0, 0.0, 0.0)
+
+    def reset_usage_cost(self) -> None:
+        for mdl in [self.config.chat_model, self.config.completion_model]:
+            if mdl is None:
+                return
+            if mdl not in self.usage_cost_dict:
+                self.usage_cost_dict[mdl] = LLMTokenUsage()
+            counter = self.usage_cost_dict[mdl]
+            counter.reset()
+
+    def update_usage_cost(
+        self, chat: bool, prompts: int, completions: int, cost: float
+    ) -> None:
+        """
+        Update usage cost for this LLM.
+        Args:
+            chat (bool): whether to update for chat or completion model
+            prompts (int): number of tokens used for prompts
+            completions (int): number of tokens used for completions
+            cost (float): total token cost in USD
+        """
+        mdl = self.config.chat_model if chat else self.config.completion_model
+        if mdl is None:
+            return
+        if mdl not in self.usage_cost_dict:
+            self.usage_cost_dict[mdl] = LLMTokenUsage()
+        counter = self.usage_cost_dict[mdl]
+        counter.prompt_tokens += prompts
+        counter.completion_tokens += completions
+        counter.cost += cost
+        counter.calls += 1
+
+    @classmethod
+    def usage_cost_summary(cls) -> str:
+        s = ""
+        for model, counter in cls.usage_cost_dict.items():
+            s += f"{model}: {counter}\n"
+        return s
+
+    @classmethod
+    def tot_tokens_cost(cls) -> Tuple[int, float]:
+        """
+        Return total tokens used and total cost across all models.
+        """
+        total_tokens = 0
+        total_cost = 0.0
+        for counter in cls.usage_cost_dict.values():
+            total_tokens += counter.total_tokens
+            total_cost += counter.cost
+        return total_tokens, total_cost
+
+    def get_reasoning_final(self, message: str) -> Tuple[str, str]:
+        """Extract "reasoning" and "final answer" from an LLM response, if the
+        reasoning is found within configured delimiters, like <think>, </think>.
+        E.g.,
+        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
+
+        Args:
+            message (str): message from LLM
+
+        Returns:
+            Tuple[str, str]: reasoning, final answer
+        """
+        start, end = self.config.thought_delimiters
+        if start in message and end in message:
+            parts = message.split(start)
+            if len(parts) > 1:
+                reasoning, final = parts[1].split(end)
+                return reasoning, final
+        return "", message
+
+    def followup_to_standalone(
+        self, chat_history: List[Tuple[str, str]], question: str
+    ) -> str:
+        """
+        Given a chat history and a question, convert it to a standalone question.
+        Args:
+            chat_history: list of tuples of (question, answer)
+            query: follow-up question
+
+        Returns: standalone version of the question
+        """
+        history = collate_chat_history(chat_history)
+
+        prompt = f"""
+        You are an expert at understanding a CHAT HISTORY between an AI Assistant
+        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP
+        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood
+        WITHOUT the context of the chat history.
+
+        Below is the CHAT HISTORY. When the User asks you to rephrase a
+        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the
+        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional
+        text or context.
+
+        <CHAT_HISTORY>
+        {history}
+        </CHAT_HISTORY>
+        """.strip()
+
+        follow_up_question = f"""
+        Please rephrase this as a stand-alone question or request:
+        <FOLLOW-UP-QUESTION-OR-REQUEST>
+        {question}
+        </FOLLOW-UP-QUESTION-OR-REQUEST>
+        """.strip()
+
+        show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
+        standalone = self.chat(
+            messages=[
+                LLMMessage(role=Role.SYSTEM, content=prompt),
+                LLMMessage(role=Role.USER, content=follow_up_question),
+            ],
+            max_tokens=1024,
+        ).message.strip()
+
+        show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
+        return standalone
+
+
+class StreamingIfAllowed:
+    """Context to temporarily enable or disable streaming, if allowed globally via
+    `settings.stream`"""
+
+    def __init__(self, llm: LanguageModel, stream: bool = True):
+        self.llm = llm
+        self.stream = stream
+
+    def __enter__(self) -> None:
+        self.old_stream = self.llm.set_stream(settings.stream and self.stream)
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.llm.set_stream(self.old_stream)
 </file>
 
 <file path="langroid/language_models/client_cache.py">
@@ -41534,264 +42780,6 @@ async def get_mcp_tools_async(
         return await client.client.list_tools()
 </file>
 
-<file path="langroid/agent/tools/task_tool.py">
-"""
-TaskTool: A tool that allows agents to delegate a task to a sub-agent with
-    specific tools enabled.
-"""
-
-import uuid
-from typing import List, Optional
-
-from pydantic import Field
-from pydantic.fields import ModelPrivateAttr
-
-import langroid.language_models as lm
-from langroid import ChatDocument
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
-from langroid.agent.tools.orchestration import DoneTool
-
-
-class TaskTool(ToolMessage):
-    """
-    Tool that spawns a sub-agent with specified tools to handle a task.
-
-    The sub-agent can be given a custom name for identification in logs.
-    If no name is provided, a random unique name starting with 'agent'
-    will be generated.
-    """
-
-    # TODO: setting up termination conditions of sub-task needs to be improved
-    request: str = "task_tool"
-    purpose: str = """
-        <HowToUse>
-        Use this tool to delegate a task to a sub-agent with specific tools enabled.
-        The sub-agent will be created with the specified tools and will run the task
-        non-interactively.
-    """
-
-    # Parameters for the agent tool
-
-    system_message: Optional[str] = Field(
-        ...,
-        description="""
-        Optional system message to configure the sub-agent's general behavior and 
-        to specify the task and its context.
-            A good system message will have these components:
-            - Inform the sub-agent of its role, e.g. "You are a financial analyst."
-            - Clear spec of the task, with sufficient context for the sub-agent to 
-              understand what it needs to do, since the sub-agent does 
-              NOT have access to your conversation history!
-            - Any additional general context needed for the task, such as a
-              (part of a) document, or data items, etc.
-            - Specify when to use certain tools, e.g. 
-                "You MUST use the 'stock_data' tool to extract stock information.
-        """,
-    )
-
-    prompt: str = Field(
-        ...,
-        description="""
-            The prompt to run the sub-agent with. This differs from the agent's
-            system message: Whereas the system message configures the sub-agent's
-            GENERAL role and goals, the `prompt` is the SPECIFIC input that the 
-            sub-agent will process. In LLM terms, the system message is sent to the 
-            LLM as the first message, with role = "system" or "developer", and 
-            the prompt is sent as a message with role = "user".
-            EXAMPLE: system_message = "You are a financial analyst, when the 
-                user asks about the share-price of a company, 
-                you must use your tools to do the research, and 
-                return the final answer to the user."
-            
-            prompt = "What is the share-price of Apple Inc.?"
-            """,
-    )
-
-    tools: List[str] = Field(
-        ...,
-        description="""
-        A list of tool names to enable for the sub-agent.
-        This must be a list of strings referring to the names of tools
-        that are known to you. 
-        If you want to enable all tools, or you do not have any preference
-        on what tools are enabled for the sub-agent, you can set 
-        this field to a singleton list ['ALL']
-        To disable all tools, set it to a singleton list ['NONE']
-        """,
-    )
-    # TODO: ensure valid model name
-    model: Optional[str] = Field(
-        default=None,
-        description="""
-            Optional name of the LLM model to use for the sub-agent, e.g. 'gpt-4.1'
-            If omitted, the sub-agent will use the same model as yours.
-            """,
-    )
-    max_iterations: Optional[int] = Field(
-        default=None,
-        description="Optional max iterations for the sub-agent to run the task",
-    )
-    agent_name: Optional[str] = Field(
-        default=None,
-        description="""
-            Optional name for the sub-agent. This will be used as the agent's name
-            in logs and for identification purposes. If not provided, a random unique
-            name starting with 'agent' will be generated.
-            """,
-    )
-
-    def _set_up_task(self, agent: ChatAgent) -> Task:
-        """
-        Helper method to set up a task for the sub-agent.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-        """
-        # Generate a random name if not provided
-        agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
-
-        # Create chat agent config with system message if provided
-        # TODO: Maybe we just copy the parent agent's config and override chat_model?
-        #   -- but what if parent agent has a MockLMConfig?
-        llm_config = lm.OpenAIGPTConfig(
-            chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
-        )
-        config = ChatAgentConfig(
-            name=agent_name,
-            llm=llm_config,
-            handle_llm_no_tool=f"""
-                You forgot to use one of your TOOLs! Remember that you must either:
-                - use a tool, or a sequence of tools, to complete your task, OR
-                - if you are done with your task, use the `{DoneTool.name()}` tool
-                to return the result.
-                
-                As a reminder, this was your task:
-                {self.prompt}
-                """,
-            system_message=f"""
-                {self.system_message}
-                
-                When you are finished with your task, you MUST
-                use the TOOL `{DoneTool.name()}` to end the task
-                and return the result.                
-            """,
-        )
-
-        # Create the sub-agent
-        sub_agent = ChatAgent(config)
-
-        # Enable the specified tools for the sub-agent
-        # Convert tool names to actual tool classes using parent agent's tools_map
-        if self.tools == ["ALL"]:
-            # Enable all tools from the parent agent:
-            # This is the list of all tools KNOWN (whether usable or handle-able or not)
-            tool_classes = []
-            for t in agent.llm_tools_known:
-                if t in agent.llm_tools_map and t != self.request:
-                    tool_class = agent.llm_tools_map[t]
-                    allow_llm_use = tool_class._allow_llm_use
-                    if isinstance(allow_llm_use, ModelPrivateAttr):
-                        allow_llm_use = allow_llm_use.default
-                    if allow_llm_use:
-                        tool_classes.append(tool_class)
-        elif self.tools == ["NONE"]:
-            # No tools enabled
-            tool_classes = []
-        else:
-            # Enable only specified tools
-            tool_classes = []
-            for tool_name in self.tools:
-                if tool_name in agent.llm_tools_map:
-                    tool_class = agent.llm_tools_map[tool_name]
-                    allow_llm_use = tool_class._allow_llm_use
-                    if isinstance(allow_llm_use, ModelPrivateAttr):
-                        allow_llm_use = allow_llm_use.default
-                    if allow_llm_use:
-                        tool_classes.append(tool_class)
-
-        # always enable the DoneTool to signal task completion
-        sub_agent.enable_message(tool_classes + [DoneTool], use=True, handle=True)
-
-        # Create a non-interactive task
-        task = Task(sub_agent, interactive=False)
-
-        return task
-
-    def handle(
-        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        """
-
-        Handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-
-        task = self._set_up_task(agent)
-
-        # Create a ChatDocument for the prompt with parent pointer
-        prompt_doc = None
-        if chat_doc is not None:
-            from langroid.agent.chat_document import ChatDocMetaData
-
-            prompt_doc = ChatDocument(
-                content=self.prompt,
-                metadata=ChatDocMetaData(
-                    parent_id=chat_doc.id(),
-                    agent_id=agent.id,
-                    sender=chat_doc.metadata.sender,
-                ),
-            )
-            # Set bidirectional parent-child relationship
-            chat_doc.metadata.child_id = prompt_doc.id()
-
-        # Run the task with the ChatDocument or string prompt
-        result = task.run(prompt_doc or self.prompt, turns=self.max_iterations or 10)
-        return result
-
-    async def handle_async(
-        self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        """
-        Async method to handle the TaskTool by creating a sub-agent with specified tools
-        and running the task non-interactively.
-
-        Args:
-            agent: The parent ChatAgent that is handling this tool
-            chat_doc: The ChatDocument containing this tool message
-        """
-        task = self._set_up_task(agent)
-
-        # Create a ChatDocument for the prompt with parent pointer
-        prompt_doc = None
-        if chat_doc is not None:
-            from langroid.agent.chat_document import ChatDocMetaData
-
-            prompt_doc = ChatDocument(
-                content=self.prompt,
-                metadata=ChatDocMetaData(
-                    parent_id=chat_doc.id(),
-                    agent_id=agent.id,
-                    sender=chat_doc.metadata.sender,
-                ),
-            )
-            # Set bidirectional parent-child relationship
-            chat_doc.metadata.child_id = prompt_doc.id()
-
-        # Run the task with the ChatDocument or string prompt
-        # TODO eventually allow the various task setup configs,
-        #  including termination conditions
-        result = await task.run_async(
-            prompt_doc or self.prompt, turns=self.max_iterations or 10
-        )
-        return result
-</file>
-
 <file path="langroid/agent/base.py">
 import asyncio
 import copy
@@ -44032,820 +45020,6 @@ class Agent(ABC):
         return None
 </file>
 
-<file path="langroid/language_models/base.py">
-import json
-import logging
-from abc import ABC, abstractmethod
-from datetime import datetime
-from enum import Enum
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    Type,
-    Union,
-    cast,
-)
-
-from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
-
-from langroid.cachedb.base import CacheDBConfig
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.model_info import ModelInfo, get_model_info
-from langroid.parsing.agent_chats import parse_message
-from langroid.parsing.file_attachment import FileAttachment
-from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
-from langroid.prompts.dialog import collate_chat_history
-from langroid.utils.configuration import settings
-from langroid.utils.output.printing import show_if_debug
-
-logger = logging.getLogger(__name__)
-
-
-def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
-    pass
-
-
-async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
-    pass
-
-
-FunctionCallTypes = Literal["none", "auto"]
-ToolChoiceTypes = Literal["none", "auto", "required"]
-ToolTypes = Literal["function"]
-
-DEFAULT_CONTEXT_LENGTH = 16_000
-
-
-class StreamEventType(Enum):
-    TEXT = 1
-    FUNC_NAME = 2
-    FUNC_ARGS = 3
-    TOOL_NAME = 4
-    TOOL_ARGS = 5
-
-
-class RetryParams(BaseSettings):
-    max_retries: int = 5
-    initial_delay: float = 1.0
-    exponential_base: float = 1.3
-    jitter: bool = True
-
-
-class LLMConfig(BaseSettings):
-    """
-    Common configuration for all language models.
-    """
-
-    type: str = "openai"
-    streamer: Optional[Callable[[Any], None]] = noop_fn
-    streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
-    api_base: str | None = None
-    formatter: None | str = None
-    # specify None if you want to use the full max output tokens of the model
-    max_output_tokens: int | None = 8192
-    timeout: int = 20  # timeout for API requests
-    chat_model: str = ""
-    completion_model: str = ""
-    temperature: float = 0.0
-    chat_context_length: int | None = None
-    async_stream_quiet: bool = False  # suppress streaming output in async mode?
-    completion_context_length: int | None = None
-    # if input length + max_output_tokens > context length of model,
-    # we will try shortening requested output
-    min_output_tokens: int = 64
-    use_completion_for_chat: bool = False  # use completion model for chat?
-    # use chat model for completion? For OpenAI models, this MUST be set to True!
-    use_chat_for_completion: bool = True
-    stream: bool = True  # stream output from API?
-    # TODO: we could have a `stream_reasoning` flag here to control whether to show
-    # reasoning output from reasoning models
-    cache_config: None | CacheDBConfig = RedisCacheConfig()
-    thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
-    retry_params: RetryParams = RetryParams()
-
-    @property
-    def model_max_output_tokens(self) -> int:
-        return (
-            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
-        )
-
-
-class LLMFunctionCall(BaseModel):
-    """
-    Structure of LLM response indicating it "wants" to call a function.
-    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
-    """
-
-    name: str  # name of function to call
-    arguments: Optional[Dict[str, Any]] = None
-
-    @staticmethod
-    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall":
-        """
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-        fun_call = LLMFunctionCall(name=message["name"])
-        fun_args_str = message["arguments"]
-        # sometimes may be malformed with invalid indents,
-        # so we try to be safe by removing newlines.
-        if fun_args_str is not None:
-            fun_args_str = fun_args_str.replace("\n", "").strip()
-            dict_or_list = parse_imperfect_json(fun_args_str)
-
-            if not isinstance(dict_or_list, dict):
-                raise ValueError(
-                    f"""
-                        Invalid function args: {fun_args_str}
-                        parsed as {dict_or_list},
-                        which is not a valid dict.
-                        """
-                )
-            fun_args = dict_or_list
-        else:
-            fun_args = None
-        fun_call.arguments = fun_args
-
-        return fun_call
-
-    def __str__(self) -> str:
-        return "FUNC: " + json.dumps(self.model_dump(), indent=2)
-
-
-class LLMFunctionSpec(BaseModel):
-    """
-    Description of a function available for the LLM to use.
-    To be used when calling the LLM `chat()` method with the `functions` parameter.
-    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
-    """
-
-    name: str
-    description: str
-    parameters: Dict[str, Any]
-
-
-class OpenAIToolCall(BaseModel):
-    """
-    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
-    See https://platform.openai.com/docs/api-reference/chat/create
-
-    Attributes:
-        id: The id of the tool call.
-        type: The type of the tool call;
-            only "function" is currently possible (7/26/24).
-        function: The function call.
-    """
-
-    id: str | None = None
-    type: ToolTypes = "function"
-    function: LLMFunctionCall | None = None
-
-    @staticmethod
-    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall":
-        """
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-        id = message["id"]
-        type = message["type"]
-        function = LLMFunctionCall.from_dict(message["function"])
-        return OpenAIToolCall(id=id, type=type, function=function)
-
-    def __str__(self) -> str:
-        if self.function is None:
-            return ""
-        return "OAI-TOOL: " + json.dumps(self.function.model_dump(), indent=2)
-
-
-class OpenAIToolSpec(BaseModel):
-    type: ToolTypes
-    strict: Optional[bool] = None
-    function: LLMFunctionSpec
-
-
-class OpenAIJsonSchemaSpec(BaseModel):
-    strict: Optional[bool] = None
-    function: LLMFunctionSpec
-
-    def to_dict(self) -> Dict[str, Any]:
-        json_schema: Dict[str, Any] = {
-            "name": self.function.name,
-            "description": self.function.description,
-            "schema": self.function.parameters,
-        }
-        if self.strict is not None:
-            json_schema["strict"] = self.strict
-
-        return {
-            "type": "json_schema",
-            "json_schema": json_schema,
-        }
-
-
-class LLMTokenUsage(BaseModel):
-    """
-    Usage of tokens by an LLM.
-    """
-
-    prompt_tokens: int = 0
-    cached_tokens: int = 0
-    completion_tokens: int = 0
-    cost: float = 0.0
-    calls: int = 0  # how many API calls - not used as of 2025-04-04
-
-    def reset(self) -> None:
-        self.prompt_tokens = 0
-        self.cached_tokens = 0
-        self.completion_tokens = 0
-        self.cost = 0.0
-        self.calls = 0
-
-    def __str__(self) -> str:
-        return (
-            f"Tokens = "
-            f"(prompt {self.prompt_tokens}, cached {self.cached_tokens}, "
-            f"completion {self.completion_tokens}), "
-            f"Cost={self.cost}, Calls={self.calls}"
-        )
-
-    @property
-    def total_tokens(self) -> int:
-        return self.prompt_tokens + self.completion_tokens
-
-
-class Role(str, Enum):
-    """
-    Possible roles for a message in a chat.
-    """
-
-    USER = "user"
-    SYSTEM = "system"
-    ASSISTANT = "assistant"
-    FUNCTION = "function"
-    TOOL = "tool"
-
-
-class LLMMessage(BaseModel):
-    """
-    Class representing an entry in the msg-history sent to the LLM API.
-    It could be one of these:
-    - a user message
-    - an LLM ("Assistant") response
-    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
-    - a result or results from executing a fn or tool-call(s)
-    """
-
-    role: Role
-    name: Optional[str] = None
-    tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
-    tool_id: str = ""  # used by OpenAIAssistant
-    content: str
-    files: List[FileAttachment] = []
-    function_call: Optional[LLMFunctionCall] = None
-    tool_calls: Optional[List[OpenAIToolCall]] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    # link to corresponding chat document, for provenance/rewind purposes
-    chat_document_id: str = ""
-
-    def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]:
-        """
-        Convert to dictionary for API request, keeping ONLY
-        the fields that are expected in an API call!
-        E.g., DROP the tool_id, since it is only for use in the Assistant API,
-            not the completion API.
-
-        Args:
-            has_system_role: whether the message has a system role (if not,
-                set to "user" role)
-        Returns:
-            dict: dictionary representation of LLM message
-        """
-        d = self.model_dump()
-        files: List[FileAttachment] = d.pop("files")
-        if len(files) > 0 and self.role == Role.USER:
-            # In there are files, then content is an array of
-            # different content-parts
-            d["content"] = [
-                dict(
-                    type="text",
-                    text=self.content,
-                )
-            ] + [f.to_dict(model) for f in self.files]
-
-        # if there is a key k = "role" with value "system", change to "user"
-        # in case has_system_role is False
-        if not has_system_role and "role" in d and d["role"] == "system":
-            d["role"] = "user"
-            if "content" in d:
-                d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
-        # drop None values since API doesn't accept them
-        dict_no_none = {k: v for k, v in d.items() if v is not None}
-        if "name" in dict_no_none and dict_no_none["name"] == "":
-            # OpenAI API does not like empty name
-            del dict_no_none["name"]
-        if "function_call" in dict_no_none:
-            # arguments must be a string
-            if "arguments" in dict_no_none["function_call"]:
-                dict_no_none["function_call"]["arguments"] = json.dumps(
-                    dict_no_none["function_call"]["arguments"]
-                )
-        if "tool_calls" in dict_no_none:
-            # convert tool calls to API format
-            for tc in dict_no_none["tool_calls"]:
-                if "arguments" in tc["function"]:
-                    # arguments must be a string
-                    tc["function"]["arguments"] = json.dumps(
-                        tc["function"]["arguments"]
-                    )
-        # IMPORTANT! drop fields that are not expected in API call
-        dict_no_none.pop("tool_id", None)
-        dict_no_none.pop("timestamp", None)
-        dict_no_none.pop("chat_document_id", None)
-        return dict_no_none
-
-    def __str__(self) -> str:
-        if self.function_call is not None:
-            content = "FUNC: " + json.dumps(self.function_call)
-        else:
-            content = self.content
-        name_str = f" ({self.name})" if self.name else ""
-        return f"{self.role} {name_str}: {content}"
-
-
-class LLMResponse(BaseModel):
-    """
-    Class representing response from LLM.
-    """
-
-    message: str
-    reasoning: str = ""  # optional reasoning text from reasoning models
-    # TODO tool_id needs to generalize to multi-tool calls
-    tool_id: str = ""  # used by OpenAIAssistant
-    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-    function_call: Optional[LLMFunctionCall] = None
-    usage: Optional[LLMTokenUsage] = None
-    cached: bool = False
-
-    def __str__(self) -> str:
-        if self.function_call is not None:
-            return str(self.function_call)
-        elif self.oai_tool_calls:
-            return "\n".join(str(tc) for tc in self.oai_tool_calls)
-        else:
-            return self.message
-
-    def to_LLMMessage(self) -> LLMMessage:
-        """Convert LLM response to an LLMMessage, to be included in the
-        message-list sent to the API.
-        This is currently NOT used in any significant way in the library, and is only
-        provided as a utility to construct a message list for the API when directly
-        working with an LLM object.
-
-        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
-        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
-        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
-        """
-        return LLMMessage(
-            role=Role.ASSISTANT,
-            content=self.message,
-            name=None if self.function_call is None else self.function_call.name,
-            function_call=self.function_call,
-            tool_calls=self.oai_tool_calls,
-        )
-
-    def get_recipient_and_message(
-        self,
-    ) -> Tuple[str, str]:
-        """
-        If `message` or `function_call` of an LLM response contains an explicit
-        recipient name, return this recipient name and `message` stripped
-        of the recipient name if specified.
-
-        Two cases:
-        (a) `message` contains addressing string "TO: <name> <content>", or
-        (b) `message` is empty and function_call/tool_call with explicit `recipient`
-
-
-        Returns:
-            (str): name of recipient, which may be empty string if no recipient
-            (str): content of message
-
-        """
-
-        if self.function_call is not None:
-            # in this case we ignore message, since all information is in function_call
-            msg = ""
-            args = self.function_call.arguments
-            recipient = ""
-            if isinstance(args, dict):
-                recipient = args.get("recipient", "")
-            return recipient, msg
-        else:
-            msg = self.message
-            if self.oai_tool_calls is not None:
-                # get the first tool that has a recipient field, if any
-                for tc in self.oai_tool_calls:
-                    if tc.function is not None and tc.function.arguments is not None:
-                        recipient = tc.function.arguments.get(
-                            "recipient"
-                        )  # type: ignore
-                        if recipient is not None and recipient != "":
-                            return recipient, ""
-
-        # It's not a function or tool call, so continue looking to see
-        # if a recipient is specified in the message.
-
-        # First check if message contains "TO: <recipient> <content>"
-        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
-        # check if there is a top level json that specifies 'recipient',
-        # and retain the entire message as content.
-        if recipient_name == "":
-            recipient_name = top_level_json_field(msg, "recipient") if msg else ""
-            content = msg
-        return recipient_name, content
-
-
-# Define an abstract base class for language models
-class LanguageModel(ABC):
-    """
-    Abstract base class for language models.
-    """
-
-    # usage cost by model, accumulates here
-    usage_cost_dict: Dict[str, LLMTokenUsage] = {}
-
-    def __init__(self, config: LLMConfig = LLMConfig()):
-        self.config = config
-        self.chat_model_orig = config.chat_model
-
-    @staticmethod
-    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
-        """
-        Create a language model.
-        Args:
-            config: configuration for language model
-        Returns: instance of language model
-        """
-        if type(config) is LLMConfig:
-            raise ValueError(
-                """
-                Cannot create a Language Model object from LLMConfig.
-                Please specify a specific subclass of LLMConfig e.g.,
-                OpenAIGPTConfig. If you are creating a ChatAgent from
-                a ChatAgentConfig, please specify the `llm` field of this config
-                as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
-                """
-            )
-        from langroid.language_models.azure_openai import AzureGPT
-        from langroid.language_models.mock_lm import MockLM, MockLMConfig
-        from langroid.language_models.openai_gpt import OpenAIGPT
-
-        if config is None or config.type is None:
-            return None
-
-        if config.type == "mock":
-            return MockLM(cast(MockLMConfig, config))
-
-        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
-
-        if config.type == "azure":
-            openai = AzureGPT
-        else:
-            openai = OpenAIGPT
-        cls = dict(
-            openai=openai,
-        ).get(config.type, openai)
-        return cls(config)  # type: ignore
-
-    @staticmethod
-    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]:
-        """
-        Given an even-length sequence of strings, split into a sequence of pairs
-
-        Args:
-            lst (List[str]): sequence of strings
-
-        Returns:
-            List[Tuple[str,str]]: sequence of pairs of strings
-        """
-        evens = lst[::2]
-        odds = lst[1::2]
-        return list(zip(evens, odds))
-
-    @staticmethod
-    def get_chat_history_components(
-        messages: List[LLMMessage],
-    ) -> Tuple[str, List[Tuple[str, str]], str]:
-        """
-        From the chat history, extract system prompt, user-assistant turns, and
-        final user msg.
-
-        Args:
-            messages (List[LLMMessage]): List of messages in the chat history
-
-        Returns:
-            Tuple[str, List[Tuple[str,str]], str]:
-                system prompt, user-assistant turns, final user msg
-
-        """
-        # Handle various degenerate cases
-        messages = [m for m in messages]  # copy
-        DUMMY_SYS_PROMPT = "You are a helpful assistant."
-        DUMMY_USER_PROMPT = "Follow the instructions above."
-        if len(messages) == 0 or messages[0].role != Role.SYSTEM:
-            logger.warning("No system msg, creating dummy system prompt")
-            messages.insert(0, LLMMessage(content=DUMMY_SYS_PROMPT, role=Role.SYSTEM))
-        system_prompt = messages[0].content
-
-        # now we have messages = [Sys,...]
-        if len(messages) == 1:
-            logger.warning(
-                "Got only system message in chat history, creating dummy user prompt"
-            )
-            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, msg, ...]
-
-        if messages[1].role != Role.USER:
-            messages.insert(1, LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, user, ...]
-        if messages[-1].role != Role.USER:
-            logger.warning(
-                "Last message in chat history is not a user message,"
-                " creating dummy user prompt"
-            )
-            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, user, ..., user]
-        # so we omit the first and last elements and make pairs of user-asst messages
-        conversation = [m.content for m in messages[1:-1]]
-        user_prompt = messages[-1].content
-        pairs = LanguageModel.user_assistant_pairs(conversation)
-        return system_prompt, pairs, user_prompt
-
-    @abstractmethod
-    def set_stream(self, stream: bool) -> bool:
-        """Enable or disable streaming output from API.
-        Return previous value of stream."""
-        pass
-
-    @abstractmethod
-    def get_stream(self) -> bool:
-        """Get streaming status"""
-        pass
-
-    @abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        pass
-
-    @abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        pass
-
-    @abstractmethod
-    def chat(
-        self,
-        messages: Union[str, List[LLMMessage]],
-        max_tokens: int = 200,
-        tools: Optional[List[OpenAIToolSpec]] = None,
-        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
-        response_format: Optional[OpenAIJsonSchemaSpec] = None,
-    ) -> LLMResponse:
-        """
-        Get chat-completion response from LLM.
-
-        Args:
-            messages: message-history to send to the LLM
-            max_tokens: max tokens to generate
-            tools: tools available for the LLM to use in its response
-            tool_choice: tool call mode, one of "none", "auto", "required",
-                or a dict specifying a specific tool.
-            functions: functions available for LLM to call (deprecated)
-            function_call: function calling mode, "auto", "none", or a specific fn
-                    (deprecated)
-        """
-
-        pass
-
-    @abstractmethod
-    async def achat(
-        self,
-        messages: Union[str, List[LLMMessage]],
-        max_tokens: int = 200,
-        tools: Optional[List[OpenAIToolSpec]] = None,
-        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
-        response_format: Optional[OpenAIJsonSchemaSpec] = None,
-    ) -> LLMResponse:
-        """Async version of `chat`. See `chat` for details."""
-        pass
-
-    def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
-        return self.generate(prompt, max_tokens)
-
-    @staticmethod
-    def _fallback_model_names(model: str) -> List[str]:
-        parts = model.split("/")
-        fallbacks = []
-        for i in range(1, len(parts)):
-            fallbacks.append("/".join(parts[i:]))
-        return fallbacks
-
-    def info(self) -> ModelInfo:
-        """Info of relevant chat model"""
-        orig_model = (
-            self.config.completion_model
-            if self.config.use_completion_for_chat
-            else self.chat_model_orig
-        )
-        return get_model_info(orig_model, self._fallback_model_names(orig_model))
-
-    def completion_info(self) -> ModelInfo:
-        """Info of relevant completion model"""
-        orig_model = (
-            self.chat_model_orig
-            if self.config.use_chat_for_completion
-            else self.config.completion_model
-        )
-        return get_model_info(orig_model, self._fallback_model_names(orig_model))
-
-    def supports_functions_or_tools(self) -> bool:
-        """
-        Does this Model's API support "native" tool-calling, i.e.
-        can we call the API with arguments that contain a list of available tools,
-        and their schemas?
-        Note that, given the plethora of LLM provider APIs this determination is
-        imperfect at best, and leans towards returning True.
-        When the API calls fails with an error indicating tools are not supported,
-        then users are encouraged to use the Langroid-based prompt-based
-        ToolMessage mechanism, which works with ANY LLM. To enable this,
-        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
-        """
-        return self.info().has_tools
-
-    def chat_context_length(self) -> int:
-        return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
-
-    def completion_context_length(self) -> int:
-        return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
-
-    def chat_cost(self) -> Tuple[float, float, float]:
-        """
-        Return the cost per 1000 tokens for chat completions.
-
-        Returns:
-            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
-                per 1000 tokens
-        """
-        return (0.0, 0.0, 0.0)
-
-    def reset_usage_cost(self) -> None:
-        for mdl in [self.config.chat_model, self.config.completion_model]:
-            if mdl is None:
-                return
-            if mdl not in self.usage_cost_dict:
-                self.usage_cost_dict[mdl] = LLMTokenUsage()
-            counter = self.usage_cost_dict[mdl]
-            counter.reset()
-
-    def update_usage_cost(
-        self, chat: bool, prompts: int, completions: int, cost: float
-    ) -> None:
-        """
-        Update usage cost for this LLM.
-        Args:
-            chat (bool): whether to update for chat or completion model
-            prompts (int): number of tokens used for prompts
-            completions (int): number of tokens used for completions
-            cost (float): total token cost in USD
-        """
-        mdl = self.config.chat_model if chat else self.config.completion_model
-        if mdl is None:
-            return
-        if mdl not in self.usage_cost_dict:
-            self.usage_cost_dict[mdl] = LLMTokenUsage()
-        counter = self.usage_cost_dict[mdl]
-        counter.prompt_tokens += prompts
-        counter.completion_tokens += completions
-        counter.cost += cost
-        counter.calls += 1
-
-    @classmethod
-    def usage_cost_summary(cls) -> str:
-        s = ""
-        for model, counter in cls.usage_cost_dict.items():
-            s += f"{model}: {counter}\n"
-        return s
-
-    @classmethod
-    def tot_tokens_cost(cls) -> Tuple[int, float]:
-        """
-        Return total tokens used and total cost across all models.
-        """
-        total_tokens = 0
-        total_cost = 0.0
-        for counter in cls.usage_cost_dict.values():
-            total_tokens += counter.total_tokens
-            total_cost += counter.cost
-        return total_tokens, total_cost
-
-    def get_reasoning_final(self, message: str) -> Tuple[str, str]:
-        """Extract "reasoning" and "final answer" from an LLM response, if the
-        reasoning is found within configured delimiters, like <think>, </think>.
-        E.g.,
-        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
-
-        Args:
-            message (str): message from LLM
-
-        Returns:
-            Tuple[str, str]: reasoning, final answer
-        """
-        start, end = self.config.thought_delimiters
-        if start in message and end in message:
-            parts = message.split(start)
-            if len(parts) > 1:
-                reasoning, final = parts[1].split(end)
-                return reasoning, final
-        return "", message
-
-    def followup_to_standalone(
-        self, chat_history: List[Tuple[str, str]], question: str
-    ) -> str:
-        """
-        Given a chat history and a question, convert it to a standalone question.
-        Args:
-            chat_history: list of tuples of (question, answer)
-            query: follow-up question
-
-        Returns: standalone version of the question
-        """
-        history = collate_chat_history(chat_history)
-
-        prompt = f"""
-        You are an expert at understanding a CHAT HISTORY between an AI Assistant
-        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP
-        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood
-        WITHOUT the context of the chat history.
-
-        Below is the CHAT HISTORY. When the User asks you to rephrase a
-        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the
-        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional
-        text or context.
-
-        <CHAT_HISTORY>
-        {history}
-        </CHAT_HISTORY>
-        """.strip()
-
-        follow_up_question = f"""
-        Please rephrase this as a stand-alone question or request:
-        <FOLLOW-UP-QUESTION-OR-REQUEST>
-        {question}
-        </FOLLOW-UP-QUESTION-OR-REQUEST>
-        """.strip()
-
-        show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
-        standalone = self.chat(
-            messages=[
-                LLMMessage(role=Role.SYSTEM, content=prompt),
-                LLMMessage(role=Role.USER, content=follow_up_question),
-            ],
-            max_tokens=1024,
-        ).message.strip()
-
-        show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
-        return standalone
-
-
-class StreamingIfAllowed:
-    """Context to temporarily enable or disable streaming, if allowed globally via
-    `settings.stream`"""
-
-    def __init__(self, llm: LanguageModel, stream: bool = True):
-        self.llm = llm
-        self.stream = stream
-
-    def __enter__(self) -> None:
-        self.old_stream = self.llm.set_stream(settings.stream and self.stream)
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self.llm.set_stream(self.old_stream)
-</file>
-
 <file path="langroid/vector_store/base.py">
 import copy
 import logging
@@ -45810,6 +45984,275 @@ class QdrantDB(VectorStore):
             logger.info(f"Found {len(doc_score_pairs)} matches, max score: {max_score}")
         self.show_if_debug(doc_score_pairs)
         return doc_score_pairs
+</file>
+
+<file path="Makefile">
+.PHONY: setup check lint tests docs nodocs loc
+
+SHELL := /bin/bash
+
+.PHONY: setup update
+
+setup: ## Setup the git pre-commit hooks
+	uv run pre-commit install
+
+update: ## Update the git pre-commit hooks
+	uv run pre-commit autoupdate
+
+.PHONY: type-check
+type-check:
+	@uv run pre-commit install
+	@uv run pre-commit autoupdate
+	@uv run pre-commit run --all-files
+	@echo "Running black..."
+	@uv run black --check .
+	@echo "Running ruff check (without fix)..."
+	@uv run ruff check .
+	@echo "Running mypy...";
+	@uv run mypy -p langroid
+	@echo "All checks passed!"
+
+.PHONY: lint
+lint:
+	uv run black .
+	uv run ruff check . --fix
+	@echo "Auto-fixing issues in examples folder..."
+	@uv run ruff check examples/ --fix-only --no-force-exclude
+
+.PHONY: stubs
+stubs:
+	@echo "Generating Python stubs for the langroid package..."
+	@uv run stubgen -p langroid -o stubs
+	@echo "Stubs generated in the 'stubs' directory"
+
+.PHONY: tests
+tests:
+	pytest tests/main --basetemp=/tmp/pytest
+
+
+docs:
+	@# Kill any existing 'mkdocs serve' processes.
+	@pkill -f "mkdocs serve" 2>/dev/null || true
+	@# Build the documentation.
+	mkdocs build
+	@# Serve the documentation in the background.
+	mkdocs serve &
+	@echo "Documentation is being served in the background."
+	@echo "You can access the documentation at http://127.0.0.1:8000/"
+
+nodocs:
+	@# Kill any existing 'mkdocs serve' processes.
+	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
+	@echo "Stopped serving documentation."
+
+
+loc:
+	@echo "Lines in git-tracked files python files:"
+	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
+
+.PHONY: repomix repomix-no-tests repomix-all
+
+repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
+	@echo "Generating llms.txt (with tests)..."
+	@git ls-files | repomix --stdin
+	@echo "Generating llms-compressed.txt..."
+	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
+	@echo "Generated llms.txt and llms-compressed.txt"
+
+repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
+	@echo "Generating llms-no-tests.txt (without tests)..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
+	@echo "Generating llms-no-tests-compressed.txt..."
+	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
+	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
+
+repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
+	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
+	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
+	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
+	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
+
+repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
+
+.PHONY: check
+check: lint type-check repomix-all
+
+.PHONY: revert-tag
+revert-tag:
+	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
+	echo "Deleting tag: $$LATEST_TAG" && \
+	git tag -d $$LATEST_TAG
+
+.PHONY: revert-bump
+revert-bump:
+	@if git log -1 --pretty=%B | grep -q "bump"; then \
+		git reset --hard HEAD~1; \
+		echo "Reverted last commit (bump commit)"; \
+	else \
+		echo "Last commit was not a bump commit"; \
+	fi
+
+.PHONY: revert
+revert: revert-bump revert-tag
+	
+.PHONY: bump-patch
+bump-patch:
+	@cz bump --increment PATCH
+
+.PHONY: bump-minor
+bump-minor:
+	@cz bump --increment MINOR 
+
+.PHONY: bump-major
+bump-major:
+	@cz bump --increment MAJOR 
+
+.PHONY: build
+build:
+	@uv build
+
+.PHONY: push
+push:
+	@git push origin main
+	@git push origin --tags
+
+.PHONY: clean
+clean:
+	-rm -rf dist/*
+
+.PHONY: release
+release:
+	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+
+.PHONY: bump-rc
+bump-rc:
+	@cz bump --prerelease rc
+
+.PHONY: bump-beta
+bump-beta:
+	@cz bump --prerelease beta
+
+.PHONY: bump-alpha
+bump-alpha:
+	@cz bump --prerelease alpha
+
+.PHONY: all-patch
+all-patch: bump-patch clean build push release
+
+.PHONY: all-minor
+all-minor: bump-minor clean build push release
+
+.PHONY: all-major
+all-major: bump-major clean build push release
+
+.PHONY: all-rc
+all-rc: bump-rc clean build push release
+
+.PHONY: all-beta
+all-beta: bump-beta clean build push release
+
+.PHONY: all-alpha
+all-alpha: bump-alpha clean build push release
+
+.PHONY: pre-release-branch
+pre-release-branch: ## Create and push pre-release from current branch
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot create pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	PRERELEASE_TYPE=$${PRERELEASE_TYPE:-rc} && \
+	cz bump --prerelease "$$PRERELEASE_TYPE" && \
+	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	git push origin "$$CURRENT_BRANCH" --tags && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: pre-release-rc
+pre-release-rc: ## Create release candidate from current branch
+	@PRERELEASE_TYPE=rc make pre-release-branch
+
+.PHONY: pre-release-beta
+pre-release-beta: ## Create beta release from current branch
+	@PRERELEASE_TYPE=beta make pre-release-branch
+
+.PHONY: pre-release-alpha
+pre-release-alpha: ## Create alpha release from current branch
+	@PRERELEASE_TYPE=alpha make pre-release-branch
+
+.PHONY: pre-release-push
+pre-release-push: ## Push current branch and tags (for pre-releases)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot push pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	git push origin "$$CURRENT_BRANCH" --tags
+
+.PHONY: pre-release-release
+pre-release-release: ## Create GitHub pre-release (requires VERSION env var)
+	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
+	if [ "$$CURRENT_BRANCH" = "main" ]; then \
+		echo "Error: Cannot create pre-release from main branch"; \
+		exit 1; \
+	fi && \
+	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
+	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
+
+.PHONY: bump-rc-patch
+bump-rc-patch: ## Bump to release candidate patch
+	@cz bump --increment PATCH --prerelease rc
+
+.PHONY: bump-rc-minor
+bump-rc-minor: ## Bump to release candidate minor
+	@cz bump --increment MINOR --prerelease rc
+
+.PHONY: bump-rc-major
+bump-rc-major: ## Bump to release candidate major
+	@cz bump --increment MAJOR --prerelease rc
+
+.PHONY: bump-beta-patch
+bump-beta-patch: ## Bump to beta patch
+	@cz bump --increment PATCH --prerelease beta
+
+.PHONY: bump-beta-minor
+bump-beta-minor: ## Bump to beta minor
+	@cz bump --increment MINOR --prerelease beta
+
+.PHONY: bump-alpha-patch
+bump-alpha-patch: ## Bump to alpha patch
+	@cz bump --increment PATCH --prerelease alpha
+
+.PHONY: bump-alpha-minor
+bump-alpha-minor: ## Bump to alpha minor
+	@cz bump --increment MINOR --prerelease alpha
+
+.PHONY: pre-release-rc-patch
+pre-release-rc-patch: bump-rc-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-rc-minor
+pre-release-rc-minor: bump-rc-minor clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-rc-major
+pre-release-rc-major: bump-rc-major clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-beta-patch
+pre-release-beta-patch: bump-beta-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-beta-minor
+pre-release-beta-minor: bump-beta-minor clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-alpha-patch
+pre-release-alpha-patch: bump-alpha-patch clean build pre-release-push pre-release-release
+
+.PHONY: pre-release-alpha-minor
+pre-release-alpha-minor: bump-alpha-minor clean build pre-release-push pre-release-release
+
+.PHONY: publish
+publish:
+	uv publish
 </file>
 
 <file path="README.md">
@@ -47495,275 +47938,6 @@ class URLLoader:
     def load(self) -> List[Document]:
         """Load the URLs using the specified crawler."""
         return self.crawler.crawl(self.urls)
-</file>
-
-<file path="Makefile">
-.PHONY: setup check lint tests docs nodocs loc
-
-SHELL := /bin/bash
-
-.PHONY: setup update
-
-setup: ## Setup the git pre-commit hooks
-	uv run pre-commit install
-
-update: ## Update the git pre-commit hooks
-	uv run pre-commit autoupdate
-
-.PHONY: type-check
-type-check:
-	@uv run pre-commit install
-	@uv run pre-commit autoupdate
-	@uv run pre-commit run --all-files
-	@echo "Running black..."
-	@uv run black --check .
-	@echo "Running ruff check (without fix)..."
-	@uv run ruff check .
-	@echo "Running mypy...";
-	@uv run mypy -p langroid
-	@echo "All checks passed!"
-
-.PHONY: lint
-lint:
-	uv run black .
-	uv run ruff check . --fix
-	@echo "Auto-fixing issues in examples folder..."
-	@uv run ruff check examples/ --fix-only --no-force-exclude
-
-.PHONY: stubs
-stubs:
-	@echo "Generating Python stubs for the langroid package..."
-	@uv run stubgen -p langroid -o stubs
-	@echo "Stubs generated in the 'stubs' directory"
-
-.PHONY: tests
-tests:
-	pytest tests/main --basetemp=/tmp/pytest
-
-
-docs:
-	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || true
-	@# Build the documentation.
-	mkdocs build
-	@# Serve the documentation in the background.
-	mkdocs serve &
-	@echo "Documentation is being served in the background."
-	@echo "You can access the documentation at http://127.0.0.1:8000/"
-
-nodocs:
-	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
-	@echo "Stopped serving documentation."
-
-
-loc:
-	@echo "Lines in git-tracked files python files:"
-	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
-
-.PHONY: repomix repomix-no-tests repomix-all
-
-repomix: ## Generate llms.txt and llms-compressed.txt (includes tests)
-	@echo "Generating llms.txt (with tests)..."
-	@git ls-files | repomix --stdin
-	@echo "Generating llms-compressed.txt..."
-	@git ls-files | repomix --stdin --compress -o llms-compressed.txt
-	@echo "Generated llms.txt and llms-compressed.txt"
-
-repomix-no-tests: ## Generate llms-no-tests.txt (excludes tests)
-	@echo "Generating llms-no-tests.txt (without tests)..."
-	@git ls-files | grep -v "^tests/" | repomix --stdin -o llms-no-tests.txt
-	@echo "Generating llms-no-tests-compressed.txt..."
-	@git ls-files | grep -v "^tests/" | repomix --stdin --compress -o llms-no-tests-compressed.txt
-	@echo "Generated llms-no-tests.txt and llms-no-tests-compressed.txt"
-
-repomix-no-tests-no-examples: ## Generate llms-no-tests-no-examples.txt (excludes tests and examples)
-	@echo "Generating llms-no-tests-no-examples.txt (without tests and examples)..."
-	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin -o llms-no-tests-no-examples.txt
-	@echo "Generating llms-no-tests-no-examples-compressed.txt..."
-	@git ls-files | grep -v -E "^(tests|examples)/" | repomix --stdin --compress -o llms-no-tests-no-examples-compressed.txt
-	@echo "Generated llms-no-tests-no-examples.txt and llms-no-tests-no-examples-compressed.txt"
-
-repomix-all: repomix repomix-no-tests repomix-no-tests-no-examples ## Generate all repomix variants
-
-.PHONY: check
-check: lint type-check repomix-all
-
-.PHONY: revert-tag
-revert-tag:
-	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
-	echo "Deleting tag: $$LATEST_TAG" && \
-	git tag -d $$LATEST_TAG
-
-.PHONY: revert-bump
-revert-bump:
-	@if git log -1 --pretty=%B | grep -q "bump"; then \
-		git reset --hard HEAD~1; \
-		echo "Reverted last commit (bump commit)"; \
-	else \
-		echo "Last commit was not a bump commit"; \
-	fi
-
-.PHONY: revert
-revert: revert-bump revert-tag
-	
-.PHONY: bump-patch
-bump-patch:
-	@cz bump --increment PATCH
-
-.PHONY: bump-minor
-bump-minor:
-	@cz bump --increment MINOR 
-
-.PHONY: bump-major
-bump-major:
-	@cz bump --increment MAJOR 
-
-.PHONY: build
-build:
-	@uv build
-
-.PHONY: push
-push:
-	@git push origin main
-	@git push origin --tags
-
-.PHONY: clean
-clean:
-	-rm -rf dist/*
-
-.PHONY: release
-release:
-	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
-
-.PHONY: bump-rc
-bump-rc:
-	@cz bump --prerelease rc
-
-.PHONY: bump-beta
-bump-beta:
-	@cz bump --prerelease beta
-
-.PHONY: bump-alpha
-bump-alpha:
-	@cz bump --prerelease alpha
-
-.PHONY: all-patch
-all-patch: bump-patch clean build push release
-
-.PHONY: all-minor
-all-minor: bump-minor clean build push release
-
-.PHONY: all-major
-all-major: bump-major clean build push release
-
-.PHONY: all-rc
-all-rc: bump-rc clean build push release
-
-.PHONY: all-beta
-all-beta: bump-beta clean build push release
-
-.PHONY: all-alpha
-all-alpha: bump-alpha clean build push release
-
-.PHONY: pre-release-branch
-pre-release-branch: ## Create and push pre-release from current branch
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	PRERELEASE_TYPE=$${PRERELEASE_TYPE:-rc} && \
-	cz bump --prerelease "$$PRERELEASE_TYPE" && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	git push origin "$$CURRENT_BRANCH" --tags && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
-
-.PHONY: pre-release-rc
-pre-release-rc: ## Create release candidate from current branch
-	@PRERELEASE_TYPE=rc make pre-release-branch
-
-.PHONY: pre-release-beta
-pre-release-beta: ## Create beta release from current branch
-	@PRERELEASE_TYPE=beta make pre-release-branch
-
-.PHONY: pre-release-alpha
-pre-release-alpha: ## Create alpha release from current branch
-	@PRERELEASE_TYPE=alpha make pre-release-branch
-
-.PHONY: pre-release-push
-pre-release-push: ## Push current branch and tags (for pre-releases)
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot push pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	git push origin "$$CURRENT_BRANCH" --tags
-
-.PHONY: pre-release-release
-pre-release-release: ## Create GitHub pre-release (requires VERSION env var)
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD) && \
-	if [ "$$CURRENT_BRANCH" = "main" ]; then \
-		echo "Error: Cannot create pre-release from main branch"; \
-		exit 1; \
-	fi && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
-	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
-	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
-
-.PHONY: bump-rc-patch
-bump-rc-patch: ## Bump to release candidate patch
-	@cz bump --increment PATCH --prerelease rc
-
-.PHONY: bump-rc-minor
-bump-rc-minor: ## Bump to release candidate minor
-	@cz bump --increment MINOR --prerelease rc
-
-.PHONY: bump-rc-major
-bump-rc-major: ## Bump to release candidate major
-	@cz bump --increment MAJOR --prerelease rc
-
-.PHONY: bump-beta-patch
-bump-beta-patch: ## Bump to beta patch
-	@cz bump --increment PATCH --prerelease beta
-
-.PHONY: bump-beta-minor
-bump-beta-minor: ## Bump to beta minor
-	@cz bump --increment MINOR --prerelease beta
-
-.PHONY: bump-alpha-patch
-bump-alpha-patch: ## Bump to alpha patch
-	@cz bump --increment PATCH --prerelease alpha
-
-.PHONY: bump-alpha-minor
-bump-alpha-minor: ## Bump to alpha minor
-	@cz bump --increment MINOR --prerelease alpha
-
-.PHONY: pre-release-rc-patch
-pre-release-rc-patch: bump-rc-patch clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-rc-minor
-pre-release-rc-minor: bump-rc-minor clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-rc-major
-pre-release-rc-major: bump-rc-major clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-beta-patch
-pre-release-beta-patch: bump-beta-patch clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-beta-minor
-pre-release-beta-minor: bump-beta-minor clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-alpha-patch
-pre-release-alpha-patch: bump-alpha-patch clean build pre-release-push pre-release-release
-
-.PHONY: pre-release-alpha-minor
-pre-release-alpha-minor: bump-alpha-minor clean build pre-release-push pre-release-release
-
-.PHONY: publish
-publish:
-	uv publish
 </file>
 
 <file path="langroid/agent/task.py">
@@ -52003,6 +52177,194 @@ class DocChatAgent(ChatAgent):
         return None
 </file>
 
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+</file>
+
 <file path="langroid/agent/chat_agent.py">
 import copy
 import inspect
@@ -54141,194 +54503,6 @@ class ChatAgent(Agent):
         pass
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="langroid/language_models/model_info.py">
 from enum import Enum
 from typing import Dict, List, Optional
@@ -54371,6 +54545,10 @@ class OpenAIChatModel(ModelName):
     GPT5 = "gpt-5"
     GPT5_MINI = "gpt-5-mini"
     GPT5_NANO = "gpt-5-nano"
+    GPT5_PRO = "gpt-5-pro"
+    GPT5_1 = "gpt-5.1"
+    GPT5_1_CODEX = "gpt-5.1-codex"
+    GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
     GPT_OSS_120b = "gpt-oss-120b"
     GPT_OSS_20b = "gpt-oss-20b"
 
@@ -54409,6 +54587,7 @@ class GeminiModel(ModelName):
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
     GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+    GEMINI_3_PRO_PREVIEW = "gemini-3-pro-preview"
     GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
     GEMINI_2_FLASH = "gemini-2.0-flash"
     GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
@@ -54429,6 +54608,10 @@ class OpenAI_API_ParamInfo(BaseModel):
             OpenAIChatModel.GPT5.value,
             OpenAIChatModel.GPT5_MINI.value,
             OpenAIChatModel.GPT5_NANO.value,
+            OpenAIChatModel.GPT5_PRO.value,
+            OpenAIChatModel.GPT5_1.value,
+            OpenAIChatModel.GPT5_1_CODEX.value,
+            OpenAIChatModel.GPT5_1_CODEX_MINI.value,
             OpenAIChatModel.GPT_OSS_120b.value,
             OpenAIChatModel.GPT_OSS_20b.value,
             GeminiModel.GEMINI_2_5_PRO.value,
@@ -54694,6 +54877,60 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_tools=False,
         description="GPT-5 Nano",
     ),
+    OpenAIChatModel.GPT5_PRO.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_PRO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=272_000,
+        input_cost_per_million=15.00,
+        cached_cost_per_million=7.50,
+        output_cost_per_million=120.00,
+        has_structured_output=True,
+        has_tools=True,
+        description="GPT-5 Pro",
+    ),
+    OpenAIChatModel.GPT5_1.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_1.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.13,
+        output_cost_per_million=10.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5.1",
+    ),
+    OpenAIChatModel.GPT5_1_CODEX.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_1_CODEX.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.125,
+        output_cost_per_million=10.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5.1 Codex",
+    ),
+    OpenAIChatModel.GPT5_1_CODEX_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_1_CODEX_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.25,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=2.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        has_tools=False,
+        description="GPT-5.1 Codex Mini",
+    ),
     # Anthropic Models
     AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
         name=AnthropicModel.CLAUDE_3_5_SONNET.value,
@@ -54852,6 +55089,18 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.5 Flash Lite",
     ),
+    # Gemini 3 Models
+    GeminiModel.GEMINI_3_PRO_PREVIEW.value: ModelInfo(
+        name=GeminiModel.GEMINI_3_PRO_PREVIEW.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_000_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=2.00,
+        cached_cost_per_million=0.20,
+        output_cost_per_million=12.00,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 3 Pro Preview",
+    ),
 }
 
 
@@ -54878,15 +55127,6 @@ def _get_model_info(model: str | ModelName) -> ModelInfo | None:
     if isinstance(model, str):
         return MODEL_INFO.get(model)
     return MODEL_INFO.get(model.value)
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.14.4
-  hooks:
-    - id: ruff
 </file>
 
 <file path="langroid/language_models/openai_gpt.py">
@@ -57188,10 +57428,19 @@ class OpenAIGPT(LanguageModel):
         return self._process_chat_completion_response(cached, response_dict)
 </file>
 
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.14.6
+  hooks:
+    - id: ruff
+</file>
+
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.18"
+version = "0.59.19"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
