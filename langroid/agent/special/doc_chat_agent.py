@@ -1584,11 +1584,14 @@ class DocChatAgent(ChatAgent):
         if len(passages) == 0:
             return query, []
 
-        with status("[cyan]LLM Extracting verbatim passages..."):
-            with StreamingIfAllowed(self.llm, False):
-                # these are async calls, one per passage; turn off streaming
-                extracts = self.get_verbatim_extracts(query, passages)
-                extracts = [e for e in extracts if e.content != NO_ANSWER]
+        if self.config.relevance_extractor_config is None:
+            extracts = passages
+        else:
+            with status("[cyan]LLM Extracting verbatim passages..."):
+                with StreamingIfAllowed(self.llm, False):
+                    # these are async calls, one per passage; turn off streaming
+                    extracts = self.get_verbatim_extracts(query, passages)
+                    extracts = [e for e in extracts if e.content != NO_ANSWER]
 
         return query, extracts
 
