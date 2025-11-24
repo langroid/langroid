@@ -9353,6 +9353,97 @@ result = critic_task.run(final_ans_doc)
 tools = critic_agent.get_tool_messages(result)
 </file>
 
+<file path="examples/basic/multi-agent-search-critic-no-orch/main.py">
+"""
+Version of examples/basic/multi-agent-search-critic/main.py, but does NOT use any
+inter-agent orchestration, i.e. we create a separate Task object from each agent,
+but we do not connect them as sub-tasks.
+Instead we write extra code to handle each task's output, and
+determine what to do with it.
+
+3-Agent system where:
+- Assistant takes user's (complex) question, breaks it down into smaller pieces
+    if needed
+- Searcher takes Assistant's question, uses the Search tool to search the web
+    (using DuckDuckGo), and returns a coherent answer to the Assistant.
+- Critic takes Assistant's final answer, and provides feedback on it.
+
+Once the Assistant thinks it has enough info to answer the user's question, it
+says DONE and presents the answer to the user.
+
+See also: chat-search for a basic single-agent search
+
+Run like this from root of repo:
+
+python3 -m examples.basic.multi-agent-search-critic-no-orch.main
+
+There are optional args, especially note these:
+
+-m <model_name>: to run with a different LLM model (default: gpt4o)
+
+For example try this question:
+
+did Bach make more music than Beethoven?
+
+You can specify a local LLM in a few different ways, e.g. `-m local/localhost:8000/v1`
+or `-m ollama/mistral` etc. See here how to use Langroid with local LLMs:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
+
+
+"""
+⋮----
+app = typer.Typer()
+⋮----
+assistant_task = make_assistant_task(model, restart=False)
+search_task = make_search_task(model)
+critic_task = make_critic_task(model)
+⋮----
+def search_answer(qtool: QuestionTool) -> AnswerTool
+⋮----
+"""
+        Take a QuestionTool, return an AnswerTool
+        """
+⋮----
+def critic_feedback(fa: FinalAnswerTool) -> FeedbackTool
+⋮----
+"""
+        Take a FinalAnswerTool, return a FeedbackTool
+        """
+⋮----
+def query_to_final_answer(question: str) -> FinalAnswerTool
+⋮----
+"""
+        Take user's question, return FinalAnswerTool after
+        iterating based on feedback from Critic.
+        """
+⋮----
+question_tool_name = QuestionTool.default_value("request")
+final_answer_tool_name = FinalAnswerTool.default_value("request")
+⋮----
+tool = assistant_task[lr.ToolMessage].run(question)
+⋮----
+# no tool => nudge
+tool = assistant_task[lr.ToolMessage].run(
+⋮----
+# QuestionTool => get search result
+answer_tool = search_answer(tool)
+tool = assistant_task[lr.ToolMessage].run(answer_tool)
+⋮----
+# FinalAnswerTool => get feedback
+fb_tool = critic_feedback(tool)
+⋮----
+# no suggested fix => return tool (which is a FinalAnswerTool)
+⋮----
+# suggested fix => ask again
+tool = assistant_task[lr.ToolMessage].run(fb_tool)
+⋮----
+# Interactive loop with user
+⋮----
+question = Prompt.ask("What do you want to know?")
+⋮----
+final_answer = query_to_final_answer(question)
+</file>
+
 <file path="examples/basic/multi-agent-search-critic-no-orch/search_agent.py">
 """
 SearcherAgent flow:
@@ -12555,6 +12646,30 @@ chat_context_length=8192,  # adjust based on model
 writer_task = Task(
 ⋮----
 # show cost summary
+</file>
+
+<file path="examples/docqa/doc-chat-simple.py">
+"""
+Bare-bones example of using DocChatAgent to query a document.
+
+Run like this (omit the model to use default GPT-4o):
+    
+    python3 examples/docqa/doc-chat-simple.py --model ollama/qwen2.5:latest
+    
+"""
+⋮----
+def main(model: str = "")
+⋮----
+# set up the agent
+agent = DocChatAgent(
+⋮----
+# several configs possible here, omitted for brevity
+⋮----
+# ingest document(s), could be a local file/folder or URL
+# Try Borges' "Library of Babel" short story
+url = "https://xpressenglish.com/our-stories/library-of-babel/"
+⋮----
+result = agent.llm_response("what is the shape of the rooms in the library?")
 </file>
 
 <file path="examples/docqa/doc-chunk-enrich.py">
@@ -24024,6 +24139,38 @@ rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank)
 - Resolved issue where `n_similar_docs=4` (old default) was silently overriding test configurations that expected 3 chunks
 </file>
 
+<file path="release-notes/v0-56-8-task-tool-spawn-example.md">
+# v0.56.8 Release Notes
+
+## 🚀 New Features
+
+### TaskTool Dynamic Sub-Agent Spawning Example
+
+- Added `examples/basic/planner-workflow-spawn.py` demonstrating how to use `TaskTool` to dynamically spawn specialized sub-agents during execution
+- Example shows a planner agent that solves multi-step math problems by spawning incremental and doubling agents as needed
+- Showcases the power of dynamic agent creation without pre-defining sub-agents in the main script
+
+## 🧪 Testing
+
+- Added comprehensive tests for `TaskTool` including support for `tools="ALL"` option
+- Enhanced test coverage for dynamic sub-agent spawning scenarios
+
+## 🛠️ Development Improvements
+
+### Ruff Auto-Fix for Examples
+
+- Updated Makefile to run `ruff check examples/ --fix-only` to automatically fix code style issues in examples
+- Removed F401 (unused imports) from ruff's ignore list to catch and fix unused imports
+- Auto-fixed imports in 150+ example files for better code consistency
+- Examples folder remains excluded from error reporting but benefits from automatic fixes
+
+## 🔧 Configuration Changes
+
+- Commented out flake8 in favor of ruff for linting (ruff is faster and covers all flake8 rules)
+- Updated `pyproject.toml` to enable F401 checking
+- Modified Makefile to add `--no-force-exclude` flag for ruff when processing examples
+</file>
+
 <file path="scripts/fix-pydantic-imports.sh">
 #!/bin/bash
 
@@ -28215,6 +28362,305 @@ When it is your turn to enter a message, you can do one of two things:
 - write a response, question or feedback to the agent, depending on context.
 </file>
 
+<file path="CLAUDE.md">
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+### Development
+- Install core dependencies: `pip install -e .`
+- Install dev dependencies: `pip install -e ".[dev]"`
+- Install specific feature groups:
+  - Document chat features: `pip install -e ".[doc-chat]"`
+  - Database features: `pip install -e ".[db]"`
+  - HuggingFace embeddings: `pip install -e ".[hf-embeddings]"`
+  - All features: `pip install -e ".[all]"`
+- Run linting and type checking: `make check`
+- Format code: `make lint`
+
+### Testing
+- Run all tests: `pytest tests/`
+- Run specific test: `pytest tests/main/test_file.py::test_function`
+- Run tests with coverage: `pytest --cov=langroid tests/`
+- Run only main tests: `make tests` (uses `pytest tests/main`)
+
+### Linting and Type Checking
+- Lint code: `make check` (runs black, ruff check, mypy)
+- Format only: `make lint` (runs black and ruff fix)
+- Type check only: `make type-check`
+- Always use `make check` to run lints + mypy before trying to commit changes
+
+### Version and Release Management
+- Bump version: `./bump_version.sh [patch|minor|major]`
+- Or use make commands:
+  - `make all-patch` - Bump patch version, build, push, release
+  - `make all-minor` - Bump minor version, build, push, release
+  - `make all-major` - Bump major version, build, push, release
+
+## Architecture
+
+Langroid is a framework for building LLM-powered agents that can use tools and collaborate with each other.
+
+### Core Components:
+
+1. **Agents** (`langroid/agent/`):
+   - `chat_agent.py` - Base ChatAgent that can converse and use tools
+   - `task.py` - Handles execution flow for agents
+   - `special/` - Domain-specific agents (doc chat, table chat, SQL chat, etc.)
+   - `openai_assistant.py` - Integration with OpenAI Assistant API
+
+2. **Tools** (`langroid/agent/tools/`):
+   - Tool system for agents to interact with external systems
+   - `tool_message.py` - Protocol for tool messages
+   - Various search tools (Google, DuckDuckGo, Tavily, Exa, etc.)
+
+3. **Language Models** (`langroid/language_models/`):
+   - Abstract interfaces for different LLM providers
+   - Implementations for OpenAI, Azure, local models, etc.
+   - Support for hundreds of LLMs via LiteLLM
+
+4. **Vector Stores** (`langroid/vector_store/`):
+   - Abstract interface and implementations for different vector databases
+   - Includes support for Qdrant, Chroma, LanceDB, Pinecone, PGVector, Weaviate
+
+5. **Document Processing** (`langroid/parsing/`):
+   - Parse and process documents from various formats
+   - Chunk text for embedding and retrieval
+   - Support for PDF, DOCX, images, and more
+
+6. **Embedding Models** (`langroid/embedding_models/`):
+   - Abstract interface for embedding generation
+   - Support for OpenAI, HuggingFace, and custom embeddings
+
+### Key Multi-Agent Patterns:
+
+- **Task Delegation**: Agents can delegate tasks to other agents through hierarchical task structures
+- **Message Passing**: Agents communicate by transforming and passing messages
+- **Collaboration**: Multiple agents can work together on complex tasks
+
+### Key Security Features:
+
+- The `full_eval` flag in both `TableChatAgentConfig` and `VectorStoreConfig` controls code injection protection
+- Defaults to `False` for security, set to `True` only in trusted environments
+
+## Documentation
+
+- Main documentation is in the `docs/` directory
+- Examples in the `examples/` directory demonstrate usage patterns
+- Quick start examples available in `examples/quick-start/`
+
+## MCP (Model Context Protocol) Tools Integration
+
+Langroid provides comprehensive support for MCP tools through the `langroid.agent.tools.mcp` module. Here are the key patterns and approaches:
+
+### MCP Tool Creation Methods
+
+#### 1. Using the `@mcp_tool` Decorator (Module Level)
+```python
+from langroid.agent.tools.mcp import mcp_tool
+from fastmcp.client.transports import StdioTransport
+
+transport = StdioTransport(command="...", args=[...])
+
+@mcp_tool(transport, "tool_name")
+class MyTool(lr.ToolMessage):
+    async def handle_async(self):
+        result = await self.call_tool_async()
+        # custom processing
+        return result
+```
+
+**Important**: The decorator creates the transport connection at module import time, so it must be used at module level (not inside async functions).
+
+#### 2. Using `get_tool_async` (Inside Async Functions)
+```python
+from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
+
+async def main():
+    transport = StdioTransport(command="...", args=[...])
+    BaseTool = await get_tool_async(transport, "tool_name")
+    
+    class MyTool(BaseTool):
+        async def handle_async(self):
+            result = await self.call_tool_async()
+            # custom processing
+            return result
+```
+
+**Use this approach when**:
+- Creating tools inside async functions
+- Need to avoid event loop conflicts
+- Want to delay transport creation until runtime
+
+### Transport Types and Event Loop Considerations
+
+- **StdioTransport**: Creates subprocess immediately, can cause "event loop closed" errors if created at module level in certain contexts
+- **SSETransport**: HTTP-based, generally safer for module-level creation
+- **Best Practice**: Create transports inside async functions when possible, use `asyncio.run()` wrapper for Fire CLI integration
+
+### Tool Message Request Field and Agent Handlers
+
+When you get an MCP tool named "my_tool", Langroid automatically:
+
+1. **Sets the `request` field**: The dynamically created ToolMessage subclass has `request = "my_tool"`
+2. **Enables custom agent handlers**: Agents can define these methods:
+   - `my_tool()` - synchronous handler
+   - `my_tool_async()` - async handler
+
+The agent's message routing system automatically calls these handlers when the tool is used.
+
+### Custom `handle_async` Method Override
+
+Both decorator and non-decorator approaches support overriding `handle_async`:
+
+```python
+class MyTool(BaseTool):  # or use @mcp_tool decorator
+    async def handle_async(self):
+        # Get raw result from MCP server
+        result = await self.call_tool_async()
+        
+        # Option 1: Return processed result to LLM (continues conversation)
+        return f"<ProcessedResult>{result}</ProcessedResult>"
+        
+        # Option 2: Return ResultTool to terminate task
+        return MyResultTool(answer=result)
+```
+
+### Common Async Issues and Solutions
+
+**Problem**: "RuntimeError: asyncio.run() cannot be called from a running event loop"
+**Solution**: Use `get_tool_async` instead of `@mcp_tool` decorator when already in async context
+
+**Problem**: "RuntimeError: Event loop is closed"
+**Solution**: 
+- Move transport creation inside async functions
+- Use `asyncio.run()` wrapper for Fire CLI integration:
+```python
+if __name__ == "__main__":
+    import asyncio
+    def run_main(**kwargs):
+        asyncio.run(main(**kwargs))
+    Fire(run_main)
+```
+
+### MCP Tool Integration Examples
+
+See `examples/mcp/` for working examples:
+- `gitmcp.py` - HTTP-based SSE transport
+- `pyodide_code_executor.py` - Subprocess-based stdio transport with proper async handling
+
+## Testing and Tool Message Patterns
+
+### MockLM for Testing Tool Generation
+- Use `MockLM` with `response_dict` to simulate LLM responses that include tool messages
+- Set `tools=[ToolClass]` or `enable_message=[ToolClass]` on the agent to enable tool handling
+- The `try_get_tool_messages()` method can extract tool messages from LLM responses with `all_tools=True`
+
+### Task Termination Control
+- `TaskConfig` has `done_if_tool` parameter to terminate tasks when any tool is generated
+- `Task.done()` method checks `result.agent_response` for tool content when this flag is set
+- Useful for workflows where tool generation signals task completion
+
+### Testing Tool-Based Task Flows
+```python
+# Example: Test task termination on tool generation
+config = TaskConfig(done_if_tool=True)
+task = Task(agent, config=config)
+response_dict = {"content": '{"request": "my_tool", "param": "value"}'}
+```
+
+## Multi-Agent System Development
+
+### Important Patterns and Best Practices
+
+#### 1. Pydantic Imports
+**ALWAYS import Pydantic classes from `langroid.pydantic_v1`**, not from `pydantic` directly:
+```python
+# CORRECT
+from langroid.pydantic_v1 import Field, BaseModel
+
+# WRONG - will cause issues
+from pydantic import Field, BaseModel
+```
+
+#### 2. Tool Name References in System Messages
+When referencing tool names in f-strings within system messages, use the `.name()` method:
+```python
+system_message: str = f"""
+Use {MyTool.name()} to perform the action.
+"""
+```
+This works at module level in configs, but be aware that complex initialization at module level can sometimes cause issues.
+
+#### 3. Agent Configuration with LLM
+Always specify the LLM configuration explicitly in agent configs:
+```python
+class MyAgentConfig(lr.ChatAgentConfig):
+    name: str = "MyAgent"
+    llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
+        chat_model="gpt-4",  # or "gpt-4.1" etc.
+    )
+    system_message: str = "..."
+```
+
+#### 4. Tool Organization in Multi-Agent Systems
+When tools delegate to agents:
+- Define agent configs and agents BEFORE the tools that use them
+- Tools can directly instantiate agents in their `handle()` methods:
+```python
+class MyTool(lr.ToolMessage):
+    def handle(self) -> str:
+        agent = MyAgent(MyAgentConfig())
+        task = lr.Task(agent, interactive=False)
+        result = task.run(prompt)
+        return result.content
+```
+
+#### 5. Task Termination with Done Sequences
+Use `done_sequences` for precise task termination control:
+```python
+# For a task that should complete after: Tool -> Agent handles -> LLM responds
+task = lr.Task(
+    agent,
+    interactive=False,
+    config=lr.TaskConfig(done_sequences=["T,A,L"]),
+)
+```
+
+Common patterns:
+- `"T,A"` - Tool used and handled by agent
+- `"T,A,L"` - Tool used, handled, then LLM responds
+- `"T[specific_tool],A"` - Specific tool used and handled
+
+See `docs/notes/task-termination.md` for comprehensive documentation.
+
+#### 6. Handling Non-Tool LLM Responses
+Use `handle_llm_no_tool` in agent configs to handle cases where the LLM forgets to use a tool:
+```python
+class MyAgentConfig(lr.ChatAgentConfig):
+    handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
+```
+
+#### 7. Agent Method Parameters
+Note that `ChatAgentConfig` does not have a `use_tools` parameter. Instead, enable tools on the agent after creation:
+```python
+agent = MyAgent(config)
+agent.enable_message([Tool1, Tool2, Tool3])  # Pass list of tool classes
+```
+
+## Commit and Pull Request Guidelines
+
+- Never include "co-authored by Claude Code" or "created by Claude" in commit messages or pull request descriptions
+
+## Codecov Badge Fix (June 2025)
+
+- Fixed broken Codecov badge in README by removing the token parameter from the URL
+- Changed from `https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE` to `https://codecov.io/gh/langroid/langroid/graph/badge.svg`
+- Tokens are not needed for public repositories and can cause GitHub rendering issues
+</file>
+
 <file path="CODE_OF_CONDUCT.md">
 # Contributor Covenant Code of Conduct
 
@@ -29850,97 +30296,6 @@ suggested_fix: str
 # just example
 ⋮----
 # thought + example
-</file>
-
-<file path="examples/basic/multi-agent-search-critic-no-orch/main.py">
-"""
-Version of examples/basic/multi-agent-search-critic/main.py, but does NOT use any
-inter-agent orchestration, i.e. we create a separate Task object from each agent,
-but we do not connect them as sub-tasks.
-Instead we write extra code to handle each task's output, and
-determine what to do with it.
-
-3-Agent system where:
-- Assistant takes user's (complex) question, breaks it down into smaller pieces
-    if needed
-- Searcher takes Assistant's question, uses the Search tool to search the web
-    (using DuckDuckGo), and returns a coherent answer to the Assistant.
-- Critic takes Assistant's final answer, and provides feedback on it.
-
-Once the Assistant thinks it has enough info to answer the user's question, it
-says DONE and presents the answer to the user.
-
-See also: chat-search for a basic single-agent search
-
-Run like this from root of repo:
-
-python3 -m examples.basic.multi-agent-search-critic-no-orch.main
-
-There are optional args, especially note these:
-
--m <model_name>: to run with a different LLM model (default: gpt4o)
-
-For example try this question:
-
-did Bach make more music than Beethoven?
-
-You can specify a local LLM in a few different ways, e.g. `-m local/localhost:8000/v1`
-or `-m ollama/mistral` etc. See here how to use Langroid with local LLMs:
-https://langroid.github.io/langroid/tutorials/local-llm-setup/
-
-
-"""
-⋮----
-app = typer.Typer()
-⋮----
-assistant_task = make_assistant_task(model, restart=False)
-search_task = make_search_task(model)
-critic_task = make_critic_task(model)
-⋮----
-def search_answer(qtool: QuestionTool) -> AnswerTool
-⋮----
-"""
-        Take a QuestionTool, return an AnswerTool
-        """
-⋮----
-def critic_feedback(fa: FinalAnswerTool) -> FeedbackTool
-⋮----
-"""
-        Take a FinalAnswerTool, return a FeedbackTool
-        """
-⋮----
-def query_to_final_answer(question: str) -> FinalAnswerTool
-⋮----
-"""
-        Take user's question, return FinalAnswerTool after
-        iterating based on feedback from Critic.
-        """
-⋮----
-question_tool_name = QuestionTool.default_value("request")
-final_answer_tool_name = FinalAnswerTool.default_value("request")
-⋮----
-tool = assistant_task[lr.ToolMessage].run(question)
-⋮----
-# no tool => nudge
-tool = assistant_task[lr.ToolMessage].run(
-⋮----
-# QuestionTool => get search result
-answer_tool = search_answer(tool)
-tool = assistant_task[lr.ToolMessage].run(answer_tool)
-⋮----
-# FinalAnswerTool => get feedback
-fb_tool = critic_feedback(tool)
-⋮----
-# no suggested fix => return tool (which is a FinalAnswerTool)
-⋮----
-# suggested fix => ask again
-tool = assistant_task[lr.ToolMessage].run(fb_tool)
-⋮----
-# Interactive loop with user
-⋮----
-question = Prompt.ask("What do you want to know?")
-⋮----
-final_answer = query_to_final_answer(question)
 </file>
 
 <file path="examples/basic/multi-agent-search-critic-no-orch/tools.py">
@@ -32628,30 +32983,6 @@ collection_name = Prompt.ask(
 replace = (
 ⋮----
 task = Task(agent, interactive=False)
-</file>
-
-<file path="examples/docqa/doc-chat-simple.py">
-"""
-Bare-bones example of using DocChatAgent to query a document.
-
-Run like this (omit the model to use default GPT-4o):
-    
-    python3 examples/docqa/doc-chat-simple.py --model ollama/qwen2.5:latest
-    
-"""
-⋮----
-def main(model: str = "")
-⋮----
-# set up the agent
-agent = DocChatAgent(
-⋮----
-# several configs possible here, omitted for brevity
-⋮----
-# ingest document(s), could be a local file/folder or URL
-# Try Borges' "Library of Babel" short story
-url = "https://xpressenglish.com/our-stories/library-of-babel/"
-⋮----
-result = agent.llm_response("what is the shape of the rooms in the library?")
 </file>
 
 <file path="examples/docqa/extract-then-chat.py">
@@ -43921,8 +44252,12 @@ key = field.split(".")[-1]
 # Traverse the object to get non-dotted fields
 all_fields: Dict[str, Any] = {}
 ⋮----
-# Add non-dotted fields to the result,
-# avoid overwriting if already present from dotted names
+# Add non-dotted fields to the result.
+# Prefer top-level attributes (e.g. doc.title) over nested ones
+# (e.g. metadata.title) to avoid default metadata values overwriting
+# real top-level fields.
+⋮----
+direct_val = getattr(doc, field)
 ⋮----
 """
     Given a flattened version of a nested dict, reconstruct the nested dict.
@@ -45411,38 +45746,6 @@ Improved DoneSequence implementation by introducing response sequence tracking a
 
 ## Testing
 All existing done sequence tests pass without modification, confirming backward compatibility.
-</file>
-
-<file path="release-notes/v0-56-8-task-tool-spawn-example.md">
-# v0.56.8 Release Notes
-
-## 🚀 New Features
-
-### TaskTool Dynamic Sub-Agent Spawning Example
-
-- Added `examples/basic/planner-workflow-spawn.py` demonstrating how to use `TaskTool` to dynamically spawn specialized sub-agents during execution
-- Example shows a planner agent that solves multi-step math problems by spawning incremental and doubling agents as needed
-- Showcases the power of dynamic agent creation without pre-defining sub-agents in the main script
-
-## 🧪 Testing
-
-- Added comprehensive tests for `TaskTool` including support for `tools="ALL"` option
-- Enhanced test coverage for dynamic sub-agent spawning scenarios
-
-## 🛠️ Development Improvements
-
-### Ruff Auto-Fix for Examples
-
-- Updated Makefile to run `ruff check examples/ --fix-only` to automatically fix code style issues in examples
-- Removed F401 (unused imports) from ruff's ignore list to catch and fix unused imports
-- Auto-fixed imports in 150+ example files for better code consistency
-- Examples folder remains excluded from error reporting but benefits from automatic fixes
-
-## 🔧 Configuration Changes
-
-- Commented out flake8 in favor of ruff for linting (ruff is faster and covers all flake8 rules)
-- Updated `pyproject.toml` to enable F401 checking
-- Modified Makefile to add `--no-force-exclude` flag for ruff when processing examples
 </file>
 
 <file path="release-notes/v0-56-9-rrf-crossencoder-fixes.md">
@@ -50453,303 +50756,165 @@ yield  # Yield to test execution
 redis = RedisCache(RedisCacheConfig(fake=False))
 </file>
 
-<file path="CLAUDE.md">
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Commands
-
-### Development
-- Install core dependencies: `pip install -e .`
-- Install dev dependencies: `pip install -e ".[dev]"`
-- Install specific feature groups:
-  - Document chat features: `pip install -e ".[doc-chat]"`
-  - Database features: `pip install -e ".[db]"`
-  - HuggingFace embeddings: `pip install -e ".[hf-embeddings]"`
-  - All features: `pip install -e ".[all]"`
-- Run linting and type checking: `make check`
-- Format code: `make lint`
-
-### Testing
-- Run all tests: `pytest tests/`
-- Run specific test: `pytest tests/main/test_file.py::test_function`
-- Run tests with coverage: `pytest --cov=langroid tests/`
-- Run only main tests: `make tests` (uses `pytest tests/main`)
-
-### Linting and Type Checking
-- Lint code: `make check` (runs black, ruff check, mypy)
-- Format only: `make lint` (runs black and ruff fix)
-- Type check only: `make type-check`
-- Always use `make check` to run lints + mypy before trying to commit changes
-
-### Version and Release Management
-- Bump version: `./bump_version.sh [patch|minor|major]`
-- Or use make commands:
-  - `make all-patch` - Bump patch version, build, push, release
-  - `make all-minor` - Bump minor version, build, push, release
-  - `make all-major` - Bump major version, build, push, release
-
-## Architecture
-
-Langroid is a framework for building LLM-powered agents that can use tools and collaborate with each other.
-
-### Core Components:
-
-1. **Agents** (`langroid/agent/`):
-   - `chat_agent.py` - Base ChatAgent that can converse and use tools
-   - `task.py` - Handles execution flow for agents
-   - `special/` - Domain-specific agents (doc chat, table chat, SQL chat, etc.)
-   - `openai_assistant.py` - Integration with OpenAI Assistant API
-
-2. **Tools** (`langroid/agent/tools/`):
-   - Tool system for agents to interact with external systems
-   - `tool_message.py` - Protocol for tool messages
-   - Various search tools (Google, DuckDuckGo, Tavily, Exa, etc.)
-
-3. **Language Models** (`langroid/language_models/`):
-   - Abstract interfaces for different LLM providers
-   - Implementations for OpenAI, Azure, local models, etc.
-   - Support for hundreds of LLMs via LiteLLM
-
-4. **Vector Stores** (`langroid/vector_store/`):
-   - Abstract interface and implementations for different vector databases
-   - Includes support for Qdrant, Chroma, LanceDB, Pinecone, PGVector, Weaviate
-
-5. **Document Processing** (`langroid/parsing/`):
-   - Parse and process documents from various formats
-   - Chunk text for embedding and retrieval
-   - Support for PDF, DOCX, images, and more
-
-6. **Embedding Models** (`langroid/embedding_models/`):
-   - Abstract interface for embedding generation
-   - Support for OpenAI, HuggingFace, and custom embeddings
-
-### Key Multi-Agent Patterns:
-
-- **Task Delegation**: Agents can delegate tasks to other agents through hierarchical task structures
-- **Message Passing**: Agents communicate by transforming and passing messages
-- **Collaboration**: Multiple agents can work together on complex tasks
-
-### Key Security Features:
-
-- The `full_eval` flag in both `TableChatAgentConfig` and `VectorStoreConfig` controls code injection protection
-- Defaults to `False` for security, set to `True` only in trusted environments
-
-## Documentation
-
-- Main documentation is in the `docs/` directory
-- Examples in the `examples/` directory demonstrate usage patterns
-- Quick start examples available in `examples/quick-start/`
-
-## MCP (Model Context Protocol) Tools Integration
-
-Langroid provides comprehensive support for MCP tools through the `langroid.agent.tools.mcp` module. Here are the key patterns and approaches:
-
-### MCP Tool Creation Methods
-
-#### 1. Using the `@mcp_tool` Decorator (Module Level)
-```python
-from langroid.agent.tools.mcp import mcp_tool
-from fastmcp.client.transports import StdioTransport
-
-transport = StdioTransport(command="...", args=[...])
-
-@mcp_tool(transport, "tool_name")
-class MyTool(lr.ToolMessage):
-    async def handle_async(self):
-        result = await self.call_tool_async()
-        # custom processing
-        return result
-```
-
-**Important**: The decorator creates the transport connection at module import time, so it must be used at module level (not inside async functions).
-
-#### 2. Using `get_tool_async` (Inside Async Functions)
-```python
-from langroid.agent.tools.mcp.fastmcp_client import get_tool_async
-
-async def main():
-    transport = StdioTransport(command="...", args=[...])
-    BaseTool = await get_tool_async(transport, "tool_name")
-    
-    class MyTool(BaseTool):
-        async def handle_async(self):
-            result = await self.call_tool_async()
-            # custom processing
-            return result
-```
-
-**Use this approach when**:
-- Creating tools inside async functions
-- Need to avoid event loop conflicts
-- Want to delay transport creation until runtime
-
-### Transport Types and Event Loop Considerations
-
-- **StdioTransport**: Creates subprocess immediately, can cause "event loop closed" errors if created at module level in certain contexts
-- **SSETransport**: HTTP-based, generally safer for module-level creation
-- **Best Practice**: Create transports inside async functions when possible, use `asyncio.run()` wrapper for Fire CLI integration
-
-### Tool Message Request Field and Agent Handlers
-
-When you get an MCP tool named "my_tool", Langroid automatically:
-
-1. **Sets the `request` field**: The dynamically created ToolMessage subclass has `request = "my_tool"`
-2. **Enables custom agent handlers**: Agents can define these methods:
-   - `my_tool()` - synchronous handler
-   - `my_tool_async()` - async handler
-
-The agent's message routing system automatically calls these handlers when the tool is used.
-
-### Custom `handle_async` Method Override
-
-Both decorator and non-decorator approaches support overriding `handle_async`:
-
-```python
-class MyTool(BaseTool):  # or use @mcp_tool decorator
-    async def handle_async(self):
-        # Get raw result from MCP server
-        result = await self.call_tool_async()
-        
-        # Option 1: Return processed result to LLM (continues conversation)
-        return f"<ProcessedResult>{result}</ProcessedResult>"
-        
-        # Option 2: Return ResultTool to terminate task
-        return MyResultTool(answer=result)
-```
-
-### Common Async Issues and Solutions
-
-**Problem**: "RuntimeError: asyncio.run() cannot be called from a running event loop"
-**Solution**: Use `get_tool_async` instead of `@mcp_tool` decorator when already in async context
-
-**Problem**: "RuntimeError: Event loop is closed"
-**Solution**: 
-- Move transport creation inside async functions
-- Use `asyncio.run()` wrapper for Fire CLI integration:
-```python
-if __name__ == "__main__":
-    import asyncio
-    def run_main(**kwargs):
-        asyncio.run(main(**kwargs))
-    Fire(run_main)
-```
-
-### MCP Tool Integration Examples
-
-See `examples/mcp/` for working examples:
-- `gitmcp.py` - HTTP-based SSE transport
-- `pyodide_code_executor.py` - Subprocess-based stdio transport with proper async handling
-
-## Testing and Tool Message Patterns
-
-### MockLM for Testing Tool Generation
-- Use `MockLM` with `response_dict` to simulate LLM responses that include tool messages
-- Set `tools=[ToolClass]` or `enable_message=[ToolClass]` on the agent to enable tool handling
-- The `try_get_tool_messages()` method can extract tool messages from LLM responses with `all_tools=True`
-
-### Task Termination Control
-- `TaskConfig` has `done_if_tool` parameter to terminate tasks when any tool is generated
-- `Task.done()` method checks `result.agent_response` for tool content when this flag is set
-- Useful for workflows where tool generation signals task completion
-
-### Testing Tool-Based Task Flows
-```python
-# Example: Test task termination on tool generation
-config = TaskConfig(done_if_tool=True)
-task = Task(agent, config=config)
-response_dict = {"content": '{"request": "my_tool", "param": "value"}'}
-```
-
-## Multi-Agent System Development
-
-### Important Patterns and Best Practices
-
-#### 1. Pydantic Imports
-**ALWAYS import Pydantic classes from `langroid.pydantic_v1`**, not from `pydantic` directly:
-```python
-# CORRECT
-from langroid.pydantic_v1 import Field, BaseModel
-
-# WRONG - will cause issues
-from pydantic import Field, BaseModel
-```
-
-#### 2. Tool Name References in System Messages
-When referencing tool names in f-strings within system messages, use the `.name()` method:
-```python
-system_message: str = f"""
-Use {MyTool.name()} to perform the action.
-"""
-```
-This works at module level in configs, but be aware that complex initialization at module level can sometimes cause issues.
-
-#### 3. Agent Configuration with LLM
-Always specify the LLM configuration explicitly in agent configs:
-```python
-class MyAgentConfig(lr.ChatAgentConfig):
-    name: str = "MyAgent"
-    llm: lm.OpenAIGPTConfig = lm.OpenAIGPTConfig(
-        chat_model="gpt-4",  # or "gpt-4.1" etc.
-    )
-    system_message: str = "..."
-```
-
-#### 4. Tool Organization in Multi-Agent Systems
-When tools delegate to agents:
-- Define agent configs and agents BEFORE the tools that use them
-- Tools can directly instantiate agents in their `handle()` methods:
-```python
-class MyTool(lr.ToolMessage):
-    def handle(self) -> str:
-        agent = MyAgent(MyAgentConfig())
-        task = lr.Task(agent, interactive=False)
-        result = task.run(prompt)
-        return result.content
-```
-
-#### 5. Task Termination with Done Sequences
-Use `done_sequences` for precise task termination control:
-```python
-# For a task that should complete after: Tool -> Agent handles -> LLM responds
-task = lr.Task(
-    agent,
-    interactive=False,
-    config=lr.TaskConfig(done_sequences=["T,A,L"]),
-)
-```
-
-Common patterns:
-- `"T,A"` - Tool used and handled by agent
-- `"T,A,L"` - Tool used, handled, then LLM responds
-- `"T[specific_tool],A"` - Specific tool used and handled
-
-See `docs/notes/task-termination.md` for comprehensive documentation.
-
-#### 6. Handling Non-Tool LLM Responses
-Use `handle_llm_no_tool` in agent configs to handle cases where the LLM forgets to use a tool:
-```python
-class MyAgentConfig(lr.ChatAgentConfig):
-    handle_llm_no_tool: str = "You FORGOT to use one of your TOOLs!"
-```
-
-#### 7. Agent Method Parameters
-Note that `ChatAgentConfig` does not have a `use_tools` parameter. Instead, enable tools on the agent after creation:
-```python
-agent = MyAgent(config)
-agent.enable_message([Tool1, Tool2, Tool3])  # Pass list of tool classes
-```
-
-## Commit and Pull Request Guidelines
-
-- Never include "co-authored by Claude Code" or "created by Claude" in commit messages or pull request descriptions
-
-## Codecov Badge Fix (June 2025)
-
-- Fixed broken Codecov badge in README by removing the token parameter from the URL
-- Changed from `https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE` to `https://codecov.io/gh/langroid/langroid/graph/badge.svg`
-- Tokens are not needed for public repositories and can cause GitHub rendering issues
+<file path=".gitignore">
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+.logs/
+**/logs/
+**/*.log
+.idea/
+.qdrant/
+.DS_Store
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+**/*.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Chainlit
+.chainlit/
+
+.vscode
+
+# Emacs
+*~
+\#*\#
+.\#*
+sessions/
+commands/
+.claude/
+
+# Temporary files
+to-be-deleted.md
+test_debug.py
+test_minimal.py
+test_debug_full.py
+test_agent_difference.py
+test_isolated.py
 </file>
 
 <file path="CONTRIBUTING.md">
@@ -56564,167 +56729,6 @@ def test_crawl4ai_integration()
 test_urls = ["https://example.com"]
 ⋮----
 loader = URLLoader(urls=test_urls, crawler_config=config)
-</file>
-
-<file path=".gitignore">
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-.logs/
-**/logs/
-**/*.log
-.idea/
-.qdrant/
-.DS_Store
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-**/*.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# Chainlit
-.chainlit/
-
-.vscode
-
-# Emacs
-*~
-\#*\#
-.\#*
-sessions/
-commands/
-.claude/
-
-# Temporary files
-to-be-deleted.md
-test_debug.py
-test_minimal.py
-test_debug_full.py
-test_agent_difference.py
-test_isolated.py
 </file>
 
 <file path="examples/docqa/chat_search.py">
@@ -63774,6 +63778,8 @@ passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
 ⋮----
 passages = self.chunked_docs
 ⋮----
+extracts = passages
+⋮----
 # these are async calls, one per passage; turn off streaming
 extracts = self.get_verbatim_extracts(query, passages)
 extracts = [e for e in extracts if e.content != NO_ANSWER]
@@ -66207,7 +66213,7 @@ repos:
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.19"
+version = "0.59.20"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
