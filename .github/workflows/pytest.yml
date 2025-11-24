@@ -112,6 +112,12 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
+    - name: Free disk space (prune Docker caches)
+      run: |
+        docker system prune -af
+        docker volume prune -f
+        df -h
+        docker system df
     - name: Increase ulimit
       run: ulimit -n 4096
     - name: Set up Python
