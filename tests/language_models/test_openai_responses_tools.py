@@ -10,6 +10,74 @@ from langroid.language_models.openai_responses import (
 )
 
 
+class TestToolFormatConversion:
+    """Tests for tool format conversion (unit tests, no API calls)."""
+
+    def test_tool_result_format_conversion(self):
+        """Tool results are converted to function_call_output format."""
+        config = OpenAIResponsesConfig(chat_model="gpt-4o")
+        llm = OpenAIResponses(config)
+
+        # Create messages with a tool result
+        messages = [
+            LLMMessage(role=Role.USER, content="Calculate 2+2"),
+            LLMMessage(
+                role=Role.TOOL,
+                content="4",
+                tool_call_id="call_abc123",
+                name="calculate",
+            ),
+        ]
+
+        # Convert to input parts
+        input_parts = llm._messages_to_input_parts(messages)
+
+        # Find the function_call_output part
+        tool_result_parts = [
+            p for p in input_parts if p.get("type") == "function_call_output"
+        ]
+        assert len(tool_result_parts) == 1
+
+        # Verify format matches Responses API spec
+        result_part = tool_result_parts[0]
+        assert result_part["type"] == "function_call_output"
+        assert result_part["call_id"] == "call_abc123"
+        assert result_part["output"] == "4"
+
+    def test_multiple_tool_results_format(self):
+        """Multiple tool results are correctly converted."""
+        config = OpenAIResponsesConfig(chat_model="gpt-4o")
+        llm = OpenAIResponses(config)
+
+        messages = [
+            LLMMessage(role=Role.USER, content="Get weather and time"),
+            LLMMessage(
+                role=Role.TOOL,
+                content='{"temp": 72}',
+                tool_call_id="call_weather",
+                name="get_weather",
+            ),
+            LLMMessage(
+                role=Role.TOOL,
+                content='{"time": "3:00 PM"}',
+                tool_call_id="call_time",
+                name="get_time",
+            ),
+        ]
+
+        input_parts = llm._messages_to_input_parts(messages)
+
+        tool_result_parts = [
+            p for p in input_parts if p.get("type") == "function_call_output"
+        ]
+        assert len(tool_result_parts) == 2
+
+        # Verify both have correct format
+        call_ids = {p["call_id"] for p in tool_result_parts}
+        assert "call_weather" in call_ids
+        assert "call_time" in call_ids
+
+
 @pytest.mark.openai_responses
 @pytest.mark.slow
 @pytest.mark.tools

@@ -160,11 +160,10 @@ class TestVision:
         # Should have text part and image part
         assert len(input_parts) >= 2
 
-        # Find the image part
-        image_parts = [p for p in input_parts if p.get("type") == "image"]
+        # Find the image part - Responses API uses "input_image" type
+        image_parts = [p for p in input_parts if p.get("type") == "input_image"]
         assert len(image_parts) == 1
-        assert "image" in image_parts[0]
+        assert "image_url" in image_parts[0]
 
-        # For data URI, should be in the image field directly
-        if data_uri.startswith("data:"):
-            assert image_parts[0]["image"] == data_uri
+        # For data URI, should be in the image_url field
+        assert image_parts[0]["image_url"] == data_uri

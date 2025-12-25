@@ -121,11 +121,11 @@ class OpenAIResponses(LanguageModel):
                 # We don't add them as input parts, they're part of history
                 pass
             elif msg.role == Role.TOOL:
-                # Tool results become tool_result parts
+                # Tool results become function_call_output parts in Responses API
                 input_parts.append(
                     {
-                        "type": "tool_result",
-                        "tool_call_id": msg.tool_call_id,
+                        "type": "function_call_output",
+                        "call_id": msg.tool_call_id,
                         "output": msg.content,
                     }
                 )
@@ -161,9 +161,11 @@ class OpenAIResponses(LanguageModel):
             return None
 
         # Create image part for Responses API
+        # Format: {"type": "input_image", "image_url": <url_string>}
+        # image_url accepts both data URIs and HTTP URLs as a string
         return {
-            "type": "image",
-            "image": url,  # Responses API accepts both data URIs and HTTP URLs
+            "type": "input_image",
+            "image_url": url,
         }
 
     def set_stream(self, stream: bool) -> bool:  # pragma: no cover - trivial
@@ -540,13 +542,15 @@ class OpenAIResponses(LanguageModel):
             except Exception:
                 pass
 
-            # Try to extract tool calls
+            # Try to extract tool calls (function_call in Responses API)
             if hasattr(result, "output") and result.output:
                 for item in result.output:
-                    if hasattr(item, "type") and item.type == "tool_call":
+                    if hasattr(item, "type") and item.type == "function_call":
                         if tool_calls is None:
                             tool_calls = []
                         # Convert to OpenAIToolCall format
+                        # Responses API uses call_id, name, arguments directly
+                        # (not nested under 'function' like Chat Completions)
                         from langroid.language_models.base import (
                             LLMFunctionCall,
                             OpenAIToolCall,
@@ -554,19 +558,11 @@ class OpenAIResponses(LanguageModel):
 
                         tool_calls.append(
                             OpenAIToolCall(
-                                id=getattr(item, "id", None),
+                                id=getattr(item, "call_id", getattr(item, "id", None)),
                                 type="function",
                                 function=LLMFunctionCall(
-                                    name=(
-                                        item.function.name
-                                        if hasattr(item, "function")
-                                        else ""
-                                    ),
-                                    arguments=(
-                                        item.function.arguments
-                                        if hasattr(item, "function")
-                                        else "{}"
-                                    ),
+                                    name=getattr(item, "name", ""),
+                                    arguments=getattr(item, "arguments", "{}"),
                                 ),
                             )
                         )
@@ -595,8 +591,8 @@ class OpenAIResponses(LanguageModel):
                                     ) and p.get("text"):
                                         message_text = p["text"]
                                         break
-                            elif entry.get("type") == "tool_call":
-                                # Extract tool call
+                            elif entry.get("type") == "function_call":
+                                # Extract function call (Responses API format)
                                 if tool_calls is None:
                                     tool_calls = []
                                 from langroid.language_models.base import (
@@ -604,17 +600,14 @@ class OpenAIResponses(LanguageModel):
                                     OpenAIToolCall,
                                 )
 
+                                # Responses API uses call_id, name, arguments directly
                                 tool_calls.append(
                                     OpenAIToolCall(
-                                        id=entry.get("id"),
+                                        id=entry.get("call_id", entry.get("id")),
                                         type="function",
                                         function=LLMFunctionCall(
-                                            name=entry.get("function", {}).get(
-                                                "name", ""
-                                            ),
-                                            arguments=entry.get("function", {}).get(
-                                                "arguments", "{}"
-                                            ),
+                                            name=entry.get("name", ""),
+                                            arguments=entry.get("arguments", "{}"),
                                         ),
                                     )
                                 )
