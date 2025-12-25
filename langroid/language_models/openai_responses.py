@@ -91,38 +91,76 @@ class OpenAIResponses(LanguageModel):
                 )
 
     def _convert_tool_spec(self, tool: OpenAIToolSpec) -> Dict[str, Any]:
-        """Convert OpenAIToolSpec to Responses API format."""
-        # For Responses API, tools are in the same format as Chat Completions
-        return tool.model_dump() if hasattr(tool, "model_dump") else dict(tool)
+        """Convert OpenAIToolSpec to Responses API format.
+
+        OpenAI expects the 'strict' flag nested inside the 'function' object,
+        not at the top level of the tool spec.
+        """
+        tool_dict = tool.model_dump() if hasattr(tool, "model_dump") else dict(tool)
+
+        # Move strict flag from top level into function payload if present
+        if "strict" in tool_dict and tool_dict["strict"] is not None:
+            strict_value = tool_dict.pop("strict")
+            if "function" in tool_dict and isinstance(tool_dict["function"], dict):
+                tool_dict["function"]["strict"] = strict_value
+
+        # Remove None strict field if still present
+        if "strict" in tool_dict and tool_dict["strict"] is None:
+            del tool_dict["strict"]
+
+        return tool_dict
 
     def _messages_to_input_parts(
         self, messages: List[LLMMessage]
     ) -> List[Dict[str, Any]]:
-        """Convert messages to Responses API input parts."""
+        """Convert messages to Responses API input format.
+
+        For multi-turn conversations, returns an array of message objects
+        with proper roles (user/assistant) to preserve conversation context.
+        """
         from langroid.language_models.base import Role
 
-        input_parts: List[Dict[str, Any]] = []
+        input_messages: List[Dict[str, Any]] = []
 
-        # Process messages in order
+        # Process messages in order, preserving conversation structure
         for msg in messages:
             if msg.role == Role.USER:
-                # User messages become input_text parts
-                input_parts.append({"type": "input_text", "text": msg.content})
+                # Build content for user message
+                content: List[Dict[str, Any]] = [
+                    {"type": "input_text", "text": msg.content}
+                ]
 
                 # Add any file attachments as image parts
                 if msg.files:
                     for file_attachment in msg.files:
                         image_part = self._convert_file_attachment(file_attachment)
                         if image_part:
-                            input_parts.append(image_part)
+                            content.append(image_part)
 
-            elif msg.role == Role.ASSISTANT and msg.tool_calls:
-                # Assistant tool calls - these are already in the conversation
-                # We don't add them as input parts, they're part of history
-                pass
+                input_messages.append({"role": "user", "content": content})
+
+            elif msg.role == Role.ASSISTANT:
+                # Include assistant messages to preserve conversation context
+                if msg.tool_calls:
+                    # Assistant message with tool calls
+                    # Add the function_call items for each tool call
+                    for tc in msg.tool_calls:
+                        if tc.function is not None:
+                            input_messages.append(
+                                {
+                                    "type": "function_call",
+                                    "call_id": tc.id,
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments,
+                                }
+                            )
+                elif msg.content:
+                    # Regular assistant message with text content
+                    input_messages.append({"role": "assistant", "content": msg.content})
+
             elif msg.role == Role.TOOL:
-                # Tool results become function_call_output parts in Responses API
-                input_parts.append(
+                # Tool results become function_call_output items
+                input_messages.append(
                     {
                         "type": "function_call_output",
                         "call_id": msg.tool_call_id,
@@ -130,23 +168,13 @@ class OpenAIResponses(LanguageModel):
                     }
                 )
 
-        # If no user content was added, add from last user message
-        if not any(p.get("type") == "input_text" for p in input_parts):
-            user_msgs = [m for m in messages if m.role == Role.USER]
-            if user_msgs:
-                last_user = user_msgs[-1]
-                input_parts.append({"type": "input_text", "text": last_user.content})
-                # Also add files from last user message if any
-                if last_user.files:
-                    for file_attachment in last_user.files:
-                        image_part = self._convert_file_attachment(file_attachment)
-                        if image_part:
-                            input_parts.append(image_part)
-            else:
-                # Fallback
-                input_parts.append({"type": "input_text", "text": "Hello"})
+        # If no messages were added, create a default user message
+        if not input_messages:
+            input_messages.append(
+                {"role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
+            )
 
-        return input_parts
+        return input_messages
 
     def _convert_file_attachment(self, attachment: Any) -> Optional[Dict[str, Any]]:
         """Convert a FileAttachment to Responses API image format."""
@@ -308,14 +336,10 @@ class OpenAIResponses(LanguageModel):
         )
 
         # Prepare request payload
+        # input_parts is now an array of properly structured messages/items
         req: Dict[str, Any] = {
             "model": self.config.chat_model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": input_parts,
-                }
-            ],
+            "input": input_parts,
             "max_output_tokens": max_output_tokens,
             "temperature": (
                 1.0 if is_o1_model else self.config.temperature

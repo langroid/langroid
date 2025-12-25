@@ -77,6 +77,134 @@ class TestToolFormatConversion:
         assert "call_weather" in call_ids
         assert "call_time" in call_ids
 
+    def test_strict_flag_nested_in_function(self):
+        """Strict flag is correctly nested inside function payload."""
+        from langroid.language_models.base import LLMFunctionSpec, OpenAIToolSpec
+
+        config = OpenAIResponsesConfig(chat_model="gpt-4o")
+        llm = OpenAIResponses(config)
+
+        # Create tool spec with strict=True at top level
+        tool = OpenAIToolSpec(
+            type="function",
+            strict=True,
+            function=LLMFunctionSpec(
+                name="test_tool",
+                description="A test tool",
+                parameters={"type": "object", "properties": {}},
+            ),
+        )
+
+        # Convert the tool spec
+        converted = llm._convert_tool_spec(tool)
+
+        # Strict should NOT be at top level
+        assert "strict" not in converted or converted.get("strict") is None
+
+        # Strict should be inside function payload
+        assert converted["function"]["strict"] is True
+
+    def test_strict_flag_none_not_included(self):
+        """Strict flag is not included when None."""
+        from langroid.language_models.base import LLMFunctionSpec, OpenAIToolSpec
+
+        config = OpenAIResponsesConfig(chat_model="gpt-4o")
+        llm = OpenAIResponses(config)
+
+        # Create tool spec without strict flag
+        tool = OpenAIToolSpec(
+            type="function",
+            function=LLMFunctionSpec(
+                name="test_tool",
+                description="A test tool",
+                parameters={"type": "object", "properties": {}},
+            ),
+        )
+
+        converted = llm._convert_tool_spec(tool)
+
+        # Strict should not be present at all (or be None)
+        assert "strict" not in converted
+        assert "strict" not in converted.get("function", {})
+
+    def test_assistant_messages_preserved_in_conversation(self):
+        """Assistant messages are included to preserve conversation context."""
+        config = OpenAIResponsesConfig(chat_model="gpt-4o")
+        llm = OpenAIResponses(config)
+
+        # Multi-turn conversation with assistant response
+        messages = [
+            LLMMessage(role=Role.USER, content="What is 2+2?"),
+            LLMMessage(role=Role.ASSISTANT, content="2+2 equals 4."),
+            LLMMessage(role=Role.USER, content="And what is 3+3?"),
+        ]
+
+        input_parts = llm._messages_to_input_parts(messages)
+
+        # Should have 3 messages: user, assistant, user
+        assert len(input_parts) == 3
+
+        # First should be user message
+        assert input_parts[0]["role"] == "user"
+        assert input_parts[0]["content"][0]["text"] == "What is 2+2?"
+
+        # Second should be assistant message
+        assert input_parts[1]["role"] == "assistant"
+        assert input_parts[1]["content"] == "2+2 equals 4."
+
+        # Third should be user message
+        assert input_parts[2]["role"] == "user"
+        assert input_parts[2]["content"][0]["text"] == "And what is 3+3?"
+
+    def test_assistant_tool_calls_preserved(self):
+        """Assistant tool calls are preserved as function_call items."""
+        from langroid.language_models.base import LLMFunctionCall, OpenAIToolCall
+
+        config = OpenAIResponsesConfig(chat_model="gpt-4o")
+        llm = OpenAIResponses(config)
+
+        # Conversation with tool call
+        messages = [
+            LLMMessage(role=Role.USER, content="What's the weather?"),
+            LLMMessage(
+                role=Role.ASSISTANT,
+                content="",
+                tool_calls=[
+                    OpenAIToolCall(
+                        id="call_123",
+                        type="function",
+                        function=LLMFunctionCall(
+                            name="get_weather",
+                            arguments='{"location": "NYC"}',
+                        ),
+                    )
+                ],
+            ),
+            LLMMessage(
+                role=Role.TOOL,
+                content='{"temp": 72}',
+                tool_call_id="call_123",
+                name="get_weather",
+            ),
+        ]
+
+        input_parts = llm._messages_to_input_parts(messages)
+
+        # Should have: user message, function_call, function_call_output
+        assert len(input_parts) == 3
+
+        # First is user
+        assert input_parts[0]["role"] == "user"
+
+        # Second is function_call (from assistant)
+        assert input_parts[1]["type"] == "function_call"
+        assert input_parts[1]["call_id"] == "call_123"
+        assert input_parts[1]["name"] == "get_weather"
+
+        # Third is function_call_output (tool result)
+        assert input_parts[2]["type"] == "function_call_output"
+        assert input_parts[2]["call_id"] == "call_123"
+
 
 @pytest.mark.openai_responses
 @pytest.mark.slow
