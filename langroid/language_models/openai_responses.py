@@ -146,12 +146,21 @@ class OpenAIResponses(LanguageModel):
                     # Add the function_call items for each tool call
                     for tc in msg.tool_calls:
                         if tc.function is not None:
+                            # Serialize arguments to JSON string for API
+                            args = tc.function.arguments
+                            if isinstance(args, dict):
+                                args_str = json.dumps(args)
+                            elif isinstance(args, str):
+                                args_str = args
+                            else:
+                                args_str = "{}"
+
                             input_messages.append(
                                 {
                                     "type": "function_call",
                                     "call_id": tc.id,
                                     "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
+                                    "arguments": args_str,
                                 }
                             )
                 elif msg.content:
@@ -580,13 +589,24 @@ class OpenAIResponses(LanguageModel):
                             OpenAIToolCall,
                         )
 
+                        # Parse arguments from JSON string to dict
+                        args_str = getattr(item, "arguments", "{}")
+                        try:
+                            args_dict = (
+                                json.loads(args_str)
+                                if isinstance(args_str, str)
+                                else args_str
+                            )
+                        except json.JSONDecodeError:
+                            args_dict = {}
+
                         tool_calls.append(
                             OpenAIToolCall(
                                 id=getattr(item, "call_id", getattr(item, "id", None)),
                                 type="function",
                                 function=LLMFunctionCall(
                                     name=getattr(item, "name", ""),
-                                    arguments=getattr(item, "arguments", "{}"),
+                                    arguments=args_dict,
                                 ),
                             )
                         )
@@ -625,13 +645,24 @@ class OpenAIResponses(LanguageModel):
                                 )
 
                                 # Responses API uses call_id, name, arguments directly
+                                # Parse arguments from JSON string to dict
+                                args_str = entry.get("arguments", "{}")
+                                try:
+                                    args_dict = (
+                                        json.loads(args_str)
+                                        if isinstance(args_str, str)
+                                        else args_str
+                                    )
+                                except json.JSONDecodeError:
+                                    args_dict = {}
+
                                 tool_calls.append(
                                     OpenAIToolCall(
                                         id=entry.get("call_id", entry.get("id")),
                                         type="function",
                                         function=LLMFunctionCall(
                                             name=entry.get("name", ""),
-                                            arguments=entry.get("arguments", "{}"),
+                                            arguments=args_dict,
                                         ),
                                     )
                                 )
@@ -654,15 +685,24 @@ class OpenAIResponses(LanguageModel):
 
                         tool_calls = []
                         for tc in choice0["message"]["tool_calls"]:
+                            # Parse arguments from JSON string to dict
+                            args_str = tc.get("function", {}).get("arguments", "{}")
+                            try:
+                                args_dict = (
+                                    json.loads(args_str)
+                                    if isinstance(args_str, str)
+                                    else args_str
+                                )
+                            except json.JSONDecodeError:
+                                args_dict = {}
+
                             tool_calls.append(
                                 OpenAIToolCall(
                                     id=tc.get("id"),
                                     type=tc.get("type", "function"),
                                     function=LLMFunctionCall(
                                         name=tc.get("function", {}).get("name", ""),
-                                        arguments=tc.get("function", {}).get(
-                                            "arguments", "{}"
-                                        ),
+                                        arguments=args_dict,
                                     ),
                                 )
                             )
@@ -774,28 +814,47 @@ class OpenAIResponses(LanguageModel):
                         if delta_reasoning:
                             accumulated_reasoning.append(delta_reasoning)
 
-                    elif event.type == "response.tool_call.delta":
-                        # Tool call delta - accumulate tool calls
-                        if hasattr(event, "delta"):
-                            tool_id = getattr(event.delta, "id", None)
-                            if tool_id:
-                                if tool_id not in tool_calls:
-                                    tool_calls[tool_id] = {
-                                        "id": tool_id,
-                                        "type": "function",
-                                        "function": {"name": "", "arguments": ""},
-                                    }
-                                # Update function details
-                                if hasattr(event.delta, "function"):
-                                    func = event.delta.function
-                                    if hasattr(func, "name") and func.name:
-                                        tool_calls[tool_id]["function"][
-                                            "name"
-                                        ] = func.name
-                                    if hasattr(func, "arguments") and func.arguments:
-                                        tool_calls[tool_id]["function"][
-                                            "arguments"
-                                        ] += func.arguments
+                    elif event.type == "response.output_item.added":
+                        # Output item added - capture function call metadata
+                        item = getattr(event, "item", None)
+                        if item and getattr(item, "type", None) == "function_call":
+                            call_id = getattr(item, "call_id", None)
+                            if call_id:
+                                tool_calls[call_id] = {
+                                    "id": call_id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": getattr(item, "name", ""),
+                                        "arguments": "",
+                                    },
+                                }
+
+                    elif event.type == "response.function_call_arguments.delta":
+                        # Function call arguments delta - accumulate arguments
+                        call_id = getattr(event, "call_id", None)
+                        if call_id:
+                            if call_id not in tool_calls:
+                                # Create entry if not seen (shouldn't happen normally)
+                                tool_calls[call_id] = {
+                                    "id": call_id,
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            # Append argument delta
+                            delta = getattr(event, "delta", "")
+                            if delta:
+                                tool_calls[call_id]["function"]["arguments"] += delta
+
+                    elif event.type == "response.function_call_arguments.done":
+                        # Function call arguments complete - finalize
+                        call_id = getattr(event, "call_id", None)
+                        if call_id and call_id in tool_calls:
+                            # Arguments are complete, optionally validate
+                            final_args = getattr(event, "arguments", None)
+                            if final_args:
+                                tool_calls[call_id]["function"][
+                                    "arguments"
+                                ] = final_args
 
                     elif event.type == "response.completed":
                         # Final response with usage
@@ -872,13 +931,22 @@ class OpenAIResponses(LanguageModel):
 
             oai_tool_calls = []
             for tc in tool_calls.values():
+                # Parse arguments from JSON string to dict
+                args_str = tc["function"]["arguments"]
+                try:
+                    args_dict = (
+                        json.loads(args_str) if isinstance(args_str, str) else args_str
+                    )
+                except json.JSONDecodeError:
+                    args_dict = {}
+
                 oai_tool_calls.append(
                     OpenAIToolCall(
                         id=tc["id"],
                         type=tc["type"],
                         function=LLMFunctionCall(
                             name=tc["function"]["name"],
-                            arguments=tc["function"]["arguments"],
+                            arguments=args_dict,
                         ),
                     )
                 )
@@ -1029,13 +1097,22 @@ class OpenAIResponses(LanguageModel):
 
             oai_tool_calls = []
             for tc in tool_calls.values():
+                # Parse arguments from JSON string to dict
+                args_str = tc["function"]["arguments"]
+                try:
+                    args_dict = (
+                        json.loads(args_str) if isinstance(args_str, str) else args_str
+                    )
+                except json.JSONDecodeError:
+                    args_dict = {}
+
                 oai_tool_calls.append(
                     OpenAIToolCall(
                         id=tc["id"],
                         type=tc["type"],
                         function=LLMFunctionCall(
                             name=tc["function"]["name"],
-                            arguments=tc["function"]["arguments"],
+                            arguments=args_dict,
                         ),
                     )
                 )

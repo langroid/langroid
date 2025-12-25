@@ -1,4 +1,3 @@
-import json
 import os
 
 import pytest
@@ -175,7 +174,7 @@ class TestToolFormatConversion:
                         type="function",
                         function=LLMFunctionCall(
                             name="get_weather",
-                            arguments='{"location": "NYC"}',
+                            arguments={"location": "NYC"},
                         ),
                     )
                 ],
@@ -200,6 +199,8 @@ class TestToolFormatConversion:
         assert input_parts[1]["type"] == "function_call"
         assert input_parts[1]["call_id"] == "call_123"
         assert input_parts[1]["name"] == "get_weather"
+        # Arguments should be serialized as JSON string for API
+        assert input_parts[1]["arguments"] == '{"location": "NYC"}'
 
         # Third is function_call_output (tool result)
         assert input_parts[2]["type"] == "function_call_output"
@@ -254,8 +255,9 @@ class TestToolCalling:
         assert len(response.oai_tool_calls) > 0
         assert response.oai_tool_calls[0].function.name == "get_weather"
 
-        # Parse arguments to verify Paris is mentioned
-        args = json.loads(response.oai_tool_calls[0].function.arguments)
+        # Arguments should be a dict (parsed from JSON string)
+        args = response.oai_tool_calls[0].function.arguments
+        assert isinstance(args, dict)
         assert "location" in args
         assert "paris" in args["location"].lower()
 
@@ -456,6 +458,7 @@ class TestToolCalling:
         assert len(response.oai_tool_calls) > 0
         assert response.oai_tool_calls[0].function.name == "search"
 
-        # Verify arguments contain Paris
-        args = json.loads(response.oai_tool_calls[0].function.arguments)
+        # Arguments should be a dict (parsed from JSON string)
+        args = response.oai_tool_calls[0].function.arguments
+        assert isinstance(args, dict)
         assert "paris" in args.get("query", "").lower()
