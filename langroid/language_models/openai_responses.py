@@ -91,62 +91,99 @@ class OpenAIResponses(LanguageModel):
                 )
 
     def _convert_tool_spec(self, tool: OpenAIToolSpec) -> Dict[str, Any]:
-        """Convert OpenAIToolSpec to Responses API format."""
-        # For Responses API, tools are in the same format as Chat Completions
-        return tool.model_dump() if hasattr(tool, "model_dump") else dict(tool)
+        """Convert OpenAIToolSpec to Responses API format.
+
+        OpenAI expects the 'strict' flag nested inside the 'function' object,
+        not at the top level of the tool spec.
+        """
+        tool_dict = tool.model_dump() if hasattr(tool, "model_dump") else dict(tool)
+
+        # Move strict flag from top level into function payload if present
+        if "strict" in tool_dict and tool_dict["strict"] is not None:
+            strict_value = tool_dict.pop("strict")
+            if "function" in tool_dict and isinstance(tool_dict["function"], dict):
+                tool_dict["function"]["strict"] = strict_value
+
+        # Remove None strict field if still present
+        if "strict" in tool_dict and tool_dict["strict"] is None:
+            del tool_dict["strict"]
+
+        return tool_dict
 
     def _messages_to_input_parts(
         self, messages: List[LLMMessage]
     ) -> List[Dict[str, Any]]:
-        """Convert messages to Responses API input parts."""
+        """Convert messages to Responses API input format.
+
+        For multi-turn conversations, returns an array of message objects
+        with proper roles (user/assistant) to preserve conversation context.
+        """
         from langroid.language_models.base import Role
 
-        input_parts: List[Dict[str, Any]] = []
+        input_messages: List[Dict[str, Any]] = []
 
-        # Process messages in order
+        # Process messages in order, preserving conversation structure
         for msg in messages:
             if msg.role == Role.USER:
-                # User messages become input_text parts
-                input_parts.append({"type": "input_text", "text": msg.content})
+                # Build content for user message
+                content: List[Dict[str, Any]] = [
+                    {"type": "input_text", "text": msg.content}
+                ]
 
                 # Add any file attachments as image parts
                 if msg.files:
                     for file_attachment in msg.files:
                         image_part = self._convert_file_attachment(file_attachment)
                         if image_part:
-                            input_parts.append(image_part)
+                            content.append(image_part)
 
-            elif msg.role == Role.ASSISTANT and msg.tool_calls:
-                # Assistant tool calls - these are already in the conversation
-                # We don't add them as input parts, they're part of history
-                pass
+                input_messages.append({"role": "user", "content": content})
+
+            elif msg.role == Role.ASSISTANT:
+                # Include assistant messages to preserve conversation context
+                if msg.tool_calls:
+                    # Assistant message with tool calls
+                    # Add the function_call items for each tool call
+                    for tc in msg.tool_calls:
+                        if tc.function is not None:
+                            # Serialize arguments to JSON string for API
+                            args = tc.function.arguments
+                            if isinstance(args, dict):
+                                args_str = json.dumps(args)
+                            elif isinstance(args, str):
+                                args_str = args
+                            else:
+                                args_str = "{}"
+
+                            input_messages.append(
+                                {
+                                    "type": "function_call",
+                                    "call_id": tc.id,
+                                    "name": tc.function.name,
+                                    "arguments": args_str,
+                                }
+                            )
+                elif msg.content:
+                    # Regular assistant message with text content
+                    input_messages.append({"role": "assistant", "content": msg.content})
+
             elif msg.role == Role.TOOL:
-                # Tool results become tool_result parts
-                input_parts.append(
+                # Tool results become function_call_output items
+                input_messages.append(
                     {
-                        "type": "tool_result",
-                        "tool_call_id": msg.tool_call_id,
+                        "type": "function_call_output",
+                        "call_id": msg.tool_call_id,
                         "output": msg.content,
                     }
                 )
 
-        # If no user content was added, add from last user message
-        if not any(p.get("type") == "input_text" for p in input_parts):
-            user_msgs = [m for m in messages if m.role == Role.USER]
-            if user_msgs:
-                last_user = user_msgs[-1]
-                input_parts.append({"type": "input_text", "text": last_user.content})
-                # Also add files from last user message if any
-                if last_user.files:
-                    for file_attachment in last_user.files:
-                        image_part = self._convert_file_attachment(file_attachment)
-                        if image_part:
-                            input_parts.append(image_part)
-            else:
-                # Fallback
-                input_parts.append({"type": "input_text", "text": "Hello"})
+        # If no messages were added, create a default user message
+        if not input_messages:
+            input_messages.append(
+                {"role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
+            )
 
-        return input_parts
+        return input_messages
 
     def _convert_file_attachment(self, attachment: Any) -> Optional[Dict[str, Any]]:
         """Convert a FileAttachment to Responses API image format."""
@@ -161,9 +198,11 @@ class OpenAIResponses(LanguageModel):
             return None
 
         # Create image part for Responses API
+        # Format: {"type": "input_image", "image_url": <url_string>}
+        # image_url accepts both data URIs and HTTP URLs as a string
         return {
-            "type": "image",
-            "image": url,  # Responses API accepts both data URIs and HTTP URLs
+            "type": "input_image",
+            "image_url": url,
         }
 
     def set_stream(self, stream: bool) -> bool:  # pragma: no cover - trivial
@@ -306,14 +345,10 @@ class OpenAIResponses(LanguageModel):
         )
 
         # Prepare request payload
+        # input_parts is now an array of properly structured messages/items
         req: Dict[str, Any] = {
             "model": self.config.chat_model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": input_parts,
-                }
-            ],
+            "input": input_parts,
             "max_output_tokens": max_output_tokens,
             "temperature": (
                 1.0 if is_o1_model else self.config.temperature
@@ -540,33 +575,38 @@ class OpenAIResponses(LanguageModel):
             except Exception:
                 pass
 
-            # Try to extract tool calls
+            # Try to extract tool calls (function_call in Responses API)
             if hasattr(result, "output") and result.output:
                 for item in result.output:
-                    if hasattr(item, "type") and item.type == "tool_call":
+                    if hasattr(item, "type") and item.type == "function_call":
                         if tool_calls is None:
                             tool_calls = []
                         # Convert to OpenAIToolCall format
+                        # Responses API uses call_id, name, arguments directly
+                        # (not nested under 'function' like Chat Completions)
                         from langroid.language_models.base import (
                             LLMFunctionCall,
                             OpenAIToolCall,
                         )
 
+                        # Parse arguments from JSON string to dict
+                        args_str = getattr(item, "arguments", "{}")
+                        try:
+                            args_dict = (
+                                json.loads(args_str)
+                                if isinstance(args_str, str)
+                                else args_str
+                            )
+                        except json.JSONDecodeError:
+                            args_dict = {}
+
                         tool_calls.append(
                             OpenAIToolCall(
-                                id=getattr(item, "id", None),
+                                id=getattr(item, "call_id", getattr(item, "id", None)),
                                 type="function",
                                 function=LLMFunctionCall(
-                                    name=(
-                                        item.function.name
-                                        if hasattr(item, "function")
-                                        else ""
-                                    ),
-                                    arguments=(
-                                        item.function.arguments
-                                        if hasattr(item, "function")
-                                        else "{}"
-                                    ),
+                                    name=getattr(item, "name", ""),
+                                    arguments=args_dict,
                                 ),
                             )
                         )
@@ -595,8 +635,8 @@ class OpenAIResponses(LanguageModel):
                                     ) and p.get("text"):
                                         message_text = p["text"]
                                         break
-                            elif entry.get("type") == "tool_call":
-                                # Extract tool call
+                            elif entry.get("type") == "function_call":
+                                # Extract function call (Responses API format)
                                 if tool_calls is None:
                                     tool_calls = []
                                 from langroid.language_models.base import (
@@ -604,17 +644,25 @@ class OpenAIResponses(LanguageModel):
                                     OpenAIToolCall,
                                 )
 
+                                # Responses API uses call_id, name, arguments directly
+                                # Parse arguments from JSON string to dict
+                                args_str = entry.get("arguments", "{}")
+                                try:
+                                    args_dict = (
+                                        json.loads(args_str)
+                                        if isinstance(args_str, str)
+                                        else args_str
+                                    )
+                                except json.JSONDecodeError:
+                                    args_dict = {}
+
                                 tool_calls.append(
                                     OpenAIToolCall(
-                                        id=entry.get("id"),
+                                        id=entry.get("call_id", entry.get("id")),
                                         type="function",
                                         function=LLMFunctionCall(
-                                            name=entry.get("function", {}).get(
-                                                "name", ""
-                                            ),
-                                            arguments=entry.get("function", {}).get(
-                                                "arguments", "{}"
-                                            ),
+                                            name=entry.get("name", ""),
+                                            arguments=args_dict,
                                         ),
                                     )
                                 )
@@ -637,15 +685,24 @@ class OpenAIResponses(LanguageModel):
 
                         tool_calls = []
                         for tc in choice0["message"]["tool_calls"]:
+                            # Parse arguments from JSON string to dict
+                            args_str = tc.get("function", {}).get("arguments", "{}")
+                            try:
+                                args_dict = (
+                                    json.loads(args_str)
+                                    if isinstance(args_str, str)
+                                    else args_str
+                                )
+                            except json.JSONDecodeError:
+                                args_dict = {}
+
                             tool_calls.append(
                                 OpenAIToolCall(
                                     id=tc.get("id"),
                                     type=tc.get("type", "function"),
                                     function=LLMFunctionCall(
                                         name=tc.get("function", {}).get("name", ""),
-                                        arguments=tc.get("function", {}).get(
-                                            "arguments", "{}"
-                                        ),
+                                        arguments=args_dict,
                                     ),
                                 )
                             )
@@ -757,28 +814,47 @@ class OpenAIResponses(LanguageModel):
                         if delta_reasoning:
                             accumulated_reasoning.append(delta_reasoning)
 
-                    elif event.type == "response.tool_call.delta":
-                        # Tool call delta - accumulate tool calls
-                        if hasattr(event, "delta"):
-                            tool_id = getattr(event.delta, "id", None)
-                            if tool_id:
-                                if tool_id not in tool_calls:
-                                    tool_calls[tool_id] = {
-                                        "id": tool_id,
-                                        "type": "function",
-                                        "function": {"name": "", "arguments": ""},
-                                    }
-                                # Update function details
-                                if hasattr(event.delta, "function"):
-                                    func = event.delta.function
-                                    if hasattr(func, "name") and func.name:
-                                        tool_calls[tool_id]["function"][
-                                            "name"
-                                        ] = func.name
-                                    if hasattr(func, "arguments") and func.arguments:
-                                        tool_calls[tool_id]["function"][
-                                            "arguments"
-                                        ] += func.arguments
+                    elif event.type == "response.output_item.added":
+                        # Output item added - capture function call metadata
+                        item = getattr(event, "item", None)
+                        if item and getattr(item, "type", None) == "function_call":
+                            call_id = getattr(item, "call_id", None)
+                            if call_id:
+                                tool_calls[call_id] = {
+                                    "id": call_id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": getattr(item, "name", ""),
+                                        "arguments": "",
+                                    },
+                                }
+
+                    elif event.type == "response.function_call_arguments.delta":
+                        # Function call arguments delta - accumulate arguments
+                        call_id = getattr(event, "call_id", None)
+                        if call_id:
+                            if call_id not in tool_calls:
+                                # Create entry if not seen (shouldn't happen normally)
+                                tool_calls[call_id] = {
+                                    "id": call_id,
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            # Append argument delta
+                            delta = getattr(event, "delta", "")
+                            if delta:
+                                tool_calls[call_id]["function"]["arguments"] += delta
+
+                    elif event.type == "response.function_call_arguments.done":
+                        # Function call arguments complete - finalize
+                        call_id = getattr(event, "call_id", None)
+                        if call_id and call_id in tool_calls:
+                            # Arguments are complete, optionally validate
+                            final_args = getattr(event, "arguments", None)
+                            if final_args:
+                                tool_calls[call_id]["function"][
+                                    "arguments"
+                                ] = final_args
 
                     elif event.type == "response.completed":
                         # Final response with usage
@@ -855,13 +931,22 @@ class OpenAIResponses(LanguageModel):
 
             oai_tool_calls = []
             for tc in tool_calls.values():
+                # Parse arguments from JSON string to dict
+                args_str = tc["function"]["arguments"]
+                try:
+                    args_dict = (
+                        json.loads(args_str) if isinstance(args_str, str) else args_str
+                    )
+                except json.JSONDecodeError:
+                    args_dict = {}
+
                 oai_tool_calls.append(
                     OpenAIToolCall(
                         id=tc["id"],
                         type=tc["type"],
                         function=LLMFunctionCall(
                             name=tc["function"]["name"],
-                            arguments=tc["function"]["arguments"],
+                            arguments=args_dict,
                         ),
                     )
                 )
@@ -1012,13 +1097,22 @@ class OpenAIResponses(LanguageModel):
 
             oai_tool_calls = []
             for tc in tool_calls.values():
+                # Parse arguments from JSON string to dict
+                args_str = tc["function"]["arguments"]
+                try:
+                    args_dict = (
+                        json.loads(args_str) if isinstance(args_str, str) else args_str
+                    )
+                except json.JSONDecodeError:
+                    args_dict = {}
+
                 oai_tool_calls.append(
                     OpenAIToolCall(
                         id=tc["id"],
                         type=tc["type"],
                         function=LLMFunctionCall(
                             name=tc["function"]["name"],
-                            arguments=tc["function"]["arguments"],
+                            arguments=args_dict,
                         ),
                     )
                 )
