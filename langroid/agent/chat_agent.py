@@ -265,22 +265,31 @@ class ChatAgent(Agent):
         Revisit later.
         """
         agent_cls = type(self)
-        config_copy = copy.deepcopy(self.config)
+        # Use model_copy to preserve Pydantic subclass types (like MockLMConfig)
+        # instead of deepcopy which loses subclass information
+        config_copy = self.config.model_copy(deep=True)
         config_copy.name = f"{config_copy.name}-{i}"
         new_agent = agent_cls(config_copy)
         new_agent.system_tool_instructions = self.system_tool_instructions
         new_agent.system_tool_format_instructions = self.system_tool_format_instructions
         new_agent.llm_tools_map = self.llm_tools_map
+        new_agent.llm_tools_known = self.llm_tools_known
+        new_agent.llm_tools_handled = self.llm_tools_handled
+        new_agent.llm_tools_usable = self.llm_tools_usable
         new_agent.llm_functions_map = self.llm_functions_map
         new_agent.llm_functions_handled = self.llm_functions_handled
         new_agent.llm_functions_usable = self.llm_functions_usable
         new_agent.llm_function_force = self.llm_function_force
-        # Caution - we are copying the vector-db, maybe we don't always want this?
-        new_agent.vecdb = self.vecdb
+        # Ensure each clone gets its own vecdb client when supported.
+        new_agent.vecdb = None if self.vecdb is None else self.vecdb.clone()
+        self._clone_extra_state(new_agent)
         new_agent.id = ObjectRegistry.new_id()
         if self.config.add_to_registry:
             ObjectRegistry.register_object(new_agent)
         return new_agent
+
+    def _clone_extra_state(self, new_agent: "ChatAgent") -> None:
+        """Hook for subclasses to copy additional state into clones."""
 
     def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool:
         """Should we enable strict mode for a given tool?"""
@@ -359,26 +368,30 @@ class ChatAgent(Agent):
                 if tool_call.id in self.oai_tool_id2call:
                     del self.oai_tool_id2call[tool_call.id]
 
-    def clear_history(self, start: int = -2) -> None:
+    def clear_history(self, start: int = -2, end: int = -1) -> None:
         """
-        Clear the message history, starting at the index `start`
+        Clear the message history, deleting  messages from index `start`,
+        up to index `end`.
 
         Args:
             start (int): index of first message to delete; default = -2
                     (i.e. delete last 2 messages, typically these
                     are the last user and assistant messages)
+            end (int): index of last message to delete; Default = -1
+                    (i.e. delete all messages up to the last one)
         """
+        n = len(self.message_history)
         if start < 0:
-            n = len(self.message_history)
             start = max(0, n + start)
-        dropped = self.message_history[start:]
+        end_ = n if end == -1 else end + 1
+        dropped = self.message_history[start:end_]
         # consider the dropped msgs in REVERSE order, so we are
         # carefully updating self.oai_tool_calls
         for msg in reversed(dropped):
             self._drop_msg_update_tool_calls(msg)
             # clear out the chat document from the ObjectRegistry
             ChatDocument.delete_id(msg.chat_document_id)
-        self.message_history = self.message_history[:start]
+        del self.message_history[start:end_]
 
     def update_history(self, message: str, response: str) -> None:
         """
@@ -685,6 +698,28 @@ class ChatAgent(Agent):
                     include_defaults=include_defaults,
                 )
             return None
+
+        # Validate that use/handle are booleans, not accidentally passed tool classes
+        if isclass(use) or isclass(handle):
+            param = "use" if isclass(use) else "handle"
+            raise TypeError(
+                textwrap.dedent(
+                    f"""
+                    Invalid arguments to enable_message().
+                    It appears you passed multiple ToolMessage classes as separate
+                    arguments instead of as a list.
+
+                    Correct usage:
+                        agent.enable_message([Tool1, Tool2, Tool3])
+
+                    Incorrect usage:
+                        agent.enable_message(Tool1, Tool2, Tool3)
+
+                    The '{param}' parameter must be a boolean, not a class.
+                    """
+                )
+            )
+
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
         if isinstance(message_class, XMLToolMessage):
@@ -700,7 +735,7 @@ class ChatAgent(Agent):
             if request == "":
                 raise ValueError(
                     f"""
-                    ToolMessage class {message_class} must have a non-empty 
+                    ToolMessage class {message_class} must have a non-empty
                     'request' field if it is to be enabled as a tool.
                     """
                 )
@@ -742,10 +777,10 @@ class ChatAgent(Agent):
                     logger.warning(
                         f"""
                         ToolMessage class {tool_class} does not allow LLM use,
-                        because `_allow_llm_use=False` either in the Tool or a 
+                        because `_allow_llm_use=False` either in the Tool or a
                         parent class of this tool;
                         so not enabling LLM use for this tool!
-                        If you intended an LLM to use this tool, 
+                        If you intended an LLM to use this tool,
                         set `_allow_llm_use=True` when you define the tool.
                         """
                     )
@@ -1294,7 +1329,7 @@ class ChatAgent(Agent):
                 tool_name = limiting_tool.default_value("request")
                 max_tokens: int = max_retained_tokens
                 truncation_warning = f"""
-                    The result of the {tool_name} tool were too large, 
+                    The result of the {tool_name} tool were too large,
                     and has been truncated to {max_tokens} tokens.
                     To obtain the full result, the tool needs to be re-used.
                 """
@@ -1587,9 +1622,9 @@ class ChatAgent(Agent):
                 logger.debug(
                     f"""
                     Chat Model context length is {self.llm.chat_context_length()},
-                    but the current message history is {self.chat_num_tokens(hist)} 
-                    tokens long, which does not allow 
-                    {self.config.llm.model_max_output_tokens} output tokens. 
+                    but the current message history is {self.chat_num_tokens(hist)}
+                    tokens long, which does not allow
+                    {self.config.llm.model_max_output_tokens} output tokens.
                     Therefore we reduced `max_output_tokens` to {output_len} tokens,
                     so they can fit within the model's context length
                     """
@@ -1621,16 +1656,16 @@ class ChatAgent(Agent):
                         # and last message (user msg).
                         raise ValueError(
                             """
-                        The (message history + max_output_tokens) is longer than the 
-                        max chat context length of this model, and we have tried 
+                        The (message history + max_output_tokens) is longer than the
+                        max chat context length of this model, and we have tried
                         reducing the requested max output tokens, as well as truncating
-                        early parts of the message history, to accommodate the model 
+                        early parts of the message history, to accommodate the model
                         context length, but we have run out of msgs to drop.
-                         
-                        HINT: In the `llm` field of your `ChatAgentConfig` object, 
-                        which is of type `LLMConfig/OpenAIGPTConfig`, try 
-                        - increasing `chat_context_length` 
-                            (if accurate for the model), or  
+
+                        HINT: In the `llm` field of your `ChatAgentConfig` object,
+                        which is of type `LLMConfig/OpenAIGPTConfig`, try
+                        - increasing `chat_context_length`
+                            (if accurate for the model), or
                         - decreasing `max_output_tokens`
                         """
                         )
@@ -1653,15 +1688,15 @@ class ChatAgent(Agent):
                 if output_len < self.config.llm.min_output_tokens:
                     raise ValueError(
                         f"""
-                        Tried to shorten prompt history for chat mode 
-                        but even after truncating all messages except system msg and 
-                        last (user) msg, 
+                        Tried to shorten prompt history for chat mode
+                        but even after truncating all messages except system msg and
+                        last (user) msg,
                         the history token len {self.chat_num_tokens(hist)} is
                         too long to accommodate the desired minimum output tokens
-                        {self.config.llm.min_output_tokens} within the 
+                        {self.config.llm.min_output_tokens} within the
                         model's context length {self.llm.chat_context_length()}.
                         Please try shortening the system msg or user prompts,
-                        or adjust `config.llm.min_output_tokens` to be smaller. 
+                        or adjust `config.llm.min_output_tokens` to be smaller.
                         """
                     )
                 else:
@@ -1669,13 +1704,13 @@ class ChatAgent(Agent):
                     msg_tokens = self.chat_num_tokens()
                     logger.warning(
                         f"""
-                    Chat Model context length is {self.llm.chat_context_length()} 
+                    Chat Model context length is {self.llm.chat_context_length()}
                     tokens, but the current message history is {msg_tokens} tokens long,
-                    which does not allow {self.config.llm.model_max_output_tokens} 
-                    output tokens. 
+                    which does not allow {self.config.llm.model_max_output_tokens}
+                    output tokens.
                     Therefore we truncated the first {n_truncated} messages
-                    in the conversation history so that history token 
-                    length is reduced to {self.chat_num_tokens(hist)}, and 
+                    in the conversation history so that history token
+                    length is reduced to {self.chat_num_tokens(hist)}, and
                     we use `max_output_tokens = {output_len}`,
                     so they can fit within the model's context length
                     of {self.llm.chat_context_length()} tokens.

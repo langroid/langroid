@@ -37,7 +37,7 @@ def main(
         chat_model=model,
         # inapplicable params are automatically removed by Langroid
         params=lm.OpenAICallParams(
-            reasoning_effort="low",  # only supported by o3-mini
+            reasoning_effort="low",  # only supported by some models
             # below lets you get reasoning when using openrouter/deepseek/deepseek-r1
             extra_body=dict(include_reasoning=True),
         ),

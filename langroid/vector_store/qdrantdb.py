@@ -143,6 +143,14 @@ class QdrantDB(VectorStore):
                 config.collection_name, replace=config.replace_collection
             )
 
+    def clone(self) -> "QdrantDB":
+        """Create an independent Qdrant client when running against Qdrant Cloud."""
+        if not self.config.cloud:
+            return self
+        cloned = super().clone()
+        assert isinstance(cloned, QdrantDB)
+        return cloned
+
     def close(self) -> None:
         """
         Close the QdrantDB client and release any resources (e.g., file locks).

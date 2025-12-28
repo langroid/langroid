@@ -2,7 +2,11 @@ import json
 
 import pytest
 
-from langroid.parsing.parse_json import extract_top_level_json, parse_imperfect_json
+from langroid.parsing.parse_json import (
+    extract_top_level_json,
+    parse_imperfect_json,
+    top_level_json_field,
+)
 
 
 @pytest.mark.parametrize(
@@ -148,3 +152,44 @@ def test_parse_imperfect_json(input_json, expected_output):
 def test_invalid_json_raises_error(invalid_input):
     with pytest.raises(ValueError):
         parse_imperfect_json(invalid_input)
+
+
+@pytest.mark.parametrize(
+    "s, field, expected",
+    [
+        # Scalar JSON should return "" (no crash)
+        ("{1}", "recipient", ""),
+        ('{"a": 1}', "a", 1),
+        # Dict with field
+        ('{"recipient": "Alice"}', "recipient", "Alice"),
+        # List of dicts
+        ('[{"recipient": "Bob"}]', "recipient", "Bob"),
+        # Mixed text with dict
+        ('Some text {"recipient": "Charlie"} more text', "recipient", "Charlie"),
+        # Field not found
+        ('{"other": "value"}', "recipient", ""),
+    ],
+)
+def test_top_level_json_field(s, field, expected):
+    assert top_level_json_field(s, field) == expected
+
+
+def test_top_level_json_field_never_crashes():
+    """Test that top_level_json_field never crashes with malformed inputs."""
+    # Test cases that should not crash, just return ""
+    malformed_inputs = [
+        "",  # Empty string
+        "not json at all",  # No JSON
+        "{broken json",  # Incomplete JSON
+        '{"key": undefined}',  # JavaScript-style undefined (gets repaired)
+        "{\"malformed\": 'quotes'}",  # Wrong quotes
+        "}{",  # Backwards braces
+        "{{{",  # Nested unclosed
+        '{"key": null, "key2": }',  # Trailing comma with no value
+        '{"recipient": }',  # Field exists but no value
+    ]
+
+    for malformed in malformed_inputs:
+        # Should never crash, just return empty string or found value
+        result = top_level_json_field(malformed, "recipient")
+        assert isinstance(result, (str, int, float, bool, type(None)))

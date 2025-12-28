@@ -136,6 +136,7 @@ nav:
       - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
       - OpenAI HTTP Client Configuration: notes/openai-http-client.md
       - OpenAI Client Caching: notes/openai-client-caching.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
       - Task Logs: notes/html-logger.md
       - Pydantic v2 Migration: notes/pydantic-v2-migration.md
       - OpenAI Responses API: notes/openai_responses_api.md
@@ -183,5 +184,4 @@ extra_javascript:
   - javascripts/mathjax.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-
 

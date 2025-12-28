@@ -135,15 +135,32 @@ def top_level_json_field(s: str, f: str) -> Any:
     Returns:
         str: The value of the field f in the top-level JSON object, if any.
             Otherwise, return an empty string.
-    """
 
-    jsons = extract_top_level_json(s)
-    if len(jsons) == 0:
-        return ""
-    for j in jsons:
-        json_data = json.loads(j)
-        if f in json_data:
-            return json_data[f]
+    Note:
+        This function is designed to never crash. If any exception occurs during
+        JSON parsing or field extraction, it gracefully returns an empty string.
+    """
+    try:
+        jsons = extract_top_level_json(s)
+        if len(jsons) == 0:
+            return ""
+        for j in jsons:
+            try:
+                json_data = json.loads(j)
+                if isinstance(json_data, dict):
+                    if f in json_data:
+                        return json_data[f]
+                elif isinstance(json_data, list):
+                    # Some responses wrap candidate JSON objects in a list; scan them.
+                    for item in json_data:
+                        if isinstance(item, dict) and f in item:
+                            return item[f]
+            except (json.JSONDecodeError, TypeError, KeyError):
+                # If this specific JSON fails to parse, continue to next candidate
+                continue
+    except Exception:
+        # Catch any unexpected errors to ensure we never crash
+        pass
 
     return ""
 

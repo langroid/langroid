@@ -1019,6 +1019,14 @@ class Task:
             self._step_idx = i  # used in step() below
             await self.step_async()
             await asyncio.sleep(0.01)  # temp yield to avoid blocking
+            # Track pending message in response sequence
+            if self.pending_message is not None:
+                if (
+                    not self.response_sequence
+                    or self.pending_message.id() != self.response_sequence[-1].id()
+                ):
+                    self.response_sequence.append(self.pending_message)
+
             done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:

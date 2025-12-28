@@ -4,10 +4,13 @@ from typing import List
 
 import pytest
 from dotenv import load_dotenv
+from sqlalchemy.exc import OperationalError
 
-from langroid.embedding_models.models import (
-    OpenAIEmbeddingsConfig,
-)
+from langroid.agent.batch import run_batch_tasks
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.task import Task
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
@@ -442,6 +445,63 @@ def test_vector_stores_context_window(vecdb):
     ]
 
     assert indices == sorted(indices)
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    [
+        "qdrant_local",
+        "qdrant_cloud",
+        pytest.param("pinecone_serverless", marks=pytest.mark.skip),
+        "chroma",
+        "lancedb",
+        "postgres",
+        "weaviate_docker",
+    ],
+    indirect=True,
+)
+def test_doc_chat_batch_with_vecdb_cloning(vecdb, test_settings):
+    """Ensure DocChatAgent batching works with cloned vector stores."""
+
+    cfg = DocChatAgentConfig(
+        name=f"DocChatBatch-{vecdb.__class__.__name__}",
+        vecdb=vecdb.config.model_copy(deep=True),
+        retrieve_only=True,
+        use_fuzzy_match=False,
+        use_bm25_search=False,
+        n_query_rephrases=0,
+        hypothetical_answer=False,
+    )
+
+    try:
+        agent = DocChatAgent(cfg)
+    except LangroidImportError as exc:
+        pytest.skip(
+            f"Optional dependency missing for {vecdb.__class__.__name__}: {exc}"
+        )
+    except OperationalError as exc:
+        pytest.skip(f"Database unavailable for {vecdb.__class__.__name__}: {exc}")
+    except Exception as exc:
+        pytest.skip(f"Skipping {vecdb.__class__.__name__} due to init failure: {exc}")
+
+    agent.llm = None  # retrieval-only, avoid external LLM calls
+    agent.vecdb.add_documents(stored_docs)
+    agent.setup_documents()
+    task = Task(agent, interactive=False, single_round=True)
+
+    queries = ["hello", "hi there", "people living in Canada"]
+
+    results = run_batch_tasks(
+        task,
+        queries,
+        sequential=False,
+        turns=1,
+    )
+
+    for query, result in zip(queries, results):
+        assert result is not None
+        assert hasattr(result, "content")
+        assert query.lower() in result.content.lower()
 
 
 @pytest.mark.parametrize(

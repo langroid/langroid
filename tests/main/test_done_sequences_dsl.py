@@ -1,5 +1,7 @@
 """Tests for done sequences DSL integration with Task."""
 
+import pytest
+
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task, TaskConfig
 from langroid.agent.tool_message import ToolMessage
@@ -17,6 +19,7 @@ class SimpleTool(ToolMessage):
         return f"Processed value: {self.value}"
 
 
+# CLAUDE - make an async version of this test, using task.run_async() etc
 def test_dsl_simple_pattern(test_settings: Settings):
     """Test that DSL pattern 'T, A' works like full DoneSequence."""
     set_global(test_settings)
@@ -41,6 +44,32 @@ def test_dsl_simple_pattern(test_settings: Settings):
     assert len(agent.message_history) == 3
 
 
+@pytest.mark.asyncio
+async def test_dsl_simple_pattern_async(test_settings: Settings):
+    """Test that DSL pattern 'T, A' works like full DoneSequence (async)."""
+    set_global(test_settings)
+
+    # Mock LLM that always generates a tool
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="TestAgent",
+            llm=MockLMConfig(
+                response_fn=lambda x: ('{"request": "simple_tool", "value": "test"}')
+            ),
+        )
+    )
+    agent.enable_message(SimpleTool)
+
+    # Use DSL string pattern
+    config = TaskConfig(done_sequences=["T, A"])
+    task = Task(agent, config=config, interactive=False)
+    result = await task.run_async("Generate a tool", turns=10)
+
+    assert result is not None
+    assert len(agent.message_history) == 3
+
+
+# CLAUDE - make an async version of this test, using task.run_async() etc
 def test_dsl_specific_tool(test_settings: Settings):
     """Test DSL pattern with specific tool name."""
     set_global(test_settings)
@@ -74,6 +103,41 @@ def test_dsl_specific_tool(test_settings: Settings):
     assert "simple_tool" in agent.message_history[-1].content
 
 
+@pytest.mark.asyncio
+async def test_dsl_specific_tool_async(test_settings: Settings):
+    """Test DSL pattern with specific tool name (async)."""
+    set_global(test_settings)
+
+    class AnotherTool(ToolMessage):
+        request: str = "another_tool"
+        purpose: str = "Another tool"
+        data: str
+
+        def handle(self) -> str:
+            return f"Processed data: {self.data}"
+
+    # Mock LLM that generates specific tool
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="TestAgent",
+            llm=MockLMConfig(
+                response_fn=lambda x: ('{"request": "simple_tool", "value": "test"}')
+            ),
+        )
+    )
+    agent.enable_message(SimpleTool)
+    agent.enable_message(AnotherTool)
+
+    # Use DSL with specific tool
+    config = TaskConfig(done_sequences=["T[simple_tool], A"])
+    task = Task(agent, config=config, interactive=False)
+    result = await task.run_async("Generate tool", turns=10)
+
+    assert result is not None
+    assert "simple_tool" in agent.message_history[-1].content
+
+
+# CLAUDE - make an async version of this test, using task.run_async() etc
 def test_dsl_content_match(test_settings: Settings):
     """Test DSL pattern with content matching."""
     set_global(test_settings)
@@ -90,6 +154,28 @@ def test_dsl_content_match(test_settings: Settings):
     config = TaskConfig(done_sequences=["C[quit|exit]"])
     task = Task(agent, config=config, interactive=False)
     result = task.run("Do something", turns=10)
+
+    assert result is not None
+    assert "quit" in result.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_dsl_content_match_async(test_settings: Settings):
+    """Test DSL pattern with content matching (async)."""
+    set_global(test_settings)
+
+    # Mock LLM that says "quit"
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="TestAgent",
+            llm=MockLMConfig(response_fn=lambda x: "I quit now"),
+        )
+    )
+
+    # Use DSL with content match
+    config = TaskConfig(done_sequences=["C[quit|exit]"])
+    task = Task(agent, config=config, interactive=False)
+    result = await task.run_async("Do something", turns=10)
 
     assert result is not None
     assert "quit" in result.content.lower()

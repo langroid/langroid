@@ -297,9 +297,18 @@ def extract_fields(doc: BaseModel, fields: List[str]) -> Dict[str, Any]:
     all_fields: Dict[str, Any] = {}
     traverse(doc, all_fields)
 
-    # Add non-dotted fields to the result,
-    # avoid overwriting if already present from dotted names
+    # Add non-dotted fields to the result.
+    # Prefer top-level attributes (e.g. doc.title) over nested ones
+    # (e.g. metadata.title) to avoid default metadata values overwriting
+    # real top-level fields.
     for field in [f for f in fields if "." not in f]:
+        if hasattr(doc, field):
+            direct_val = getattr(doc, field)
+            if direct_val is not None:
+                result[field] = direct_val
+                continue
+        if field in result:
+            continue
         for key, value in all_fields.items():
             if key.split(".")[-1] == field and field not in result:
                 result[field] = value

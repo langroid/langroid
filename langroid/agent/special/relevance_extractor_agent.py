@@ -14,7 +14,6 @@ from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
 from langroid.language_models.base import LLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.mytypes import Entity
 from langroid.parsing.utils import extract_numbered_segments, number_segments
 from langroid.utils.constants import DONE, NO_ANSWER
 
@@ -26,12 +25,19 @@ class RelevanceExtractorAgentConfig(ChatAgentConfig):
     llm: LLMConfig | None = OpenAIGPTConfig()
     segment_length: int = 1  # number of sentences per segment
     query: str = ""  # query for relevance extraction
+    handle_llm_no_tool: str = """
+    You FORGOT to use the `extract_segments` tool!
+    Remember that your response MUST be a JSON-formatted string
+    starting with `{"request": "extract_segments", ...}`
+    """
     system_message: str = """
     The user will give you a PASSAGE containing segments numbered as  
     <#1#>, <#2#>, <#3#>, etc.,
     followed by a QUERY. Extract ONLY the segment-numbers from 
     the PASSAGE that are RELEVANT to the QUERY.
     Present the extracted segment-numbers using the `extract_segments` tool/function.
+    Note that your response MUST be a JSON-formatted string 
+    starting with `{"request": "extract_segments", ...}`
     """
 
 
@@ -63,13 +69,22 @@ class RelevanceExtractorAgent(ChatAgent):
         self.numbered_passage = number_segments(message_str, self.config.segment_length)
         # compose prompt
         prompt = f"""
+        <Instructions>
+        Given the PASSAGE below with NUMBERED segments, and the QUERY,
+        extract ONLY the segment-numbers that are RELEVANT to the QUERY,
+        and present them using the `extract_segments` tool/function,
+        i.e. your response MUST be a JSON-formatted string starting with
+        `{{"request": "extract_segments", ...}}`
+        </Instructions>
+        
         PASSAGE:
         {self.numbered_passage}
         
         QUERY: {self.config.query}
         """
         # send to LLM
-        return super().llm_response(prompt)
+        response = super().llm_response(prompt)
+        return response
 
     @no_type_check
     async def llm_response_async(
@@ -99,7 +114,8 @@ class RelevanceExtractorAgent(ChatAgent):
         QUERY: {self.config.query}
         """
         # send to LLM
-        return await super().llm_response_async(prompt)
+        response = await super().llm_response_async(prompt)
+        return response
 
     def extract_segments(self, msg: SegmentExtractTool) -> str:
         """Method to handle a segmentExtractTool message from LLM"""
@@ -116,12 +132,3 @@ class RelevanceExtractorAgent(ChatAgent):
             return DONE + " " + NO_ANSWER
         # this response ends the task by saying DONE
         return DONE + " " + extracts
-
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        """Handle case where LLM forgets to use SegmentExtractTool"""
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            return DONE + " " + NO_ANSWER
-        else:
-            return None

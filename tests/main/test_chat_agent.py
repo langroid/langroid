@@ -1,8 +1,11 @@
+import pytest
+
 from langroid.agent.base import NO_ANSWER
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.base import LLMMessage, Role
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.parsing.file_attachment import FileAttachment
@@ -246,3 +249,48 @@ def test_agent_file_chat():
     # follow-up
     response = agent.llm_response("What's the title?")
     assert "Supply Chain" in response.content
+
+
+@pytest.mark.parametrize(
+    "initial_msgs,start,end,expected_contents",
+    [
+        # Default behavior: remove last 2 messages
+        (["S", "U1", "A1", "U2", "A2"], -2, -1, ["S", "U1", "A1"]),
+        # Remove middle messages with positive indices
+        (["S", "U1", "A1", "U2", "A2", "U3"], 1, 3, ["S", "A2", "U3"]),
+        # Remove last 3 messages with negative start
+        (["S", "U1", "A1", "U2", "A2"], -3, -1, ["S", "U1"]),
+        # Remove all but first message
+        (["S", "U1", "A1", "U2"], 1, -1, ["S"]),
+        # Remove first user/assistant pair
+        (["S", "U1", "A1", "U2", "A2"], 1, 2, ["S", "U2", "A2"]),
+        # Edge case: start=0 removes system message too
+        (["S", "U1", "A1"], 0, 1, ["A1"]),
+        # No removal when start > end (if end != -1)
+        (["S", "U1", "A1"], 2, 1, ["S", "U1", "A1"]),
+        # Remove single message
+        (["S", "U1", "A1", "U2"], 2, 2, ["S", "U1", "U2"]),
+        # Complex negative indices
+        (["S", "U1", "A1", "U2", "A2", "U3", "A3"], -4, -2, ["S", "U1", "A1", "A3"]),
+    ],
+)
+def test_clear_history(initial_msgs, start, end, expected_contents):
+    """Test clear_history with various parameter combinations."""
+
+    agent = ChatAgent(_TestChatAgentConfig())
+
+    # Build message history from abbreviated content strings
+    # S=System, U=User, A=Assistant
+    role_map = {"S": Role.SYSTEM, "U": Role.USER, "A": Role.ASSISTANT}
+    agent.message_history = [
+        LLMMessage(role=role_map[content[0]], content=content)
+        for content in initial_msgs
+    ]
+
+    # Clear history with specified parameters
+    agent.clear_history(start=start, end=end)
+
+    # Verify the remaining messages
+    assert len(agent.message_history) == len(expected_contents)
+    for i, expected in enumerate(expected_contents):
+        assert agent.message_history[i].content == expected

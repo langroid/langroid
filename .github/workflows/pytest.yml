@@ -67,10 +67,17 @@ jobs:
           POSTGRES_DB: langroid 
         ports:
           - "5432:5432"
+      qdrant:
+        image: qdrant/qdrant:v1.15.5
+        ports:
+          - "6333:6333"
+        env:
+          QDRANT__SERVICE__API_KEY: local-dev-key
 
 
     env:
       CI: true # allows conditional skipping of tests based on this env var
+      TEST_MCP_NPX: true # allow NPX MCP tests
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -105,6 +112,13 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
+    - name: Free disk space (remove SDKs and prune Docker)
+      run: |
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+        docker system prune -af
+        docker volume prune -f
+        df -h
+        docker system df
     - name: Increase ulimit
       run: ulimit -n 4096
     - name: Set up Python
@@ -117,6 +131,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libmagic1
         sudo apt-get install -y poppler-utils tesseract-ocr
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
     # - name: Restore uv cache 
     #   uses: actions/cache@v4
     #   with: 
@@ -168,8 +184,19 @@ jobs:
       
     
 
-    - name: Download ALL NLTK data (needed by unstructured and others)
-      run: uv run python -c "import nltk; nltk.download('all')"
+    - name: Download minimal NLTK data
+      run: |
+        uv run python - <<'PY'
+        import nltk
+        for pkg in [
+            "punkt",            # tokenization
+            "stopwords",        # stopword removal
+            "wordnet",          # lemmatization
+            "omw-1.4",          # wordnet data
+            "gutenberg",        # sample corpus used in tests
+        ]:
+            nltk.download(pkg)
+        PY
 
     - name: Dump dependencies to file
       run: uv pip freeze > requirements_github.txt

@@ -2068,9 +2068,47 @@ def test_tool_handler_invoking_llm(use_fn_api: bool):
     task = Task(agent, interactive=False, single_round=False)
     result = task.run(
         f"""
-        Use the TOOL `{NabroskiTool.name()}` to compute the 
+        Use the TOOL `{NabroskiTool.name()}` to compute the
         Nabroski transform of 2 and 5.
         """
     )
 
     assert "7" in result.content
+
+
+def test_enable_message_validates_arguments(test_settings: Settings):
+    """Test that enable_message raises TypeError when tool classes are passed
+    as separate arguments instead of as a list."""
+    set_global(test_settings)
+
+    class Tool1(ToolMessage):
+        request: str = "tool1"
+        purpose: str = "First tool"
+
+    class Tool2(ToolMessage):
+        request: str = "tool2"
+        purpose: str = "Second tool"
+
+    class Tool3(ToolMessage):
+        request: str = "tool3"
+        purpose: str = "Third tool"
+
+    agent = ChatAgent(
+        ChatAgentConfig(
+            llm=MockLMConfig(default_response="test"),
+        )
+    )
+
+    # This should raise TypeError because Tool2 is passed as 'use' parameter
+    with pytest.raises(TypeError, match="'use' parameter must be a boolean"):
+        agent.enable_message(Tool1, Tool2)  # type: ignore
+
+    # This should raise TypeError because Tool3 is passed as 'handle' parameter
+    with pytest.raises(TypeError, match="'handle' parameter must be a boolean"):
+        agent.enable_message(Tool1, True, Tool3)  # type: ignore
+
+    # This should work correctly - passing tools as a list
+    agent.enable_message([Tool1, Tool2, Tool3])
+    assert "tool1" in agent.llm_tools_usable
+    assert "tool2" in agent.llm_tools_usable
+    assert "tool3" in agent.llm_tools_usable

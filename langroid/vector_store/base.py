@@ -52,6 +52,8 @@ class VectorStore(ABC):
             self.embedding_model = EmbeddingModel.create(config.embedding)
         else:
             self.embedding_model = config.embedding_model
+        if hasattr(self.config, "embedding_model"):
+            self.config.embedding_model = None
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
 
     @staticmethod
@@ -94,6 +96,56 @@ class VectorStore(ABC):
     @property
     def embedding_dim(self) -> int:
         return len(self.embedding_fn(["test"])[0])
+
+    def clone(self) -> "VectorStore":
+        """Return a vector-store clone suitable for agent cloning.
+
+        The default implementation deep-copies the configuration, reuses any
+        existing embedding model, and instantiates a fresh store of the same
+        type. Subclasses can override when sharing the instance is required
+        (e.g., embedded/local stores that rely on file locks).
+        """
+
+        config_class = self.config.__class__
+        config_data = self.config.model_dump(mode="python")
+        config_data["embedding_model"] = None
+        config_copy = config_class.model_validate(config_data)
+        logger.debug(
+            "Cloning VectorStore %s: original collection=%s, copied collection=%s",
+            type(self).__name__,
+            getattr(self.config, "collection_name", None),
+            getattr(config_copy, "collection_name", None),
+        )
+        # Preserve the calculated collection contents without forcing replaces
+        if hasattr(config_copy, "replace_collection"):
+            config_copy.replace_collection = False  # type: ignore[attr-defined]
+        cloned_embedding: Optional[EmbeddingModel] = None
+        if (
+            hasattr(self, "embedding_model")
+            and getattr(self, "embedding_model") is not None
+        ):
+            cloned_embedding = self.embedding_model.clone()  # type: ignore[attr-defined]
+            if hasattr(config_copy, "embedding_model"):
+                config_copy.embedding_model = cloned_embedding
+
+        cloned_store = type(self)(config_copy)  # type: ignore[call-arg]
+        if hasattr(cloned_store.config, "embedding_model"):
+            cloned_store.config.embedding_model = None
+        logger.debug(
+            "Cloned VectorStore %s: cloned collection=%s",
+            type(self).__name__,
+            getattr(cloned_store.config, "collection_name", None),
+        )
+        if hasattr(cloned_store.config, "replace_collection"):
+            cloned_store.config.replace_collection = False
+        # Some stores might not honour replace_collection; ensure same collection
+        if getattr(self.config, "collection_name", None) is not None:
+            setattr(
+                cloned_store.config,
+                "collection_name",
+                getattr(self.config, "collection_name", None),
+            )
+        return cloned_store
 
     @abstractmethod
     def clear_empty_collections(self) -> int:

@@ -1,10 +1,11 @@
 """
-Interact with Claude Code's MCP server.
+Enable a Langroid agent to use all MCP Tools from 
+Claude Code's MCP server.
 
 
-Run like this (omitting the `--model` argument will use the default GPT-4.1-Mini):
+Run like this (omitting the `--model` argument will use the default gpt-5-mini):
 
-    uv run examples/mcp/claude-code-mcp.py --model gpt-4.1-mini
+    uv run examples/mcp/claude-code-mcp.py --model gpt-5-mini
 
 
 """

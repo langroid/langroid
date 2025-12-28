@@ -1,19 +1,26 @@
 from typing import Callable, Type
 
 from langroid.agent.tool_message import ToolMessage
-from langroid.agent.tools.mcp.fastmcp_client import get_tool
+from langroid.agent.tools.mcp.fastmcp_client import (
+    FastMCPServerSpec,
+    get_tool,
+)
 
 
 def mcp_tool(
-    server: str, tool_name: str
+    server: FastMCPServerSpec, tool_name: str
 ) -> Callable[[Type[ToolMessage]], Type[ToolMessage]]:
     """Decorator: declare a ToolMessage class bound to a FastMCP tool.
 
     Usage:
-        @fastmcp_tool("/path/to/server.py", "get_weather")
+        @mcp_tool("/path/to/server.py", "get_weather")
         class WeatherTool:
             def pretty(self) -> str:
                 return f"Temp is {self.temperature}"
+
+    The `server` may be a string/URL/FastMCP/ClientTransport, or a zero-arg
+    callable returning one of those, e.g. `lambda: StdioTransport(...)`. Using a
+    factory ensures a fresh transport per connection under fastmcp>=2.13.
     """
 
     def decorator(user_cls: Type[ToolMessage]) -> Type[ToolMessage]:
