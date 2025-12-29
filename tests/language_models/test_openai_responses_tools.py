@@ -147,9 +147,11 @@ class TestToolFormatConversion:
         assert input_parts[0]["role"] == "user"
         assert input_parts[0]["content"][0]["text"] == "What is 2+2?"
 
-        # Second should be assistant message
+        # Second should be assistant message (as output item)
+        assert input_parts[1]["type"] == "message"
         assert input_parts[1]["role"] == "assistant"
-        assert input_parts[1]["content"] == "2+2 equals 4."
+        assert input_parts[1]["content"][0]["type"] == "output_text"
+        assert input_parts[1]["content"][0]["text"] == "2+2 equals 4."
 
         # Third should be user message
         assert input_parts[2]["role"] == "user"

@@ -10,6 +10,7 @@ from pydantic_settings import SettingsConfigDict
 
 from langroid.cachedb.base import CacheDB
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
+from langroid.parsing.parse_json import parse_imperfect_json
 
 from .base import (
     LanguageModel,
@@ -52,15 +53,18 @@ class OpenAIResponses(LanguageModel):
     @property
     def supports_strict_tools(self) -> bool:
         """Check if this model supports strict tool schemas."""
-        # Check model capabilities - most modern OpenAI models support this
-        model = self.config.chat_model.lower()
-        return "gpt-4" in model or "gpt-3.5" in model or "o1" in model
+        from langroid.language_models.model_info import get_model_info
+
+        info = get_model_info(self.config.chat_model)
+        return info.has_structured_output
 
     @property
     def supports_json_schema(self) -> bool:
         """Check if this model supports JSON schema output format."""
-        model = self.config.chat_model.lower()
-        return "gpt-4" in model or "gpt-3.5" in model or "o1" in model
+        from langroid.language_models.model_info import get_model_info
+
+        info = get_model_info(self.config.chat_model)
+        return info.has_structured_output
 
     def __init__(self, config: Optional[LLMConfig] = None):
         """Initialize OpenAI Responses API client."""
@@ -140,7 +144,9 @@ class OpenAIResponses(LanguageModel):
                 input_messages.append({"role": "user", "content": content})
 
             elif msg.role == Role.ASSISTANT:
-                # Include assistant messages to preserve conversation context
+                # Include assistant messages as output items to preserve context
+                # Responses API only accepts user/system/developer roles for messages
+                # Assistant history must be represented as output items
                 if msg.tool_calls:
                     # Assistant message with tool calls
                     # Add the function_call items for each tool call
@@ -164,8 +170,15 @@ class OpenAIResponses(LanguageModel):
                                 }
                             )
                 elif msg.content:
-                    # Regular assistant message with text content
-                    input_messages.append({"role": "assistant", "content": msg.content})
+                    # Regular assistant message - use output item format
+                    # This represents previous assistant output in the conversation
+                    input_messages.append(
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": msg.content}],
+                        }
+                    )
 
             elif msg.role == Role.TOOL:
                 # Tool results become function_call_output items
@@ -593,11 +606,11 @@ class OpenAIResponses(LanguageModel):
                         args_str = getattr(item, "arguments", "{}")
                         try:
                             args_dict = (
-                                json.loads(args_str)
-                                if isinstance(args_str, str)
-                                else args_str
+                                parse_imperfect_json(args_str)
+                                if isinstance(args_str, str) and args_str.strip()
+                                else (args_str if isinstance(args_str, dict) else {})
                             )
-                        except json.JSONDecodeError:
+                        except (ValueError, json.JSONDecodeError):
                             args_dict = {}
 
                         tool_calls.append(
@@ -649,11 +662,16 @@ class OpenAIResponses(LanguageModel):
                                 args_str = entry.get("arguments", "{}")
                                 try:
                                     args_dict = (
-                                        json.loads(args_str)
+                                        parse_imperfect_json(args_str)
                                         if isinstance(args_str, str)
-                                        else args_str
+                                        and args_str.strip()
+                                        else (
+                                            args_str
+                                            if isinstance(args_str, dict)
+                                            else {}
+                                        )
                                     )
-                                except json.JSONDecodeError:
+                                except (ValueError, json.JSONDecodeError):
                                     args_dict = {}
 
                                 tool_calls.append(
@@ -689,11 +707,13 @@ class OpenAIResponses(LanguageModel):
                             args_str = tc.get("function", {}).get("arguments", "{}")
                             try:
                                 args_dict = (
-                                    json.loads(args_str)
-                                    if isinstance(args_str, str)
-                                    else args_str
+                                    parse_imperfect_json(args_str)
+                                    if isinstance(args_str, str) and args_str.strip()
+                                    else (
+                                        args_str if isinstance(args_str, dict) else {}
+                                    )
                                 )
-                            except json.JSONDecodeError:
+                            except (ValueError, json.JSONDecodeError):
                                 args_dict = {}
 
                             tool_calls.append(
@@ -715,7 +735,9 @@ class OpenAIResponses(LanguageModel):
         if use_responses_api:
             prompt_tokens = int(usage_dict.get("input_tokens", 0))
             completion_tokens = int(usage_dict.get("output_tokens", 0))
-            cached_tokens = int(usage_dict.get("cached_tokens", 0))
+            # Responses API: cached tokens are in input_tokens_details.cached_tokens
+            input_details = usage_dict.get("input_tokens_details", {}) or {}
+            cached_tokens = int(input_details.get("cached_tokens", 0))
         else:
             prompt_tokens = int(usage_dict.get("prompt_tokens", 0))
             completion_tokens = int(usage_dict.get("completion_tokens", 0))
@@ -898,7 +920,9 @@ class OpenAIResponses(LanguageModel):
         # Build usage with Responses API field names
         prompt_tokens = int(usage_dict.get("input_tokens", 0))
         completion_tokens = int(usage_dict.get("output_tokens", 0))
-        cached_tokens = int(usage_dict.get("cached_tokens", 0))
+        # Responses API: cached tokens are in input_tokens_details.cached_tokens
+        input_details = usage_dict.get("input_tokens_details", {}) or {}
+        cached_tokens = int(input_details.get("cached_tokens", 0))
 
         # Compute cost
         info = get_model_info(self.config.chat_model)
@@ -935,9 +959,11 @@ class OpenAIResponses(LanguageModel):
                 args_str = tc["function"]["arguments"]
                 try:
                     args_dict = (
-                        json.loads(args_str) if isinstance(args_str, str) else args_str
+                        parse_imperfect_json(args_str)
+                        if isinstance(args_str, str) and args_str.strip()
+                        else (args_str if isinstance(args_str, dict) else {})
                     )
-                except json.JSONDecodeError:
+                except (ValueError, json.JSONDecodeError):
                     args_dict = {}
 
                 oai_tool_calls.append(
@@ -1101,9 +1127,11 @@ class OpenAIResponses(LanguageModel):
                 args_str = tc["function"]["arguments"]
                 try:
                     args_dict = (
-                        json.loads(args_str) if isinstance(args_str, str) else args_str
+                        parse_imperfect_json(args_str)
+                        if isinstance(args_str, str) and args_str.strip()
+                        else (args_str if isinstance(args_str, dict) else {})
                     )
-                except json.JSONDecodeError:
+                except (ValueError, json.JSONDecodeError):
                     args_dict = {}
 
                 oai_tool_calls.append(
