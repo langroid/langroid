@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterator, List, Union
 
 import yaml
 from json_repair import repair_json
-from pyparsing import nestedExpr, originalTextFor
+from pyparsing import nested_expr, original_text_for
 
 
 def is_valid_json(json_str: str) -> bool:
@@ -37,11 +37,11 @@ def flatten(nested_list) -> Iterator[str]:  # type: ignore
 def get_json_candidates(s: str) -> List[str]:
     """Get top-level JSON candidates, i.e. strings between curly braces."""
     # Define the grammar for matching curly braces
-    curly_braces = originalTextFor(nestedExpr("{", "}"))
+    curly_braces = original_text_for(nested_expr("{", "}"))
 
     # Parse the string
     try:
-        results = curly_braces.searchString(s)
+        results = curly_braces.search_string(s)
         # Properly convert nested lists to strings
         return [r[0] for r in results]
     except Exception:
