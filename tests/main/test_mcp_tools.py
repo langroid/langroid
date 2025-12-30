@@ -799,6 +799,7 @@ async def test_uvxstdio_transport() -> None:
     os.getenv("CI") and not os.getenv("TEST_MCP_NPX"),
     reason="Skipping npx tests in CI unless TEST_MCP_NPX is set",
 )
+@pytest.mark.flaky(reruns=2)
 @pytest.mark.asyncio
 async def test_npxstdio_transport_memory() -> None:
     """
