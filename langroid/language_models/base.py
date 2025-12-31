@@ -473,6 +473,7 @@ class LanguageModel(ABC):
         from langroid.language_models.azure_openai import AzureGPT
         from langroid.language_models.mock_lm import MockLM, MockLMConfig
         from langroid.language_models.openai_gpt import OpenAIGPT
+        from langroid.language_models.openai_responses import OpenAIResponses
 
         if config is None or config.type is None:
             return None
@@ -480,12 +481,20 @@ class LanguageModel(ABC):
         if config.type == "mock":
             return MockLM(cast(MockLMConfig, config))
 
-        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+        openai: Union[Type[AzureGPT], Type[OpenAIGPT], Type[OpenAIResponses]]
 
         if config.type == "azure":
             openai = AzureGPT
+        elif config.type == "openai_responses":
+            openai = OpenAIResponses
         else:
-            openai = OpenAIGPT
+            # Check if we should use Responses API for regular OpenAI config
+            from langroid.language_models.openai_gpt import OpenAIGPTConfig
+
+            if isinstance(config, OpenAIGPTConfig) and config.use_responses_api:
+                openai = OpenAIResponses
+            else:
+                openai = OpenAIGPT
         cls = dict(
             openai=openai,
         ).get(config.type, openai)

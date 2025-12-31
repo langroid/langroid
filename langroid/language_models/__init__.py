@@ -22,6 +22,7 @@ from .model_info import (
     OpenAICompletionModel,
 )
 from .openai_gpt import OpenAIGPTConfig, OpenAIGPT, OpenAICallParams
+from .openai_responses import OpenAIResponsesConfig, OpenAIResponses
 from .mock_lm import MockLM, MockLMConfig
 from .azure_openai import AzureConfig, AzureGPT
 
@@ -49,6 +50,8 @@ __all__ = [
     "OpenAIGPTConfig",
     "OpenAIGPT",
     "OpenAICallParams",
+    "OpenAIResponsesConfig",
+    "OpenAIResponses",
     "AzureConfig",
     "AzureGPT",
     "MockLM",
