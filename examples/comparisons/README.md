@@ -60,8 +60,8 @@ task_config = lr.TaskConfig(
 | Aspect | Langroid | Google ADK |
 |--------|----------|------------|
 | **Built-in** | Yes - `handle_llm_no_tool` config | No |
-| **Options** | String nudge, callable, "done", "user" | Must write custom callback |
-| **Effort** | One line of config | 20+ lines of boilerplate |
+| **Options** | String nudge, callable, "done", "user" | Must write custom callback + retry loop |
+| **Effort** | One line of config | ~100 lines of boilerplate |
 
 **Langroid:**
 ```python
@@ -72,15 +72,28 @@ agent_config = lr.ChatAgentConfig(
 
 **Google ADK:**
 ```python
-# Must implement a custom after_model_callback:
-def check_for_tool_usage(callback_context, llm_response):
-    # Check if response has function calls...
-    # If not, somehow inject a retry (non-trivial)
-    pass
+# Must implement:
+# 1. A callback class to detect missing tool calls (~50 lines)
+class ToolNudgeCallback:
+    def __init__(self, nudge_message, max_retries):
+        self._retry_counts = {}
 
-agent = LlmAgent(
-    after_model_callback=check_for_tool_usage,
-)
+    def _has_function_call(self, llm_response):
+        # Check response structure for function_call...
+        pass
+
+    def __call__(self, callback_context, llm_response):
+        if not self._has_function_call(llm_response):
+            # Track retries, set session state...
+            pass
+        return None
+
+# 2. Application-level retry loop (~40 lines)
+async def extract_with_retry(text, max_retries=3):
+    for attempt in range(max_retries + 1):
+        # Create session, run agent, check if tool was used
+        # If not, prepend nudge message and retry
+        pass
 ```
 
 #### 3. Tool Definition

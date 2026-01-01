@@ -5,7 +5,7 @@ This example demonstrates the equivalent task in Google's Agent Development Kit,
 highlighting the differences in:
 1. Tool definition
 2. Task termination (implicit vs explicit)
-3. Handling LLM forgetting to use tools (no built-in mechanism)
+3. Handling LLM forgetting to use tools (requires custom callback + retry logic)
 
 Run:
     python examples/comparisons/structured_extraction_google_adk.py
@@ -61,8 +61,6 @@ def extract_person_info(
     Returns:
         A dictionary containing the extracted person information.
     """
-    # In Google ADK, the tool function just returns data.
-    # There's no built-in way to signal "task complete" from here.
     return {
         "name": name,
         "age": age,
@@ -72,15 +70,150 @@ def extract_person_info(
 
 
 # =============================================================================
-# 2. CREATE AGENT
+# 2. THE BOILERPLATE: Custom callback to nudge LLM on missing tool calls
 # =============================================================================
-# Note: Google ADK has NO equivalent to Langroid's `handle_llm_no_tool`.
-# If the LLM forgets to call the tool, the task simply completes with
-# the LLM's text response - there's no automatic retry or nudge.
+# This is what you need to write in Google ADK to achieve what Langroid does
+# with a single config option: handle_llm_no_tool="You forgot to use the tool!"
+#
+# In Langroid:
+#     handle_llm_no_tool = "You FORGOT to use the tool! Try again."
+#
+# In Google ADK: ~50 lines of callback + state management code below.
+
+
+class ToolNudgeCallback:
+    """
+    Callback class to detect when LLM forgets to use a tool and inject a nudge.
+
+    This implements what Langroid's `handle_llm_no_tool` does automatically.
+
+    Usage:
+        callback = ToolNudgeCallback(
+            nudge_message="You MUST use the extract_person_info tool!",
+            max_retries=3,
+        )
+        agent = LlmAgent(
+            after_model_callback=callback,
+            ...
+        )
+    """
+
+    def __init__(
+        self,
+        nudge_message: str = "You MUST use one of your tools! Do not respond with plain text.",
+        max_retries: int = 3,
+    ):
+        self.nudge_message = nudge_message
+        self.max_retries = max_retries
+        # Track retries per session (in production, use proper state management)
+        self._retry_counts: dict[str, int] = {}
+
+    def _has_function_call(self, llm_response: Any) -> bool:
+        """Check if the LLM response contains a function call."""
+        try:
+            if hasattr(llm_response, "candidates"):
+                for candidate in llm_response.candidates:
+                    if hasattr(candidate, "content") and candidate.content:
+                        for part in candidate.content.parts:
+                            if hasattr(part, "function_call") and part.function_call:
+                                return True
+            # Also check direct content access pattern
+            if hasattr(llm_response, "content") and llm_response.content:
+                for part in llm_response.content.parts:
+                    if hasattr(part, "function_call") and part.function_call:
+                        return True
+        except Exception:
+            pass
+        return False
+
+    def _get_session_id(self, callback_context: Any) -> str:
+        """Extract session ID from callback context for retry tracking."""
+        try:
+            if hasattr(callback_context, "invocation_context"):
+                ctx = callback_context.invocation_context
+                if hasattr(ctx, "session") and ctx.session:
+                    return ctx.session.id
+        except Exception:
+            pass
+        return "default"
+
+    def __call__(
+        self,
+        callback_context: Any,
+        llm_response: Any,
+    ) -> Any:
+        """
+        After-model callback that nudges the LLM if it didn't use a tool.
+
+        Returns:
+            None to proceed normally, or a modified LlmResponse to inject nudge.
+        """
+        # If tool was called, we're good - reset retry count and proceed
+        if self._has_function_call(llm_response):
+            session_id = self._get_session_id(callback_context)
+            self._retry_counts[session_id] = 0
+            return None
+
+        # No tool call detected - check retry count
+        session_id = self._get_session_id(callback_context)
+        retry_count = self._retry_counts.get(session_id, 0)
+
+        if retry_count >= self.max_retries:
+            # Max retries exceeded - let it through (will fail gracefully)
+            print(f"WARNING: LLM failed to use tool after {self.max_retries} attempts")
+            return None
+
+        # Increment retry count
+        self._retry_counts[session_id] = retry_count + 1
+        print(f"NUDGE ({retry_count + 1}/{self.max_retries}): LLM forgot to use tool, injecting reminder...")
+
+        # =====================================================================
+        # THE HACKY PART: Inject a nudge into the conversation
+        # =====================================================================
+        # Google ADK doesn't have a clean way to do this. We need to:
+        # 1. Access the invocation context
+        # 2. Add a message to the session/conversation
+        # 3. Somehow trigger another model call
+        #
+        # The cleanest approach is to modify the response to include an error
+        # that forces a retry, but this requires deep knowledge of ADK internals.
+        #
+        # For this example, we'll add the nudge to the session state and
+        # handle retry at the application level (see extract_with_retry below).
+        try:
+            if hasattr(callback_context, "invocation_context"):
+                ctx = callback_context.invocation_context
+                # Store nudge in state for application-level retry handling
+                if hasattr(ctx, "session") and ctx.session:
+                    ctx.session.state["_needs_retry"] = True
+                    ctx.session.state["_nudge_message"] = self.nudge_message
+        except Exception as e:
+            print(f"Could not set retry state: {e}")
+
+        return None
+
+
+# =============================================================================
+# 3. CREATE AGENT WITH TOOL NUDGE
+# =============================================================================
 
 
 def create_extraction_agent() -> LlmAgent:
-    """Create an agent configured for structured extraction."""
+    """
+    Create an agent configured for structured extraction with tool nudging.
+
+    Note how much more setup this requires compared to Langroid:
+
+    Langroid (3 lines in config):
+        handle_llm_no_tool="You FORGOT to use the tool!"
+
+    Google ADK (entire ToolNudgeCallback class + this function):
+        after_model_callback=ToolNudgeCallback(...)
+    """
+    nudge_callback = ToolNudgeCallback(
+        nudge_message="You MUST use the `extract_person_info` tool! Do not respond with plain text.",
+        max_retries=3,
+    )
 
     agent = LlmAgent(
         name="extractor_agent",
@@ -93,162 +226,99 @@ to output the extracted information in a structured format.
 IMPORTANT: Always use the tool - never respond with plain text.
 """,
         tools=[extract_person_info],
-        # =====================================================================
-        # GOOGLE ADK: No built-in handle_llm_no_tool equivalent!
-        # =====================================================================
-        # If you need to handle the case where the LLM forgets to use a tool,
-        # you must implement a custom callback. See below for a workaround.
-        #
-        # Available callbacks (but none handle "forgot tool" automatically):
-        #   - before_model_callback: runs before LLM call
-        #   - after_model_callback: runs after LLM response (could check here)
-        #   - on_model_error_callback: only for errors, not missing tools
+        after_model_callback=nudge_callback,
     )
 
     return agent
 
 
 # =============================================================================
-# 3. WORKAROUND: Custom callback to detect missing tool calls
+# 4. RUN EXTRACTION WITH RETRY LOGIC
 # =============================================================================
-# This is the boilerplate you'd need to write in Google ADK to achieve
-# what Langroid does with a single `handle_llm_no_tool` config option.
+# Because Google ADK callbacks can't easily trigger retries, we need
+# application-level retry logic. More boilerplate!
 
 
-def create_agent_with_tool_nudge() -> LlmAgent:
+async def extract_with_retry(
+    text: str,
+    max_retries: int = 3,
+) -> dict | None:
     """
-    Create an agent with a custom callback to nudge the LLM if it forgets tools.
+    Extract structured person information with retry on missing tool calls.
 
-    This demonstrates the manual workaround needed in Google ADK.
-    """
-
-    def check_for_tool_usage(
-        callback_context: Any,
-        llm_response: Any,
-    ) -> Any:
-        """
-        After-model callback to check if the LLM used a tool.
-
-        NOTE: This is a simplified example. In practice, you'd need to:
-        1. Check if the response contains function calls
-        2. If not, return a modified response that prompts retry
-        3. Handle the retry loop yourself
-        """
-        # Check if response has function calls
-        if hasattr(llm_response, "candidates"):
-            for candidate in llm_response.candidates:
-                if hasattr(candidate, "content") and candidate.content:
-                    for part in candidate.content.parts:
-                        if hasattr(part, "function_call") and part.function_call:
-                            # Tool was called - let it proceed
-                            return None
-
-        # No tool call detected - in a real implementation, you'd:
-        # 1. Log a warning
-        # 2. Potentially inject a retry prompt
-        # 3. Return a modified response
-        #
-        # But Google ADK doesn't make this easy - you'd need to construct
-        # a new LlmResponse with a nudge message, which is non-trivial.
-        print("WARNING: LLM did not use a tool! (No automatic retry in Google ADK)")
-        return None
-
-    agent = LlmAgent(
-        name="extractor_agent_with_nudge",
-        model="gemini-2.0-flash",
-        instruction="""
-You are an expert at extracting structured information from text.
-When given a passage about a person, you MUST use the `extract_person_info` tool
-to output the extracted information in a structured format.
-
-IMPORTANT: Always use the tool - never respond with plain text.
-""",
-        tools=[extract_person_info],
-        after_model_callback=check_for_tool_usage,
-    )
-
-    return agent
-
-
-# =============================================================================
-# 4. RUN EXTRACTION
-# =============================================================================
-# In Google ADK, you use a Runner to execute agents.
-# Task termination is IMPLICIT: the task ends when the LLM stops calling tools.
-
-
-async def extract_person_info_async(text: str) -> dict | None:
-    """
-    Extract structured person information from text using Google ADK.
+    This function handles the retry loop that Langroid does automatically
+    with handle_llm_no_tool.
 
     Args:
         text: A passage containing information about a person.
+        max_retries: Maximum number of retry attempts.
 
     Returns:
         A dictionary with extracted info, or None if extraction fails.
-
-    Note:
-        Google ADK task termination is implicit:
-        - Task continues while LLM makes tool calls
-        - Task ends when LLM responds with text (no tool calls)
-
-        This means if the LLM "forgets" to use a tool and just responds
-        with text, the task completes with that text response - NOT with
-        structured data. There's no automatic retry.
     """
     agent = create_extraction_agent()
-
-    # Google ADK requires a session service
     session_service = InMemorySessionService()
-    session = await session_service.create_session(
-        app_name="extraction_demo",
-        user_id="demo_user",
-    )
 
-    # Create runner
-    runner = Runner(
-        agent=agent,
-        app_name="extraction_demo",
-        session_service=session_service,
-    )
+    for attempt in range(max_retries + 1):
+        # Create fresh session for each attempt
+        session = await session_service.create_session(
+            app_name="extraction_demo",
+            user_id="demo_user",
+        )
 
-    # Run the agent
-    # =========================================================================
-    # KEY DIFFERENCE: No explicit termination control!
-    # =========================================================================
-    # In Langroid: done_if_tool=True explicitly terminates on tool call
-    # In Google ADK: Task runs until LLM stops calling tools (implicit)
-    #
-    # The loop in base_llm_flow.py checks is_final_response() which returns
-    # True when there are no function calls in the response.
-    result = None
-    async for event in runner.run_async(
-        session_id=session.id,
-        user_id="demo_user",
-        new_message=types.Content(
-            role="user",
-            parts=[types.Part(text=text)],
-        ),
-    ):
-        # Events stream as the agent runs
-        # We need to capture the tool response if it exists
-        if hasattr(event, "content") and event.content:
-            for part in event.content.parts:
-                if hasattr(part, "function_response") and part.function_response:
-                    # Tool was called and returned a response
-                    result = part.function_response.response
-                elif hasattr(part, "text") and part.text:
-                    # LLM responded with text - might be final answer or forgot tool
-                    if result is None:
-                        # No tool was called - LLM might have forgotten!
-                        print(f"LLM text response (no tool used): {part.text[:100]}...")
+        runner = Runner(
+            agent=agent,
+            app_name="extraction_demo",
+            session_service=session_service,
+        )
 
-    return result
+        # Build the message - include nudge on retries
+        if attempt == 0:
+            message_text = text
+        else:
+            # On retry, prepend the nudge to remind the LLM
+            message_text = f"""
+REMINDER: You MUST use the `extract_person_info` tool to extract information.
+Do NOT respond with plain text. Use the tool now.
+
+Here is the text to extract from:
+{text}
+"""
+
+        result = None
+        tool_was_used = False
+
+        async for event in runner.run_async(
+            session_id=session.id,
+            user_id="demo_user",
+            new_message=types.Content(
+                role="user",
+                parts=[types.Part(text=message_text)],
+            ),
+        ):
+            if hasattr(event, "content") and event.content:
+                for part in event.content.parts:
+                    if hasattr(part, "function_response") and part.function_response:
+                        # Tool was called successfully
+                        result = part.function_response.response
+                        tool_was_used = True
+                    elif hasattr(part, "function_call") and part.function_call:
+                        # Tool is being called
+                        tool_was_used = True
+
+        if tool_was_used and result is not None:
+            return result
+
+        if attempt < max_retries:
+            print(f"  Retry {attempt + 1}/{max_retries}: LLM didn't use tool, trying again...")
+
+    print("  FAILED: LLM never used the tool after all retries")
+    return None
 
 
 def extract_person(text: str) -> dict | None:
     """Sync wrapper for the async extraction function."""
-    return asyncio.run(extract_person_info_async(text))
+    return asyncio.run(extract_with_retry(text))
 
 
 # =============================================================================
@@ -272,15 +342,19 @@ def main():
         """,
     ]
 
-    print("=" * 60)
-    print("GOOGLE ADK: Structured Information Extraction")
-    print("=" * 60)
+    print("=" * 70)
+    print("GOOGLE ADK: Structured Information Extraction (with retry workaround)")
+    print("=" * 70)
     print()
-    print("Key Differences from Langroid:")
-    print("  - Tools are plain Python functions (vs ToolMessage classes)")
-    print("  - NO handle_llm_no_tool: must write custom callbacks")
-    print("  - Implicit termination: ends when LLM stops calling tools")
-    print("  - If LLM forgets tool, task completes with text (no retry!)")
+    print("This example shows the boilerplate needed to handle LLM forgetting tools:")
+    print()
+    print("  LANGROID (built-in, 1 line):")
+    print('    handle_llm_no_tool = "You FORGOT to use the tool!"')
+    print()
+    print("  GOOGLE ADK (manual implementation):")
+    print("    - ToolNudgeCallback class (~50 lines)")
+    print("    - Application-level retry loop (~40 lines)")
+    print("    - Session state management for retry tracking")
     print()
 
     for i, passage in enumerate(passages, 1):
@@ -293,7 +367,7 @@ def main():
         if result:
             print(f"Extracted: {result}")
         else:
-            print("Extraction failed or LLM didn't use the tool!")
+            print("Extraction failed!")
         print()
 
 
