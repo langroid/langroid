@@ -1,0 +1,8 @@
+{
+  "name": "langroid",
+  "version": "1.0.0",
+  "description": "Design patterns for the Langroid multi-agent LLM framework",
+  "author": {
+    "name": "Langroid"
+  }
+}
