@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import (
     Any,
@@ -277,7 +277,7 @@ class LLMMessage(BaseModel):
     files: List[FileAttachment] = []
     function_call: Optional[LLMFunctionCall] = None
     tool_calls: Optional[List[OpenAIToolCall]] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     # link to corresponding chat document, for provenance/rewind purposes
     chat_document_id: str = ""
 
