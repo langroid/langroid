@@ -152,7 +152,7 @@ class TestHTTPClientIntegration:
     def test_ssl_verification_enabled_fails(self):
         """Test SSL verification behavior with self-signed certificate."""
         import tempfile
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         from cryptography import x509
         from cryptography.hazmat.primitives import hashes, serialization
@@ -177,8 +177,8 @@ class TestHTTPClientIntegration:
             .issuer_name(issuer)
             .public_key(key.public_key())
             .serial_number(x509.random_serial_number())
-            .not_valid_before(datetime.utcnow())
-            .not_valid_after(datetime.utcnow() + timedelta(days=1))
+            .not_valid_before(datetime.now(timezone.utc))
+            .not_valid_after(datetime.now(timezone.utc) + timedelta(days=1))
             .sign(key, hashes.SHA256())
         )
 
