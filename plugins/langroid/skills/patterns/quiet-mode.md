@@ -1,146 +1,86 @@
-# Pattern: Quiet Mode for Clean Output
+# Quiet Mode - Suppressing Verbose Agent Output
 
-## Problem
+Suppress Langroid's verbose agent output while showing your own custom progress.
 
-Langroid agents produce verbose output (streaming, tool JSON, intermediate
-messages). You want clean CLI output with only your custom progress messages.
-
-## Solution
-
-Use the `quiet_mode()` context manager to suppress Langroid output during
-task execution, then print your own messages outside the context.
-
-## Complete Code Example
+## Key Imports
 
 ```python
-import langroid as lr
-from langroid.agent.task import Task, TaskConfig
-from langroid.agent.tool_message import ToolMessage
-from langroid.pydantic_v1 import Field
-from langroid.utils.output import quiet_mode
-from rich.console import Console
+from langroid.utils.configuration import quiet_mode, settings
+```
 
+## Context Manager (Recommended)
 
-class AnalysisTool(ToolMessage):
-    request: str = "analysis"
-    purpose: str = "Return analysis"
-    result: str = Field(..., description="Analysis result")
+```python
+from langroid.utils.configuration import quiet_mode
 
+# Wrap agent runs in quiet_mode context
+print("Starting writer...")
 
-def run_analysis(data: str) -> str | None:
-    """Run analysis with clean output."""
-    console = Console()
+with quiet_mode():
+    result = writer_task.run("Write the proposal")
 
-    agent = lr.ChatAgent(lr.ChatAgentConfig(
-        llm=lr.language_models.OpenAIGPTConfig(chat_model="gpt-4o"),
-        system_message="Analyze the data and return your analysis.",
-    ))
-    agent.enable_message(AnalysisTool)
+print(f"Done! {len(result)} chars")
+```
 
-    task = Task(
-        agent,
-        interactive=False,
-        config=TaskConfig(done_if_tool=True),
-    )[AnalysisTool]
+## Global Setting
 
-    # Show progress BEFORE quiet mode
-    console.print("[blue]Starting analysis...[/blue]")
+```python
+from langroid.utils.configuration import settings
 
-    # Suppress Langroid output during task execution
+settings.quiet = True   # Enable globally
+result = task.run(...)
+settings.quiet = False  # Disable
+```
+
+## What Gets Suppressed
+
+- Agent streaming output
+- Intermediate messages and tool outputs
+- Rich console spinners/status messages
+- Response statistics (show_stats)
+- Debug information
+
+## Pattern: Multi-Step Workflow with Progress
+
+```python
+from langroid.utils.configuration import quiet_mode
+
+def run_workflow():
+    print("Phase 1: Writing proposal...")
     with quiet_mode():
-        result = task.run(f"Analyze this: {data}")
+        proposal = writer_task.run("Write proposal")
+    print(f"  ✓ Proposal written ({len(proposal)} chars)")
 
-    # Show result AFTER quiet mode
-    if result:
-        console.print("[green]Analysis complete![/green]")
-        return result.result
-    else:
-        console.print("[red]Analysis failed[/red]")
-        return None
+    print("Phase 2: Reviewing...")
+    with quiet_mode():
+        edits = reviewer_task.run(f"Review:\n{proposal}")
+    print(f"  ✓ Found {len(edits)} issues")
 
-
-def run_multi_step_workflow(items: list[str]) -> list[str]:
-    """Multi-step workflow with progress updates."""
-    console = Console()
-    results = []
-
-    agent = lr.ChatAgent(lr.ChatAgentConfig(
-        llm=lr.language_models.OpenAIGPTConfig(chat_model="gpt-4o"),
-        system_message="Process the item.",
-    ))
-    agent.enable_message(AnalysisTool)
-
-    for i, item in enumerate(items, 1):
-        # Progress OUTSIDE quiet mode
-        console.print(f"[blue]Processing item {i}/{len(items)}...[/blue]")
-
-        task = Task(
-            agent,
-            interactive=False,
-            config=TaskConfig(done_if_tool=True),
-        )[AnalysisTool]
-
-        # Suppress during execution
+    for i, edit in enumerate(edits, 1):
+        print(f"  Applying edit {i}/{len(edits)}...")
         with quiet_mode():
-            result = task.run(item)
+            result = editor_task.run(edit)
+        print(f"    ✓ Applied")
 
-        if result:
-            results.append(result.result)
-            console.print(f"[green]  Done[/green]")
-        else:
-            console.print(f"[red]  Failed[/red]")
-
-        # Reset agent state for next item
-        agent.init_state()
-
-    return results
+    print("Done!")
 ```
 
-## What quiet_mode() Suppresses
+## Thread Safety
 
-- LLM streaming output
-- Tool JSON/function call details
-- Intermediate agent messages
-- Debug/info logging from Langroid
-
-## What It Does NOT Suppress
-
-- Your `print()` or `console.print()` statements
-- Errors and exceptions
-- Output from code outside the context manager
-
-## Alternative: Per-Agent Streaming Control
+- Uses thread-local storage
+- Supports nesting (once quiet, stays quiet in nested contexts)
+- Exception-safe (reverts even on error)
 
 ```python
-# Disable streaming at LLM config level
-config = lr.ChatAgentConfig(
-    llm=lr.language_models.OpenAIGPTConfig(
-        chat_model="gpt-4o",
-        stream=False,  # Disable streaming
-    ),
-)
+with quiet_mode():
+    with quiet_mode(quiet=False):
+        # Still quiet - once enabled, stays enabled in nesting
+        assert settings.quiet
 ```
 
-## Async Usage
+## Key Files in Langroid Repo
 
-```python
-async def run_async_with_quiet():
-    with quiet_mode():
-        result = await task.run_async(prompt)
-    return result
-```
-
-## Key Points
-
-- Import: `from langroid.utils.output import quiet_mode`
-- Use `with quiet_mode():` around `task.run()` calls
-- Print progress messages OUTSIDE the context manager
-- Works with both `run()` and `run_async()`
-- Thread-safe for concurrent task execution
-
-## When to Use
-
-- CLI applications needing clean output
-- Multi-step workflows with progress reporting
-- Batch processing with status updates
-- Production deployments where verbose output is unwanted
+- `langroid/utils/configuration.py` - Main implementation (lines 111-128)
+- `langroid/utils/output/status.py` - Status output helper
+- `langroid/agent/batch.py` - Real-world usage example
+- `tests/main/test_quiet_mode.py` - Test examples

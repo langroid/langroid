@@ -525,6 +525,42 @@ with a postgres db, you will need to:
 
 :memo: If you get strange errors involving `mysqlclient`, try doing `pip uninstall mysqlclient` followed by `pip install mysqlclient`.
 
+### Claude Code Plugin (Optional)
+
+This plugin provides the `langroid:patterns` skill that your Claude Code agent can
+leverage to produce Langroid agent code using proper design patterns.
+
+**Step 1: Add the Langroid marketplace**
+
+From terminal:
+```bash
+claude plugin marketplace add langroid/langroid
+```
+
+Or within Claude Code:
+```
+/plugin marketplace add langroid/langroid
+```
+
+**Step 2: Install the Langroid plugin**
+
+From terminal:
+```bash
+claude plugin install langroid@langroid
+```
+
+Or within Claude Code:
+```
+/plugin install langroid@langroid
+```
+
+Once installed, simply ask your Claude Code agent to implement Langroid patterns in
+natural language, e.g.,
+
+> set up a Langroid agent so it uses the EditTool, and wrap it in a task that ends as soon as the tool is generated
+
+and it will automatically use the `langroid:patterns` skill to follow the right design pattern.
+
 ### Set up environment variables (API keys, etc)
 
 To get started, all you need is an OpenAI API Key.

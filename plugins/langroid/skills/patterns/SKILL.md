@@ -1,100 +1,118 @@
 ---
 name: patterns
 description: Design patterns for the Langroid multi-agent LLM framework. Covers
-  agent configuration, tools, task control, and multi-agent orchestration.
+  agent configuration, tools, task control, and integrations.
 ---
 
 # Langroid Patterns
 
 ## Instructions
 
-Below is an INDEX of Langroid design patterns. Each item describes WHAT you might
-want to implement, followed by a POINTER to a document with a complete code example.
+Below is an INDEX of design patterns organized by category. Each item describes
+WHAT you might want to implement, followed by a REFERENCE to a document with
+a complete code example.
 
-Scan this index to find patterns that match your needs, then consult the
+Scan this index to find patterns matching your needs, then consult the
 corresponding document.
 
 ---
 
-## Agent & Configuration Patterns
+## Agent & Task Basics
 
-1. **Basic Agent Configuration** - Set up a ChatAgent with LLM config,
-   system message, and basic settings. Use this as the foundation for any
-   Langroid agent.
-   see ./agent-config.md
+1. **Task Returns Tool Directly**
 
-2. **Custom Config Subclass** - Create a reusable ChatAgentConfig subclass
-   with preset fields (name, system_message, llm settings). Use this when you
-   have multiple agents sharing similar configuration.
-   see ./custom-agent-config.md
+   Create a Langroid Agent equipped with a single Tool (a ToolMessage), and wrap
+   it in a Task so that running the task returns that ToolMessage directly. Use
+   this pattern when you want a simple LLM agent that returns a structured
+   response.
 
-3. **Agent with Custom State** - Create a ChatAgent subclass with custom
-   `__init__` that stores state (connections, counters, context). Use this when
-   tool handlers need access to agent-level data or resources.
-   see ./agent-state.md
+   - Reference: `./task-return-tool.md`
 
 ---
 
-## Tool Patterns
+## Tool Handlers
 
-4. **Basic ToolMessage Definition** - Define a tool with `request`, `purpose`,
-   and Pydantic `Field()` descriptions. Use this for any structured output you
-   want the LLM to generate.
-   see ./tool-message-basic.md
+2. **Stateful Handler on Agent**
 
-5. **Tool Examples for Few-Shot** - Add an `examples()` classmethod returning
-   sample tool instances. Use this to improve LLM tool usage accuracy through
-   few-shot learning.
-   see ./tool-examples.md
+   Define a STATEFUL tool handler as a METHOD on the agent (not inside the
+   ToolMessage). Use this pattern when: (a) the tool handler needs to execute
+   external operations (API calls, database queries, file I/O), (b) you need to
+   track state across retries (e.g., failure counter), (c) the handler needs
+   access to agent-level resources (connections, configs), or (d) you want
+   Langroid to automatically loop errors back to the LLM for self-correction.
+   The method name must match the `request` field of the ToolMessage. Return a
+   string for errors (LLM sees it and can retry), or DoneTool(content=result)
+   to terminate successfully.
 
-6. **Stateless Tool Handler (in ToolMessage)** - Define `handle()` method
-   inside the ToolMessage class. Use this for simple validation or
-   transformation that doesn't need agent state.
-   see ./tool-handle-stateless.md
+   - Reference: `./agent-tool-handler-with-state.md`
 
-7. **Stateful Tool Handler (on Agent)** - Define handler method on agent class
-   with name matching tool's `request` field. Use this when the handler needs
-   agent state, external resources, or complex logic.
-   see ./agent-handler-stateful.md
+3. **Handler with Validation**
 
-8. **Enabling Tools with enable_message()** - Register tools on an agent using
-   `enable_message()` with single tool, list of tools, or use/handle flags.
-   see ./enable-message.md
+   Validate tool output against agent state before accepting it. Use this
+   pattern when: (a) the LLM's tool output must preserve certain content from
+   the input (e.g., placeholders, required fields), (b) you want automatic
+   retry if validation fails, (c) you need to compare tool output against
+   context the LLM received. Define a handler method on a custom agent class
+   that stores the input context as state, validates the tool output, and
+   returns an error string for retry or AgentDoneTool for success (note: use
+   AgentDoneTool, NOT DoneTool). Use `done_sequences=["T[ToolName], A"]` so the
+   handler runs before task termination.
 
----
-
-## Task Control Patterns
-
-9. **Task Termination with done_sequences** - Control when a task terminates
-   using `TaskConfig(done_sequences=...)` or `done_if_tool=True`. Use this for
-   fine-grained control over task completion.
-   see ./done-sequences.md
-
-10. **Typed Task Return with Subscript** - Use `Task(...)[ToolType]` to get
-    typed tool output directly. Use this when you want the task to return a
-    specific tool instance rather than ChatDocument.
-    see ./task-subscript.md
-
-11. **Sequential Multi-Agent Orchestration** - Chain multiple agents by
-    running tasks sequentially, passing output from one to the next. Use this
-    for workflows like Writer → Reviewer → Editor.
-    see ./sequential-orchestration.md
+   - Reference: `./agent-handler-validation-with-state.md`
 
 ---
 
-## Integration Patterns
+## Task Control
 
-12. **MCP Tool Integration** - Connect to MCP servers (like Claude Code) and
-    enable their tools on Langroid agents. Use `@mcp_tool` decorator or
-    `get_tools_async()` for all tools.
-    see ./mcp-tools.md
+4. **Terminate on Specific Tool**
 
-13. **Quiet Mode for Clean Output** - Suppress verbose Langroid output using
-    `quiet_mode()` context manager. Use this when you want clean CLI output
-    with only your custom progress messages.
-    see ./quiet-mode.md
+   Terminate a Task only when a SPECIFIC tool is called. Use
+   `TaskConfig(done_sequences=["T[ToolName]"])` to exit immediately when that
+   tool is emitted, or `TaskConfig(done_sequences=["T[ToolName], A"])` to exit
+   after the tool is emitted AND handled by the agent. Use this when an agent
+   has multiple tools but you only want one specific tool to trigger task
+   termination.
 
-14. **Force Tool Usage with handle_llm_no_tool** - Configure agent to return
-    an error message when LLM generates plain text instead of using a tool.
-    Use this to enforce tool-only output.
-    see ./handle-llm-no-tool.md
+   - Reference: `./done-sequences-specific-tool.md`
+
+5. **Batch Processing**
+
+   Run the SAME task on MULTIPLE inputs concurrently using `run_batch_tasks()`.
+   Use this pattern when: (a) you need to process many items with the same
+   agent/task logic, (b) you want parallelism without manual asyncio/threading,
+   (c) you need state isolation between items (each gets a cloned agent with
+   fresh message history), (d) you want to avoid connection exhaustion from
+   creating too many agents manually. Each item gets a cloned task+agent, runs
+   independently, results collected in order. Supports batch_size for
+   concurrency limiting.
+
+   - Reference: `./run-batch-tasks.md`
+
+---
+
+## Integration & Output
+
+6. **MCP Tools Integration**
+
+   Enable a Langroid agent to use MCP (Model Context Protocol) tools from an
+   external MCP server like Claude Code. Use this pattern when: (a) you want
+   your agent to use file editing tools (Read, Edit, Write) from Claude Code,
+   (b) you need to connect to any MCP server via stdio transport, (c) you want
+   to enable ALL tools from an MCP server or just SPECIFIC tools selectively,
+   (d) you want to customize/post-process MCP tool results before returning to
+   the LLM. Uses `@mcp_tool` decorator for specific tools or `get_tools_async()`
+   for all tools.
+
+   - Reference: `./mcp-tool-integration.md`
+
+7. **Quiet Mode**
+
+   Suppress verbose Langroid agent output (streaming, tool JSON, intermediate
+   messages) while showing your own custom progress messages. Use this pattern
+   when: (a) you want clean CLI output showing only milestone events, (b) you're
+   running a multi-step workflow and want to show progress without agent noise,
+   (c) you need thread-safe output control. Use `quiet_mode()` context manager
+   to wrap agent task.run() calls, then print your own messages outside the
+   context.
+
+   - Reference: `./quiet-mode.md`
