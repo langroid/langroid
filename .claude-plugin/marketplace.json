@@ -1,0 +1,14 @@
+{
+  "name": "langroid",
+  "version": "1.0.0",
+  "owner": {
+    "name": "Langroid"
+  },
+  "plugins": [
+    {
+      "name": "langroid",
+      "source": "./plugins/langroid",
+      "description": "Langroid multi-agent framework patterns and best practices"
+    }
+  ]
+}
