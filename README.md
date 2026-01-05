@@ -527,8 +527,12 @@ with a postgres db, you will need to:
 
 ### Claude Code Plugin (Optional)
 
-This plugin provides the `langroid:patterns` skill that your Claude Code agent can
-leverage to produce Langroid agent code using proper design patterns.
+This plugin provides two skills:
+
+- `langroid:patterns` - Your Claude Code agent can leverage this skill to produce
+  Langroid multi-agent code using proper design patterns.
+- `langroid:add-pattern` - The agent can use this skill to record new patterns it
+  learns, for future reference, either autonomously or when prompted by the user.
 
 **Step 1: Add the Langroid marketplace**
 
@@ -560,6 +564,11 @@ natural language, e.g.,
 > set up a Langroid agent so it uses the EditTool, and wrap it in a task that ends as soon as the tool is generated
 
 and it will automatically use the `langroid:patterns` skill to follow the right design pattern.
+
+You can also ask Claude Code to record a new pattern when you discover one, e.g.,
+
+> record this as a new Langroid pattern for setting up MCP tools
+
 
 ### Set up environment variables (API keys, etc)
 
