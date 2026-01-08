@@ -1858,17 +1858,7 @@ class ChatAgent(Agent):
                 function_call=fun_call,
                 response_format=output_format,
             )
-        if self.llm.get_stream():
-            self.callbacks.finish_llm_stream(
-                content=str(response),
-                is_tool=self.has_tool_message_attempt(
-                    ChatDocument.from_LLMResponse(response, displayed=True),
-                ),
-            )
-        self.llm.config.streamer = noop_fn
-        if response.cached:
-            self.callbacks.cancel_llm_stream()
-        self._render_llm_response(response)
+
         self.update_token_usage(
             response,  # .usage attrib is updated!
             messages,
@@ -1876,7 +1866,19 @@ class ChatAgent(Agent):
             chat=True,
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
+
         chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+
+        if self.llm.get_stream():
+            self.callbacks.finish_llm_stream(
+                content=str(response),
+                is_tool=self.has_tool_message_attempt(chat_doc),
+            )
+        self.llm.config.streamer = noop_fn
+        if response.cached:
+            self.callbacks.cancel_llm_stream()
+        self._render_llm_response(chat_doc, response)
+
         self.oai_tool_calls = response.oai_tool_calls or []
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
@@ -1915,17 +1917,7 @@ class ChatAgent(Agent):
             function_call=fun_call,
             response_format=output_format,
         )
-        if self.llm.get_stream():
-            self.callbacks.finish_llm_stream(
-                content=str(response),
-                is_tool=self.has_tool_message_attempt(
-                    ChatDocument.from_LLMResponse(response, displayed=True),
-                ),
-            )
-        self.llm.config.streamer_async = async_noop_fn
-        if response.cached:
-            self.callbacks.cancel_llm_stream()
-        self._render_llm_response(response)
+
         self.update_token_usage(
             response,  # .usage attrib is updated!
             messages,
@@ -1933,7 +1925,19 @@ class ChatAgent(Agent):
             chat=True,
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
+
         chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+
+        if self.llm.get_stream():
+            self.callbacks.finish_llm_stream(
+                content=str(response),
+                is_tool=self.has_tool_message_attempt(chat_doc),
+            )
+        self.llm.config.streamer_async = async_noop_fn
+        if response.cached:
+            self.callbacks.cancel_llm_stream()
+        self._render_llm_response(chat_doc, response)
+
         self.oai_tool_calls = response.oai_tool_calls or []
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
@@ -1945,12 +1949,13 @@ class ChatAgent(Agent):
         return chat_doc
 
     def _render_llm_response(
-        self, response: ChatDocument | LLMResponse, citation_only: bool = False
+        self,
+        chat_doc: ChatDocument,
+        response: Optional[LLMResponse] = None,
+        citation_only: bool = False,
     ) -> None:
         is_cached = (
-            response.cached
-            if isinstance(response, LLMResponse)
-            else response.metadata.cached
+            response.cached if response is not None else chat_doc.metadata.cached
         )
         if self.llm is None:
             return
@@ -1959,28 +1964,23 @@ class ChatAgent(Agent):
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
-            chat_doc = (
-                response
-                if isinstance(response, ChatDocument)
-                else ChatDocument.from_LLMResponse(response, displayed=True)
-            )
             # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
             self.callbacks.show_llm_response(
-                content=str(response),
+                content=str(response or chat_doc),
                 is_tool=self.has_tool_message_attempt(chat_doc),
                 cached=is_cached,
             )
-        if isinstance(response, LLMResponse):
+        if response is not None:
             # we are in the context immediately after an LLM responded,
             # we won't have citations yet, so we're done
             return
-        if response.metadata.has_citation:
+        if chat_doc.metadata.has_citation:
             citation = (
-                response.metadata.source_content
+                chat_doc.metadata.source_content
                 if self.config.full_citations
-                else response.metadata.source
+                else chat_doc.metadata.source
             )
             if not settings.quiet:
                 print("[grey37]SOURCES:\n" + escape(citation) + "[/grey37]")
