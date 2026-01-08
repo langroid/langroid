@@ -270,7 +270,7 @@ class OpenAIGPTConfig(LLMConfig):
     )
     # these can be any model name that is served at an OpenAI-compatible API end point
     chat_model: str = default_openai_chat_model
-    chat_model_orig: str = default_openai_chat_model
+    chat_model_orig: Optional[str] = None
     completion_model: str = default_openai_completion_model
     run_on_first_use: Callable[[], None] = noop
     parallel_tool_calls: Optional[bool] = None
@@ -427,7 +427,7 @@ class OpenAIGPT(LanguageModel):
         # save original model name such as `provider/model` before
         # we strip out the `provider` - we retain the original in
         # case some params are specific to a provider.
-        self.chat_model_orig = self.config.chat_model
+        self.chat_model_orig = self.config.chat_model_orig or self.config.chat_model
 
         # Run the first time the model is used
         self.run_on_first_use = cache(self.config.run_on_first_use)
