@@ -970,7 +970,7 @@ class OpenAIGPT(LanguageModel):
             if not silent:
                 sys.stdout.write(Colors().GREEN_DIM + event_reasoning)
                 sys.stdout.flush()
-            self.config.streamer(event_reasoning, StreamEventType.TEXT)
+            self.config.streamer(event_reasoning, StreamEventType.REASONING)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
@@ -1101,7 +1101,7 @@ class OpenAIGPT(LanguageModel):
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_reasoning)
                 sys.stdout.flush()
-            await self.config.streamer_async(event_reasoning, StreamEventType.TEXT)
+            await self.config.streamer_async(event_reasoning, StreamEventType.REASONING)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
