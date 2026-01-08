@@ -39,7 +39,7 @@ class RedisCache(CacheDB):
             self.pool = fakeredis.FakeStrictRedis()  # type: ignore
         else:
             redis_password = os.getenv("REDIS_PASSWORD")
-            redis_host = os.getenv("REDIS_HOST")
+            redis_host = os.getenv("REDIS_HOST") or None
             redis_port = os.getenv("REDIS_PORT")
             if None in [redis_password, redis_host, redis_port]:
                 if not RedisCache._warned_password:
