@@ -14,7 +14,13 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from langroid.agent.base import Agent, AgentConfig, async_noop_fn, noop_fn
+from langroid.agent.base import (
+    Agent,
+    AgentConfig,
+    SearchForTools,
+    async_noop_fn,
+    noop_fn,
+)
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import (
     ToolMessage,
@@ -105,6 +111,7 @@ class ChatAgentConfig(AgentConfig):
     output_format_include_defaults: bool = True
     use_tools_on_output_format: bool = True
     full_citations: bool = True  # show source + content for each citation?
+    search_for_tools_everywhere: bool = True
 
     def _set_fn_or_tools(self) -> None:
         """
@@ -208,6 +215,16 @@ class ChatAgent(Agent):
         self.any_strict = False
         # Tracks the set of tools on which we force-disable strict decoding
         self.disable_strict_tools_set: set[str] = set()
+
+        # search for tools according to the agent configuration
+        if not config.search_for_tools_everywhere:
+            if config.use_functions_api:
+                if config.use_tools_api:
+                    self.search_for_tools = {SearchForTools.TOOLS.value}
+                else:
+                    self.search_for_tools = {SearchForTools.FUNCTIONS.value}
+            else:
+                self.search_for_tools = {SearchForTools.CONTENT.value}
 
         if self.config.enable_orchestration_tool_handling:
             # Only enable HANDLING by `agent_response`, NOT LLM generation of these.

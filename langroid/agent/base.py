@@ -7,6 +7,7 @@ import re
 from abc import ABC
 from collections import OrderedDict
 from contextlib import ExitStack
+from enum import Enum
 from types import SimpleNamespace
 from typing import (
     Any,
@@ -72,6 +73,12 @@ console = Console(quiet=settings.quiet)
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+
+class SearchForTools(Enum):
+    CONTENT = 1  # from message content
+    FUNCTIONS = 2  # from OpenAI function calls
+    TOOLS = 3  # from OpenAI tool calls
 
 
 class AgentConfig(BaseSettings):
@@ -153,6 +160,11 @@ class Agent(ABC):
         self.llm = LanguageModel.create(config.llm)
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
         self.tool_error = False
+        self.search_for_tools = {
+            SearchForTools.CONTENT.value,
+            SearchForTools.TOOLS.value,
+            SearchForTools.FUNCTIONS.value,
+        }
         if config.parsing is not None and self.config.llm is not None:
             # token_encoding_model is used to obtain the tokenizer,
             # so in case it's an OpenAI model, we ensure that the tokenizer
@@ -1300,9 +1312,6 @@ class Agent(ABC):
         Get ToolMessages recognized in msg, handle-able by this agent.
         NOTE: as a side-effect, this will update msg.tool_messages
         when msg is a ChatDocument and msg contains tool messages.
-        The intent here is that update=True should be set ONLY within agent_response()
-        or agent_response_async() methods. In other words, we want to persist the
-        msg.tool_messages only AFTER the agent has had a chance to handle the tools.
 
         Args:
             msg (str|ChatDocument): the message to extract tools from.
@@ -1330,10 +1339,6 @@ class Agent(ABC):
                     if self._tool_recipient_match(t) and t.default_value("request")
                 ]
 
-        if all_tools and len(msg.all_tool_messages) > 0:
-            # We've already identified all_tool_messages in the msg;
-            # return the corresponding ToolMessage objects
-            return msg.all_tool_messages
         if len(msg.tool_messages) > 0:
             # We've already found tool_messages,
             # (either via OpenAI Fn-call or Langroid-native ToolMessage);
@@ -1343,9 +1348,21 @@ class Agent(ABC):
             if all_tools:
                 return msg.tool_messages
             return [t for t in msg.tool_messages if self._tool_recipient_match(t)]
+
+        if msg.all_tool_messages is not None:
+            # We've already identified all_tool_messages in the msg;
+            # so use them to return the corresponding ToolMessage objects
+            if all_tools:
+                return msg.all_tool_messages
+            msg.tool_messages = [
+                t for t in msg.all_tool_messages if self._tool_recipient_match(t)
+            ]
+            return msg.tool_messages
+
         assert isinstance(msg, ChatDocument)
         if (
-            msg.content != ""
+            SearchForTools.CONTENT.value in self.search_for_tools
+            and msg.content != ""
             and msg.oai_tool_calls is None
             and msg.function_call is None
         ):
@@ -1364,12 +1381,16 @@ class Agent(ABC):
                 return my_tools
 
         # otherwise, we look for `tool_calls` (possibly multiple)
-        tools = self.get_oai_tool_calls_classes(msg)
-        msg.all_tool_messages = tools
-        my_tools = [t for t in tools if self._tool_recipient_match(t)]
-        msg.tool_messages = my_tools
+        if SearchForTools.TOOLS.value in self.search_for_tools:
+            tools = self.get_oai_tool_calls_classes(msg)
+            msg.all_tool_messages = tools
+            my_tools = [t for t in tools if self._tool_recipient_match(t)]
+            msg.tool_messages = my_tools
+        else:
+            tools = []
+            my_tools = []
 
-        if len(tools) == 0:
+        if len(tools) == 0 and SearchForTools.FUNCTIONS.value in self.search_for_tools:
             # otherwise, we look for a `function_call`
             fun_call_cls = self.get_function_call_class(msg)
             tools = [fun_call_cls] if fun_call_cls is not None else []
