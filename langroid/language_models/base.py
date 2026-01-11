@@ -368,6 +368,14 @@ class LLMResponse(BaseModel):
         else:
             return self.message
 
+    def tools_content(self) -> str:
+        if self.function_call is not None:
+            return str(self.function_call)
+        elif self.oai_tool_calls:
+            return "\n".join(str(tc) for tc in self.oai_tool_calls)
+        else:
+            return ""
+
     def to_LLMMessage(self) -> LLMMessage:
         """Convert LLM response to an LLMMessage, to be included in the
         message-list sent to the API.
