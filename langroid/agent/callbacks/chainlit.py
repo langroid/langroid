@@ -356,7 +356,7 @@ class ChainlitAgentCallbacks:
             run_sync(self.stream.remove())  # type: ignore
         else:
             run_sync(self.stream.update())  # type: ignore
-        stream_id = self.stream.id if content else None
+        stream_id = self.stream.id if tools_content or content else None
         step = cl.Message(
             content=textwrap.dedent(tools_content or content) or NO_ANSWER,
             id=stream_id,
