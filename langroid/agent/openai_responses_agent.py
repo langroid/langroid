@@ -587,12 +587,6 @@ class OpenAIResponsesAgent(ChatAgent):
 
         return kwargs
 
-    def _log_reasoning_data(self, response: LLMResponse) -> None:
-        """Log the reasoning data from LLM response."""
-        # log reasoning data if any
-        if response.reasoning and self.agent_config.get('reasoning_logs'):  # type: ignore
-            self.main_agent.custom_log(response.reasoning, 'LLM (reasoning)')  # type: ignore
-
     def _create_response_finalize(
         self,
         response: Optional[LLMResponse],
@@ -632,9 +626,6 @@ class OpenAIResponsesAgent(ChatAgent):
 
         if response_id:
             self.response_ids[chat_doc.id()] = response_id
-
-        # langroid callbacks are not designed to handle reasoning streams yet
-        self._log_reasoning_data(response)
 
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
