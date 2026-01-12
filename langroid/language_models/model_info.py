@@ -43,6 +43,8 @@ class OpenAIChatModel(ModelName):
     GPT5_1 = "gpt-5.1"
     GPT5_1_CODEX = "gpt-5.1-codex"
     GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
+    GPT5_2 = "gpt-5.2"
+    GPT5_2_PRO = "gpt-5.2-pro"
     GPT_OSS_120b = "gpt-oss-120b"
     GPT_OSS_20b = "gpt-oss-20b"
 
@@ -81,6 +83,7 @@ class GeminiModel(ModelName):
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
     GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+    GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview"
     GEMINI_3_PRO_PREVIEW = "gemini-3-pro-preview"
     GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
     GEMINI_2_FLASH = "gemini-2.0-flash"
@@ -340,7 +343,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_structured_output=True,
         unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
         description="GPT-5",
     ),
     OpenAIChatModel.GPT5_MINI.value: ModelInfo(
@@ -354,7 +356,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_structured_output=True,
         unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
         description="GPT-5 Mini",
     ),
     OpenAIChatModel.GPT5_NANO.value: ModelInfo(
@@ -368,7 +369,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_structured_output=True,
         unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
         description="GPT-5 Nano",
     ),
     OpenAIChatModel.GPT5_PRO.value: ModelInfo(
@@ -380,7 +380,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         cached_cost_per_million=7.50,
         output_cost_per_million=120.00,
         has_structured_output=True,
-        has_tools=True,
         description="GPT-5 Pro",
     ),
     OpenAIChatModel.GPT5_1.value: ModelInfo(
@@ -394,7 +393,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_structured_output=True,
         unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
         description="GPT-5.1",
     ),
     OpenAIChatModel.GPT5_1_CODEX.value: ModelInfo(
@@ -408,7 +406,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_structured_output=True,
         unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
         description="GPT-5.1 Codex",
     ),
     OpenAIChatModel.GPT5_1_CODEX_MINI.value: ModelInfo(
@@ -422,8 +419,33 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         has_structured_output=True,
         unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
-        has_tools=False,
         description="GPT-5.1 Codex Mini",
+    ),
+    OpenAIChatModel.GPT5_2.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_2.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.75,
+        cached_cost_per_million=0.175,
+        output_cost_per_million=14.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="GPT-5.2",
+    ),
+    OpenAIChatModel.GPT5_2_PRO.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_2_PRO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=272_000,
+        input_cost_per_million=15.00,
+        cached_cost_per_million=7.50,
+        output_cost_per_million=120.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="GPT-5.2 Pro",
     ),
     # Anthropic Models
     AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
@@ -584,11 +606,22 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         description="Gemini 2.5 Flash Lite",
     ),
     # Gemini 3 Models
+    GeminiModel.GEMINI_3_FLASH_PREVIEW.value: ModelInfo(
+        name=GeminiModel.GEMINI_3_FLASH_PREVIEW.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_535,
+        input_cost_per_million=0.50,
+        cached_cost_per_million=0.05,
+        output_cost_per_million=3.00,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 3 Flash Preview",
+    ),
     GeminiModel.GEMINI_3_PRO_PREVIEW.value: ModelInfo(
         name=GeminiModel.GEMINI_3_PRO_PREVIEW.value,
         provider=ModelProvider.GOOGLE,
-        context_length=1_000_000,
-        max_output_tokens=64_000,
+        context_length=1_048_576,
+        max_output_tokens=65_535,
         input_cost_per_million=2.00,
         cached_cost_per_million=0.20,
         output_cost_per_million=12.00,
