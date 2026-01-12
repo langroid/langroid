@@ -5,7 +5,18 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from openai import AsyncOpenAI, AsyncStream, BadRequestError, OpenAI, Stream
-from openai.types.responses import Response, ResponseInputItemParam, ResponseStreamEvent
+from openai.types.responses import (
+    Response,
+    ResponseCompletedEvent,
+    ResponseFailedEvent,
+    ResponseFunctionCallArgumentsDeltaEvent,
+    ResponseIncompleteEvent,
+    ResponseInputItemParam,
+    ResponseOutputItemAddedEvent,
+    ResponseReasoningTextDeltaEvent,
+    ResponseStreamEvent,
+    ResponseTextDeltaEvent,
+)
 from pydantic import Field
 
 from langroid.agent.base import async_noop_fn, noop_fn
@@ -245,7 +256,7 @@ class OpenAIResponsesAgent(ChatAgent):
 
     def _parse_response(
         self,
-        openai_response: Dict[str, Any]
+        openai_response: Response
     ) -> Tuple[LLMResponse, List[Dict[str, Any]], str]:
         """
         Parse the response object from Responses API and convert to LLMResponse.
@@ -260,29 +271,29 @@ class OpenAIResponsesAgent(ChatAgent):
         """
         response: LLMResponse = LLMResponse(message='')
         reasoning_data: List[Dict[str, Any]] = []
-        for item in openai_response.get('output', []):
-            if item.get('type') == 'message':
+        for item in openai_response.output:
+            if item.type == 'message':
                 texts: List[str] = []
-                for content in item.get('content', []):
-                    if content.get('type') == 'output_text':
-                        texts.append(content.get('text', ''))
+                for content in item.content:
+                    if content.type == 'output_text':
+                        texts.append(content.text)
                 if texts:
                     response.message = '\n'.join(texts)
 
-            elif item.get('type') == 'function_call':
+            elif item.type == 'function_call':
                 if response.oai_tool_calls is None:
                     response.oai_tool_calls = []
                 try:
                     response.oai_tool_calls.append(
                         OpenAIToolCall(
-                            id=item.get('call_id', ''),
+                            id=item.call_id,
                             function=LLMFunctionCall(
-                                name=item.get('name', ''),
-                                arguments=json.loads(item.get('arguments') or "{}"),
+                                name=item.name,
+                                arguments=json.loads(item.arguments or "{}"),
                             )
                         )
                     )
-                    response.tool_id = item.get('id') or ''
+                    response.tool_id = item.id or ''
                 except (ValueError, SyntaxError):
                     logger.warning(
                         "Could not parse function arguments: "
@@ -290,44 +301,40 @@ class OpenAIResponsesAgent(ChatAgent):
                         f"for function {item.name}"
                     )
 
-            elif item.get('type') == 'reasoning':
-                if item.get('content') is not None:
+            elif item.type == 'reasoning':
+                if item.content is not None:
                     reasonings: List[str] = []
-                    for reasoning_content in item.get('content'):
-                        if reasoning_content.get('type') == 'reasoning_text':
-                            reasonings.append(reasoning_content.get('text', ''))
+                    for reasoning_content in item.content:
+                        if reasoning_content.type == 'reasoning_text':
+                            reasonings.append(reasoning_content.text)
                     if reasonings:
                         response.reasoning += '\n'.join(reasonings)
-                elif item.get('summary') is not None:
+                elif item.summary is not None:
                     summaries: List[str] = []
-                    for reasoning_summary in item.get('summary'):
-                        if reasoning_summary.get('type') == 'summary_text':
-                            summaries.append(reasoning_summary.get('text', ''))
+                    for reasoning_summary in item.summary:
+                        if reasoning_summary.type == 'summary_text':
+                            summaries.append(reasoning_summary.text)
                     if summaries:
                         response.reasoning += '\n'.join(summaries)
 
-                if item.get('encrypted_content') is not None and \
+                if item.encrypted_content is not None and \
                    not self.config.stateful:
-                    reasoning_data.append(item)
+                    reasoning_data.append(item.model_dump(exclude_none=True))
 
-        if openai_response.get('usage') is not None:
-            usage = openai_response.get('usage', {})
-            input_tokens = usage.get('input_tokens', 0)
-            input_tokens_details = usage.get('input_tokens_details', {})
-            cached_tokens = input_tokens_details.get('cached_tokens', 0)
-            output_tokens = usage.get('output_tokens', 0)
+        if openai_response.usage is not None:
             response.usage = LLMTokenUsage(
-                prompt_tokens = input_tokens,
-                cached_tokens = cached_tokens,
-                completion_tokens = output_tokens,
+                prompt_tokens = openai_response.usage.input_tokens,
+                cached_tokens = \
+                    openai_response.usage.input_tokens_details.cached_tokens,
+                completion_tokens = openai_response.usage.output_tokens,
                 cost = self.compute_token_cost(
-                    input_tokens,
-                    cached_tokens,
-                    output_tokens
+                    openai_response.usage.input_tokens,
+                    openai_response.usage.input_tokens_details.cached_tokens,
+                    openai_response.usage.output_tokens
                 )
             )
 
-        return response, reasoning_data, openai_response.get('id', '')
+        return response, reasoning_data, openai_response.id
 
     def _stream_response(
         self,
@@ -349,7 +356,7 @@ class OpenAIResponsesAgent(ChatAgent):
         try:
             for event in openai_stream:
                 is_done = self._process_stream_event(
-                    event.model_dump(exclude_none=True),
+                    event,
                     data
                 )
                 if is_done:
@@ -371,7 +378,7 @@ class OpenAIResponsesAgent(ChatAgent):
         try:
             async for event in openai_stream:
                 is_done = await self._process_stream_event_async(
-                    event.model_dump(exclude_none=True),
+                    event,
                     data
                 )
                 if is_done:
@@ -384,131 +391,116 @@ class OpenAIResponsesAgent(ChatAgent):
 
     def _process_stream_event(
         self,
-        event: Dict[str, Any],
+        event: ResponseStreamEvent,
         data: ProcessStreamData
     ) -> bool:
         """
         Process streaming event and update data dictionary.
         """
         assert self.llm is not None
-        match event.get('type'):
-            case 'response.completed' | 'response.failed' | 'response.incomplete':
-                if self.config.llm_logs:
-                    logger.info(f'EVENT: {event}')
-                data.llm_response, data.reasoning_data, data.response_id = \
-                    self._parse_response(event.get('response', {}))
-                return True
-            case 'response.output_text.delta':
-                delta = event.get('delta')
-                if delta is not None:
-                    data.output_text += delta
-                    if self.llm.config.streamer is not None:
+        if isinstance(event, (
+            ResponseCompletedEvent,
+            ResponseFailedEvent,
+            ResponseIncompleteEvent)
+        ):
+            if self.config.llm_logs:
+                logger.info(f'EVENT: {event}')
+            data.llm_response, data.reasoning_data, data.response_id = \
+                self._parse_response(event.response)
+            return True
+        elif isinstance(event, ResponseTextDeltaEvent):
+            data.output_text += event.delta
+            if self.llm.config.streamer is not None:
+                self.llm.config.streamer(
+                    event.delta,
+                    StreamEventType.TEXT
+                )  # type: ignore
+        elif isinstance(event, ResponseReasoningTextDeltaEvent):
+            data.reasoning_text += event.delta
+            if self.llm.config.streamer is not None:
+                self.llm.config.streamer(
+                    event.delta,
+                    StreamEventType.REASONING
+                )  # type: ignore
+        elif isinstance(event, ResponseOutputItemAddedEvent):
+            if event.item.type == 'function_call':
+                data.function_name = event.item.name
+                data.function_args = event.item.arguments
+                if self.llm.config.streamer is not None:
+                    self.llm.config.streamer(
+                        event.item.name,
+                        StreamEventType.TOOL_NAME
+                    )  # type: ignore
+                    if event.item.arguments:
                         self.llm.config.streamer(
-                            delta,
-                            StreamEventType.TEXT
-                        )  # type: ignore
-            case 'response.reasoning_text.delta':
-                delta = event.get('delta')
-                if delta is not None:
-                    data.reasoning_text += delta
-                    # if self.llm.config.streamer is not None:
-                    #     self.llm.config.streamer(
-                    #         delta,
-                    #         StreamEventType.REASONING
-                    #     )  # type: ignore
-            case 'response.output_item.added':
-                item: Dict[str, Any] = event.get('item', {})
-                if item.get('type') == 'function_call':
-                    name = item.get('name')
-                    if name is not None:
-                        data.function_name = name
-                        if self.llm.config.streamer is not None:
-                            self.llm.config.streamer(
-                                name,
-                                StreamEventType.TOOL_NAME
-                            )  # type: ignore
-                        arguments = item.get('arguments')
-                        if arguments is not None:
-                            data.function_args = arguments
-                            if self.llm.config.streamer is not None:
-                                self.llm.config.streamer(
-                                    arguments,
-                                    StreamEventType.TOOL_ARGS
-                                )  # type: ignore
-            case 'response.function_call_arguments.delta':
-                delta = event.get('delta')
-                if delta is not None:
-                    data.function_args += delta
-                    if self.llm.config.streamer is not None:
-                        self.llm.config.streamer(
-                            delta,
+                            event.item.arguments,
                             StreamEventType.TOOL_ARGS
                         )  # type: ignore
+        elif isinstance(event, ResponseFunctionCallArgumentsDeltaEvent):
+            data.function_args += event.delta
+            if self.llm.config.streamer is not None:
+                self.llm.config.streamer(
+                    event.delta,
+                    StreamEventType.TOOL_ARGS
+                )  # type: ignore
 
         return False
 
     async def _process_stream_event_async(
         self,
-        event: Dict[str, Any],
+        event: ResponseStreamEvent,
         data: ProcessStreamData
     ) -> bool:
         """
         Async version of _process_stream_event().
         """
         assert self.llm is not None
-        match event.get('type'):
-            case 'response.completed' | 'response.failed' | 'response.incomplete':
-                if self.config.llm_logs:
-                    logger.info(f'EVENT: {event}')
-                data.llm_response, data.reasoning_data, data.response_id = \
-                    self._parse_response(event.get('response', {}))
-                return True
-            case 'response.output_text.delta':
-                delta = event.get('delta')
-                if delta is not None:
-                    data.output_text += delta
-                    if self.llm.config.streamer_async is not None:
+        if isinstance(event, (
+            ResponseCompletedEvent,
+            ResponseFailedEvent,
+            ResponseIncompleteEvent
+            )
+        ):
+            if self.config.llm_logs:
+                logger.info(f'EVENT: {event}')
+            data.llm_response, data.reasoning_data, data.response_id = \
+                self._parse_response(event.response)
+            return True
+        elif isinstance(event, ResponseTextDeltaEvent):
+            data.output_text += event.delta
+            if self.llm.config.streamer_async is not None:
+                await self.llm.config.streamer_async(
+                    event.delta,
+                    StreamEventType.TEXT
+                )
+        elif isinstance(event, ResponseReasoningTextDeltaEvent):
+            data.reasoning_text += event.delta
+            if self.llm.config.streamer_async is not None:
+                await self.llm.config.streamer_async(
+                    event.delta,
+                    StreamEventType.REASONING
+                )
+        elif isinstance(event, ResponseOutputItemAddedEvent):
+            if event.item.type == 'function_call':
+                data.function_name = event.item.name
+                data.function_args = event.item.arguments
+                if self.llm.config.streamer_async is not None:
+                    await self.llm.config.streamer_async(
+                        event.item.name,
+                        StreamEventType.TOOL_NAME
+                    )
+                    if event.item.arguments:
                         await self.llm.config.streamer_async(
-                            delta,
-                            StreamEventType.TEXT
-                        )
-            case 'response.reasoning_text.delta':
-                delta = event.get('delta')
-                if delta is not None:
-                    data.reasoning_text += delta
-                    # if self.llm.config.streamer_async is not None:
-                    #     await self.llm.config.streamer_async(
-                    #         delta,
-                    #         StreamEventType.REASONING
-                    #     )
-            case 'response.output_item.added':
-                item: Dict[str, Any] = event.get('item', {})
-                if item.get('type') == 'function_call':
-                    name = item.get('name')
-                    if name is not None:
-                        data.function_name = name
-                        if self.llm.config.streamer_async is not None:
-                            await self.llm.config.streamer_async(
-                                name,
-                                StreamEventType.TOOL_NAME
-                            )
-                        arguments = item.get('arguments')
-                        if arguments is not None:
-                            data.function_args = arguments
-                            if self.llm.config.streamer_async is not None:
-                                await self.llm.config.streamer_async(
-                                    arguments,
-                                    StreamEventType.TOOL_ARGS
-                                )
-            case 'response.function_call_arguments.delta':
-                delta = event.get('delta')
-                if delta is not None:
-                    data.function_args += delta
-                    if self.llm.config.streamer_async is not None:
-                        await self.llm.config.streamer_async(
-                            delta,
+                            event.item.arguments,
                             StreamEventType.TOOL_ARGS
                         )
+        elif isinstance(event, ResponseFunctionCallArgumentsDeltaEvent):
+            data.function_args += event.delta
+            if self.llm.config.streamer_async is not None:
+                await self.llm.config.streamer_async(
+                    event.delta,
+                    StreamEventType.TOOL_ARGS
+                )
 
         return False
 
@@ -720,7 +712,7 @@ class OpenAIResponsesAgent(ChatAgent):
                 if self.config.llm_logs:
                     logger.info(f'RESPONSE: {openai_response}')
                 response, reasoning_data, response_id = \
-                    self._parse_response(openai_response.model_dump(exclude_none=True))
+                    self._parse_response(openai_response)
         finally:
             self.llm.config.streamer = noop_fn
 
@@ -775,7 +767,7 @@ class OpenAIResponsesAgent(ChatAgent):
                 if self.config.llm_logs:
                     logger.info(f'RESPONSE: {openai_response}')
                 response, reasoning_data, response_id = \
-                    self._parse_response(openai_response.model_dump(exclude_none=True))
+                    self._parse_response(openai_response)
         finally:
             self.llm.config.streamer_async = async_noop_fn
 
