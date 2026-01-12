@@ -54,6 +54,7 @@ class StreamEventType(Enum):
     FUNC_ARGS = 3
     TOOL_NAME = 4
     TOOL_ARGS = 5
+    REASONING = 6
 
 
 class RetryParams(BaseSettings):

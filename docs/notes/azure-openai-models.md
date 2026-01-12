@@ -41,7 +41,30 @@ agent = lr.ChatAgent(
     )
 )
 
-response = agent.llm_response("is 4 odd?")  
+response = agent.llm_response("is 4 odd?")
 print(response.content)  # "Yes, 4 is an even number."
 response = agent.llm_response("what about 2?")  # follow-up question
 ```
+
+## Using Azure OpenAI API v1 with Standard OpenAI Clients
+
+Azure's October 2025 API update allows using standard OpenAI clients instead of
+Azure-specific ones. However, Azure deployment names often differ from actual
+model identifiers, which can cause issues with model capability detection.
+
+If your deployment name differs from the actual model name, use `chat_model_orig`
+to specify the actual model for proper capability detection:
+
+```python
+import langroid.language_models as lm
+
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="my-gpt4o-deployment",     # Your Azure deployment name
+    chat_model_orig="gpt-4o",             # Actual model name for capability detection
+    api_base="https://your-resource.openai.azure.com/",
+)
+```
+
+This ensures Langroid correctly identifies model capabilities (context length,
+supported features, etc.) even when the deployment name doesn't match the
+underlying model.
