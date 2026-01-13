@@ -59,7 +59,6 @@ from langroid.language_models.client_cache import (
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
     DeepSeekModel,
-    OpenAI_API_ParamInfo,
 )
 from langroid.language_models.model_info import (
     OpenAIChatModel as OpenAIChatModel,
@@ -807,14 +806,7 @@ class OpenAIGPT(LanguageModel):
         """
         List of params that are not supported by the current model
         """
-        unsupported = set(self.info().unsupported_params)
-        for param, model_list in OpenAI_API_ParamInfo().params.items():
-            if (
-                self.config.chat_model not in model_list
-                and self.chat_model_orig not in model_list
-            ):
-                unsupported.add(param)
-        return list(unsupported)
+        return self.info().unsupported_params
 
     def rename_params(self) -> Dict[str, str]:
         """
@@ -2109,17 +2101,6 @@ class OpenAIGPT(LanguageModel):
             if old_param in args:
                 args[new_param] = args.pop(old_param)
 
-        # finally, get rid of extra_body params exclusive to certain models
-        extra_params = args.get("extra_body", {})
-        if extra_params:
-            for param, model_list in OpenAI_API_ParamInfo().extra_parameters.items():
-                if (
-                    self.config.chat_model not in model_list
-                    and self.chat_model_orig not in model_list
-                ):
-                    extra_params.pop(param, None)
-            if extra_params:
-                args["extra_body"] = extra_params
         return args
 
     def _process_chat_completion_response(

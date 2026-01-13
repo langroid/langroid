@@ -59,11 +59,17 @@ class OpenAICompletionModel(str, Enum):
 class AnthropicModel(ModelName):
     """Enum for Anthropic models"""
 
+    CLAUDE_3_OPUS = "claude-3-opus-latest"
+    CLAUDE_3_SONNET = "claude-3-sonnet-latest"
+    CLAUDE_3_HAIKU = "claude-3-haiku-latest"
     CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
     CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
-    CLAUDE_3_OPUS = "claude-3-opus-latest"
-    CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
-    CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
+    CLAUDE_4_OPUS = "claude-opus-4"
+    CLAUDE_4_SONNET = "claude-sonnet-4"
+    CLAUDE_4_HAIKU = "claude-haiku-4"
+    CLAUDE_4_5_OPUS = "claude-opus-4-5"
+    CLAUDE_4_5_SONNET = "claude-sonnet-4-5"
+    CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
 
 
 class DeepSeekModel(ModelName):
@@ -80,48 +86,15 @@ class GeminiModel(ModelName):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
     GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
     GEMINI_1_5_PRO = "gemini-1.5-pro"
-    GEMINI_2_5_PRO = "gemini-2.5-pro"
-    GEMINI_2_5_FLASH = "gemini-2.5-flash"
-    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
-    GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview"
-    GEMINI_3_PRO_PREVIEW = "gemini-3-pro-preview"
-    GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
     GEMINI_2_FLASH = "gemini-2.0-flash"
     GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
     GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
-
-
-class OpenAI_API_ParamInfo(BaseModel):
-    """
-    Parameters exclusive to some models, when using OpenAI API
-    """
-
-    # model-specific params at top level
-    params: Dict[str, List[str]] = dict(
-        reasoning_effort=[
-            OpenAIChatModel.O3_MINI.value,
-            OpenAIChatModel.O3.value,
-            OpenAIChatModel.O4_MINI.value,
-            OpenAIChatModel.GPT5.value,
-            OpenAIChatModel.GPT5_MINI.value,
-            OpenAIChatModel.GPT5_NANO.value,
-            OpenAIChatModel.GPT5_PRO.value,
-            OpenAIChatModel.GPT5_1.value,
-            OpenAIChatModel.GPT5_1_CODEX.value,
-            OpenAIChatModel.GPT5_1_CODEX_MINI.value,
-            OpenAIChatModel.GPT_OSS_120b.value,
-            OpenAIChatModel.GPT_OSS_20b.value,
-            GeminiModel.GEMINI_2_5_PRO.value,
-            GeminiModel.GEMINI_2_5_FLASH.value,
-            GeminiModel.GEMINI_2_5_FLASH_LITE.value,
-        ],
-    )
-    # model-specific params in extra_body
-    extra_parameters: Dict[str, List[str]] = dict(
-        include_reasoning=[
-            DeepSeekModel.OPENROUTER_DEEPSEEK_R1.value,
-        ]
-    )
+    GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
+    GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+    GEMINI_2_5_PRO = "gemini-2.5-pro"
+    GEMINI_3_FLASH = "gemini-3-flash-preview"
+    GEMINI_3_PRO = "gemini-3-pro-preview"
 
 
 class ModelInfo(BaseModel):
@@ -159,6 +132,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=4096,
         input_cost_per_million=2.0,
         output_cost_per_million=2.0,
+        unsupported_params=["reasoning_effort"],
         description="Davinci-002",
     ),
     OpenAICompletionModel.BABBAGE.value: ModelInfo(
@@ -168,6 +142,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=4096,
         input_cost_per_million=0.40,
         output_cost_per_million=0.40,
+        unsupported_params=["reasoning_effort"],
         description="Babbage-002",
     ),
     OpenAIChatModel.GPT3_5_TURBO.value: ModelInfo(
@@ -177,6 +152,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=4096,
         input_cost_per_million=0.50,
         output_cost_per_million=1.50,
+        unsupported_params=["reasoning_effort"],
         description="GPT-3.5 Turbo",
     ),
     OpenAIChatModel.GPT4.value: ModelInfo(
@@ -186,6 +162,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=8192,
         input_cost_per_million=30.0,
         output_cost_per_million=60.0,
+        unsupported_params=["reasoning_effort"],
         description="GPT-4 (8K context)",
     ),
     OpenAIChatModel.GPT4_TURBO.value: ModelInfo(
@@ -195,6 +172,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=4096,
         input_cost_per_million=10.0,
         output_cost_per_million=30.0,
+        unsupported_params=["reasoning_effort"],
         description="GPT-4 Turbo",
     ),
     OpenAIChatModel.GPT4_1_NANO.value: ModelInfo(
@@ -206,6 +184,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.10,
         cached_cost_per_million=0.025,
         output_cost_per_million=0.40,
+        unsupported_params=["reasoning_effort"],
         description="GPT-4.1",
     ),
     OpenAIChatModel.GPT4_1_MINI.value: ModelInfo(
@@ -217,6 +196,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.40,
         cached_cost_per_million=0.10,
         output_cost_per_million=1.60,
+        unsupported_params=["reasoning_effort"],
         description="GPT-4.1 Mini",
     ),
     OpenAIChatModel.GPT4_1.value: ModelInfo(
@@ -228,6 +208,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=2.00,
         cached_cost_per_million=0.50,
         output_cost_per_million=8.00,
+        unsupported_params=["reasoning_effort"],
         description="GPT-4.1",
     ),
     OpenAIChatModel.GPT4o.value: ModelInfo(
@@ -239,6 +220,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         cached_cost_per_million=1.25,
         output_cost_per_million=10.0,
         has_structured_output=True,
+        unsupported_params=["reasoning_effort"],
         description="GPT-4o (128K context)",
     ),
     OpenAIChatModel.GPT4o_MINI.value: ModelInfo(
@@ -250,6 +232,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         cached_cost_per_million=0.075,
         output_cost_per_million=0.60,
         has_structured_output=True,
+        unsupported_params=["reasoning_effort"],
         description="GPT-4o Mini",
     ),
     OpenAIChatModel.O1.value: ModelInfo(
@@ -264,7 +247,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         allows_system_message=False,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
         description="O1 Reasoning LM",
     ),
@@ -280,7 +262,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         allows_system_message=False,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
         description="O1 Reasoning LM",
     ),
@@ -296,7 +277,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         allows_system_message=False,
         has_structured_output=True,
         unsupported_params=["temperature", "stream"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
         description="O1 Mini Reasoning LM",
     ),
@@ -312,7 +292,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         allows_system_message=False,
         has_structured_output=True,
         unsupported_params=["temperature", "stream"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
         description="O3 Mini Reasoning LM",
     ),
@@ -328,7 +307,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         allows_system_message=False,
         has_structured_output=True,
         unsupported_params=["temperature", "stream"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
         description="O3 Mini Reasoning LM",
     ),
@@ -342,7 +320,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=10.00,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="GPT-5",
     ),
     OpenAIChatModel.GPT5_MINI.value: ModelInfo(
@@ -355,7 +332,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=2.00,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="GPT-5 Mini",
     ),
     OpenAIChatModel.GPT5_NANO.value: ModelInfo(
@@ -368,7 +344,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=0.40,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="GPT-5 Nano",
     ),
     OpenAIChatModel.GPT5_PRO.value: ModelInfo(
@@ -380,6 +355,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         cached_cost_per_million=7.50,
         output_cost_per_million=120.00,
         has_structured_output=True,
+        unsupported_params=["temperature"],
         description="GPT-5 Pro",
     ),
     OpenAIChatModel.GPT5_1.value: ModelInfo(
@@ -392,7 +368,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=10.00,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="GPT-5.1",
     ),
     OpenAIChatModel.GPT5_1_CODEX.value: ModelInfo(
@@ -405,7 +380,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=10.00,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="GPT-5.1 Codex",
     ),
     OpenAIChatModel.GPT5_1_CODEX_MINI.value: ModelInfo(
@@ -418,8 +392,29 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=2.00,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="GPT-5.1 Codex Mini",
+    ),
+    OpenAIChatModel.GPT_OSS_120b.value: ModelInfo(
+        name=OpenAIChatModel.GPT_OSS_120b.value,
+        provider=ModelProvider.OPENAI,
+        context_length=131_072,
+        max_output_tokens=65_535,
+        input_cost_per_million=0.15,
+        cached_cost_per_million=0.075,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="GPT OSS 120B",
+    ),
+    OpenAIChatModel.GPT_OSS_20b.value: ModelInfo(
+        name=OpenAIChatModel.GPT_OSS_20b.value,
+        provider=ModelProvider.OPENAI,
+        context_length=131_072,
+        max_output_tokens=65_535,
+        input_cost_per_million=0.075,
+        cached_cost_per_million=0.037,
+        output_cost_per_million=0.30,
+        has_structured_output=True,
+        description="GPT OSS 20b",
     ),
     OpenAIChatModel.GPT5_2.value: ModelInfo(
         name=OpenAIChatModel.GPT5_2.value,
@@ -431,7 +426,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=14.00,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="GPT-5.2",
     ),
     OpenAIChatModel.GPT5_2_PRO.value: ModelInfo(
@@ -444,20 +438,9 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=120.00,
         has_structured_output=True,
         unsupported_params=["temperature"],
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="GPT-5.2 Pro",
     ),
     # Anthropic Models
-    AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_5_SONNET.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=8192,
-        input_cost_per_million=3.0,
-        cached_cost_per_million=0.30,
-        output_cost_per_million=15.0,
-        description="Claude 3.5 Sonnet",
-    ),
     AnthropicModel.CLAUDE_3_OPUS.value: ModelInfo(
         name=AnthropicModel.CLAUDE_3_OPUS.value,
         provider=ModelProvider.ANTHROPIC,
@@ -466,6 +449,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=15.0,
         cached_cost_per_million=1.50,
         output_cost_per_million=75.0,
+        unsupported_params=["reasoning_effort"],
         description="Claude 3 Opus",
     ),
     AnthropicModel.CLAUDE_3_SONNET.value: ModelInfo(
@@ -476,6 +460,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=3.0,
         cached_cost_per_million=0.30,
         output_cost_per_million=15.0,
+        unsupported_params=["reasoning_effort"],
         description="Claude 3 Sonnet",
     ),
     AnthropicModel.CLAUDE_3_HAIKU.value: ModelInfo(
@@ -486,7 +471,95 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.25,
         cached_cost_per_million=0.03,
         output_cost_per_million=1.25,
+        unsupported_params=["reasoning_effort"],
         description="Claude 3 Haiku",
+    ),
+    AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_5_SONNET.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=8192,
+        input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
+        output_cost_per_million=15.0,
+        unsupported_params=["reasoning_effort"],
+        description="Claude 3.5 Sonnet",
+    ),
+    AnthropicModel.CLAUDE_3_7_SONNET.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_7_SONNET.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=8192,
+        input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
+        output_cost_per_million=15.0,
+        unsupported_params=["reasoning_effort"],
+        description="Claude 3.7 Sonnet",
+    ),
+    AnthropicModel.CLAUDE_4_OPUS.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_4_OPUS.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=32_000,
+        input_cost_per_million=15.0,
+        cached_cost_per_million=1.50,
+        output_cost_per_million=75.0,
+        unsupported_params=["reasoning_effort"],
+        description="Claude 4 Opus",
+    ),
+    AnthropicModel.CLAUDE_4_SONNET.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_4_SONNET.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
+        output_cost_per_million=15.0,
+        unsupported_params=["reasoning_effort"],
+        description="Claude 4 Sonnet",
+    ),
+    AnthropicModel.CLAUDE_4_HAIKU.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_4_HAIKU.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=1.0,
+        cached_cost_per_million=0.10,
+        output_cost_per_million=5.0,
+        unsupported_params=["reasoning_effort"],
+        description="Claude 4 Haiku",
+    ),
+    AnthropicModel.CLAUDE_4_5_OPUS.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_4_5_OPUS.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=5.0,
+        cached_cost_per_million=0.50,
+        output_cost_per_million=25.0,
+        description="Claude 4.5 Opus",
+    ),
+    AnthropicModel.CLAUDE_4_5_SONNET.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_4_5_SONNET.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
+        output_cost_per_million=15.0,
+        unsupported_params=["reasoning_effort"],
+        description="Claude 4.5 Sonnet",
+    ),
+    AnthropicModel.CLAUDE_4_5_HAIKU.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_4_5_HAIKU.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=1.0,
+        cached_cost_per_million=0.10,
+        output_cost_per_million=5.0,
+        unsupported_params=["reasoning_effort"],
+        description="Claude 4.5 Haiku",
     ),
     # DeepSeek Models
     DeepSeekModel.DEEPSEEK.value: ModelInfo(
@@ -497,6 +570,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.27,
         cached_cost_per_million=0.07,
         output_cost_per_million=1.10,
+        unsupported_params=["reasoning_effort"],
         description="DeepSeek Chat",
     ),
     DeepSeekModel.DEEPSEEK_R1.value: ModelInfo(
@@ -507,6 +581,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.55,
         cached_cost_per_million=0.14,
         output_cost_per_million=2.19,
+        unsupported_params=["reasoning_effort"],
         description="DeepSeek-R1 Reasoning LM",
     ),
     # Gemini Models
@@ -518,7 +593,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.10,
         cached_cost_per_million=0.025,
         output_cost_per_million=0.40,
-        rename_params={"max_tokens": "max_completion_tokens"},
+        unsupported_params=["reasoning_effort"],
         description="Gemini 2.0 Flash",
     ),
     GeminiModel.GEMINI_2_FLASH_LITE.value: ModelInfo(
@@ -528,7 +603,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=8192,
         input_cost_per_million=0.075,
         output_cost_per_million=0.30,
-        rename_params={"max_tokens": "max_completion_tokens"},
+        unsupported_params=["reasoning_effort"],
         description="Gemini 2.0 Flash Lite",
     ),
     GeminiModel.GEMINI_1_5_FLASH.value: ModelInfo(
@@ -536,7 +611,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         provider=ModelProvider.GOOGLE,
         context_length=1_056_768,
         max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
+        unsupported_params=["reasoning_effort"],
         description="Gemini 1.5 Flash",
     ),
     GeminiModel.GEMINI_1_5_FLASH_8B.value: ModelInfo(
@@ -544,7 +619,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         provider=ModelProvider.GOOGLE,
         context_length=1_000_000,
         max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
+        unsupported_params=["reasoning_effort"],
         description="Gemini 1.5 Flash 8B",
     ),
     GeminiModel.GEMINI_1_5_PRO.value: ModelInfo(
@@ -552,7 +627,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         provider=ModelProvider.GOOGLE,
         context_length=2_000_000,
         max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
+        unsupported_params=["reasoning_effort"],
         description="Gemini 1.5 Pro",
     ),
     GeminiModel.GEMINI_2_PRO.value: ModelInfo(
@@ -560,7 +635,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         provider=ModelProvider.GOOGLE,
         context_length=2_000_000,
         max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
+        unsupported_params=["reasoning_effort"],
         description="Gemini 2 Pro Exp 02-05",
     ),
     GeminiModel.GEMINI_2_FLASH_THINKING.value: ModelInfo(
@@ -568,7 +643,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         provider=ModelProvider.GOOGLE,
         context_length=1_000_000,
         max_output_tokens=64_000,
-        rename_params={"max_tokens": "max_completion_tokens"},
+        unsupported_params=["reasoning_effort"],
         description="Gemini 2.0 Flash Thinking",
     ),
     # Gemini 2.5 Models
@@ -580,7 +655,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=1.25,
         cached_cost_per_million=0.31,
         output_cost_per_million=10.0,
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.5 Pro",
     ),
     GeminiModel.GEMINI_2_5_FLASH.value: ModelInfo(
@@ -591,7 +665,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.30,
         cached_cost_per_million=0.075,
         output_cost_per_million=2.50,
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.5 Flash",
     ),
     GeminiModel.GEMINI_2_5_FLASH_LITE.value: ModelInfo(
@@ -602,31 +675,28 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         input_cost_per_million=0.10,
         cached_cost_per_million=0.025,
         output_cost_per_million=0.40,
-        rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.5 Flash Lite",
     ),
     # Gemini 3 Models
-    GeminiModel.GEMINI_3_FLASH_PREVIEW.value: ModelInfo(
-        name=GeminiModel.GEMINI_3_FLASH_PREVIEW.value,
+    GeminiModel.GEMINI_3_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_3_FLASH.value,
         provider=ModelProvider.GOOGLE,
         context_length=1_048_576,
         max_output_tokens=65_535,
         input_cost_per_million=0.50,
         cached_cost_per_million=0.05,
         output_cost_per_million=3.00,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 3 Flash Preview",
+        description="Gemini 3 Flash",
     ),
-    GeminiModel.GEMINI_3_PRO_PREVIEW.value: ModelInfo(
-        name=GeminiModel.GEMINI_3_PRO_PREVIEW.value,
+    GeminiModel.GEMINI_3_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_3_PRO.value,
         provider=ModelProvider.GOOGLE,
         context_length=1_048_576,
         max_output_tokens=65_535,
         input_cost_per_million=2.00,
         cached_cost_per_million=0.20,
         output_cost_per_million=12.00,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 3 Pro Preview",
+        description="Gemini 3 Pro",
     ),
 }
 
