@@ -58,7 +58,6 @@ from langroid.language_models.client_cache import (
 )
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
-    MODEL_INFO,
     DeepSeekModel,
     OpenAI_API_ParamInfo,
 )
@@ -811,9 +810,7 @@ class OpenAIGPT(LanguageModel):
         unsupported = set(self.info().unsupported_params)
         # Only apply allowlist restrictions for known models.
         # Unknown/custom models are allowed to use all params by default.
-        is_known_model = (
-            self.config.chat_model in MODEL_INFO or self.chat_model_orig in MODEL_INFO
-        )
+        is_known_model = self.info().name != "unknown"
         if is_known_model:
             for param, model_list in OpenAI_API_ParamInfo().params.items():
                 if (
@@ -2119,9 +2116,7 @@ class OpenAIGPT(LanguageModel):
         # finally, get rid of extra_body params exclusive to certain models
         # Only apply allowlist restrictions for known models.
         # Unknown/custom models are allowed to use all params by default.
-        is_known_model = (
-            self.config.chat_model in MODEL_INFO or self.chat_model_orig in MODEL_INFO
-        )
+        is_known_model = self.info().name != "unknown"
         extra_params = args.get("extra_body", {})
         if extra_params and is_known_model:
             for param, model_list in OpenAI_API_ParamInfo().extra_parameters.items():
