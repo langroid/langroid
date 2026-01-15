@@ -50,6 +50,10 @@ into simplifying the developer experience;
 it does not use `Langchain`, or any other LLM framework, 
 and works with [practically any LLM](https://langroid.github.io/langroid/tutorials/supported-models/).
 
+:fire: :sparkles: A Claude Code [plugin](#claude-code-plugin-optional) is available to
+accelerate Langroid development with built-in patterns and best practices.
+
+
 :fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/), 
  and a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/).
 
