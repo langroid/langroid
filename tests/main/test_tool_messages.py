@@ -2112,3 +2112,75 @@ def test_enable_message_validates_arguments(test_settings: Settings):
     assert "tool1" in agent.llm_tools_usable
     assert "tool2" in agent.llm_tools_usable
     assert "tool3" in agent.llm_tools_usable
+
+
+def test_multi_agent_tool_caching(test_settings: Settings):
+    """
+    Test that tool message caching is agent-specific.
+
+    When Agent A parses a ChatDocument and caches tool messages,
+    Agent B (with different tools) should NOT use A's cached results
+    and should re-parse the message with its own tool registry.
+    """
+    set_global(test_settings)
+
+    # Define two different tools
+    class ToolA(ToolMessage):
+        request: str = "tool_a"
+        purpose: str = "Tool for Agent A"
+        value: str = "a"
+
+    class ToolB(ToolMessage):
+        request: str = "tool_b"
+        purpose: str = "Tool for Agent B"
+        value: str = "b"
+
+    # Create two agents with different tool registries
+    agent_a = ChatAgent(
+        ChatAgentConfig(
+            name="AgentA",
+            llm=MockLMConfig(default_response="test"),
+        )
+    )
+    agent_a.enable_message(ToolA)
+
+    agent_b = ChatAgent(
+        ChatAgentConfig(
+            name="AgentB",
+            llm=MockLMConfig(default_response="test"),
+        )
+    )
+    agent_b.enable_message(ToolB)
+
+    # Create a ChatDocument containing ToolB (which only AgentB knows about)
+    tool_b_json = json.dumps({"request": "tool_b", "value": "test_value"})
+    chat_doc = ChatDocument(
+        content=tool_b_json,
+        metadata=ChatDocMetaData(
+            source=Entity.LLM,
+            sender=Entity.LLM,
+        ),
+    )
+
+    # Agent A parses - should find no tools it handles (ToolB is unknown to A)
+    tools_from_a = agent_a.get_tool_messages(chat_doc, all_tools=True)
+    assert len(tools_from_a) == 0
+
+    # Verify cache was set by Agent A
+    assert chat_doc.all_tool_messages is not None
+    assert chat_doc.all_tool_messages_agent_id == agent_a.id
+
+    # Agent B parses the SAME ChatDocument - should re-parse and find ToolB
+    # because the cache was set by a different agent
+    tools_from_b = agent_b.get_tool_messages(chat_doc, all_tools=True)
+    assert len(tools_from_b) == 1
+    assert tools_from_b[0].request == "tool_b"
+    assert tools_from_b[0].value == "test_value"
+
+    # Verify cache was updated by Agent B
+    assert chat_doc.all_tool_messages_agent_id == agent_b.id
+
+    # Agent B parsing again should use the cache (same agent)
+    tools_from_b_cached = agent_b.get_tool_messages(chat_doc, all_tools=True)
+    assert len(tools_from_b_cached) == 1
+    assert tools_from_b_cached[0].request == "tool_b"

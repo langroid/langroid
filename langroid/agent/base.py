@@ -1349,8 +1349,11 @@ class Agent(ABC):
                 return msg.tool_messages
             return [t for t in msg.tool_messages if self._tool_recipient_match(t)]
 
-        if msg.all_tool_messages is not None:
-            # We've already identified all_tool_messages in the msg;
+        if (
+            msg.all_tool_messages is not None
+            and msg.all_tool_messages_agent_id == self.id
+        ):
+            # We've already identified all_tool_messages in the msg by this same agent;
             # so use them to return the corresponding ToolMessage objects
             if all_tools:
                 return msg.all_tool_messages
@@ -1371,6 +1374,7 @@ class Agent(ABC):
                 msg.content, from_llm=msg.metadata.sender == Entity.LLM
             )
             msg.all_tool_messages = tools
+            msg.all_tool_messages_agent_id = self.id
             # filter for actually handle-able tools, and recipient is this agent
             my_tools = [t for t in tools if self._tool_recipient_match(t)]
             msg.tool_messages = my_tools
@@ -1384,6 +1388,7 @@ class Agent(ABC):
         if SearchForTools.TOOLS.value in self.search_for_tools:
             tools = self.get_oai_tool_calls_classes(msg)
             msg.all_tool_messages = tools
+            msg.all_tool_messages_agent_id = self.id
             my_tools = [t for t in tools if self._tool_recipient_match(t)]
             msg.tool_messages = my_tools
         else:
@@ -1395,6 +1400,7 @@ class Agent(ABC):
             fun_call_cls = self.get_function_call_class(msg)
             tools = [fun_call_cls] if fun_call_cls is not None else []
             msg.all_tool_messages = tools
+            msg.all_tool_messages_agent_id = self.id
             my_tools = [t for t in tools if self._tool_recipient_match(t)]
             msg.tool_messages = my_tools
         if all_tools:

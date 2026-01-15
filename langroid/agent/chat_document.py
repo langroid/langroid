@@ -132,6 +132,8 @@ class ChatDocument(Document):
     # even if non-used/handled
     # (the list is populated by Agent.has_tool_message_attempt())
     all_tool_messages: Optional[List[ToolMessage]] = None
+    # ID of the agent that populated all_tool_messages (for cache validity)
+    all_tool_messages_agent_id: Optional[str] = None
 
     metadata: ChatDocMetaData
     attachment: None | ChatDocAttachment = None
