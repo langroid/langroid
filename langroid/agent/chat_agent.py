@@ -1859,12 +1859,14 @@ class ChatAgent(Agent):
                 response_format=output_format,
             )
         if self.llm.get_stream():
+            # Create temp ChatDocument for tool check, then clean up to avoid
+            # polluting ObjectRegistry (see PR #939 discussion)
+            temp_doc = ChatDocument.from_LLMResponse(response, displayed=True)
             self.callbacks.finish_llm_stream(
                 content=str(response),
-                is_tool=self.has_tool_message_attempt(
-                    ChatDocument.from_LLMResponse(response, displayed=True),
-                ),
+                is_tool=self.has_tool_message_attempt(temp_doc),
             )
+            ObjectRegistry.remove(temp_doc.id())
         self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
@@ -1916,12 +1918,14 @@ class ChatAgent(Agent):
             response_format=output_format,
         )
         if self.llm.get_stream():
+            # Create temp ChatDocument for tool check, then clean up to avoid
+            # polluting ObjectRegistry (see PR #939 discussion)
+            temp_doc = ChatDocument.from_LLMResponse(response, displayed=True)
             self.callbacks.finish_llm_stream(
                 content=str(response),
-                is_tool=self.has_tool_message_attempt(
-                    ChatDocument.from_LLMResponse(response, displayed=True),
-                ),
+                is_tool=self.has_tool_message_attempt(temp_doc),
             )
+            ObjectRegistry.remove(temp_doc.id())
         self.llm.config.streamer_async = async_noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
@@ -1959,6 +1963,8 @@ class ChatAgent(Agent):
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
+            # Track whether we created a temp ChatDocument for cleanup
+            is_temp_doc = isinstance(response, LLMResponse)
             chat_doc = (
                 response
                 if isinstance(response, ChatDocument)
@@ -1972,6 +1978,9 @@ class ChatAgent(Agent):
                 is_tool=self.has_tool_message_attempt(chat_doc),
                 cached=is_cached,
             )
+            # Clean up temp ChatDocument to avoid polluting ObjectRegistry
+            if is_temp_doc:
+                ObjectRegistry.remove(chat_doc.id())
         if isinstance(response, LLMResponse):
             # we are in the context immediately after an LLM responded,
             # we won't have citations yet, so we're done
