@@ -294,3 +294,45 @@ def test_clear_history(initial_msgs, start, end, expected_contents):
     assert len(agent.message_history) == len(expected_contents)
     for i, expected in enumerate(expected_contents):
         assert agent.message_history[i].content == expected
+
+
+def test_llm_response_messages_no_registry_leak():
+    """
+    Test that llm_response_messages creates exactly one ChatDocument per call.
+
+    This is a regression test for the fix in PR #939: previously,
+    ChatDocument.from_LLMResponse was called multiple times (for callbacks
+    and for _render_llm_response), causing temporary ChatDocument objects
+    to accumulate in the ObjectRegistry.
+    """
+    from langroid.language_models.mock_lm import MockLMConfig
+    from langroid.utils.object_registry import ObjectRegistry
+
+    config = ChatAgentConfig(
+        llm=MockLMConfig(default_response="Hello"),
+    )
+    agent = ChatAgent(config)
+
+    # Count ChatDocument objects in registry before
+    initial_count = sum(
+        1 for obj in ObjectRegistry.registry.values() if isinstance(obj, ChatDocument)
+    )
+
+    # Make multiple llm_response_messages calls
+    num_calls = 5
+    messages = [LLMMessage(role=Role.USER, content="test")]
+    for _ in range(num_calls):
+        agent.llm_response_messages(messages)
+
+    # Count ChatDocument objects in registry after
+    final_count = sum(
+        1 for obj in ObjectRegistry.registry.values() if isinstance(obj, ChatDocument)
+    )
+
+    # Should have exactly num_calls new ChatDocuments (one per call)
+    new_docs = final_count - initial_count
+    assert new_docs == num_calls, (
+        f"Expected {num_calls} new ChatDocuments, but found {new_docs}. "
+        f"This suggests ChatDocument objects are being created unnecessarily "
+        f"(e.g., in callbacks or _render_llm_response)."
+    )

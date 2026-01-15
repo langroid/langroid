@@ -1966,7 +1966,7 @@ class ChatAgent(Agent):
             cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
             # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
             if not settings.quiet:
-                print(cached + "[green]" + escape(str(response)))
+                print(cached + "[green]" + escape(str(response or chat_doc)))
             self.callbacks.show_llm_response(
                 content=str(response or chat_doc),
                 is_tool=self.has_tool_message_attempt(chat_doc),
