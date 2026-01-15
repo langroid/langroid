@@ -130,7 +130,10 @@ class ChatDocument(Document):
     tool_messages: List[ToolMessage] = []
     # all known tools in the msg that are in an agent's llm_tools_known list,
     # even if non-used/handled
-    all_tool_messages: List[ToolMessage] = []
+    # (the list is populated by Agent.has_tool_message_attempt())
+    all_tool_messages: Optional[List[ToolMessage]] = None
+    # ID of the agent that populated all_tool_messages (for cache validity)
+    all_tool_messages_agent_id: Optional[str] = None
 
     metadata: ChatDocMetaData
     attachment: None | ChatDocAttachment = None
