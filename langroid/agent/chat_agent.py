@@ -1992,9 +1992,15 @@ class ChatAgent(Agent):
             # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
+            if isinstance(response, LLMResponse):
+                content = response.message
+                tools_content = response.tools_content()
+            else:
+                content = response.content
+                tools_content = ""
             self.callbacks.show_llm_response(
-                content=response.message,
-                tools_content=response.tools_content(),
+                content=content,
+                tools_content=tools_content,
                 is_tool=self.has_tool_message_attempt(chat_doc),
                 cached=is_cached,
             )
