@@ -352,7 +352,7 @@ class ChainlitAgentCallbacks:
         """Update the stream, and display entire response in the right language."""
         if self.agent.llm is None or self.stream is None:
             raise ValueError("LLM or stream not initialized")
-        if content == "":
+        if not content and not tools_content:
             run_sync(self.stream.remove())  # type: ignore
         else:
             run_sync(self.stream.update())  # type: ignore
