@@ -1880,7 +1880,8 @@ class ChatAgent(Agent):
             # polluting ObjectRegistry (see PR #939 discussion)
             temp_doc = ChatDocument.from_LLMResponse(response, displayed=True)
             self.callbacks.finish_llm_stream(
-                content=str(response),
+                content=response.message,
+                tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
             )
             ObjectRegistry.remove(temp_doc.id())
@@ -1939,7 +1940,8 @@ class ChatAgent(Agent):
             # polluting ObjectRegistry (see PR #939 discussion)
             temp_doc = ChatDocument.from_LLMResponse(response, displayed=True)
             self.callbacks.finish_llm_stream(
-                content=str(response),
+                content=response.message,
+                tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
             )
             ObjectRegistry.remove(temp_doc.id())
@@ -1990,8 +1992,15 @@ class ChatAgent(Agent):
             # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
+            if isinstance(response, LLMResponse):
+                content = response.message
+                tools_content = response.tools_content()
+            else:
+                content = response.content
+                tools_content = ""
             self.callbacks.show_llm_response(
-                content=str(response),
+                content=content,
+                tools_content=tools_content,
                 is_tool=self.has_tool_message_attempt(chat_doc),
                 cached=is_cached,
             )
@@ -2012,6 +2021,7 @@ class ChatAgent(Agent):
                 print("[grey37]SOURCES:\n" + escape(citation) + "[/grey37]")
             self.callbacks.show_llm_response(
                 content=str(citation),
+                tools_content="",
                 is_tool=False,
                 cached=False,
                 language="text",

@@ -302,7 +302,7 @@ class ChainlitAgentCallbacks:
         logger.info(
             f"""
             Starting LLM stream for {self.agent.config.name}
-            id = {self.stream.id} 
+            id = {self.stream.id}
             under parent {self._get_parent_id()}
         """
         )
@@ -328,7 +328,7 @@ class ChainlitAgentCallbacks:
         logger.info(
             f"""
             Starting LLM stream for {self.agent.config.name}
-            id = {self.stream.id} 
+            id = {self.stream.id}
             under parent {self._get_parent_id()}
             """
         )
@@ -346,17 +346,19 @@ class ChainlitAgentCallbacks:
         if self.stream is not None:
             run_sync(self.stream.remove())  # type: ignore
 
-    def finish_llm_stream(self, content: str, is_tool: bool = False) -> None:
+    def finish_llm_stream(
+        self, content: str, tools_content: str = "", is_tool: bool = False
+    ) -> None:
         """Update the stream, and display entire response in the right language."""
         if self.agent.llm is None or self.stream is None:
             raise ValueError("LLM or stream not initialized")
-        if content == "":
+        if not content and not tools_content:
             run_sync(self.stream.remove())  # type: ignore
         else:
             run_sync(self.stream.update())  # type: ignore
-        stream_id = self.stream.id if content else None
+        stream_id = self.stream.id if tools_content or content else None
         step = cl.Message(
-            content=textwrap.dedent(content) or NO_ANSWER,
+            content=textwrap.dedent(tools_content or content) or NO_ANSWER,
             id=stream_id,
             author=self._entity_name("llm", tool=is_tool),
             type="assistant_message",
@@ -366,7 +368,7 @@ class ChainlitAgentCallbacks:
         logger.info(
             f"""
             Finish STREAM LLM response for {self.agent.config.name}
-            id = {step.id} 
+            id = {step.id}
             under parent {self._get_parent_id()}
             """
         )
@@ -375,13 +377,14 @@ class ChainlitAgentCallbacks:
     def show_llm_response(
         self,
         content: str,
+        tools_content: str = "",
         is_tool: bool = False,
         cached: bool = False,
         language: str | None = None,
     ) -> None:
         """Show non-streaming LLM response."""
         step = cl.Message(
-            content=textwrap.dedent(content) or NO_ANSWER,
+            content=textwrap.dedent(tools_content or content) or NO_ANSWER,
             id=self.curr_step.id if self.curr_step is not None else None,
             author=self._entity_name("llm", tool=is_tool, cached=cached),
             type="assistant_message",
@@ -393,7 +396,7 @@ class ChainlitAgentCallbacks:
         logger.info(
             f"""
             Showing NON-STREAM LLM response for {self.agent.config.name}
-            id = {step.id} 
+            id = {step.id}
             under parent {self._get_parent_id()}
             """
         )
@@ -433,7 +436,7 @@ class ChainlitAgentCallbacks:
         logger.info(
             f"""
             Showing AGENT response for {self.agent.config.name}
-            id = {step.id} 
+            id = {step.id}
             under parent {self._get_parent_id()}
             """
         )
@@ -456,7 +459,7 @@ class ChainlitAgentCallbacks:
         logger.info(
             f"""
             Showing START response for {self.agent.config.name} ({entity})
-            id = {step.id} 
+            id = {step.id}
             under parent {self._get_parent_id()}
             """
         )

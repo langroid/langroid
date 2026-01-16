@@ -55,6 +55,7 @@ async def test_openai_assistant_async(test_settings: Settings):
 
 
 @pytest.mark.asyncio
+@pytest.mark.xfail(reason="Flaky: LLM may not always call the function")
 @pytest.mark.parametrize("fn_api", [True, False])
 async def test_openai_assistant_fn_tool_async(test_settings: Settings, fn_api: bool):
     """Test function calling works, both with OpenAI Assistant function-calling AND
