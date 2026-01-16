@@ -1860,7 +1860,8 @@ class ChatAgent(Agent):
             )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
-                content=str(response),
+                content=response.message,
+                tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(
                     ChatDocument.from_LLMResponse(response, displayed=True),
                 ),
@@ -1917,7 +1918,8 @@ class ChatAgent(Agent):
         )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
-                content=str(response),
+                content=response.message,
+                tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(
                     ChatDocument.from_LLMResponse(response, displayed=True),
                 ),
@@ -1968,7 +1970,8 @@ class ChatAgent(Agent):
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
             self.callbacks.show_llm_response(
-                content=str(response),
+                content=response.message,
+                tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(chat_doc),
                 cached=is_cached,
             )
@@ -1986,6 +1989,7 @@ class ChatAgent(Agent):
                 print("[grey37]SOURCES:\n" + escape(citation) + "[/grey37]")
             self.callbacks.show_llm_response(
                 content=str(citation),
+                tools_content="",
                 is_tool=False,
                 cached=False,
                 language="text",
