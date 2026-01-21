@@ -590,7 +590,10 @@ class OpenAIGPT(LanguageModel):
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
-                self.api_base = GEMINI_BASE_URL
+                if self.config.api_base is not None:
+                    self.api_base = self.config.api_base
+                else:
+                    self.api_base = GEMINI_BASE_URL
             elif self.is_glhf:
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
                 if self.api_key == OPENAI_API_KEY:
