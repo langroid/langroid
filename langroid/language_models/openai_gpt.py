@@ -808,16 +808,6 @@ class OpenAIGPT(LanguageModel):
         List of params that are not supported by the current model
         """
         unsupported = set(self.info().unsupported_params)
-        # Only apply allowlist restrictions for known models.
-        # Unknown/custom models are allowed to use all params by default.
-        is_known_model = self.info().name != "unknown"
-        if is_known_model:
-            for param, model_list in OpenAI_API_ParamInfo().params.items():
-                if (
-                    self.config.chat_model not in model_list
-                    and self.chat_model_orig not in model_list
-                ):
-                    unsupported.add(param)
         return list(unsupported)
 
     def rename_params(self) -> Dict[str, str]:
