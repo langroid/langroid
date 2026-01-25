@@ -294,6 +294,7 @@ class ChatDocument(Document):
     def from_LLMResponse(
         response: LLMResponse,
         displayed: bool = False,
+        content_based_routing: bool = True,
     ) -> "ChatDocument":
         """
         Convert LLMResponse to ChatDocument.
@@ -303,7 +304,7 @@ class ChatDocument(Document):
         Returns:
             ChatDocument: ChatDocument representation of this LLMResponse.
         """
-        recipient, message = response.get_recipient_and_message()
+        recipient, message = response.get_recipient_and_message(content_based_routing)
         message = message.strip()
         if message in ["''", '""']:
             message = ""
