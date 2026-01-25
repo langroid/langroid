@@ -1532,6 +1532,7 @@ class OpenAIGPT(LanguageModel):
             LLMResponse(
                 message=completion,
                 reasoning=reasoning,
+                message_with_reasoning=completion if reasoning else None,
                 cached=False,
                 # don't allow empty list [] here
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
