@@ -354,8 +354,8 @@ class LLMResponse(BaseModel):
 
     message: str
     reasoning: str = ""  # optional reasoning text from reasoning models
-    message_with_reasoning: Optional[str] = None # if we extracted reasoning
-                         # from the message text, store original message here
+    # if we extract reasoning from the message text, store original message here
+    message_with_reasoning: Optional[str] = None
     # TODO tool_id needs to generalize to multi-tool calls
     tool_id: str = ""  # used by OpenAIAssistant
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
