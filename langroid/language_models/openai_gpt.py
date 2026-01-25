@@ -1517,7 +1517,9 @@ class OpenAIGPT(LanguageModel):
             # some LLM APIs may not return a separate reasoning field,
             # and the reasoning may be included in the message content
             # within delimiters like <think> ... </think>
-            reasoning, completion = self.get_reasoning_final(completion)
+            reasoning, message = self.get_reasoning_final(completion)
+        else:
+            message = completion
 
         prompt_tokens = usage.get("prompt_tokens", 0)
         prompt_tokens_details: Any = usage.get("prompt_tokens_details", {})
@@ -1530,7 +1532,7 @@ class OpenAIGPT(LanguageModel):
 
         return (
             LLMResponse(
-                message=completion,
+                message=message,
                 reasoning=reasoning,
                 message_with_reasoning=completion if reasoning else None,
                 cached=False,
@@ -2171,13 +2173,15 @@ class OpenAIGPT(LanguageModel):
             message = response["choices"][0].get("message", {})
         if message is None:
             message = {}
-        msg = message.get("content", "")
+        content = message.get("content", "")
         reasoning = message.get("reasoning_content", "")
-        if reasoning == "" and msg is not None:
+        if reasoning == "" and content is not None:
             # some LLM APIs may not return a separate reasoning field,
             # and the reasoning may be included in the message content
             # within delimiters like <think> ... </think>
-            reasoning, msg = self.get_reasoning_final(msg)
+            reasoning, msg = self.get_reasoning_final(content)
+        else:
+            msg = content
 
         if message.get("function_call") is None:
             fun_call = None
@@ -2212,6 +2216,7 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(
             message=msg.strip() if msg is not None else "",
             reasoning=reasoning.strip() if reasoning is not None else "",
+            message_with_reasoning=content if reasoning else None,
             function_call=fun_call,
             oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
             cached=cached,

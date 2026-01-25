@@ -120,7 +120,7 @@ class ChatDocument(Document):
 
     reasoning: str = ""  # reasoning produced by a reasoning LLM
     content_any: Any = None  # to hold arbitrary data returned by responders
-    content_with_reasoning: Optional[str] = None # original content including reasoning
+    content_with_reasoning: Optional[str] = None  # original content including reasoning
     files: List[FileAttachment] = []  # list of file attachments
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
     oai_tool_id2result: Optional[OrderedDict[str, str]] = None
@@ -415,8 +415,12 @@ class ChatDocument(Document):
         sender_role = Role.USER
         if isinstance(message, str):
             message = ChatDocument.from_str(message)
-        content = message.content_with_reasoning or \
-            message.content or to_string(message.content_any) or ""
+        content = (
+            message.content_with_reasoning
+            or message.content
+            or to_string(message.content_any)
+            or ""
+        )
         fun_call = message.function_call
         oai_tool_calls = message.oai_tool_calls
         if message.metadata.sender == Entity.USER and fun_call is not None:
