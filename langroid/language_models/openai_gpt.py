@@ -1514,11 +1514,22 @@ class OpenAIGPT(LanguageModel):
             choices=[msg],
             usage=dict(total_tokens=0),
         )
+        # Track whether we extracted inline thought tags from the text.
+        # Only set message_with_reasoning when get_reasoning_final()
+        # actually finds and extracts inline tags (e.g. <think>...</think>).
+        # When reasoning is already provided via a separate API field
+        # (e.g. reasoning_content), the message text doesn't contain
+        # thought signatures, so there's nothing extra to preserve.
+        message_with_reasoning = None
         if reasoning == "":
             # some LLM APIs may not return a separate reasoning field,
             # and the reasoning may be included in the message content
             # within delimiters like <think> ... </think>
             reasoning, message = self.get_reasoning_final(completion)
+            if reasoning:
+                # Inline tags were found and extracted; preserve the
+                # original text so it can be restored in message history.
+                message_with_reasoning = completion
         else:
             message = completion
 
@@ -1535,7 +1546,7 @@ class OpenAIGPT(LanguageModel):
             LLMResponse(
                 message=message,
                 reasoning=reasoning,
-                message_with_reasoning=completion if reasoning else None,
+                message_with_reasoning=message_with_reasoning,
                 cached=False,
                 # don't allow empty list [] here
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
@@ -2176,11 +2187,22 @@ class OpenAIGPT(LanguageModel):
             message = {}
         content = message.get("content", "")
         reasoning = message.get("reasoning_content", "")
+        # Track whether we extracted inline thought tags from the text.
+        # Only set message_with_reasoning when get_reasoning_final()
+        # actually finds and extracts inline tags (e.g. <think>...</think>).
+        # When reasoning is already provided via a separate API field
+        # (e.g. reasoning_content), the message text doesn't contain
+        # thought signatures, so there's nothing extra to preserve.
+        message_with_reasoning = None
         if reasoning == "" and content is not None:
             # some LLM APIs may not return a separate reasoning field,
             # and the reasoning may be included in the message content
             # within delimiters like <think> ... </think>
             reasoning, msg = self.get_reasoning_final(content)
+            if reasoning:
+                # Inline tags were found and extracted; preserve the
+                # original text so it can be restored in message history.
+                message_with_reasoning = content
         else:
             msg = content
 
@@ -2217,7 +2239,7 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(
             message=msg.strip() if msg is not None else "",
             reasoning=reasoning.strip() if reasoning is not None else "",
-            message_with_reasoning=content if reasoning else None,
+            message_with_reasoning=message_with_reasoning,
             function_call=fun_call,
             oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
             cached=cached,

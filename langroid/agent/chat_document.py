@@ -120,7 +120,13 @@ class ChatDocument(Document):
 
     reasoning: str = ""  # reasoning produced by a reasoning LLM
     content_any: Any = None  # to hold arbitrary data returned by responders
-    content_with_reasoning: Optional[str] = None  # original content including reasoning
+    # Original LLM response text including inline thought signatures
+    # (e.g. <thinking>...</thinking>). Only populated when reasoning was
+    # extracted from inline tags in the message text. Used by to_LLMMessage()
+    # to preserve thought signatures in message history, which is critical
+    # for models like Gemini 3 Flash and Amazon Nova that rely on seeing
+    # their own thought tags in context to maintain reasoning ability.
+    content_with_reasoning: Optional[str] = None
     files: List[FileAttachment] = []  # list of file attachments
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
     oai_tool_id2result: Optional[OrderedDict[str, str]] = None
@@ -415,6 +421,13 @@ class ChatDocument(Document):
         sender_role = Role.USER
         if isinstance(message, str):
             message = ChatDocument.from_str(message)
+        # Prefer content_with_reasoning when available — this preserves
+        # inline thought signatures (e.g. <thinking>...</thinking>) in
+        # message history, which certain models (Gemini 3 Flash, Amazon
+        # Nova) need to maintain reasoning across turns.
+        # content_with_reasoning is only set when inline tags were
+        # actually extracted, so this won't interfere with models that
+        # provide reasoning via a separate API field.
         content = (
             message.content_with_reasoning
             or message.content
