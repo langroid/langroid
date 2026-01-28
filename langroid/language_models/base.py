@@ -398,6 +398,7 @@ class LLMResponse(BaseModel):
 
     def get_recipient_and_message(
         self,
+        content_based_routing: bool = True,
     ) -> Tuple[str, str]:
         """
         If `message` or `function_call` of an LLM response contains an explicit
@@ -434,6 +435,9 @@ class LLMResponse(BaseModel):
                         )  # type: ignore
                         if recipient is not None and recipient != "":
                             return recipient, ""
+
+        if not content_based_routing:
+            return "", msg
 
         # It's not a function or tool call, so continue looking to see
         # if a recipient is specified in the message.

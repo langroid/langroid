@@ -94,6 +94,11 @@ class ChatAgentConfig(AgentConfig):
             in the output schema
         full_citations: Whether to show source reference citation + content for each
             citation, or just the main reference citation.
+        search_for_tools_everywhere: Whether to search for tools everywhere,
+            or only in specific LLM response elements based on use_tools /
+            use_functions_api / use_tools_api config settings.
+        content_based_routing: Whether to parse LLM response content (text) for routing
+            instructions - e.g. "TO: <destination>"
     """
 
     system_message: str = "You are a helpful assistant."
@@ -112,6 +117,7 @@ class ChatAgentConfig(AgentConfig):
     use_tools_on_output_format: bool = True
     full_citations: bool = True  # show source + content for each citation?
     search_for_tools_everywhere: bool = True
+    content_based_routing: bool = True
 
     def _set_fn_or_tools(self) -> None:
         """
@@ -1878,7 +1884,8 @@ class ChatAgent(Agent):
         if self.llm.get_stream():
             # Create temp ChatDocument for tool check, then clean up to avoid
             # polluting ObjectRegistry (see PR #939 discussion)
-            temp_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+            temp_doc = ChatDocument.from_LLMResponse(response, displayed=True,
+                content_based_routing=self.config.content_based_routing)
             self.callbacks.finish_llm_stream(
                 content=response.message,
                 tools_content=response.tools_content(),
@@ -1896,7 +1903,8 @@ class ChatAgent(Agent):
             chat=True,
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
-        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True,
+            content_based_routing=self.config.content_based_routing)
         self.oai_tool_calls = response.oai_tool_calls or []
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
@@ -1938,7 +1946,8 @@ class ChatAgent(Agent):
         if self.llm.get_stream():
             # Create temp ChatDocument for tool check, then clean up to avoid
             # polluting ObjectRegistry (see PR #939 discussion)
-            temp_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+            temp_doc = ChatDocument.from_LLMResponse(response, displayed=True,
+                content_based_routing=self.config.content_based_routing)
             self.callbacks.finish_llm_stream(
                 content=response.message,
                 tools_content=response.tools_content(),
@@ -1956,7 +1965,8 @@ class ChatAgent(Agent):
             chat=True,
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
-        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True,
+            content_based_routing=self.config.content_based_routing)
         self.oai_tool_calls = response.oai_tool_calls or []
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
@@ -1987,7 +1997,8 @@ class ChatAgent(Agent):
             chat_doc = (
                 response
                 if isinstance(response, ChatDocument)
-                else ChatDocument.from_LLMResponse(response, displayed=True)
+                else ChatDocument.from_LLMResponse(response, displayed=True,
+                    content_based_routing=self.config.content_based_routing)
             )
             # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
             if not settings.quiet:
