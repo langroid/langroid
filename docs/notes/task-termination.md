@@ -26,6 +26,7 @@ This guide introduces Langroid's declarative approach to task termination, culmi
 - [Implementation Details](#implementation-details)
 - [Best Practices](#best-practices)
 - [Reference](#reference)
+- [Text-Based Routing and Signal Control](#text-based-routing-and-signal-control)
 
 ## Overview
 
@@ -67,6 +68,9 @@ config = TaskConfig(
 # Task completes when special strings like "DONE" are detected
 # (enabled by default with recognize_string_signals=True)
 ```
+
+See [Text-Based Routing and Signal Control](#text-based-routing-and-signal-control)
+for detailed documentation on controlling text-based routing behavior.
 
 ### 6. Orchestration Tools
 ```python
@@ -443,6 +447,133 @@ This provides better type safety and makes refactoring easier.
 - Consider shorter sequences for better performance
 - Use specific tool names to avoid unnecessary checks
 
+## Text-Based Routing and Signal Control
+
+Langroid provides two related but distinct settings for controlling how text patterns
+in LLM responses are parsed and used for routing:
+
+### Overview
+
+| Setting | Location | Controls | Default |
+|---------|----------|----------|---------|
+| `recognize_string_signals` | `TaskConfig` | Parsing of `DONE`, `PASS`, etc. | `True` |
+| `recognize_recipient_in_content` | `ChatAgentConfig` | Parsing of `TO[recipient]:` and JSON `{"recipient": ...}` | `True` |
+
+These settings operate at different layers:
+
+- **`recognize_string_signals`** operates at the **Task level**, affecting how the
+  task loop interprets orchestration signals in responses
+- **`recognize_recipient_in_content`** operates at the **Agent level**, affecting
+  how LLM responses are parsed into `ChatDocument` objects
+
+### `TaskConfig.recognize_string_signals`
+
+Controls whether the task recognizes text-based orchestration signals like `DONE`,
+`PASS`, `DONE_PASS`, etc.
+
+```python
+from langroid.agent.task import Task, TaskConfig
+
+# Default: signals are recognized
+task = Task(agent, config=TaskConfig(recognize_string_signals=True))
+
+# Disable: signals treated as plain text
+task = Task(agent, config=TaskConfig(recognize_string_signals=False))
+```
+
+**When `True` (default):**
+
+- `DONE` in a response signals task completion
+- `PASS` signals passing control to another agent
+- `DONE_PASS` combines both behaviors
+
+**When `False`:**
+
+- These strings are treated as literal text
+- Useful when LLM responses might accidentally contain these keywords
+- Task termination must use other mechanisms (tools, `done_sequences`, etc.)
+
+### `ChatAgentConfig.recognize_recipient_in_content`
+
+Controls whether recipient routing patterns in LLM response text are parsed and
+used for message routing.
+
+```python
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+
+# Default: recipient patterns are parsed
+agent = ChatAgent(ChatAgentConfig(
+    recognize_recipient_in_content=True
+))
+
+# Disable: patterns treated as plain text
+agent = ChatAgent(ChatAgentConfig(
+    recognize_recipient_in_content=False
+))
+```
+
+**Recognized patterns:**
+
+1. **TO-bracket format**: `TO[AgentName]: message content`
+2. **JSON format**: `{"recipient": "AgentName", "content": "message"}`
+
+**When `True` (default):**
+
+- Patterns are parsed and recipient is extracted to `ChatDocument.metadata.recipient`
+- The pattern prefix/wrapper is stripped from the message content
+- Enables LLM-driven routing in multi-agent systems
+
+**When `False`:**
+
+- Patterns are preserved as literal text in the message content
+- `metadata.recipient` remains empty
+- Useful when you want explicit tool-based routing only
+
+### Full Text-Based Routing Lockdown
+
+To completely disable text-based routing and rely solely on tools/explicit
+mechanisms, set **both** flags to `False`:
+
+```python
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task, TaskConfig
+
+agent = ChatAgent(ChatAgentConfig(
+    name="MyAgent",
+    recognize_recipient_in_content=False,  # No recipient parsing
+))
+
+task = Task(
+    agent,
+    config=TaskConfig(
+        recognize_string_signals=False,  # No DONE/PASS parsing
+    ),
+)
+```
+
+This configuration ensures:
+
+- LLM responses are treated as literal text
+- No accidental routing based on text patterns
+- All routing must be explicit (tools, `done_sequences`, etc.)
+
+### OpenAI Assistant Support
+
+The `recognize_recipient_in_content` setting is also honored by `OpenAIAssistant`:
+
+```python
+from langroid.agent.openai_assistant import OpenAIAssistant, OpenAIAssistantConfig
+
+assistant = OpenAIAssistant(OpenAIAssistantConfig(
+    name="MyAssistant",
+    recognize_recipient_in_content=False,
+))
+```
+
 ## Summary
 
-The `done_sequences` feature provides a powerful, declarative way to control task termination based on conversation patterns. The DSL syntax makes common cases simple while the full object syntax provides complete control when needed. This approach eliminates the need to subclass `Task` and override `done()` for most use cases, leading to cleaner, more maintainable code.
+The `done_sequences` feature provides a powerful, declarative way to control task
+termination based on conversation patterns. The DSL syntax makes common cases
+simple while the full object syntax provides complete control when needed. This
+approach eliminates the need to subclass `Task` and override `done()` for most
+use cases, leading to cleaner, more maintainable code.

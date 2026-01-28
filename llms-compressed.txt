@@ -32204,6 +32204,7 @@ This guide introduces Langroid's declarative approach to task termination, culmi
 - [Implementation Details](#implementation-details)
 - [Best Practices](#best-practices)
 - [Reference](#reference)
+- [Text-Based Routing and Signal Control](#text-based-routing-and-signal-control)
 
 ## Overview
 
@@ -32245,6 +32246,9 @@ config = TaskConfig(
 # Task completes when special strings like "DONE" are detected
 # (enabled by default with recognize_string_signals=True)
 ```
+
+See [Text-Based Routing and Signal Control](#text-based-routing-and-signal-control)
+for detailed documentation on controlling text-based routing behavior.
 
 ### 6. Orchestration Tools
 ```python
@@ -32621,9 +32625,136 @@ This provides better type safety and makes refactoring easier.
 - Consider shorter sequences for better performance
 - Use specific tool names to avoid unnecessary checks
 
+## Text-Based Routing and Signal Control
+
+Langroid provides two related but distinct settings for controlling how text patterns
+in LLM responses are parsed and used for routing:
+
+### Overview
+
+| Setting | Location | Controls | Default |
+|---------|----------|----------|---------|
+| `recognize_string_signals` | `TaskConfig` | Parsing of `DONE`, `PASS`, etc. | `True` |
+| `recognize_recipient_in_content` | `ChatAgentConfig` | Parsing of `TO[recipient]:` and JSON `{"recipient": ...}` | `True` |
+
+These settings operate at different layers:
+
+- **`recognize_string_signals`** operates at the **Task level**, affecting how the
+  task loop interprets orchestration signals in responses
+- **`recognize_recipient_in_content`** operates at the **Agent level**, affecting
+  how LLM responses are parsed into `ChatDocument` objects
+
+### `TaskConfig.recognize_string_signals`
+
+Controls whether the task recognizes text-based orchestration signals like `DONE`,
+`PASS`, `DONE_PASS`, etc.
+
+```python
+from langroid.agent.task import Task, TaskConfig
+
+# Default: signals are recognized
+task = Task(agent, config=TaskConfig(recognize_string_signals=True))
+
+# Disable: signals treated as plain text
+task = Task(agent, config=TaskConfig(recognize_string_signals=False))
+```
+
+**When `True` (default):**
+
+- `DONE` in a response signals task completion
+- `PASS` signals passing control to another agent
+- `DONE_PASS` combines both behaviors
+
+**When `False`:**
+
+- These strings are treated as literal text
+- Useful when LLM responses might accidentally contain these keywords
+- Task termination must use other mechanisms (tools, `done_sequences`, etc.)
+
+### `ChatAgentConfig.recognize_recipient_in_content`
+
+Controls whether recipient routing patterns in LLM response text are parsed and
+used for message routing.
+
+```python
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+
+# Default: recipient patterns are parsed
+agent = ChatAgent(ChatAgentConfig(
+    recognize_recipient_in_content=True
+))
+
+# Disable: patterns treated as plain text
+agent = ChatAgent(ChatAgentConfig(
+    recognize_recipient_in_content=False
+))
+```
+
+**Recognized patterns:**
+
+1. **TO-bracket format**: `TO[AgentName]: message content`
+2. **JSON format**: `{"recipient": "AgentName", "content": "message"}`
+
+**When `True` (default):**
+
+- Patterns are parsed and recipient is extracted to `ChatDocument.metadata.recipient`
+- The pattern prefix/wrapper is stripped from the message content
+- Enables LLM-driven routing in multi-agent systems
+
+**When `False`:**
+
+- Patterns are preserved as literal text in the message content
+- `metadata.recipient` remains empty
+- Useful when you want explicit tool-based routing only
+
+### Full Text-Based Routing Lockdown
+
+To completely disable text-based routing and rely solely on tools/explicit
+mechanisms, set **both** flags to `False`:
+
+```python
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task, TaskConfig
+
+agent = ChatAgent(ChatAgentConfig(
+    name="MyAgent",
+    recognize_recipient_in_content=False,  # No recipient parsing
+))
+
+task = Task(
+    agent,
+    config=TaskConfig(
+        recognize_string_signals=False,  # No DONE/PASS parsing
+    ),
+)
+```
+
+This configuration ensures:
+
+- LLM responses are treated as literal text
+- No accidental routing based on text patterns
+- All routing must be explicit (tools, `done_sequences`, etc.)
+
+### OpenAI Assistant Support
+
+The `recognize_recipient_in_content` setting is also honored by `OpenAIAssistant`:
+
+```python
+from langroid.agent.openai_assistant import OpenAIAssistant, OpenAIAssistantConfig
+
+assistant = OpenAIAssistant(OpenAIAssistantConfig(
+    name="MyAssistant",
+    recognize_recipient_in_content=False,
+))
+```
+
 ## Summary
 
-The `done_sequences` feature provides a powerful, declarative way to control task termination based on conversation patterns. The DSL syntax makes common cases simple while the full object syntax provides complete control when needed. This approach eliminates the need to subclass `Task` and override `done()` for most use cases, leading to cleaner, more maintainable code.
+The `done_sequences` feature provides a powerful, declarative way to control task
+termination based on conversation patterns. The DSL syntax makes common cases
+simple while the full object syntax provides complete control when needed. This
+approach eliminates the need to subclass `Task` and override `done()` for most
+use cases, leading to cleaner, more maintainable code.
 </file>
 
 <file path="docs/tutorials/langroid-tour.md">
@@ -47815,6 +47946,112 @@ for msg in task.agent.message_history:
 **Use when**: Tool emission is the primary goal of the task
 </file>
 
+<file path="release-notes/v0-58-0-crawl4ai-integration.md">
+# Langroid Release 0.58.0
+
+## 🎉 Major Features
+
+### 🕷️ Crawl4AI Integration - Advanced Web Crawling with Browser Rendering
+
+We're excited to introduce **Crawl4AI** as a new web crawling option in Langroid! This powerful crawler uses Playwright to render JavaScript-heavy websites, making it ideal for modern web applications.
+
+#### Key Features:
+- **Real Browser Rendering**: Handles dynamic content, SPAs, and JavaScript-heavy sites
+- **No API Key Required**: Works locally without external dependencies
+- **Multiple Extraction Strategies**:
+  - CSS selector-based extraction for structured data
+  - LLM-based extraction for unstructured content
+  - Regex extraction for pattern matching
+- **Advanced Markdown Generation**: Apply content filters to remove ads, sidebars, and irrelevant content
+- **Deep Crawling**: Recursively crawl entire websites with customizable depth and filters
+- **High Performance**: Optional LXML-based scraping for speed optimization
+
+#### Installation:
+```bash
+pip install "langroid[crawl4ai]"
+crawl4ai setup  # Note: Downloads Playwright browsers (~300MB, one-time)
+crawl4ai doctor
+```
+
+#### Quick Example:
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+
+# Simple usage
+config = Crawl4aiConfig()
+loader = URLLoader(urls=["https://example.com"], crawler_config=config)
+docs = loader.load()
+
+# With extraction strategy
+from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
+
+css_strategy = JsonCssExtractionStrategy(schema={
+    "name": "Articles",
+    "baseSelector": "article",
+    "fields": [
+        {"name": "title", "selector": "h2", "type": "text"},
+        {"name": "content", "selector": "p", "type": "text"}
+    ]
+})
+
+config = Crawl4aiConfig(extraction_strategy=css_strategy)
+loader = URLLoader(urls=["https://news.site.com"], crawler_config=config)
+docs = loader.load()  # Returns structured JSON data
+```
+
+#### Using with DocChatAgent:
+```python
+# In chat_search.py or similar applications
+python examples/docqa/chat_search.py -c crawl4ai
+```
+
+See the [full documentation](https://langroid.github.io/langroid/notes/crawl4ai/) for advanced usage including deep crawling, LLM-based extraction, and content filtering.
+
+## 🔧 Improvements
+
+### Enhanced URL Loader Framework
+- Added `Crawl4aiConfig` to the URL loader configuration options
+- Improved factory pattern to support multiple crawler backends
+- Better separation between document URLs (PDF, DOCX) and web pages
+
+### CLI Improvements
+- `chat_search.py` now uses Fire instead of Typer for simpler CLI interface
+- Updated help text to list all available crawlers: trafilatura, firecrawl, exa, crawl4ai
+
+## 📚 Documentation
+- Added comprehensive Crawl4AI documentation with examples
+- Updated navigation in mkdocs.yml
+- Added detailed examples in `examples/docqa/crawl4ai_examples.py`
+
+## 🧪 Testing
+- Added mocked tests for Crawl4AI functionality
+- Added optional integration tests (skipped in CI to avoid Playwright download)
+- Run integration tests locally with: `TEST_CRAWL4AI=1 pytest tests/main/test_url_loader.py::test_crawl4ai_integration`
+
+## 🐛 Bug Fixes
+- Fixed metadata extraction in crawl4ai implementation
+- Improved error handling for missing crawl4ai dependencies
+- Fixed import issues and duplicate code in examples
+
+## 📦 Dependencies
+- Added optional `crawl4ai>=0.6.3` dependency group
+- No changes to core dependencies
+
+## 🚀 Migration Guide
+No breaking changes. To use the new Crawl4AI crawler:
+
+1. Install the extra: `pip install "langroid[crawl4ai]"`
+2. Run setup: `crawl4ai setup` (one-time Playwright download)
+3. Use `Crawl4aiConfig()` instead of other crawler configs
+
+## 🙏 Acknowledgments
+Thanks to the contributors who helped improve this release, especially the integration of the powerful crawl4ai library for advanced web scraping capabilities.
+
+---
+
+**Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
+</file>
+
 <file path="tests/extras/test_hf_vector_stores.py">
 """
 Test vector stores using HuggingFace embeddings.
@@ -51133,463 +51370,6 @@ tools=["NONE"],  # Disable all tools except DoneTool
 result = task.run(msg="Test no tools")
 ⋮----
 # Verify that the task completed (sub-agent can still use DoneTool)
-</file>
-
-<file path="tests/main/test_task.py">
-"""
-Other tests for Task are in test_chat_agent.py
-"""
-⋮----
-def test_task_cost(test_settings: Settings)
-⋮----
-"""Test that max_cost, max_tokens are respected by Task.run()"""
-⋮----
-agent = ChatAgent(ChatAgentConfig(name="Test"))
-⋮----
-task = Task(
-sub_agent = ChatAgent(ChatAgentConfig(name="Sub"))
-⋮----
-sub = Task(
-⋮----
-response = task.run("4", turns=10, max_cost=0.0005, max_tokens=100)
-⋮----
-@pytest.mark.parametrize("restart", [True, False])
-def test_task_restart(test_settings: Settings, restart: bool)
-⋮----
-"""Test whether the `restart` option works as expected"""
-⋮----
-agent = ChatAgent(
-⋮----
-llm=MockLMConfig(response_fn=lambda x: int(x) + 1),  # increment
-⋮----
-task.run("4", turns=1)  # msg hist = sys, user=4, asst=5
-# if restart, erases agent history => msg hist = sys, user=10, asst=11
-# otherwise, adds to msg history => msg hist = sys, user=4, asst=5, user=10, asst=11
-⋮----
-@pytest.mark.asyncio
-async def test_task_kill(test_settings: Settings)
-⋮----
-"""Test that Task.run() can be killed"""
-⋮----
-class MockAgent(ChatAgent)
-⋮----
-# dummy deterministic response; no need for real LLM here!
-⋮----
-agent = MockAgent(ChatAgentConfig(name="Test"))
-⋮----
-config=lr.TaskConfig(inf_loop_cycle_len=0),  # turn off cycle detection
-⋮----
-# start task
-async_task = asyncio.create_task(
-# sleep a bit then kill it
-⋮----
-result: lr.ChatDocument = await async_task
-⋮----
-# test killing via static method:
-# Run it for a potentially very large number of turns...
-⋮----
-# ...sleep a bit then kill it
-⋮----
-def test_task_empty_response(test_settings: Settings)
-⋮----
-response = task.run("4")
-⋮----
-response = task.run("3")
-⋮----
-# test done_if_response, done_if_no_response
-⋮----
-response = task.run(input)
-⋮----
-"""
-    Test loop within single agent, where this cycle repeats:
-        [ LLM --Tool--> Agent[Tool] ---> (User) ]*
-
-    Test expected behavior for various Agent-tool-handler responses.
-    """
-⋮----
-class AugmentTool(ToolMessage)
-⋮----
-request: str = "next_num"
-purpose: str = """
-number: int
-successor: int
-⋮----
-def handle(self) -> str | ToolMessage
-⋮----
-@classmethod
-        def examples(cls) -> List["ToolMessage"]
-⋮----
-task = Task(agent, interactive=False)
-⋮----
-response = task.run("100")
-⋮----
-def content_empty()
-⋮----
-def fn_call_valid()
-⋮----
-def tool_valid()
-⋮----
-def fn_or_tool_valid()
-⋮----
-"""
-    Test loop within single agent, where this cycle repeats:
-        [ LLM --Tool--> Agent[Tool] ---> (User) ]*
-
-    The Agent responds to the tool with a number.
-    """
-⋮----
-def handle(self) -> str | DoneTool
-⋮----
-tool_name = AugmentTool.default_value("request")
-done_pass_tool_name = DonePassTool.default_value("request")
-⋮----
-done_response = f"use the TOOL: `{done_pass_tool_name}`"
-⋮----
-done_response = f"say {DONE} {PASS}"
-⋮----
-task_config = TaskConfig(recognize_string_signals=string_signals)
-⋮----
-response = task.run("100", turns=10)
-⋮----
-# no orch tool, and string signals ignored, so task doesn't terminate,
-# and is limited by "turns" parameter
-⋮----
-"""
-    Test task loop where Agent B's task is a subtask of Agent A's task, and:
-    - LLM(A) generates Tool
-    - Agent(A) validates Tool, if error, LLM(A) needs to fix, else pass to Agent(B)
-    - Agent(B) handles Tool, generates a query for LLM(B) to respond to
-    - LLM(B) responds, result should be sent back to Agent(A)
-    """
-⋮----
-class PolinskyTool(ToolMessage)
-⋮----
-request: str = "polinsky"
-⋮----
-class Requestor(ChatAgent)
-⋮----
-def __init__(self, config: ChatAgentConfig)
-⋮----
-def polinsky(self, msg: PolinskyTool) -> str | PassTool
-⋮----
-# No validation err, so pass it on
-⋮----
-requestor_agent = Requestor(
-⋮----
-requestor_task = Task(
-⋮----
-class PolinskyAgent(ChatAgent)
-⋮----
-def polinsky(self, msg: PolinskyTool) -> str
-⋮----
-# Pass on the number so LLM can respond
-# On the first try, flip the sign of the number,
-# to force the Requestor to try again
-response = str(-msg.number) if self.n_tries == 0 else str(msg.number)
-⋮----
-polinsky_agent = PolinskyAgent(
-polinsky_task = Task(
-⋮----
-# below ensure that task returns to requestor_task when LLM responds
-⋮----
-# connect the two agents
-⋮----
-response = requestor_task.run("100")
-⋮----
-"""
-    QueryTool: Task A uses and handles (validates), Task B handles but doesn't use
-    FeedbackTool: Task B uses and handles (validates), Task A handles but doesn't use
-    """
-⋮----
-class QueryTool(ToolMessage)
-⋮----
-request: str = "polinsky_query"
-⋮----
-value: int
-⋮----
-class FeedbackTool(ToolMessage)
-⋮----
-request: str = "polinsky_feedback"
-⋮----
-feedback: str
-⋮----
-def polinsky_query(self, msg: QueryTool) -> str | PassTool
-⋮----
-# No validation err, so pass it on so other agent can respond
-⋮----
-def polinsky_feedback(self, msg: FeedbackTool) -> str
-⋮----
-"""Transmit feedback received from other agent, to this agent's LLM"""
-⋮----
-def handle_message_fallback(self, msg: str | ChatDocument) -> Any
-⋮----
-done_tool_name = DoneTool.default_value("request")
-⋮----
-class Critic(ChatAgent)
-⋮----
-def polinsky_query(self, msg: QueryTool) -> str
-⋮----
-# pass on the number so LLM can respond
-⋮----
-def polinsky_feedback(self, msg: FeedbackTool) -> str | DonePassTool
-⋮----
-"""Pass on the feedback to the Requestor"""
-⋮----
-critic_agent = Critic(
-⋮----
-critic_task = Task(
-⋮----
-response = requestor_task.run()
-strings = "100 200 500 1000".split()
-⋮----
-"""Test that returning ToolMessage from an entity-responder or a Task.run() are
-    handled correctly"""
-⋮----
-class IncrementTool(ToolMessage)
-⋮----
-request: str = "increment"
-purpose: str = "To increment a number"
-x: int
-⋮----
-def handle(self) -> str
-⋮----
-class AnswerTool(ToolMessage)
-⋮----
-request: str = "answer"
-purpose: str = "To provide the final answer"
-answer: int
-⋮----
-class DoubleTool(ToolMessage)
-⋮----
-request: str = "double"
-purpose: str = "To double a number"
-⋮----
-# return this as the double_task's answer
-⋮----
-class HalveTool(ToolMessage)
-⋮----
-request: str = "halve"
-purpose: str = "To halve a number"
-⋮----
-return DoneTool(content=self.x // 2)  # note: content can be any type
-⋮----
-class ProcessTool(ToolMessage)
-⋮----
-request: str = "process"
-purpose: str = "To process a number"
-⋮----
-def handle(self) -> ToolMessage
-⋮----
-class ProcessorAgent(lr.ChatAgent)
-⋮----
-def init_state(self)
-⋮----
-# return a ToolMessage rather than ChatDocument
-msg_str = message.content if isinstance(message, ChatDocument) else message
-⋮----
-# must be AnswerTool
-answer_tool: AnswerTool = message.tool_messages[0]
-⋮----
-x = int(msg_str)
-⋮----
-processor_agent = ProcessorAgent(lr.ChatAgentConfig(name="Processor"))
-⋮----
-processor_task = Task(processor_agent, interactive=False, restart=True)
-⋮----
-halve_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Halver", llm=None))
-⋮----
-halve_task = Task(halve_agent, interactive=False)
-⋮----
-double_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Doubler", llm=None))
-⋮----
-double_task = Task(double_agent, interactive=False)
-⋮----
-increment_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Incrementer", llm=None))
-⋮----
-increment_task = Task(increment_agent, interactive=False)
-⋮----
-result = processor_task.run(str(3))
-⋮----
-# note: processor_agent state gets reset each time we run the task
-result = processor_task.run(str(16))
-⋮----
-result = processor_task[int].run(10)
-⋮----
-def test_task_output_format_sequence()
-⋮----
-"""
-    Test that `Task`s correctly execute a sequence of steps
-    controlled by the agent's `output_format`, and that `output_format`
-    is handled by default without `enable_message`.
-    """
-⋮----
-class MultiplyTool(ToolMessage)
-⋮----
-request: str = "multiply"
-purpose: str = "To multiply two integers."
-a: int
-b: int
-⋮----
-purpose: str = "To increment an integer."
-⋮----
-class PowerTool(ToolMessage)
-⋮----
-request: str = "power"
-purpose: str = "To compute `x` ** `y`."
-⋮----
-y: int
-⋮----
-class CompositionAgent(ChatAgent)
-⋮----
-def __init__(self, config: ChatAgentConfig = ChatAgentConfig())
-⋮----
-def multiply(self, message: MultiplyTool) -> str
-⋮----
-def increment(self, message: IncrementTool) -> str
-⋮----
-def power(self, message: PowerTool) -> str
-⋮----
-def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage
-⋮----
-def test_sequence(x: int) -> None
-⋮----
-agent = CompositionAgent(
-task = lr.Task(
-output = task.run(x)
-⋮----
-# check steps
-messages = agent.message_history
-⋮----
-multiply_message: MultiplyTool = to_tool(messages[2], MultiplyTool)  # type: ignore
-⋮----
-increment_message: IncrementTool = to_tool(messages[4], IncrementTool)  # type: ignore
-⋮----
-power_message: PowerTool = to_tool(messages[6], PowerTool)  # type: ignore
-⋮----
-@pytest.mark.asyncio
-async def test_task_output_format_sequence_async()
-⋮----
-"""
-    Test that async `Task`s correctly execute a sequence of steps
-    controlled by the agent's `output_format`, and that `output_format`
-    is handled by default without `enable_message`.
-    """
-⋮----
-async def test_sequence(x: int) -> None
-⋮----
-output = await task.run_async(x)
-⋮----
-def test_done_if_tool(test_settings: Settings)
-⋮----
-"""Test that task terminates when LLM generates a tool and done_if_tool=True"""
-⋮----
-class SimpleTool(ToolMessage)
-⋮----
-request: str = "simple_tool"
-purpose: str = "A simple tool for testing"
-value: str = "test"
-⋮----
-# Create a mock LLM that always responds with a tool in JSON format
-tool_response = SimpleTool(value="hello").to_json()
-⋮----
-mock_lm_config = MockLMConfig(default_response=tool_response)
-⋮----
-# Create agent with mock LLM
-⋮----
-# Enable the tool but don't handle it
-# (the `use` doesn't matter here since we're hard-coding the MockLM response
-# to always be the tool-call)
-⋮----
-# Test 1: With done_if_tool=False (default), task should not terminate on tool
-⋮----
-result = task.run("Process this message", turns=3)
-# Task should run for all 3 turns since done_if_tool=False
-⋮----
-assert len(agent.message_history) >= 3  # At least: system, user, assistant
-⋮----
-# Reset agent for next test
-⋮----
-# Test 2: With done_if_tool=True, task should terminate when tool is generated
-task_with_done = Task(
-⋮----
-result = task_with_done.run("Do something else", turns=10)
-# Task should terminate after first LLM response containing tool
-⋮----
-# Should have exactly 3 messages: system, user, assistant (with tool)
-⋮----
-# Verify the last message contains the tool
-last_msg = agent.message_history[-1]
-⋮----
-# Test 3: With done_if_tool=True and return type specified
-task_with_return_type = Task(
-⋮----
-result_typed = task_with_return_type.run("Process with type", turns=10)
-# Task should terminate and return the SimpleTool instance
-⋮----
-def test_task_init_preserves_parent_id()
-⋮----
-"""Test that task.init() preserves parent_id when deep copying ChatDocument"""
-⋮----
-# Create an agent
-agent = ChatAgent(ChatAgentConfig(name="TestAgent"))
-⋮----
-# Test 1: Basic parent_id preservation
-parent_doc = ChatDocument(
-child_doc = ChatDocument(
-⋮----
-# The pending message should preserve the parent_id
-⋮----
-# Test 2: With caller (subtask scenario)
-caller_task = Task(agent, interactive=False, name="CallerTask")
-sub_task = Task(agent, interactive=False, name="SubTask")
-⋮----
-# When message already has parent_id, it should be preserved
-msg_with_parent = ChatDocument(
-⋮----
-# Set caller to simulate subtask scenario
-⋮----
-# Parent_id should still be preserved (not overridden to msg.id)
-⋮----
-# Test 3: With caller but no original parent_id
-msg_no_parent = ChatDocument(
-⋮----
-sub_task2 = Task(agent, interactive=False, name="SubTask2")
-⋮----
-# Since original had no parent_id, it should be set to msg.id
-⋮----
-"""
-    Test that ChatAgentConfig.recognize_recipient_in_content controls whether
-    recipient patterns (TO[recipient]:message) are parsed from LLM responses.
-
-    When True (default): recipient is extracted, content has pattern removed
-    When False: recipient is empty, content preserves the TO[...] pattern
-    """
-⋮----
-# LLM response containing recipient pattern
-llm_response_text = "TO[SubAgent]: Please handle this request"
-⋮----
-task = Task(agent, interactive=False, single_round=True)
-result = task.run("Hello")
-⋮----
-# Recipient should be extracted
-⋮----
-# Content should have pattern stripped
-⋮----
-# Recipient should NOT be extracted
-⋮----
-# Content should preserve the original pattern
-⋮----
-"""
-    Test that recognize_recipient_in_content also controls parsing of
-    JSON recipient format: {"recipient": "...", ...}
-    """
-⋮----
-# LLM response with JSON recipient pattern
-llm_response_text = '{"recipient": "SubAgent", "content": "Handle this"}'
-⋮----
-# Recipient should be extracted from JSON
-⋮----
-# Content should preserve the original JSON
 </file>
 
 <file path="tests/main/test_token_usage.py">
@@ -57402,112 +57182,6 @@ corresponding document.
    - Reference: `./quiet-mode.md`
 </file>
 
-<file path="release-notes/v0-58-0-crawl4ai-integration.md">
-# Langroid Release 0.58.0
-
-## 🎉 Major Features
-
-### 🕷️ Crawl4AI Integration - Advanced Web Crawling with Browser Rendering
-
-We're excited to introduce **Crawl4AI** as a new web crawling option in Langroid! This powerful crawler uses Playwright to render JavaScript-heavy websites, making it ideal for modern web applications.
-
-#### Key Features:
-- **Real Browser Rendering**: Handles dynamic content, SPAs, and JavaScript-heavy sites
-- **No API Key Required**: Works locally without external dependencies
-- **Multiple Extraction Strategies**:
-  - CSS selector-based extraction for structured data
-  - LLM-based extraction for unstructured content
-  - Regex extraction for pattern matching
-- **Advanced Markdown Generation**: Apply content filters to remove ads, sidebars, and irrelevant content
-- **Deep Crawling**: Recursively crawl entire websites with customizable depth and filters
-- **High Performance**: Optional LXML-based scraping for speed optimization
-
-#### Installation:
-```bash
-pip install "langroid[crawl4ai]"
-crawl4ai setup  # Note: Downloads Playwright browsers (~300MB, one-time)
-crawl4ai doctor
-```
-
-#### Quick Example:
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-
-# Simple usage
-config = Crawl4aiConfig()
-loader = URLLoader(urls=["https://example.com"], crawler_config=config)
-docs = loader.load()
-
-# With extraction strategy
-from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
-
-css_strategy = JsonCssExtractionStrategy(schema={
-    "name": "Articles",
-    "baseSelector": "article",
-    "fields": [
-        {"name": "title", "selector": "h2", "type": "text"},
-        {"name": "content", "selector": "p", "type": "text"}
-    ]
-})
-
-config = Crawl4aiConfig(extraction_strategy=css_strategy)
-loader = URLLoader(urls=["https://news.site.com"], crawler_config=config)
-docs = loader.load()  # Returns structured JSON data
-```
-
-#### Using with DocChatAgent:
-```python
-# In chat_search.py or similar applications
-python examples/docqa/chat_search.py -c crawl4ai
-```
-
-See the [full documentation](https://langroid.github.io/langroid/notes/crawl4ai/) for advanced usage including deep crawling, LLM-based extraction, and content filtering.
-
-## 🔧 Improvements
-
-### Enhanced URL Loader Framework
-- Added `Crawl4aiConfig` to the URL loader configuration options
-- Improved factory pattern to support multiple crawler backends
-- Better separation between document URLs (PDF, DOCX) and web pages
-
-### CLI Improvements
-- `chat_search.py` now uses Fire instead of Typer for simpler CLI interface
-- Updated help text to list all available crawlers: trafilatura, firecrawl, exa, crawl4ai
-
-## 📚 Documentation
-- Added comprehensive Crawl4AI documentation with examples
-- Updated navigation in mkdocs.yml
-- Added detailed examples in `examples/docqa/crawl4ai_examples.py`
-
-## 🧪 Testing
-- Added mocked tests for Crawl4AI functionality
-- Added optional integration tests (skipped in CI to avoid Playwright download)
-- Run integration tests locally with: `TEST_CRAWL4AI=1 pytest tests/main/test_url_loader.py::test_crawl4ai_integration`
-
-## 🐛 Bug Fixes
-- Fixed metadata extraction in crawl4ai implementation
-- Improved error handling for missing crawl4ai dependencies
-- Fixed import issues and duplicate code in examples
-
-## 📦 Dependencies
-- Added optional `crawl4ai>=0.6.3` dependency group
-- No changes to core dependencies
-
-## 🚀 Migration Guide
-No breaking changes. To use the new Crawl4AI crawler:
-
-1. Install the extra: `pip install "langroid[crawl4ai]"`
-2. Run setup: `crawl4ai setup` (one-time Playwright download)
-3. Use `Crawl4aiConfig()` instead of other crawler configs
-
-## 🙏 Acknowledgments
-Thanks to the contributors who helped improve this release, especially the integration of the powerful crawl4ai library for advanced web scraping capabilities.
-
----
-
-**Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
-</file>
-
 <file path="tests/main/test_chat_agent.py">
 class _TestChatAgentConfig(ChatAgentConfig)
 ⋮----
@@ -58287,6 +57961,463 @@ def mock_factory()
 # The factory should be called during initialization
 ⋮----
 # Verify the factory was called
+</file>
+
+<file path="tests/main/test_task.py">
+"""
+Other tests for Task are in test_chat_agent.py
+"""
+⋮----
+def test_task_cost(test_settings: Settings)
+⋮----
+"""Test that max_cost, max_tokens are respected by Task.run()"""
+⋮----
+agent = ChatAgent(ChatAgentConfig(name="Test"))
+⋮----
+task = Task(
+sub_agent = ChatAgent(ChatAgentConfig(name="Sub"))
+⋮----
+sub = Task(
+⋮----
+response = task.run("4", turns=10, max_cost=0.0005, max_tokens=100)
+⋮----
+@pytest.mark.parametrize("restart", [True, False])
+def test_task_restart(test_settings: Settings, restart: bool)
+⋮----
+"""Test whether the `restart` option works as expected"""
+⋮----
+agent = ChatAgent(
+⋮----
+llm=MockLMConfig(response_fn=lambda x: int(x) + 1),  # increment
+⋮----
+task.run("4", turns=1)  # msg hist = sys, user=4, asst=5
+# if restart, erases agent history => msg hist = sys, user=10, asst=11
+# otherwise, adds to msg history => msg hist = sys, user=4, asst=5, user=10, asst=11
+⋮----
+@pytest.mark.asyncio
+async def test_task_kill(test_settings: Settings)
+⋮----
+"""Test that Task.run() can be killed"""
+⋮----
+class MockAgent(ChatAgent)
+⋮----
+# dummy deterministic response; no need for real LLM here!
+⋮----
+agent = MockAgent(ChatAgentConfig(name="Test"))
+⋮----
+config=lr.TaskConfig(inf_loop_cycle_len=0),  # turn off cycle detection
+⋮----
+# start task
+async_task = asyncio.create_task(
+# sleep a bit then kill it
+⋮----
+result: lr.ChatDocument = await async_task
+⋮----
+# test killing via static method:
+# Run it for a potentially very large number of turns...
+⋮----
+# ...sleep a bit then kill it
+⋮----
+def test_task_empty_response(test_settings: Settings)
+⋮----
+response = task.run("4")
+⋮----
+response = task.run("3")
+⋮----
+# test done_if_response, done_if_no_response
+⋮----
+response = task.run(input)
+⋮----
+"""
+    Test loop within single agent, where this cycle repeats:
+        [ LLM --Tool--> Agent[Tool] ---> (User) ]*
+
+    Test expected behavior for various Agent-tool-handler responses.
+    """
+⋮----
+class AugmentTool(ToolMessage)
+⋮----
+request: str = "next_num"
+purpose: str = """
+number: int
+successor: int
+⋮----
+def handle(self) -> str | ToolMessage
+⋮----
+@classmethod
+        def examples(cls) -> List["ToolMessage"]
+⋮----
+task = Task(agent, interactive=False)
+⋮----
+response = task.run("100")
+⋮----
+def content_empty()
+⋮----
+def fn_call_valid()
+⋮----
+def tool_valid()
+⋮----
+def fn_or_tool_valid()
+⋮----
+"""
+    Test loop within single agent, where this cycle repeats:
+        [ LLM --Tool--> Agent[Tool] ---> (User) ]*
+
+    The Agent responds to the tool with a number.
+    """
+⋮----
+def handle(self) -> str | DoneTool
+⋮----
+tool_name = AugmentTool.default_value("request")
+done_pass_tool_name = DonePassTool.default_value("request")
+⋮----
+done_response = f"use the TOOL: `{done_pass_tool_name}`"
+⋮----
+done_response = f"say {DONE} {PASS}"
+⋮----
+task_config = TaskConfig(recognize_string_signals=string_signals)
+⋮----
+response = task.run("100", turns=10)
+⋮----
+# no orch tool, and string signals ignored, so task doesn't terminate,
+# and is limited by "turns" parameter
+⋮----
+"""
+    Test task loop where Agent B's task is a subtask of Agent A's task, and:
+    - LLM(A) generates Tool
+    - Agent(A) validates Tool, if error, LLM(A) needs to fix, else pass to Agent(B)
+    - Agent(B) handles Tool, generates a query for LLM(B) to respond to
+    - LLM(B) responds, result should be sent back to Agent(A)
+    """
+⋮----
+class PolinskyTool(ToolMessage)
+⋮----
+request: str = "polinsky"
+⋮----
+class Requestor(ChatAgent)
+⋮----
+def __init__(self, config: ChatAgentConfig)
+⋮----
+def polinsky(self, msg: PolinskyTool) -> str | PassTool
+⋮----
+# No validation err, so pass it on
+⋮----
+requestor_agent = Requestor(
+⋮----
+requestor_task = Task(
+⋮----
+class PolinskyAgent(ChatAgent)
+⋮----
+def polinsky(self, msg: PolinskyTool) -> str
+⋮----
+# Pass on the number so LLM can respond
+# On the first try, flip the sign of the number,
+# to force the Requestor to try again
+response = str(-msg.number) if self.n_tries == 0 else str(msg.number)
+⋮----
+polinsky_agent = PolinskyAgent(
+polinsky_task = Task(
+⋮----
+# below ensure that task returns to requestor_task when LLM responds
+⋮----
+# connect the two agents
+⋮----
+response = requestor_task.run("100")
+⋮----
+"""
+    QueryTool: Task A uses and handles (validates), Task B handles but doesn't use
+    FeedbackTool: Task B uses and handles (validates), Task A handles but doesn't use
+    """
+⋮----
+class QueryTool(ToolMessage)
+⋮----
+request: str = "polinsky_query"
+⋮----
+value: int
+⋮----
+class FeedbackTool(ToolMessage)
+⋮----
+request: str = "polinsky_feedback"
+⋮----
+feedback: str
+⋮----
+def polinsky_query(self, msg: QueryTool) -> str | PassTool
+⋮----
+# No validation err, so pass it on so other agent can respond
+⋮----
+def polinsky_feedback(self, msg: FeedbackTool) -> str
+⋮----
+"""Transmit feedback received from other agent, to this agent's LLM"""
+⋮----
+def handle_message_fallback(self, msg: str | ChatDocument) -> Any
+⋮----
+done_tool_name = DoneTool.default_value("request")
+⋮----
+class Critic(ChatAgent)
+⋮----
+def polinsky_query(self, msg: QueryTool) -> str
+⋮----
+# pass on the number so LLM can respond
+⋮----
+def polinsky_feedback(self, msg: FeedbackTool) -> str | DonePassTool
+⋮----
+"""Pass on the feedback to the Requestor"""
+⋮----
+critic_agent = Critic(
+⋮----
+critic_task = Task(
+⋮----
+response = requestor_task.run()
+strings = "100 200 500 1000".split()
+⋮----
+"""Test that returning ToolMessage from an entity-responder or a Task.run() are
+    handled correctly"""
+⋮----
+class IncrementTool(ToolMessage)
+⋮----
+request: str = "increment"
+purpose: str = "To increment a number"
+x: int
+⋮----
+def handle(self) -> str
+⋮----
+class AnswerTool(ToolMessage)
+⋮----
+request: str = "answer"
+purpose: str = "To provide the final answer"
+answer: int
+⋮----
+class DoubleTool(ToolMessage)
+⋮----
+request: str = "double"
+purpose: str = "To double a number"
+⋮----
+# return this as the double_task's answer
+⋮----
+class HalveTool(ToolMessage)
+⋮----
+request: str = "halve"
+purpose: str = "To halve a number"
+⋮----
+return DoneTool(content=self.x // 2)  # note: content can be any type
+⋮----
+class ProcessTool(ToolMessage)
+⋮----
+request: str = "process"
+purpose: str = "To process a number"
+⋮----
+def handle(self) -> ToolMessage
+⋮----
+class ProcessorAgent(lr.ChatAgent)
+⋮----
+def init_state(self)
+⋮----
+# return a ToolMessage rather than ChatDocument
+msg_str = message.content if isinstance(message, ChatDocument) else message
+⋮----
+# must be AnswerTool
+answer_tool: AnswerTool = message.tool_messages[0]
+⋮----
+x = int(msg_str)
+⋮----
+processor_agent = ProcessorAgent(lr.ChatAgentConfig(name="Processor"))
+⋮----
+processor_task = Task(processor_agent, interactive=False, restart=True)
+⋮----
+halve_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Halver", llm=None))
+⋮----
+halve_task = Task(halve_agent, interactive=False)
+⋮----
+double_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Doubler", llm=None))
+⋮----
+double_task = Task(double_agent, interactive=False)
+⋮----
+increment_agent = lr.ChatAgent(lr.ChatAgentConfig(name="Incrementer", llm=None))
+⋮----
+increment_task = Task(increment_agent, interactive=False)
+⋮----
+result = processor_task.run(str(3))
+⋮----
+# note: processor_agent state gets reset each time we run the task
+result = processor_task.run(str(16))
+⋮----
+result = processor_task[int].run(10)
+⋮----
+def test_task_output_format_sequence()
+⋮----
+"""
+    Test that `Task`s correctly execute a sequence of steps
+    controlled by the agent's `output_format`, and that `output_format`
+    is handled by default without `enable_message`.
+    """
+⋮----
+class MultiplyTool(ToolMessage)
+⋮----
+request: str = "multiply"
+purpose: str = "To multiply two integers."
+a: int
+b: int
+⋮----
+purpose: str = "To increment an integer."
+⋮----
+class PowerTool(ToolMessage)
+⋮----
+request: str = "power"
+purpose: str = "To compute `x` ** `y`."
+⋮----
+y: int
+⋮----
+class CompositionAgent(ChatAgent)
+⋮----
+def __init__(self, config: ChatAgentConfig = ChatAgentConfig())
+⋮----
+def multiply(self, message: MultiplyTool) -> str
+⋮----
+def increment(self, message: IncrementTool) -> str
+⋮----
+def power(self, message: PowerTool) -> str
+⋮----
+def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage
+⋮----
+def test_sequence(x: int) -> None
+⋮----
+agent = CompositionAgent(
+task = lr.Task(
+output = task.run(x)
+⋮----
+# check steps
+messages = agent.message_history
+⋮----
+multiply_message: MultiplyTool = to_tool(messages[2], MultiplyTool)  # type: ignore
+⋮----
+increment_message: IncrementTool = to_tool(messages[4], IncrementTool)  # type: ignore
+⋮----
+power_message: PowerTool = to_tool(messages[6], PowerTool)  # type: ignore
+⋮----
+@pytest.mark.asyncio
+async def test_task_output_format_sequence_async()
+⋮----
+"""
+    Test that async `Task`s correctly execute a sequence of steps
+    controlled by the agent's `output_format`, and that `output_format`
+    is handled by default without `enable_message`.
+    """
+⋮----
+async def test_sequence(x: int) -> None
+⋮----
+output = await task.run_async(x)
+⋮----
+def test_done_if_tool(test_settings: Settings)
+⋮----
+"""Test that task terminates when LLM generates a tool and done_if_tool=True"""
+⋮----
+class SimpleTool(ToolMessage)
+⋮----
+request: str = "simple_tool"
+purpose: str = "A simple tool for testing"
+value: str = "test"
+⋮----
+# Create a mock LLM that always responds with a tool in JSON format
+tool_response = SimpleTool(value="hello").to_json()
+⋮----
+mock_lm_config = MockLMConfig(default_response=tool_response)
+⋮----
+# Create agent with mock LLM
+⋮----
+# Enable the tool but don't handle it
+# (the `use` doesn't matter here since we're hard-coding the MockLM response
+# to always be the tool-call)
+⋮----
+# Test 1: With done_if_tool=False (default), task should not terminate on tool
+⋮----
+result = task.run("Process this message", turns=3)
+# Task should run for all 3 turns since done_if_tool=False
+⋮----
+assert len(agent.message_history) >= 3  # At least: system, user, assistant
+⋮----
+# Reset agent for next test
+⋮----
+# Test 2: With done_if_tool=True, task should terminate when tool is generated
+task_with_done = Task(
+⋮----
+result = task_with_done.run("Do something else", turns=10)
+# Task should terminate after first LLM response containing tool
+⋮----
+# Should have exactly 3 messages: system, user, assistant (with tool)
+⋮----
+# Verify the last message contains the tool
+last_msg = agent.message_history[-1]
+⋮----
+# Test 3: With done_if_tool=True and return type specified
+task_with_return_type = Task(
+⋮----
+result_typed = task_with_return_type.run("Process with type", turns=10)
+# Task should terminate and return the SimpleTool instance
+⋮----
+def test_task_init_preserves_parent_id()
+⋮----
+"""Test that task.init() preserves parent_id when deep copying ChatDocument"""
+⋮----
+# Create an agent
+agent = ChatAgent(ChatAgentConfig(name="TestAgent"))
+⋮----
+# Test 1: Basic parent_id preservation
+parent_doc = ChatDocument(
+child_doc = ChatDocument(
+⋮----
+# The pending message should preserve the parent_id
+⋮----
+# Test 2: With caller (subtask scenario)
+caller_task = Task(agent, interactive=False, name="CallerTask")
+sub_task = Task(agent, interactive=False, name="SubTask")
+⋮----
+# When message already has parent_id, it should be preserved
+msg_with_parent = ChatDocument(
+⋮----
+# Set caller to simulate subtask scenario
+⋮----
+# Parent_id should still be preserved (not overridden to msg.id)
+⋮----
+# Test 3: With caller but no original parent_id
+msg_no_parent = ChatDocument(
+⋮----
+sub_task2 = Task(agent, interactive=False, name="SubTask2")
+⋮----
+# Since original had no parent_id, it should be set to msg.id
+⋮----
+"""
+    Test that ChatAgentConfig.recognize_recipient_in_content controls whether
+    recipient patterns (TO[recipient]:message) are parsed from LLM responses.
+
+    When True (default): recipient is extracted, content has pattern removed
+    When False: recipient is empty, content preserves the TO[...] pattern
+    """
+⋮----
+# LLM response containing recipient pattern
+llm_response_text = "TO[SubAgent]: Please handle this request"
+⋮----
+task = Task(agent, interactive=False, single_round=True)
+result = task.run("Hello")
+⋮----
+# Recipient should be extracted
+⋮----
+# Content should have pattern stripped
+⋮----
+# Recipient should NOT be extracted
+⋮----
+# Content should preserve the original pattern
+⋮----
+"""
+    Test that recognize_recipient_in_content also controls parsing of
+    JSON recipient format: {"recipient": "...", ...}
+    """
+⋮----
+# LLM response with JSON recipient pattern
+llm_response_text = '{"recipient": "SubAgent", "content": "Handle this"}'
+⋮----
+# Recipient should be extracted from JSON
+⋮----
+# Content should preserve the original JSON
 </file>
 
 <file path="examples/docqa/rag-concurrent.py">
