@@ -1138,3 +1138,83 @@ def test_task_init_preserves_parent_id():
     # Since original had no parent_id, it should be set to msg.id
     assert sub_task2.pending_message is not None
     assert sub_task2.pending_message.metadata.parent_id == msg_no_parent.id()
+
+
+@pytest.mark.parametrize("recognize_recipient", [True, False])
+def test_recognize_recipient_in_content(
+    test_settings: Settings,
+    recognize_recipient: bool,
+):
+    """
+    Test that ChatAgentConfig.recognize_recipient_in_content controls whether
+    recipient patterns (TO[recipient]:message) are parsed from LLM responses.
+
+    When True (default): recipient is extracted, content has pattern removed
+    When False: recipient is empty, content preserves the TO[...] pattern
+    """
+    set_global(test_settings)
+
+    # LLM response containing recipient pattern
+    llm_response_text = "TO[SubAgent]: Please handle this request"
+
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="Test",
+            llm=MockLMConfig(
+                default_response=llm_response_text,
+            ),
+            recognize_recipient_in_content=recognize_recipient,
+        )
+    )
+
+    task = Task(agent, interactive=False, single_round=True)
+    result = task.run("Hello")
+
+    if recognize_recipient:
+        # Recipient should be extracted
+        assert result.metadata.recipient == "SubAgent"
+        # Content should have pattern stripped
+        assert "TO[" not in result.content
+        assert "Please handle this request" in result.content
+    else:
+        # Recipient should NOT be extracted
+        assert result.metadata.recipient == ""
+        # Content should preserve the original pattern
+        assert "TO[SubAgent]:" in result.content
+
+
+@pytest.mark.parametrize("recognize_recipient", [True, False])
+def test_recognize_recipient_json_format(
+    test_settings: Settings,
+    recognize_recipient: bool,
+):
+    """
+    Test that recognize_recipient_in_content also controls parsing of
+    JSON recipient format: {"recipient": "...", ...}
+    """
+    set_global(test_settings)
+
+    # LLM response with JSON recipient pattern
+    llm_response_text = '{"recipient": "SubAgent", "content": "Handle this"}'
+
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="Test",
+            llm=MockLMConfig(
+                default_response=llm_response_text,
+            ),
+            recognize_recipient_in_content=recognize_recipient,
+        )
+    )
+
+    task = Task(agent, interactive=False, single_round=True)
+    result = task.run("Hello")
+
+    if recognize_recipient:
+        # Recipient should be extracted from JSON
+        assert result.metadata.recipient == "SubAgent"
+    else:
+        # Recipient should NOT be extracted
+        assert result.metadata.recipient == ""
+        # Content should preserve the original JSON
+        assert '"recipient"' in result.content

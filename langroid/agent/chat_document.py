@@ -301,16 +301,22 @@ class ChatDocument(Document):
     def from_LLMResponse(
         response: LLMResponse,
         displayed: bool = False,
+        recognize_recipient_in_content: bool = True,
     ) -> "ChatDocument":
         """
         Convert LLMResponse to ChatDocument.
         Args:
             response (LLMResponse): LLMResponse to convert.
             displayed (bool): Whether this response was displayed to the user.
+            recognize_recipient_in_content (bool): Whether to parse message text
+                for recipient routing (``TO[<recipient>]:`` and JSON
+                ``{"recipient": ...}``). Default True.
         Returns:
             ChatDocument: ChatDocument representation of this LLMResponse.
         """
-        recipient, message = response.get_recipient_and_message()
+        recipient, message = response.get_recipient_and_message(
+            recognize_recipient_in_content
+        )
         message = message.strip()
         if message in ["''", '""']:
             message = ""

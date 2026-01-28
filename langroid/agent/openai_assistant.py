@@ -811,7 +811,11 @@ class OpenAIAssistant(ChatAgent):
                     f"{self._get_code_logs_str()}[/magenta]"
                 )
             print(f"{cache_str}[green]" + response_str + "[/green]")
-        cdoc = ChatDocument.from_LLMResponse(response, displayed=False)
+        cdoc = ChatDocument.from_LLMResponse(
+            response,
+            displayed=False,
+            recognize_recipient_in_content=self.config.recognize_recipient_in_content,
+        )
         # Note message.metadata.tool_ids may have been popped above
         tool_ids = (
             []
