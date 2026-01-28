@@ -1354,7 +1354,9 @@ class ChatAgent(Agent):
                 )
 
     def llm_response(
-        self, message: Optional[str | ChatDocument] = None
+        self,
+        message: Optional[str | ChatDocument] = None,
+        update_message_history: bool = True,
     ) -> Optional[ChatDocument]:
         """
         Respond to a single user message, appended to the message history,
@@ -1362,6 +1364,7 @@ class ChatAgent(Agent):
         Args:
             message (str|ChatDocument): message or ChatDocument object to respond to.
                 If None, use the self.task_messages
+            update_message_historuy (bool): whether to update the message history
         Returns:
             LLM response as a ChatDocument object
         """
@@ -1375,6 +1378,7 @@ class ChatAgent(Agent):
             and self.output_format is None
             and self._json_schema_available()
             and self.config.strict_recovery
+            and update_message_history
         ):
             self.tool_error = False
             AnyTool = self._get_any_tool_message()
@@ -1430,10 +1434,11 @@ class ChatAgent(Agent):
                         Disabling strict mode and retrying.
                         """
                     )
-                    return self.llm_response(message)
+                    return self.llm_response(message, update_message_history)
                 else:
                     raise e
-        self.message_history.extend(ChatDocument.to_LLMMessage(response))
+        if update_message_history:
+            self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
         if isinstance(message, ChatDocument):
@@ -1448,7 +1453,9 @@ class ChatAgent(Agent):
         return response
 
     async def llm_response_async(
-        self, message: Optional[str | ChatDocument] = None
+        self,
+        message: Optional[str | ChatDocument] = None,
+        update_message_history: bool = True
     ) -> Optional[ChatDocument]:
         """
         Async version of `llm_response`. See there for details.
@@ -1463,6 +1470,7 @@ class ChatAgent(Agent):
             and self.output_format is None
             and self._json_schema_available()
             and self.config.strict_recovery
+            and update_message_history
         ):
             self.tool_error = False
             AnyTool = self._get_any_tool_message()
@@ -1518,10 +1526,14 @@ class ChatAgent(Agent):
                         Disabling strict mode and retrying.
                         """
                     )
-                    return await self.llm_response_async(message)
+                    return await self.llm_response_async(
+                        message,
+                        update_message_history
+                    )
                 else:
                     raise e
-        self.message_history.extend(ChatDocument.to_LLMMessage(response))
+        if update_message_history:
+            self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
         if isinstance(message, ChatDocument):
