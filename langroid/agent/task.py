@@ -142,6 +142,11 @@ class TaskConfig(BaseModel):
             to use string-based signaling, and it is recommended to use the
             new Orchestration tools instead (see agent/tools/orchestration.py),
             e.g. DoneTool, SendTool, etc.
+            Note: this is distinct from
+            ``ChatAgentConfig.recognize_recipient_in_content``, which controls
+            whether LLM response text is parsed for ``TO[<recipient>]:`` and
+            JSON ``{"recipient": ...}`` patterns at the Agent level.
+            To fully disable all text-based routing, set both to False.
         done_if_tool (bool): whether to consider the task done if the pending message
             contains a Tool attempt by the LLM
             (including tools not handled by the agent).
