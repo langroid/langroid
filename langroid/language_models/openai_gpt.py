@@ -590,7 +590,18 @@ class OpenAIGPT(LanguageModel):
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
-                self.api_base = GEMINI_BASE_URL
+                # Use GEMINI_API_BASE env var if set (e.g. for Vertex AI),
+                # then config.api_base only if explicitly set by the user
+                # (not inherited from OPENAI_API_BASE via env_prefix),
+                # then fall back to the default Gemini endpoint.
+                gemini_api_base = os.getenv("GEMINI_API_BASE", "")
+                openai_api_base = os.getenv("OPENAI_API_BASE")
+                explicit_api_base = (
+                    self.config.api_base
+                    if self.config.api_base and self.config.api_base != openai_api_base
+                    else None
+                )
+                self.api_base = gemini_api_base or explicit_api_base or GEMINI_BASE_URL
             elif self.is_glhf:
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
                 if self.api_key == OPENAI_API_KEY:
