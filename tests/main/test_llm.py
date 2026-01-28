@@ -458,6 +458,10 @@ def test_gemini_api_base():
     original_chat_model = settings.chat_model
     settings.chat_model = ""
 
+    # Save and clear env vars that could interfere
+    saved_openai_api_base = os.environ.pop("OPENAI_API_BASE", None)
+    saved_gemini_api_base = os.environ.pop("GEMINI_API_BASE", None)
+
     try:
         # Default: api_base should be GEMINI_BASE_URL
         config = lm.OpenAIGPTConfig(
@@ -495,8 +499,45 @@ def test_gemini_api_base():
         llm = lm.OpenAIGPT(config)
         assert llm.is_gemini
         assert llm.api_base == GEMINI_BASE_URL
+
+        # OPENAI_API_BASE env var should NOT leak into Gemini api_base
+        os.environ["OPENAI_API_BASE"] = "http://localhost:8000/v1"
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == GEMINI_BASE_URL
+        os.environ.pop("OPENAI_API_BASE")
+
+        # GEMINI_API_BASE env var should be used (e.g. Vertex AI)
+        os.environ["GEMINI_API_BASE"] = vertex_url
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == vertex_url
+        os.environ.pop("GEMINI_API_BASE")
+
+        # GEMINI_API_BASE should take priority over OPENAI_API_BASE
+        os.environ["OPENAI_API_BASE"] = "http://localhost:8000/v1"
+        os.environ["GEMINI_API_BASE"] = vertex_url
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == vertex_url
+        os.environ.pop("OPENAI_API_BASE")
+        os.environ.pop("GEMINI_API_BASE")
     finally:
         settings.chat_model = original_chat_model
+        # Restore original env vars
+        if saved_openai_api_base is not None:
+            os.environ["OPENAI_API_BASE"] = saved_openai_api_base
+        if saved_gemini_api_base is not None:
+            os.environ["GEMINI_API_BASE"] = saved_gemini_api_base
 
 
 def test_followup_standalone():

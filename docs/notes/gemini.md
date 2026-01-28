@@ -48,8 +48,14 @@ agent = DocChatAgent(config)
 Google Vertex AI uses project-specific URLs for its
 [OpenAI compatibility layer](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-gemini-using-openai-library),
 which differs from the fixed URL used by the standard Google AI (Gemini) API.
-To use Gemini models through Vertex AI, specify a custom `api_base` in
+To use Gemini models through Vertex AI, set the endpoint via the
+`GEMINI_API_BASE` environment variable or the `api_base` parameter in
 `OpenAIGPTConfig`.
+
+!!! note
+    The `OPENAI_API_BASE` environment variable (commonly used for local
+    proxies) is **not** applied to Gemini models. Use `GEMINI_API_BASE`
+    or an explicit `api_base` in the config instead.
 
 ### Setup
 
@@ -60,14 +66,32 @@ To use Gemini models through Vertex AI, specify a custom `api_base` in
     export GEMINI_API_KEY=$(gcloud auth print-access-token)
     ```
 
-2. Identify your Vertex AI endpoint URL, which includes your GCP project ID
+2. Set your Vertex AI endpoint URL, which includes your GCP project ID
    and region:
 
-    ```
-    https://{REGION}-aiplatform.googleapis.com/v1beta1/projects/{PROJECT_ID}/locations/{REGION}/endpoints/openapi
+    ```bash
+    export GEMINI_API_BASE=https://{REGION}-aiplatform.googleapis.com/v1beta1/projects/{PROJECT_ID}/locations/{REGION}/endpoints/openapi
     ```
 
 ### Usage
+
+**Option 1: Environment variable (recommended for Vertex AI)**
+
+```bash
+export GEMINI_API_KEY=$(gcloud auth print-access-token)
+export GEMINI_API_BASE=https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-gcp-project/locations/us-central1/endpoints/openapi
+```
+
+```python
+import langroid.language_models as lm
+
+# GEMINI_API_BASE is picked up automatically
+config = lm.OpenAIGPTConfig(chat_model="gemini/gemini-2.0-flash")
+llm = lm.OpenAIGPT(config)
+response = llm.chat("Hello from Vertex AI!")
+```
+
+**Option 2: Explicit `api_base` in config**
 
 ```python
 import langroid.language_models as lm
@@ -83,5 +107,6 @@ llm = lm.OpenAIGPT(config)
 response = llm.chat("Hello from Vertex AI!")
 ```
 
-When `api_base` is not set, Langroid falls back to the default Google AI
-(Gemini) endpoint (`https://generativelanguage.googleapis.com/v1beta/openai`).
+When neither `GEMINI_API_BASE` nor an explicit `api_base` is set, Langroid
+falls back to the default Google AI (Gemini) endpoint
+(`https://generativelanguage.googleapis.com/v1beta/openai`).
