@@ -641,7 +641,9 @@ async def test_npxstdio_transport() -> None:
     via npx stdio transport, for example the `exa-mcp-server`:
     https://github.com/exa-labs/exa-mcp-server
     """
-    package_name = "tavily-mcp"
+    # Pin to 0.2.12 because 0.2.14+ depends on @modelcontextprotocol/sdk@1.25.2
+    # which doesn't exist on npm (as of Jan 2026)
+    package_name = "tavily-mcp@0.2.12"
 
     # Pre-check package availability to provide better error messages
     if not await check_npx_package_availability(package_name):

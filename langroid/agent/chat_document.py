@@ -120,6 +120,13 @@ class ChatDocument(Document):
 
     reasoning: str = ""  # reasoning produced by a reasoning LLM
     content_any: Any = None  # to hold arbitrary data returned by responders
+    # Original LLM response text including inline thought signatures
+    # (e.g. <thinking>...</thinking>). Only populated when reasoning was
+    # extracted from inline tags in the message text. Used by to_LLMMessage()
+    # to preserve thought signatures in message history, which is critical
+    # for models like Gemini 3 Flash and Amazon Nova that rely on seeing
+    # their own thought tags in context to maintain reasoning ability.
+    content_with_reasoning: Optional[str] = None
     files: List[FileAttachment] = []  # list of file attachments
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
     oai_tool_id2result: Optional[OrderedDict[str, str]] = None
@@ -316,6 +323,7 @@ class ChatDocument(Document):
         return ChatDocument(
             content=message,
             reasoning=response.reasoning,
+            content_with_reasoning=response.message_with_reasoning,
             content_any=message,
             oai_tool_calls=response.oai_tool_calls,
             function_call=response.function_call,
@@ -413,7 +421,19 @@ class ChatDocument(Document):
         sender_role = Role.USER
         if isinstance(message, str):
             message = ChatDocument.from_str(message)
-        content = message.content or to_string(message.content_any) or ""
+        # Prefer content_with_reasoning when available — this preserves
+        # inline thought signatures (e.g. <thinking>...</thinking>) in
+        # message history, which certain models (Gemini 3 Flash, Amazon
+        # Nova) need to maintain reasoning across turns.
+        # content_with_reasoning is only set when inline tags were
+        # actually extracted, so this won't interfere with models that
+        # provide reasoning via a separate API field.
+        content = (
+            message.content_with_reasoning
+            or message.content
+            or to_string(message.content_any)
+            or ""
+        )
         fun_call = message.function_call
         oai_tool_calls = message.oai_tool_calls
         if message.metadata.sender == Entity.USER and fun_call is not None:
