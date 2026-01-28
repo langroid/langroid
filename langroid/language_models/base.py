@@ -354,6 +354,12 @@ class LLMResponse(BaseModel):
 
     message: str
     reasoning: str = ""  # optional reasoning text from reasoning models
+    # Original message text including inline thought signatures (e.g.
+    # <thinking>...</thinking>). Only set when reasoning was extracted
+    # from the message text via get_reasoning_final(); NOT set when
+    # reasoning comes from a separate API field (e.g. reasoning_content),
+    # since in that case the message text never contained thought tags.
+    message_with_reasoning: Optional[str] = None
     # TODO tool_id needs to generalize to multi-tool calls
     tool_id: str = ""  # used by OpenAIAssistant
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None

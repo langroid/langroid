@@ -32,7 +32,7 @@ def parse_message(msg: str) -> Tuple[str, str]:
     parser = to_field + message
 
     try:
-        parsed = parser.parseString(msg)
+        parsed = parser.parse_string(msg)
         return parsed.name, parsed.text
     except ParseException:
         return "", msg

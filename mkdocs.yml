@@ -104,7 +104,7 @@ nav:
       - XML-based Tools: notes/xml-tools.md
       - Async Streaming: notes/async-streaming.md
       - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings: notes/gemini.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
       - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
       - Large Tool Results: notes/large-tool-results.md
       - GLHF.chat Support: notes/glhf-chat.md
