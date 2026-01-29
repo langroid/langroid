@@ -1900,6 +1900,7 @@ class ChatAgent(Agent):
                 content=response.message,
                 tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
+                reasoning=response.reasoning,
             )
             ObjectRegistry.remove(temp_doc.id())
         self.llm.config.streamer = noop_fn
@@ -1968,6 +1969,7 @@ class ChatAgent(Agent):
                 content=response.message,
                 tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
+                reasoning=response.reasoning,
             )
             ObjectRegistry.remove(temp_doc.id())
         self.llm.config.streamer_async = async_noop_fn
@@ -2031,11 +2033,13 @@ class ChatAgent(Agent):
             else:
                 content = response.content
                 tools_content = ""
+            reasoning = response.reasoning if isinstance(response, LLMResponse) else ""
             self.callbacks.show_llm_response(
                 content=content,
                 tools_content=tools_content,
                 is_tool=self.has_tool_message_attempt(chat_doc),
                 cached=is_cached,
+                reasoning=reasoning,
             )
             # Clean up temp ChatDocument to avoid polluting ObjectRegistry
             if is_temp_doc:
@@ -2058,6 +2062,7 @@ class ChatAgent(Agent):
                 is_tool=False,
                 cached=False,
                 language="text",
+                reasoning="",  # Citations don't have reasoning
             )
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:

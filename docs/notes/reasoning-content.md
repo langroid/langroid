@@ -64,3 +64,50 @@ print(response.reasoning)
 # extract answer
 print(response.content)
 ```
+
+## Displaying Reasoning in UI Callbacks
+
+When using Langroid with UI frameworks like Chainlit, the reasoning content from LLM
+responses is automatically passed to the callback methods. This allows you to display
+the chain-of-thought reasoning in your UI.
+
+The following callback methods receive a `reasoning` parameter:
+
+- `show_llm_response(content, tools_content, is_tool, cached, language, reasoning)` -
+  For non-streaming LLM responses
+- `finish_llm_stream(content, tools_content, is_tool, reasoning)` -
+  For streaming LLM responses
+
+### Chainlit Integration
+
+When using `ChainlitAgentCallbacks` or `ChainlitTaskCallbacks`, reasoning content is
+automatically displayed as a nested message under the main LLM response. The reasoning
+appears with a "💭 Reasoning" label in the author field.
+
+### Custom Callback Implementation
+
+If you're implementing custom callbacks, you can access the reasoning parameter to
+display it however you prefer:
+
+```python
+from langroid.agent.base import Agent
+
+def my_show_llm_response(
+    content: str,
+    tools_content: str = "",
+    is_tool: bool = False,
+    cached: bool = False,
+    language: str | None = None,
+    reasoning: str = "",
+) -> None:
+    # Display the main response
+    print(f"Response: {content}")
+
+    # Display reasoning if available
+    if reasoning:
+        print(f"Reasoning: {reasoning}")
+
+# Attach to an agent
+agent = Agent(config)
+agent.callbacks.show_llm_response = my_show_llm_response
+```

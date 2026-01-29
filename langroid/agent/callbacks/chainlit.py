@@ -347,9 +347,20 @@ class ChainlitAgentCallbacks:
             run_sync(self.stream.remove())  # type: ignore
 
     def finish_llm_stream(
-        self, content: str, tools_content: str = "", is_tool: bool = False
+        self,
+        content: str,
+        tools_content: str = "",
+        is_tool: bool = False,
+        reasoning: str = "",
     ) -> None:
-        """Update the stream, and display entire response in the right language."""
+        """Update the stream, and display entire response in the right language.
+
+        Args:
+            content: The main LLM response content
+            tools_content: Tool-related content if any
+            is_tool: Whether this is a tool response
+            reasoning: Chain-of-thought reasoning from the LLM (if available)
+        """
         if self.agent.llm is None or self.stream is None:
             raise ValueError("LLM or stream not initialized")
         if not content and not tools_content:
@@ -374,6 +385,16 @@ class ChainlitAgentCallbacks:
         )
         run_sync(step.update())  # type: ignore
 
+        # Display reasoning content if available (e.g., from thinking models)
+        if reasoning:
+            reasoning_step = cl.Message(
+                content=textwrap.dedent(reasoning),
+                author=self._entity_name("llm") + " 💭 Reasoning",
+                type="assistant_message",
+                parent_id=step.id,
+            )
+            run_sync(reasoning_step.send())  # type: ignore
+
     def show_llm_response(
         self,
         content: str,
@@ -381,8 +402,18 @@ class ChainlitAgentCallbacks:
         is_tool: bool = False,
         cached: bool = False,
         language: str | None = None,
+        reasoning: str = "",
     ) -> None:
-        """Show non-streaming LLM response."""
+        """Show non-streaming LLM response.
+
+        Args:
+            content: The main LLM response content
+            tools_content: Tool-related content if any
+            is_tool: Whether this is a tool response
+            cached: Whether this response was from cache
+            language: Language for syntax highlighting
+            reasoning: Chain-of-thought reasoning from the LLM (if available)
+        """
         step = cl.Message(
             content=textwrap.dedent(tools_content or content) or NO_ANSWER,
             id=self.curr_step.id if self.curr_step is not None else None,
@@ -401,6 +432,16 @@ class ChainlitAgentCallbacks:
             """
         )
         run_sync(step.send())  # type: ignore
+
+        # Display reasoning content if available (e.g., from thinking models)
+        if reasoning:
+            reasoning_step = cl.Message(
+                content=textwrap.dedent(reasoning),
+                author=self._entity_name("llm", cached=cached) + " 💭 Reasoning",
+                type="assistant_message",
+                parent_id=step.id,
+            )
+            run_sync(reasoning_step.send())  # type: ignore
 
     def show_error_message(self, error: str) -> None:
         """Show error message."""
