@@ -347,7 +347,11 @@ class ChainlitAgentCallbacks:
             run_sync(self.stream.remove())  # type: ignore
 
     def finish_llm_stream(
-        self, content: str, tools_content: str = "", is_tool: bool = False
+        self,
+        content: str,
+        tools_content: str = "",
+        is_tool: bool = False,
+        reasoning: str = "",
     ) -> None:
         """Update the stream, and display entire response in the right language."""
         if self.agent.llm is None or self.stream is None:
@@ -379,6 +383,7 @@ class ChainlitAgentCallbacks:
         content: str,
         tools_content: str = "",
         is_tool: bool = False,
+        reasoning: str = "",
         cached: bool = False,
         language: str | None = None,
     ) -> None:

@@ -1900,6 +1900,7 @@ class ChatAgent(Agent):
                 content=response.message,
                 tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
+                reasoning=response.reasoning,
             )
             ObjectRegistry.remove(temp_doc.id())
         self.llm.config.streamer = noop_fn
@@ -1968,6 +1969,7 @@ class ChatAgent(Agent):
                 content=response.message,
                 tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
+                reasoning=response.reasoning,
             )
             ObjectRegistry.remove(temp_doc.id())
         self.llm.config.streamer_async = async_noop_fn
@@ -2035,6 +2037,7 @@ class ChatAgent(Agent):
                 content=content,
                 tools_content=tools_content,
                 is_tool=self.has_tool_message_attempt(chat_doc),
+                reasoning=response.reasoning,
                 cached=is_cached,
             )
             # Clean up temp ChatDocument to avoid polluting ObjectRegistry
