@@ -1896,7 +1896,9 @@ class ChatAgent(Agent):
                 displayed=True,
                 recognize_recipient_in_content=self.config.recognize_recipient_in_content,
             )
-            self.callbacks.finish_llm_stream(
+            self._call_callback_with_reasoning(
+                "finish_llm_stream",
+                reasoning=response.reasoning,
                 content=response.message,
                 tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
@@ -1964,7 +1966,9 @@ class ChatAgent(Agent):
                 displayed=True,
                 recognize_recipient_in_content=self.config.recognize_recipient_in_content,
             )
-            self.callbacks.finish_llm_stream(
+            self._call_callback_with_reasoning(
+                "finish_llm_stream",
+                reasoning=response.reasoning,
                 content=response.message,
                 tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
@@ -1995,6 +1999,43 @@ class ChatAgent(Agent):
         self._load_output_format(chat_doc)
 
         return chat_doc
+
+    def _call_callback_with_reasoning(
+        self,
+        callback_name: str,
+        reasoning: str,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Call a callback method, only passing 'reasoning' if it accepts it.
+
+        This provides backward compatibility for custom callbacks that don't
+        have the 'reasoning' parameter in their signature.
+
+        Args:
+            callback_name: Name of the callback method (e.g., 'show_llm_response')
+            reasoning: The reasoning content to pass if supported
+            **kwargs: Other arguments to pass to the callback
+        """
+        callback = getattr(self.callbacks, callback_name, None)
+        if callback is None:
+            return
+
+        # Check if callback accepts 'reasoning' param or **kwargs
+        try:
+            sig = inspect.signature(callback)
+            params = sig.parameters
+            accepts_reasoning = "reasoning" in params or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+            )
+        except (ValueError, TypeError):
+            # If we can't inspect the signature, assume it doesn't accept reasoning
+            accepts_reasoning = False
+
+        if accepts_reasoning:
+            callback(reasoning=reasoning, **kwargs)
+        else:
+            callback(**kwargs)
 
     def _render_llm_response(
         self, response: ChatDocument | LLMResponse, citation_only: bool = False
@@ -2031,7 +2072,10 @@ class ChatAgent(Agent):
             else:
                 content = response.content
                 tools_content = ""
-            self.callbacks.show_llm_response(
+            reasoning = response.reasoning if isinstance(response, LLMResponse) else ""
+            self._call_callback_with_reasoning(
+                "show_llm_response",
+                reasoning=reasoning,
                 content=content,
                 tools_content=tools_content,
                 is_tool=self.has_tool_message_attempt(chat_doc),
@@ -2052,7 +2096,9 @@ class ChatAgent(Agent):
             )
             if not settings.quiet:
                 print("[grey37]SOURCES:\n" + escape(citation) + "[/grey37]")
-            self.callbacks.show_llm_response(
+            self._call_callback_with_reasoning(
+                "show_llm_response",
+                reasoning="",  # Citations don't have reasoning
                 content=str(citation),
                 tools_content="",
                 is_tool=False,
