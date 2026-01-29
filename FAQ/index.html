@@ -1,0 +1,6682 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Langroid LLM App Development Framework">
+      
+      
+      
+        <link rel="canonical" href="https://langroid.github.io/langroid/FAQ/">
+      
+      
+        <link rel="prev" href="../quick-start/chat-agent-docs/">
+      
+      
+        <link rel="next" href="../notes/overview/">
+      
+      
+        <link rel="alternate" type="application/rss+xml" title="RSS feed" href="../feed_rss_created.xml">
+        <link rel="alternate" type="application/rss+xml" title="RSS feed of updated content" href="../feed_rss_updated.xml">
+      
+      <link rel="icon" href="../assets/orange-logo-lambda-563.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.2">
+    
+    
+      
+        <title>FAQ - langroid</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.d7758b05.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#frequently-asked-questions" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="langroid" class="md-header__button md-logo" aria-label="langroid" data-md-component="logo">
+      
+  <img src="../assets/orange-logo-lambda-563.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            langroid
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              FAQ
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/langroid/langroid" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    langroid/langroid
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../blog/" class="md-tabs__link">
+        
+  
+    
+  
+  Blog
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../quick-start/" class="md-tabs__link">
+        
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+    
+  
+  FAQ
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../notes/overview/" class="md-tabs__link">
+          
+  
+  Notes-Updates
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../examples/guide/" class="md-tabs__link">
+          
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../tutorials/langroid-tour/" class="md-tabs__link">
+          
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/" class="md-tabs__link">
+          
+  
+  Code/API Docs
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="langroid" class="md-nav__button md-logo" aria-label="langroid" data-md-component="logo">
+      
+  <img src="../assets/orange-logo-lambda-563.png" alt="logo">
+
+    </a>
+    langroid
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/langroid/langroid" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    langroid/langroid
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    
+  
+  
+    <li class="md-nav__item">
+      <a href="../blog/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Blog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../quick-start/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/setup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/llm-interaction/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LLM interaction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/chat-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Simple Chat Agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/multi-agent-task-delegation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Task Delegation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/two-agent-chat-num/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Two Agent Chat
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/three-agent-chat-num/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Three Agent Chat
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/chat-agent-tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent with Tools/Functions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/three-agent-chat-num-router/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Three Agents, with Routing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/chat-agent-docs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent with Retrieval
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-view-the-reasoning-thinking-text-when-using-a-reasoning-llm-like-r1-or-o1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I view the reasoning (thinking) text when using a Reasoning LLM like R1 or o1?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#does-langroid-work-with-non-openai-llms" class="md-nav__link">
+    <span class="md-ellipsis">
+      Does Langroid work with non-OpenAI LLMs?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-can-i-find-out-about-langroids-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Where can I find out about Langroid's architecture?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-limit-the-number-of-output-tokens-generated-by-the-llm" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I limit the number of output tokens generated by the LLM?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-langroid-handles-long-chat-histories" class="md-nav__link">
+    <span class="md-ellipsis">
+      How langroid handles long chat histories
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-handle-large-results-from-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I handle large results from Tools?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-handle-a-tool-without-running-a-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I handle a tool without running a task?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#openai-tools-and-function-calling-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      OpenAI Tools and Function-calling support
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#some-example-scripts-appear-to-return-to-user-input-immediately-without-handling-a-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      Some example scripts appear to return to user input immediately without handling a tool.
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-specify-top_k-in-openaigptconfig-for-llm-api-calls" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I specify top_k in OpenAIGPTConfig (for LLM API calls)?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-persist-agent-state-across-multiple-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I persist agent state across multiple runs?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#is-it-possible-to-share-state-between-agentstasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Is it possible to share state between agents/tasks?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-suppress-llm-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I suppress LLM output?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-deal-with-llms-especially-weak-ones-generating-bad-json-in-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I deal with LLMs (especially weak ones) generating bad JSON in tools?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-handle-an-llm-forgetting-to-generate-a-toolmessage" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I handle an LLM "forgetting" to generate a ToolMessage?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-use-langroid-to-converse-with-a-knowledge-graph-kg" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I use Langroid to converse with a Knowledge Graph (KG)?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-improve-docchatagent-rag-latency" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I improve DocChatAgent (RAG) latency?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#is-there-support-to-run-multiple-tasks-concurrently" class="md-nav__link">
+    <span class="md-ellipsis">
+      Is there support to run multiple tasks concurrently?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-use-langroid-in-a-fastapi-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I use Langroid in a FastAPI server?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-a-sub-task-end-all-parent-tasks-and-return-a-result" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can a sub-task end all parent tasks and return a result?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-configure-a-task-to-retain-or-discard-prior-conversation" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I configure a task to retain or discard prior conversation?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-set-up-a-task-to-exit-as-soon-as-the-llm-responds" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I set up a task to exit as soon as the LLM responds?
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Notes-Updates
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Notes-Updates
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/xml-tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    XML-based Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/async-streaming/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Async Streaming
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/knowledge-graphs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Knowledge Graphs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/gemini/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Gemini LLMs, Embeddings, Vertex AI
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/llm-pdf-parser/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LLM-based Pdf Parsing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/large-tool-results/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Large Tool Results
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/glhf-chat/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    GLHF.chat Support
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/structured-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Structured Output
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/tool-message-handler/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tool Handlers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/task-termination/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Task Termination
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/message-routing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Message Routing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/llama-cpp-embeddings/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Llama.cpp Embeddings
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/azure-openai-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Azure OpenAI models
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/custom-azure-client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Custom Azure OpenAI client
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/enriching-for-retrieval/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Enriching Chunks for Retrieval
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/reasoning-content/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reasoning Content
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/weaviate/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Weaviate
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/handle-llm-no-tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Handling LLM Non-Tool Messages
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/pgvector/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    PGVector
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/pinecone/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Pinecone
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/tavily_search/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tavily Search Tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/marker-pdf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Marker Pdf Parser
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/url_loader/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    URLLoader
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/crawl4ai/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Crawl4AI Crawler
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/langdb/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangDB AI Gateway
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/portkey/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Portkey AI Gateway
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/markitdown/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Markitdown Parsers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/litellm-proxy/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LiteLLM Proxy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/chunking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Chunking
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/file-input/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Image, PDF Input
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/mcp-tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    MCP Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/code-injection-protection/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code-Injection Protection
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/task-tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TaskTool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/qdrant-resource-cleanup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Local Qdrant VectorDB Cleanup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/openai-http-client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI HTTP Client Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/openai-client-caching/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Client Caching
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/cross-encoder.md" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Cross-Encoder Reranking
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/html-logger/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Task Logs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notes/pydantic-v2-migration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Pydantic v2 Migration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/guide/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/agent-tree/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Hierarchical Agent Computation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Demos
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
+            <span class="md-nav__icon md-icon"></span>
+            Demos
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../demos/targeting/audience-targeting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Audience Targeting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tutorials
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/langroid-tour/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Langroid Tour
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/supported-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Supported LLMs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/local-llm-setup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Local LLM Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/non-openai-llms/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Non-OpenAI LLMs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/postgresql-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SQLChatAgent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/llm-usage-options/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LLM Usage Options
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Code/API Docs
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Code/API Docs
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    langroid
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1" id="__nav_8_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1">
+            <span class="md-nav__icon md-icon"></span>
+            langroid
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    agent
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1" id="__nav_8_1_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1">
+            <span class="md-nav__icon md-icon"></span>
+            agent
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/base/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    base
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/batch/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    batch
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/callbacks/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    callbacks
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_3" id="__nav_8_1_1_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_8_1_1_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_3">
+            <span class="md-nav__icon md-icon"></span>
+            callbacks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/callbacks/chainlit/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    chainlit
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/chat_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    chat_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/chat_document/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    chat_document
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/done_sequence_parser/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    done_sequence_parser
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/openai_assistant/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    openai_assistant
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_8" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/special/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    special
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_8" id="__nav_8_1_1_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_8_1_1_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_8">
+            <span class="md-nav__icon md-icon"></span>
+            special
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_8_1" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/special/arangodb/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    arangodb
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_8_1" id="__nav_8_1_1_8_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_8_1_1_8_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_8_1">
+            <span class="md-nav__icon md-icon"></span>
+            arangodb
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/arangodb/arangodb_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    arangodb_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/arangodb/system_messages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    system_messages
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/arangodb/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/arangodb/utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    utils
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/doc_chat_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    doc_chat_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/lance_doc_chat_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    lance_doc_chat_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_8_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/special/lance_rag/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    lance_rag
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_8_4" id="__nav_8_1_1_8_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_8_1_1_8_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_8_4">
+            <span class="md-nav__icon md-icon"></span>
+            lance_rag
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/lance_rag/critic_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    critic_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/lance_rag/lance_rag_task/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    lance_rag_task
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/lance_rag/query_planner_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    query_planner_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/lance_tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    lance_tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_8_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/special/neo4j/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    neo4j
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_8_6" id="__nav_8_1_1_8_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_8_1_1_8_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_8_6">
+            <span class="md-nav__icon md-icon"></span>
+            neo4j
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/neo4j/csv_kg_chat/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    csv_kg_chat
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/neo4j/neo4j_chat_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    neo4j_chat_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/neo4j/system_messages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    system_messages
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/neo4j/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/relevance_extractor_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    relevance_extractor_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/retriever_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    retriever_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_8_9" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/special/sql/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    sql
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_8_9" id="__nav_8_1_1_8_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_8_1_1_8_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_8_9">
+            <span class="md-nav__icon md-icon"></span>
+            sql
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/sql/sql_chat_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    sql_chat_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_8_9_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/special/sql/utils/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    utils
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_8_9_2" id="__nav_8_1_1_8_9_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="6" aria-labelledby="__nav_8_1_1_8_9_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_8_9_2">
+            <span class="md-nav__icon md-icon"></span>
+            utils
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/sql/utils/description_extractors/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    description_extractors
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/sql/utils/populate_metadata/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    populate_metadata
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/sql/utils/system_message/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    system_message
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/sql/utils/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/special/table_chat_agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    table_chat_agent
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/task/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    task
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tool_message/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tool_message
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_11" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/tools/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    tools
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_11" id="__nav_8_1_1_11_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_8_1_1_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_11">
+            <span class="md-nav__icon md-icon"></span>
+            tools
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/duckduckgo_search_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    duckduckgo_search_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/exa_search_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    exa_search_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/file_tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    file_tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/google_search_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    google_search_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_1_11_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/agent/tools/mcp/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    mcp
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_1_11_5" id="__nav_8_1_1_11_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_8_1_1_11_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_1_11_5">
+            <span class="md-nav__icon md-icon"></span>
+            mcp
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/mcp/decorators/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    decorators
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/mcp/fastmcp_client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    fastmcp_client
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/metaphor_search_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    metaphor_search_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/orchestration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    orchestration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/recipient_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    recipient_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/retrieval_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    retrieval_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/rewind_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    rewind_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/segment_extract_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    segment_extract_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/task_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    task_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/tools/tavily_search_tool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    tavily_search_tool
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agent/xml_tool_message/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    xml_tool_message
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/cachedb/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    cachedb
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_2" id="__nav_8_1_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_2">
+            <span class="md-nav__icon md-icon"></span>
+            cachedb
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/cachedb/base/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    base
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/cachedb/redis_cachedb/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    redis_cachedb
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/embedding_models/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    embedding_models
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_3" id="__nav_8_1_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_3">
+            <span class="md-nav__icon md-icon"></span>
+            embedding_models
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/embedding_models/base/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    base
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/embedding_models/models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    models
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_3_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/embedding_models/protoc/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    protoc
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_3_3" id="__nav_8_1_3_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_8_1_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            protoc
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/embedding_models/protoc/embeddings_pb2/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    embeddings_pb2
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/embedding_models/protoc/embeddings_pb2_grpc/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    embeddings_pb2_grpc
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/embedding_models/remote_embeds/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    remote_embeds
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/exceptions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    exceptions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/language_models/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    language_models
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_5" id="__nav_8_1_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            language_models
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/azure_openai/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    azure_openai
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/base/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    base
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/client_cache/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    client_cache
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/config/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    config
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/mock_lm/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    mock_lm
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/model_info/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    model_info
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/openai_gpt/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    openai_gpt
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_5_8" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/language_models/prompt_formatter/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    prompt_formatter
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_5_8" id="__nav_8_1_5_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_8_1_5_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_5_8">
+            <span class="md-nav__icon md-icon"></span>
+            prompt_formatter
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/prompt_formatter/base/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    base
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/prompt_formatter/hf_formatter/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    hf_formatter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/prompt_formatter/llama2_formatter/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    llama2_formatter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/provider_params/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    provider_params
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/language_models/utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    utils
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/mytypes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    mytypes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_7" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/parsing/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    parsing
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_7" id="__nav_8_1_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_7">
+            <span class="md-nav__icon md-icon"></span>
+            parsing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/agent_chats/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    agent_chats
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/code_parser/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    code_parser
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/document_parser/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    document_parser
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/file_attachment/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    file_attachment
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/md_parser/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    md_parser
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/para_sentence_split/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    para_sentence_split
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/parse_json/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    parse_json
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/parser/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    parser
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/pdf_utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pdf_utils
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/repo_loader/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    repo_loader
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/routing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    routing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/search/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    search
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/spider/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    spider
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/table_loader/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    table_loader
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/url_loader/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    url_loader
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/urls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    urls
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    utils
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/parsing/web_search/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    web_search
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_8" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/prompts/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    prompts
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_8" id="__nav_8_1_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_8">
+            <span class="md-nav__icon md-icon"></span>
+            prompts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/prompts/dialog/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    dialog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/prompts/prompts_config/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    prompts_config
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/prompts/templates/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    templates
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_9" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/pydantic_v1/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    pydantic_v1
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_9" id="__nav_8_1_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_9">
+            <span class="md-nav__icon md-icon"></span>
+            pydantic_v1
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/pydantic_v1/main/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    main
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_10" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/utils/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    utils
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_10" id="__nav_8_1_10_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_10">
+            <span class="md-nav__icon md-icon"></span>
+            utils
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_10_1" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/utils/algorithms/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    algorithms
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_10_1" id="__nav_8_1_10_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_8_1_10_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_10_1">
+            <span class="md-nav__icon md-icon"></span>
+            algorithms
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/algorithms/graph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    graph
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/configuration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/constants/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    constants
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/git_utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    git_utils
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/globals/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    globals
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/html_logger/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    html_logger
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/logging/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    logging
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/object_registry/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    object_registry
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_10_9" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/utils/output/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    output
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_10_9" id="__nav_8_1_10_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_8_1_10_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_10_9">
+            <span class="md-nav__icon md-icon"></span>
+            output
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/output/citations/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    citations
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/output/printing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    printing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/output/status/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    status
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/pandas_utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pandas_utils
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/pydantic_utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pydantic_utils
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/system/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    system
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/utils/types/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    types
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1_11" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/vector_store/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    vector_store
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_1_11" id="__nav_8_1_11_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_8_1_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1_11">
+            <span class="md-nav__icon md-icon"></span>
+            vector_store
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/vector_store/base/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    base
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/vector_store/chromadb/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    chromadb
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/vector_store/lancedb/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    lancedb
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/vector_store/meilisearch/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    meilisearch
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/vector_store/pineconedb/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pineconedb
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/vector_store/postgres/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    postgres
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/vector_store/qdrantdb/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    qdrantdb
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/vector_store/weaviatedb/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    weaviatedb
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-view-the-reasoning-thinking-text-when-using-a-reasoning-llm-like-r1-or-o1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I view the reasoning (thinking) text when using a Reasoning LLM like R1 or o1?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#does-langroid-work-with-non-openai-llms" class="md-nav__link">
+    <span class="md-ellipsis">
+      Does Langroid work with non-OpenAI LLMs?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-can-i-find-out-about-langroids-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Where can I find out about Langroid's architecture?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-limit-the-number-of-output-tokens-generated-by-the-llm" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I limit the number of output tokens generated by the LLM?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-langroid-handles-long-chat-histories" class="md-nav__link">
+    <span class="md-ellipsis">
+      How langroid handles long chat histories
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-handle-large-results-from-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I handle large results from Tools?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-handle-a-tool-without-running-a-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I handle a tool without running a task?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#openai-tools-and-function-calling-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      OpenAI Tools and Function-calling support
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#some-example-scripts-appear-to-return-to-user-input-immediately-without-handling-a-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      Some example scripts appear to return to user input immediately without handling a tool.
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-specify-top_k-in-openaigptconfig-for-llm-api-calls" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I specify top_k in OpenAIGPTConfig (for LLM API calls)?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-persist-agent-state-across-multiple-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I persist agent state across multiple runs?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#is-it-possible-to-share-state-between-agentstasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Is it possible to share state between agents/tasks?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-suppress-llm-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I suppress LLM output?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-deal-with-llms-especially-weak-ones-generating-bad-json-in-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I deal with LLMs (especially weak ones) generating bad JSON in tools?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-handle-an-llm-forgetting-to-generate-a-toolmessage" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I handle an LLM "forgetting" to generate a ToolMessage?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-use-langroid-to-converse-with-a-knowledge-graph-kg" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I use Langroid to converse with a Knowledge Graph (KG)?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-improve-docchatagent-rag-latency" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I improve DocChatAgent (RAG) latency?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#is-there-support-to-run-multiple-tasks-concurrently" class="md-nav__link">
+    <span class="md-ellipsis">
+      Is there support to run multiple tasks concurrently?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-use-langroid-in-a-fastapi-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can I use Langroid in a FastAPI server?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-a-sub-task-end-all-parent-tasks-and-return-a-result" class="md-nav__link">
+    <span class="md-ellipsis">
+      Can a sub-task end all parent tasks and return a result?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-configure-a-task-to-retain-or-discard-prior-conversation" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I configure a task to retain or discard prior conversation?
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-can-i-set-up-a-task-to-exit-as-soon-as-the-llm-responds" class="md-nav__link">
+    <span class="md-ellipsis">
+      How can I set up a task to exit as soon as the LLM responds?
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="frequently-asked-questions">Frequently Asked Questions<a class="headerlink" href="#frequently-asked-questions" title="Permanent link">&para;</a></h1>
+<h2 id="can-i-view-the-reasoning-thinking-text-when-using-a-reasoning-llm-like-r1-or-o1">Can I view the reasoning (thinking) text when using a Reasoning LLM like R1 or o1?<a class="headerlink" href="#can-i-view-the-reasoning-thinking-text-when-using-a-reasoning-llm-like-r1-or-o1" title="Permanent link">&para;</a></h2>
+<p>Yes, see this note on <a href="https://langroid.github.io/langroid/notes/reasoning-content/">reasoning-content</a>.</p>
+<h2 id="does-langroid-work-with-non-openai-llms">Does Langroid work with non-OpenAI LLMs?<a class="headerlink" href="#does-langroid-work-with-non-openai-llms" title="Permanent link">&para;</a></h2>
+<p>Yes! Langroid works with practically any LLM, local or remote, closed or open.</p>
+<p>See these two guides:</p>
+<ul>
+<li><a href="https://langroid.github.io/langroid/tutorials/local-llm-setup/">Using Langroid with local/open LLMs</a></li>
+<li><a href="https://langroid.github.io/langroid/tutorials/non-openai-llms/">Using Langroid with non-OpenAI proprietary LLMs</a></li>
+</ul>
+<h2 id="where-can-i-find-out-about-langroids-architecture">Where can I find out about Langroid's architecture?<a class="headerlink" href="#where-can-i-find-out-about-langroids-architecture" title="Permanent link">&para;</a></h2>
+<p>There are a few documents that can help:</p>
+<ul>
+<li>A work-in-progress <a href="https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/">architecture description</a>
+  on the Langroid blog.</li>
+<li>The Langroid <a href="https://langroid.github.io/langroid/quick-start/">Getting Started</a> guide walks you 
+  step-by-step through Langroid's features and architecture.</li>
+<li>An article by LanceDB on <a href="https://lancedb.substack.com/p/langoid-multi-agent-programming-framework">Multi-Agent Programming with Langroid</a></li>
+</ul>
+<h2 id="how-can-i-limit-the-number-of-output-tokens-generated-by-the-llm">How can I limit the number of output tokens generated by the LLM?<a class="headerlink" href="#how-can-i-limit-the-number-of-output-tokens-generated-by-the-llm" title="Permanent link">&para;</a></h2>
+<p>You can set the <code>max_output_tokens</code> parameter in the <code>LLMConfig</code> class,
+or more commonly, the <code>OpenAIGPTConfig</code> class, which is a subclass of <code>LLMConfig</code>,
+for example:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">langroid</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">lr</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">langroid.language_models</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">lm</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">llm_config</span> <span class="o">=</span> <span class="n">lm</span><span class="o">.</span><span class="n">OpenAIGPTConfig</span><span class="p">(</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">chat_model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-3.5-turbo&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">max_output_tokens</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="c1"># limit output to 100 tokens</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">agent_config</span> <span class="o">=</span> <span class="n">lr</span><span class="o">.</span><span class="n">ChatAgentConfig</span><span class="p">(</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">llm</span><span class="o">=</span><span class="n">llm_config</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="c1"># ... other configs</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">agent</span> <span class="o">=</span> <span class="n">lr</span><span class="o">.</span><span class="n">ChatAgent</span><span class="p">(</span><span class="n">agent_config</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Then every time the agent's <code>llm_response</code> method is called, the LLM's output 
+will be limited to this number of tokens.</p>
+<p>If you omit the <code>max_output_tokens</code>, it defaults to 8192. If you wish <strong>not</strong> to 
+limit the output tokens, you can set <code>max_output_tokens=None</code>, in which case 
+Langroid uses the model-specific maximum output tokens from the 
+<a href="https://github.com/langroid/langroid/blob/main/langroid/language_models/model_info.py"><code>langroid/language_models/model_info.py</code></a> file
+(specifically the <code>model_max_output_tokens</code> property of <code>LLMConfig</code>).
+Note however that this model-specific may be quite large, so you would generally 
+want to either omit setting <code>max_output_tokens</code> (which defaults to 8192), or set it
+another desired value.</p>
+<h2 id="how-langroid-handles-long-chat-histories">How langroid handles long chat histories<a class="headerlink" href="#how-langroid-handles-long-chat-histories" title="Permanent link">&para;</a></h2>
+<p>You may encounter an error like this:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Error: Tried to shorten prompt history but ... longer than context length
+</span></code></pre></div>
+<p>This might happen when your chat history bumps against various limits.
+Here is how Langroid handles long chat histories. Ultimately the LLM API is invoked with two key inputs:
+the message history <span class="arithmatex">\(h\)</span>, and the desired output length <span class="arithmatex">\(n\)</span> (defaults to the <code>max_output_tokens</code> in the 
+<code>ChatAgentConfig</code>). These inputs are determined as follows (see the <code>ChatAgent._prep_llm_messages</code> method):</p>
+<ul>
+<li>let <span class="arithmatex">\(H\)</span> be the current message history, and <span class="arithmatex">\(M\)</span> be the value of <code>ChatAgentConfig.max_output_tokens</code>, and <span class="arithmatex">\(C\)</span> be 
+  the context-length of the LLM.</li>
+<li>If <span class="arithmatex">\(\text{tokens}(H) + M \leq C\)</span>, then langroid uses <span class="arithmatex">\(h = H\)</span> and <span class="arithmatex">\(n = M\)</span>, since there is enough room to fit both the 
+  actual chat history as well as the desired max output length.</li>
+<li>If <span class="arithmatex">\(\text{tokens}(H) + M &gt; C\)</span>, this means the context length is too small to accommodate the message history <span class="arithmatex">\(H\)</span> 
+  and 
+  the desired output length <span class="arithmatex">\(M\)</span>. Then langroid tries to use a <em>shortened</em> output length <span class="arithmatex">\(n' = C - \text{tokens}(H)\)</span>, 
+  i.e. the output is effectively <em>truncated</em> to fit within the context length. <ul>
+<li>If <span class="arithmatex">\(n'\)</span> is at least equal to <code>min_output_tokens</code> <span class="arithmatex">\(m\)</span> (default 10), langroid proceeds with <span class="arithmatex">\(h = H\)</span> and <span class="arithmatex">\(n=n'\)</span>.</li>
+<li>otherwise, this means that the message history <span class="arithmatex">\(H\)</span> is so long that the remaining space in the LLM's 
+  context-length <span class="arithmatex">\(C\)</span> is unacceptably small (i.e. smaller than the minimum output length <span class="arithmatex">\(m\)</span>). In this case,
+  Langroid tries to shorten the message history by dropping early messages, and updating the message history <span class="arithmatex">\(h\)</span> as 
+  long as <span class="arithmatex">\(C - \text{tokens}(h) &lt;  m\)</span>, until there are no more messages to drop (it will not drop the system 
+  message or the last message, which is a user message), and throws the error mentioned above. </li>
+</ul>
+</li>
+</ul>
+<p>If you are getting this error, you will want to check whether:</p>
+<ul>
+<li>you have set the <code>chat_context_length</code> too small, if you are setting it manually</li>
+<li>you have set the <code>max_output_tokens</code> too large</li>
+<li>you have set the <code>min_output_tokens</code> too large</li>
+</ul>
+<p>If these look fine, then the next thing to look at is whether you are accumulating too much context into the agent 
+history, for example retrieved passages (which can be very long) in a RAG scenario. One common case is when a query 
+<span class="arithmatex">\(Q\)</span> is being answered using RAG, the retrieved passages <span class="arithmatex">\(P\)</span> are added to <span class="arithmatex">\(Q\)</span> to create a (potentially very long) prompt 
+like </p>
+<blockquote>
+<p>based on the passages P, answer query Q</p>
+</blockquote>
+<p>Once the LLM returns an answer (if appropropriate for your context), you should avoid retaining the passages <span class="arithmatex">\(P\)</span> in the 
+agent history, i.e. the last user message should be simply <span class="arithmatex">\(Q\)</span>, rather than the prompt above. This functionality is exactly what you get when you 
+use <code>ChatAgent._llm_response_temp_context</code>, which is used by default in the <code>DocChatAgent</code>. </p>
+<p>Another way to keep chat history tokens from growing too much is to use the <code>llm_response_forget</code> method, which 
+erases both the query and response, if that makes sense in your scenario.</p>
+<h2 id="how-can-i-handle-large-results-from-tools">How can I handle large results from Tools?<a class="headerlink" href="#how-can-i-handle-large-results-from-tools" title="Permanent link">&para;</a></h2>
+<p>As of version 0.22.0, Langroid allows you to control the size of tool results
+by setting <a href="https://langroid.github.io/langroid/notes/large-tool-results/">optional parameters</a> 
+in a <code>ToolMessage</code> definition.</p>
+<h2 id="can-i-handle-a-tool-without-running-a-task">Can I handle a tool without running a task?<a class="headerlink" href="#can-i-handle-a-tool-without-running-a-task" title="Permanent link">&para;</a></h2>
+<p>Yes, if you've enabled an agent to both <em>use</em> (i.e. generate) and <em>handle</em> a tool. 
+See the <code>test_tool_no_task</code> for an example of this. The <code>NabroskiTool</code> is enabled
+for the agent, and to get the agent's LLM to generate the tool, you first do 
+something like:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">response</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">llm_response</span><span class="p">(</span><span class="s2">&quot;What is Nabroski of 1 and 2?&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+Now the <code>response</code> is a <code>ChatDocument</code> that will contain the JSON for the <code>NabroskiTool</code>.
+To <em>handle</em> the tool, you will need to call the agent's <code>agent_response</code> method:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">agent_response</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+</span></code></pre></div>
+<p>When you wrap the agent in a task object, and do <code>task.run()</code> the above two steps are done for you,
+since Langroid operates via a loop mechanism, see docs 
+<a href="https://langroid.github.io/langroid/quick-start/multi-agent-task-delegation/#task-collaboration-via-sub-tasks">here</a>.
+The <em>advantage</em> of using <code>task.run()</code> instead of doing this yourself, is that this method
+ensures that tool generation errors are sent back to the LLM so it retries the generation.</p>
+<h2 id="openai-tools-and-function-calling-support">OpenAI Tools and Function-calling support<a class="headerlink" href="#openai-tools-and-function-calling-support" title="Permanent link">&para;</a></h2>
+<p>Langroid supports OpenAI tool-calls API as well as OpenAI function-calls API.
+Read more <a href="https://github.com/langroid/langroid/releases/tag/0.7.0">here</a>.</p>
+<p>Langroid has always had its own native tool-calling support as well, 
+which works with <strong>any</strong> LLM -- you can define a subclass of <code>ToolMessage</code> (pydantic based) 
+and it is transpiled into system prompt instructions for the tool. 
+In practice, we don't see much difference between using this vs OpenAI fn-calling. 
+Example <a href="https://github.com/langroid/langroid/blob/main/examples/basic/fn-call-local-simple.py">here</a>.
+Or search for <code>ToolMessage</code> in any of the <code>tests/</code> or <code>examples/</code> folders.</p>
+<h2 id="some-example-scripts-appear-to-return-to-user-input-immediately-without-handling-a-tool">Some example scripts appear to return to user input immediately without handling a tool.<a class="headerlink" href="#some-example-scripts-appear-to-return-to-user-input-immediately-without-handling-a-tool" title="Permanent link">&para;</a></h2>
+<p>This is because the <code>task</code> has been set up with <code>interactive=True</code> 
+(which is the default). With this setting, the task loop waits for user input after
+either the <code>llm_response</code> or <code>agent_response</code> (typically a tool-handling response) 
+returns a valid response. If you want to progress through the task, you can simply 
+hit return, unless the prompt indicates that the user needs to enter a response.</p>
+<p>Alternatively, the <code>task</code> can be set up with <code>interactive=False</code> -- with this setting,
+the task loop will <em>only</em> wait for user input when an entity response (<code>llm_response</code> 
+or <code>agent_response</code>) <em>explicitly</em> addresses the user. Explicit user addressing can
+be done using either:</p>
+<ul>
+<li>an orchestration tool, e.g. <code>SendTool</code> (see details in
+the release notes for <a href="https://github.com/langroid/langroid/releases/tag/0.9.0">0.9.0</a>), an example script is the <a href="https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-triage.py">multi-agent-triage.py</a>, or </li>
+<li>a special addressing prefix, see the example script <a href="https://github.com/langroid/langroid/blob/main/examples/basic/1-agent-3-tools-address-user.py">1-agent-3-tools-address-user.py</a></li>
+</ul>
+<h2 id="can-i-specify-top_k-in-openaigptconfig-for-llm-api-calls">Can I specify top_k in OpenAIGPTConfig (for LLM API calls)?<a class="headerlink" href="#can-i-specify-top_k-in-openaigptconfig-for-llm-api-calls" title="Permanent link">&para;</a></h2>
+<p>No; Langroid currently only supports parameters accepted by OpenAI's API, and <code>top_k</code> is <em>not</em> one of them. See:</p>
+<ul>
+<li><a href="https://platform.openai.com/docs/api-reference/chat/create">OpenAI API Reference</a></li>
+<li><a href="https://community.openai.com/t/temperature-top-p-and-top-k-for-chatbot-responses/295542/5">Discussion on top_k, top_p, temperature</a></li>
+<li><a href="https://github.com/langroid/langroid/blob/main/examples/basic/fn-call-local-numerical.py">Langroid example</a> showing how you can set other OpenAI API parameters, using the <code>OpenAICallParams</code> object.</li>
+</ul>
+<h2 id="can-i-persist-agent-state-across-multiple-runs">Can I persist agent state across multiple runs?<a class="headerlink" href="#can-i-persist-agent-state-across-multiple-runs" title="Permanent link">&para;</a></h2>
+<p>For example, you may want to stop the current python script, and 
+run it again later, resuming your previous conversation.
+Currently there is no built-in Langroid mechanism for this, but you can 
+achieve a basic type of persistence by saving the agent's <code>message_history</code>:</p>
+<ul>
+<li>if you used <code>Task.run()</code> in your script, make sure the task is 
+set up with <code>restart=False</code> -- this prevents the agent state from being reset when 
+the task is run again.</li>
+<li>using python's pickle module, you can save the <code>agent.message_history</code> to a file,
+and load it (if it exists) at the start of your script.</li>
+</ul>
+<p>See the example script <a href="https://github.com/langroid/langroid/blob/main/examples/basic/chat-persist.py"><code>chat-persist.py</code></a></p>
+<p>For more complex persistence, you can take advantage of the <code>GlobalState</code>,
+where you can store message histories of multiple agents indexed by their name.
+Simple examples of <code>GlobalState</code> are in the <a href="https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree.py"><code>chat-tree.py</code></a> example, 
+and the <a href="https://github.com/langroid/langroid/blob/main/tests/main/test_global_state.py"><code>test_global_state.py</code></a> test.</p>
+<h2 id="is-it-possible-to-share-state-between-agentstasks">Is it possible to share state between agents/tasks?<a class="headerlink" href="#is-it-possible-to-share-state-between-agentstasks" title="Permanent link">&para;</a></h2>
+<p>The above-mentioned <code>GlobalState</code> mechanism can be used to share state between 
+agents/tasks. See the links mentioned in the previous answer.</p>
+<h2 id="how-can-i-suppress-llm-output">How can I suppress LLM output?<a class="headerlink" href="#how-can-i-suppress-llm-output" title="Permanent link">&para;</a></h2>
+<p>You can use the <code>quiet_mode</code> context manager for this, see 
+<a href="https://langroid.github.io/langroid/notes/quiet-mode/">here</a></p>
+<h2 id="how-can-i-deal-with-llms-especially-weak-ones-generating-bad-json-in-tools">How can I deal with LLMs (especially weak ones) generating bad JSON in tools?<a class="headerlink" href="#how-can-i-deal-with-llms-especially-weak-ones-generating-bad-json-in-tools" title="Permanent link">&para;</a></h2>
+<p>Langroid already attempts to repair bad JSON (e.g. unescaped newlines, missing quotes, etc)<br />
+using the <a href="https://github.com/mangiucugna/json_repair">json-repair</a> library and other
+custom methods, before attempting to parse it into a <code>ToolMessage</code> object.
+However this type of repair may not be able to handle all edge cases of bad JSON 
+from weak LLMs. There are two existing ways to deal with this, and one coming soon:</p>
+<ul>
+<li>If you are defining your own <code>ToolMessage</code> subclass, considering deriving it instead
+  from <code>XMLToolMessage</code> instead, see the <a href="https://langroid.github.io/langroid/notes/xml-tools/">XML-based Tools</a></li>
+<li>If you are using an existing Langroid <code>ToolMessage</code>, e.g. <code>SendTool</code>, you can 
+  define your own subclass of <code>SendTool</code>, say <code>XMLSendTool</code>,
+  inheriting from both <code>SendTool</code> and <code>XMLToolMessage</code>; see this 
+  <a href="https://github.com/langroid/langroid/blob/main/examples/basic/xml_tool.py">example</a></li>
+<li>Coming soon: strict decoding to leverage the Structured JSON outputs supported by OpenAI
+  and open LLM providers such as <code>llama.cpp</code> and <code>vllm</code>.</li>
+</ul>
+<p>The first two methods instruct the LLM to generate XML instead of JSON,
+and any field that is designated with a <code>verbatim=True</code> will be enclosed 
+within an XML <code>CDATA</code> tag, which does <em>not</em> require any escaping, and can
+be far more reliable for tool-use than JSON, especially with weak LLMs.</p>
+<h2 id="how-can-i-handle-an-llm-forgetting-to-generate-a-toolmessage">How can I handle an LLM "forgetting" to generate a <code>ToolMessage</code>?<a class="headerlink" href="#how-can-i-handle-an-llm-forgetting-to-generate-a-toolmessage" title="Permanent link">&para;</a></h2>
+<p>Sometimes the LLM (especially a weak one) forgets to generate a 
+<a class="autorefs autorefs-internal" href="../reference/agent/tool_message/#langroid.agent.tool_message.ToolMessage"><code>ToolMessage</code></a>
+(either via OpenAI's tools/functions API, or via Langroid's JSON/XML Tool mechanism),
+despite being instructed to do so. There are a few remedies Langroid offers for this:</p>
+<p><strong>Improve the instructions in the <code>ToolMessage</code> definition:</strong></p>
+<ul>
+<li>Improve instructions in the <code>purpose</code> field of the <code>ToolMessage</code>.</li>
+<li>Add an <code>instructions</code> class-method to the <code>ToolMessage</code>, as in the
+  <a href="https://github.com/langroid/langroid/blob/main/examples/docqa/chat-search.py"><code>chat-search.py</code></a> script:</li>
+</ul>
+<p><div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@classmethod</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">instructions</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="k">return</span> <span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="s2">        IMPORTANT: You must include an ACTUAL query in the `query` field,</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s2">        &quot;&quot;&quot;</span>
+</span></code></pre></div>
+  These instructions are meant to be general instructions on how to use the tool
+  (e.g. how to set the field values), not to specifically about the formatting.</p>
+<ul>
+<li>Add a <code>format_instructions</code> class-method, e.g. like the one in the 
+  <a href="https://github.com/langroid/langroid/blob/main/examples/docqa/chat-multi-extract-3.py"><code>chat-multi-extract-3.py</code></a> 
+  example script.</li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@classmethod</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">format_instructions</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">tool</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">instr</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">format_instructions</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">instr</span> <span class="o">+=</span> <span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="s2">    ------------------------------</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="s2">    ASK ME QUESTIONS ONE BY ONE, to FILL IN THE FIELDS </span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="s2">    of the `lease_info` function/tool.</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="s2">    First ask me for the start date of the lease.</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="s2">    DO NOT ASK ANYTHING ELSE UNTIL YOU RECEIVE MY ANSWER.</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="s2">    &quot;&quot;&quot;</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="k">return</span> <span class="n">instr</span>
+</span></code></pre></div>
+<p><strong>Override the <code>handle_message_fallback</code> method in the agent:</strong></p>
+<p>This method is called when the Agent's <code>agent_response</code> method receives a non-tool
+message as input. The default behavior of this method is to return None, but it
+is very useful to override the method to handle cases where the LLM has forgotten
+to use a tool. You can define this method to return a "nudge" to the LLM
+telling it that it forgot to do a tool-call, e.g. see how it's done in the 
+example script <a href="https://github.com/langroid/langroid/blob/main/examples/docqa/chat-multi-extract-local.py"><code>chat-multi-extract-local.py</code></a>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeasePresenterAgent</span><span class="p">(</span><span class="n">ChatAgent</span><span class="p">):</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">handle_message_fallback</span><span class="p">(</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">ChatDocument</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">ChatDocument</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Handle scenario where Agent failed to present the Lease JSON&quot;&quot;&quot;</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ChatDocument</span><span class="p">)</span> <span class="ow">and</span> <span class="n">msg</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">sender</span> <span class="o">==</span> <span class="n">Entity</span><span class="o">.</span><span class="n">LLM</span><span class="p">:</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>            <span class="k">return</span> <span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="s2">            You either forgot to present the information in the JSON format</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="s2">            required in `lease_info` JSON specification,</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="s2">            or you may have used the wrong name of the tool or fields.</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="s2">            Try again.</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="s2">            &quot;&quot;&quot;</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>        <span class="k">return</span> <span class="kc">None</span>
+</span></code></pre></div>
+<p>Note that despite doing all of these, the LLM may still fail to generate a <code>ToolMessage</code>.
+In such cases, you may want to consider using a better LLM, or an up-coming Langroid
+feature that leverages <strong>strict decoding</strong> abilities of specific LLM providers
+(e.g. OpenAI, llama.cpp, vllm) that are able to use grammar-constrained decoding
+to force the output to conform to the specified structure.</p>
+<p>Langroid also provides a simpler mechanism to specify the action to take
+when an LLM does not generate a tool, via the <code>ChatAgentConfig.handle_llm_no_tool</code> 
+config parameter, see the 
+<a href="https://langroid.github.io/langroid/notes/handle-llm-no-tool/">docs</a>.</p>
+<h2 id="can-i-use-langroid-to-converse-with-a-knowledge-graph-kg">Can I use Langroid to converse with a Knowledge Graph (KG)?<a class="headerlink" href="#can-i-use-langroid-to-converse-with-a-knowledge-graph-kg" title="Permanent link">&para;</a></h2>
+<p>Yes, you can use Langroid to "chat with" either a Neo4j or ArangoDB KG, 
+see docs <a href="https://langroid.github.io/langroid/notes/knowledge-graphs/">here</a></p>
+<h2 id="how-can-i-improve-docchatagent-rag-latency">How can I improve <code>DocChatAgent</code> (RAG) latency?<a class="headerlink" href="#how-can-i-improve-docchatagent-rag-latency" title="Permanent link">&para;</a></h2>
+<p>The behavior of <code>DocChatAgent</code> can be controlled by a number of settings in 
+the <code>DocChatAgentConfig</code> class.
+The top-level query-answering method in <code>DocChatAgent</code> is <code>llm_response</code>, which use the 
+<code>answer_from_docs</code> method. At a high level, the response to an input message involves
+the following steps:</p>
+<ul>
+<li><strong>Query to StandAlone:</strong> LLM rephrases the query as a stand-alone query. 
+   This can incur some latency. You can 
+    turn it off by setting <code>assistant_mode=True</code> in the <code>DocChatAgentConfig</code>.</li>
+<li><strong>Retrieval:</strong> The most relevant passages (chunks) are retrieved using a collection of semantic/lexical 
+      similarity searches and ranking methods. There are various knobs in <code>DocChatAgentConfig</code> to control
+      this retrieval.</li>
+<li><strong>Relevance Extraction:</strong> LLM is used to retrieve verbatim relevant portions from
+  the retrieved chunks. This is typically the biggest latency step. You can turn it off
+  by setting the <code>relevance_extractor_config</code> to None in <code>DocChatAgentConfig</code>.</li>
+<li><strong>Answer Generation:</strong> LLM generates answer based on retrieved passages.</li>
+</ul>
+<p>See the <a href="https://github.com/langroid/langroid/blob/main/examples/docqa/doc-aware-chat.py"><code>doc-aware-chat.py</code></a>
+example script, which illustrates some of these settings.</p>
+<p>In some scenarios you want to <em>only</em> use the <strong>retrieval</strong> step of a <code>DocChatAgent</code>.
+For this you can use the <a class="autorefs autorefs-internal" href="../reference/agent/tools/retrieval_tool/#langroid.agent.tools.retrieval_tool.RetrievalTool"><code>RetrievalTool</code></a>.
+See the <code>test_retrieval_tool</code> in 
+<a href="https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py"><code>test_doc_chat_agent.py</code></a>.
+to learn how to use it. The above example script uses <code>RetrievalTool</code> as well.</p>
+<h2 id="is-there-support-to-run-multiple-tasks-concurrently">Is there support to run multiple tasks concurrently?<a class="headerlink" href="#is-there-support-to-run-multiple-tasks-concurrently" title="Permanent link">&para;</a></h2>
+<p>Yes, see the <code>run_batch_tasks</code> and related functions in 
+<a href="https://github.com/langroid/langroid/blob/main/langroid/agent/batch.py">batch.py</a>.</p>
+<p>See also:</p>
+<ul>
+<li>tests: <a href="https://github.com/langroid/langroid/blob/main/tests/main/test_batch.py">test_batch.py</a>,
+   <a href="https://github.com/langroid/langroid/blob/main/tests/main/test_relevance_extractor.py">test_relevance_extractor.py</a>,</li>
+<li>example: <a href="https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-round-table.py">multi-agent-round-table.py</a></li>
+</ul>
+<p>Another example is within 
+<a href="https://github.com/langroid/langroid/blob/main/langroid/agent/special/doc_chat_agent.py"><code>DocChatAgent</code></a>, 
+which uses batch tasks for relevance extraction,
+see the <code>get_verbatim_extracts</code> method -- when there are k relevant passages,
+this runs k tasks concurrently, 
+each of which uses an LLM-agent to extract relevant verbatim text from a passage.</p>
+<h2 id="can-i-use-langroid-in-a-fastapi-server">Can I use Langroid in a FastAPI server?<a class="headerlink" href="#can-i-use-langroid-in-a-fastapi-server" title="Permanent link">&para;</a></h2>
+<p>Yes, see the <a href="https://github.com/langroid/fastapi-server">langroid/fastapi-server</a> repo.</p>
+<h2 id="can-a-sub-task-end-all-parent-tasks-and-return-a-result">Can a sub-task end all parent tasks and return a result?<a class="headerlink" href="#can-a-sub-task-end-all-parent-tasks-and-return-a-result" title="Permanent link">&para;</a></h2>
+<p>Yes, there are two ways to achieve this, using [<code>FinalResultTool</code>][langroid.agent.tools.orchestration.final_result_tool.FinalResultTool]:</p>
+<p>From a <code>ChatAgent</code>'s tool-handler or <code>agent_response</code> method: Your code can return a 
+<code>FinalResultTool</code> with arbitrary field types; this ends the current and all parent tasks and this<br />
+<code>FinalResultTool</code> will appear as one of tools in the final <code>ChatDocument.tool_messages</code>.
+See <code>test_tool_handlers_and_results</code> in 
+<a href="https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py">test_tool_messages.py</a>, 
+and <a href="https://github.com/langroid/langroid/blob/main/examples/basic/chat-tool-function.py">examples/basic/chat-tool-function.py</a></p>
+<p>From <code>ChatAgent</code>'s <code>llm_response</code> method: you can define a subclass of a 
+<code>FinalResultTool</code> and enable the agent to use this tool, which means it will become
+available for the LLM to generate. 
+See <a href="https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-return-result.py">examples/basic/multi-agent-return-result.py</a>.</p>
+<h2 id="how-can-i-configure-a-task-to-retain-or-discard-prior-conversation">How can I configure a task to retain or discard prior conversation?<a class="headerlink" href="#how-can-i-configure-a-task-to-retain-or-discard-prior-conversation" title="Permanent link">&para;</a></h2>
+<p>In some scenarios, you may want to control whether each time you call a task's <code>run</code> 
+method, the underlying agent retains the conversation history from the previous run.
+There are two boolean config parameters that control this behavior: </p>
+<ul>
+<li>the <code>restart</code> parameter (default <code>True</code>) in the <code>Task</code> constructor, and</li>
+<li>the <code>restart_as_subtask</code> (default <code>False</code>) parameter in the <code>TaskConfig</code> argument of the <code>Task</code> constructor.</li>
+</ul>
+<p>To understand how these work, consider a simple scenario of a task <code>t</code> that has a 
+subtask <code>t1</code>, e.g., suppose you have the following code with default settings 
+of the <code>restart</code> and <code>restart_as_subtask</code> parameters:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">langroid.agent.task</span><span class="w"> </span><span class="kn">import</span> <span class="n">Task</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">langroid.agent.task</span><span class="w"> </span><span class="kn">import</span> <span class="n">TaskConfig</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># default setttings:</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">rs</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">r</span> <span class="o">=</span> <span class="n">r1</span> <span class="o">=</span> <span class="kc">True</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">agent</span> <span class="o">=</span> <span class="o">...</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="n">task_config</span> <span class="o">=</span> <span class="n">TaskConfig</span><span class="p">(</span><span class="n">restart_as_subtask</span><span class="o">=</span><span class="n">rs</span><span class="p">)</span> 
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="n">t</span> <span class="o">=</span> <span class="n">Task</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">restart</span><span class="o">=</span><span class="n">r</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">task_config</span><span class="p">)</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="n">agent1</span> <span class="o">=</span> <span class="o">...</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="n">t1</span> <span class="o">=</span> <span class="n">Task</span><span class="p">(</span><span class="n">agent1</span><span class="p">,</span> <span class="n">restart</span><span class="o">=</span><span class="n">r1</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">task_config</span><span class="p">)</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="n">t</span><span class="o">.</span><span class="n">add_subtask</span><span class="p">(</span><span class="n">t1</span><span class="p">)</span>
+</span></code></pre></div>
+<p>This default setting works as follows:
+Since task <code>t</code> was constructed with the default <code>restart=True</code>, when <code>t.run()</code> is called, the conversation histories of the agent underlying <code>t</code> as well as all 
+those of all subtasks (such as <code>t1</code>) are reset. However, if during <code>t.run()</code>,
+there are multiple calls to <code>t1.run()</code>, then the conversation history is retained across these calls, even though <code>t1</code> was constructed with the default <code>restart=True</code> --
+this is because the <code>restart</code> constructor parameter has no effect on a task's reset
+behavior <strong>when it is a subtask</strong>. </p>
+<p>The <code>TaskConfig.restart_as_subtask</code> parameter
+controls the reset behavior of a task's <code>run</code> method when invoked as a subtask.
+It defaults to <code>False</code>, which is why in the above example, the conversation history
+of <code>t1</code> is retained across multiple calls to <code>t1.run()</code> that may occur
+during execution of <code>t.run()</code>. If you set this parameter to <code>True</code> in the above
+example, then the conversation history of <code>t1</code> would be reset each time <code>t1.run()</code> is called, during a call to <code>t.run()</code>.</p>
+<p>To summarize, </p>
+<ul>
+<li>The <code>Task</code> constructor's <code>restart</code> parameter controls the reset behavior of the task's <code>run</code> method when it is called directly, not as a subtask.</li>
+<li>The <code>TaskConfig.restart_as_subtask</code> parameter controls the reset behavior of the task's <code>run</code> method when it is called as a subtask.</li>
+</ul>
+<p>These settings can be mixed and matched as needed.</p>
+<p>Additionally, all reset behavior can be turned off during a specific <code>run()</code> invocation
+by calling it with <code>allow_restart=False</code>, e.g.,  <code>t.run(..., allow_restart=False)</code>.</p>
+<h2 id="how-can-i-set-up-a-task-to-exit-as-soon-as-the-llm-responds">How can I set up a task to exit as soon as the LLM responds?<a class="headerlink" href="#how-can-i-set-up-a-task-to-exit-as-soon-as-the-llm-responds" title="Permanent link">&para;</a></h2>
+<p>In some cases you may want the top-level task or a subtask to exit as soon as the LLM responds. You can get this behavior by setting <code>single_round=True</code> during task construction, e.g.,</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">langroid.agent.task</span><span class="w"> </span><span class="kn">import</span> <span class="n">Task</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">agent</span> <span class="o">=</span> <span class="o">...</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">t</span> <span class="o">=</span> <span class="n">Task</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">single_round</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">interactive</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">result</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;What is 4 + 5?&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>The name <code>single_round</code> comes from the fact that the task loop ends as soon as 
+any <strong>one</strong> of the agent's responders return a valid response. Recall that an 
+agent's responders are <code>llm_response</code>, <code>agent_response</code> (for tool handling), and <code>user_response</code> (for user input). In the above example there are no tools and no 
+user interaction (since <code>interactive=False</code>), so the task will exit as soon as the LLM responds.</p>
+<p>More commonly, you may only want this single-round behavior for a subtask, e.g.,</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">agent</span> <span class="o">=</span> <span class="o">...</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">t</span> <span class="o">=</span> <span class="n">Task</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">single_round</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">interactive</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">agent1</span> <span class="o">=</span> <span class="o">...</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">t1</span> <span class="o">=</span> <span class="n">Task</span><span class="p">(</span><span class="n">agent1</span><span class="p">,</span> <span class="n">single_round</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">interactive</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="n">t</span><span class="o">.</span><span class="n">add_subtask</span><span class="p">(</span><span class="n">t1</span><span class="p">)</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">top_level_query</span> <span class="o">=</span> <span class="o">...</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="n">result</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span></code></pre></div>
+<p>See the example script <a href="https://github.com/langroid/langroid/blob/main/examples/basic/chat-2-agent-discuss.py"><code>chat-2-agent-discuss.py</code></a> for an example of this, and also search for <code>single_round</code> in the rest of the examples.</p>
+<div class="admonition warning">
+<p class="admonition-title">Using <code>single_round=True</code> will prevent tool-handling</p>
+<p>As explained above, setting <code>single_round=True</code> will cause the task to exit as soon as the LLM responds, and thus if it emits a valid tool (which the agent is enabled to handle), this tool will <em>not</em> be handled.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "toc", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f13b1293.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
