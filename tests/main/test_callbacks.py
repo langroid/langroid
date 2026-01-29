@@ -34,19 +34,18 @@ class MockLMWithReasoning(lm.MockLM):
 class TestCallbacksReasoningParameter:
     """Test that reasoning parameter is correctly passed to callbacks."""
 
-    def test_show_llm_response_receives_reasoning(self):
+    def test_show_llm_response_receives_reasoning(self) -> None:
         """Test that show_llm_response callback receives the reasoning parameter."""
         test_reasoning = "This is my chain-of-thought reasoning."
         mock_callback = MagicMock()
 
-        config = ChatAgentConfig(
-            llm=lm.MockLMConfig(default_response="The answer is 42"),
-        )
+        mock_config = lm.MockLMConfig(default_response="The answer is 42")
+        config = ChatAgentConfig(llm=mock_config)
         agent = ChatAgent(config)
 
         # Replace LLM with our custom MockLM that includes reasoning
         agent.llm = MockLMWithReasoning(
-            config=agent.config.llm,
+            config=mock_config,
             reasoning=test_reasoning,
         )
 
@@ -62,17 +61,16 @@ class TestCallbacksReasoningParameter:
         assert "reasoning" in call_kwargs
         assert call_kwargs["reasoning"] == test_reasoning
 
-    def test_show_llm_response_empty_reasoning(self):
+    def test_show_llm_response_empty_reasoning(self) -> None:
         """Test that show_llm_response callback receives empty reasoning when none."""
         mock_callback = MagicMock()
 
-        config = ChatAgentConfig(
-            llm=lm.MockLMConfig(default_response="The answer is 42"),
-        )
+        mock_config = lm.MockLMConfig(default_response="The answer is 42")
+        config = ChatAgentConfig(llm=mock_config)
         agent = ChatAgent(config)
 
         # Use standard MockLM without reasoning
-        agent.llm = lm.MockLM(config=agent.config.llm)
+        agent.llm = lm.MockLM(config=mock_config)
 
         # Attach mock callback
         agent.callbacks.show_llm_response = mock_callback
@@ -86,15 +84,14 @@ class TestCallbacksReasoningParameter:
         assert "reasoning" in call_kwargs
         assert call_kwargs["reasoning"] == ""
 
-    def test_show_llm_response_citation_has_empty_reasoning(self):
+    def test_show_llm_response_citation_has_empty_reasoning(self) -> None:
         """Test that citation callback call has empty reasoning."""
         mock_callback = MagicMock()
 
-        config = ChatAgentConfig(
-            llm=lm.MockLMConfig(default_response="The answer is 42"),
-        )
+        mock_config = lm.MockLMConfig(default_response="The answer is 42")
+        config = ChatAgentConfig(llm=mock_config)
         agent = ChatAgent(config)
-        agent.llm = lm.MockLM(config=agent.config.llm)
+        agent.llm = lm.MockLM(config=mock_config)
 
         # Attach mock callback
         agent.callbacks.show_llm_response = mock_callback
@@ -112,19 +109,18 @@ class TestCallbacksReasoningParameter:
 class TestCallbacksReasoningParameterAsync:
     """Test that reasoning parameter is correctly passed to callbacks in async."""
 
-    async def test_show_llm_response_receives_reasoning_async(self):
+    async def test_show_llm_response_receives_reasoning_async(self) -> None:
         """Test that show_llm_response callback receives reasoning in async flow."""
         test_reasoning = "Async chain-of-thought reasoning."
         mock_callback = MagicMock()
 
-        config = ChatAgentConfig(
-            llm=lm.MockLMConfig(default_response="The async answer is 42"),
-        )
+        mock_config = lm.MockLMConfig(default_response="The async answer is 42")
+        config = ChatAgentConfig(llm=mock_config)
         agent = ChatAgent(config)
 
         # Replace LLM with our custom MockLM that includes reasoning
         agent.llm = MockLMWithReasoning(
-            config=agent.config.llm,
+            config=mock_config,
             reasoning=test_reasoning,
         )
 
@@ -144,18 +140,47 @@ class TestCallbacksReasoningParameterAsync:
 class TestCallbackSignatureBackwardCompatibility:
     """Test that callbacks work with old signatures (without reasoning param)."""
 
-    def test_noop_callback_accepts_reasoning(self):
+    def test_noop_callback_accepts_reasoning(self) -> None:
         """Test that the default noop callbacks accept the reasoning parameter."""
-        config = ChatAgentConfig(
-            llm=lm.MockLMConfig(default_response="Test response"),
-        )
+        mock_config = lm.MockLMConfig(default_response="Test response")
+        config = ChatAgentConfig(llm=mock_config)
         agent = ChatAgent(config)
 
         # Replace LLM with MockLM that includes reasoning
         agent.llm = MockLMWithReasoning(
-            config=agent.config.llm,
+            config=mock_config,
             reasoning="Some reasoning content",
         )
 
         # This should not raise an error - noop callbacks accept **kwargs
         agent.llm_response("Test question")
+
+    def test_old_callback_without_reasoning_still_works(self) -> None:
+        """Old callbacks without reasoning param should not crash."""
+        callback_called = False
+
+        def old_style_callback(
+            content: str,
+            tools_content: str = "",
+            is_tool: bool = False,
+            cached: bool = False,
+            language: str | None = None,
+        ) -> None:
+            nonlocal callback_called
+            callback_called = True
+            # Mark params as used to satisfy linter
+            _ = (content, tools_content, is_tool, cached, language)
+
+        mock_config = lm.MockLMConfig(default_response="Test response")
+        config = ChatAgentConfig(llm=mock_config)
+        agent = ChatAgent(config)
+        agent.llm = lm.MockLM(config=mock_config)
+
+        # Attach old-style callback without reasoning param
+        agent.callbacks.show_llm_response = old_style_callback
+
+        # This should not raise TypeError
+        agent.llm_response("Test question")
+
+        # Verify callback was actually called
+        assert callback_called
