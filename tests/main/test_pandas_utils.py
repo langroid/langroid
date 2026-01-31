@@ -40,6 +40,29 @@ BLOCK_WITH_MSG = [
         r"unexpected variable 'other_var'",
     ),
     (DEEP_EXPR, r"AST nesting too deep"),
+    # CVE-2025-46724 bypass tests - dunder attribute access
+    ("df.__init__", r"dunder attribute '__init__' not allowed"),
+    ("df.__class__", r"dunder attribute '__class__' not allowed"),
+    ("df.__globals__", r"dunder attribute '__globals__' not allowed"),
+    ("df.__builtins__", r"dunder attribute '__builtins__' not allowed"),
+    # CVE-2025-46724 bypass tests - private attribute access
+    ("df._private", r"private attribute '_private' not allowed"),
+    ("df._internal_method()", r"method '_internal_method' not permitted"),
+    # CVE-2025-46724 bypass tests - dunder access via kwargs (the actual bypass vector)
+    (
+        "df.groupby(by=df.__init__)",
+        r"dunder attribute '__init__' not allowed",
+    ),
+    (
+        "df.groupby(by=df.__class__.__bases__)",
+        r"dunder attribute '__.+__' not allowed",
+    ),
+    # Full PoC exploit payload - blocks on dunder attribute access
+    (
+        "df.add_prefix(\"__import__('os').system('ls')#\").T.groupby("
+        "by=df.__init__.__globals__['__builtins__']['eval'])",
+        r"dunder attribute '__.+__' not allowed",
+    ),
 ]
 
 

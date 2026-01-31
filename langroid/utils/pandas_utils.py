@@ -237,6 +237,16 @@ class CommandValidator(ast.NodeVisitor):
             raise UnsafeCommandError("subscript must be literal")
         self.generic_visit(node)
 
+    # Attribute access
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        # Block dunder attributes to prevent access to __init__, __globals__, etc.
+        if node.attr.startswith("__") and node.attr.endswith("__"):
+            raise UnsafeCommandError(f"dunder attribute '{node.attr}' not allowed")
+        # Block single underscore private attributes as well for defense in depth
+        if node.attr.startswith("_") and node.attr not in WHITELISTED_DF_METHODS:
+            raise UnsafeCommandError(f"private attribute '{node.attr}' not allowed")
+        self.generic_visit(node)
+
     # Method calls
     def visit_Call(self, node: ast.Call) -> None:
         if not isinstance(node.func, ast.Attribute):
@@ -253,6 +263,7 @@ class CommandValidator(ast.NodeVisitor):
         for kw in node.keywords:
             if kw.arg in BLOCKED_KW:
                 raise UnsafeCommandError(f"kwarg '{kw.arg}' is blocked")
+            # Check numeric limits on literals; non-literals validated via generic_visit
             _literal_ok(kw.value)
         for arg in node.args:
             _literal_ok(arg)
