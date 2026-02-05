@@ -1659,54 +1659,41 @@ class ChatAgent(Agent):
                     """
                 )
             else:
-                # unacceptably small output len, so compress early parts of conv
-                # history if output_len is still too long.
-                # TODO we should really be doing summarization or other types of
-                #   prompt-size reduction
-                msg_idx_to_compress = 1  # don't touch system msg
-                # we will try compressing msg indices up to but not including
-                # last user msg
-                last_msg_idx_to_compress = (
-                    self.last_message_idx_with_role(
-                        role=Role.USER,
-                    )
-                    - 1
-                )
-                n_truncated = 0
+                # unacceptably small output len, so drop complete turns from early
+                # parts of conversation history
+                # A complete turn = USER msg -> last msg before next USER msg
+
+                n_dropped_turns = 0
                 while (
                     self.chat_num_tokens(hist)
                     > self.llm.chat_context_length() - self.config.llm.min_output_tokens
                 ):
-                    # try dropping early parts of conv history
-                    # TODO we should really be doing summarization or other types of
-                    #   prompt-size reduction
-                    if msg_idx_to_compress > last_msg_idx_to_compress:
-                        # We want to preserve the first message (typically system msg)
-                        # and last message (user msg).
-                        raise ValueError(
-                            """
-                        The (message history + max_output_tokens) is longer than the
-                        max chat context length of this model, and we have tried
-                        reducing the requested max output tokens, as well as truncating
-                        early parts of the message history, to accommodate the model
-                        context length, but we have run out of msgs to drop.
+                    # Find the last USER message index
+                    last_user_idx = self.last_message_idx_with_role(role=Role.USER)
+                    if last_user_idx == -1:
+                        break
 
-                        HINT: In the `llm` field of your `ChatAgentConfig` object,
-                        which is of type `LLMConfig/OpenAIGPTConfig`, try
-                        - increasing `chat_context_length`
-                            (if accurate for the model), or
-                        - decreasing `max_output_tokens`
-                        """
-                        )
-                    n_truncated += 1
-                    # compress the msg at idx `msg_idx_to_compress`
-                    hist[msg_idx_to_compress] = self.truncate_message(
-                        msg_idx_to_compress,
-                        tokens=30,
-                        warning="... [Contents truncated!]",
-                    )
+                    # Find the first complete turn to drop (skip system message)
+                    first_user_idx = -1
+                    for i in range(1, last_user_idx):
+                        if hist[i].role == Role.USER:
+                            first_user_idx = i
+                            break
+                    if first_user_idx == -1:
+                        break
 
-                    msg_idx_to_compress += 1
+                    # Find the end of this turn: last message before next USER
+                    next_user_idx = -1
+                    for i in range(first_user_idx + 1, last_user_idx):
+                        if hist[i].role == Role.USER:
+                            next_user_idx = i
+                            break
+                    if next_user_idx == -1:
+                        break
+
+                    # Drop the turn
+                    self.clear_history(first_user_idx, next_user_idx - 1)
+                    n_dropped_turns += 1
 
                 output_len = min(
                     self.config.llm.model_max_output_tokens,
@@ -1718,9 +1705,8 @@ class ChatAgent(Agent):
                     raise ValueError(
                         f"""
                         Tried to shorten prompt history for chat mode
-                        but even after truncating all messages except system msg and
-                        last (user) msg,
-                        the history token len {self.chat_num_tokens(hist)} is
+                        but even after dropping complete turns except the system msg and
+                        last turn, the history token len {self.chat_num_tokens(hist)} is
                         too long to accommodate the desired minimum output tokens
                         {self.config.llm.min_output_tokens} within the
                         model's context length {self.llm.chat_context_length()}.
@@ -1729,7 +1715,7 @@ class ChatAgent(Agent):
                         """
                     )
                 else:
-                    # we MUST have truncated at least one msg
+                    # we MUST have dropped at least one turn
                     msg_tokens = self.chat_num_tokens()
                     logger.warning(
                         f"""
@@ -1737,8 +1723,8 @@ class ChatAgent(Agent):
                     tokens, but the current message history is {msg_tokens} tokens long,
                     which does not allow {self.config.llm.model_max_output_tokens}
                     output tokens.
-                    Therefore we truncated the first {n_truncated} messages
-                    in the conversation history so that history token
+                    Therefore we dropped the first {n_dropped_turns} complete turn(s)
+                    from the conversation history so that history token
                     length is reduced to {self.chat_num_tokens(hist)}, and
                     we use `max_output_tokens = {output_len}`,
                     so they can fit within the model's context length
