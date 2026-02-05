@@ -1684,7 +1684,7 @@ class ChatAgent(Agent):
 
                     # Find the end of this turn: last message before next USER
                     next_user_idx = -1
-                    for i in range(first_user_idx + 1, last_user_idx):
+                    for i in range(first_user_idx + 1, last_user_idx + 1):
                         if hist[i].role == Role.USER:
                             next_user_idx = i
                             break
