@@ -890,7 +890,8 @@ class OpenAIGPT(LanguageModel):
         reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
-    ) -> Tuple[bool, bool, str, str, Dict[str, int]]:
+        in_reasoning: bool = False,
+    ) -> Tuple[bool, bool, str, str, bool, Dict[str, int]]:
         """Process state vars while processing a streaming API response.
             Returns a tuple consisting of:
         - is_break: whether to break out of the loop
@@ -921,6 +922,7 @@ class OpenAIGPT(LanguageModel):
                 function_args,
                 completion,
                 reasoning,
+                in_reasoning,
                 usage,
             )
         event_args = ""
@@ -949,6 +951,37 @@ class OpenAIGPT(LanguageModel):
         else:
             event_text = choices[0]["text"]
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
+
+        # Handle inline reasoning delimiters
+        if event_text and not event_reasoning:
+            start, end = self.config.thought_delimiters
+            remaining_text = event_text
+            event_text = ""
+            event_reasoning = ""
+
+            while remaining_text:
+                if not in_reasoning:
+                    # Look for start delimiter
+                    if start in remaining_text:
+                        before_start, _, after_start = remaining_text.partition(start)
+                        event_text += before_start
+                        remaining_text = after_start
+                        in_reasoning = True
+                    else:
+                        # No start delimiter, it's all regular text
+                        event_text += remaining_text
+                        break
+                else:
+                    # We're inside reasoning, look for end delimiter
+                    if end in remaining_text:
+                        before_end, _, after_end = remaining_text.partition(end)
+                        event_reasoning += before_end
+                        remaining_text = after_end
+                        in_reasoning = False
+                    else:
+                        # No end delimiter yet, it's all reasoning
+                        event_reasoning += remaining_text
+                        break
 
         finish_reason = choices[0].get("finish_reason", "")
         if not event_text and finish_reason == "content_filter":
@@ -1025,6 +1058,7 @@ class OpenAIGPT(LanguageModel):
             function_args,
             completion,
             reasoning,
+            in_reasoning,
             usage,
         )
 
@@ -1039,7 +1073,8 @@ class OpenAIGPT(LanguageModel):
         reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
-    ) -> Tuple[bool, bool, str, str]:
+        in_reasoning: bool = False,
+    ) -> Tuple[bool, bool, str, str, bool, Dict[str, int]]:
         """Process state vars while processing a streaming API response.
             Returns a tuple consisting of:
         - is_break: whether to break out of the loop
@@ -1068,6 +1103,7 @@ class OpenAIGPT(LanguageModel):
                 function_args,
                 completion,
                 reasoning,
+                in_reasoning,
                 usage,
             )
         event_args = ""
@@ -1095,6 +1131,38 @@ class OpenAIGPT(LanguageModel):
         else:
             event_text = choices[0]["text"]
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
+
+        # Handle inline reasoning delimiters
+        if event_text and not event_reasoning:
+            start, end = self.config.thought_delimiters
+            remaining_text = event_text
+            event_text = ""
+            event_reasoning = ""
+
+            while remaining_text:
+                if not in_reasoning:
+                    # Look for start delimiter
+                    if start in remaining_text:
+                        before_start, _, after_start = remaining_text.partition(start)
+                        event_text += before_start
+                        remaining_text = after_start
+                        in_reasoning = True
+                    else:
+                        # No start delimiter, it's all regular text
+                        event_text += remaining_text
+                        break
+                else:
+                    # We're inside reasoning, look for end delimiter
+                    if end in remaining_text:
+                        before_end, _, after_end = remaining_text.partition(end)
+                        event_reasoning += before_end
+                        remaining_text = after_end
+                        in_reasoning = False
+                    else:
+                        # No end delimiter yet, it's all reasoning
+                        event_reasoning += remaining_text
+                        break
+
         if event_text:
             completion += event_text
             if not silent:
@@ -1160,6 +1228,7 @@ class OpenAIGPT(LanguageModel):
             function_args,
             completion,
             reasoning,
+            in_reasoning,
             usage,
         )
 
@@ -1189,6 +1258,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = []
         token_usage: Dict[str, int] = {}
         done: bool = False
+        in_reasoning: bool = False  # Track if we're inside reasoning delimiters
         try:
             for event in response:
                 (
@@ -1198,6 +1268,7 @@ class OpenAIGPT(LanguageModel):
                     function_args,
                     completion,
                     reasoning,
+                    in_reasoning,
                     usage,
                 ) = self._process_stream_event(
                     event,
@@ -1208,6 +1279,7 @@ class OpenAIGPT(LanguageModel):
                     reasoning=reasoning,
                     function_args=function_args,
                     function_name=function_name,
+                    in_reasoning=in_reasoning,
                 )
                 if len(usage) > 0:
                     # capture the token usage when non-empty
@@ -1265,6 +1337,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = []
         token_usage: Dict[str, int] = {}
         done: bool = False
+        in_reasoning: bool = False  # Track if we're inside reasoning delimiters
         try:
             async for event in response:
                 (
@@ -1274,6 +1347,7 @@ class OpenAIGPT(LanguageModel):
                     function_args,
                     completion,
                     reasoning,
+                    in_reasoning,
                     usage,
                 ) = await self._process_stream_event_async(
                     event,
@@ -1284,6 +1358,7 @@ class OpenAIGPT(LanguageModel):
                     reasoning=reasoning,
                     function_args=function_args,
                     function_name=function_name,
+                    in_reasoning=in_reasoning,
                 )
                 if len(usage) > 0:
                     # capture the token usage when non-empty
