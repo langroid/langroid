@@ -966,47 +966,55 @@ class OpenAIGPT(LanguageModel):
             )
             logging.warning("LLM API returned content filter error: " + event_text)
 
-        event_text_to_stream = event_text
-        event_reasoning_to_stream = event_reasoning
+        event_text_tokens = event_text
+        event_reasoning_tokens = event_reasoning
 
         # Handle inline reasoning delimiters
         if event_text and not event_reasoning:
             start, end = self.config.thought_delimiters
 
-            if not in_reasoning:
+            remaining_text = event_text
+            if in_reasoning:
+                # We're inside reasoning from the previous chunk
+                event_text_tokens = ""
+            else:
                 # Look for start delimiter
                 if start in event_text:
-                    event_text_to_stream, _, event_reasoning_to_stream = (
+                    before_start, _, after_start = (
                         event_text.partition(start)
                     )
+                    event_text_tokens = before_start
+                    remaining_text = after_start
                     in_reasoning = True
-            else:
+
+            if in_reasoning:
                 # We're inside reasoning, look for end delimiter
-                if end in event_text:
-                    event_reasoning_to_stream, _, event_text_to_stream = (
-                        event_text.partition(end)
+                if end in remaining_text:
+                    before_end, _, after_end = (
+                        remaining_text.partition(end)
                     )
+                    event_text_tokens += after_end
+                    event_reasoning_tokens = before_end
                     in_reasoning = False
                 else:
                     # No end delimiter yet, it's all reasoning
-                    event_text_to_stream = ""
-                    event_reasoning_to_stream = event_text
+                    event_reasoning_tokens = remaining_text
 
         if event_text:
             completion += event_text
-        if event_text_to_stream:
+        if event_text_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN + event_text_to_stream)
+                sys.stdout.write(Colors().GREEN + event_text_tokens)
                 sys.stdout.flush()
-            self.config.streamer(event_text_to_stream, StreamEventType.TEXT)
+            self.config.streamer(event_text_tokens, StreamEventType.TEXT)
 
         if event_reasoning:
             reasoning += event_reasoning
-        if event_reasoning_to_stream:
+        if event_reasoning_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN_DIM + event_reasoning_to_stream)
+                sys.stdout.write(Colors().GREEN_DIM + event_reasoning_tokens)
                 sys.stdout.flush()
-            self.config.streamer(event_reasoning_to_stream, StreamEventType.REASONING)
+            self.config.streamer(event_reasoning_tokens, StreamEventType.REASONING)
 
         if event_fn_name:
             function_name = event_fn_name
@@ -1131,48 +1139,56 @@ class OpenAIGPT(LanguageModel):
             event_text = choices[0]["text"]
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
 
-        event_text_to_stream = event_text
-        event_reasoning_to_stream = event_reasoning
+        event_text_tokens = event_text
+        event_reasoning_tokens = event_reasoning
 
         # Handle inline reasoning delimiters
         if event_text and not event_reasoning:
             start, end = self.config.thought_delimiters
 
-            if not in_reasoning:
+            remaining_text = event_text
+            if in_reasoning:
+                # We're inside reasoning from the previous chunk
+                event_text_tokens = ""
+            else:
                 # Look for start delimiter
                 if start in event_text:
-                    event_text_to_stream, _, event_reasoning_to_stream = (
+                    before_start, _, after_start = (
                         event_text.partition(start)
                     )
+                    event_text_tokens = before_start
+                    remaining_text = after_start
                     in_reasoning = True
-            else:
+
+            if in_reasoning:
                 # We're inside reasoning, look for end delimiter
-                if end in event_text:
-                    event_reasoning_to_stream, _, event_text_to_stream = (
-                        event_text.partition(end)
+                if end in remaining_text:
+                    before_end, _, after_end = (
+                        remaining_text.partition(end)
                     )
+                    event_text_tokens += after_end
+                    event_reasoning_tokens = before_end
                     in_reasoning = False
                 else:
                     # No end delimiter yet, it's all reasoning
-                    event_text_to_stream = ""
-                    event_reasoning_to_stream = event_text
+                    event_reasoning_tokens = remaining_text
 
         if event_text:
             completion += event_text
-        if event_text_to_stream:
+        if event_text_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN + event_text_to_stream)
+                sys.stdout.write(Colors().GREEN + event_text_tokens)
                 sys.stdout.flush()
-            await self.config.streamer_async(event_text_to_stream, StreamEventType.TEXT)
+            await self.config.streamer_async(event_text_tokens, StreamEventType.TEXT)
 
         if event_reasoning:
             reasoning += event_reasoning
-        if event_reasoning_to_stream:
+        if event_reasoning_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN + event_reasoning_to_stream)
+                sys.stdout.write(Colors().GREEN + event_reasoning_tokens)
                 sys.stdout.flush()
             await self.config.streamer_async(
-                event_reasoning_to_stream, StreamEventType.REASONING
+                event_reasoning_tokens, StreamEventType.REASONING
             )
 
         if event_fn_name:
