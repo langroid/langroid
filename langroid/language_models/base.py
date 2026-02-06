@@ -173,6 +173,7 @@ class OpenAIToolCall(BaseModel):
     id: str | None = None
     type: ToolTypes = "function"
     function: LLMFunctionCall | None = None
+    extra_content: Dict[str, Any] | None = None
 
     @staticmethod
     def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall":
@@ -184,7 +185,13 @@ class OpenAIToolCall(BaseModel):
         id = message["id"]
         type = message["type"]
         function = LLMFunctionCall.from_dict(message["function"])
-        return OpenAIToolCall(id=id, type=type, function=function)
+        extra_content = message.get("extra_content")
+        return OpenAIToolCall(
+            id=id,
+            type=type,
+            function=function,
+            extra_content=extra_content
+        )
 
     def __str__(self) -> str:
         if self.function is None:
@@ -332,6 +339,8 @@ class LLMMessage(BaseModel):
                     tc["function"]["arguments"] = json.dumps(
                         tc["function"]["arguments"]
                     )
+                if "extra_content" in tc and tc["extra_content"] is None:
+                    del tc["extra_content"]
         # IMPORTANT! drop fields that are not expected in API call
         dict_no_none.pop("tool_id", None)
         dict_no_none.pop("timestamp", None)
