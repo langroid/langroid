@@ -9,10 +9,10 @@ which is handled by the Agent's `pandas_eval` method. This method evaluates
 the expression and returns the result as a string.
 
 WARNING: This Agent should be used only with trusted input, as it can execute system
-commands. 
+commands.
 
 The `full_eval` flag is false by default, which means that the input is sanitized
-against most common code injection attack vectors. `full_eval` may be set to True to 
+against most common code injection attack vectors. `full_eval` may be set to True to
 disable sanitization at all. Both cases should be used with caution.
 """
 
@@ -222,7 +222,7 @@ class TableChatAgent(ChatAgent):
         """
         self.sent_expression = True
         exprn = msg.expression
-        vars = {"df": self.df}
+        vars = {"df": self.df, "__builtins__": {}}
         # Create a string-based I/O stream
         code_out = io.StringIO()
 

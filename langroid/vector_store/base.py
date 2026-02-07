@@ -82,15 +82,13 @@ class VectorStore(ABC):
             return PineconeDB(config)
 
         else:
-            logger.warning(
-                f"""
+            logger.warning(f"""
                 Unknown vector store config: {config.__class__.__name__},
                 so skipping vector store creation!
                 If you intended to use a vector-store, please set a specific 
                 vector-store in your script, typically in the `vecdb` field of a 
                 `ChatAgentConfig`, otherwise set it to None.
-                """
-            )
+                """)
             return None
 
     @property
@@ -218,7 +216,7 @@ class VectorStore(ABC):
         try:
             # SECURITY MITIGATION: Eval input is sanitized to prevent most common
             # code injection attack vectors when full_eval is False.
-            vars = {"df": df}
+            vars = {"df": df, "__builtins__": {}}
             if not self.config.full_eval:
                 calc = sanitize_command(calc)
             code = compile(calc, "<calc>", "eval")
