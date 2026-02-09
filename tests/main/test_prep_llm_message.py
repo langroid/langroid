@@ -110,3 +110,108 @@ def test_truncate_messages(agent):
     # First user message truncated
     assert "Contents truncated" in hist[1].content
     assert output_len >= MIN_OUTPUT_TOKENS  # At least min_output_tokens
+
+
+@pytest.fixture
+def agent_drop_turns():
+    """Create a ChatAgent with drop_turns strategy for testing."""
+    config = ChatAgentConfig(
+        system_message="System message",
+        context_overflow_strategy="drop_turns",
+        llm=OpenAIGPTConfig(
+            # Small context for testing truncation
+            chat_context_length=CHAT_CONTEXT_LENGTH,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+            min_output_tokens=MIN_OUTPUT_TOKENS,
+        ),
+    )
+    agent = ChatAgent(config)
+
+    # Create a mock parser that counts tokens as characters for simplicity
+    class MockParser:
+        def num_tokens(self, text: str | LLMMessage):
+            if isinstance(text, str):
+                return len(text)
+            else:
+                return len(text.content)
+
+        def truncate_tokens(self, text, tokens, warning=""):
+            return text[:tokens] + warning
+
+    agent.parser = MockParser()
+
+    # Create a mock LLM that returns a fixed context length
+    class MockLLM:
+        def chat_context_length(self):
+            return CHAT_CONTEXT_LENGTH
+
+        def supports_functions_or_tools(self):
+            return False
+
+    agent.llm = MockLLM()
+
+    agent.init_message_history()
+    return agent
+
+
+def test_drop_turns_strategy(agent_drop_turns):
+    """Test when drop_turns strategy is used to handle context overflow."""
+    agent = agent_drop_turns
+
+    # Fill the context with messages that will require dropping turns
+    agent.message_history = [LLMMessage(role=Role.SYSTEM, content="System message")]
+
+    # Add several complete turns that will need to be dropped
+    for i in range(3):
+        agent.message_history.append(
+            LLMMessage(role=Role.USER, content=f"User message {i+1} " + "X" * 8_000)
+        )
+        agent.message_history.append(
+            LLMMessage(role=Role.ASSISTANT, content=f"Assistant reply {i+1}")
+        )
+
+    orig_hist_len = len(agent.message_history)
+    # Call the method
+    hist, output_len = agent._prep_llm_messages("Final message")
+
+    # Check that turns were dropped (fewer messages than original)
+    assert len(hist) < orig_hist_len
+    # System message should still be present
+    assert hist[0].role == Role.SYSTEM
+    assert hist[0].content == "System message"
+    # The last user message should be present
+    assert hist[-1].role == Role.USER
+    assert hist[-1].content == "Final message"
+    # Check alternating pattern is preserved
+    for i in range(1, len(hist) - 1, 2):
+        assert hist[i].role == Role.USER
+        assert hist[i + 1].role == Role.ASSISTANT
+    assert output_len >= MIN_OUTPUT_TOKENS
+
+
+def test_drop_turns_preserves_last_turn(agent_drop_turns):
+    """Test that drop_turns preserves the system message and last turn."""
+    agent = agent_drop_turns
+
+    # Set up history with multiple turns
+    agent.message_history = [LLMMessage(role=Role.SYSTEM, content="System message")]
+
+    # Add turns with large content that will force dropping
+    for i in range(4):
+        agent.message_history.append(
+            LLMMessage(role=Role.USER, content=f"User {i+1} " + "Y" * 6_000)
+        )
+        agent.message_history.append(
+            LLMMessage(role=Role.ASSISTANT, content=f"Assistant {i+1}")
+        )
+
+    # Call the method with a final message
+    hist, output_len = agent._prep_llm_messages("Final user message")
+
+    # System message must be preserved
+    assert hist[0].role == Role.SYSTEM
+    # Last message must be the final user message
+    assert hist[-1].content == "Final user message"
+    # No message should contain "Contents truncated" (we drop, not truncate)
+    for msg in hist:
+        assert "Contents truncated" not in msg.content
