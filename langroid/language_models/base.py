@@ -187,10 +187,7 @@ class OpenAIToolCall(BaseModel):
         function = LLMFunctionCall.from_dict(message["function"])
         extra_content = message.get("extra_content")
         return OpenAIToolCall(
-            id=id,
-            type=type,
-            function=function,
-            extra_content=extra_content
+            id=id, type=type, function=function, extra_content=extra_content
         )
 
     def __str__(self) -> str:

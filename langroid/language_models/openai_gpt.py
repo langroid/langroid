@@ -879,6 +879,49 @@ class OpenAIGPT(LanguageModel):
         """Get streaming status."""
         return self.config.stream and settings.stream and self.info().allows_streaming
 
+    @staticmethod
+    def _split_inline_reasoning(
+        event_text: str,
+        event_reasoning: str,
+        in_reasoning: bool,
+        thought_delimiters: Tuple[str, str],
+    ) -> Tuple[str, str, bool]:
+        """Separate inline reasoning from text tokens in a streaming chunk.
+
+        When models embed thinking inside content (e.g. <think>...</think>)
+        rather than using a separate reasoning field, this splits the chunk
+        into text-only and reasoning-only portions for proper streamer routing.
+
+        Returns (text_tokens, reasoning_tokens, in_reasoning).
+        """
+        text_tokens = event_text
+        reasoning_tokens = event_reasoning
+
+        if not event_text or event_reasoning:
+            return text_tokens, reasoning_tokens, in_reasoning
+
+        start, end = thought_delimiters
+        remaining = event_text
+
+        if in_reasoning:
+            text_tokens = ""
+        elif start in event_text:
+            before, _, after = event_text.partition(start)
+            text_tokens = before
+            remaining = after
+            in_reasoning = True
+
+        if in_reasoning:
+            if end in remaining:
+                before, _, after = remaining.partition(end)
+                text_tokens += after
+                reasoning_tokens = before
+                in_reasoning = False
+            else:
+                reasoning_tokens = remaining
+
+        return text_tokens, reasoning_tokens, in_reasoning
+
     @no_type_check
     def _process_stream_event(
         self,
@@ -966,39 +1009,14 @@ class OpenAIGPT(LanguageModel):
             )
             logging.warning("LLM API returned content filter error: " + event_text)
 
-        event_text_tokens = event_text
-        event_reasoning_tokens = event_reasoning
-
-        # Handle inline reasoning delimiters
-        if event_text and not event_reasoning:
-            start, end = self.config.thought_delimiters
-
-            remaining_text = event_text
-            if in_reasoning:
-                # We're inside reasoning from the previous chunk
-                event_text_tokens = ""
-            else:
-                # Look for start delimiter
-                if start in event_text:
-                    before_start, _, after_start = (
-                        event_text.partition(start)
-                    )
-                    event_text_tokens = before_start
-                    remaining_text = after_start
-                    in_reasoning = True
-
-            if in_reasoning:
-                # We're inside reasoning, look for end delimiter
-                if end in remaining_text:
-                    before_end, _, after_end = (
-                        remaining_text.partition(end)
-                    )
-                    event_text_tokens += after_end
-                    event_reasoning_tokens = before_end
-                    in_reasoning = False
-                else:
-                    # No end delimiter yet, it's all reasoning
-                    event_reasoning_tokens = remaining_text
+        event_text_tokens, event_reasoning_tokens, in_reasoning = (
+            self._split_inline_reasoning(
+                event_text,
+                event_reasoning,
+                in_reasoning,
+                self.config.thought_delimiters,
+            )
+        )
 
         if event_text:
             completion += event_text
@@ -1139,39 +1157,14 @@ class OpenAIGPT(LanguageModel):
             event_text = choices[0]["text"]
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
 
-        event_text_tokens = event_text
-        event_reasoning_tokens = event_reasoning
-
-        # Handle inline reasoning delimiters
-        if event_text and not event_reasoning:
-            start, end = self.config.thought_delimiters
-
-            remaining_text = event_text
-            if in_reasoning:
-                # We're inside reasoning from the previous chunk
-                event_text_tokens = ""
-            else:
-                # Look for start delimiter
-                if start in event_text:
-                    before_start, _, after_start = (
-                        event_text.partition(start)
-                    )
-                    event_text_tokens = before_start
-                    remaining_text = after_start
-                    in_reasoning = True
-
-            if in_reasoning:
-                # We're inside reasoning, look for end delimiter
-                if end in remaining_text:
-                    before_end, _, after_end = (
-                        remaining_text.partition(end)
-                    )
-                    event_text_tokens += after_end
-                    event_reasoning_tokens = before_end
-                    in_reasoning = False
-                else:
-                    # No end delimiter yet, it's all reasoning
-                    event_reasoning_tokens = remaining_text
+        event_text_tokens, event_reasoning_tokens, in_reasoning = (
+            self._split_inline_reasoning(
+                event_text,
+                event_reasoning,
+                in_reasoning,
+                self.config.thought_delimiters,
+            )
+        )
 
         if event_text:
             completion += event_text
@@ -1185,7 +1178,7 @@ class OpenAIGPT(LanguageModel):
             reasoning += event_reasoning
         if event_reasoning_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN + event_reasoning_tokens)
+                sys.stdout.write(Colors().GREEN_DIM + event_reasoning_tokens)
                 sys.stdout.flush()
             await self.config.streamer_async(
                 event_reasoning_tokens, StreamEventType.REASONING
