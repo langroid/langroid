@@ -1644,6 +1644,9 @@ class OpenAIGPT(LanguageModel):
 
         try:
             return self._generate(prompt, max_tokens)
+        except openai.APIError as e:
+            logging.error(f"API error in OpenAIGPT.generate: {e}")
+            raise e
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
@@ -1725,6 +1728,9 @@ class OpenAIGPT(LanguageModel):
 
         try:
             return await self._agenerate(prompt, max_tokens)
+        except openai.APIError as e:
+            logging.error(f"API error in OpenAIGPT.agenerate: {e}")
+            raise e
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
@@ -1837,6 +1843,9 @@ class OpenAIGPT(LanguageModel):
                 function_call,
                 response_format,
             )
+        except openai.APIError as e:
+            logging.error(f"API error in OpenAIGPT.chat: {e}")
+            raise e
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
@@ -1891,6 +1900,9 @@ class OpenAIGPT(LanguageModel):
                 response_format,
             )
             return result
+        except openai.APIError as e:
+            logging.error(f"API error in OpenAIGPT.achat: {e}")
+            raise e
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
