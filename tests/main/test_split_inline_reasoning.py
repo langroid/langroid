@@ -31,9 +31,7 @@ class TestSplitInlineReasoning:
 
     def test_already_has_reasoning_field(self):
         """When the API already provides separate reasoning, skip parsing."""
-        text, reasoning, in_r = split(
-            "some text", "api reasoning", False, DELIMS
-        )
+        text, reasoning, in_r = split("some text", "api reasoning", False, DELIMS)
         assert text == "some text"
         assert reasoning == "api reasoning"
         assert in_r is False
@@ -42,9 +40,7 @@ class TestSplitInlineReasoning:
 
     def test_full_think_block_in_one_chunk(self):
         """Complete <think>reasoning</think> in a single chunk."""
-        text, reasoning, in_r = split(
-            "<think>step 1</think>", "", False, DELIMS
-        )
+        text, reasoning, in_r = split("<think>step 1</think>", "", False, DELIMS)
         assert text == ""
         assert reasoning == "step 1"
         assert in_r is False
@@ -89,27 +85,21 @@ class TestSplitInlineReasoning:
 
     def test_continuation_mid_reasoning(self):
         """Chunk arrives while already in reasoning (no delimiters)."""
-        text, reasoning, in_r = split(
-            "more reasoning stuff", "", True, DELIMS
-        )
+        text, reasoning, in_r = split("more reasoning stuff", "", True, DELIMS)
         assert text == ""
         assert reasoning == "more reasoning stuff"
         assert in_r is True
 
     def test_end_delimiter_while_in_reasoning(self):
         """Chunk has </think> while in reasoning state."""
-        text, reasoning, in_r = split(
-            "final bit</think>answer", "", True, DELIMS
-        )
+        text, reasoning, in_r = split("final bit</think>answer", "", True, DELIMS)
         assert text == "answer"
         assert reasoning == "final bit"
         assert in_r is False
 
     def test_end_delimiter_no_trailing_text(self):
         """End delimiter with nothing after it."""
-        text, reasoning, in_r = split(
-            "last thought</think>", "", True, DELIMS
-        )
+        text, reasoning, in_r = split("last thought</think>", "", True, DELIMS)
         assert text == ""
         assert reasoning == "last thought"
         assert in_r is False
@@ -152,9 +142,7 @@ class TestSplitInlineReasoning:
 
     def test_empty_think_block(self):
         """<think></think> with nothing inside."""
-        text, reasoning, in_r = split(
-            "<think></think>answer", "", False, DELIMS
-        )
+        text, reasoning, in_r = split("<think></think>answer", "", False, DELIMS)
         assert text == "answer"
         assert reasoning == ""
         assert in_r is False
