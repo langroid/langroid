@@ -1728,10 +1728,19 @@ class OpenAIGPT(LanguageModel):
 
         try:
             return self._generate(prompt, max_tokens)
+        except openai.APIStatusError as e:
+            # Catch HTTP-level API errors (400, 401, 403, 404, 422, 429, 5xx)
+            # without traceback — these originate server-side and a local
+            # stack trace adds no diagnostic value.
+            # Note: APIConnectionError/APITimeoutError are intentionally NOT
+            # caught here so they fall through to the generic handler below,
+            # where the full traceback aids in diagnosing local network issues.
+            logging.error(f"API error in OpenAIGPT.generate: {e}")
+            raise
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
-            raise e
+            raise
 
     def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         if self.config.use_chat_for_completion:
@@ -1809,10 +1818,14 @@ class OpenAIGPT(LanguageModel):
 
         try:
             return await self._agenerate(prompt, max_tokens)
+        except openai.APIStatusError as e:
+            # Catch HTTP-level API errors (see comment in generate() above).
+            logging.error(f"API error in OpenAIGPT.agenerate: {e}")
+            raise
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
-            raise e
+            raise
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         # note we typically will not have self.config.stream = True
@@ -1921,10 +1934,14 @@ class OpenAIGPT(LanguageModel):
                 function_call,
                 response_format,
             )
+        except openai.APIStatusError as e:
+            # Catch HTTP-level API errors (see comment in generate() above).
+            logging.error(f"API error in OpenAIGPT.chat: {e}")
+            raise
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
-            raise e
+            raise
 
     async def achat(
         self,
@@ -1975,10 +1992,14 @@ class OpenAIGPT(LanguageModel):
                 response_format,
             )
             return result
+        except openai.APIStatusError as e:
+            # Catch HTTP-level API errors (see comment in generate() above).
+            logging.error(f"API error in OpenAIGPT.achat: {e}")
+            raise
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
-            raise e
+            raise
 
     def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
         cached = False

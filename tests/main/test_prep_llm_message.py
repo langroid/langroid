@@ -296,4 +296,3 @@ def test_drop_turns_accounts_for_buffer():
     # History should have been compressed
     assert hist[0].role == Role.SYSTEM
     assert hist[-1].role == Role.USER
-
