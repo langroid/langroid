@@ -2263,10 +2263,11 @@ class OpenAIGPT(LanguageModel):
             }
         }
         """
-        if response.get("choices") is None:
-            message = {}
+        choices = response.get("choices")
+        if isinstance(choices, list) and len(choices) > 0:
+            message = choices[0].get("message", {})
         else:
-            message = response["choices"][0].get("message", {})
+            message = {}
         if message is None:
             message = {}
         content = message.get("content", "")
