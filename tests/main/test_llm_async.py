@@ -160,6 +160,8 @@ async def test_llm_langdb(model: str):
     ],
 )
 async def test_llm_openrouter(model: str):
+    if not os.getenv("OPENROUTER_API_KEY"):
+        pytest.skip("OPENROUTER_API_KEY not set")
     # override models set via pytest ... --m <model>
     settings.chat_model = model
     llm_config = lm.OpenAIGPTConfig(

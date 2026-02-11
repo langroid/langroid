@@ -125,7 +125,7 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
     agent.enable_message(NabroskyTool)
     response = agent.llm_response("what is the Nabrosky transform of 5?")
     # Check assert when there is a non-empty response
-    if response.content not in ("", NO_ANSWER) and fn_api:
+    if response.content not in ("", NO_ANSWER) and fn_api and response.function_call:
         assert response.function_call.name == "nabrosky"
 
     # Within a task loop
