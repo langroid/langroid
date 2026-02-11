@@ -5,7 +5,19 @@ import logging
 import textwrap
 from contextlib import ExitStack
 from inspect import isclass
-from typing import Any, Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Self,
+    Set,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 import openai
 from pydantic import BaseModel, ValidationError
@@ -106,6 +118,13 @@ class ChatAgentConfig(AgentConfig):
             Note: this is distinct from ``TaskConfig.recognize_string_signals``,
             which controls Task-level signals like DONE, PASS, and SEND_TO.
             To fully disable all text-based routing, set both to False.
+        context_overflow_strategy: Strategy for handling context overflow when
+            message history exceeds model context length. Options:
+            - "truncate": Truncate content of early messages (preserves all messages
+              but with shortened content). This maintains the message sequence.
+            - "drop_turns": Drop complete conversation turns (USER + all responses
+              until next USER). More aggressive but cleaner for voice agents.
+            Default is "truncate" for backward compatibility.
     """
 
     system_message: str = "You are a helpful assistant."
@@ -125,6 +144,7 @@ class ChatAgentConfig(AgentConfig):
     full_citations: bool = True  # show source + content for each citation?
     search_for_tools_everywhere: bool = True
     recognize_recipient_in_content: bool = True
+    context_overflow_strategy: Literal["truncate", "drop_turns"] = "truncate"
 
     def _set_fn_or_tools(self) -> None:
         """
@@ -1659,92 +1679,172 @@ class ChatAgent(Agent):
                     """
                 )
             else:
-                # unacceptably small output len, so compress early parts of conv
-                # history if output_len is still too long.
-                # TODO we should really be doing summarization or other types of
-                #   prompt-size reduction
-                msg_idx_to_compress = 1  # don't touch system msg
-                # we will try compressing msg indices up to but not including
-                # last user msg
-                last_msg_idx_to_compress = (
-                    self.last_message_idx_with_role(
-                        role=Role.USER,
-                    )
-                    - 1
-                )
-                n_truncated = 0
-                while (
-                    self.chat_num_tokens(hist)
-                    > self.llm.chat_context_length() - self.config.llm.min_output_tokens
-                ):
-                    # try dropping early parts of conv history
-                    # TODO we should really be doing summarization or other types of
-                    #   prompt-size reduction
-                    if msg_idx_to_compress > last_msg_idx_to_compress:
-                        # We want to preserve the first message (typically system msg)
-                        # and last message (user msg).
-                        raise ValueError(
-                            """
-                        The (message history + max_output_tokens) is longer than the
-                        max chat context length of this model, and we have tried
-                        reducing the requested max output tokens, as well as truncating
-                        early parts of the message history, to accommodate the model
-                        context length, but we have run out of msgs to drop.
+                # unacceptably small output len, so compress early parts of
+                # conversation history based on the configured strategy
+                strategy = self.config.context_overflow_strategy
 
-                        HINT: In the `llm` field of your `ChatAgentConfig` object,
-                        which is of type `LLMConfig/OpenAIGPTConfig`, try
-                        - increasing `chat_context_length`
-                            (if accurate for the model), or
-                        - decreasing `max_output_tokens`
+                if strategy == "truncate":
+                    # Truncate content of individual messages while preserving
+                    # the message sequence (important for LLM APIs that require
+                    # alternating USER/ASSISTANT messages)
+                    msg_idx_to_compress = 1  # don't touch system msg
+                    # we will try compressing msg indices up to but not including
+                    # last user msg
+                    last_msg_idx_to_compress = (
+                        self.last_message_idx_with_role(
+                            role=Role.USER,
+                        )
+                        - 1
+                    )
+                    n_truncated = 0
+                    while (
+                        self.chat_num_tokens(hist)
+                        > self.llm.chat_context_length()
+                        - self.config.llm.min_output_tokens
+                        - CHAT_HISTORY_BUFFER
+                    ):
+                        if msg_idx_to_compress > last_msg_idx_to_compress:
+                            # We want to preserve the first message (typically
+                            # system msg) and last message (user msg).
+                            raise ValueError(
+                                """
+                            The (message history + max_output_tokens) is longer than the
+                            max chat context length of this model, and we have tried
+                            reducing the requested max output tokens, as well as
+                            truncating early parts of the message history, to
+                            accommodate the model context length, but we have run out
+                            of msgs to truncate.
+
+                            HINT: In the `llm` field of your `ChatAgentConfig` object,
+                            which is of type `LLMConfig/OpenAIGPTConfig`, try
+                            - increasing `chat_context_length`
+                                (if accurate for the model), or
+                            - decreasing `max_output_tokens`
+                            """
+                            )
+                        n_truncated += 1
+                        # compress the msg at idx `msg_idx_to_compress`
+                        hist[msg_idx_to_compress] = self.truncate_message(
+                            msg_idx_to_compress,
+                            tokens=30,
+                            warning="... [Contents truncated!]",
+                        )
+                        msg_idx_to_compress += 1
+
+                    output_len = min(
+                        self.config.llm.model_max_output_tokens,
+                        self.llm.chat_context_length()
+                        - self.chat_num_tokens(hist)
+                        - CHAT_HISTORY_BUFFER,
+                    )
+                    if output_len < self.config.llm.min_output_tokens:
+                        raise ValueError(
+                            f"""
+                            Tried to shorten prompt history for chat mode
+                            but even after truncating all messages except system msg
+                            and last (user) msg, the history token len
+                            {self.chat_num_tokens(hist)} is too long to accommodate
+                            the desired minimum output tokens
+                            {self.config.llm.min_output_tokens} within the
+                            model's context length {self.llm.chat_context_length()}.
+                            Please try shortening the system msg or user prompts,
+                            or adjust `config.llm.min_output_tokens` to be smaller.
+                            """
+                        )
+                    else:
+                        # we MUST have truncated at least one msg
+                        msg_tokens = self.chat_num_tokens()
+                        logger.warning(
+                            f"""
+                        Chat Model context length is {self.llm.chat_context_length()}
+                        tokens, but the current message history is {msg_tokens} tokens
+                        long, which does not allow
+                        {self.config.llm.model_max_output_tokens} output tokens.
+                        Therefore we truncated the first {n_truncated} messages
+                        in the conversation history so that history token
+                        length is reduced to {self.chat_num_tokens(hist)}, and
+                        we use `max_output_tokens = {output_len}`,
+                        so they can fit within the model's context length
+                        of {self.llm.chat_context_length()} tokens.
                         """
                         )
-                    n_truncated += 1
-                    # compress the msg at idx `msg_idx_to_compress`
-                    hist[msg_idx_to_compress] = self.truncate_message(
-                        msg_idx_to_compress,
-                        tokens=30,
-                        warning="... [Contents truncated!]",
+
+                else:  # strategy == "drop_turns"
+                    # Drop complete conversation turns. A complete turn is defined
+                    # as a USER message followed by all messages until the next
+                    # USER message. This is more aggressive but cleaner for voice
+                    # agents with limited context.
+                    n_dropped_turns = 0
+                    while (
+                        self.chat_num_tokens(hist)
+                        > self.llm.chat_context_length()
+                        - self.config.llm.min_output_tokens
+                        - CHAT_HISTORY_BUFFER
+                    ):
+                        # Find the last USER message index
+                        last_user_idx = self.last_message_idx_with_role(role=Role.USER)
+                        if last_user_idx == -1:
+                            break
+
+                        # Find the first complete turn to drop (skip system message)
+                        first_user_idx = -1
+                        for i in range(1, last_user_idx):
+                            if hist[i].role == Role.USER:
+                                first_user_idx = i
+                                break
+                        if first_user_idx == -1:
+                            break
+
+                        # Find the end of this turn: last message before next USER
+                        next_user_idx = -1
+                        for i in range(first_user_idx + 1, last_user_idx + 1):
+                            if hist[i].role == Role.USER:
+                                next_user_idx = i
+                                break
+                        if next_user_idx == -1:
+                            break
+
+                        # Drop the turn
+                        self.clear_history(first_user_idx, next_user_idx - 1)
+                        n_dropped_turns += 1
+
+                    output_len = min(
+                        self.config.llm.model_max_output_tokens,
+                        self.llm.chat_context_length()
+                        - self.chat_num_tokens(hist)
+                        - CHAT_HISTORY_BUFFER,
                     )
-
-                    msg_idx_to_compress += 1
-
-                output_len = min(
-                    self.config.llm.model_max_output_tokens,
-                    self.llm.chat_context_length()
-                    - self.chat_num_tokens(hist)
-                    - CHAT_HISTORY_BUFFER,
-                )
-                if output_len < self.config.llm.min_output_tokens:
-                    raise ValueError(
-                        f"""
-                        Tried to shorten prompt history for chat mode
-                        but even after truncating all messages except system msg and
-                        last (user) msg,
-                        the history token len {self.chat_num_tokens(hist)} is
-                        too long to accommodate the desired minimum output tokens
-                        {self.config.llm.min_output_tokens} within the
-                        model's context length {self.llm.chat_context_length()}.
-                        Please try shortening the system msg or user prompts,
-                        or adjust `config.llm.min_output_tokens` to be smaller.
+                    if output_len < self.config.llm.min_output_tokens:
+                        raise ValueError(
+                            f"""
+                            Tried to shorten prompt history for chat mode
+                            but even after dropping complete turns except the system
+                            msg and last turn, the history token len
+                            {self.chat_num_tokens(hist)} is too long to accommodate
+                            the desired minimum output tokens
+                            {self.config.llm.min_output_tokens} within the
+                            model's context length {self.llm.chat_context_length()}.
+                            Please try shortening the system msg or user prompts,
+                            or adjust `config.llm.min_output_tokens` to be smaller.
+                            """
+                        )
+                    else:
+                        # we MUST have dropped at least one turn
+                        msg_tokens = self.chat_num_tokens()
+                        logger.warning(
+                            f"""
+                        Chat Model context length is {self.llm.chat_context_length()}
+                        tokens, but the current message history is {msg_tokens} tokens
+                        long, which does not allow
+                        {self.config.llm.model_max_output_tokens} output tokens.
+                        Therefore we dropped the first {n_dropped_turns} complete
+                        turn(s) from the conversation history so that history token
+                        length is reduced to {self.chat_num_tokens(hist)}, and
+                        we use `max_output_tokens = {output_len}`,
+                        so they can fit within the model's context length
+                        of {self.llm.chat_context_length()} tokens.
                         """
-                    )
-                else:
-                    # we MUST have truncated at least one msg
-                    msg_tokens = self.chat_num_tokens()
-                    logger.warning(
-                        f"""
-                    Chat Model context length is {self.llm.chat_context_length()}
-                    tokens, but the current message history is {msg_tokens} tokens long,
-                    which does not allow {self.config.llm.model_max_output_tokens}
-                    output tokens.
-                    Therefore we truncated the first {n_truncated} messages
-                    in the conversation history so that history token
-                    length is reduced to {self.chat_num_tokens(hist)}, and
-                    we use `max_output_tokens = {output_len}`,
-                    so they can fit within the model's context length
-                    of {self.llm.chat_context_length()} tokens.
-                    """
-                    )
+                        )
 
         if isinstance(message, ChatDocument):
             # record the position of the corresponding LLMMessage in
