@@ -1701,6 +1701,7 @@ class ChatAgent(Agent):
                         self.chat_num_tokens(hist)
                         > self.llm.chat_context_length()
                         - self.config.llm.min_output_tokens
+                        - CHAT_HISTORY_BUFFER
                     ):
                         if msg_idx_to_compress > last_msg_idx_to_compress:
                             # We want to preserve the first message (typically
@@ -1778,6 +1779,7 @@ class ChatAgent(Agent):
                         self.chat_num_tokens(hist)
                         > self.llm.chat_context_length()
                         - self.config.llm.min_output_tokens
+                        - CHAT_HISTORY_BUFFER
                     ):
                         # Find the last USER message index
                         last_user_idx = self.last_message_idx_with_role(role=Role.USER)
