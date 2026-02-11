@@ -3282,6 +3282,7 @@ docs = [
     { name = "mkdocs-rss-plugin" },
     { name = "mkdocs-section-index" },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "nbconvert" },
 ]
 
 [package.metadata]
@@ -3482,6 +3483,7 @@ docs = [
     { name = "mkdocs-rss-plugin", specifier = ">=1.8.0,<2.0.0" },
     { name = "mkdocs-section-index", specifier = ">=0.3.5,<1.0.0" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.25.2,<1.0.0" },
+    { name = "nbconvert", specifier = ">=7.17.0" },
 ]
 
 [[package]]
