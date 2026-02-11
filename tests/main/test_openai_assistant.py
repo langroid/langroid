@@ -114,6 +114,7 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
         llm=OpenAIGPTConfig(),
         use_functions_api=fn_api,
         use_tools=not fn_api,
+        handle_llm_no_tool="You MUST use the `nabrosky` tool/function. Do NOT guess.",
         system_message="""
         The user will ask you, 'What is the Nabrosky transform of...' a certain number.
         You do NOT know the answer, and you should NOT guess the answer.
@@ -136,7 +137,7 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
         agent,
         interactive=False,
     )
-    result = task.run("what is the Nabrosky transform of 5?", turns=4)
+    result = task.run("what is the Nabrosky transform of 5?", turns=6)
     # When fn_api = False (i.e. using ToolMessage) we get brittleness so we just make
     # sure there is no error until this point.
     if result.content not in ("", NO_ANSWER) and fn_api:
