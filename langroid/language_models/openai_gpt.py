@@ -879,6 +879,49 @@ class OpenAIGPT(LanguageModel):
         """Get streaming status."""
         return self.config.stream and settings.stream and self.info().allows_streaming
 
+    @staticmethod
+    def _split_inline_reasoning(
+        event_text: str,
+        event_reasoning: str,
+        in_reasoning: bool,
+        thought_delimiters: Tuple[str, str],
+    ) -> Tuple[str, str, bool]:
+        """Separate inline reasoning from text tokens in a streaming chunk.
+
+        When models embed thinking inside content (e.g. <think>...</think>)
+        rather than using a separate reasoning field, this splits the chunk
+        into text-only and reasoning-only portions for proper streamer routing.
+
+        Returns (text_tokens, reasoning_tokens, in_reasoning).
+        """
+        text_tokens = event_text
+        reasoning_tokens = event_reasoning
+
+        if not event_text or event_reasoning:
+            return text_tokens, reasoning_tokens, in_reasoning
+
+        start, end = thought_delimiters
+        remaining = event_text
+
+        if in_reasoning:
+            text_tokens = ""
+        elif start in event_text:
+            before, _, after = event_text.partition(start)
+            text_tokens = before
+            remaining = after
+            in_reasoning = True
+
+        if in_reasoning:
+            if end in remaining:
+                before, _, after = remaining.partition(end)
+                text_tokens += after
+                reasoning_tokens = before
+                in_reasoning = False
+            else:
+                reasoning_tokens = remaining
+
+        return text_tokens, reasoning_tokens, in_reasoning
+
     @no_type_check
     def _process_stream_event(
         self,
@@ -890,7 +933,8 @@ class OpenAIGPT(LanguageModel):
         reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
-    ) -> Tuple[bool, bool, str, str, Dict[str, int]]:
+        in_reasoning: bool = False,
+    ) -> Tuple[bool, bool, str, str, bool, Dict[str, int]]:
         """Process state vars while processing a streaming API response.
             Returns a tuple consisting of:
         - is_break: whether to break out of the loop
@@ -921,6 +965,7 @@ class OpenAIGPT(LanguageModel):
                 function_args,
                 completion,
                 reasoning,
+                in_reasoning,
                 usage,
             )
         event_args = ""
@@ -964,18 +1009,31 @@ class OpenAIGPT(LanguageModel):
             )
             logging.warning("LLM API returned content filter error: " + event_text)
 
+        event_text_tokens, event_reasoning_tokens, in_reasoning = (
+            self._split_inline_reasoning(
+                event_text,
+                event_reasoning,
+                in_reasoning,
+                self.config.thought_delimiters,
+            )
+        )
+
         if event_text:
             completion += event_text
+        if event_text_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN + event_text)
+                sys.stdout.write(Colors().GREEN + event_text_tokens)
                 sys.stdout.flush()
-            self.config.streamer(event_text, StreamEventType.TEXT)
+            self.config.streamer(event_text_tokens, StreamEventType.TEXT)
+
         if event_reasoning:
             reasoning += event_reasoning
+        if event_reasoning_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN_DIM + event_reasoning)
+                sys.stdout.write(Colors().GREEN_DIM + event_reasoning_tokens)
                 sys.stdout.flush()
-            self.config.streamer(event_reasoning, StreamEventType.REASONING)
+            self.config.streamer(event_reasoning_tokens, StreamEventType.REASONING)
+
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
@@ -1025,6 +1083,7 @@ class OpenAIGPT(LanguageModel):
             function_args,
             completion,
             reasoning,
+            in_reasoning,
             usage,
         )
 
@@ -1039,7 +1098,8 @@ class OpenAIGPT(LanguageModel):
         reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
-    ) -> Tuple[bool, bool, str, str]:
+        in_reasoning: bool = False,
+    ) -> Tuple[bool, bool, str, str, bool, Dict[str, int]]:
         """Process state vars while processing a streaming API response.
             Returns a tuple consisting of:
         - is_break: whether to break out of the loop
@@ -1068,6 +1128,7 @@ class OpenAIGPT(LanguageModel):
                 function_args,
                 completion,
                 reasoning,
+                in_reasoning,
                 usage,
             )
         event_args = ""
@@ -1095,18 +1156,34 @@ class OpenAIGPT(LanguageModel):
         else:
             event_text = choices[0]["text"]
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
+
+        event_text_tokens, event_reasoning_tokens, in_reasoning = (
+            self._split_inline_reasoning(
+                event_text,
+                event_reasoning,
+                in_reasoning,
+                self.config.thought_delimiters,
+            )
+        )
+
         if event_text:
             completion += event_text
+        if event_text_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN + event_text)
+                sys.stdout.write(Colors().GREEN + event_text_tokens)
                 sys.stdout.flush()
-            await self.config.streamer_async(event_text, StreamEventType.TEXT)
+            await self.config.streamer_async(event_text_tokens, StreamEventType.TEXT)
+
         if event_reasoning:
             reasoning += event_reasoning
+        if event_reasoning_tokens:
             if not silent:
-                sys.stdout.write(Colors().GREEN + event_reasoning)
+                sys.stdout.write(Colors().GREEN_DIM + event_reasoning_tokens)
                 sys.stdout.flush()
-            await self.config.streamer_async(event_reasoning, StreamEventType.REASONING)
+            await self.config.streamer_async(
+                event_reasoning_tokens, StreamEventType.REASONING
+            )
+
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
@@ -1160,6 +1237,7 @@ class OpenAIGPT(LanguageModel):
             function_args,
             completion,
             reasoning,
+            in_reasoning,
             usage,
         )
 
@@ -1189,6 +1267,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = []
         token_usage: Dict[str, int] = {}
         done: bool = False
+        in_reasoning: bool = False  # Track if we're inside reasoning delimiters
         try:
             for event in response:
                 (
@@ -1198,6 +1277,7 @@ class OpenAIGPT(LanguageModel):
                     function_args,
                     completion,
                     reasoning,
+                    in_reasoning,
                     usage,
                 ) = self._process_stream_event(
                     event,
@@ -1208,6 +1288,7 @@ class OpenAIGPT(LanguageModel):
                     reasoning=reasoning,
                     function_args=function_args,
                     function_name=function_name,
+                    in_reasoning=in_reasoning,
                 )
                 if len(usage) > 0:
                     # capture the token usage when non-empty
@@ -1265,6 +1346,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = []
         token_usage: Dict[str, int] = {}
         done: bool = False
+        in_reasoning: bool = False  # Track if we're inside reasoning delimiters
         try:
             async for event in response:
                 (
@@ -1274,6 +1356,7 @@ class OpenAIGPT(LanguageModel):
                     function_args,
                     completion,
                     reasoning,
+                    in_reasoning,
                     usage,
                 ) = await self._process_stream_event_async(
                     event,
@@ -1284,6 +1367,7 @@ class OpenAIGPT(LanguageModel):
                     reasoning=reasoning,
                     function_args=function_args,
                     function_name=function_name,
+                    in_reasoning=in_reasoning,
                 )
                 if len(usage) > 0:
                     # capture the token usage when non-empty
@@ -2179,10 +2263,11 @@ class OpenAIGPT(LanguageModel):
             }
         }
         """
-        if response.get("choices") is None:
-            message = {}
+        choices = response.get("choices")
+        if isinstance(choices, list) and len(choices) > 0:
+            message = choices[0].get("message", {})
         else:
-            message = response["choices"][0].get("message", {})
+            message = {}
         if message is None:
             message = {}
         content = message.get("content", "")
