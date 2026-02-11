@@ -311,6 +311,7 @@ docs = [
     "mkdocs-literate-nav<1.0.0,>=0.6.0",
     "mkdocs-section-index<1.0.0,>=0.3.5",
     "mkdocs-jupyter<1.0.0,>=0.24.1",
+    "nbconvert>=7.17.0",
     "griffe<1.0.0",
 ]
 
