@@ -598,6 +598,8 @@ class ArangoChatAgent(ChatAgent):
         """When LLM sends a no-tool msg, assume user is the intended recipient,
         and if in interactive mode, forward the msg to the user.
         """
+        if self.config.handle_llm_no_tool is not None:
+            return super().handle_message_fallback(msg)
         done_tool_name = DoneTool.default_value("request")
         forward_tool_name = ForwardTool.default_value("request")
         aql_retrieval_tool_instructions = AQLRetrievalTool.instructions()

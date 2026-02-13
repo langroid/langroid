@@ -361,6 +361,8 @@ class SQLChatAgent(ChatAgent):
         If this is from LLM, we may need to handle the scenario where
         it may have "forgotten" to generate a tool.
         """
+        if self.config.handle_llm_no_tool is not None:
+            return super().handle_message_fallback(message)
         if (
             not isinstance(message, ChatDocument)
             or message.metadata.sender != Entity.LLM

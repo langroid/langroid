@@ -249,6 +249,8 @@ class LanceQueryPlanAgent(ChatAgent):
         """
         Remind to use QueryPlanTool if we are expecting it.
         """
+        if self.config.handle_llm_no_tool is not None:
+            return super().handle_message_fallback(msg)
         if self.expecting_query_plan and self.n_query_plan_reminders < 5:
             self.n_query_plan_reminders += 1
             return """

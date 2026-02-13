@@ -188,6 +188,8 @@ class QueryPlanCritic(ChatAgent):
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """Remind the LLM to use QueryPlanFeedbackTool since it forgot"""
+        if self.config.handle_llm_no_tool is not None:
+            return super().handle_message_fallback(msg)
         if self.expecting_feedback_tool:
             return """
             You forgot to use the `query_plan_feedback` tool/function.

@@ -263,6 +263,8 @@ class TableChatAgent(ChatAgent):
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """Handle various LLM deviations"""
+        if self.config.handle_llm_no_tool is not None:
+            return super().handle_message_fallback(msg)
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
             if msg.content.strip() == DONE and self.sent_expression:
                 # LLM sent an expression (i.e. used the `pandas_eval` tool)
