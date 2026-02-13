@@ -5,7 +5,7 @@ authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
 description = "Harness LLMs with Multi-Agent Programming"
-readme = "README.md"
+readme = {file = "README.md", content-type = "text/markdown"}
 license = {text = "MIT"}
 requires-python = "<3.13,>=3.10"
 dependencies = [
