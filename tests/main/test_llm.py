@@ -307,9 +307,8 @@ def test_llm_langdb(model: str):
 @pytest.mark.parametrize(
     "model",
     [
-        "openrouter/anthropic/claude-3.5-haiku-20241022:beta",
-        "openrouter/mistralai/mistral-small-24b-instruct-2501:free",
-        "openrouter/google/gemini-2.0-flash-lite-001",
+        "openrouter/anthropic/claude-haiku-4.5",
+        "openrouter/google/gemini-2.5-flash-lite",
     ],
 )
 def test_llm_openrouter(model: str):
