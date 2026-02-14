@@ -129,10 +129,13 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
     agent = OpenAIAssistant(cfg)
     agent.enable_message(NabroskyTool)
     response = agent.llm_response("what is the Nabrosky transform of 5?")
-    # When fn_api is used, the LLM should produce a function_call (not text content).
-    # response.content is empty when a function call is made; function_call is None
-    # when the LLM responds with text instead.
-    if fn_api and response.function_call is not None:
+    # When fn_api is used, the LLM should produce a function_call (not text
+    # content). Assert unconditionally so that a regression surfaces as an
+    # xfail rather than silently passing.
+    if fn_api:
+        assert response.function_call is not None, (
+            "Expected function_call but LLM responded with text"
+        )
         assert response.function_call.name == "nabrosky"
 
     # Within a task loop
