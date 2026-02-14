@@ -133,9 +133,9 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
     # content). Assert unconditionally so that a regression surfaces as an
     # xfail rather than silently passing.
     if fn_api:
-        assert response.function_call is not None, (
-            "Expected function_call but LLM responded with text"
-        )
+        assert (
+            response.function_call is not None
+        ), "Expected function_call but LLM responded with text"
         assert response.function_call.name == "nabrosky"
 
     # Within a task loop

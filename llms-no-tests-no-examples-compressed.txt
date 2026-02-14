@@ -371,6 +371,7 @@ LICENSE
 Makefile
 mkdocs.yml
 PR_954_REVIEW.md
+PR_REVIEW_975.md
 pyproject.toml
 pytest.ini
 README.md
@@ -3137,6 +3138,348 @@ df.apply(lambda x: dangerous_function(x))
 When writing tests that use `TableChatAgent` or `VectorStore.compute_from_docs()` with pandas expressions that go beyond the whitelisted operations, you may need to set `full_eval=True` to ensure the tests pass.
 </file>
 
+<file path="docs/notes/crawl4ai.md">
+# Crawl4ai Crawler Documentation
+
+## Overview
+
+The `Crawl4aiCrawler` is a highly advanced and flexible web crawler integrated into Langroid, built on the powerful `crawl4ai` library. It uses a real browser engine (Playwright) to render web pages, making it exceptionally effective at handling modern, JavaScript-heavy websites. This crawler provides a rich set of features for simple page scraping, deep-site crawling, and sophisticated data extraction, making it the most powerful crawling option available in Langroid.
+
+It is a local crawler, so no need for API keys.
+
+## Installation
+
+To use `Crawl4aiCrawler`, you must install the `crawl4ai` extra dependencies.
+
+To install and prepare crawl4ai:
+
+```bash
+# Install langroid with crawl4ai support
+pip install "langroid[crawl4ai]"
+crawl4ai setup
+crawl4ai doctor
+
+```
+
+> **Note**: The `crawl4ai setup` command will download Playwright browsers (Chromium, Firefox, WebKit) on first run. This is a one-time download that can be several hundred MB in size. The browsers are stored locally and used for rendering web pages.
+
+## Key Features
+
+- **Real Browser Rendering**: Accurately processes dynamic content, single-page applications (SPAs), and sites that require JavaScript execution.
+
+- **Simple and Deep Crawling**: Can scrape a list of individual URLs (`simple` mode) or perform a recursive, deep crawl of a website starting from a seed URL (`deep` mode).
+
+- **Powerful Extraction Strategies**:
+
+  - **Structured JSON (No LLM)**: Extract data into a predefined JSON structure using CSS selectors, XPath, or Regex patterns. This is extremely fast, reliable, and cost-effective.
+
+  - **LLM-Based Extraction**: Leverage Large Language Models (like GPT or Gemini) to extract data from unstructured content based on natural language instructions and a Pydantic schema.
+
+- **Advanced Markdown Generation**: Go beyond basic HTML-to-markdown conversion. Apply content filters to prune irrelevant sections (sidebars, ads, footers) or use an LLM to intelligently reformat content for maximum relevance, perfect for RAG pipelines.
+
+- **High-Performance Scraping**: Optionally use an LXML-based scraping strategy for a significant speed boost on large HTML documents.
+
+- **Fine-Grained Configuration**: Offers detailed control over browser behavior (`BrowserConfig`) and individual crawl runs (`CrawlerRunConfig`) for advanced use cases.
+
+## Configuration (`Crawl4aiConfig`)
+
+The `Crawl4aiCrawler` is configured via the `Crawl4aiConfig` object. This class acts as a high-level interface to the underlying `crawl4ai` library's settings.
+
+All of the strategies are optional.
+Learn more about these strategies , browser_config and run_config at [Crawl4AI docs](https://docs.crawl4ai.com/)
+
+```python
+from langroid.parsing.url_loader import Crawl4aiConfig
+
+# All parameters are optional and have sensible defaults
+config = Crawl4aiConfig(
+    crawl_mode="simple",  # or "deep"
+    extraction_strategy=...,
+    markdown_strategy=...,
+    deep_crawl_strategy=...,
+    scraping_strategy=...,
+    browser_config=...,  # For advanced browser settings
+    run_config=...,      # For advanced crawl-run settings
+)
+```
+
+**Main Parameters:**
+
+- `crawl_mode` (str):
+
+  - `"simple"` (default): Crawls each URL in the provided list individually.
+
+  - `"deep"`: Starts from the first URL in the list and recursively crawls linked pages based on the `deep_crawl_strategy`.
+
+  - Make sure you are setting `"crawl_mode=deep"` whenever you are deep crawling this is crucial for smooth functioning.
+
+- `extraction_strategy` (`ExtractionStrategy`): Defines how to extract structured data from a page. If set, the `Document.content` will be a **JSON string** containing the extracted data.
+
+- `markdown_strategy` (`MarkdownGenerationStrategy`): Defines how to convert HTML to markdown. This is used when `extraction_strategy` is not set. The `Document.content` will be a **markdown string**.
+
+- `deep_crawl_strategy` (`DeepCrawlStrategy`): Configuration for deep crawling, such as `max_depth`, `max_pages`, and URL filters. Only used when `crawl_mode` is `"deep"`.
+
+- `scraping_strategy` (`ContentScrapingStrategy`): Specifies the underlying HTML parsing engine. Useful for performance tuning.
+
+- `browser_config` & `run_config`: For advanced users to pass detailed `BrowserConfig` and `CrawlerRunConfig` objects directly from the `crawl4ai` library.
+
+---
+
+## Usage Examples
+
+These are representative examples. For runnable examples check the script [`examples/docqa/crawl4ai_examples.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/crawl4ai_examples.py)
+
+### 1. Simple Crawling (Default Markdown)
+
+This is the most basic usage. It will fetch the content of each URL and convert it to clean markdown.
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+
+urls = [
+    "https://pytorch.org/",
+    "https://techcrunch.com/",
+]
+
+# Use default settings
+crawler_config = Crawl4aiConfig()
+loader = URLLoader(urls=urls, crawler_config=crawler_config)
+
+docs = loader.load()
+for doc in docs:
+    print(f"URL: {doc.metadata.source}")
+    print(f"Content (first 200 chars): {doc.content[:200]}")
+```
+
+### 2. Structured JSON Extraction (No LLM)
+
+When you need to extract specific, repeated data fields from a page, schema-based extraction is the best choice. It's fast, precise, and free of LLM costs. The result in `Document.content` is a JSON string.
+
+#### a. Using CSS Selectors (`JsonCssExtractionStrategy`)
+
+This example scrapes titles and links from the Hacker News front page.
+
+```python
+import json
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
+
+HACKER_NEWS_URL = "https://news.ycombinator.com"
+HACKER_NEWS_SCHEMA = {
+    "name": "HackerNewsArticles",
+    "baseSelector": "tr.athing",
+    "fields": [
+        {"name": "title", "selector": "span.titleline > a", "type": "text"},
+        {"name": "link", "selector": "span.titleline > a", "type": "attribute", "attribute": "href"},
+    ],
+}
+
+# Create the strategy and pass it to the config
+css_strategy = JsonCssExtractionStrategy(schema=HACKER_NEWS_SCHEMA)
+crawler_config = Crawl4aiConfig(extraction_strategy=css_strategy)
+
+loader = URLLoader(urls=[HACKER_NEWS_URL], crawler_config=crawler_config)
+documents = loader.load()
+
+# The Document.content will contain the JSON string
+extracted_data = json.loads(documents[0].content)
+print(json.dumps(extracted_data[:3], indent=2))
+```
+
+#### b. Using Regex (`RegexExtractionStrategy`)
+
+This is ideal for finding common patterns like emails, URLs, or phone numbers.
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.extraction_strategy import RegexExtractionStrategy
+
+url = "https://www.scrapethissite.com/pages/forms/"
+
+# Combine multiple built-in patterns
+regex_strategy = RegexExtractionStrategy(
+    pattern=(
+        RegexExtractionStrategy.Email
+        | RegexExtractionStrategy.Url
+        | RegexExtractionStrategy.PhoneUS
+    )
+)
+
+crawler_config = Crawl4aiConfig(extraction_strategy=regex_strategy)
+loader = URLLoader(urls=[url], crawler_config=crawler_config)
+documents = loader.load()
+
+print(documents[0].content)
+```
+
+### 3. Advanced Markdown Generation
+
+For RAG applications, the quality of the markdown is crucial. These strategies produce highly relevant, clean text. The result in `Document.content` is the filtered markdown (`fit_markdown`).
+
+#### a. Pruning Filter (`PruningContentFilter`)
+
+This filter heuristically removes boilerplate content based on text density, link density, and common noisy tags.
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from crawl4ai.content_filter_strategy import PruningContentFilter
+
+prune_filter = PruningContentFilter(threshold=0.6, min_word_threshold=10)
+md_generator = DefaultMarkdownGenerator(
+    content_filter=prune_filter,
+    options={"ignore_links": True}
+)
+
+crawler_config = Crawl4aiConfig(markdown_strategy=md_generator)
+loader = URLLoader(urls=["https://news.ycombinator.com"], crawler_config=crawler_config)
+docs = loader.load()
+
+print(docs[0].content[:500])
+```
+
+#### b. LLM Filter (`LLMContentFilter`)
+
+Use an LLM to semantically understand the content and extract only the relevant parts based on your instructions. This is extremely powerful for creating topic-focused documents.
+
+```python
+import os
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.async_configs import LLMConfig
+from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from crawl4ai.content_filter_strategy import LLMContentFilter
+
+# Requires an API key, e.g., OPENAI_API_KEY
+llm_filter = LLMContentFilter(
+    llm_config=LLMConfig(
+        provider="openai/gpt-4o-mini",
+        api_token=os.getenv("OPENAI_API_KEY"),
+    ),
+    instruction="""
+    Extract only the main article content.
+    Exclude all navigation, sidebars, comments, and footer content.
+    Format the output as clean, readable markdown.
+    """,
+    chunk_token_threshold=4096,
+)
+
+md_generator = DefaultMarkdownGenerator(content_filter=llm_filter)
+crawler_config = Crawl4aiConfig(markdown_strategy=md_generator)
+loader = URLLoader(urls=["https://www.theverge.com/tech"], crawler_config=crawler_config)
+docs = loader.load()
+
+print(docs[0].content)
+```
+
+### 4. Deep Crawling
+
+To crawl an entire website or a specific section, use `deep` mode.
+
+Recommended setting is BestFirstCrawlingStrategy
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.deep_crawling import BestFirstCrawlingStrategy
+from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
+
+
+deep_crawl_strategy = BestFirstCrawlingStrategy(
+    max_depth=2,
+    include_external=False,
+    max_pages=25,              # Maximum number of pages to crawl (optional)
+    filter_chain=FilterChain([URLPatternFilter(patterns=["*core*"])]) # Pattern matching for granular control (optional)
+)
+
+crawler_config = Crawl4aiConfig(
+    crawl_mode="deep",
+    deep_crawl_strategy=deep_crawl_strategy
+)
+
+loader = URLLoader(urls=["https://docs.crawl4ai.com/"], crawler_config=crawler_config)
+docs = loader.load()
+
+print(f"Crawled {len(docs)} pages.")
+for doc in docs:
+    print(f"- {doc.metadata.source}")
+```
+
+### 5. High-Performance Scraping (`LXMLWebScrapingStrategy`)
+
+For a performance boost, especially on very large, static HTML pages, switch the scraping strategy to LXML.
+
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
+
+crawler_config = Crawl4aiConfig(
+    scraping_strategy=LXMLWebScrapingStrategy()
+)
+
+loader = URLLoader(urls=["https://www.nbcnews.com/business"], crawler_config=crawler_config)
+docs = loader.load()
+print(f"Content Length: {len(docs[0].content)}")
+```
+
+### 6. LLM-Based JSON Extraction (`LLMExtractionStrategy`)
+
+When data is unstructured or requires semantic interpretation, use an LLM for extraction. This is slower and more expensive but incredibly flexible. The result in `Document.content` is a JSON string.
+
+```python
+import os
+import json
+from langroid.pydantic_v1 import BaseModel, Field
+from typing import Optional
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+from crawl4ai.async_configs import LLMConfig
+from crawl4ai.extraction_strategy import LLMExtractionStrategy
+
+# Define the data structure you want to extract
+class ArticleData(BaseModel):
+    headline: str
+    summary: str = Field(description="A short summary of the article")
+    author: Optional[str] = None
+
+# Configure the LLM strategy
+llm_strategy = LLMExtractionStrategy(
+    llm_config=LLMConfig(
+        provider="openai/gpt-4o-mini",
+        api_token=os.getenv("OPENAI_API_KEY"),
+    ),
+    schema=ArticleData.schema_json(),
+    extraction_type="schema",
+    instruction="Extract the headline, summary, and author of the main article.",
+)
+
+crawler_config = Crawl4aiConfig(extraction_strategy=llm_strategy)
+loader = URLLoader(urls=["https://news.ycombinator.com"], crawler_config=crawler_config)
+docs = loader.load()
+
+extracted_data = json.loads(docs[0].content)
+print(json.dumps(extracted_data, indent=2))
+```
+
+## How It Handles Different Content Types
+
+The `Crawl4aiCrawler` is smart about handling different types of URLs:
+
+- **Web Pages** (e.g., `http://...`, `https://...`): These are processed by the `crawl4ai` browser engine. The output format (`markdown` or `JSON`) depends on the strategy you configure in `Crawl4aiConfig`.
+- **Local and Remote Documents** (e.g., URLs ending in `.pdf`, `.docx`): These are automatically detected and delegated to Langroid's internal `DocumentParser`. This ensures that documents are properly parsed and chunked according to your `ParsingConfig`, just like with other Langroid tools.
+
+## Conclusion
+
+The `Crawl4aiCrawler` is a feature-rich, powerful tool for any web-based data extraction task.
+
+- For **simple, clean text**, use the default `Crawl4aiConfig`.
+
+- For **structured data from consistent sites**, use `JsonCssExtractionStrategy` or `RegexExtractionStrategy` for unbeatable speed and reliability.
+
+- To create **high-quality, focused content for RAG**, use `PruningContentFilter` or the `LLMContentFilter` with the `DefaultMarkdownGenerator`.
+
+- To scrape an **entire website**, use `deep_crawl_strategy` with `crawl_mode="deep"`.
+
+- For **complex or unstructured data** that needs AI interpretation, `LLMExtractionStrategy` provides a flexible solution.
+</file>
+
 <file path="docs/notes/custom-azure-client.md">
 # Custom Azure OpenAI client
 
@@ -3575,6 +3918,97 @@ The `handle_llm_no_tool` parameter can have the following possible values:
 A simple example is in the [`chat-search.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search.py) 
 script, and in the `test_handle_llm_no_tool` test in   
 [`test_tool_messages.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py).
+</file>
+
+<file path="docs/notes/html-logger.md">
+# HTML Logger
+
+The HTML logger creates interactive, self-contained HTML files that make it easy to navigate complex multi-agent conversations in Langroid.
+
+## Enabling the HTML Logger
+
+The HTML logger is **enabled by default** in `TaskConfig`:
+
+```python
+import langroid as lr
+
+# HTML logging is automatically enabled
+task = lr.Task(agent)
+
+# To disable HTML logging
+task = lr.Task(agent, config=lr.TaskConfig(enable_html_logging=False))
+
+# To change the log directory (default is "logs/")
+task = lr.Task(agent, config=lr.TaskConfig(logs_dir="my_logs"))
+```
+
+## Log Files
+
+Langroid creates three types of log files in the `logs/` directory:
+
+1. **HTML Log**: `<name>.html` - Interactive, collapsible view
+2. **Plain Text Log**: `<name>.log` - Traditional text log with colors
+3. **TSV Log**: `<name>.tsv` - Tab-separated values for data analysis
+
+The `<name>` is determined by:
+
+- The task name (if specified)
+- Otherwise, the agent name
+- Falls back to "root" if neither is specified
+
+When a task starts, you'll see a clickable `file://` link in the console:
+```
+WARNING - 📊 HTML Log: file:///path/to/logs/task-name.html
+```
+
+## Key Features
+
+### Collapsible Entries
+Each log entry can be expanded/collapsed to show different levels of detail:
+
+- **Collapsed**: Shows only the entity type (USER, LLM, AGENT) and preview
+- **Expanded**: Shows full message content, tools, and sub-sections
+
+### Visual Hierarchy
+- **Important responses** are shown at full opacity
+- **Intermediate steps** are faded (0.4 opacity)
+- Color-coded entities: USER (blue), LLM (green), AGENT (orange), SYSTEM (gray)
+
+### Tool Visibility
+Tools are clearly displayed with:
+
+- Tool name and parameters
+- Collapsible sections showing raw tool calls
+- Visual indicators for tool results
+
+### Auto-Refresh
+The HTML page automatically refreshes every 2 seconds to show new log entries as they're written.
+
+### Persistent UI State
+Your view preferences are preserved across refreshes:
+
+- Expanded/collapsed entries remain in their state
+- Filter settings are remembered
+
+## Example
+
+Here's what the HTML logger looks like for a planner workflow:
+
+![HTML Logger Screenshot](../screenshots/planner-workflow-html-logs.png)
+
+In this example from `examples/basic/planner-workflow-simple.py`, you can see:
+
+- The planner agent orchestrating multiple tool calls
+- Clear visibility of `IncrementTool` and `DoublingTool` usage
+- The filtered view showing only important responses
+- Collapsible tool sections with parameters
+
+## Benefits
+
+1. **Easy Navigation**: Quickly expand/collapse entries to focus on what matters
+2. **Tool Clarity**: See exactly which tools were called with what parameters
+3. **Real-time Updates**: Watch logs update automatically as your task runs
+4. **Filtered Views**: Use "Show only important responses" to hide intermediate steps
 </file>
 
 <file path="docs/notes/knowledge-graphs.md">
@@ -14936,6 +15370,112 @@ rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank)
 - Updated warning message for better clarity when both options are configured
 </file>
 
+<file path="release-notes/v0-58-0-crawl4ai-integration.md">
+# Langroid Release 0.58.0
+
+## 🎉 Major Features
+
+### 🕷️ Crawl4AI Integration - Advanced Web Crawling with Browser Rendering
+
+We're excited to introduce **Crawl4AI** as a new web crawling option in Langroid! This powerful crawler uses Playwright to render JavaScript-heavy websites, making it ideal for modern web applications.
+
+#### Key Features:
+- **Real Browser Rendering**: Handles dynamic content, SPAs, and JavaScript-heavy sites
+- **No API Key Required**: Works locally without external dependencies
+- **Multiple Extraction Strategies**:
+  - CSS selector-based extraction for structured data
+  - LLM-based extraction for unstructured content
+  - Regex extraction for pattern matching
+- **Advanced Markdown Generation**: Apply content filters to remove ads, sidebars, and irrelevant content
+- **Deep Crawling**: Recursively crawl entire websites with customizable depth and filters
+- **High Performance**: Optional LXML-based scraping for speed optimization
+
+#### Installation:
+```bash
+pip install "langroid[crawl4ai]"
+crawl4ai setup  # Note: Downloads Playwright browsers (~300MB, one-time)
+crawl4ai doctor
+```
+
+#### Quick Example:
+```python
+from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
+
+# Simple usage
+config = Crawl4aiConfig()
+loader = URLLoader(urls=["https://example.com"], crawler_config=config)
+docs = loader.load()
+
+# With extraction strategy
+from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
+
+css_strategy = JsonCssExtractionStrategy(schema={
+    "name": "Articles",
+    "baseSelector": "article",
+    "fields": [
+        {"name": "title", "selector": "h2", "type": "text"},
+        {"name": "content", "selector": "p", "type": "text"}
+    ]
+})
+
+config = Crawl4aiConfig(extraction_strategy=css_strategy)
+loader = URLLoader(urls=["https://news.site.com"], crawler_config=config)
+docs = loader.load()  # Returns structured JSON data
+```
+
+#### Using with DocChatAgent:
+```python
+# In chat_search.py or similar applications
+python examples/docqa/chat_search.py -c crawl4ai
+```
+
+See the [full documentation](https://langroid.github.io/langroid/notes/crawl4ai/) for advanced usage including deep crawling, LLM-based extraction, and content filtering.
+
+## 🔧 Improvements
+
+### Enhanced URL Loader Framework
+- Added `Crawl4aiConfig` to the URL loader configuration options
+- Improved factory pattern to support multiple crawler backends
+- Better separation between document URLs (PDF, DOCX) and web pages
+
+### CLI Improvements
+- `chat_search.py` now uses Fire instead of Typer for simpler CLI interface
+- Updated help text to list all available crawlers: trafilatura, firecrawl, exa, crawl4ai
+
+## 📚 Documentation
+- Added comprehensive Crawl4AI documentation with examples
+- Updated navigation in mkdocs.yml
+- Added detailed examples in `examples/docqa/crawl4ai_examples.py`
+
+## 🧪 Testing
+- Added mocked tests for Crawl4AI functionality
+- Added optional integration tests (skipped in CI to avoid Playwright download)
+- Run integration tests locally with: `TEST_CRAWL4AI=1 pytest tests/main/test_url_loader.py::test_crawl4ai_integration`
+
+## 🐛 Bug Fixes
+- Fixed metadata extraction in crawl4ai implementation
+- Improved error handling for missing crawl4ai dependencies
+- Fixed import issues and duplicate code in examples
+
+## 📦 Dependencies
+- Added optional `crawl4ai>=0.6.3` dependency group
+- No changes to core dependencies
+
+## 🚀 Migration Guide
+No breaking changes. To use the new Crawl4AI crawler:
+
+1. Install the extra: `pip install "langroid[crawl4ai]"`
+2. Run setup: `crawl4ai setup` (one-time Playwright download)
+3. Use `Crawl4aiConfig()` instead of other crawler configs
+
+## 🙏 Acknowledgments
+Thanks to the contributors who helped improve this release, especially the integration of the powerful crawl4ai library for advanced web scraping capabilities.
+
+---
+
+**Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
+</file>
+
 <file path="release-notes/v0.57.0-html-logger.md">
 # HTML Logger for Langroid Task System
 
@@ -15507,6 +16047,281 @@ https://www.contributor-covenant.org/faq. Translations are available at
 https://www.contributor-covenant.org/translations.
 </file>
 
+<file path="CONTRIBUTING.md">
+# Contributing to Langroid
+
+
+Thank you for your interest in contributing to Langroid!
+We want to fundamentally change how LLM applications are built, 
+using Langroid's principled multi-agent framework. 
+Together, let us build the future of LLM-apps!
+We welcome contributions from everyone.
+
+Below you will find guidelines and suggestions for contributing.
+We explicitly designed Langroid with a transparent, flexible architecture to 
+make it easier to build LLM-powered applications, as well as 
+to make it easier to contribute to Langroid itself.
+Feel free to join us on [Discord](https://discord.gg/ZU36McDgDs) 
+for any questions or discussions.
+
+# How can I Contribute?
+
+There are many ways to contribute to Langroid. Here are some areas where you can help:
+
+- Bug Reports
+- Code Fixes
+- Feature Requests
+- Feature Implementations
+- Documentation
+- Testing
+- UI/UX Improvements
+- Translations
+- Outreach
+
+You are welcome to take on un-assigned open [issues](https://github.com/langroid/langroid/issues).
+
+## Implementation Ideas
+
+> **⚠️ Warning: The list of contribution ideas is not updated frequently
+> and may be out of date.**  
+> Please see the github issues for more up-to-date possibilities.
+
+
+**INTEGRATIONS**
+
+- Vector databases, e.g.:
+    - [x] Qdrant
+    - [x] Chroma
+    - [x] LanceDB
+    - [x] Pinecone 
+    - [x] PostgresML (pgvector)
+    - [x] Weaviate
+    - [ ] Milvus 
+    - [ ] Marqo 
+    
+- Other LLM APIs, e.g.: 
+  - [ ] Anthropic 
+  - [ ] Google 
+  - [ ] Cohere
+  
+- Data Sources: 
+  - [x] SQL DBs, 
+  - [x] Neo4j knowledge-graph
+  - [x] ArangoDB knowledge-graph
+  - [ ] NoSQL DBs
+- Query languages: GraphQL, ...
+
+
+**SPECIALIZED AGENTS**
+
+- [x] `SQLChatAgent`, analogous to `DocChatAgent`: adds ability to chat with SQL databases
+- [x] `TableChatAgent`: adds ability to chat with a tabular dataset in a file. 
+   This can derive from `RetrieverAgent`
+
+**CORE LANGROID**
+
+- [ ] **Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
+  launched from a single script. Extend this so agents can run in different
+  processes, machines, or envs or cloud, and communicate via message queues.
+- [ ] **Improve observability:** we currently log all agent interactions into structured
+  and unstructured forms. Add features on top, to improve inspection and
+  diagnosis of issues.
+- [ ] Implement a way to **backtrack** 1 step in a multi-agent task. 
+For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
+when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
+the previous step is re-done and the LLM gets another chance to respond.
+- [x] **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
+    and https://github.com/philschmid/easyllm. It would be useful to have Langroid work with these APIs.
+- [ ] Implement Agents that communicate via REST APIs: Currently, all agents within 
+the multi-agent system are created in a single script. 
+We can remove this limitation, and add the ability to have agents running and 
+listening to an end-point (e.g. a flask server). For example the LLM may 
+generate a function-call or Langroid-tool-message, which the agent’s 
+tool-handling method interprets and makes a corresponding request to an API endpoint. 
+This request can be handled by an agent listening to requests at this endpoint, 
+and the tool-handling method gets the result and returns it as the result of the handling method. 
+This is roughly the mechanism behind OpenAI plugins, e.g. https://github.com/openai/chatgpt-retrieval-plugin
+
+**DEMOS, POC, Use-cases**
+
+- [ ] **Text labeling/classification:** Specifically do what this repo does: https://github.com/refuel-ai/autolabel, 
+  but using Langroid instead of Langchain (which that repo uses).
+- [ ] Data Analyst Demo: A multi-agent system that automates a data analysis workflow, e.g. 
+feature-exploration, visualization, ML model training.
+- [ ] Document classification based on rules in an unstructured “policy” document. 
+    This is an actual use-case from a large US bank. The task is to classify 
+    documents into categories “Public” or “Sensitive”. The classification must be 
+    informed by a “policy” document which has various criteria. 
+    Normally, someone would have to read the policy doc, and apply that to 
+    classify the documents, and maybe go back and forth and look up the policy repeatedly. 
+    This would be a perfect use-case for Langroid’s multi-agent system. 
+    One agent would read the policy, perhaps extract the info into some structured form. 
+    Another agent would apply the various criteria from the policy to the document in question, 
+    and (possibly with other helper agents) classify the document, along with a detailed justification.
+
+- [ ] Document classification and tagging: Given a collection of already labeled/tagged docs, 
+which have been ingested into a vecdb (to allow semantic search), 
+when given a new document to label/tag, we retrieve the most similar docs 
+from multiple categories/tags from the vecdb and present these (with the labels/tags) 
+as few-shot examples to the LLM, and have the LLM classify/tag the retrieved document.
+
+- [ ] Implement the CAMEL multi-agent debate system : https://lablab.ai/t/camel-tutorial-building-communicative-agents-for-large-scale-language-model-exploration
+
+- [ ] Implement Stanford’s Simulacra paper with Langroid.
+Generative Agents: Interactive Simulacra of Human Behavior https://arxiv.org/abs/2304.03442
+
+- [ ] Implement CMU's paper with Langroid.
+Emergent autonomous scientific research capabilities of large language models https://arxiv.org/pdf/2304.05332.pdf
+
+---
+
+# Contribution Guidelines
+
+## Set up dev env
+
+We use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+to manage dependencies, and `python 3.11` for development.
+
+First install `uv`, then create virtual env and install dependencies:
+
+```bash
+# clone this repo and cd into repo root
+git clone ...
+cd <repo_root>
+# create a virtual env under project root, .venv directory
+uv venv --python 3.11
+
+# activate the virtual env
+. .venv/bin/activate
+
+
+# use uv to install dependencies (these go into .venv dir)
+uv sync --dev 
+```
+
+Important note about dependencies management:
+> As of version 0.33.0, we are starting to include the `uv.lock` file as part of 
+> the repo. This ensures that all contributors are using the same versions of 
+> dependencies. If you add a new dependency, `uv add` will automatically update 
+> the `uv.lock` file. This will also update the `pyproject.toml` file.
+
+To add packages, use `uv add <package-name>`. This will automatically
+find the latest compatible version of the package and add it to `pyproject.
+toml`. _Do not manually edit `pyproject.toml` to add packages._
+
+## Set up environment variables (API keys, etc)
+
+Copy the `.env-template` file to a new file `.env` and
+insert secrets such as API keys, etc:
+- OpenAI API key, Anthropic API key, etc.
+- [Optional] GitHub Personal Access Token (needed by  PyGithub to analyze git repos;
+  token-based API calls are less rate-limited).
+- [Optional] Cache Configs
+  - Redis : Password, Host, Port <br>
+- Qdrant API key for the vector database.
+
+```bash
+cp .env-template .env
+# now edit the .env file, insert your secrets as above
+``` 
+
+Currently only OpenAI models are supported. 
+You are welcome to submit a PR to support other API-based or local models. 
+
+## Run tests
+To verify your env is correctly setup, run all tests using `make tests`.
+
+## IMPORTANT: Please include tests, docs and possibly examples.
+
+For any new features, please include:
+- Tests in the `tests` directory (first check if there is a suitable test file to add to).
+  _If fixing a bug, please add a regression test, i.e., 
+   one which would have failed without your fix_
+- A note in `docs/notes` folder, e.g. `docs/notes/weaviate.md` that is a
+  (relatively) self-contained guide to using the feature, including any instructions
+  on how to set up the environment or keys if needed. 
+  See the [weaviate](https://langroid.github.io/langroid/notes/weaviate/) note as an example. Make sure you link to this note in the `mkdocs.yml` file under the `nav` section.
+- Where possible and meaningful, add a simple example in the `examples` directory.
+
+## Generate docs
+
+Generate docs: `make docs`, then go to the IP address shown at the end, like
+`http://127.0.0.1:8000/`
+Note this runs a docs server in the background.
+To stop it, run `make nodocs`. Also, running `make docs` next time will kill
+any previously running `mkdocs` server.
+
+
+## Coding guidelines
+
+In this Python repository, we prioritize code readability and maintainability.
+To ensure this, please adhere to the following guidelines when contributing:
+
+1. **Type-Annotate Code:** Add type annotations to function signatures and
+   variables to make the code more self-explanatory and to help catch potential
+   issues early. For example, `def greet(name: str) -> str:`. We use [`mypy`](https://mypy.readthedocs.io/en/stable/) for
+   type-checking, so please ensure your code passes `mypy` checks. 
+
+2. **Google-Style Docstrings:** Use Google-style docstrings to clearly describe
+   the purpose, arguments, and return values of functions. For example:
+
+   ```python
+   def greet(name: str) -> str:
+       """Generate a greeting message.
+
+       Args:
+           name (str): The name of the person to greet.
+
+       Returns:
+           str: The greeting message.
+       """
+       return f"Hello, {name}!"
+   ```
+
+3. **PEP8-Compliant 80-Char Max per Line:** Follow the PEP8 style guide and keep
+   lines to a maximum of 80 characters. This improves readability and ensures
+   consistency across the codebase.
+
+If you are using an LLM to write code for you, adding these
+instructions will usually get you code compliant with the above:
+```
+use type-annotations, google-style docstrings, and pep8 compliant max 80 
+     chars per line.
+```     
+
+
+By following these practices, we can create a clean, consistent, and
+easy-to-understand codebase for all contributors. Thank you for your
+cooperation!
+
+## Submitting a PR
+
+To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
+and type-checker `mypy`. It also installs a pre-commit hook, 
+so that commits are blocked if there are style/type issues. The linting attempts to
+auto-fix issues, and warns about those it can't fix.
+(There is a separate `make lint` you could do, but that is already part of `make check`).
+The `make check` command also looks through the codebase to see if there are any
+direct imports from pydantic, and replaces them with importing from `langroid.pydantic_v1`
+(this is needed to enable dual-compatibility with Pydantic v1 and v2).
+
+So, typically when submitting a PR, you would do this sequence:
+- run `make tests` or `pytest -xvs tests/main/my-specific-test.py` 
+  - if needed use `-nc` means "no cache", i.e. to prevent using cached LLM API call responses
+  - the `-xvs` option means "exit on first failure, verbose, show output"
+- fix things so tests pass, then proceed to lint/style/type checks below.
+- `make check` to see what issues there are (typically lints and mypy)
+- manually fix any lint or type issues
+- `make check` again to see what issues remain
+- repeat if needed, until all clean.
+
+When done with these, commit and push to github and submit the PR. If this
+is an ongoing PR, just push to github again and the PR will be updated.
+
+It is strongly recommended to use the `gh` command-line utility when working with git.
+Read more [here](docs/development/github-cli.md).
+</file>
+
 <file path="Dockerfile">
 FROM --platform=$TARGETPLATFORM python:3.11
 
@@ -15713,348 +16528,6 @@ supported features, etc.) even when the deployment name doesn't match the
 underlying model.
 </file>
 
-<file path="docs/notes/crawl4ai.md">
-# Crawl4ai Crawler Documentation
-
-## Overview
-
-The `Crawl4aiCrawler` is a highly advanced and flexible web crawler integrated into Langroid, built on the powerful `crawl4ai` library. It uses a real browser engine (Playwright) to render web pages, making it exceptionally effective at handling modern, JavaScript-heavy websites. This crawler provides a rich set of features for simple page scraping, deep-site crawling, and sophisticated data extraction, making it the most powerful crawling option available in Langroid.
-
-It is a local crawler, so no need for API keys.
-
-## Installation
-
-To use `Crawl4aiCrawler`, you must install the `crawl4ai` extra dependencies.
-
-To install and prepare crawl4ai:
-
-```bash
-# Install langroid with crawl4ai support
-pip install "langroid[crawl4ai]"
-crawl4ai setup
-crawl4ai doctor
-
-```
-
-> **Note**: The `crawl4ai setup` command will download Playwright browsers (Chromium, Firefox, WebKit) on first run. This is a one-time download that can be several hundred MB in size. The browsers are stored locally and used for rendering web pages.
-
-## Key Features
-
-- **Real Browser Rendering**: Accurately processes dynamic content, single-page applications (SPAs), and sites that require JavaScript execution.
-
-- **Simple and Deep Crawling**: Can scrape a list of individual URLs (`simple` mode) or perform a recursive, deep crawl of a website starting from a seed URL (`deep` mode).
-
-- **Powerful Extraction Strategies**:
-
-  - **Structured JSON (No LLM)**: Extract data into a predefined JSON structure using CSS selectors, XPath, or Regex patterns. This is extremely fast, reliable, and cost-effective.
-
-  - **LLM-Based Extraction**: Leverage Large Language Models (like GPT or Gemini) to extract data from unstructured content based on natural language instructions and a Pydantic schema.
-
-- **Advanced Markdown Generation**: Go beyond basic HTML-to-markdown conversion. Apply content filters to prune irrelevant sections (sidebars, ads, footers) or use an LLM to intelligently reformat content for maximum relevance, perfect for RAG pipelines.
-
-- **High-Performance Scraping**: Optionally use an LXML-based scraping strategy for a significant speed boost on large HTML documents.
-
-- **Fine-Grained Configuration**: Offers detailed control over browser behavior (`BrowserConfig`) and individual crawl runs (`CrawlerRunConfig`) for advanced use cases.
-
-## Configuration (`Crawl4aiConfig`)
-
-The `Crawl4aiCrawler` is configured via the `Crawl4aiConfig` object. This class acts as a high-level interface to the underlying `crawl4ai` library's settings.
-
-All of the strategies are optional.
-Learn more about these strategies , browser_config and run_config at [Crawl4AI docs](https://docs.crawl4ai.com/)
-
-```python
-from langroid.parsing.url_loader import Crawl4aiConfig
-
-# All parameters are optional and have sensible defaults
-config = Crawl4aiConfig(
-    crawl_mode="simple",  # or "deep"
-    extraction_strategy=...,
-    markdown_strategy=...,
-    deep_crawl_strategy=...,
-    scraping_strategy=...,
-    browser_config=...,  # For advanced browser settings
-    run_config=...,      # For advanced crawl-run settings
-)
-```
-
-**Main Parameters:**
-
-- `crawl_mode` (str):
-
-  - `"simple"` (default): Crawls each URL in the provided list individually.
-
-  - `"deep"`: Starts from the first URL in the list and recursively crawls linked pages based on the `deep_crawl_strategy`.
-
-  - Make sure you are setting `"crawl_mode=deep"` whenever you are deep crawling this is crucial for smooth functioning.
-
-- `extraction_strategy` (`ExtractionStrategy`): Defines how to extract structured data from a page. If set, the `Document.content` will be a **JSON string** containing the extracted data.
-
-- `markdown_strategy` (`MarkdownGenerationStrategy`): Defines how to convert HTML to markdown. This is used when `extraction_strategy` is not set. The `Document.content` will be a **markdown string**.
-
-- `deep_crawl_strategy` (`DeepCrawlStrategy`): Configuration for deep crawling, such as `max_depth`, `max_pages`, and URL filters. Only used when `crawl_mode` is `"deep"`.
-
-- `scraping_strategy` (`ContentScrapingStrategy`): Specifies the underlying HTML parsing engine. Useful for performance tuning.
-
-- `browser_config` & `run_config`: For advanced users to pass detailed `BrowserConfig` and `CrawlerRunConfig` objects directly from the `crawl4ai` library.
-
----
-
-## Usage Examples
-
-These are representative examples. For runnable examples check the script [`examples/docqa/crawl4ai_examples.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/crawl4ai_examples.py)
-
-### 1. Simple Crawling (Default Markdown)
-
-This is the most basic usage. It will fetch the content of each URL and convert it to clean markdown.
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-
-urls = [
-    "https://pytorch.org/",
-    "https://techcrunch.com/",
-]
-
-# Use default settings
-crawler_config = Crawl4aiConfig()
-loader = URLLoader(urls=urls, crawler_config=crawler_config)
-
-docs = loader.load()
-for doc in docs:
-    print(f"URL: {doc.metadata.source}")
-    print(f"Content (first 200 chars): {doc.content[:200]}")
-```
-
-### 2. Structured JSON Extraction (No LLM)
-
-When you need to extract specific, repeated data fields from a page, schema-based extraction is the best choice. It's fast, precise, and free of LLM costs. The result in `Document.content` is a JSON string.
-
-#### a. Using CSS Selectors (`JsonCssExtractionStrategy`)
-
-This example scrapes titles and links from the Hacker News front page.
-
-```python
-import json
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
-
-HACKER_NEWS_URL = "https://news.ycombinator.com"
-HACKER_NEWS_SCHEMA = {
-    "name": "HackerNewsArticles",
-    "baseSelector": "tr.athing",
-    "fields": [
-        {"name": "title", "selector": "span.titleline > a", "type": "text"},
-        {"name": "link", "selector": "span.titleline > a", "type": "attribute", "attribute": "href"},
-    ],
-}
-
-# Create the strategy and pass it to the config
-css_strategy = JsonCssExtractionStrategy(schema=HACKER_NEWS_SCHEMA)
-crawler_config = Crawl4aiConfig(extraction_strategy=css_strategy)
-
-loader = URLLoader(urls=[HACKER_NEWS_URL], crawler_config=crawler_config)
-documents = loader.load()
-
-# The Document.content will contain the JSON string
-extracted_data = json.loads(documents[0].content)
-print(json.dumps(extracted_data[:3], indent=2))
-```
-
-#### b. Using Regex (`RegexExtractionStrategy`)
-
-This is ideal for finding common patterns like emails, URLs, or phone numbers.
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.extraction_strategy import RegexExtractionStrategy
-
-url = "https://www.scrapethissite.com/pages/forms/"
-
-# Combine multiple built-in patterns
-regex_strategy = RegexExtractionStrategy(
-    pattern=(
-        RegexExtractionStrategy.Email
-        | RegexExtractionStrategy.Url
-        | RegexExtractionStrategy.PhoneUS
-    )
-)
-
-crawler_config = Crawl4aiConfig(extraction_strategy=regex_strategy)
-loader = URLLoader(urls=[url], crawler_config=crawler_config)
-documents = loader.load()
-
-print(documents[0].content)
-```
-
-### 3. Advanced Markdown Generation
-
-For RAG applications, the quality of the markdown is crucial. These strategies produce highly relevant, clean text. The result in `Document.content` is the filtered markdown (`fit_markdown`).
-
-#### a. Pruning Filter (`PruningContentFilter`)
-
-This filter heuristically removes boilerplate content based on text density, link density, and common noisy tags.
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.content_filter_strategy import PruningContentFilter
-
-prune_filter = PruningContentFilter(threshold=0.6, min_word_threshold=10)
-md_generator = DefaultMarkdownGenerator(
-    content_filter=prune_filter,
-    options={"ignore_links": True}
-)
-
-crawler_config = Crawl4aiConfig(markdown_strategy=md_generator)
-loader = URLLoader(urls=["https://news.ycombinator.com"], crawler_config=crawler_config)
-docs = loader.load()
-
-print(docs[0].content[:500])
-```
-
-#### b. LLM Filter (`LLMContentFilter`)
-
-Use an LLM to semantically understand the content and extract only the relevant parts based on your instructions. This is extremely powerful for creating topic-focused documents.
-
-```python
-import os
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.async_configs import LLMConfig
-from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.content_filter_strategy import LLMContentFilter
-
-# Requires an API key, e.g., OPENAI_API_KEY
-llm_filter = LLMContentFilter(
-    llm_config=LLMConfig(
-        provider="openai/gpt-4o-mini",
-        api_token=os.getenv("OPENAI_API_KEY"),
-    ),
-    instruction="""
-    Extract only the main article content.
-    Exclude all navigation, sidebars, comments, and footer content.
-    Format the output as clean, readable markdown.
-    """,
-    chunk_token_threshold=4096,
-)
-
-md_generator = DefaultMarkdownGenerator(content_filter=llm_filter)
-crawler_config = Crawl4aiConfig(markdown_strategy=md_generator)
-loader = URLLoader(urls=["https://www.theverge.com/tech"], crawler_config=crawler_config)
-docs = loader.load()
-
-print(docs[0].content)
-```
-
-### 4. Deep Crawling
-
-To crawl an entire website or a specific section, use `deep` mode.
-
-Recommended setting is BestFirstCrawlingStrategy
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.deep_crawling import BestFirstCrawlingStrategy
-from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
-
-
-deep_crawl_strategy = BestFirstCrawlingStrategy(
-    max_depth=2,
-    include_external=False,
-    max_pages=25,              # Maximum number of pages to crawl (optional)
-    filter_chain=FilterChain([URLPatternFilter(patterns=["*core*"])]) # Pattern matching for granular control (optional)
-)
-
-crawler_config = Crawl4aiConfig(
-    crawl_mode="deep",
-    deep_crawl_strategy=deep_crawl_strategy
-)
-
-loader = URLLoader(urls=["https://docs.crawl4ai.com/"], crawler_config=crawler_config)
-docs = loader.load()
-
-print(f"Crawled {len(docs)} pages.")
-for doc in docs:
-    print(f"- {doc.metadata.source}")
-```
-
-### 5. High-Performance Scraping (`LXMLWebScrapingStrategy`)
-
-For a performance boost, especially on very large, static HTML pages, switch the scraping strategy to LXML.
-
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
-
-crawler_config = Crawl4aiConfig(
-    scraping_strategy=LXMLWebScrapingStrategy()
-)
-
-loader = URLLoader(urls=["https://www.nbcnews.com/business"], crawler_config=crawler_config)
-docs = loader.load()
-print(f"Content Length: {len(docs[0].content)}")
-```
-
-### 6. LLM-Based JSON Extraction (`LLMExtractionStrategy`)
-
-When data is unstructured or requires semantic interpretation, use an LLM for extraction. This is slower and more expensive but incredibly flexible. The result in `Document.content` is a JSON string.
-
-```python
-import os
-import json
-from langroid.pydantic_v1 import BaseModel, Field
-from typing import Optional
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-from crawl4ai.async_configs import LLMConfig
-from crawl4ai.extraction_strategy import LLMExtractionStrategy
-
-# Define the data structure you want to extract
-class ArticleData(BaseModel):
-    headline: str
-    summary: str = Field(description="A short summary of the article")
-    author: Optional[str] = None
-
-# Configure the LLM strategy
-llm_strategy = LLMExtractionStrategy(
-    llm_config=LLMConfig(
-        provider="openai/gpt-4o-mini",
-        api_token=os.getenv("OPENAI_API_KEY"),
-    ),
-    schema=ArticleData.schema_json(),
-    extraction_type="schema",
-    instruction="Extract the headline, summary, and author of the main article.",
-)
-
-crawler_config = Crawl4aiConfig(extraction_strategy=llm_strategy)
-loader = URLLoader(urls=["https://news.ycombinator.com"], crawler_config=crawler_config)
-docs = loader.load()
-
-extracted_data = json.loads(docs[0].content)
-print(json.dumps(extracted_data, indent=2))
-```
-
-## How It Handles Different Content Types
-
-The `Crawl4aiCrawler` is smart about handling different types of URLs:
-
-- **Web Pages** (e.g., `http://...`, `https://...`): These are processed by the `crawl4ai` browser engine. The output format (`markdown` or `JSON`) depends on the strategy you configure in `Crawl4aiConfig`.
-- **Local and Remote Documents** (e.g., URLs ending in `.pdf`, `.docx`): These are automatically detected and delegated to Langroid's internal `DocumentParser`. This ensures that documents are properly parsed and chunked according to your `ParsingConfig`, just like with other Langroid tools.
-
-## Conclusion
-
-The `Crawl4aiCrawler` is a feature-rich, powerful tool for any web-based data extraction task.
-
-- For **simple, clean text**, use the default `Crawl4aiConfig`.
-
-- For **structured data from consistent sites**, use `JsonCssExtractionStrategy` or `RegexExtractionStrategy` for unbeatable speed and reliability.
-
-- To create **high-quality, focused content for RAG**, use `PruningContentFilter` or the `LLMContentFilter` with the `DefaultMarkdownGenerator`.
-
-- To scrape an **entire website**, use `deep_crawl_strategy` with `crawl_mode="deep"`.
-
-- For **complex or unstructured data** that needs AI interpretation, `LLMExtractionStrategy` provides a flexible solution.
-</file>
-
 <file path="docs/notes/gemini.md">
 # Gemini LLMs & Embeddings via OpenAI client (without LiteLLM)
 
@@ -16168,97 +16641,6 @@ response = llm.chat("Hello from Vertex AI!")
 When neither `GEMINI_API_BASE` nor an explicit `api_base` is set, Langroid
 falls back to the default Google AI (Gemini) endpoint
 (`https://generativelanguage.googleapis.com/v1beta/openai`).
-</file>
-
-<file path="docs/notes/html-logger.md">
-# HTML Logger
-
-The HTML logger creates interactive, self-contained HTML files that make it easy to navigate complex multi-agent conversations in Langroid.
-
-## Enabling the HTML Logger
-
-The HTML logger is **enabled by default** in `TaskConfig`:
-
-```python
-import langroid as lr
-
-# HTML logging is automatically enabled
-task = lr.Task(agent)
-
-# To disable HTML logging
-task = lr.Task(agent, config=lr.TaskConfig(enable_html_logging=False))
-
-# To change the log directory (default is "logs/")
-task = lr.Task(agent, config=lr.TaskConfig(logs_dir="my_logs"))
-```
-
-## Log Files
-
-Langroid creates three types of log files in the `logs/` directory:
-
-1. **HTML Log**: `<name>.html` - Interactive, collapsible view
-2. **Plain Text Log**: `<name>.log` - Traditional text log with colors
-3. **TSV Log**: `<name>.tsv` - Tab-separated values for data analysis
-
-The `<name>` is determined by:
-
-- The task name (if specified)
-- Otherwise, the agent name
-- Falls back to "root" if neither is specified
-
-When a task starts, you'll see a clickable `file://` link in the console:
-```
-WARNING - 📊 HTML Log: file:///path/to/logs/task-name.html
-```
-
-## Key Features
-
-### Collapsible Entries
-Each log entry can be expanded/collapsed to show different levels of detail:
-
-- **Collapsed**: Shows only the entity type (USER, LLM, AGENT) and preview
-- **Expanded**: Shows full message content, tools, and sub-sections
-
-### Visual Hierarchy
-- **Important responses** are shown at full opacity
-- **Intermediate steps** are faded (0.4 opacity)
-- Color-coded entities: USER (blue), LLM (green), AGENT (orange), SYSTEM (gray)
-
-### Tool Visibility
-Tools are clearly displayed with:
-
-- Tool name and parameters
-- Collapsible sections showing raw tool calls
-- Visual indicators for tool results
-
-### Auto-Refresh
-The HTML page automatically refreshes every 2 seconds to show new log entries as they're written.
-
-### Persistent UI State
-Your view preferences are preserved across refreshes:
-
-- Expanded/collapsed entries remain in their state
-- Filter settings are remembered
-
-## Example
-
-Here's what the HTML logger looks like for a planner workflow:
-
-![HTML Logger Screenshot](../screenshots/planner-workflow-html-logs.png)
-
-In this example from `examples/basic/planner-workflow-simple.py`, you can see:
-
-- The planner agent orchestrating multiple tool calls
-- Clear visibility of `IncrementTool` and `DoublingTool` usage
-- The filtered view showing only important responses
-- Collapsible tool sections with parameters
-
-## Benefits
-
-1. **Easy Navigation**: Quickly expand/collapse entries to focus on what matters
-2. **Tool Clarity**: See exactly which tools were called with what parameters
-3. **Real-time Updates**: Watch logs update automatically as your task runs
-4. **Filtered Views**: Use "Show only important responses" to hide intermediate steps
 </file>
 
 <file path="docs/notes/llama-cpp-embeddings.md">
@@ -24018,6 +24400,348 @@ result = lsh.query(minhashes[idx])
 # If only the passage itself is returned, it's unique
 </file>
 
+<file path="langroid/parsing/url_loader.py">
+# Base crawler config and specific configurations
+class BaseCrawlerConfig(BaseSettings)
+⋮----
+"""Base configuration for web crawlers."""
+⋮----
+parser: Optional[Parser] = None
+⋮----
+class TrafilaturaConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for Trafilatura crawler."""
+⋮----
+threads: int = 4
+format: str = "markdown"  # or "xml" or "txt"
+⋮----
+class FirecrawlConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for Firecrawl crawler."""
+⋮----
+api_key: str = ""
+mode: str = "scrape"
+params: Dict[str, Any] = {}
+timeout: Optional[int] = None
+⋮----
+model_config = SettingsConfigDict(env_prefix="FIRECRAWL_")
+⋮----
+class ExaCrawlerConfig(BaseCrawlerConfig)
+⋮----
+model_config = SettingsConfigDict(env_prefix="EXA_")
+⋮----
+class Crawl4aiConfig(BaseCrawlerConfig)
+⋮----
+"""Configuration for the Crawl4aiCrawler."""
+⋮----
+crawl_mode: Literal["simple", "deep"] = "simple"
+extraction_strategy: Optional["ExtractionStrategy"] = None
+markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
+deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
+scraping_strategy: Optional["ContentScrapingStrategy"] = None
+browser_config: Optional["BrowserConfig"] = None
+run_config: Optional["CrawlerRunConfig"] = None
+⋮----
+model_config = SettingsConfigDict(arbitrary_types_allowed=True)
+⋮----
+# Resolve forward references for Crawl4aiConfig after the class is defined
+⋮----
+# Rebuild the model with resolved references
+⋮----
+# If crawl4ai is not installed, leave forward refs as strings
+⋮----
+class BaseCrawler(ABC)
+⋮----
+"""Abstract base class for web crawlers."""
+⋮----
+def __init__(self, config: BaseCrawlerConfig)
+⋮----
+"""Initialize the base crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+@property
+@abstractmethod
+    def needs_parser(self) -> bool
+⋮----
+"""Indicates whether the crawler requires a parser."""
+⋮----
+@abstractmethod
+    def crawl(self, urls: List[str]) -> List[Document]
+⋮----
+def _process_document(self, url: str) -> List[Document]
+⋮----
+doc_parser = DocumentParser.create(url, self.parser.config)
+new_chunks = doc_parser.get_doc_chunks()
+⋮----
+# If the document is empty, try to extract images
+img_parser = ImagePdfParser(url, self.parser.config)
+new_chunks = img_parser.get_doc_chunks()
+⋮----
+headers = requests.head(url).headers
+⋮----
+headers = CaseInsensitiveDict()
+⋮----
+content_type = headers.get("Content-Type", "").lower()
+temp_file_suffix = None
+⋮----
+temp_file_suffix = ".pdf"
+⋮----
+temp_file_suffix = ".docx"
+⋮----
+temp_file_suffix = ".doc"
+⋮----
+response = requests.get(url)
+⋮----
+temp_file_path = temp_file.name
+doc_parser = DocumentParser.create(
+docs = doc_parser.get_doc_chunks()
+⋮----
+def _is_document_url(self, url: str) -> bool
+⋮----
+class CrawlerFactory
+⋮----
+"""Factory for creating web crawlers."""
+⋮----
+@staticmethod
+    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler
+⋮----
+"""Create a crawler instance based on configuration type.
+
+        Args:
+            config: Configuration for the crawler
+
+        Returns:
+            A BaseCrawler instance
+
+        Raises:
+            ValueError: If config type is not supported
+        """
+⋮----
+class TrafilaturaCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Trafilatura."""
+⋮----
+def __init__(self, config: TrafilaturaConfig)
+⋮----
+"""Initialize the Trafilatura crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+@property
+    def needs_parser(self) -> bool
+⋮----
+def crawl(self, urls: List[str]) -> List[Document]
+⋮----
+docs = []
+dl_dict = add_to_compressed_dict(urls)
+⋮----
+parsed_doc = self._process_document(url)
+⋮----
+text = trafilatura.extract(
+⋮----
+with_metadata=True,  # Title, date, author... at start of text
+⋮----
+# heading_style="ATX" for markdown headings, i.e. #, ##, etc.
+text = md.markdownify(text, heading_style="ATX")
+⋮----
+text = result
+⋮----
+class FirecrawlCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Firecrawl."""
+⋮----
+def __init__(self, config: FirecrawlConfig) -> None
+⋮----
+"""Initialize the Firecrawl crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+# Code used verbatim from firecrawl blog with few modifications
+# https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
+⋮----
+pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
+⋮----
+processed_urls: set[str] = set()
+⋮----
+# Check current status
+status = app.check_crawl_status(crawl_id)
+new_pages = 0
+⋮----
+# Save new pages
+⋮----
+url = page["metadata"]["url"]
+⋮----
+content = page.get("markdown", "")
+filename = f"{output_dir}/{len(processed_urls)}.md"
+⋮----
+pbar.model_copy(update=new_pages)  # Update progress bar with new pages
+⋮----
+# Break if crawl is complete
+⋮----
+time.sleep(5)  # Wait before checking again
+⋮----
+app = FirecrawlApp(api_key=self.config.api_key)
+⋮----
+params = self.config.params.copy()  # Create a copy of the existing params
+⋮----
+params["timeout"] = self.config.timeout  # Add/override timeout in params
+⋮----
+result = app.scrape_url(url, params=params)
+metadata = result.get(
+⋮----
+)  # Default to empty dict if missing
+status_code = metadata.get("statusCode")
+⋮----
+# Start the crawl
+crawl_status = app.async_crawl_url(url=urls[0], params=params)
+⋮----
+# Save results incrementally
+docs = self._return_save_incremental_results(app, crawl_status["id"])
+⋮----
+class ExaCrawler(BaseCrawler)
+⋮----
+"""Crawler implementation using Exa API."""
+⋮----
+def __init__(self, config: ExaCrawlerConfig) -> None
+⋮----
+"""Initialize the Exa crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+⋮----
+"""Crawl the given URLs using Exa SDK.
+
+        Args:
+            urls: List of URLs to crawl
+
+        Returns:
+            List of Documents with content extracted from the URLs
+
+        Raises:
+            LangroidImportError: If the exa package is not installed
+            ValueError: If the Exa API key is not set
+        """
+⋮----
+exa = Exa(self.config.api_key)
+⋮----
+parsed_doc_chunks = self._process_document(url)
+⋮----
+results = exa.get_contents(
+result = results.results[0]
+⋮----
+md_text = md.markdownify(result.text, heading_style="ATX")
+# append a NON-chunked document
+# (metadata.is_chunk = False, so will be chunked downstream)
+⋮----
+class Crawl4aiCrawler(BaseCrawler)
+⋮----
+"""
+    Crawler implementation using the crawl4ai library.
+
+    This crawler intelligently dispatches URLs. Standard web pages are rendered
+    and scraped using the crawl4ai browser engine. Direct links to documents
+    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
+    """
+⋮----
+def __init__(self, config: Crawl4aiConfig) -> None
+⋮----
+"""Initialize the Crawl4ai crawler."""
+⋮----
+"""
+        Indicates that this crawler relies on the framework's DocumentParser
+        for handling specific file types like PDF, DOCX, etc., which
+        the browser engine cannot parse directly.
+        """
+⋮----
+"""
+        Executes the crawl by separating document URLs from web page URLs.
+
+        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
+        - Web page URLs are handled using the async crawl4ai engine.
+        """
+all_documents: List[Document] = []
+webpage_urls: List[str] = []
+⋮----
+# Step 1: Separate URLs into documents and web pages
+⋮----
+# Step 2: Process web page URLs asynchronously
+⋮----
+loop = asyncio.get_running_loop()
+⋮----
+web_docs = asyncio.run(self._async_crawl(webpage_urls))
+⋮----
+"""Converts a crawl4ai CrawlResult into the framework's Document format."""
+⋮----
+content = ""
+⋮----
+content = result.extracted_content
+⋮----
+content = result.markdown.fit_markdown
+⋮----
+content = result.markdown.raw_markdown
+⋮----
+content = str(result.markdown)
+⋮----
+# Extract metadata safely
+title = "Unknown Title"
+published_date = "Unknown Date"
+⋮----
+title = result.metadata.get("title", "Unknown Title")
+# Try common date field names
+⋮----
+published_date = result.metadata.get(date_field)
+⋮----
+meta = DocMetaData(
+⋮----
+# Note: source_content is meant for reference content, not metadata
+# Keeping it minimal as other crawlers don't populate it
+⋮----
+async def _async_crawl(self, urls: List[str]) -> List[Document]
+⋮----
+# Import configs here for lazy loading
+⋮----
+# CHANGE 2: Handle the new optional config fields.
+# Use the user-provided config if it exists, otherwise create a default one.
+browser_config = self.config.browser_config or BrowserConfig()
+run_config = self.config.run_config or CrawlerRunConfig()
+⋮----
+crawled_documents: List[Document] = []
+⋮----
+result = await crawler.arun(url, config=run_config)
+doc = self._translate_result_to_document(result)
+⋮----
+# In deep crawl mode, `crawl4ai` will discover and crawl pages
+# starting from the seed URL. It will not process direct document links
+# found during the deep crawl; it is designed to follow hyperlinks.
+crawl_results = await crawler.arun(urls[0], config=run_config)
+⋮----
+class URLLoader
+⋮----
+"""Loads URLs and extracts text using a specified crawler."""
+⋮----
+"""Initialize the URL loader.
+
+        Args:
+            urls: List of URLs to load
+            parsing_config: Configuration for parsing
+            crawler_config: Configuration for the crawler
+        """
+⋮----
+crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
+⋮----
+def load(self) -> List[Document]
+⋮----
+"""Load the URLs using the specified crawler."""
+</file>
+
 <file path="langroid/parsing/urls.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -26935,112 +27659,6 @@ for msg in task.agent.message_history:
 **Use when**: Tool emission is the primary goal of the task
 </file>
 
-<file path="release-notes/v0-58-0-crawl4ai-integration.md">
-# Langroid Release 0.58.0
-
-## 🎉 Major Features
-
-### 🕷️ Crawl4AI Integration - Advanced Web Crawling with Browser Rendering
-
-We're excited to introduce **Crawl4AI** as a new web crawling option in Langroid! This powerful crawler uses Playwright to render JavaScript-heavy websites, making it ideal for modern web applications.
-
-#### Key Features:
-- **Real Browser Rendering**: Handles dynamic content, SPAs, and JavaScript-heavy sites
-- **No API Key Required**: Works locally without external dependencies
-- **Multiple Extraction Strategies**:
-  - CSS selector-based extraction for structured data
-  - LLM-based extraction for unstructured content
-  - Regex extraction for pattern matching
-- **Advanced Markdown Generation**: Apply content filters to remove ads, sidebars, and irrelevant content
-- **Deep Crawling**: Recursively crawl entire websites with customizable depth and filters
-- **High Performance**: Optional LXML-based scraping for speed optimization
-
-#### Installation:
-```bash
-pip install "langroid[crawl4ai]"
-crawl4ai setup  # Note: Downloads Playwright browsers (~300MB, one-time)
-crawl4ai doctor
-```
-
-#### Quick Example:
-```python
-from langroid.parsing.url_loader import URLLoader, Crawl4aiConfig
-
-# Simple usage
-config = Crawl4aiConfig()
-loader = URLLoader(urls=["https://example.com"], crawler_config=config)
-docs = loader.load()
-
-# With extraction strategy
-from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
-
-css_strategy = JsonCssExtractionStrategy(schema={
-    "name": "Articles",
-    "baseSelector": "article",
-    "fields": [
-        {"name": "title", "selector": "h2", "type": "text"},
-        {"name": "content", "selector": "p", "type": "text"}
-    ]
-})
-
-config = Crawl4aiConfig(extraction_strategy=css_strategy)
-loader = URLLoader(urls=["https://news.site.com"], crawler_config=config)
-docs = loader.load()  # Returns structured JSON data
-```
-
-#### Using with DocChatAgent:
-```python
-# In chat_search.py or similar applications
-python examples/docqa/chat_search.py -c crawl4ai
-```
-
-See the [full documentation](https://langroid.github.io/langroid/notes/crawl4ai/) for advanced usage including deep crawling, LLM-based extraction, and content filtering.
-
-## 🔧 Improvements
-
-### Enhanced URL Loader Framework
-- Added `Crawl4aiConfig` to the URL loader configuration options
-- Improved factory pattern to support multiple crawler backends
-- Better separation between document URLs (PDF, DOCX) and web pages
-
-### CLI Improvements
-- `chat_search.py` now uses Fire instead of Typer for simpler CLI interface
-- Updated help text to list all available crawlers: trafilatura, firecrawl, exa, crawl4ai
-
-## 📚 Documentation
-- Added comprehensive Crawl4AI documentation with examples
-- Updated navigation in mkdocs.yml
-- Added detailed examples in `examples/docqa/crawl4ai_examples.py`
-
-## 🧪 Testing
-- Added mocked tests for Crawl4AI functionality
-- Added optional integration tests (skipped in CI to avoid Playwright download)
-- Run integration tests locally with: `TEST_CRAWL4AI=1 pytest tests/main/test_url_loader.py::test_crawl4ai_integration`
-
-## 🐛 Bug Fixes
-- Fixed metadata extraction in crawl4ai implementation
-- Improved error handling for missing crawl4ai dependencies
-- Fixed import issues and duplicate code in examples
-
-## 📦 Dependencies
-- Added optional `crawl4ai>=0.6.3` dependency group
-- No changes to core dependencies
-
-## 🚀 Migration Guide
-No breaking changes. To use the new Crawl4AI crawler:
-
-1. Install the extra: `pip install "langroid[crawl4ai]"`
-2. Run setup: `crawl4ai setup` (one-time Playwright download)
-3. Use `Crawl4aiConfig()` instead of other crawler configs
-
-## 🙏 Acknowledgments
-Thanks to the contributors who helped improve this release, especially the integration of the powerful crawl4ai library for advanced web scraping capabilities.
-
----
-
-**Full Changelog**: https://github.com/langroid/langroid/compare/v0.57.0...v0.58.0
-</file>
-
 <file path=".gitignore">
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -27200,281 +27818,6 @@ test_minimal.py
 test_debug_full.py
 test_agent_difference.py
 test_isolated.py
-</file>
-
-<file path="CONTRIBUTING.md">
-# Contributing to Langroid
-
-
-Thank you for your interest in contributing to Langroid!
-We want to fundamentally change how LLM applications are built, 
-using Langroid's principled multi-agent framework. 
-Together, let us build the future of LLM-apps!
-We welcome contributions from everyone.
-
-Below you will find guidelines and suggestions for contributing.
-We explicitly designed Langroid with a transparent, flexible architecture to 
-make it easier to build LLM-powered applications, as well as 
-to make it easier to contribute to Langroid itself.
-Feel free to join us on [Discord](https://discord.gg/ZU36McDgDs) 
-for any questions or discussions.
-
-# How can I Contribute?
-
-There are many ways to contribute to Langroid. Here are some areas where you can help:
-
-- Bug Reports
-- Code Fixes
-- Feature Requests
-- Feature Implementations
-- Documentation
-- Testing
-- UI/UX Improvements
-- Translations
-- Outreach
-
-You are welcome to take on un-assigned open [issues](https://github.com/langroid/langroid/issues).
-
-## Implementation Ideas
-
-> **⚠️ Warning: The list of contribution ideas is not updated frequently
-> and may be out of date.**  
-> Please see the github issues for more up-to-date possibilities.
-
-
-**INTEGRATIONS**
-
-- Vector databases, e.g.:
-    - [x] Qdrant
-    - [x] Chroma
-    - [x] LanceDB
-    - [x] Pinecone 
-    - [x] PostgresML (pgvector)
-    - [x] Weaviate
-    - [ ] Milvus 
-    - [ ] Marqo 
-    
-- Other LLM APIs, e.g.: 
-  - [ ] Anthropic 
-  - [ ] Google 
-  - [ ] Cohere
-  
-- Data Sources: 
-  - [x] SQL DBs, 
-  - [x] Neo4j knowledge-graph
-  - [x] ArangoDB knowledge-graph
-  - [ ] NoSQL DBs
-- Query languages: GraphQL, ...
-
-
-**SPECIALIZED AGENTS**
-
-- [x] `SQLChatAgent`, analogous to `DocChatAgent`: adds ability to chat with SQL databases
-- [x] `TableChatAgent`: adds ability to chat with a tabular dataset in a file. 
-   This can derive from `RetrieverAgent`
-
-**CORE LANGROID**
-
-- [ ] **Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
-  launched from a single script. Extend this so agents can run in different
-  processes, machines, or envs or cloud, and communicate via message queues.
-- [ ] **Improve observability:** we currently log all agent interactions into structured
-  and unstructured forms. Add features on top, to improve inspection and
-  diagnosis of issues.
-- [ ] Implement a way to **backtrack** 1 step in a multi-agent task. 
-For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
-when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
-the previous step is re-done and the LLM gets another chance to respond.
-- [x] **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
-    and https://github.com/philschmid/easyllm. It would be useful to have Langroid work with these APIs.
-- [ ] Implement Agents that communicate via REST APIs: Currently, all agents within 
-the multi-agent system are created in a single script. 
-We can remove this limitation, and add the ability to have agents running and 
-listening to an end-point (e.g. a flask server). For example the LLM may 
-generate a function-call or Langroid-tool-message, which the agent’s 
-tool-handling method interprets and makes a corresponding request to an API endpoint. 
-This request can be handled by an agent listening to requests at this endpoint, 
-and the tool-handling method gets the result and returns it as the result of the handling method. 
-This is roughly the mechanism behind OpenAI plugins, e.g. https://github.com/openai/chatgpt-retrieval-plugin
-
-**DEMOS, POC, Use-cases**
-
-- [ ] **Text labeling/classification:** Specifically do what this repo does: https://github.com/refuel-ai/autolabel, 
-  but using Langroid instead of Langchain (which that repo uses).
-- [ ] Data Analyst Demo: A multi-agent system that automates a data analysis workflow, e.g. 
-feature-exploration, visualization, ML model training.
-- [ ] Document classification based on rules in an unstructured “policy” document. 
-    This is an actual use-case from a large US bank. The task is to classify 
-    documents into categories “Public” or “Sensitive”. The classification must be 
-    informed by a “policy” document which has various criteria. 
-    Normally, someone would have to read the policy doc, and apply that to 
-    classify the documents, and maybe go back and forth and look up the policy repeatedly. 
-    This would be a perfect use-case for Langroid’s multi-agent system. 
-    One agent would read the policy, perhaps extract the info into some structured form. 
-    Another agent would apply the various criteria from the policy to the document in question, 
-    and (possibly with other helper agents) classify the document, along with a detailed justification.
-
-- [ ] Document classification and tagging: Given a collection of already labeled/tagged docs, 
-which have been ingested into a vecdb (to allow semantic search), 
-when given a new document to label/tag, we retrieve the most similar docs 
-from multiple categories/tags from the vecdb and present these (with the labels/tags) 
-as few-shot examples to the LLM, and have the LLM classify/tag the retrieved document.
-
-- [ ] Implement the CAMEL multi-agent debate system : https://lablab.ai/t/camel-tutorial-building-communicative-agents-for-large-scale-language-model-exploration
-
-- [ ] Implement Stanford’s Simulacra paper with Langroid.
-Generative Agents: Interactive Simulacra of Human Behavior https://arxiv.org/abs/2304.03442
-
-- [ ] Implement CMU's paper with Langroid.
-Emergent autonomous scientific research capabilities of large language models https://arxiv.org/pdf/2304.05332.pdf
-
----
-
-# Contribution Guidelines
-
-## Set up dev env
-
-We use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
-to manage dependencies, and `python 3.11` for development.
-
-First install `uv`, then create virtual env and install dependencies:
-
-```bash
-# clone this repo and cd into repo root
-git clone ...
-cd <repo_root>
-# create a virtual env under project root, .venv directory
-uv venv --python 3.11
-
-# activate the virtual env
-. .venv/bin/activate
-
-
-# use uv to install dependencies (these go into .venv dir)
-uv sync --dev 
-```
-
-Important note about dependencies management:
-> As of version 0.33.0, we are starting to include the `uv.lock` file as part of 
-> the repo. This ensures that all contributors are using the same versions of 
-> dependencies. If you add a new dependency, `uv add` will automatically update 
-> the `uv.lock` file. This will also update the `pyproject.toml` file.
-
-To add packages, use `uv add <package-name>`. This will automatically
-find the latest compatible version of the package and add it to `pyproject.
-toml`. _Do not manually edit `pyproject.toml` to add packages._
-
-## Set up environment variables (API keys, etc)
-
-Copy the `.env-template` file to a new file `.env` and
-insert secrets such as API keys, etc:
-- OpenAI API key, Anthropic API key, etc.
-- [Optional] GitHub Personal Access Token (needed by  PyGithub to analyze git repos;
-  token-based API calls are less rate-limited).
-- [Optional] Cache Configs
-  - Redis : Password, Host, Port <br>
-- Qdrant API key for the vector database.
-
-```bash
-cp .env-template .env
-# now edit the .env file, insert your secrets as above
-``` 
-
-Currently only OpenAI models are supported. 
-You are welcome to submit a PR to support other API-based or local models. 
-
-## Run tests
-To verify your env is correctly setup, run all tests using `make tests`.
-
-## IMPORTANT: Please include tests, docs and possibly examples.
-
-For any new features, please include:
-- Tests in the `tests` directory (first check if there is a suitable test file to add to).
-  _If fixing a bug, please add a regression test, i.e., 
-   one which would have failed without your fix_
-- A note in `docs/notes` folder, e.g. `docs/notes/weaviate.md` that is a
-  (relatively) self-contained guide to using the feature, including any instructions
-  on how to set up the environment or keys if needed. 
-  See the [weaviate](https://langroid.github.io/langroid/notes/weaviate/) note as an example. Make sure you link to this note in the `mkdocs.yml` file under the `nav` section.
-- Where possible and meaningful, add a simple example in the `examples` directory.
-
-## Generate docs
-
-Generate docs: `make docs`, then go to the IP address shown at the end, like
-`http://127.0.0.1:8000/`
-Note this runs a docs server in the background.
-To stop it, run `make nodocs`. Also, running `make docs` next time will kill
-any previously running `mkdocs` server.
-
-
-## Coding guidelines
-
-In this Python repository, we prioritize code readability and maintainability.
-To ensure this, please adhere to the following guidelines when contributing:
-
-1. **Type-Annotate Code:** Add type annotations to function signatures and
-   variables to make the code more self-explanatory and to help catch potential
-   issues early. For example, `def greet(name: str) -> str:`. We use [`mypy`](https://mypy.readthedocs.io/en/stable/) for
-   type-checking, so please ensure your code passes `mypy` checks. 
-
-2. **Google-Style Docstrings:** Use Google-style docstrings to clearly describe
-   the purpose, arguments, and return values of functions. For example:
-
-   ```python
-   def greet(name: str) -> str:
-       """Generate a greeting message.
-
-       Args:
-           name (str): The name of the person to greet.
-
-       Returns:
-           str: The greeting message.
-       """
-       return f"Hello, {name}!"
-   ```
-
-3. **PEP8-Compliant 80-Char Max per Line:** Follow the PEP8 style guide and keep
-   lines to a maximum of 80 characters. This improves readability and ensures
-   consistency across the codebase.
-
-If you are using an LLM to write code for you, adding these
-instructions will usually get you code compliant with the above:
-```
-use type-annotations, google-style docstrings, and pep8 compliant max 80 
-     chars per line.
-```     
-
-
-By following these practices, we can create a clean, consistent, and
-easy-to-understand codebase for all contributors. Thank you for your
-cooperation!
-
-## Submitting a PR
-
-To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
-and type-checker `mypy`. It also installs a pre-commit hook, 
-so that commits are blocked if there are style/type issues. The linting attempts to
-auto-fix issues, and warns about those it can't fix.
-(There is a separate `make lint` you could do, but that is already part of `make check`).
-The `make check` command also looks through the codebase to see if there are any
-direct imports from pydantic, and replaces them with importing from `langroid.pydantic_v1`
-(this is needed to enable dual-compatibility with Pydantic v1 and v2).
-
-So, typically when submitting a PR, you would do this sequence:
-- run `make tests` or `pytest -xvs tests/main/my-specific-test.py` 
-  - if needed use `-nc` means "no cache", i.e. to prevent using cached LLM API call responses
-  - the `-xvs` option means "exit on first failure, verbose, show output"
-- fix things so tests pass, then proceed to lint/style/type checks below.
-- `make check` to see what issues there are (typically lints and mypy)
-- manually fix any lint or type issues
-- `make check` again to see what issues remain
-- repeat if needed, until all clean.
-
-When done with these, commit and push to github and submit the PR. If this
-is an ongoing PR, just push to github again and the PR will be updated.
-
-It is strongly recommended to use the `gh` command-line utility when working with git.
-Read more [here](docs/development/github-cli.md).
 </file>
 
 <file path="Makefile">
@@ -27850,6 +28193,97 @@ to the `or` pattern for consistency:
 ```python
 self.api_base = self.config.api_base or GEMINI_BASE_URL
 ```
+</file>
+
+<file path="PR_REVIEW_975.md">
+# PR #975 Review: Remove traceback from OpenAI API error logs
+
+**Author:** alexagr
+**Branch:** `api_error_log` → `main`
+**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
+
+## Summary
+
+This PR adds `except openai.APIError` handlers before the generic `except Exception`
+blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
+and `achat`. The intent is to log API errors cleanly (without a full traceback) since
+server-side errors don't benefit from a local stack trace.
+
+The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
+produces multi-line stack traces for every OpenAI API error. For authentication
+failures, bad requests, and similar server-side errors these tracebacks are noisy and
+provide no diagnostic value.
+
+## Issues
+
+### 1. `openai.APIError` is too broad — catches connection and timeout errors too
+
+`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
+
+```
+openai.APIError
+├── openai.APIConnectionError    ← network/local issues
+│   └── openai.APITimeoutError   ← timeout issues
+└── openai.APIStatusError        ← HTTP status errors from the API server
+    ├── openai.BadRequestError (400)
+    ├── openai.AuthenticationError (401)
+    ├── openai.PermissionDeniedError (403)
+    ├── openai.NotFoundError (404)
+    ├── openai.UnprocessableEntityError (422)
+    ├── openai.RateLimitError (429)
+    └── openai.InternalServerError (>=500)
+```
+
+The PR description correctly identifies that server-side errors (AuthenticationError,
+BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
+and `APITimeoutError` **are** related to the local environment (network configuration,
+DNS, proxy issues), where a traceback **could** help diagnose the problem.
+
+**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
+captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
+while letting connection/timeout errors fall through to the `except Exception` handler
+where `friendly_error()` provides the full traceback.
+
+### 2. `raise e` vs bare `raise`
+
+The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
+`raise` preserves the original traceback chain. This is consistent with the existing
+code (the `except Exception` blocks also use `raise e`), but `raise` is generally
+preferred — especially since callers higher up the stack may want the full traceback
+context even if the log message omits it.
+
+This is a minor style point and not a blocker — it could be a separate cleanup across
+the file.
+
+### 3. Log level consideration
+
+Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
+(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
+a transient condition. That said, by the time the error reaches this outer handler the
+retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
+
+Not a blocker.
+
+## Suggested Change
+
+Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
+
+```python
+except openai.APIStatusError as e:
+    logging.error(f"API error in OpenAIGPT.generate: {e}")
+    raise e
+```
+
+## Verdict
+
+The change addresses a real usability issue — excessively noisy tracebacks for
+server-side API errors. With the suggested narrowing from `APIError` to
+`APIStatusError`, this would be a clean, well-targeted improvement. The code is
+consistent with existing patterns and correctly placed before the generic exception
+handlers.
+
+**Recommendation: Request changes** — use `openai.APIStatusError` instead of
+`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
 </file>
 
 <file path="pytest.ini">
@@ -30801,348 +31235,6 @@ return LlamaCppServerEmbeddings  # type: ignore
 return GeminiEmbeddings  # type: ignore
 else:  # default sentence transformer
 return SentenceTransformerEmbeddings  # type: ignore
-</file>
-
-<file path="langroid/parsing/url_loader.py">
-# Base crawler config and specific configurations
-class BaseCrawlerConfig(BaseSettings)
-⋮----
-"""Base configuration for web crawlers."""
-⋮----
-parser: Optional[Parser] = None
-⋮----
-class TrafilaturaConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for Trafilatura crawler."""
-⋮----
-threads: int = 4
-format: str = "markdown"  # or "xml" or "txt"
-⋮----
-class FirecrawlConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for Firecrawl crawler."""
-⋮----
-api_key: str = ""
-mode: str = "scrape"
-params: Dict[str, Any] = {}
-timeout: Optional[int] = None
-⋮----
-model_config = SettingsConfigDict(env_prefix="FIRECRAWL_")
-⋮----
-class ExaCrawlerConfig(BaseCrawlerConfig)
-⋮----
-model_config = SettingsConfigDict(env_prefix="EXA_")
-⋮----
-class Crawl4aiConfig(BaseCrawlerConfig)
-⋮----
-"""Configuration for the Crawl4aiCrawler."""
-⋮----
-crawl_mode: Literal["simple", "deep"] = "simple"
-extraction_strategy: Optional["ExtractionStrategy"] = None
-markdown_strategy: Optional["MarkdownGenerationStrategy"] = None
-deep_crawl_strategy: Optional["DeepCrawlStrategy"] = None
-scraping_strategy: Optional["ContentScrapingStrategy"] = None
-browser_config: Optional["BrowserConfig"] = None
-run_config: Optional["CrawlerRunConfig"] = None
-⋮----
-model_config = SettingsConfigDict(arbitrary_types_allowed=True)
-⋮----
-# Resolve forward references for Crawl4aiConfig after the class is defined
-⋮----
-# Rebuild the model with resolved references
-⋮----
-# If crawl4ai is not installed, leave forward refs as strings
-⋮----
-class BaseCrawler(ABC)
-⋮----
-"""Abstract base class for web crawlers."""
-⋮----
-def __init__(self, config: BaseCrawlerConfig)
-⋮----
-"""Initialize the base crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-@property
-@abstractmethod
-    def needs_parser(self) -> bool
-⋮----
-"""Indicates whether the crawler requires a parser."""
-⋮----
-@abstractmethod
-    def crawl(self, urls: List[str]) -> List[Document]
-⋮----
-def _process_document(self, url: str) -> List[Document]
-⋮----
-doc_parser = DocumentParser.create(url, self.parser.config)
-new_chunks = doc_parser.get_doc_chunks()
-⋮----
-# If the document is empty, try to extract images
-img_parser = ImagePdfParser(url, self.parser.config)
-new_chunks = img_parser.get_doc_chunks()
-⋮----
-headers = requests.head(url).headers
-⋮----
-headers = CaseInsensitiveDict()
-⋮----
-content_type = headers.get("Content-Type", "").lower()
-temp_file_suffix = None
-⋮----
-temp_file_suffix = ".pdf"
-⋮----
-temp_file_suffix = ".docx"
-⋮----
-temp_file_suffix = ".doc"
-⋮----
-response = requests.get(url)
-⋮----
-temp_file_path = temp_file.name
-doc_parser = DocumentParser.create(
-docs = doc_parser.get_doc_chunks()
-⋮----
-def _is_document_url(self, url: str) -> bool
-⋮----
-class CrawlerFactory
-⋮----
-"""Factory for creating web crawlers."""
-⋮----
-@staticmethod
-    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler
-⋮----
-"""Create a crawler instance based on configuration type.
-
-        Args:
-            config: Configuration for the crawler
-
-        Returns:
-            A BaseCrawler instance
-
-        Raises:
-            ValueError: If config type is not supported
-        """
-⋮----
-class TrafilaturaCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Trafilatura."""
-⋮----
-def __init__(self, config: TrafilaturaConfig)
-⋮----
-"""Initialize the Trafilatura crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-@property
-    def needs_parser(self) -> bool
-⋮----
-def crawl(self, urls: List[str]) -> List[Document]
-⋮----
-docs = []
-dl_dict = add_to_compressed_dict(urls)
-⋮----
-parsed_doc = self._process_document(url)
-⋮----
-text = trafilatura.extract(
-⋮----
-with_metadata=True,  # Title, date, author... at start of text
-⋮----
-# heading_style="ATX" for markdown headings, i.e. #, ##, etc.
-text = md.markdownify(text, heading_style="ATX")
-⋮----
-text = result
-⋮----
-class FirecrawlCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Firecrawl."""
-⋮----
-def __init__(self, config: FirecrawlConfig) -> None
-⋮----
-"""Initialize the Firecrawl crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-# Code used verbatim from firecrawl blog with few modifications
-# https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
-⋮----
-pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
-⋮----
-processed_urls: set[str] = set()
-⋮----
-# Check current status
-status = app.check_crawl_status(crawl_id)
-new_pages = 0
-⋮----
-# Save new pages
-⋮----
-url = page["metadata"]["url"]
-⋮----
-content = page.get("markdown", "")
-filename = f"{output_dir}/{len(processed_urls)}.md"
-⋮----
-pbar.model_copy(update=new_pages)  # Update progress bar with new pages
-⋮----
-# Break if crawl is complete
-⋮----
-time.sleep(5)  # Wait before checking again
-⋮----
-app = FirecrawlApp(api_key=self.config.api_key)
-⋮----
-params = self.config.params.copy()  # Create a copy of the existing params
-⋮----
-params["timeout"] = self.config.timeout  # Add/override timeout in params
-⋮----
-result = app.scrape_url(url, params=params)
-metadata = result.get(
-⋮----
-)  # Default to empty dict if missing
-status_code = metadata.get("statusCode")
-⋮----
-# Start the crawl
-crawl_status = app.async_crawl_url(url=urls[0], params=params)
-⋮----
-# Save results incrementally
-docs = self._return_save_incremental_results(app, crawl_status["id"])
-⋮----
-class ExaCrawler(BaseCrawler)
-⋮----
-"""Crawler implementation using Exa API."""
-⋮----
-def __init__(self, config: ExaCrawlerConfig) -> None
-⋮----
-"""Initialize the Exa crawler.
-
-        Args:
-            config: Configuration for the crawler
-        """
-⋮----
-"""Crawl the given URLs using Exa SDK.
-
-        Args:
-            urls: List of URLs to crawl
-
-        Returns:
-            List of Documents with content extracted from the URLs
-
-        Raises:
-            LangroidImportError: If the exa package is not installed
-            ValueError: If the Exa API key is not set
-        """
-⋮----
-exa = Exa(self.config.api_key)
-⋮----
-parsed_doc_chunks = self._process_document(url)
-⋮----
-results = exa.get_contents(
-result = results.results[0]
-⋮----
-md_text = md.markdownify(result.text, heading_style="ATX")
-# append a NON-chunked document
-# (metadata.is_chunk = False, so will be chunked downstream)
-⋮----
-class Crawl4aiCrawler(BaseCrawler)
-⋮----
-"""
-    Crawler implementation using the crawl4ai library.
-
-    This crawler intelligently dispatches URLs. Standard web pages are rendered
-    and scraped using the crawl4ai browser engine. Direct links to documents
-    (PDF, DOCX, etc.) are delegated to the framework's internal DocumentParser.
-    """
-⋮----
-def __init__(self, config: Crawl4aiConfig) -> None
-⋮----
-"""Initialize the Crawl4ai crawler."""
-⋮----
-"""
-        Indicates that this crawler relies on the framework's DocumentParser
-        for handling specific file types like PDF, DOCX, etc., which
-        the browser engine cannot parse directly.
-        """
-⋮----
-"""
-        Executes the crawl by separating document URLs from web page URLs.
-
-        - Document URLs (.pdf, .docx, etc.) are processed using `_process_document`.
-        - Web page URLs are handled using the async crawl4ai engine.
-        """
-all_documents: List[Document] = []
-webpage_urls: List[str] = []
-⋮----
-# Step 1: Separate URLs into documents and web pages
-⋮----
-# Step 2: Process web page URLs asynchronously
-⋮----
-loop = asyncio.get_running_loop()
-⋮----
-web_docs = asyncio.run(self._async_crawl(webpage_urls))
-⋮----
-"""Converts a crawl4ai CrawlResult into the framework's Document format."""
-⋮----
-content = ""
-⋮----
-content = result.extracted_content
-⋮----
-content = result.markdown.fit_markdown
-⋮----
-content = result.markdown.raw_markdown
-⋮----
-content = str(result.markdown)
-⋮----
-# Extract metadata safely
-title = "Unknown Title"
-published_date = "Unknown Date"
-⋮----
-title = result.metadata.get("title", "Unknown Title")
-# Try common date field names
-⋮----
-published_date = result.metadata.get(date_field)
-⋮----
-meta = DocMetaData(
-⋮----
-# Note: source_content is meant for reference content, not metadata
-# Keeping it minimal as other crawlers don't populate it
-⋮----
-async def _async_crawl(self, urls: List[str]) -> List[Document]
-⋮----
-# Import configs here for lazy loading
-⋮----
-# CHANGE 2: Handle the new optional config fields.
-# Use the user-provided config if it exists, otherwise create a default one.
-browser_config = self.config.browser_config or BrowserConfig()
-run_config = self.config.run_config or CrawlerRunConfig()
-⋮----
-crawled_documents: List[Document] = []
-⋮----
-result = await crawler.arun(url, config=run_config)
-doc = self._translate_result_to_document(result)
-⋮----
-# In deep crawl mode, `crawl4ai` will discover and crawl pages
-# starting from the seed URL. It will not process direct document links
-# found during the deep crawl; it is designed to follow hyperlinks.
-crawl_results = await crawler.arun(urls[0], config=run_config)
-⋮----
-class URLLoader
-⋮----
-"""Loads URLs and extracts text using a specified crawler."""
-⋮----
-"""Initialize the URL loader.
-
-        Args:
-            urls: List of URLs to load
-            parsing_config: Configuration for parsing
-            crawler_config: Configuration for the crawler
-        """
-⋮----
-crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
-⋮----
-def load(self) -> List[Document]
-⋮----
-"""Load the URLs using the specified crawler."""
 </file>
 
 <file path="langroid/utils/pydantic_utils.py">
@@ -36754,6 +36846,195 @@ def justify_response(self) -> ChatDocument | None
 source = self.response.metadata.source
 </file>
 
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+</file>
+
 <file path="langroid/language_models/base.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -36879,6 +37160,7 @@ class OpenAIToolCall(BaseModel)
 id: str | None = None
 type: ToolTypes = "function"
 function: LLMFunctionCall | None = None
+extra_content: Dict[str, Any] | None = None
 ⋮----
 @staticmethod
     def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall"
@@ -36886,6 +37168,7 @@ function: LLMFunctionCall | None = None
 id = message["id"]
 type = message["type"]
 function = LLMFunctionCall.from_dict(message["function"])
+extra_content = message.get("extra_content")
 ⋮----
 class OpenAIToolSpec(BaseModel)
 ⋮----
@@ -37301,195 +37584,6 @@ def __enter__(self) -> None
 def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="langroid/language_models/model_info.py">
 class ModelProvider(str, Enum)
 ⋮----
@@ -37646,1010 +37740,6 @@ None,  # Default value if the iterator is exhausted (no valid info found)
 # Return the found info, or a default ModelInfo if none was found
 ⋮----
 def _get_model_info(model: str | ModelName) -> ModelInfo | None
-</file>
-
-<file path="langroid/language_models/openai_gpt.py">
-OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
-⋮----
-OLLAMA_BASE_URL = "http://localhost:11434/v1"
-⋮----
-DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
-OLLAMA_API_KEY = "ollama"
-⋮----
-VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
-LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
-⋮----
-openai_chat_model_pref_list = [
-⋮----
-openai_completion_model_pref_list = [
-⋮----
-available_models = set(map(lambda m: m.id, OpenAI().models.list()))
-⋮----
-available_models = set()
-⋮----
-default_openai_chat_model = next(
-default_openai_completion_model = next(
-⋮----
-class AccessWarning(Warning)
-⋮----
-@cache
-def gpt_3_5_warning() -> None
-⋮----
-@cache
-def parallel_strict_warning() -> None
-⋮----
-def noop() -> None
-⋮----
-"""Does nothing."""
-⋮----
-class OpenAICallParams(BaseModel)
-⋮----
-"""
-    Various params that can be sent to an OpenAI API chat-completion call.
-    When specified, any param here overrides the one with same name in the
-    OpenAIGPTConfig.
-    See OpenAI API Reference for details on the params:
-    https://platform.openai.com/docs/api-reference/chat
-    """
-⋮----
-max_tokens: int | None = None
-temperature: float | None = None
-frequency_penalty: float | None = None  # between -2 and 2
-presence_penalty: float | None = None  # between -2 and 2
-response_format: Dict[str, str] | None = None
-logit_bias: Dict[int, float] | None = None  # token_id -> bias
-logprobs: bool | None = None
-top_p: float | None = None
-reasoning_effort: str | None = None  # or "low" or "high" or "medium"
-top_logprobs: int | None = None  # if int, requires logprobs=True
-n: int | None = None  # how many completions to generate (n > 1 is NOT handled now)
-stop: str | List[str] | None = None  # (list of) stop sequence(s)
-seed: int | None = None
-user: str | None = None  # user id for tracking
-extra_body: Dict[str, Any] | None = None  # additional params for API request body
-⋮----
-def to_dict_exclude_none(self) -> Dict[str, Any]
-⋮----
-class LiteLLMProxyConfig(BaseSettings)
-⋮----
-"""Configuration for LiteLLM proxy connection."""
-⋮----
-api_key: str = ""  # read from env var LITELLM_API_KEY if set
-api_base: str = ""  # read from env var LITELLM_API_BASE if set
-⋮----
-model_config = SettingsConfigDict(env_prefix="LITELLM_")
-⋮----
-class OpenAIGPTConfig(LLMConfig)
-⋮----
-"""
-    Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
-    (a) locally-served models behind an OpenAI-compatible API
-    (b) non-local models, using a proxy adaptor lib like litellm that provides
-        an OpenAI-compatible API.
-    (We could rename this class to OpenAILikeConfig, but we keep it as-is for now)
-
-    Important Note:
-    Due to the `env_prefix = "OPENAI_"` defined below,
-    all of the fields below can be set AND OVERRIDDEN via env vars,
-    # by upper-casing the name and prefixing with OPENAI_, e.g.
-    # OPENAI_MAX_OUTPUT_TOKENS=1000.
-    # If any of these is defined in this way in the environment
-    # (either via explicit setenv or export or via .env file + load_dotenv()),
-    # the environment variable takes precedence over the value in the config.
-    """
-⋮----
-type: str = "openai"
-api_key: str = DUMMY_API_KEY
-organization: str = ""
-api_base: str | None = None  # used for local or other non-OpenAI models
-litellm: bool = False  # use litellm api?
-litellm_proxy: LiteLLMProxyConfig = LiteLLMProxyConfig()
-ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
-min_output_tokens: int = 1
-use_chat_for_completion: bool = True  # do not change this, for OpenAI models!
-timeout: int = 20
-temperature: float = 0.2
-seed: int | None = 42
-params: OpenAICallParams | None = None
-use_cached_client: bool = (
-⋮----
-True  # Whether to reuse cached clients (prevents resource exhaustion)
-⋮----
-# these can be any model name that is served at an OpenAI-compatible API end point
-chat_model: str = default_openai_chat_model
-chat_model_orig: Optional[str] = None
-completion_model: str = default_openai_completion_model
-run_on_first_use: Callable[[], None] = noop
-parallel_tool_calls: Optional[bool] = None
-# Supports constrained decoding which enforces that the output of the LLM
-# adheres to a JSON schema
-supports_json_schema: Optional[bool] = None
-# Supports strict decoding for the generation of tool calls with
-# the OpenAI Tools API; this ensures that the generated tools
-# adhere to the provided schema.
-supports_strict_tools: Optional[bool] = None
-# a string that roughly matches a HuggingFace chat_template,
-# e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
-formatter: str | None = None
-hf_formatter: HFFormatter | None = None
-langdb_params: LangDBParams = LangDBParams()
-portkey_params: PortkeyParams = PortkeyParams()
-headers: Dict[str, str] = {}
-http_client_factory: Optional[Callable[[], Any]] = None  # Factory for httpx.Client
-http_verify_ssl: bool = True  # Simple flag for SSL verification
-http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
-⋮----
-def __init__(self, **kwargs) -> None:  # type: ignore
-⋮----
-local_model = "api_base" in kwargs and kwargs["api_base"] is not None
-⋮----
-chat_model = kwargs.get("chat_model", "")
-local_prefixes = ["local/", "litellm/", "ollama/", "vllm/", "llamacpp/"]
-⋮----
-local_model = True
-⋮----
-warn_gpt_3_5 = (
-⋮----
-existing_hook = kwargs.get("run_on_first_use", noop)
-⋮----
-def with_warning() -> None
-⋮----
-model_config = SettingsConfigDict(env_prefix="OPENAI_")
-⋮----
-"""
-        Copy config while preserving nested model instances and subclasses.
-
-        Important: Avoid reconstructing via `model_dump` as that coerces nested
-        models to their annotated base types (dropping subclass-only fields).
-        Instead, defer to Pydantic's native `model_copy`, which keeps nested
-        `BaseModel` instances (and their concrete subclasses) intact.
-        """
-# Delegate to BaseSettings/BaseModel implementation to preserve types
-return super().model_copy(update=update, deep=deep)  # type: ignore[return-value]
-⋮----
-def _validate_litellm(self) -> None
-⋮----
-"""
-        When using liteLLM, validate whether all env vars required by the model
-        have been set.
-        """
-⋮----
-litellm.drop_params = True  # drop un-supported params without crashing
-⋮----
-self.seed = None  # some local mdls don't support seed
-⋮----
-keys_dict = litellm.utils.validate_environment(self.chat_model)
-missing_keys = keys_dict.get("missing_keys", [])
-⋮----
-@classmethod
-    def create(cls, prefix: str) -> Type["OpenAIGPTConfig"]
-⋮----
-"""Create a config class whose params can be set via a desired
-        prefix from the .env file or env vars.
-        E.g., using
-        ```python
-        OllamaConfig = OpenAIGPTConfig.create("ollama")
-        ollama_config = OllamaConfig()
-        ```
-        you can have a group of params prefixed by "OLLAMA_", to be used
-        with models served via `ollama`.
-        This way, you can maintain several setting-groups in your .env file,
-        one per model type.
-        """
-⋮----
-class DynamicConfig(OpenAIGPTConfig)
-⋮----
-class OpenAIResponse(BaseModel)
-⋮----
-"""OpenAI response model, either completion or chat."""
-⋮----
-choices: List[Dict]  # type: ignore
-usage: Dict  # type: ignore
-⋮----
-def litellm_logging_fn(model_call_dict: Dict[str, Any]) -> None
-⋮----
-"""Logging function for litellm"""
-⋮----
-api_input_dict = model_call_dict.get("additional_args", {}).get(
-⋮----
-text = escape(json.dumps(api_input_dict, indent=2))
-⋮----
-# Define a class for OpenAI GPT models that extends the base class
-class OpenAIGPT(LanguageModel)
-⋮----
-"""
-    Class for OpenAI LLMs
-    """
-⋮----
-client: OpenAI | Groq | Cerebras | None
-async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras | None
-⋮----
-def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig())
-⋮----
-"""
-        Args:
-            config: configuration for openai-gpt model
-        """
-# copy the config to avoid modifying the original; deep to decouple
-# nested models while preserving their concrete subclasses
-config = config.model_copy(deep=True)
-⋮----
-# save original model name such as `provider/model` before
-# we strip out the `provider` - we retain the original in
-# case some params are specific to a provider.
-⋮----
-# Run the first time the model is used
-⋮----
-# global override of chat_model,
-# to allow quick testing with other models
-⋮----
-# there is a formatter specified, e.g.
-# "litellm/ollama/mistral//hf" or
-# "local/localhost:8000/v1//mistral-instruct-v0.2"
-formatter = parts[1]
-⋮----
-# e.g. "litellm/ollama/mistral//hf" -> "litellm/ollama/mistral"
-formatter = find_hf_formatter(self.config.chat_model)
-⋮----
-# e.g. "mistral"
-⋮----
-# e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
-⋮----
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
-⋮----
-# if model name starts with "litellm",
-# set the actual model name by stripping the "litellm/" prefix
-# and set the litellm flag to True
-⋮----
-# e.g. litellm/ollama/mistral
-⋮----
-# strip the "litellm/" prefix
-# e.g. litellm/ollama/llama2 => ollama/llama2
-⋮----
-# expect this to be of the form "local/localhost:8000/v1",
-# depending on how the model is launched locally.
-# In this case the model served locally behind an OpenAI-compatible API
-# so we can just use `openai.*` methods directly,
-# and don't need a adaptor library like litellm
-⋮----
-self.config.seed = None  # some models raise an error when seed is set
-# Extract the api_base from the model name after the "local/" prefix
-⋮----
-# use api_base from config if set, else fall back on OLLAMA_BASE_URL
-⋮----
-# If api_base is unset we use OpenAI's endpoint, which supports
-# these features (with JSON schema restricted to a limited set of models)
-⋮----
-# if we're overriding chat model globally, set completion model to same
-⋮----
-# we want to format chats -> completions using this specific formatter
-⋮----
-# use groq-specific client
-⋮----
-# Create new clients without caching
-⋮----
-# use cerebras-specific client
-⋮----
-# TODO there is not async client, so should we do anything here?
-⋮----
-# in these cases, there's no specific client: OpenAI python client suffices
-⋮----
-# Use GEMINI_API_BASE env var if set (e.g. for Vertex AI),
-# then config.api_base only if explicitly set by the user
-# (not inherited from OPENAI_API_BASE via env_prefix),
-# then fall back to the default Gemini endpoint.
-gemini_api_base = os.getenv("GEMINI_API_BASE", "")
-openai_api_base = os.getenv("OPENAI_API_BASE")
-explicit_api_base = (
-⋮----
-project_id = self.config.langdb_params.project_id
-⋮----
-params = self.config.langdb_params
-⋮----
-# Parse the model string and extract provider/model
-⋮----
-# Set Portkey base URL
-⋮----
-# Set API key - use provider's API key from env if available
-⋮----
-# Add Portkey-specific headers
-⋮----
-# Create http_client if needed - Priority order:
-# 1. http_client_factory (most flexibility, not cacheable)
-# 2. http_client_config (cacheable, moderate flexibility)
-# 3. http_verify_ssl=False (cacheable, simple SSL bypass)
-http_client = None
-async_http_client = None
-http_client_config_used = None
-⋮----
-# Use the factory to create http_client (not cacheable)
-http_client = self.config.http_client_factory()
-# Don't set async_http_client from sync client - create separately
-# This avoids type mismatch issues
-⋮----
-# Use config dict (cacheable)
-http_client_config_used = self.config.http_client_config
-⋮----
-# Simple SSL bypass (cacheable)
-http_client_config_used = {"verify": False}
-⋮----
-client_kwargs: Dict[str, Any] = dict(
-⋮----
-# Create http_client from config for non-cached scenario
-⋮----
-async_client_kwargs: Dict[str, Any] = dict(
-⋮----
-# Create async http_client from config for non-cached scenario
-⋮----
-use_cache = self.config.cache_config is not None
-⋮----
-# switch to fresh redis config if needed
-⋮----
-# force use of fake redis if global cache_type is "fakeredis"
-⋮----
-def _openai_api_call_params(self, kwargs: Dict[str, Any]) -> Dict[str, Any]
-⋮----
-"""
-        Prep the params to be sent to the OpenAI API
-        (or any OpenAI-compatible API, e.g. from Ooba or LmStudio)
-        for chat-completion.
-
-        Order of priority:
-        - (1) Params (mainly max_tokens) in the chat/achat/generate/agenerate call
-                (these are passed in via kwargs)
-        - (2) Params in OpenAIGPTConfig.params (of class OpenAICallParams)
-        - (3) Specific Params in OpenAIGPTConfig (just temperature for now)
-        """
-params = dict(
-⋮----
-def is_openai_chat_model(self) -> bool
-⋮----
-openai_chat_models = [e.value for e in OpenAIChatModel]
-⋮----
-def is_openai_completion_model(self) -> bool
-⋮----
-openai_completion_models = [e.value for e in OpenAICompletionModel]
-⋮----
-def is_gemini_model(self) -> bool
-⋮----
-"""Are we using the gemini OpenAI-compatible API?"""
-⋮----
-def is_deepseek_model(self) -> bool
-⋮----
-deepseek_models = [e.value for e in DeepSeekModel]
-⋮----
-def unsupported_params(self) -> List[str]
-⋮----
-"""
-        List of params that are not supported by the current model
-        """
-unsupported = set(self.info().unsupported_params)
-⋮----
-def rename_params(self) -> Dict[str, str]
-⋮----
-"""
-        Map of param name -> new name for specific models.
-        Currently main troublemaker is o1* series.
-        """
-⋮----
-def chat_context_length(self) -> int
-⋮----
-"""
-        Context-length for chat-completion models/endpoints.
-        Get it from the config if explicitly given,
-         otherwise use model_info based on model name, and fall back to
-         generic model_info if there's no match.
-        """
-⋮----
-def completion_context_length(self) -> int
-⋮----
-"""
-        Context-length for completion models/endpoints.
-        Get it from the config if explicitly given,
-         otherwise use model_info based on model name, and fall back to
-         generic model_info if there's no match.
-        """
-⋮----
-def chat_cost(self) -> Tuple[float, float, float]
-⋮----
-"""
-        (Prompt, Cached, Generation) cost per 1000 tokens, for chat-completion
-        models/endpoints.
-        Get it from the dict, otherwise fail-over to general method
-        """
-info = self.info()
-cached_cost_per_million = info.cached_cost_per_million
-⋮----
-cached_cost_per_million = info.input_cost_per_million
-⋮----
-def set_stream(self, stream: bool) -> bool
-⋮----
-"""Enable or disable streaming output from API.
-        Args:
-            stream: enable streaming output from API
-        Returns: previous value of stream
-        """
-tmp = self.config.stream
-⋮----
-def get_stream(self) -> bool
-⋮----
-"""Get streaming status."""
-⋮----
-"""Process state vars while processing a streaming API response.
-            Returns a tuple consisting of:
-        - is_break: whether to break out of the loop
-        - has_function: whether the response contains a function_call
-        - function_name: name of the function
-        - function_args: args of the function
-        - completion: completion text
-        - reasoning: reasoning text
-        - usage: usage dict
-        """
-# convert event obj (of type ChatCompletionChunk) to dict so rest of code,
-# which expects dicts, works as it did before switching to openai v1.x
-⋮----
-event = event.model_dump()
-⋮----
-usage = event.get("usage", {}) or {}
-choices = event.get("choices", [{}])
-⋮----
-choices = [{}]
-⋮----
-# we have a "usage" chunk, and empty choices, so we're done
-# ASSUMPTION: a usage chunk ONLY arrives AFTER all normal completion text!
-# If any API does not follow this, we need to change this code.
-⋮----
-event_args = ""
-event_fn_name = ""
-event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-silent = settings.quiet
-# The first two events in the stream of Azure OpenAI is useless.
-# In the 1st: choices list is empty, in the 2nd: the dict delta has null content
-⋮----
-delta = choices[0].get("delta", {})
-# capture both content and reasoning_content
-event_text = delta.get("content", "")
-event_reasoning = delta.get(
-⋮----
-event_fn_name = delta["function_call"]["name"]
-⋮----
-event_args = delta["function_call"]["arguments"]
-⋮----
-# it's a list of deltas, usually just one
-event_tool_deltas = delta["tool_calls"]
-⋮----
-event_text = choices[0]["text"]
-event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
-⋮----
-finish_reason = choices[0].get("finish_reason", "")
-⋮----
-filter_names = [
-event_text = (
-⋮----
-function_name = event_fn_name
-has_function = True
-⋮----
-# print out streaming tool calls, if not async
-⋮----
-tool_fn_name = td["function"]["name"]
-⋮----
-tool_fn_args = td["function"]["arguments"]
-⋮----
-# show this delta in the stream
-is_break = finish_reason in [
-# for function_call, finish_reason does not necessarily
-# contain "function_call" as mentioned in the docs.
-# So we check for "stop" or "function_call" here.
-⋮----
-# we got usage chunk, and empty choices, so we're done
-⋮----
-silent = self.config.async_stream_quiet or settings.quiet
-⋮----
-is_break = choices[0].get("finish_reason", "") in [
-⋮----
-def _stream_response(  # type: ignore
-⋮----
-"""
-        Grab and print streaming response from API.
-        Args:
-            response: event-sequence emitted by API
-            chat: whether in chat-mode (or else completion-mode)
-        Returns:
-            Tuple consisting of:
-                LLMResponse object (with message, usage),
-                Dict version of OpenAIResponse object (with choices, usage)
-
-        """
-completion = ""
-reasoning = ""
-function_args = ""
-function_name = ""
-⋮----
-has_function = False
-tool_deltas: List[Dict[str, Any]] = []
-token_usage: Dict[str, int] = {}
-done: bool = False
-⋮----
-# capture the token usage when non-empty
-token_usage = usage
-⋮----
-# if not streaming, then we don't wait for last "usage" chunk
-⋮----
-# mark done, so we quit after the last "usage" chunk
-done = True
-⋮----
-# TODO- get usage info in stream mode (?)
-⋮----
-async def _stream_response_async(  # type: ignore
-⋮----
-"""
-        Grab and print streaming response from API.
-        Args:
-            response: event-sequence emitted by API
-            chat: whether in chat-mode (or else completion-mode)
-        Returns:
-            Tuple consisting of:
-                LLMResponse object (with message, usage),
-                OpenAIResponse object (with choices, usage)
-
-        """
-⋮----
-# mark done, so we quit after the next "usage" chunk
-⋮----
-"""
-        Convert accumulated tool-call deltas to OpenAIToolCall objects.
-        Adapted from this excellent code:
-         https://community.openai.com/t/help-for-function-calls-with-streaming/627170/2
-
-        Args:
-            tools: list of tool deltas received from streaming API
-
-        Returns:
-            str: plain text corresponding to tool calls that failed to parse
-            List[OpenAIToolCall]: list of OpenAIToolCall objects
-            List[Dict[str, Any]]: list of tool dicts
-                (to reconstruct OpenAI API response, so it can be cached)
-        """
-# Initialize a dictionary with default values
-⋮----
-# idx -> dict repr of tool
-# (used to simulate OpenAIResponse object later, and also to
-# accumulate function args as strings)
-idx2tool_dict: Dict[str, Dict[str, Any]] = defaultdict(
-⋮----
-# (try to) parse the fn args of each tool
-contents: List[str] = []
-good_indices = []
-id2args: Dict[str, None | Dict[str, Any]] = {}
-⋮----
-# used to build tool_calls_list below
-id2args[tool_dict["id"]] = args_dict or None  # if {}, store as None
-⋮----
-# remove the failed tool calls
-idx2tool_dict = {
-⋮----
-# create OpenAIToolCall list
-tool_calls_list = [
-⋮----
-@staticmethod
-    def _parse_function_args(args: str) -> Tuple[str, Dict[str, Any]]
-⋮----
-"""
-        Try to parse the `args` string as function args.
-
-        Args:
-            args: string containing function args
-
-        Returns:
-            Tuple of content, function name and args dict.
-            If parsing unsuccessful, returns the original string as content,
-            else returns the args dict.
-        """
-content = ""
-args_dict = {}
-⋮----
-stripped_fn_args = args.strip()
-dict_or_list = parse_imperfect_json(stripped_fn_args)
-⋮----
-args_dict = dict_or_list
-⋮----
-content = args
-⋮----
-"""
-        Create an LLMResponse object from the streaming API response.
-
-        Args:
-            chat: whether in chat-mode (or else completion-mode)
-            tool_deltas: list of tool deltas received from streaming API
-            has_function: whether the response contains a function_call
-            completion: completion text
-            reasoning: reasoning text
-            function_args: string representing function args
-            function_name: name of the function
-            usage: token usage dict
-        Returns:
-            Tuple consisting of:
-                LLMResponse object (with message, usage),
-                Dict version of OpenAIResponse object (with choices, usage)
-                    (this is needed so we can cache the response, as if it were
-                    a non-streaming response)
-        """
-# check if function_call args are valid, if not,
-# treat this as a normal msg, not a function call
-args: Dict[str, Any] = {}
-⋮----
-completion = completion + content
-⋮----
-# mock openai response so we can cache it
-⋮----
-completion = completion + "\n" + failed_content
-msg: Dict[str, Any] = dict(
-⋮----
-function_call = LLMFunctionCall(name=function_name)
-function_call_dict = function_call.model_dump()
-⋮----
-# non-chat mode has no function_call
-msg = dict(text=completion)
-# TODO: Ignoring reasoning content for non-chat models
-⋮----
-# create an OpenAIResponse object so we can cache it as if it were
-# a non-streaming response
-openai_response = OpenAIResponse(
-# Track whether we extracted inline thought tags from the text.
-# Only set message_with_reasoning when get_reasoning_final()
-# actually finds and extracts inline tags (e.g. <think>...</think>).
-# When reasoning is already provided via a separate API field
-# (e.g. reasoning_content), the message text doesn't contain
-# thought signatures, so there's nothing extra to preserve.
-message_with_reasoning = None
-⋮----
-# some LLM APIs may not return a separate reasoning field,
-# and the reasoning may be included in the message content
-# within delimiters like <think> ... </think>
-⋮----
-# Inline tags were found and extracted; preserve the
-# original text so it can be restored in message history.
-message_with_reasoning = completion
-⋮----
-message = completion
-⋮----
-prompt_tokens = usage.get("prompt_tokens", 0)
-prompt_tokens_details: Any = usage.get("prompt_tokens_details", {})
-cached_tokens = (
-completion_tokens = usage.get("completion_tokens", 0)
-⋮----
-# don't allow empty list [] here
-⋮----
-def _cache_store(self, k: str, v: Any) -> None
-⋮----
-def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]
-⋮----
-return "", None  # no cache, return empty key and None result
-# Use the kwargs as the cache key
-sorted_kwargs_str = str(sorted(kwargs.items()))
-raw_key = f"{fn_name}:{sorted_kwargs_str}"
-⋮----
-# Hash the key to a fixed length using SHA256
-hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
-⋮----
-# when caching disabled, return the hashed_key and none result
-⋮----
-# Try to get the result from the cache
-⋮----
-cached_val = self.cache.retrieve(hashed_key)
-⋮----
-def _cost_chat_model(self, prompt: int, cached: int, completion: int) -> float
-⋮----
-price = self.chat_cost()
-⋮----
-"""
-        Extracts token usage from ``response`` and computes cost, only when NOT
-        in streaming mode, since the LLM API (OpenAI currently) was not
-        populating the usage fields in streaming mode (but as of Sep 2024, streaming
-        responses include  usage info as well, so we should update the code
-        to directly use usage information from the streaming response, which is more
-        accurate, esp with "thinking" LLMs like o1 series which consume
-        thinking tokens).
-        In streaming mode, these are set to zero for
-        now, and will be updated later by the fn ``update_token_usage``.
-        """
-cost = 0.0
-prompt_tokens = 0
-cached_tokens = 0
-completion_tokens = 0
-⋮----
-usage = response.get("usage")
-⋮----
-prompt_tokens = usage.get("prompt_tokens") or 0
-prompt_tokens_details = usage.get("prompt_tokens_details", {}) or {}
-cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
-completion_tokens = usage.get("completion_tokens") or 0
-cost = self._cost_chat_model(
-⋮----
-def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-# log and re-raise exception
-⋮----
-def _generate(self, prompt: str, max_tokens: int) -> LLMResponse
-⋮----
-@retry_with_exponential_backoff
-        def completions_with_backoff(**kwargs):  # type: ignore
-⋮----
-cached = False
-⋮----
-cached = True
-⋮----
-completion_call = litellm_completion
-⋮----
-completion_call = self.client.completions.create
-⋮----
-# If it's not in the cache, call the API
-result = completion_call(**kwargs)
-⋮----
-kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
-⋮----
-# TODO this is a temp fix, we should really be using a proper completion fn
-# that takes a pre-formatted prompt, rather than mocking it as a sys msg.
-⋮----
-else:  # any other OpenAI-compatible endpoint
-⋮----
-args = dict(
-⋮----
-max_tokens=max_tokens,  # for output/completion
-⋮----
-args = self._openai_api_call_params(args)
-⋮----
-# assume response is an actual response rather than a streaming event
-⋮----
-response = response.model_dump()
-⋮----
-msg = response["choices"][0]["message"]["content"].strip()
-⋮----
-msg = response["choices"][0]["text"].strip()
-⋮----
-async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse
-⋮----
-# note we typically will not have self.config.stream = True
-# when issuing several api calls concurrently/asynchronously.
-# The calling fn should use the context `with Streaming(..., False)` to
-# disable streaming.
-⋮----
-# WARNING: .Completion.* endpoints are deprecated,
-# and as of Sep 2023 only legacy models will work here,
-# e.g. text-davinci-003, text-ada-001.
-⋮----
-@async_retry_with_exponential_backoff
-        async def completions_with_backoff(**kwargs):  # type: ignore
-⋮----
-# TODO this may not work: text_completion is not async,
-# and we didn't find an async version in litellm
-⋮----
-acompletion_call = (
-⋮----
-result = await acompletion_call(**kwargs)
-⋮----
-# only makes sense for non-OpenAI models
-⋮----
-messages = [
-prompt = self.config.hf_formatter.format(messages)
-⋮----
-# turn off streaming for async calls
-⋮----
-# only makes sense for local models, where we are trying to
-# convert a chat dialog msg-sequence to a simple completion prompt.
-⋮----
-formatter = HFFormatter(
-⋮----
-prompt = formatter.format(messages)
-⋮----
-result = await self._achat(
-⋮----
-def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
-⋮----
-# If it's not in the cache, call the API
-⋮----
-completion_call = self.client.chat.completions.create
-⋮----
-# If streaming, cannot cache result
-# since it is a generator. Instead,
-# we hold on to the hashed_key and
-# cache the result later
-⋮----
-# Test if this is a stream with an exception by
-# trying to get first chunk: Some providers like LiteLLM
-# produce a valid stream object `result` instead of throwing a
-# rate-limit error, and if we don't catch it here,
-# we end up returning an empty response and not
-# using the retry mechanism in the decorator.
-⋮----
-# try to get the first chunk to check for errors
-test_iter = iter(result)
-first_chunk = next(test_iter)
-# If we get here without error, recreate the stream
-result = chain([first_chunk], test_iter)
-⋮----
-# Empty stream is fine
-⋮----
-# Propagate any errors in the stream
-⋮----
-def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
-⋮----
-retry_func = retry_with_exponential_backoff(
-⋮----
-async def _achat_completions_with_backoff_body(self, **kwargs):  # type: ignore
-⋮----
-acompletion_call = litellm_acompletion
-⋮----
-acompletion_call = self.async_client.chat.completions.create
-⋮----
-# Try to peek at the first chunk to immediately catch any errors
-# Store the original result (the stream)
-original_stream = result
-⋮----
-# Manually create and advance the iterator to check for errors
-stream_iter = original_stream.__aiter__()
-⋮----
-# This will raise an exception if the stream is invalid
-first_chunk = await anext(stream_iter)
-⋮----
-# If we reach here, the stream started successfully
-# Now recreate a fresh stream from the original API result
-# Otherwise, return a new stream that yields the first chunk
-# and remaining items
-async def combined_stream():  # type: ignore
-⋮----
-result = combined_stream()  # type: ignore
-⋮----
-# Empty stream is normal - nothing to do
-⋮----
-# Any exception here should be raised to trigger the retry mechanism
-⋮----
-async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
-⋮----
-retry_func = async_retry_with_exponential_backoff(
-⋮----
-"""Prepare args for LLM chat-completion API call"""
-⋮----
-llm_messages = [
-⋮----
-llm_messages = messages
-⋮----
-# TODO: we will unconditionally insert a dummy user msg
-# if the only msg is a system msg.
-# We could make this conditional on ModelInfo.needs_first_user_message
-⋮----
-# some LLMs, notable Gemini as of 12/11/24,
-# require the first message to be from the user,
-# so insert a dummy user msg if needed.
-⋮----
-chat_model = self.config.chat_model
-⋮----
-args: Dict[str, Any] = dict(
-⋮----
-# groq fails when we include stream_options in the request
-⋮----
-# get token-usage numbers in stream mode from OpenAI API,
-# and possibly other OpenAI-compatible APIs.
-⋮----
-# only include functions-related args if functions are provided
-# since the OpenAI API will throw an error if `functions` is None or []
-⋮----
-# some models e.g. o1-mini (as of sep 2024) don't support some params,
-# like temperature and stream, so we need to remove them.
-⋮----
-param_rename_map = self.rename_params()
-⋮----
-# finally, get rid of extra_body params exclusive to certain models
-# Only apply allowlist restrictions for known models.
-# Unknown/custom models are allowed to use all params by default.
-is_known_model = self.info().name != "unknown"
-extra_params = args.get("extra_body", {})
-⋮----
-# openAI response will look like this:
-"""
-        {
-            "id": "chatcmpl-123",
-            "object": "chat.completion",
-            "created": 1677652288,
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "name": "",
-                    "content": "\n\nHello there, how may I help you?",
-                    "reasoning_content": "Okay, let's see here, hmmm...",
-                    "function_call": {
-                        "name": "fun_name",
-                        "arguments: {
-                            "arg1": "val1",
-                            "arg2": "val2"
-                        }
-                    },
-                },
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 9,
-                "completion_tokens": 12,
-                "total_tokens": 21
-            }
-        }
-        """
-⋮----
-message = {}
-⋮----
-message = response["choices"][0].get("message", {})
-⋮----
-content = message.get("content", "")
-reasoning = message.get("reasoning_content", "")
-⋮----
-message_with_reasoning = content
-⋮----
-msg = content
-⋮----
-fun_call = None
-⋮----
-fun_call = LLMFunctionCall.from_dict(message["function_call"])
-⋮----
-args_str = message["function_call"]["arguments"] or ""
-msg_str = message["content"] or ""
-msg = msg_str + args_str
-oai_tool_calls = None
-⋮----
-oai_tool_calls = []
-⋮----
-tool_call = OpenAIToolCall.from_dict(tool_call_dict)
-⋮----
-msg = msg + "\n" + json.dumps(tool_call_dict)
-⋮----
-oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
-⋮----
-"""
-        ChatCompletion API call to OpenAI.
-        Args:
-            messages: list of messages  to send to the API, typically
-                represents back and forth dialogue between user and LLM, but could
-                also include "function"-role messages. If messages is a string,
-                it is assumed to be a user message.
-            max_tokens: max output tokens to generate
-            functions: list of LLMFunction specs available to the LLM, to possibly
-                use in its response
-            function_call: controls how the LLM uses `functions`:
-                - "auto": LLM decides whether to use `functions` or not,
-                - "none": LLM blocked from using any function
-                - a dict of {"name": "function_name"} which forces the LLM to use
-                    the specified function.
-        Returns:
-            LLMResponse object
-        """
-args = self._prep_chat_completion(
-cached, hashed_key, response = self._chat_completions_with_backoff(**args)  # type: ignore
-⋮----
-return llm_response  # type: ignore
-⋮----
-response_dict = response
-⋮----
-response_dict = response.model_dump()
-⋮----
-"""
-        Async version of _chat(). See that function for details.
-        """
-⋮----
-cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.15.0
-  hooks:
-    - id: ruff
 </file>
 
 <file path="langroid/agent/chat_agent.py">
@@ -39756,10 +38846,1049 @@ def __del__(self) -> None
 # Clients are now managed centrally in langroid.language_models.client_cache
 </file>
 
+<file path="langroid/language_models/openai_gpt.py">
+OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
+⋮----
+OLLAMA_BASE_URL = "http://localhost:11434/v1"
+⋮----
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
+OLLAMA_API_KEY = "ollama"
+⋮----
+VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
+LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
+⋮----
+openai_chat_model_pref_list = [
+⋮----
+openai_completion_model_pref_list = [
+⋮----
+available_models = set(map(lambda m: m.id, OpenAI().models.list()))
+⋮----
+available_models = set()
+⋮----
+default_openai_chat_model = next(
+default_openai_completion_model = next(
+⋮----
+class AccessWarning(Warning)
+⋮----
+@cache
+def gpt_3_5_warning() -> None
+⋮----
+@cache
+def parallel_strict_warning() -> None
+⋮----
+def noop() -> None
+⋮----
+"""Does nothing."""
+⋮----
+class OpenAICallParams(BaseModel)
+⋮----
+"""
+    Various params that can be sent to an OpenAI API chat-completion call.
+    When specified, any param here overrides the one with same name in the
+    OpenAIGPTConfig.
+    See OpenAI API Reference for details on the params:
+    https://platform.openai.com/docs/api-reference/chat
+    """
+⋮----
+max_tokens: int | None = None
+temperature: float | None = None
+frequency_penalty: float | None = None  # between -2 and 2
+presence_penalty: float | None = None  # between -2 and 2
+response_format: Dict[str, str] | None = None
+logit_bias: Dict[int, float] | None = None  # token_id -> bias
+logprobs: bool | None = None
+top_p: float | None = None
+reasoning_effort: str | None = None  # or "low" or "high" or "medium"
+top_logprobs: int | None = None  # if int, requires logprobs=True
+n: int | None = None  # how many completions to generate (n > 1 is NOT handled now)
+stop: str | List[str] | None = None  # (list of) stop sequence(s)
+seed: int | None = None
+user: str | None = None  # user id for tracking
+extra_body: Dict[str, Any] | None = None  # additional params for API request body
+⋮----
+def to_dict_exclude_none(self) -> Dict[str, Any]
+⋮----
+class LiteLLMProxyConfig(BaseSettings)
+⋮----
+"""Configuration for LiteLLM proxy connection."""
+⋮----
+api_key: str = ""  # read from env var LITELLM_API_KEY if set
+api_base: str = ""  # read from env var LITELLM_API_BASE if set
+⋮----
+model_config = SettingsConfigDict(env_prefix="LITELLM_")
+⋮----
+class OpenAIGPTConfig(LLMConfig)
+⋮----
+"""
+    Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
+    (a) locally-served models behind an OpenAI-compatible API
+    (b) non-local models, using a proxy adaptor lib like litellm that provides
+        an OpenAI-compatible API.
+    (We could rename this class to OpenAILikeConfig, but we keep it as-is for now)
+
+    Important Note:
+    Due to the `env_prefix = "OPENAI_"` defined below,
+    all of the fields below can be set AND OVERRIDDEN via env vars,
+    # by upper-casing the name and prefixing with OPENAI_, e.g.
+    # OPENAI_MAX_OUTPUT_TOKENS=1000.
+    # If any of these is defined in this way in the environment
+    # (either via explicit setenv or export or via .env file + load_dotenv()),
+    # the environment variable takes precedence over the value in the config.
+    """
+⋮----
+type: str = "openai"
+api_key: str = DUMMY_API_KEY
+organization: str = ""
+api_base: str | None = None  # used for local or other non-OpenAI models
+litellm: bool = False  # use litellm api?
+litellm_proxy: LiteLLMProxyConfig = LiteLLMProxyConfig()
+ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
+min_output_tokens: int = 1
+use_chat_for_completion: bool = True  # do not change this, for OpenAI models!
+timeout: int = 20
+temperature: float = 0.2
+seed: int | None = 42
+params: OpenAICallParams | None = None
+use_cached_client: bool = (
+⋮----
+True  # Whether to reuse cached clients (prevents resource exhaustion)
+⋮----
+# these can be any model name that is served at an OpenAI-compatible API end point
+chat_model: str = default_openai_chat_model
+chat_model_orig: Optional[str] = None
+completion_model: str = default_openai_completion_model
+run_on_first_use: Callable[[], None] = noop
+parallel_tool_calls: Optional[bool] = None
+# Supports constrained decoding which enforces that the output of the LLM
+# adheres to a JSON schema
+supports_json_schema: Optional[bool] = None
+# Supports strict decoding for the generation of tool calls with
+# the OpenAI Tools API; this ensures that the generated tools
+# adhere to the provided schema.
+supports_strict_tools: Optional[bool] = None
+# a string that roughly matches a HuggingFace chat_template,
+# e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
+formatter: str | None = None
+hf_formatter: HFFormatter | None = None
+langdb_params: LangDBParams = LangDBParams()
+portkey_params: PortkeyParams = PortkeyParams()
+headers: Dict[str, str] = {}
+http_client_factory: Optional[Callable[[], Any]] = None  # Factory for httpx.Client
+http_verify_ssl: bool = True  # Simple flag for SSL verification
+http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
+⋮----
+def __init__(self, **kwargs) -> None:  # type: ignore
+⋮----
+local_model = "api_base" in kwargs and kwargs["api_base"] is not None
+⋮----
+chat_model = kwargs.get("chat_model", "")
+local_prefixes = ["local/", "litellm/", "ollama/", "vllm/", "llamacpp/"]
+⋮----
+local_model = True
+⋮----
+warn_gpt_3_5 = (
+⋮----
+existing_hook = kwargs.get("run_on_first_use", noop)
+⋮----
+def with_warning() -> None
+⋮----
+model_config = SettingsConfigDict(env_prefix="OPENAI_")
+⋮----
+"""
+        Copy config while preserving nested model instances and subclasses.
+
+        Important: Avoid reconstructing via `model_dump` as that coerces nested
+        models to their annotated base types (dropping subclass-only fields).
+        Instead, defer to Pydantic's native `model_copy`, which keeps nested
+        `BaseModel` instances (and their concrete subclasses) intact.
+        """
+# Delegate to BaseSettings/BaseModel implementation to preserve types
+return super().model_copy(update=update, deep=deep)  # type: ignore[return-value]
+⋮----
+def _validate_litellm(self) -> None
+⋮----
+"""
+        When using liteLLM, validate whether all env vars required by the model
+        have been set.
+        """
+⋮----
+litellm.drop_params = True  # drop un-supported params without crashing
+⋮----
+self.seed = None  # some local mdls don't support seed
+⋮----
+keys_dict = litellm.utils.validate_environment(self.chat_model)
+missing_keys = keys_dict.get("missing_keys", [])
+⋮----
+@classmethod
+    def create(cls, prefix: str) -> Type["OpenAIGPTConfig"]
+⋮----
+"""Create a config class whose params can be set via a desired
+        prefix from the .env file or env vars.
+        E.g., using
+        ```python
+        OllamaConfig = OpenAIGPTConfig.create("ollama")
+        ollama_config = OllamaConfig()
+        ```
+        you can have a group of params prefixed by "OLLAMA_", to be used
+        with models served via `ollama`.
+        This way, you can maintain several setting-groups in your .env file,
+        one per model type.
+        """
+⋮----
+class DynamicConfig(OpenAIGPTConfig)
+⋮----
+class OpenAIResponse(BaseModel)
+⋮----
+"""OpenAI response model, either completion or chat."""
+⋮----
+choices: List[Dict]  # type: ignore
+usage: Dict  # type: ignore
+⋮----
+def litellm_logging_fn(model_call_dict: Dict[str, Any]) -> None
+⋮----
+"""Logging function for litellm"""
+⋮----
+api_input_dict = model_call_dict.get("additional_args", {}).get(
+⋮----
+text = escape(json.dumps(api_input_dict, indent=2))
+⋮----
+# Define a class for OpenAI GPT models that extends the base class
+class OpenAIGPT(LanguageModel)
+⋮----
+"""
+    Class for OpenAI LLMs
+    """
+⋮----
+client: OpenAI | Groq | Cerebras | None
+async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras | None
+⋮----
+def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig())
+⋮----
+"""
+        Args:
+            config: configuration for openai-gpt model
+        """
+# copy the config to avoid modifying the original; deep to decouple
+# nested models while preserving their concrete subclasses
+config = config.model_copy(deep=True)
+⋮----
+# save original model name such as `provider/model` before
+# we strip out the `provider` - we retain the original in
+# case some params are specific to a provider.
+⋮----
+# Run the first time the model is used
+⋮----
+# global override of chat_model,
+# to allow quick testing with other models
+⋮----
+# there is a formatter specified, e.g.
+# "litellm/ollama/mistral//hf" or
+# "local/localhost:8000/v1//mistral-instruct-v0.2"
+formatter = parts[1]
+⋮----
+# e.g. "litellm/ollama/mistral//hf" -> "litellm/ollama/mistral"
+formatter = find_hf_formatter(self.config.chat_model)
+⋮----
+# e.g. "mistral"
+⋮----
+# e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
+⋮----
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
+⋮----
+# if model name starts with "litellm",
+# set the actual model name by stripping the "litellm/" prefix
+# and set the litellm flag to True
+⋮----
+# e.g. litellm/ollama/mistral
+⋮----
+# strip the "litellm/" prefix
+# e.g. litellm/ollama/llama2 => ollama/llama2
+⋮----
+# expect this to be of the form "local/localhost:8000/v1",
+# depending on how the model is launched locally.
+# In this case the model served locally behind an OpenAI-compatible API
+# so we can just use `openai.*` methods directly,
+# and don't need a adaptor library like litellm
+⋮----
+self.config.seed = None  # some models raise an error when seed is set
+# Extract the api_base from the model name after the "local/" prefix
+⋮----
+# use api_base from config if set, else fall back on OLLAMA_BASE_URL
+⋮----
+# If api_base is unset we use OpenAI's endpoint, which supports
+# these features (with JSON schema restricted to a limited set of models)
+⋮----
+# if we're overriding chat model globally, set completion model to same
+⋮----
+# we want to format chats -> completions using this specific formatter
+⋮----
+# use groq-specific client
+⋮----
+# Create new clients without caching
+⋮----
+# use cerebras-specific client
+⋮----
+# TODO there is not async client, so should we do anything here?
+⋮----
+# in these cases, there's no specific client: OpenAI python client suffices
+⋮----
+# Use GEMINI_API_BASE env var if set (e.g. for Vertex AI),
+# then config.api_base only if explicitly set by the user
+# (not inherited from OPENAI_API_BASE via env_prefix),
+# then fall back to the default Gemini endpoint.
+gemini_api_base = os.getenv("GEMINI_API_BASE", "")
+openai_api_base = os.getenv("OPENAI_API_BASE")
+explicit_api_base = (
+⋮----
+project_id = self.config.langdb_params.project_id
+⋮----
+params = self.config.langdb_params
+⋮----
+# Parse the model string and extract provider/model
+⋮----
+# Set Portkey base URL
+⋮----
+# Set API key - use provider's API key from env if available
+⋮----
+# Add Portkey-specific headers
+⋮----
+# Create http_client if needed - Priority order:
+# 1. http_client_factory (most flexibility, not cacheable)
+# 2. http_client_config (cacheable, moderate flexibility)
+# 3. http_verify_ssl=False (cacheable, simple SSL bypass)
+http_client = None
+async_http_client = None
+http_client_config_used = None
+⋮----
+# Use the factory to create http_client (not cacheable)
+http_client = self.config.http_client_factory()
+# Don't set async_http_client from sync client - create separately
+# This avoids type mismatch issues
+⋮----
+# Use config dict (cacheable)
+http_client_config_used = self.config.http_client_config
+⋮----
+# Simple SSL bypass (cacheable)
+http_client_config_used = {"verify": False}
+⋮----
+client_kwargs: Dict[str, Any] = dict(
+⋮----
+# Create http_client from config for non-cached scenario
+⋮----
+async_client_kwargs: Dict[str, Any] = dict(
+⋮----
+# Create async http_client from config for non-cached scenario
+⋮----
+use_cache = self.config.cache_config is not None
+⋮----
+# switch to fresh redis config if needed
+⋮----
+# force use of fake redis if global cache_type is "fakeredis"
+⋮----
+def _openai_api_call_params(self, kwargs: Dict[str, Any]) -> Dict[str, Any]
+⋮----
+"""
+        Prep the params to be sent to the OpenAI API
+        (or any OpenAI-compatible API, e.g. from Ooba or LmStudio)
+        for chat-completion.
+
+        Order of priority:
+        - (1) Params (mainly max_tokens) in the chat/achat/generate/agenerate call
+                (these are passed in via kwargs)
+        - (2) Params in OpenAIGPTConfig.params (of class OpenAICallParams)
+        - (3) Specific Params in OpenAIGPTConfig (just temperature for now)
+        """
+params = dict(
+⋮----
+def is_openai_chat_model(self) -> bool
+⋮----
+openai_chat_models = [e.value for e in OpenAIChatModel]
+⋮----
+def is_openai_completion_model(self) -> bool
+⋮----
+openai_completion_models = [e.value for e in OpenAICompletionModel]
+⋮----
+def is_gemini_model(self) -> bool
+⋮----
+"""Are we using the gemini OpenAI-compatible API?"""
+⋮----
+def is_deepseek_model(self) -> bool
+⋮----
+deepseek_models = [e.value for e in DeepSeekModel]
+⋮----
+def unsupported_params(self) -> List[str]
+⋮----
+"""
+        List of params that are not supported by the current model
+        """
+unsupported = set(self.info().unsupported_params)
+⋮----
+def rename_params(self) -> Dict[str, str]
+⋮----
+"""
+        Map of param name -> new name for specific models.
+        Currently main troublemaker is o1* series.
+        """
+⋮----
+def chat_context_length(self) -> int
+⋮----
+"""
+        Context-length for chat-completion models/endpoints.
+        Get it from the config if explicitly given,
+         otherwise use model_info based on model name, and fall back to
+         generic model_info if there's no match.
+        """
+⋮----
+def completion_context_length(self) -> int
+⋮----
+"""
+        Context-length for completion models/endpoints.
+        Get it from the config if explicitly given,
+         otherwise use model_info based on model name, and fall back to
+         generic model_info if there's no match.
+        """
+⋮----
+def chat_cost(self) -> Tuple[float, float, float]
+⋮----
+"""
+        (Prompt, Cached, Generation) cost per 1000 tokens, for chat-completion
+        models/endpoints.
+        Get it from the dict, otherwise fail-over to general method
+        """
+info = self.info()
+cached_cost_per_million = info.cached_cost_per_million
+⋮----
+cached_cost_per_million = info.input_cost_per_million
+⋮----
+def set_stream(self, stream: bool) -> bool
+⋮----
+"""Enable or disable streaming output from API.
+        Args:
+            stream: enable streaming output from API
+        Returns: previous value of stream
+        """
+tmp = self.config.stream
+⋮----
+def get_stream(self) -> bool
+⋮----
+"""Get streaming status."""
+⋮----
+"""Separate inline reasoning from text tokens in a streaming chunk.
+
+        When models embed thinking inside content (e.g. <think>...</think>)
+        rather than using a separate reasoning field, this splits the chunk
+        into text-only and reasoning-only portions for proper streamer routing.
+
+        Returns (text_tokens, reasoning_tokens, in_reasoning).
+        """
+text_tokens = event_text
+reasoning_tokens = event_reasoning
+⋮----
+remaining = event_text
+⋮----
+text_tokens = ""
+⋮----
+text_tokens = before
+remaining = after
+in_reasoning = True
+⋮----
+reasoning_tokens = before
+in_reasoning = False
+⋮----
+reasoning_tokens = remaining
+⋮----
+"""Process state vars while processing a streaming API response.
+            Returns a tuple consisting of:
+        - is_break: whether to break out of the loop
+        - has_function: whether the response contains a function_call
+        - function_name: name of the function
+        - function_args: args of the function
+        - completion: completion text
+        - reasoning: reasoning text
+        - usage: usage dict
+        """
+# convert event obj (of type ChatCompletionChunk) to dict so rest of code,
+# which expects dicts, works as it did before switching to openai v1.x
+⋮----
+event = event.model_dump()
+⋮----
+usage = event.get("usage", {}) or {}
+choices = event.get("choices", [{}])
+⋮----
+choices = [{}]
+⋮----
+# we have a "usage" chunk, and empty choices, so we're done
+# ASSUMPTION: a usage chunk ONLY arrives AFTER all normal completion text!
+# If any API does not follow this, we need to change this code.
+⋮----
+event_args = ""
+event_fn_name = ""
+event_tool_deltas: Optional[List[Dict[str, Any]]] = None
+silent = settings.quiet
+# The first two events in the stream of Azure OpenAI is useless.
+# In the 1st: choices list is empty, in the 2nd: the dict delta has null content
+⋮----
+delta = choices[0].get("delta", {})
+# capture both content and reasoning_content
+event_text = delta.get("content", "")
+event_reasoning = delta.get(
+⋮----
+event_fn_name = delta["function_call"]["name"]
+⋮----
+event_args = delta["function_call"]["arguments"]
+⋮----
+# it's a list of deltas, usually just one
+event_tool_deltas = delta["tool_calls"]
+⋮----
+event_text = choices[0]["text"]
+event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
+⋮----
+finish_reason = choices[0].get("finish_reason", "")
+⋮----
+filter_names = [
+event_text = (
+⋮----
+function_name = event_fn_name
+has_function = True
+⋮----
+# print out streaming tool calls, if not async
+⋮----
+tool_fn_name = td["function"]["name"]
+⋮----
+tool_fn_args = td["function"]["arguments"]
+⋮----
+# show this delta in the stream
+is_break = finish_reason in [
+# for function_call, finish_reason does not necessarily
+# contain "function_call" as mentioned in the docs.
+# So we check for "stop" or "function_call" here.
+⋮----
+# we got usage chunk, and empty choices, so we're done
+⋮----
+silent = self.config.async_stream_quiet or settings.quiet
+⋮----
+is_break = choices[0].get("finish_reason", "") in [
+⋮----
+def _stream_response(  # type: ignore
+⋮----
+"""
+        Grab and print streaming response from API.
+        Args:
+            response: event-sequence emitted by API
+            chat: whether in chat-mode (or else completion-mode)
+        Returns:
+            Tuple consisting of:
+                LLMResponse object (with message, usage),
+                Dict version of OpenAIResponse object (with choices, usage)
+
+        """
+completion = ""
+reasoning = ""
+function_args = ""
+function_name = ""
+⋮----
+has_function = False
+tool_deltas: List[Dict[str, Any]] = []
+token_usage: Dict[str, int] = {}
+done: bool = False
+in_reasoning: bool = False  # Track if we're inside reasoning delimiters
+⋮----
+# capture the token usage when non-empty
+token_usage = usage
+⋮----
+# if not streaming, then we don't wait for last "usage" chunk
+⋮----
+# mark done, so we quit after the last "usage" chunk
+done = True
+⋮----
+# TODO- get usage info in stream mode (?)
+⋮----
+async def _stream_response_async(  # type: ignore
+⋮----
+"""
+        Grab and print streaming response from API.
+        Args:
+            response: event-sequence emitted by API
+            chat: whether in chat-mode (or else completion-mode)
+        Returns:
+            Tuple consisting of:
+                LLMResponse object (with message, usage),
+                OpenAIResponse object (with choices, usage)
+
+        """
+⋮----
+# mark done, so we quit after the next "usage" chunk
+⋮----
+"""
+        Convert accumulated tool-call deltas to OpenAIToolCall objects.
+        Adapted from this excellent code:
+         https://community.openai.com/t/help-for-function-calls-with-streaming/627170/2
+
+        Args:
+            tools: list of tool deltas received from streaming API
+
+        Returns:
+            str: plain text corresponding to tool calls that failed to parse
+            List[OpenAIToolCall]: list of OpenAIToolCall objects
+            List[Dict[str, Any]]: list of tool dicts
+                (to reconstruct OpenAI API response, so it can be cached)
+        """
+# Initialize a dictionary with default values
+⋮----
+# idx -> dict repr of tool
+# (used to simulate OpenAIResponse object later, and also to
+# accumulate function args as strings)
+idx2tool_dict: Dict[str, Dict[str, Any]] = defaultdict(
+⋮----
+# (try to) parse the fn args of each tool
+contents: List[str] = []
+good_indices = []
+id2args: Dict[str, None | Dict[str, Any]] = {}
+⋮----
+# used to build tool_calls_list below
+id2args[tool_dict["id"]] = args_dict or None  # if {}, store as None
+⋮----
+# remove the failed tool calls
+idx2tool_dict = {
+⋮----
+# create OpenAIToolCall list
+tool_calls_list = [
+⋮----
+@staticmethod
+    def _parse_function_args(args: str) -> Tuple[str, Dict[str, Any]]
+⋮----
+"""
+        Try to parse the `args` string as function args.
+
+        Args:
+            args: string containing function args
+
+        Returns:
+            Tuple of content, function name and args dict.
+            If parsing unsuccessful, returns the original string as content,
+            else returns the args dict.
+        """
+content = ""
+args_dict = {}
+⋮----
+stripped_fn_args = args.strip()
+dict_or_list = parse_imperfect_json(stripped_fn_args)
+⋮----
+args_dict = dict_or_list
+⋮----
+content = args
+⋮----
+"""
+        Create an LLMResponse object from the streaming API response.
+
+        Args:
+            chat: whether in chat-mode (or else completion-mode)
+            tool_deltas: list of tool deltas received from streaming API
+            has_function: whether the response contains a function_call
+            completion: completion text
+            reasoning: reasoning text
+            function_args: string representing function args
+            function_name: name of the function
+            usage: token usage dict
+        Returns:
+            Tuple consisting of:
+                LLMResponse object (with message, usage),
+                Dict version of OpenAIResponse object (with choices, usage)
+                    (this is needed so we can cache the response, as if it were
+                    a non-streaming response)
+        """
+# check if function_call args are valid, if not,
+# treat this as a normal msg, not a function call
+args: Dict[str, Any] = {}
+⋮----
+completion = completion + content
+⋮----
+# mock openai response so we can cache it
+⋮----
+completion = completion + "\n" + failed_content
+msg: Dict[str, Any] = dict(
+⋮----
+function_call = LLMFunctionCall(name=function_name)
+function_call_dict = function_call.model_dump()
+⋮----
+# non-chat mode has no function_call
+msg = dict(text=completion)
+# TODO: Ignoring reasoning content for non-chat models
+⋮----
+# create an OpenAIResponse object so we can cache it as if it were
+# a non-streaming response
+openai_response = OpenAIResponse(
+# Track whether we extracted inline thought tags from the text.
+# Only set message_with_reasoning when get_reasoning_final()
+# actually finds and extracts inline tags (e.g. <think>...</think>).
+# When reasoning is already provided via a separate API field
+# (e.g. reasoning_content), the message text doesn't contain
+# thought signatures, so there's nothing extra to preserve.
+message_with_reasoning = None
+⋮----
+# some LLM APIs may not return a separate reasoning field,
+# and the reasoning may be included in the message content
+# within delimiters like <think> ... </think>
+⋮----
+# Inline tags were found and extracted; preserve the
+# original text so it can be restored in message history.
+message_with_reasoning = completion
+⋮----
+message = completion
+⋮----
+prompt_tokens = usage.get("prompt_tokens", 0)
+prompt_tokens_details: Any = usage.get("prompt_tokens_details", {})
+cached_tokens = (
+completion_tokens = usage.get("completion_tokens", 0)
+⋮----
+# don't allow empty list [] here
+⋮----
+def _cache_store(self, k: str, v: Any) -> None
+⋮----
+def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]
+⋮----
+return "", None  # no cache, return empty key and None result
+# Use the kwargs as the cache key
+sorted_kwargs_str = str(sorted(kwargs.items()))
+raw_key = f"{fn_name}:{sorted_kwargs_str}"
+⋮----
+# Hash the key to a fixed length using SHA256
+hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+⋮----
+# when caching disabled, return the hashed_key and none result
+⋮----
+# Try to get the result from the cache
+⋮----
+cached_val = self.cache.retrieve(hashed_key)
+⋮----
+def _cost_chat_model(self, prompt: int, cached: int, completion: int) -> float
+⋮----
+price = self.chat_cost()
+⋮----
+"""
+        Extracts token usage from ``response`` and computes cost, only when NOT
+        in streaming mode, since the LLM API (OpenAI currently) was not
+        populating the usage fields in streaming mode (but as of Sep 2024, streaming
+        responses include  usage info as well, so we should update the code
+        to directly use usage information from the streaming response, which is more
+        accurate, esp with "thinking" LLMs like o1 series which consume
+        thinking tokens).
+        In streaming mode, these are set to zero for
+        now, and will be updated later by the fn ``update_token_usage``.
+        """
+cost = 0.0
+prompt_tokens = 0
+cached_tokens = 0
+completion_tokens = 0
+⋮----
+usage = response.get("usage")
+⋮----
+prompt_tokens = usage.get("prompt_tokens") or 0
+prompt_tokens_details = usage.get("prompt_tokens_details", {}) or {}
+cached_tokens = prompt_tokens_details.get("cached_tokens") or 0
+completion_tokens = usage.get("completion_tokens") or 0
+cost = self._cost_chat_model(
+⋮----
+def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+# Catch HTTP-level API errors (400, 401, 403, 404, 422, 429, 5xx)
+# without traceback — these originate server-side and a local
+# stack trace adds no diagnostic value.
+# Note: APIConnectionError/APITimeoutError are intentionally NOT
+# caught here so they fall through to the generic handler below,
+# where the full traceback aids in diagnosing local network issues.
+⋮----
+# log and re-raise exception
+⋮----
+def _generate(self, prompt: str, max_tokens: int) -> LLMResponse
+⋮----
+@retry_with_exponential_backoff
+        def completions_with_backoff(**kwargs):  # type: ignore
+⋮----
+cached = False
+⋮----
+cached = True
+⋮----
+completion_call = litellm_completion
+⋮----
+completion_call = self.client.completions.create
+⋮----
+# If it's not in the cache, call the API
+result = completion_call(**kwargs)
+⋮----
+kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
+⋮----
+# TODO this is a temp fix, we should really be using a proper completion fn
+# that takes a pre-formatted prompt, rather than mocking it as a sys msg.
+⋮----
+else:  # any other OpenAI-compatible endpoint
+⋮----
+args = dict(
+⋮----
+max_tokens=max_tokens,  # for output/completion
+⋮----
+args = self._openai_api_call_params(args)
+⋮----
+# assume response is an actual response rather than a streaming event
+⋮----
+response = response.model_dump()
+⋮----
+msg = response["choices"][0]["message"]["content"].strip()
+⋮----
+msg = response["choices"][0]["text"].strip()
+⋮----
+async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+# Catch HTTP-level API errors (see comment in generate() above).
+⋮----
+async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse
+⋮----
+# note we typically will not have self.config.stream = True
+# when issuing several api calls concurrently/asynchronously.
+# The calling fn should use the context `with Streaming(..., False)` to
+# disable streaming.
+⋮----
+# WARNING: .Completion.* endpoints are deprecated,
+# and as of Sep 2023 only legacy models will work here,
+# e.g. text-davinci-003, text-ada-001.
+⋮----
+@async_retry_with_exponential_backoff
+        async def completions_with_backoff(**kwargs):  # type: ignore
+⋮----
+# TODO this may not work: text_completion is not async,
+# and we didn't find an async version in litellm
+⋮----
+acompletion_call = (
+⋮----
+result = await acompletion_call(**kwargs)
+⋮----
+# only makes sense for non-OpenAI models
+⋮----
+messages = [
+prompt = self.config.hf_formatter.format(messages)
+⋮----
+# turn off streaming for async calls
+⋮----
+# only makes sense for local models, where we are trying to
+# convert a chat dialog msg-sequence to a simple completion prompt.
+⋮----
+formatter = HFFormatter(
+⋮----
+prompt = formatter.format(messages)
+⋮----
+result = await self._achat(
+⋮----
+def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
+⋮----
+# If it's not in the cache, call the API
+⋮----
+completion_call = self.client.chat.completions.create
+⋮----
+# If streaming, cannot cache result
+# since it is a generator. Instead,
+# we hold on to the hashed_key and
+# cache the result later
+⋮----
+# Test if this is a stream with an exception by
+# trying to get first chunk: Some providers like LiteLLM
+# produce a valid stream object `result` instead of throwing a
+# rate-limit error, and if we don't catch it here,
+# we end up returning an empty response and not
+# using the retry mechanism in the decorator.
+⋮----
+# try to get the first chunk to check for errors
+test_iter = iter(result)
+first_chunk = next(test_iter)
+# If we get here without error, recreate the stream
+result = chain([first_chunk], test_iter)
+⋮----
+# Empty stream is fine
+⋮----
+# Propagate any errors in the stream
+⋮----
+def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
+⋮----
+retry_func = retry_with_exponential_backoff(
+⋮----
+async def _achat_completions_with_backoff_body(self, **kwargs):  # type: ignore
+⋮----
+acompletion_call = litellm_acompletion
+⋮----
+acompletion_call = self.async_client.chat.completions.create
+⋮----
+# Try to peek at the first chunk to immediately catch any errors
+# Store the original result (the stream)
+original_stream = result
+⋮----
+# Manually create and advance the iterator to check for errors
+stream_iter = original_stream.__aiter__()
+⋮----
+# This will raise an exception if the stream is invalid
+first_chunk = await anext(stream_iter)
+⋮----
+# If we reach here, the stream started successfully
+# Now recreate a fresh stream from the original API result
+# Otherwise, return a new stream that yields the first chunk
+# and remaining items
+async def combined_stream():  # type: ignore
+⋮----
+result = combined_stream()  # type: ignore
+⋮----
+# Empty stream is normal - nothing to do
+⋮----
+# Any exception here should be raised to trigger the retry mechanism
+⋮----
+async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
+⋮----
+retry_func = async_retry_with_exponential_backoff(
+⋮----
+"""Prepare args for LLM chat-completion API call"""
+⋮----
+llm_messages = [
+⋮----
+llm_messages = messages
+⋮----
+# TODO: we will unconditionally insert a dummy user msg
+# if the only msg is a system msg.
+# We could make this conditional on ModelInfo.needs_first_user_message
+⋮----
+# some LLMs, notable Gemini as of 12/11/24,
+# require the first message to be from the user,
+# so insert a dummy user msg if needed.
+⋮----
+chat_model = self.config.chat_model
+⋮----
+args: Dict[str, Any] = dict(
+⋮----
+# groq fails when we include stream_options in the request
+⋮----
+# get token-usage numbers in stream mode from OpenAI API,
+# and possibly other OpenAI-compatible APIs.
+⋮----
+# only include functions-related args if functions are provided
+# since the OpenAI API will throw an error if `functions` is None or []
+⋮----
+# some models e.g. o1-mini (as of sep 2024) don't support some params,
+# like temperature and stream, so we need to remove them.
+⋮----
+param_rename_map = self.rename_params()
+⋮----
+# finally, get rid of extra_body params exclusive to certain models
+# Only apply allowlist restrictions for known models.
+# Unknown/custom models are allowed to use all params by default.
+is_known_model = self.info().name != "unknown"
+extra_params = args.get("extra_body", {})
+⋮----
+# openAI response will look like this:
+"""
+        {
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "created": 1677652288,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "name": "",
+                    "content": "\n\nHello there, how may I help you?",
+                    "reasoning_content": "Okay, let's see here, hmmm...",
+                    "function_call": {
+                        "name": "fun_name",
+                        "arguments: {
+                            "arg1": "val1",
+                            "arg2": "val2"
+                        }
+                    },
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 9,
+                "completion_tokens": 12,
+                "total_tokens": 21
+            }
+        }
+        """
+choices = response.get("choices")
+⋮----
+message = choices[0].get("message", {})
+⋮----
+message = {}
+⋮----
+content = message.get("content", "")
+reasoning = message.get("reasoning_content", "")
+⋮----
+message_with_reasoning = content
+⋮----
+msg = content
+⋮----
+fun_call = None
+⋮----
+fun_call = LLMFunctionCall.from_dict(message["function_call"])
+⋮----
+args_str = message["function_call"]["arguments"] or ""
+msg_str = message["content"] or ""
+msg = msg_str + args_str
+oai_tool_calls = None
+⋮----
+oai_tool_calls = []
+⋮----
+tool_call = OpenAIToolCall.from_dict(tool_call_dict)
+⋮----
+msg = msg + "\n" + json.dumps(tool_call_dict)
+⋮----
+oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
+⋮----
+"""
+        ChatCompletion API call to OpenAI.
+        Args:
+            messages: list of messages  to send to the API, typically
+                represents back and forth dialogue between user and LLM, but could
+                also include "function"-role messages. If messages is a string,
+                it is assumed to be a user message.
+            max_tokens: max output tokens to generate
+            functions: list of LLMFunction specs available to the LLM, to possibly
+                use in its response
+            function_call: controls how the LLM uses `functions`:
+                - "auto": LLM decides whether to use `functions` or not,
+                - "none": LLM blocked from using any function
+                - a dict of {"name": "function_name"} which forces the LLM to use
+                    the specified function.
+        Returns:
+            LLMResponse object
+        """
+args = self._prep_chat_completion(
+cached, hashed_key, response = self._chat_completions_with_backoff(**args)  # type: ignore
+⋮----
+return llm_response  # type: ignore
+⋮----
+response_dict = response
+⋮----
+response_dict = response.model_dump()
+⋮----
+"""
+        Async version of _chat(). See that function for details.
+        """
+⋮----
+cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.15.1
+  hooks:
+    - id: ruff
+</file>
+
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.59.32"
+version = "0.59.34"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -40070,6 +40199,7 @@ docs = [
     "mkdocs-literate-nav<1.0.0,>=0.6.0",
     "mkdocs-section-index<1.0.0,>=0.3.5",
     "mkdocs-jupyter<1.0.0,>=0.24.1",
+    "nbconvert>=7.17.0",
     "griffe<1.0.0",
 ]
 
