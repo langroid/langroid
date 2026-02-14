@@ -238,3 +238,61 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
     # directly get the answer
     answer = df[df["cotton"] < 500]["poultry"].mean()
     assert contains_approx_float(result.content, answer)
+
+
+def test_table_chat_agent_handle_llm_no_tool():
+    """Test that handle_llm_no_tool config is respected in TableChatAgent.
+
+    Regression test for https://github.com/langroid/langroid/issues/870.
+    When handle_llm_no_tool is explicitly configured, the specialized
+    handle_message_fallback should delegate to the base ChatAgent behavior
+    instead of using its own hardcoded fallback logic.
+    """
+    from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
+    from langroid.mytypes import Entity
+
+    custom_msg = "Please use a tool to answer the question."
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    agent = TableChatAgent(
+        TableChatAgentConfig(
+            data=df,
+            handle_llm_no_tool=custom_msg,
+        )
+    )
+
+    # Simulate an LLM message without any tool
+    llm_msg = ChatDocument(
+        content="Here is the answer: 42",
+        metadata=ChatDocMetaData(sender=Entity.LLM),
+    )
+
+    result = agent.handle_message_fallback(llm_msg)
+    assert result == custom_msg
+
+
+def test_table_chat_agent_default_fallback_unchanged():
+    """Test that default behavior (handle_llm_no_tool=None) is unchanged.
+
+    When handle_llm_no_tool is not set, the specialized fallback logic in
+    TableChatAgent should still run as before.
+    """
+    from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
+    from langroid.mytypes import Entity
+
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    agent = TableChatAgent(
+        TableChatAgentConfig(
+            data=df,
+        )
+    )
+
+    # Simulate an LLM message without any tool
+    llm_msg = ChatDocument(
+        content="Here is the answer: 42",
+        metadata=ChatDocMetaData(sender=Entity.LLM),
+    )
+
+    result = agent.handle_message_fallback(llm_msg)
+    # Default behavior: specialized fallback reminds to use pandas_eval tool
+    assert result is not None
+    assert "pandas_eval" in result
