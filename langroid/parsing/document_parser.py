@@ -367,14 +367,18 @@ class DocumentParser(Parser):
             a `Document` object containing the content of the pdf file,
                 and metadata containing source name (URL or path)
         """
+        all_images = []
+        text_parts = []
+        for i, page in self.iterate_pages():
+            page_doc = self.get_document_from_page(page, i)
+            text_parts.append(page_doc.content)
+            all_images.extend(page_doc.images)
 
-        text = "".join(
-            [
-                self.get_document_from_page(page).content
-                for _, page in self.iterate_pages()
-            ]
+        return Document(
+            content="".join(text_parts),
+            metadata=DocMetaData(source=self.source),
+            images=all_images,
         )
-        return Document(content=text, metadata=DocMetaData(source=self.source))
 
     def get_doc_chunks(self) -> List[Document]:
         """
@@ -388,6 +392,7 @@ class DocumentParser(Parser):
 
         split = []  # tokens in curr split
         pages: List[str] = []
+        chunk_images: List[str] = []  # images accumulated for current chunk
         docs: List[Document] = []
         # metadata.id to be shared by ALL chunks of this document
         common_id = ObjectRegistry.new_id()
@@ -395,10 +400,12 @@ class DocumentParser(Parser):
         for i, page in self.iterate_pages():
             # not used but could be useful, esp to blend the
             # metadata from the pages into the chunks
-            page_doc = self.get_document_from_page(page)
+            page_doc = self.get_document_from_page(page, i)
             page_text = page_doc.content
+            page_images = page_doc.images
             split += self.tokenizer.encode(page_text)
             pages.append(str(i + 1))
+            chunk_images.extend(page_images)
             # split could be so long it needs to be split
             # into multiple chunks. Or it could be so short
             # that it needs to be combined with the next chunk.
@@ -416,11 +423,13 @@ class DocumentParser(Parser):
                             is_chunk=True,
                             id=common_id,
                         ),
+                        images=chunk_images.copy(),
                     )
                 )
                 n_chunks += 1
                 split = split[self.config.chunk_size - self.config.overlap :]
                 pages = [str(i + 1)]
+                chunk_images = page_images.copy()  # start fresh with current page images
         # there may be a last split remaining:
         # if it's shorter than the overlap, we shouldn't make a chunk for it
         # since it's already included in the prior chunk;
@@ -438,6 +447,7 @@ class DocumentParser(Parser):
                         is_chunk=True,
                         id=common_id,
                     ),
+                    images=chunk_images,
                 )
             )
         self.add_window_ids(docs)
@@ -448,6 +458,55 @@ class FitzPDFParser(DocumentParser):
     """
     Parser for processing PDFs using the `fitz` library.
     """
+
+    def extract_images_from_page(
+        self, page: "fitz.Page", page_num: int
+    ) -> List[str]:
+        """
+        Extract images from a PDF page and save them to a temporary directory.
+
+        Args:
+            page (fitz.Page): The PDF page object.
+            page_num (int): The page number (0-indexed).
+
+        Returns:
+            List[str]: List of file paths to the extracted images.
+        """
+        try:
+            import fitz
+        except ImportError:
+            return []
+
+        image_paths = []
+        image_list = page.get_images()
+
+        for img_index, img in enumerate(image_list):
+            xref = img[0]
+            try:
+                base_image = page.parent.extract_image(xref)
+                image_bytes = base_image["image"]
+                image_ext = base_image["ext"]
+
+                # Create a temp directory for images if it doesn't exist
+                temp_dir = tempfile.gettempdir()
+                images_dir = os.path.join(temp_dir, "langroid_images")
+                os.makedirs(images_dir, exist_ok=True)
+
+                # Save the image
+                image_filename = f"page_{page_num}_img_{img_index}.{image_ext}"
+                image_path = os.path.join(images_dir, image_filename)
+
+                with open(image_path, "wb") as img_file:
+                    img_file.write(image_bytes)
+
+                image_paths.append(image_path)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to extract image {img_index} from page {page_num}: {e}"
+                )
+                continue
+
+        return image_paths
 
     def iterate_pages(self) -> Generator[Tuple[int, "fitz.Page"], None, None]:
         """
@@ -465,19 +524,26 @@ class FitzPDFParser(DocumentParser):
             yield i, page
         doc.close()
 
-    def get_document_from_page(self, page: "fitz.Page") -> Document:
+    def get_document_from_page(
+        self, page: "fitz.Page", page_num: int = 0
+    ) -> Document:
         """
         Get Document object from a given `fitz` page.
 
         Args:
             page (fitz.Page): The `fitz` page object.
+            page_num (int): The page number (0-indexed). Defaults to 0.
 
         Returns:
             Document: Document object, with content and possible metadata.
         """
+        # Extract images from the page
+        images = self.extract_images_from_page(page, page_num)
+
         return Document(
             content=self.fix_text(page.get_text()),
             metadata=DocMetaData(source=self.source),
+            images=images,
         )
 
 

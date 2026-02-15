@@ -218,6 +218,35 @@ class TrafilaturaCrawler(BaseCrawler):
     def needs_parser(self) -> bool:
         return True
 
+    def extract_image_urls(self, html_content: str, base_url: str) -> List[str]:
+        """
+        Extract image URLs from HTML content.
+
+        Args:
+            html_content (str): The HTML content to parse.
+            base_url (str): The base URL to resolve relative image URLs.
+
+        Returns:
+            List[str]: List of absolute image URLs.
+        """
+        from urllib.parse import urljoin
+
+        from bs4 import BeautifulSoup
+
+        image_urls = []
+        try:
+            soup = BeautifulSoup(html_content, "html.parser")
+            for img in soup.find_all("img"):
+                src = img.get("src")
+                if src:
+                    # Convert relative URLs to absolute
+                    absolute_url = urljoin(base_url, src)
+                    image_urls.append(absolute_url)
+        except Exception as e:
+            logger.warning(f"Failed to extract images from {base_url}: {e}")
+
+        return image_urls
+
     def crawl(self, urls: List[str]) -> List[Document]:
         import trafilatura
         from trafilatura.downloads import (
@@ -250,8 +279,14 @@ class TrafilaturaCrawler(BaseCrawler):
                     if text is None and result is not None and isinstance(result, str):
                         text = result
                     if text:
+                        # Extract image URLs from the HTML content
+                        image_urls = self.extract_image_urls(result, url)
                         docs.append(
-                            Document(content=text, metadata=DocMetaData(source=url))
+                            Document(
+                                content=text,
+                                metadata=DocMetaData(source=url),
+                                images=image_urls,
+                            )
                         )
 
         return docs

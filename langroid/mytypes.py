@@ -108,6 +108,7 @@ class Document(BaseModel):
 
     content: str
     metadata: DocMetaData
+    images: List[str] = []  # paths to extracted image files
 
     def id(self) -> str:
         return self.metadata.id
