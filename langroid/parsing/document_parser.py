@@ -370,7 +370,7 @@ class DocumentParser(Parser):
         all_images = []
         text_parts = []
         for i, page in self.iterate_pages():
-            page_doc = self.get_document_from_page(page, i)
+            page_doc = self.get_document_from_page(page)
             text_parts.append(page_doc.content)
             all_images.extend(page_doc.images)
 
@@ -400,7 +400,7 @@ class DocumentParser(Parser):
         for i, page in self.iterate_pages():
             # not used but could be useful, esp to blend the
             # metadata from the pages into the chunks
-            page_doc = self.get_document_from_page(page, i)
+            page_doc = self.get_document_from_page(page)
             page_text = page_doc.content
             page_images = page_doc.images
             split += self.tokenizer.encode(page_text)
@@ -459,19 +459,17 @@ class FitzPDFParser(DocumentParser):
     Parser for processing PDFs using the `fitz` library.
     """
 
-    def extract_images_from_page(
-        self, page: "fitz.Page", page_num: int
-    ) -> List[str]:
+    def extract_images_from_page(self, page: "fitz.Page") -> List[str]:
         """
         Extract images from a PDF page and save them to a temporary directory.
 
         Args:
             page (fitz.Page): The PDF page object.
-            page_num (int): The page number (0-indexed).
 
         Returns:
             List[str]: List of file paths to the extracted images.
         """
+        page_num = page.number
         try:
             import fitz
         except ImportError:
@@ -524,21 +522,18 @@ class FitzPDFParser(DocumentParser):
             yield i, page
         doc.close()
 
-    def get_document_from_page(
-        self, page: "fitz.Page", page_num: int = 0
-    ) -> Document:
+    def get_document_from_page(self, page: "fitz.Page") -> Document:
         """
         Get Document object from a given `fitz` page.
 
         Args:
             page (fitz.Page): The `fitz` page object.
-            page_num (int): The page number (0-indexed). Defaults to 0.
 
         Returns:
             Document: Document object, with content and possible metadata.
         """
         # Extract images from the page
-        images = self.extract_images_from_page(page, page_num)
+        images = self.extract_images_from_page(page)
 
         return Document(
             content=self.fix_text(page.get_text()),
