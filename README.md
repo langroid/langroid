@@ -437,7 +437,7 @@ Here is what it looks like in action
 
 # ⚡ Highlights
 (For a more up-to-date list see the 
-[Updates/Releases](https://github.com/langroid/langroid?tab=readme-ov-file#fire-updatesreleases) 
+[Updates/Releases](https://github.com/langroid/langroid?tab=readme-ov-file#-updatesreleases) 
 section above)
 - **Agents as first-class citizens:** The [Agent](https://langroid.github.io/langroid/reference/agent/base/#langroid.agent.base.Agent) class encapsulates LLM conversation state,
   and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
