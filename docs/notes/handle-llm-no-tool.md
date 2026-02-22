@@ -79,7 +79,59 @@ The `handle_llm_no_tool` parameter can have the following possible values:
 """
 ```
 
-A simple example is in the [`chat-search.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search.py) 
-script, and in the `test_handle_llm_no_tool` test in   
+A simple example is in the [`chat-search.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search.py)
+script, and in the `test_handle_llm_no_tool` test in
 [`test_tool_messages.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py).
+
+## Important: Specialized agents and `handle_llm_no_tool`
+
+!!! warning "Specialized agents have their own fallback logic"
+
+    Several built-in Langroid agents — such as `TableChatAgent`,
+    `SQLChatAgent`, `Neo4jChatAgent`, `ArangoChatAgent`,
+    `QueryPlannerAgent`, and `CriticAgent` — override the
+    `handle_message_fallback` method with their own specialized,
+    **state-dependent** fallback logic. For example, `TableChatAgent`
+    checks whether it has already sent an expression and reminds
+    the LLM to use the `pandas_eval` tool, while `QueryPlannerAgent`
+    tracks how many reminders it has sent and stops after a limit.
+
+    **Setting `handle_llm_no_tool` on these specialized agents has
+    no effect** — the specialized `handle_message_fallback` override
+    takes precedence, and the config parameter is silently ignored.
+    These two mechanisms are intentionally separate:
+    `handle_llm_no_tool` is a simple declarative config knob for the
+    base `ChatAgent`, while specialized agents use
+    `handle_message_fallback` for context-aware fallback behavior
+    that cannot be captured by a single config value.
+
+If you are subclassing a specialized agent and want to customize
+the fallback behavior, **override `handle_message_fallback`** in
+your own subclass rather than setting `handle_llm_no_tool`.
+You can call `super()` selectively if you want the parent's
+specialized logic in some cases:
+
+```python
+from langroid.agent.special.table_chat_agent import (
+    TableChatAgent,
+    TableChatAgentConfig,
+)
+from langroid.agent.chat_document import ChatDocument
+from langroid.mytypes import Entity
+
+
+class MyTableAgent(TableChatAgent):
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        if (
+            isinstance(msg, ChatDocument)
+            and msg.metadata.sender == Entity.LLM
+        ):
+            # Your custom fallback logic here
+            return "Please use a tool to answer the question."
+        # Or delegate to the parent's specialized logic:
+        # return super().handle_message_fallback(msg)
+        return None
+```
 
