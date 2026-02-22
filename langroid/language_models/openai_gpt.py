@@ -1430,6 +1430,7 @@ class OpenAIGPT(LanguageModel):
                 "id": None,
                 "function": {"arguments": "", "name": None},
                 "type": None,
+                "extra_content": None
             }
         )
 
@@ -1448,6 +1449,11 @@ class OpenAIGPT(LanguageModel):
 
             if tool_delta["type"] is not None:
                 idx2tool_dict[tool_delta["index"]]["type"] = tool_delta["type"]
+
+            if tool_delta.get("extra_content") is not None:
+                idx2tool_dict[tool_delta["index"]]["extra_content"] = tool_delta[
+                    "extra_content"
+                ]
 
         # (try to) parse the fn args of each tool
         contents: List[str] = []
@@ -1480,6 +1486,7 @@ class OpenAIGPT(LanguageModel):
                     arguments=id2args.get(tool_dict["id"]),
                 ),
                 type=tool_dict["type"],
+                extra_content=tool_dict.get("extra_content"),
             )
             for tool_dict in idx2tool_dict.values()
         ]
