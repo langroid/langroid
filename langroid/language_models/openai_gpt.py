@@ -975,26 +975,22 @@ class OpenAIGPT(LanguageModel):
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
-            delta = choices[0].get("delta", {})
-            if delta:
-                # capture both content and reasoning_content
-                event_text = delta.get("content", "")
-                event_reasoning = delta.get(
-                    "reasoning_content",
-                    delta.get("reasoning", ""),
-                )
-                if "function_call" in delta and delta["function_call"] is not None:
-                    if "name" in delta["function_call"]:
-                        event_fn_name = delta["function_call"]["name"]
-                    if "arguments" in delta["function_call"]:
-                        event_args = delta["function_call"]["arguments"]
-                if "tool_calls" in delta and delta["tool_calls"] is not None:
-                    # it's a list of deltas, usually just one
-                    event_tool_deltas = delta["tool_calls"]
-                    tool_deltas += event_tool_deltas
-            else:
-                event_text = ""
-                event_reasoning = ""
+            delta = choices[0].get("delta", {}) or {}
+            # capture both content and reasoning_content
+            event_text = delta.get("content", "")
+            event_reasoning = delta.get(
+                "reasoning_content",
+                delta.get("reasoning", ""),
+            )
+            if "function_call" in delta and delta["function_call"] is not None:
+                if "name" in delta["function_call"]:
+                    event_fn_name = delta["function_call"]["name"]
+                if "arguments" in delta["function_call"]:
+                    event_args = delta["function_call"]["arguments"]
+            if "tool_calls" in delta and delta["tool_calls"] is not None:
+                # it's a list of deltas, usually just one
+                event_tool_deltas = delta["tool_calls"]
+                tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
@@ -1142,25 +1138,21 @@ class OpenAIGPT(LanguageModel):
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
-            delta = choices[0].get("delta", {})
-            if delta:
-                event_text = delta.get("content", "")
-                event_reasoning = delta.get(
-                    "reasoning_content",
-                    delta.get("reasoning", ""),
-                )
-                if "function_call" in delta and delta["function_call"] is not None:
-                    if "name" in delta["function_call"]:
-                        event_fn_name = delta["function_call"]["name"]
-                    if "arguments" in delta["function_call"]:
-                        event_args = delta["function_call"]["arguments"]
-                if "tool_calls" in delta and delta["tool_calls"] is not None:
-                    # it's a list of deltas, usually just one
-                    event_tool_deltas = delta["tool_calls"]
-                    tool_deltas += event_tool_deltas
-            else:
-                event_text = ""
-                event_reasoning = ""
+            delta = choices[0].get("delta", {}) or {}
+            event_text = delta.get("content", "")
+            event_reasoning = delta.get(
+                "reasoning_content",
+                delta.get("reasoning", ""),
+            )
+            if "function_call" in delta and delta["function_call"] is not None:
+                if "name" in delta["function_call"]:
+                    event_fn_name = delta["function_call"]["name"]
+                if "arguments" in delta["function_call"]:
+                    event_args = delta["function_call"]["arguments"]
+            if "tool_calls" in delta and delta["tool_calls"] is not None:
+                # it's a list of deltas, usually just one
+                event_tool_deltas = delta["tool_calls"]
+                tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
