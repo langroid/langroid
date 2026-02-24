@@ -975,7 +975,7 @@ class OpenAIGPT(LanguageModel):
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
-            delta = choices[0].get("delta", {})
+            delta = choices[0].get("delta", {}) or {}
             # capture both content and reasoning_content
             event_text = delta.get("content", "")
             event_reasoning = delta.get(
@@ -1138,7 +1138,7 @@ class OpenAIGPT(LanguageModel):
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
-            delta = choices[0].get("delta", {})
+            delta = choices[0].get("delta", {}) or {}
             event_text = delta.get("content", "")
             event_reasoning = delta.get(
                 "reasoning_content",
