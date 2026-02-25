@@ -333,9 +333,12 @@ class LLMMessage(BaseModel):
             for tc in dict_no_none["tool_calls"]:
                 if "arguments" in tc["function"]:
                     # arguments must be a string
-                    tc["function"]["arguments"] = json.dumps(
-                        tc["function"]["arguments"]
-                    )
+                    if tc["function"]["arguments"] is None:
+                        tc["function"]["arguments"] = "{}"
+                    else:
+                        tc["function"]["arguments"] = json.dumps(
+                            tc["function"]["arguments"]
+                        )
                 if "extra_content" in tc and tc["extra_content"] is None:
                     del tc["extra_content"]
         # IMPORTANT! drop fields that are not expected in API call
