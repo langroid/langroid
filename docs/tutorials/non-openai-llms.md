@@ -123,6 +123,36 @@ To use OpenRouter with Langroid:
 
 For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
 
+### AI/ML API
+
+[AI/ML API](https://aimlapi.com/app/?utm_source=langroid&utm_medium=github&utm_campaign=integration) provides access to over 300 models (e.g. DeepSeek, GPT-4o, Gemini, Claude) via an OpenAI-compatible API with smart routing, high rate limits, and low-latency global infrastructure.
+
+To use AI/ML API with Langroid:
+
+* Set up your `AIML_API_KEY` environment variable
+* Set `chat_model="aimlapi/<model_name>"` in the `OpenAIGPTConfig`, e.g.:
+
+  ```python
+  chat_model = "aimlapi/deepseek-chat"
+  ```
+
+Optionally, you can also configure the API base:
+
+```python
+cfg = OpenAIGPTConfig(
+    chat_model="aimlapi/deepseek-chat",
+    api_base="https://api.aimlapi.com/v1",
+    api_key=os.getenv("AIML_API_KEY")
+)
+```
+
+For more details and available models, see the:
+### 🧠 [Model List](https://aimlapi.com/models?utm_source=langroid&utm_medium=github&utm_campaign=integration)
+
+#### 📘 [Official AI/ML API Docs](https://docs.aimlapi.com/?utm_source=langroid&utm_medium=github&utm_campaign=integration)
+
+---
+
 ## Working with the created `OpenAIGPTConfig` object
 
 From here you can proceed as usual, creating instances of `OpenAIGPT`,
