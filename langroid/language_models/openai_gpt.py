@@ -670,9 +670,12 @@ class OpenAIGPT(LanguageModel):
             if self.config.http_client_factory is not None:
                 # Use the factory to create http_client (not cacheable)
                 http_client = self.config.http_client_factory()
-                # Don't set async_http_client from sync client - create separately
-                # This avoids type mismatch issues
-                async_http_client = None
+                if isinstance(http_client, (list, tuple)):
+                    http_client, async_http_client = http_client
+                else:
+                    # set async_http_client to None - so that it will
+                    # be created later
+                    async_http_client = None
             elif self.config.http_client_config is not None:
                 # Use config dict (cacheable)
                 http_client_config_used = self.config.http_client_config
