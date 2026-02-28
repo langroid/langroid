@@ -288,7 +288,9 @@ class OpenAIGPTConfig(LLMConfig):
     langdb_params: LangDBParams = LangDBParams()
     portkey_params: PortkeyParams = PortkeyParams()
     headers: Dict[str, str] = {}
-    http_client_factory: Optional[Callable[[], Any]] = None  # Factory for httpx.Client
+    http_client_factory: Optional[Callable[[], Any]] = (
+        None  # Factory: returns Client or (Client, AsyncClient)
+    )
     http_verify_ssl: bool = True  # Simple flag for SSL verification
     http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
 
@@ -671,6 +673,12 @@ class OpenAIGPT(LanguageModel):
                 # Use the factory to create http_client (not cacheable)
                 http_client = self.config.http_client_factory()
                 if isinstance(http_client, (list, tuple)):
+                    if len(http_client) != 2:
+                        raise ValueError(
+                            "http_client_factory must return either a single "
+                            "httpx.Client or a tuple of "
+                            "(httpx.Client, httpx.AsyncClient)"
+                        )
                     http_client, async_http_client = http_client
                 else:
                     # set async_http_client to None - so that it will
@@ -1433,7 +1441,7 @@ class OpenAIGPT(LanguageModel):
                 "id": None,
                 "function": {"arguments": "", "name": None},
                 "type": None,
-                "extra_content": None
+                "extra_content": None,
             }
         )
 

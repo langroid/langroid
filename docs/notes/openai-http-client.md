@@ -81,7 +81,7 @@ config = lm.OpenAIGPTConfig(
 llm = lm.OpenAIGPT(config)
 ```
 
-If you are using `async` methods, return `Tuple(Client, AsyncClient)` from your factory:
+If you are using `async` methods, return a tuple of `(Client, AsyncClient)` from your factory:
 
 ```python
 from httpx import AsyncClient, Client
@@ -90,10 +90,7 @@ def create_custom_client():
     """Factory function to create a custom sync and async HTTP clients."""
     client_args = {
         "verify": "/path/to/corporate-ca-bundle.pem",
-        "proxies": {
-            "http": "http://proxy.corp.com:8080",
-            "https": "http://proxy.corp.com:8080",
-        },
+        "proxy": "http://proxy.corp.com:8080",
         "timeout": 30.0,
     }
     client = Client(**client_args)
