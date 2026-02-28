@@ -64,13 +64,13 @@ def create_custom_client():
         },
         timeout=30.0
     )
-    
+
     # Add custom event hooks for logging
     def log_request(request):
         print(f"API Request: {request.method} {request.url}")
-    
+
     client.event_hooks = {"request": [log_request]}
-    
+
     return client
 
 config = lm.OpenAIGPTConfig(
@@ -79,6 +79,24 @@ config = lm.OpenAIGPTConfig(
 )
 
 llm = lm.OpenAIGPT(config)
+```
+
+If you are using `async` methods, return a tuple of `(Client, AsyncClient)` from your factory:
+
+```python
+from httpx import AsyncClient, Client
+
+def create_custom_client():
+    """Factory function to create a custom sync and async HTTP clients."""
+    client_args = {
+        "verify": "/path/to/corporate-ca-bundle.pem",
+        "proxy": "http://proxy.corp.com:8080",
+        "timeout": 30.0,
+    }
+    client = Client(**client_args)
+    async_client = AsyncClient(**client_args)
+
+    return client, async_client
 ```
 
 **Note**: Custom factories bypass client caching. Each `OpenAIGPT` instance creates a new client.
@@ -112,17 +130,17 @@ config = lm.OpenAIGPTConfig(
 ```python
 def debug_client_factory():
     from httpx import Client
-    
+
     client = Client(verify=False)
-    
+
     def log_response(response):
         print(f"Status: {response.status_code}")
         print(f"Headers: {response.headers}")
-    
+
     client.event_hooks = {
         "response": [log_response]
     }
-    
+
     return client
 
 config = lm.OpenAIGPTConfig(
