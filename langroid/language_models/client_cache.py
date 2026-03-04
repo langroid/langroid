@@ -4,6 +4,7 @@ Client caching/singleton pattern for LLM clients to prevent connection pool exha
 
 import atexit
 import hashlib
+import threading
 import time
 import weakref
 from typing import Any, Dict, Optional, Tuple, Union, cast
@@ -16,6 +17,7 @@ from openai import AsyncOpenAI, OpenAI
 # Cache for client instances, keyed by hashed configuration parameters.
 # Value is a tuple of (client instance, last_used_monotonic_seconds).
 _client_cache: Dict[str, Tuple[Any, float]] = {}
+_client_cache_lock = threading.RLock()
 
 # Keep track of clients for cleanup
 _all_clients: weakref.WeakSet[Any] = weakref.WeakSet()
@@ -47,13 +49,14 @@ def _get_cache_key(client_type: str, **kwargs: Any) -> str:
 
 def _get_cached_client(cache_key: str) -> Optional[Any]:
     """Get cached client and refresh its last-used timestamp."""
-    entry = _client_cache.get(cache_key)
-    if entry is None:
-        return None
+    with _client_cache_lock:
+        entry = _client_cache.get(cache_key)
+        if entry is None:
+            return None
 
-    client, _ = entry
-    _client_cache[cache_key] = (client, time.monotonic())
-    return client
+        client, _ = entry
+        _client_cache[cache_key] = (client, time.monotonic())
+        return client
 
 
 def get_openai_client(
@@ -132,7 +135,8 @@ def get_openai_client(
         http_client=created_http_client,  # Use the client created from config
     )
 
-    _client_cache[cache_key] = (client, time.monotonic())
+    with _client_cache_lock:
+        _client_cache[cache_key] = (client, time.monotonic())
     _all_clients.add(client)
     return client
 
@@ -213,7 +217,8 @@ def get_async_openai_client(
         http_client=created_http_client,  # Use the client created from config
     )
 
-    _client_cache[cache_key] = (client, time.monotonic())
+    with _client_cache_lock:
+        _client_cache[cache_key] = (client, time.monotonic())
     _all_clients.add(client)
     return client
 
@@ -235,7 +240,8 @@ def get_groq_client(api_key: str) -> Groq:
         return cast(Groq, cached_client)
 
     client = Groq(api_key=api_key)
-    _client_cache[cache_key] = (client, time.monotonic())
+    with _client_cache_lock:
+        _client_cache[cache_key] = (client, time.monotonic())
     _all_clients.add(client)
     return client
 
@@ -257,7 +263,8 @@ def get_async_groq_client(api_key: str) -> AsyncGroq:
         return cast(AsyncGroq, cached_client)
 
     client = AsyncGroq(api_key=api_key)
-    _client_cache[cache_key] = (client, time.monotonic())
+    with _client_cache_lock:
+        _client_cache[cache_key] = (client, time.monotonic())
     _all_clients.add(client)
     return client
 
@@ -279,7 +286,8 @@ def get_cerebras_client(api_key: str) -> Cerebras:
         return cast(Cerebras, cached_client)
 
     client = Cerebras(api_key=api_key)
-    _client_cache[cache_key] = (client, time.monotonic())
+    with _client_cache_lock:
+        _client_cache[cache_key] = (client, time.monotonic())
     _all_clients.add(client)
     return client
 
@@ -301,7 +309,8 @@ def get_async_cerebras_client(api_key: str) -> AsyncCerebras:
         return cast(AsyncCerebras, cached_client)
 
     client = AsyncCerebras(api_key=api_key)
-    _client_cache[cache_key] = (client, time.monotonic())
+    with _client_cache_lock:
+        _client_cache[cache_key] = (client, time.monotonic())
     _all_clients.add(client)
     return client
 
@@ -321,14 +330,15 @@ def prune_cache(max_age_seconds: float) -> int:
         raise ValueError("max_age_seconds must be non-negative")
 
     now = time.monotonic()
-    stale_entries = [
-        key
-        for key, (_, last_used_at) in _client_cache.items()
-        if now - last_used_at > max_age_seconds
-    ]
+    with _client_cache_lock:
+        stale_entries = [
+            key
+            for key, (_, last_used_at) in _client_cache.items()
+            if now - last_used_at > max_age_seconds
+        ]
 
-    for key in stale_entries:
-        _client_cache.pop(key, None)
+        for key in stale_entries:
+            _client_cache.pop(key, None)
 
     return len(stale_entries)
 
@@ -362,4 +372,5 @@ atexit.register(_cleanup_clients)
 # For testing purposes
 def _clear_cache() -> None:
     """Clear the client cache. Only for testing."""
-    _client_cache.clear()
+    with _client_cache_lock:
+        _client_cache.clear()
