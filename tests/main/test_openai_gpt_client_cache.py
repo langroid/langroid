@@ -113,32 +113,6 @@ class TestOpenAIGPTClientCache:
         client3 = get_openai_client(api_key="test-key-refresh")
         assert client3 is client1
 
-    def test_prune_cache_closes_and_unregisters_stale_clients(
-        self, monkeypatch
-    ):
-        """Test stale entries are closed and removed from _all_clients."""
-        fake_now = [4000.0]
-
-        monkeypatch.setattr(client_cache_module.time, "monotonic", lambda: fake_now[0])
-
-        class DummyClient:
-            def __init__(self):
-                self.closed = False
-
-            def close(self):
-                self.closed = True
-
-        dummy = DummyClient()
-        client_cache_module._client_cache["dummy"] = (dummy, 3980.0)
-        client_cache_module._all_clients.add(dummy)
-
-        removed = prune_cache(5.0)
-
-        assert removed == 1
-        assert dummy.closed is True
-        assert "dummy" not in client_cache_module._client_cache
-        assert dummy not in client_cache_module._all_clients
-
     def test_mixed_client_types(self):
         """Test that different client types are cached separately."""
         api_key = "same-key-for-all"

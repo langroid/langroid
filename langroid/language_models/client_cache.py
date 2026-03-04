@@ -2,7 +2,6 @@
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
 """
 
-import asyncio
 import atexit
 import hashlib
 import inspect
@@ -45,28 +44,6 @@ def _get_cache_key(client_type: str, **kwargs: Any) -> str:
     hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
 
     return hashed_key
-
-
-def _close_client(client: Any) -> None:
-    """Best-effort close for sync and async clients."""
-    close_method = getattr(client, "close", None)
-    if not callable(close_method):
-        return
-
-    try:
-        result = close_method()
-    except Exception:
-        return
-
-    if inspect.isawaitable(result):
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(result)
-        except RuntimeError:
-            try:
-                asyncio.run(result)
-            except Exception:
-                pass
 
 
 def _get_cached_client(cache_key: str) -> Optional[Any]:
@@ -352,11 +329,26 @@ def prune_cache(max_age_seconds: float) -> int:
     ]
 
     for key, client in stale_entries:
-        _close_client(client)
-        _all_clients.discard(client)
+        if not _client_has_sync_close_method(client):
+            # Remove from tracking if we can't close it
+            _all_clients.discard(client)
         _client_cache.pop(key, None)
 
     return len(stale_entries)
+
+
+def _client_has_sync_close_method(client: Any) -> bool:
+    """Check if the client has a synchronous close method."""
+    if hasattr(client, "close") and callable(client.close):
+        try:
+            # Check if close is a coroutine function (async)
+            if inspect.iscoroutinefunction(client.close):
+                return False
+            else:
+                return True
+        except Exception:
+            pass  # Ignore errors during cleanup
+    return False
 
 
 def _cleanup_clients() -> None:
@@ -365,7 +357,12 @@ def _cleanup_clients() -> None:
     Called automatically via atexit.
     """
     for client in list(_all_clients):
-        _close_client(client)
+        # Sync clients can be closed directly
+        # For async clients, we can't await in atexit
+        # They will be cleaned up by the OS
+        if _client_has_sync_close_method(client):
+            # Sync clients can be closed directly
+            client.close()
 
 
 # Register cleanup function to run on exit
