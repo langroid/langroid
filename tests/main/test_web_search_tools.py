@@ -12,6 +12,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.agent.tools.exa_search_tool import ExaSearchTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
 from langroid.agent.tools.tavily_search_tool import TavilySearchTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -36,7 +37,13 @@ agent = ChatAgent(cfg)
 
 @pytest.mark.parametrize(
     "search_tool_cls",
-    [ExaSearchTool, TavilySearchTool, GoogleSearchTool, DuckduckgoSearchTool],
+    [
+        ExaSearchTool,
+        TavilySearchTool,
+        GoogleSearchTool,
+        DuckduckgoSearchTool,
+        SeltzSearchTool,
+    ],
 )
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
