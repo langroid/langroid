@@ -1,9 +1,6 @@
 """
 This is a basic example of a chatbot that uses SeltzSearchTool to
-answer questions with context-engineered web content and sources
-for real-time AI reasoning.
-
-Seltz provides fast, up-to-date web data optimized for LLM consumption.
+answer questions using web search results powered by Seltz.
 
 Run like this:
 
@@ -23,7 +20,7 @@ your `.env` file, e.g. `SELTZ_API_KEY=your_api_key_here`
 `pip install langroid[seltz]` or `uv pip install langroid[seltz]`
 or `poetry add langroid[seltz]` or `uv add langroid[seltz]`
 
-For more information, please refer to https://seltz.ai/?utm_source=langroid&utm_medium=integration
+For more information, please refer to https://seltz.ai/
 """
 
 import typer
@@ -55,8 +52,8 @@ def main(
     print(
         """
         [blue]Welcome to the Seltz Web Search chatbot!
-        I will try to answer your questions using context-engineered web content
-        and sources for real-time AI reasoning, powered by Seltz.
+        I will try to answer your questions using web search
+        results powered by Seltz.
 
         Enter x or q to quit at any point.
         """

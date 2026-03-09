@@ -34,16 +34,8 @@ class TestSeltzSearchUnit:
     """Unit tests for seltz_search (mocked, no API key needed)."""
 
     @patch.dict(os.environ, {"SELTZ_API_KEY": "test-key"})
-    @patch("langroid.parsing.web_search.Seltz", create=True)
-    def test_seltz_search_returns_results(self, mock_seltz_cls, mock_seltz_response):
+    def test_seltz_search_returns_results(self, mock_seltz_response):
         """Test that seltz_search returns properly formatted WebSearchResult objects."""
-        # Patch the import inside seltz_search
-        with patch(
-            "langroid.parsing.web_search.seltz_search.__code__",
-        ):
-            pass
-
-        # We need to mock the import and client
         mock_client = MagicMock()
         mock_client.search.return_value = mock_seltz_response
 

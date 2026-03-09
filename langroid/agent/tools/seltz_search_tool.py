@@ -1,8 +1,5 @@
 """
-A tool to trigger a Seltz search for a given query,
-(https://seltz.ai/?utm_source=langroid&utm_medium=integration)
-and return the top results with context-engineered web content and sources
-for real-time AI reasoning.
+A tool to trigger a Seltz search for a given query and return the top results.
 Since the tool is stateless (i.e. does not need
 access to agent state), it can be enabled for any agent, without having to define a
 special method inside the agent: `agent.enable_message(SeltzSearchTool)`
@@ -17,8 +14,7 @@ your `.env` file, e.g. `SELTZ_API_KEY=your_api_key_here`
 or `poetry add langroid[seltz]` or `uv add langroid[seltz]`
 (it installs the `seltz` package from pypi).
 
-For more information, please refer to the official docs:
-https://seltz.ai/?utm_source=langroid&utm_medium=integration
+For more information, please refer to: https://seltz.ai/
 """
 
 from typing import List, Tuple
@@ -31,8 +27,7 @@ class SeltzSearchTool(ToolMessage):
     request: str = "seltz_search"
     purpose: str = """
             To search the web using Seltz and return up to <num_results>
-            results with context-engineered web content and sources relevant
-            to the given <query>. When using this tool,
+            results relevant to the given <query>. When using this tool,
             ONLY show the required JSON, DO NOT SAY ANYTHING ELSE.
             Wait for the results of the web search, and then use them to
             compose your response.

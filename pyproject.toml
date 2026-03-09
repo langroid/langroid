@@ -126,6 +126,7 @@ all = [
     "pgvector>=0.3.6",
     "psycopg2-binary>=2.9.10",
     "marker-pdf",
+    "seltz>=0.2.0",
 ]
 
 # More granular groupings

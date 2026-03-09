@@ -282,8 +282,7 @@ def tavily_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 def seltz_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     """
     Method that makes an API call to Seltz API that queries
-    the top `num_results` results with context-engineered web content
-    and sources. Returns a list of WebSearchResult objects.
+    the top `num_results` results. Returns a list of WebSearchResult objects.
 
     Args:
         query (str): The query body that users wants to make.
@@ -301,11 +300,9 @@ def seltz_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         )
 
     try:
-        from seltz import Seltz
+        from seltz import Includes, Seltz
     except ImportError:
         raise LangroidImportError("seltz", "seltz")
-
-    from seltz import Includes
 
     client = Seltz(api_key=api_key)
     response = client.search(
@@ -315,18 +312,15 @@ def seltz_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     results = []
     for doc in response.documents:
-        # Use link=None to skip unnecessary HTTP fetch in __init__,
-        # then set fields directly with Seltz's context-engineered content.
         result = WebSearchResult(
-            title="",
-            link=None,
+            title=doc.url,
+            link=None,  # skip HTTP fetch; Seltz already provides content
             max_content_length=3500,
             max_summary_length=300,
         )
         result.link = doc.url
         result.full_content = doc.content[:3500]
         result.summary = doc.content[:300]
-        result.title = doc.url
         results.append(result)
 
     return results
