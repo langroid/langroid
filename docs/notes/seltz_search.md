@@ -24,11 +24,7 @@
 
 ---
 
-## **2. Use Seltz Search with Langroid**
-
-### **Installation**
-
-Install langroid with the `seltz` extra:
+## **2. Install**
 
 ```bash
 pip install langroid[seltz]
@@ -36,7 +32,9 @@ pip install langroid[seltz]
 uv pip install langroid[seltz]
 ```
 
-### **Code Example**
+---
+
+## **3. Use Seltz Search with Langroid**
 
 ```python
 import langroid as lr
@@ -51,16 +49,14 @@ config = ChatAgentConfig(
     ),
 )
 
-# Create the agent
+# Create the agent and enable the Seltz search tool
 agent = ChatAgent(config)
-
-# Enable Seltz search tool
 agent.enable_message(SeltzSearchTool)
 ```
 
 ---
 
-## **3. Perform Web Searches**
+## **4. Perform Web Searches**
 
 Use the agent to perform web searches using Seltz.
 
@@ -70,27 +66,21 @@ response = agent.llm_response(
     "What are the latest developments in quantum computing?"
 )
 print(response)
-
-# Search with specific number of results
-response = agent.llm_response(
-    "Find 5 recent news articles about artificial intelligence."
-)
-print(response)
 ```
 
 ---
 
-## **4. Custom Search Requests**
+## **5. Direct Tool Usage**
 
-You can also create a `SeltzSearchTool` instance directly:
+You can also use the tool directly without an agent:
 
 ```python
 from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
 
-# Create a custom search request
+# Create a search request
 search_request = SeltzSearchTool(
     query="Latest breakthroughs in fusion energy",
-    num_results=3
+    num_results=3,
 )
 
 # Get search results
@@ -100,9 +90,14 @@ print(results)
 
 ---
 
-## **5. Full Example**
+## **6. Full Example**
 
-See [`examples/basic/chat-search-seltz.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-seltz.py)
-for a complete chatbot example with Seltz search.
+See the complete working example at
+[`examples/basic/chat-search-seltz.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-seltz.py).
+
+Run it with:
+```bash
+python3 examples/basic/chat-search-seltz.py
+```
 
 ---
