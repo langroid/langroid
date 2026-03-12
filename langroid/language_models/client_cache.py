@@ -325,9 +325,9 @@ def prune_cache(max_age_seconds: float) -> int:
     """
     Remove cache entries whose last-used time exceeds *max_age_seconds*.
 
-    Evicted **sync** clients are closed; async clients are left for the
-    garbage collector (their ``close`` method is a coroutine and cannot be
-    awaited here).
+    Evicted clients are **not** closed here because they may still be serving
+    in-flight requests.  Cleanup is handled by the ``atexit`` handler and the
+    garbage collector.
 
     Args:
         max_age_seconds: Maximum age (in seconds) for cache entries to keep.
@@ -340,7 +340,6 @@ def prune_cache(max_age_seconds: float) -> int:
         raise ValueError("max_age_seconds must be non-negative")
 
     now = time.monotonic()
-    evicted_clients = []
 
     with _client_cache_lock:
         stale_keys = [
@@ -350,17 +349,10 @@ def prune_cache(max_age_seconds: float) -> int:
         ]
 
         for key in stale_keys:
-            client, _ = _client_cache.pop(key)
-            evicted_clients.append(client)
+            _client_cache.pop(key)
 
-    # Close sync clients outside the lock to avoid blocking other callers.
-    for client in evicted_clients:
-        if hasattr(client, "close") and callable(client.close):
-            try:
-                if not inspect.iscoroutinefunction(client.close):
-                    client.close()
-            except Exception:
-                pass
+    # Don't close evicted clients here — they may still be serving in-flight
+    # requests. The atexit handler and GC will clean them up.
 
     return len(stale_keys)
 
