@@ -4,6 +4,7 @@ answer questions:
  - GoogleSearchTool
  - DuckduckgoSearchTool
  - ExaSearchTool
+ - SeltzSearchTool
 When the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
 question.
@@ -65,7 +66,7 @@ def main(
         "ddg",
         "--provider",
         "-p",
-        help="search provider name (google, ddg, exa)",
+        help="search provider name (google, ddg, exa, seltz)",
     ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
@@ -106,6 +107,10 @@ def main(
             search_tool_class = ExaSearchTool
         case "ddg":
             search_tool_class = DuckduckgoSearchTool
+        case "seltz":
+            from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
+
+            search_tool_class = SeltzSearchTool
         case _:
             raise ValueError(f"Unsupported provider {provider} specified.")
 

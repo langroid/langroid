@@ -40,8 +40,12 @@ the LLM will try its best to interpret what you want, and offer choices when con
 - [`/examples/basic/chat-search.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat-search.py)  This uses a `GoogleSearchTool` function-call/tool to answer questions using a google web search if needed.
   Try asking questions about facts known after Sep 2021 (GPT4 training cutoff),
   like  `when was llama2 released`
-  
+
     - Illustrates Agent + Tools/function-calling + web-search
+
+- [`/examples/basic/chat-search-seltz.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-seltz.py) Similar to the above, but uses `SeltzSearchTool` for web search powered by [Seltz](https://seltz.ai/). Requires `SELTZ_API_KEY` and `pip install langroid[seltz]`. See [Seltz Search Tool docs](../notes/seltz_search.md) for setup details.
+
+    - Illustrates Agent + Tools/function-calling + web-search via Seltz
 
 - [`/examples/basic/chat-tree.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat-tree.py) is a toy example of tree-structured multi-agent
   computation, see a detailed writeup [here.](https://langroid.github.io/langroid/examples/agent-tree/)

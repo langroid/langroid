@@ -277,3 +277,50 @@ def tavily_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         )
         for result in search_results
     ]
+
+
+def seltz_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call to Seltz API that queries
+    the top `num_results` results. Returns a list of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("SELTZ_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "SELTZ_API_KEY environment variable is not set. "
+            "Please set it to your API key and try again."
+        )
+
+    try:
+        from seltz import Includes, Seltz
+    except ImportError:
+        raise LangroidImportError("seltz", "seltz")
+
+    client = Seltz(api_key=api_key)
+    response = client.search(
+        query=query,
+        includes=Includes(max_documents=num_results),
+    )
+
+    results = []
+    for doc in response.documents:
+        result = WebSearchResult(
+            title=doc.url,
+            link=None,  # skip HTTP fetch; Seltz already provides content
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        result.link = doc.url
+        result.full_content = doc.content[:3500]
+        result.summary = doc.content[:300]
+        results.append(result)
+
+    return results
