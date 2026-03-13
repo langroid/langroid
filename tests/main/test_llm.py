@@ -13,6 +13,7 @@ import langroid as lr
 import langroid.language_models as lm
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import LLMMessage, Role
+from langroid.language_models.model_info import get_model_info
 from langroid.language_models.openai_gpt import (
     AccessWarning,
     OpenAIChatModel,
@@ -159,6 +160,69 @@ def test_llm_config_context_length(mdl: str, ctx: int | None):
     )
     mdl = lm.OpenAIGPT(config=llm_config)
     assert mdl.chat_context_length() == ctx or mdl.info().context_length
+
+
+@pytest.mark.parametrize(
+    ("alias_model", "canonical_model"),
+    [
+        (
+            "gemini/gemini-3-flash-preview",
+            lm.GeminiModel.GEMINI_3_FLASH.value,
+        ),
+        (
+            "google/gemini-3-flash-preview",
+            lm.GeminiModel.GEMINI_3_FLASH.value,
+        ),
+        (
+            "gemini/gemini-2.5-flash-lite-preview-06-17",
+            lm.GeminiModel.GEMINI_2_5_FLASH_LITE.value,
+        ),
+    ],
+)
+def test_get_model_info_normalizes_gemini_aliases(
+    alias_model: str, canonical_model: str
+) -> None:
+    assert get_model_info(alias_model) == get_model_info(canonical_model)
+
+
+@pytest.mark.parametrize(
+    ("alias_model", "canonical_model"),
+    [
+        (
+            "gemini/gemini-3-flash-preview",
+            lm.GeminiModel.GEMINI_3_FLASH.value,
+        ),
+        (
+            "gemini/gemini-2.5-flash-lite-preview-06-17",
+            lm.GeminiModel.GEMINI_2_5_FLASH_LITE.value,
+        ),
+    ],
+)
+def test_openai_gpt_context_length_uses_gemini_alias_info(
+    alias_model: str, canonical_model: str
+) -> None:
+    alias_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=alias_model))
+    canonical_llm = lm.OpenAIGPT(
+        config=lm.OpenAIGPTConfig(chat_model=canonical_model)
+    )
+
+    assert alias_llm.info() == canonical_llm.info()
+    assert alias_llm.chat_context_length() == canonical_llm.chat_context_length()
+
+
+def test_get_model_info_warns_on_unknown_models(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    model_name = "gemini/gemini-999-unknown-preview"
+
+    with caplog.at_level("WARNING"):
+        info = get_model_info(model_name)
+
+    assert info.name == "unknown"
+    assert any(
+        model_name in record.message and "fallback defaults" in record.message
+        for record in caplog.records
+    )
 
 
 def test_model_selection(test_settings: Settings):
