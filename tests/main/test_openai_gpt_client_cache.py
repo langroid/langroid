@@ -4,12 +4,14 @@ Tests for OpenAIGPT client caching functionality.
 
 import pytest
 
+import langroid.language_models.client_cache as client_cache_module
 from langroid.language_models.client_cache import (
     _clear_cache,
     get_async_openai_client,
     get_cerebras_client,
     get_groq_client,
     get_openai_client,
+    prune_cache,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 
@@ -57,6 +59,78 @@ class TestOpenAIGPTClientCache:
         client2 = get_groq_client(api_key=api_key)
 
         assert client1 is client2
+
+    def test_prune_cache_removes_stale_entries(self, monkeypatch):
+        """Test eviction of cache entries older than the specified max age."""
+        fake_now = [1000.0]
+
+        monkeypatch.setattr(client_cache_module.time, "monotonic", lambda: fake_now[0])
+
+        client1 = get_openai_client(api_key="test-key-stale")
+        fake_now[0] += 20.0
+
+        removed = prune_cache(5.0)
+
+        assert removed == 1
+
+        client2 = get_openai_client(api_key="test-key-stale")
+        assert client1 is not client2
+
+    def test_prune_cache_keeps_fresh_entries(self, monkeypatch):
+        """Test fresh cache entries are retained when below max age."""
+        fake_now = [2000.0]
+
+        monkeypatch.setattr(client_cache_module.time, "monotonic", lambda: fake_now[0])
+
+        client1 = get_openai_client(api_key="test-key-fresh")
+        fake_now[0] += 1.0
+
+        removed = prune_cache(5.0)
+
+        assert removed == 0
+
+        client2 = get_openai_client(api_key="test-key-fresh")
+        assert client1 is client2
+
+    def test_cache_age_refreshes_on_use(self, monkeypatch):
+        """Test cache entry last-used timestamp is refreshed on cache hits."""
+        fake_now = [3000.0]
+
+        monkeypatch.setattr(client_cache_module.time, "monotonic", lambda: fake_now[0])
+
+        client1 = get_openai_client(api_key="test-key-refresh")
+
+        # Use client again from cache; this should refresh last-used time.
+        fake_now[0] += 3.0
+        client2 = get_openai_client(api_key="test-key-refresh")
+        assert client1 is client2
+
+        # At this point age since last use is only 3s, so it should not be evicted.
+        fake_now[0] += 3.0
+        removed = prune_cache(5.0)
+        assert removed == 0
+
+        client3 = get_openai_client(api_key="test-key-refresh")
+        assert client3 is client1
+
+    def test_prune_cache_negative_max_age_raises(self):
+        """Test that negative max_age_seconds raises ValueError."""
+        with pytest.raises(ValueError, match="max_age_seconds must be non-negative"):
+            prune_cache(-1.0)
+
+    def test_prune_cache_zero_max_age(self, monkeypatch):
+        """Test that max_age_seconds=0 evicts all entries."""
+        fake_now = [4000.0]
+        monkeypatch.setattr(client_cache_module.time, "monotonic", lambda: fake_now[0])
+
+        get_openai_client(api_key="test-key-zero-a")
+        get_openai_client(api_key="test-key-zero-b")
+
+        # Advance time by the smallest amount so entries are older than 0.
+        fake_now[0] += 0.001
+
+        removed = prune_cache(0.0)
+        assert removed == 2
 
     def test_mixed_client_types(self):
         """Test that different client types are cached separately."""
