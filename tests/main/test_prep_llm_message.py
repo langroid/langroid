@@ -1,8 +1,13 @@
+import json
+
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.language_models.base import LLMMessage, Role
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.mytypes import Entity
+from langroid.parsing.file_attachment import FileAttachment
 
 CHAT_CONTEXT_LENGTH = 16_000
 MAX_OUTPUT_TOKENS = 1000
@@ -187,6 +192,86 @@ def test_drop_turns_strategy(agent_drop_turns):
         assert hist[i].role == Role.USER
         assert hist[i + 1].role == Role.ASSISTANT
     assert output_len >= MIN_OUTPUT_TOKENS
+
+
+def test_chat_num_tokens_counts_attachment_payload(agent):
+    """Test attachment payloads are included in chat token accounting."""
+    model = "gemini/gemini-2.5-flash"
+    agent.config.llm.chat_model = model
+    attachment = FileAttachment.from_bytes(
+        content=b"pdf-bytes" * 20,
+        filename="dummy.pdf",
+    )
+    message = LLMMessage(
+        role=Role.USER,
+        content="Question about the PDF",
+        files=[attachment],
+    )
+
+    expected_attachment_tokens = len(
+        json.dumps(
+            attachment.to_dict(model),
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+    assert agent.chat_num_tokens([message]) == (
+        len(message.content) + expected_attachment_tokens
+    )
+
+
+def test_attachment_payload_reduces_output_length():
+    """Test preflight shrinks output length when attachments consume context."""
+    context_length = 1000
+    max_output_tokens = 500
+    min_output_tokens = 50
+    config = ChatAgentConfig(
+        system_message="System message",
+        llm=OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.5-flash",
+            chat_context_length=context_length,
+            max_output_tokens=max_output_tokens,
+            min_output_tokens=min_output_tokens,
+        ),
+    )
+    agent = ChatAgent(config)
+
+    class MockParser:
+        def num_tokens(self, text: str | LLMMessage):
+            if isinstance(text, str):
+                return len(text)
+            return len(text.content)
+
+        def truncate_tokens(self, text, tokens, warning=""):
+            return text[:tokens] + warning
+
+    class MockLLM:
+        def chat_context_length(self):
+            return context_length
+
+        def supports_functions_or_tools(self):
+            return False
+
+    agent.parser = MockParser()
+    agent.llm = MockLLM()
+    agent.init_message_history()
+
+    attachment = FileAttachment.from_bytes(
+        content=b"x" * 400,
+        filename="dummy.pdf",
+    )
+    user_input = ChatDocument(
+        content="Question about the PDF",
+        files=[attachment],
+        metadata=ChatDocMetaData(sender=Entity.USER),
+    )
+
+    hist, output_len = agent._prep_llm_messages(user_input)
+
+    assert output_len < max_output_tokens
+    assert output_len == context_length - agent.chat_num_tokens(hist) - 300
+    assert hist[-1].content == user_input.content
 
 
 def test_drop_turns_preserves_last_turn(agent_drop_turns):
