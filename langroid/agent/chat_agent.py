@@ -2320,7 +2320,58 @@ class ChatAgent(Agent):
                 "before calling chat_num_tokens()."
             )
         hist = messages if messages is not None else self.message_history
-        return sum([self.parser.num_tokens(m.content) for m in hist])
+        return sum([self._message_num_tokens(m) for m in hist])
+
+    def _message_num_tokens(self, message: LLMMessage) -> int:
+        """Count tokens for a message, including serialized user attachments."""
+        if self.parser is None:
+            raise ValueError(
+                "ChatAgent.parser is None. "
+                "You must set ChatAgent.parser "
+                "before calling _message_num_tokens()."
+            )
+
+        return self.parser.num_tokens(message.content) + self._attachment_num_tokens(
+            message
+        )
+
+    def _attachment_num_tokens(self, message: LLMMessage) -> int:
+        """
+        Estimate attachment contribution using the serialized payload
+        that is sent in the API request for user messages.
+        """
+        if self.parser is None or message.role != Role.USER or len(message.files) == 0:
+            return 0
+
+        model = self._chat_model_name_for_attachments()
+        return sum(
+            self.parser.num_tokens(
+                json.dumps(
+                    attachment.to_dict(model),
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+            for attachment in message.files
+        )
+
+    def _chat_model_name_for_attachments(self) -> str:
+        """Return the model name used for attachment serialization."""
+        if self.llm is None:
+            return self.config.llm.chat_model if self.config.llm is not None else ""
+
+        return cast(
+            str,
+            getattr(
+                self.llm,
+                "chat_model_orig",
+                getattr(
+                    getattr(self.llm, "config", None),
+                    "chat_model",
+                    self.config.llm.chat_model if self.config.llm is not None else "",
+                ),
+            ),
+        )
 
     def message_history_str(self, i: Optional[int] = None) -> str:
         """
