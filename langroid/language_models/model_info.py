@@ -1,7 +1,10 @@
+import logging
 from enum import Enum
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class ModelProvider(str, Enum):
@@ -157,6 +160,11 @@ class ModelInfo(BaseModel):
     has_tools: bool = True  # Does model API support tools/function-calling?
     needs_first_user_message: bool = False  # Does API need first msg to be from user?
     description: Optional[str] = None
+
+
+GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
+DEFAULT_MODEL_INFO = ModelInfo()
+WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
 
 
 # Model information registry
@@ -689,11 +697,74 @@ def get_model_info(
         None,  # Default value if the iterator is exhausted (no valid info found)
     )
 
-    # Return the found info, or a default ModelInfo if none was found
-    return found_info or ModelInfo()
+    if found_info is not None:
+        return found_info
+
+    normalized_models = _normalize_model_names(models_to_try)
+    found_info = next(
+        (
+            info
+            for normalized_model in normalized_models
+            if (info := _get_model_info(normalized_model)) is not None
+        ),
+        None,
+    )
+    if found_info is not None:
+        return found_info
+
+    _warn_unknown_model(models_to_try)
+    return ModelInfo()
 
 
 def _get_model_info(model: str | ModelName) -> ModelInfo | None:
     if isinstance(model, str):
         return MODEL_INFO.get(model)
     return MODEL_INFO.get(model.value)
+
+
+def _normalize_model_names(models: List[str | ModelName]) -> List[str]:
+    normalized_models: List[str] = []
+    seen: set[str] = set()
+    for model in models:
+        normalized_model = _normalize_gemini_model_name(_model_name(model))
+        if normalized_model is None or normalized_model in seen:
+            continue
+        seen.add(normalized_model)
+        normalized_models.append(normalized_model)
+    return normalized_models
+
+
+def _normalize_gemini_model_name(model: str) -> str | None:
+    base_model = model.rsplit("/", 1)[-1]
+    if base_model in GEMINI_CANONICAL_MODEL_NAMES:
+        return base_model
+    if not base_model.startswith("gemini-"):
+        return None
+
+    preview_base = base_model.split("-preview", maxsplit=1)[0]
+    if preview_base in GEMINI_CANONICAL_MODEL_NAMES:
+        return preview_base
+    return None
+
+
+def _warn_unknown_model(models: List[str | ModelName]) -> None:
+    model_names = tuple(_model_name(model) for model in models)
+    if model_names in WARNED_UNKNOWN_MODELS:
+        return
+
+    WARNED_UNKNOWN_MODELS.add(model_names)
+    logger.warning(
+        "Unknown model info for %s; using fallback defaults "
+        "(context_length=%s, max_output_tokens=%s). "
+        "Context-length checks may be inaccurate. "
+        "Set `chat_context_length` explicitly if needed.",
+        ", ".join(model_names),
+        DEFAULT_MODEL_INFO.context_length,
+        DEFAULT_MODEL_INFO.max_output_tokens,
+    )
+
+
+def _model_name(model: str | ModelName) -> str:
+    if isinstance(model, str):
+        return model
+    return model.value
