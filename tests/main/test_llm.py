@@ -202,9 +202,7 @@ def test_openai_gpt_context_length_uses_gemini_alias_info(
     alias_model: str, canonical_model: str
 ) -> None:
     alias_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=alias_model))
-    canonical_llm = lm.OpenAIGPT(
-        config=lm.OpenAIGPTConfig(chat_model=canonical_model)
-    )
+    canonical_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=canonical_model))
 
     assert alias_llm.info() == canonical_llm.info()
     assert alias_llm.chat_context_length() == canonical_llm.chat_context_length()
