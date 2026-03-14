@@ -228,9 +228,7 @@ def test_get_model_info_warns_on_unknown_models() -> None:
 
     assert info.name == "unknown"
     messages = [record.getMessage() for record in handler.buffer]
-    assert any(
-        model_name in msg and "fallback defaults" in msg for msg in messages
-    )
+    assert any(model_name in msg and "fallback defaults" in msg for msg in messages)
 
 
 def test_model_selection(test_settings: Settings):
