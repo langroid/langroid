@@ -214,9 +214,9 @@ def test_get_model_info_warns_on_unknown_models() -> None:
 
     model_name = "gemini/gemini-999-unknown-preview"
     # Ensure this model hasn't been warned about in a prior test so the
-    # warning actually fires.
-    bare = model_name.split("/", 1)[-1]
-    WARNED_UNKNOWN_MODELS.discard((bare,))
+    # warning actually fires.  The cache key is a tuple of the full model
+    # strings passed to _warn_unknown_model (i.e. with the provider prefix).
+    WARNED_UNKNOWN_MODELS.discard((model_name,))
 
     handler = logging.handlers.MemoryHandler(capacity=100)
     logger = logging.getLogger("langroid.language_models.model_info")
@@ -229,7 +229,7 @@ def test_get_model_info_warns_on_unknown_models() -> None:
     assert info.name == "unknown"
     messages = [record.getMessage() for record in handler.buffer]
     assert any(
-        bare in msg and "fallback defaults" in msg for msg in messages
+        model_name in msg and "fallback defaults" in msg for msg in messages
     )
 
 
