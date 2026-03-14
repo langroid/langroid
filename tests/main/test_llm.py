@@ -1,4 +1,5 @@
 import io
+import logging.handlers
 import os
 import random
 import warnings
@@ -208,19 +209,26 @@ def test_openai_gpt_context_length_uses_gemini_alias_info(
     assert alias_llm.chat_context_length() == canonical_llm.chat_context_length()
 
 
-def test_get_model_info_warns_on_unknown_models(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    model_name = "gemini/gemini-999-unknown-preview"
+def test_get_model_info_warns_on_unknown_models() -> None:
+    from langroid.language_models.model_info import WARNED_UNKNOWN_MODELS
 
-    with caplog.at_level("WARNING"):
+    model_name = "gemini/gemini-999-unknown-preview"
+    # Ensure this model hasn't been warned about in a prior test so the
+    # warning actually fires.  The cache key is a tuple of the full model
+    # strings passed to _warn_unknown_model (i.e. with the provider prefix).
+    WARNED_UNKNOWN_MODELS.discard((model_name,))
+
+    handler = logging.handlers.MemoryHandler(capacity=100)
+    logger = logging.getLogger("langroid.language_models.model_info")
+    logger.addHandler(handler)
+    try:
         info = get_model_info(model_name)
+    finally:
+        logger.removeHandler(handler)
 
     assert info.name == "unknown"
-    assert any(
-        model_name in record.message and "fallback defaults" in record.message
-        for record in caplog.records
-    )
+    messages = [record.getMessage() for record in handler.buffer]
+    assert any(model_name in msg and "fallback defaults" in msg for msg in messages)
 
 
 def test_model_selection(test_settings: Settings):
