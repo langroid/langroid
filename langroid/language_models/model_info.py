@@ -735,15 +735,36 @@ def _normalize_model_names(models: List[str | ModelName]) -> List[str]:
 
 
 def _normalize_gemini_model_name(model: str) -> str | None:
+    """Normalize Gemini model names by stripping provider prefixes and suffixes.
+    
+    Handles patterns like:
+    - gemini/gemini-3-flash-preview -> gemini-3-flash
+    - vertex_ai/gemini-2.0-flash -> gemini-2.0-flash
+    - gemini-2.5-pro-exp -> gemini-2.5-pro
+    """
+    # Strip provider prefix (e.g., "gemini/", "vertex_ai/")
     base_model = model.rsplit("/", 1)[-1]
+    
+    # Check if already canonical
     if base_model in GEMINI_CANONICAL_MODEL_NAMES:
         return base_model
+    
+    # Must start with "gemini-" to be a Gemini model
     if not base_model.startswith("gemini-"):
         return None
 
-    preview_base = base_model.split("-preview", maxsplit=1)[0]
-    if preview_base in GEMINI_CANONICAL_MODEL_NAMES:
-        return preview_base
+    # Strip common suffixes: -preview, -exp, -experimental, -latest
+    suffixes_to_strip = ["-preview", "-exp", "-experimental", "-latest"]
+    normalized = base_model
+    for suffix in suffixes_to_strip:
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)]
+            break
+    
+    # Check if normalized version is canonical
+    if normalized in GEMINI_CANONICAL_MODEL_NAMES:
+        return normalized
+    
     return None
 
 
