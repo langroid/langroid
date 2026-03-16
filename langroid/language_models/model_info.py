@@ -741,9 +741,13 @@ def _normalize_gemini_model_name(model: str) -> str | None:
     if not base_model.startswith("gemini-"):
         return None
 
-    preview_base = base_model.split("-preview", maxsplit=1)[0]
-    if preview_base in GEMINI_CANONICAL_MODEL_NAMES:
-        return preview_base
+    # Try stripping known suffixes to find a canonical name.
+    # Use split (not endswith) for "-preview" so dated variants like
+    # "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
+    for suffix in ("-preview", "-exp", "-experimental", "-latest"):
+        stripped = base_model.split(suffix, maxsplit=1)[0]
+        if stripped != base_model and stripped in GEMINI_CANONICAL_MODEL_NAMES:
+            return stripped
     return None
 
 
