@@ -626,9 +626,22 @@ class OpenAIGPT(LanguageModel):
                     self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
             elif self.is_minimax:
                 self.config.chat_model = self.config.chat_model.replace("minimax/", "")
-                self.api_base = MINIMAX_BASE_URL
+                # Honor caller-supplied base URL (e.g. regional endpoints,
+                # proxies) instead of always forcing the default.
+                openai_api_base = os.getenv("OPENAI_API_BASE")
+                explicit_api_base = (
+                    self.config.api_base
+                    if self.config.api_base and self.config.api_base != openai_api_base
+                    else None
+                )
+                self.api_base = explicit_api_base or MINIMAX_BASE_URL
                 if self.api_key == OPENAI_API_KEY:
-                    self.api_key = os.getenv("MINIMAX_API_KEY", DUMMY_API_KEY)
+                    # Only overwrite with MINIMAX_API_KEY when it is actually
+                    # set, so users who intentionally put their MiniMax key in
+                    # OPENAI_API_KEY are not silently downgraded to a dummy key.
+                    minimax_key = os.getenv("MINIMAX_API_KEY", "")
+                    if minimax_key:
+                        self.api_key = minimax_key
             elif self.is_langdb:
                 self.config.chat_model = self.config.chat_model.replace("langdb/", "")
                 self.api_base = self.config.langdb_params.base_url

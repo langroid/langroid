@@ -22,7 +22,6 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPTConfig,
 )
 
-
 # ──────────────────────── Unit Tests ────────────────────────
 
 
@@ -40,6 +39,9 @@ class TestMiniMaxModelInfo:
         assert MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value == "MiniMax-M2.7-highspeed"
         assert MiniMaxModel.MINIMAX_M2_5.value == "MiniMax-M2.5"
         assert MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value == "MiniMax-M2.5-highspeed"
+        assert MiniMaxModel.MINIMAX_M2_1.value == "MiniMax-M2.1"
+        assert MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value == "MiniMax-M2.1-highspeed"
+        assert MiniMaxModel.MINIMAX_M2.value == "MiniMax-M2"
 
     @pytest.mark.parametrize(
         "model",
@@ -48,6 +50,9 @@ class TestMiniMaxModelInfo:
             MiniMaxModel.MINIMAX_M2_7_HIGHSPEED,
             MiniMaxModel.MINIMAX_M2_5,
             MiniMaxModel.MINIMAX_M2_5_HIGHSPEED,
+            MiniMaxModel.MINIMAX_M2_1,
+            MiniMaxModel.MINIMAX_M2_1_HIGHSPEED,
+            MiniMaxModel.MINIMAX_M2,
         ],
     )
     def test_model_info_registered(self, model):
@@ -200,6 +205,31 @@ class TestMiniMaxProviderRouting:
     def test_minimax_base_url_constant(self):
         """MINIMAX_BASE_URL should point to the correct endpoint."""
         assert MINIMAX_BASE_URL == "https://api.minimax.io/v1"
+
+    def test_minimax_honors_explicit_api_base(self):
+        """Caller-supplied api_base should not be overwritten."""
+        custom_base = "https://api.minimaxi.com/v1"
+        config = OpenAIGPTConfig(
+            api_key="test-key",
+            api_base=custom_base,
+            chat_model="minimax/MiniMax-M2.5",
+        )
+        gpt = OpenAIGPT(config)
+        assert gpt.api_base == custom_base
+
+    def test_minimax_openai_key_not_clobbered_without_minimax_key(self):
+        """OPENAI_API_KEY should be kept when MINIMAX_API_KEY is unset."""
+        env = {"OPENAI_API_KEY": "my-openai-key"}
+        # Ensure MINIMAX_API_KEY is NOT in the environment
+        env_clear = {k: v for k, v in os.environ.items() if k != "MINIMAX_API_KEY"}
+        env_clear.update(env)
+        with patch.dict(os.environ, env_clear, clear=True):
+            config = OpenAIGPTConfig(
+                chat_model="minimax/MiniMax-M2.5",
+            )
+            gpt = OpenAIGPT(config)
+            # Should keep the OPENAI_API_KEY value, not replace with dummy
+            assert gpt.api_key == "my-openai-key"
 
 
 class TestMiniMaxExports:

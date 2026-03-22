@@ -110,6 +110,9 @@ class MiniMaxModel(ModelName):
     MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
     MINIMAX_M2_5 = "MiniMax-M2.5"
     MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
+    MINIMAX_M2_1 = "MiniMax-M2.1"
+    MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
+    MINIMAX_M2 = "MiniMax-M2"
 
 
 class OpenAI_API_ParamInfo(BaseModel):
@@ -729,6 +732,36 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=2.20,
         has_structured_output=True,
         description="MiniMax M2.5 Highspeed (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_1.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_1.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=1_000_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=1.10,
+        output_cost_per_million=4.40,
+        has_structured_output=True,
+        description="MiniMax M2.1 (1M context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=1_000_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=0.55,
+        output_cost_per_million=2.20,
+        has_structured_output=True,
+        description="MiniMax M2.1 Highspeed (1M context)",
+    ),
+    MiniMaxModel.MINIMAX_M2.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=1_000_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=1.10,
+        output_cost_per_million=4.40,
+        has_structured_output=True,
+        description="MiniMax M2 (1M context)",
     ),
 }
 
