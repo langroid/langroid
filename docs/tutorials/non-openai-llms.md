@@ -89,6 +89,28 @@ python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
 
 
 
+## MiniMax LLMs
+
+[MiniMax](https://www.minimax.io/) offers high-performance language models with
+up to 1M context length. Like Gemini, MiniMax models are available via a direct
+OpenAI-compatible API without needing LiteLLM.
+
+To use MiniMax with Langroid:
+
+- set the `MINIMAX_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="minimax/<model_name>"` in the `OpenAIGPTConfig` object
+
+For example:
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="minimax/MiniMax-M2.7",
+)
+```
+
+Available models include `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, and
+`MiniMax-M2`, each with a `-highspeed` variant.
+
 ## AI Gateways for Multiple LLM Providers
 
 In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:

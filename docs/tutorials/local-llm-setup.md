@@ -192,6 +192,21 @@ in the OpenRouter section here) or ollama (see those instructions). E.g. you
 can use the DeepSeek R1 or its distilled variants by setting `chat_model` to 
 `openrouter/deepseek/deepseek-r1` or `ollama/deepseek-r1:8b`.
 
+## MiniMax LLMs
+
+[MiniMax](https://www.minimax.io/) provides high-performance language models
+with up to 1M context length via their OpenAI-compatible API.
+To use MiniMax models with Langroid:
+
+- set up your `MINIMAX_API_KEY` environment variable in the `.env` file or as
+ an explicit export in your shell
+- set the `chat_model` in the `OpenAIGPTConfig` to `minimax/<model_name>`, e.g.
+  `minimax/MiniMax-M2.7` for their flagship model, or
+  `minimax/MiniMax-M2.7-highspeed` for the faster, lower-cost variant.
+
+Available models include `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, and
+`MiniMax-M2`, each with a `-highspeed` variant offering reduced latency and cost.
+
 ## Other non-OpenAI LLMs supported by LiteLLM
 
 For other scenarios of running local/remote LLMs, it is possible that the `LiteLLM` library
