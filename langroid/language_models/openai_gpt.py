@@ -642,6 +642,10 @@ class OpenAIGPT(LanguageModel):
                     minimax_key = os.getenv("MINIMAX_API_KEY", "")
                     if minimax_key:
                         self.api_key = minimax_key
+                # Recompute capabilities now that the prefix has been stripped
+                # and self.info() can find the model in MODEL_INFO.
+                self.supports_strict_tools = True
+                self.supports_json_schema = self.info().has_structured_output
             elif self.is_langdb:
                 self.config.chat_model = self.config.chat_model.replace("langdb/", "")
                 self.api_base = self.config.langdb_params.base_url

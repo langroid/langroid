@@ -217,6 +217,30 @@ class TestMiniMaxProviderRouting:
         gpt = OpenAIGPT(config)
         assert gpt.api_base == custom_base
 
+    def test_minimax_supports_json_schema(self):
+        """MiniMax models with has_structured_output should have JSON schema support.
+
+        Regression test: supports_json_schema was computed before the minimax/
+        prefix was stripped, so self.info() looked up 'minimax/MiniMax-M2.7'
+        (not in MODEL_INFO) and incorrectly disabled JSON schema support.
+        """
+        config = OpenAIGPTConfig(
+            api_key="test-key",
+            chat_model="minimax/MiniMax-M2.7",
+        )
+        gpt = OpenAIGPT(config)
+        # MiniMax-M2.7 has has_structured_output=True in MODEL_INFO
+        assert gpt.supports_json_schema is True
+
+    def test_minimax_supports_strict_tools(self):
+        """MiniMax models should support strict tools (OpenAI-compatible API)."""
+        config = OpenAIGPTConfig(
+            api_key="test-key",
+            chat_model="minimax/MiniMax-M2.7",
+        )
+        gpt = OpenAIGPT(config)
+        assert gpt.supports_strict_tools is True
+
     def test_minimax_openai_key_not_clobbered_without_minimax_key(self):
         """OPENAI_API_KEY should be kept when MINIMAX_API_KEY is unset."""
         env = {"OPENAI_API_KEY": "my-openai-key"}
