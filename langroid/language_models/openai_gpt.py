@@ -686,6 +686,10 @@ class OpenAIGPT(LanguageModel):
                 # Add Portkey-specific headers
                 self.config.headers.update(self.config.portkey_params.get_headers())
 
+            # Sanitize the API key: strip leading/trailing whitespace
+            # (including stray newlines from .env files or CI secrets).
+            self.api_key = self.api_key.strip()
+
             # Create http_client if needed - Priority order:
             # 1. http_client_factory (most flexibility, not cacheable)
             # 2. http_client_config (cacheable, moderate flexibility)
