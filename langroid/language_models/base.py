@@ -98,9 +98,14 @@ class LLMConfig(BaseSettings):
 
     @property
     def model_max_output_tokens(self) -> int:
-        return (
-            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
-        )
+        if self.max_output_tokens:
+            return self.max_output_tokens
+        # Build fallback names by progressively stripping provider prefixes
+        # (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
+        # succeeds even before OpenAIGPT.__init__ strips the prefix.
+        parts = self.chat_model.split("/")
+        fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
+        return get_model_info(self.chat_model, fallbacks).max_output_tokens
 
 
 class LLMFunctionCall(BaseModel):
