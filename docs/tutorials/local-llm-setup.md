@@ -207,6 +207,8 @@ To use MiniMax models with Langroid:
 Available models include `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, and
 `MiniMax-M2`, each with a `-highspeed` variant offering reduced latency and cost.
 
+See the [`chat-minimax.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-minimax.py) example for a ready-to-run interactive chat script using MiniMax.
+
 ## Other non-OpenAI LLMs supported by LiteLLM
 
 For other scenarios of running local/remote LLMs, it is possible that the `LiteLLM` library

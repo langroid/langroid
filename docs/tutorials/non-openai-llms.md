@@ -111,6 +111,8 @@ llm_config = lm.OpenAIGPTConfig(
 Available models include `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, and
 `MiniMax-M2`, each with a `-highspeed` variant.
 
+See the [`chat-minimax.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-minimax.py) example for a ready-to-run interactive chat script.
+
 ## AI Gateways for Multiple LLM Providers
 
 In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
