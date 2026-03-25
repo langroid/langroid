@@ -68,22 +68,22 @@ class TestMiniMaxModelInfo:
         """get_model_info returns correct info for MiniMax models."""
         info = get_model_info("MiniMax-M2.7")
         assert info.provider == ModelProvider.MINIMAX
-        assert info.context_length == 1_000_000
+        assert info.context_length == 204_800
         assert info.has_structured_output is True
 
     def test_model_info_m27_context(self):
-        """M2.7 models have 1M context length."""
+        """M2.7 models have 204K context length."""
         info_m27 = MODEL_INFO[MiniMaxModel.MINIMAX_M2_7.value]
         info_m27hs = MODEL_INFO[MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value]
-        assert info_m27.context_length == 1_000_000
-        assert info_m27hs.context_length == 1_000_000
+        assert info_m27.context_length == 204_800
+        assert info_m27hs.context_length == 204_800
 
     def test_model_info_m25_context(self):
-        """M2.5 models have 204K context length."""
+        """M2.5 models have 196K context length."""
         info_m25 = MODEL_INFO[MiniMaxModel.MINIMAX_M2_5.value]
         info_m25hs = MODEL_INFO[MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value]
-        assert info_m25.context_length == 204_000
-        assert info_m25hs.context_length == 204_000
+        assert info_m25.context_length == 196_608
+        assert info_m25hs.context_length == 196_608
 
     def test_highspeed_models_cheaper(self):
         """Highspeed variants should cost less than standard variants."""
