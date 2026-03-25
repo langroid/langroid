@@ -79,11 +79,11 @@ class TestMiniMaxModelInfo:
         assert info_m27hs.context_length == 204_800
 
     def test_model_info_m25_context(self):
-        """M2.5 models have 196K context length."""
+        """M2.5 models have 204K context length."""
         info_m25 = MODEL_INFO[MiniMaxModel.MINIMAX_M2_5.value]
         info_m25hs = MODEL_INFO[MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value]
-        assert info_m25.context_length == 196_608
-        assert info_m25hs.context_length == 196_608
+        assert info_m25.context_length == 204_800
+        assert info_m25hs.context_length == 204_800
 
     def test_highspeed_models_cheaper(self):
         """Highspeed variants should cost less than standard variants."""
