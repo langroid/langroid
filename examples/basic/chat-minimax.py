@@ -7,7 +7,7 @@
 """
 Basic chat example using MiniMax LLMs.
 
-MiniMax provides high-performance language models with up to 1M context length.
+MiniMax provides high-performance language models with up to 204K context length.
 
 Setup:
 - Set the MINIMAX_API_KEY environment variable (or add to .env file).

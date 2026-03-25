@@ -92,7 +92,7 @@ python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
 ## MiniMax LLMs
 
 [MiniMax](https://www.minimax.io/) offers high-performance language models with
-up to 1M context length. Like Gemini, MiniMax models are available via a direct
+up to 204K context length. Like Gemini, MiniMax models are available via a direct
 OpenAI-compatible API without needing LiteLLM.
 
 To use MiniMax with Langroid:
