@@ -73,17 +73,15 @@ async def test_openai_gpt_async(
     assert capital in response.message
     assert response.cached
 
-    # pass intentional bad msg to test error handling
-    if not test_settings.chat_model.startswith("litellm-proxy/"):
-        messages = [
-            LLMMessage(
-                role=Role.FUNCTION,
-                content="Hello!",
-            ),
-        ]
-
-        with pytest.raises(Exception):
-            await mdl.achat(messages=messages, max_tokens=50)
+    # Verify that function-role messages get a default
+    # 'name' field when none is provided, avoiding the
+    # OpenAI API error about missing 'name'.
+    func_msg = LLMMessage(
+        role=Role.FUNCTION,
+        content="Hello!",
+    )
+    d = func_msg.api_dict(cfg.chat_model)
+    assert d.get("name") == "function"
 
 
 @pytest.mark.asyncio

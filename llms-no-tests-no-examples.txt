@@ -8047,6 +8047,216 @@ for a simple [numbers game](three-agent-chat-num.md).
 }
 </file>
 
+<file path="docs/tutorials/langroid-tour.md">
+# A quick tour of Langroid
+
+This is a quick tour of some Langroid features. For a more detailed guide,
+see the [Getting Started guide](https://langroid.github.io/langroid/quick-start/).
+There are many more features besides the ones shown here. To explore langroid more,
+see the sections of the main [docs](https://langroid.github.io/langroid/),
+and a 
+[Colab notebook](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
+you can try yourself.  
+
+
+## Chat directly with LLM
+
+Imports:
+
+```python
+import langroid as lr
+import langroid.language_models as lm
+```
+
+
+Set up the LLM; note how you can specify the chat model -- if omitted, defaults
+to OpenAI `GPT4o`. See the guide to using Langroid with 
+[local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
+and with [non-OpenAI LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
+    
+```python
+llm_config = lm.OpenAIGPTConfig( 
+   chat_model="gpt-5-mini"
+)
+llm = lm.OpenAIGPT(llm_config)
+```
+
+Chat with bare LLM -- no chat accumulation, i.e. follow-up responses will *not*
+be aware of prior conversation history (you need an Agent for that, see below).
+
+```python
+llm.chat("1 2 4 7 11 ?")
+# ==> answers 16, with some explanation
+```
+
+## Agent
+
+Make a [`ChatAgent`][langroid.agent.chat_agent.ChatAgent], 
+and chat with it; now accumulates conv history
+
+```python
+agent = lr.ChatAgent(lr.ChatAgentConfig(llm=llm_config))
+agent.llm_response("Find the next number: 1 2 4 7 11 ?")
+# => responds 16
+agent.llm_response("and then?)
+# => answers 22
+```
+
+## Task
+
+Make a [`Task`][langroid.agent.task.Task] and create a chat loop with the user:
+
+```python
+task = lr.Task(agent, interactive=True)
+task.run()
+```
+
+## Tools/Functions/Structured outputs:
+
+Define a [`ToolMessage`][langroid.agent.tool_message.ToolMessage] 
+using Pydantic (v1) -- this gets transpiled into system-message instructions
+to the LLM, so you never have to deal with writing a JSON schema.
+(Besides JSON-based tools, Langroid also supports 
+[XML-based tools](https://langroid.github.io/langroid/notes/xml-tools/), which 
+are far more reliable when having the LLM return code in a structured output.)
+
+
+```python
+from pydantic import BaseModel
+
+class CityTemperature(BaseModel):
+    city: str
+    temp: float
+
+class WeatherTool(lr.ToolMessage):
+    request: str = "weather_tool" #(1)!
+    purpose: str = "To extract <city_temp> info from text" #(2)!
+
+    city_temp: CityTemperature
+
+    # tool handler
+    def handle(self) -> CityTemperature:
+        return self.city_temp
+```
+
+1. When this tool is enabled for an agent, a method named `weather_tool` gets auto-inserted in the agent class, 
+   with body being the `handle` method -- this method handles the LLM's generation 
+   of this tool.
+2. The value of the `purpose` field is used to populate the system message to the LLM,
+   along with the Tool's schema derived from its Pydantic-based definition.
+
+Enable the Agent to use the `ToolMessage`, and set a system message describing the 
+agent's task:
+
+```python
+agent.enable_message(WeatherTool)
+agent.config.system_message = """
+ Your job is to extract city and temperature info from user input
+ and return it using the `weather_tool`.
+"""
+```
+
+Create specialized task that returns a `CityTemperature` object:
+
+```python
+# configure task to terminate after (a) LLM emits a tool, (b) tool is handled by Agent
+task_config = lr.TaskConfig(done_sequences=["T,A"])
+
+# create a task that returns a CityTemperature object
+task = lr.Task(agent, interactive=False, config=task_config)[CityTemperature]
+
+# run task, with built-in tool-handling loop
+data = task.run("It is 45 degrees F in Boston")
+
+assert data.city == "Boston"
+assert int(data.temp) == 45
+```
+
+## Chat with a document (RAG)
+
+Create a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent].
+
+```python
+doc_agent_config = lr.agent.special.DocChatAgentConfig(llm=llm_config)
+doc_agent = lr.agent.special.DocChatAgent(doc_agent_config)
+```
+
+Ingest the contents of a web page into the agent 
+(this involves chunking, indexing into a vector-database, etc.):
+
+```python
+doc_agent.ingest_doc_paths("https://en.wikipedia.org/wiki/Ludwig_van_Beethoven")
+```
+
+Ask a question:
+
+```
+result = doc_agent.llm_response("When did Beethoven move from Bonn to Vienna?")
+```
+
+You should see the streamed response with citations like this:
+
+![langroid-tour-beethoven.png](langroid-tour-beethoven.png)
+
+## Two-agent interaction
+
+Set up a teacher agent:
+
+```python
+from langroid.agent.tools.orchestration import DoneTool
+
+teacher = lr.ChatAgent(
+    lr.ChatAgentConfig(
+        llm=llm_config,
+        system_message=f"""
+        Ask a numbers-based question, and your student will answer.
+        You can then provide feedback or hints to the student to help them
+        arrive at the right answer. Once you receive the right answer,
+        use the `{DoneTool.name()}` tool to end the session.
+        """
+    )
+)
+
+teacher.enable_message(DoneTool)
+teacher_task = lr.Task(teacher, interactive=False)
+
+```
+
+Set up a student agent:
+
+```python
+student = lr.ChatAgent(
+    lr.ChatAgentConfig(
+        llm=llm_config,
+        system_message=f"""
+        You will receive a numbers-related question. Answer to the best of
+        your ability. If your answer is wrong, you will receive feedback or hints,
+        and you can revise your answer, and repeat this process until you get 
+        the right answer.
+        """
+    )
+)
+
+student_task = lr.Task(student, interactive=False, single_round=True)
+```
+
+Make the `student_task` a subtask of the `teacher_task`:
+
+```python
+teacher_task.add_sub_task(student_task)
+```
+
+Run the teacher task:
+
+```python
+teacher_task.run()
+```
+
+You should then see this type of interaction:
+
+![langroid-tour-teacher.png](langroid-tour-teacher.png)
+</file>
+
 <file path="docs/tutorials/llm-usage-options.md">
 # Options for accessing LLMs
 
@@ -8301,472 +8511,6 @@ See [here](https://langroid.github.io/langroid/tutorials/local-llm-setup/) for
 a guide to using Langroid with Open LLMs.
 </file>
 
-<file path="docs/tutorials/local-llm-setup.md">
-# Setting up a Local/Open LLM to work with Langroid
-
-!!! tip "Examples scripts in [`examples/`](https://github.com/langroid/langroid/tree/main/examples) directory."
-      There are numerous examples of scripts that can be run with local LLMs,
-      in the [`examples/`](https://github.com/langroid/langroid/tree/main/examples)
-      directory of the main `langroid` repo. These examples are also in the 
-      [`langroid-examples`](https://github.com/langroid/langroid-examples/tree/main/examples),
-      although the latter repo may contain some examples that are not in the `langroid` repo.
-      Most of these example scripts allow you to specify an LLM in the format `-m <model>`,
-      where the specification of `<model>` is described in the quide below for local/open LLMs, 
-      or in the [Non-OpenAI LLM](https://langroid.github.io/langroid/tutorials/non-openai-llms/) guide. Scripts 
-      that have the string `local` in their name have been especially designed to work with 
-      certain local LLMs, as described in the respective scripts.
-      If you want a pointer to a specific script that illustrates a 2-agent chat, have a look 
-      at [`chat-search-assistant.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-assistant.py).
-      This specific script, originally designed for GPT-4/GPT-4o, works well with `llama3-70b` 
-      (tested via Groq, mentioned below).
-
-## Easiest: with Ollama
-
-As of version 0.1.24, Ollama provides an OpenAI-compatible API server for the LLMs it supports,
-which massively simplifies running these LLMs with Langroid. Example below.
-
-```
-ollama pull mistral:7b-instruct-v0.2-q8_0
-```
-This provides an OpenAI-compatible 
-server for the `mistral:7b-instruct-v0.2-q8_0` model.
-
-You can run any Langroid script using this model, by setting the `chat_model`
-in the `OpenAIGPTConfig` to `ollama/mistral:7b-instruct-v0.2-q8_0`, e.g.
-
-```python
-import langroid.language_models as lm
-import langroid as lr
-
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="ollama/mistral:7b-instruct-v0.2-q8_0",
-    chat_context_length=16_000, # adjust based on model
-)
-agent_config = lr.ChatAgentConfig(
-    llm=llm_config,
-    system_message="You are helpful but concise",
-)
-agent = lr.ChatAgent(agent_config)
-# directly invoke agent's llm_response method
-# response = agent.llm_response("What is the capital of Russia?")
-task = lr.Task(agent, interactive=True)
-task.run() # for an interactive chat loop
-```
-
-## Setup Ollama with a GGUF model from HuggingFace
-
-Some models are not directly supported by Ollama out of the box. To server a GGUF
-model with Ollama, you can download the model from HuggingFace and set up a custom
-Modelfile for it.
-
-E.g. download the GGUF version of `dolphin-mixtral` from
-[here](https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF)
-
-(specifically, download this file `dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf`)
-
-To set up a custom ollama model based on this:
-
-- Save this model at a convenient place, e.g. `~/.ollama/models/`
-- Create a modelfile for this model. First see what an existing modelfile
-  for a similar model looks like, e.g. by running:
-
-```
-ollama show --modelfile dolphin-mixtral:latest
-```
-You will notice this file has a FROM line followed by a prompt template and other settings.
-Create a new file with these contents.
-Only  change the  `FROM ...` line with the path to the model you downloaded, e.g.
-```
-FROM /Users/blah/.ollama/models/dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf
-```
-
-- Save this modelfile somewhere, e.g. `~/.ollama/modelfiles/dolphin-mixtral-gguf`
-- Create a new ollama model based on this file:
-```
-ollama create dolphin-mixtral-gguf -f ~/.ollama/modelfiles/dolphin-mixtral-gguf
-``` 
-
-- Run this new model using `ollama run dolphin-mixtral-gguf`
-
-To use this model with Langroid you can then specify `ollama/dolphin-mixtral-gguf`
-as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
-When a script supports it, you can also pass in the model name via
-`-m ollama/dolphin-mixtral-gguf`
-
-## Local LLMs using LMStudio
-
-LMStudio is one of the simplest ways to download run open-weight LLMs locally.
-See their docs at [lmstudio.ai](https://lmstudio.ai/docs) for installation and usage 
-instructions. Once you download a model, you can use the "server" option to have it 
-served via an OpenAI-compatible API at a local IP like `https://127.0.0.1:1234/v1`.
-As with any other scenario of running a local LLM, you can use this with Langroid by
-setting `chat_model` as follows (note you should not include the `https://` part):
-
-```python
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="local/127.0.0.1234/v1",
-    ...
-)
-```
-
-## Setup llama.cpp with a GGUF model from HuggingFace
-
-See `llama.cpp`'s [GitHub page](https://github.com/ggerganov/llama.cpp/tree/master) for build and installation instructions.
-
-After installation, begin as above with downloading a GGUF model from HuggingFace; for example, the quantized `Qwen2.5-Coder-7B` from [here](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF); specifically, [this file](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/blob/main/qwen2.5-coder-7b-instruct-q2_k.gguf).
-
-Now, the server can be started with `llama-server -m qwen2.5-coder-7b-instruct-q2_k.gguf`.
-
-In addition, your `llama.cpp` may be built with support for simplified management of HuggingFace models (specifically, `libcurl` support is required); in this case, `llama.cpp` will download HuggingFace models to a cache directory, and the server may be run with:
-```bash
-llama-server \
-      --hf-repo Qwen/Qwen2.5-Coder-7B-Instruct-GGUF \
-      --hf-file qwen2.5-coder-7b-instruct-q2_k.gguf
-```
-
-To use the model with Langroid, specify `llamacpp/localhost:{port}` as the `chat_model`; the default port is 8080.
-
-## Setup vLLM with a model from HuggingFace
-
-See [the vLLM docs](https://docs.vllm.ai/en/stable/getting_started/installation.html) for installation and configuration options. To run a HuggingFace model with vLLM, use `vllm serve`, which provides an OpenAI-compatible server. 
-
-For example, to run `Qwen2.5-Coder-32B`, run `vllm serve Qwen/Qwen2.5-Coder-32B`.
-
-If the model is not publicly available, set the environment varaible `HF_TOKEN` to your HuggingFace token with read access to the model repo.
-
-To use the model with Langroid, specify `vllm/Qwen/Qwen2.5-Coder-32B` as the `chat_model` and, if a port other than the default 8000 was used, set `api_base` to `localhost:{port}`.
-
-## Setup vLLM with a GGUF model from HuggingFace
-
-`vLLM` supports running quantized models from GGUF files; however, this is currently an experimental feature. To run a quantized `Qwen2.5-Coder-32B`, download the model from [the repo](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF), specifically [this file](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF/blob/main/qwen2.5-coder-32b-instruct-q4_0.gguf). 
-
-The model can now be run with `vllm serve qwen2.5-coder-32b-instruct-q4_0.gguf --tokenizer Qwen/Qwen2.5-Coder-32B` (the tokenizer of the base model rather than the quantized model should be used).
-
-To use the model with Langroid, specify `vllm/qwen2.5-coder-32b-instruct-q4_0.gguf` as the `chat_model` and, if a port other than the default 8000 was used, set `api_base` to `localhost:{port}`.
-
-## "Local" LLMs hosted on Groq
-In this scenario, an open-source LLM (e.g. `llama3.1-8b-instant`) is hosted on a Groq server
-which provides an OpenAI-compatible API. Using this with langroid is exactly analogous
-to the Ollama scenario above: you can set the `chat_model` in the `OpenAIGPTConfig` to
-`groq/<model_name>`, e.g. `groq/llama3.1-8b-instant`. 
-For this to work, ensure you have a `GROQ_API_KEY` environment variable set in your
-`.env` file. See [groq docs](https://console.groq.com/docs/quickstart).
-
-## "Local" LLMs hosted on Cerebras
-This works exactly like with Groq, except you set up a `CEREBRAS_API_KEY` environment variable, and specify the `chat_model` as `cerebras/<model_name>`, e.g. `cerebras/llama3.1-8b`. See the Cerebras [docs](https://inference-docs.cerebras.ai/introduction) for details on which LLMs are supported.
-
-## Open/Proprietary LLMs via OpenRouter
-
-OpenRouter is a **paid service** that provides an OpenAI-compatible API 
-for practically any LLM, open or proprietary.
-Using this with Langroid is similar to the `groq` scenario above:
-
-- Ensure you have an `OPENROUTER_API_KEY` set up in your environment (or `.env` file), and 
-- Set the `chat_model` in the `OpenAIGPTConfig` to 
-  `openrouter/<model_name>`, where `<model_name>` is the name of the model on the 
-[OpenRouter](https://openrouter.ai/) website, e.g. `qwen/qwen-2.5-7b-instruct`.
-
-This is a good option if you want to use larger open LLMs without having to download
-them locally (especially if your local machine does not have the resources to run them).
-Besides using specific LLMs, OpenRouter also has smart routing/load-balancing.
-OpenRouter is also convenient for using proprietary LLMs (e.g. gemini, amazon) via 
-a single convenient API.
-
-## "Local" LLMs hosted on GLHF.chat
-
-See [glhf.chat](https://glhf.chat/chat/create) for a list of available models.
-
-To run with one of these models, set the `chat_model` in the `OpenAIGPTConfig` to
-`"glhf/<model_name>"`, where `model_name` is `hf:` followed by the HuggingFace repo 
-path, e.g. `Qwen/Qwen2.5-Coder-32B-Instruct`, so the full `chat_model` would be
-`"glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct"`. 
-
-## DeepSeek LLMs
-
-As of 26-Dec-2024, DeepSeek models are available via their [api](https://platform.deepseek.com).
-To use it with Langroid:
-
-- set up your `DEEPSEEK_API_KEY` environment variable in the `.env` file or as
- an explicit export in your shell
-- set the `chat_model` in the `OpenAIGPTConfig` to `deepseek/deepseek-chat` to use the 
-`DeepSeek-V3` model, or `deepseek/deepseek-reasoner` to use the full (i.e. non-distilled) `DeepSeek-R1` "reasoning" model.
-
-The DeepSeek models are also available via OpenRouter (see the corresponding 
-in the OpenRouter section here) or ollama (see those instructions). E.g. you
-can use the DeepSeek R1 or its distilled variants by setting `chat_model` to 
-`openrouter/deepseek/deepseek-r1` or `ollama/deepseek-r1:8b`.
-
-## Other non-OpenAI LLMs supported by LiteLLM
-
-For other scenarios of running local/remote LLMs, it is possible that the `LiteLLM` library
-supports an "OpenAI adaptor" for these models (see their [docs](https://litellm.vercel.app/docs/providers)).
-
-Depending on the specific model, the `litellm` docs may say you need to 
-specify a model in the form `<provider>/<model>`, e.g. `palm/chat-bison`. 
-To use the model with Langroid, simply prepend `litellm/` to this string, e.g. `litellm/palm/chat-bison`,
-when you specify the `chat_model` in the `OpenAIGPTConfig`.
-
-To use `litellm`, ensure you have the `litellm` extra installed, 
-via `pip install langroid[litellm]` or equivalent.
-
-
-
-## Harder: with oobabooga
-Like Ollama, [oobabooga/text-generation-webui](https://github.com/oobabooga/text-generation-webui) provides an OpenAI-API-compatible API server, but the setup 
-is significantly more involved. See their github page for installation and model-download instructions.
-
-Once you have finished the installation, you can spin up the server for an LLM using
-something like this:
-
-```
-python server.py --api --model mistral-7b-instruct-v0.2.Q8_0.gguf --verbose --extensions openai --nowebui
-```
-This will show a message saying that the OpenAI-compatible API is running at `http://127.0.0.1:5000`
-
-Then in your Langroid code you can specify the LLM config using
-`chat_model="local/127.0.0.1:5000/v1` (the `v1` is the API version, which is required).
-As with Ollama, you can use the `-m` arg in many of the example scripts, e.g.
-```
-python examples/docqa/rag-local-simple.py -m local/127.0.0.1:5000/v1
-```
-
-Recommended: to ensure accurate chat formatting (and not use the defaults from ooba),
-  append the appropriate HuggingFace model name to the
-  -m arg, separated by //, e.g. 
-```
-python examples/docqa/rag-local-simple.py -m local/127.0.0.1:5000/v1//mistral-instruct-v0.2
-```
-  (no need to include the full model name, as long as you include enough to
-   uniquely identify the model's chat formatting template)
-
-
-## Other local LLM scenarios
-
-There may be scenarios where the above `local/...` or `ollama/...` syntactic shorthand
-does not work.(e.g. when using vLLM to spin up a local LLM at an OpenAI-compatible
-endpoint). For these scenarios, you will have to explicitly create an instance of 
-`lm.OpenAIGPTConfig` and set *both* the `chat_model` and `api_base` parameters.
-For example, suppose you are able to get responses from this endpoint using something like:
-```bash
-curl http://192.168.0.5:5078/v1/chat/completions \
-    -H "Content-Type: application/json" \
-    -d '{
-        "model": "Mistral-7B-Instruct-v0.2",
-        "messages": [
-             {"role": "user", "content": "Who won the world series in 2020?"}
-        ]
-    }'
-```
-To use this endpoint with Langroid, you would create an `OpenAIGPTConfig` like this:
-```python
-import langroid.language_models as lm
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="Mistral-7B-Instruct-v0.2",
-    api_base="http://192.168.0.5:5078/v1",
-)
-```
-
-## Quick testing with local LLMs
-As mentioned [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/#quick-testing-with-non-openai-models), 
-you can run many of the [tests](https://github.com/langroid/langroid/tree/main/tests/main) in the main langroid repo against a local LLM
-(which by default run against an OpenAI model), 
-by specifying the model as `--m <model>`, 
-where `<model>` follows the syntax described in the previous sections. Here's an example:
-
-```bash
-pytest tests/main/test_chat_agent.py --m ollama/mixtral
-```
-Of course, bear in mind that the tests may not pass due to weaknesses of the local LLM.
-</file>
-
-<file path="docs/tutorials/non-openai-llms.md">
-# Using Langroid with Non-OpenAI LLMs
-
-Langroid was initially written to work with OpenAI models via their API.
-This may sound limiting, but fortunately:
-
-- Many open-source LLMs can be served via 
-OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.io/langroid/tutorials/local-llm-setup/) guide for details.
-- There are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
-  that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
-(e.g. Anthropic's Claude, Google's Gemini).
-- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), and [OpenRouter](https://openrouter.ai/) provide unified access to multiple LLM providers with additional features like cost control, observability, caching, and fallback strategies.
-  
-Below we show how you can use these various options with Langroid.
-
-## Create an `OpenAIGPTConfig` object with `chat_model = "litellm/..."`
-
-!!! note "Install `litellm` extra"
-    To use `litellm` you need to install Langroid with the `litellm` extra, e.g.:
-    `pip install "langroid[litellm]"`
-
-Next, look up the instructions in LiteLLM docs for the specific model you are 
-interested. Here we take the example of Anthropic's `claude-instant-1` model.
-Set up the necessary environment variables as specified in the LiteLLM docs,
-e.g. for the `claude-instant-1` model, you will need to set the `ANTHROPIC_API_KEY`
-```bash
-export ANTHROPIC_API_KEY=my-api-key
-```
-
-Now you are ready to create an instance of `OpenAIGPTConfig` with the 
-`chat_model` set to `litellm/<model_spec>`, where you should set `model_spec` based on LiteLLM 
-docs. For example, for the `claude-instant-1` model, you would set `chat_model` to
-`litellm/claude-instant-1`. But if you are using the model via a 3rd party provider,
-(e.g. those via Amazon Bedrock), you may also need to have a `provider` part in the `model_spec`, e.g. 
-`litellm/bedrock/anthropic.claude-instant-v1`. In general you can see which of
-these to use, from the LiteLLM docs.
-
-```python
-import langroid.language_models as lm
-
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="litellm/claude-instant-v1",
-    chat_context_length=8000, # adjust according to model
-)
-```
-
-A similar process works for the `Gemini 1.5 Pro` LLM:
-
-- get the API key [here](https://aistudio.google.com/)
-- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
-- set `chat_model="litellm/gemini/gemini-1.5-pro-latest"` in the `OpenAIGPTConfig` object
-
-For other gemini models supported by litellm, see [their docs](https://litellm.vercel.app/docs/providers/gemini)
-
-## Gemini LLMs via OpenAI client, without LiteLLM
-
-This is now the recommended way to use Gemini LLMs with Langroid,
-where you don't need to use LiteLLM. As of 11/20/2024, these models
-are [available via the OpenAI client](https://developers.googleblog.com/en/gemini-is-now-accessible-from-the-openai-library/).
-
-To use langroid with Gemini LLMs, all you have to do is:
-
-- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
-- set `chat_model="gemini/<model_name>"` in the `OpenAIGPTConfig` object,  
-  where <model_name> is one of "gemini-1.5-flash", "gemini-1.5-flash-8b", or "gemini-1.5-pro"
-
-See [here](https://ai.google.dev/gemini-api/docs/models/gemini) for details on Gemini models.
-
-For example, you can use this `llm_config`:
-
-```python
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="gemini/" + lm.OpenAIChatModel.GEMINI_1_5_FLASH,
-)
-```
-
-In most tests you can switch to a gemini model, e.g. `--m gemini/gemini-1.5-flash`, 
-e.g.:
-
-```bash
-pytest -xvs tests/main/test_llm.py --m gemini/gemini-1.5-flash
-```
-
-Many of the example scripts allow switching the model using `-m` or `--model`, e.g.
-
-```bash
-python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
-```
-
-
-
-
-## AI Gateways for Multiple LLM Providers
-
-In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
-
-### LangDB
-
-[LangDB](https://langdb.ai/) is an AI gateway offering OpenAI-compatible APIs to access 250+ LLMs with cost control, observability, and performance benchmarking. LangDB enables seamless model switching while providing detailed analytics and usage tracking.
-
-To use LangDB with Langroid:
-- Set up your `LANGDB_API_KEY` and `LANGDB_PROJECT_ID` environment variables
-- Set `chat_model="langdb/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"langdb/anthropic/claude-3.7-sonnet"`)
-
-For detailed setup and usage instructions, see the [LangDB integration guide](../notes/langdb.md).
-
-### Portkey
-
-[Portkey](https://portkey.ai) is a comprehensive AI gateway that provides access to 200+ models from various providers through a unified API. It offers advanced features like intelligent caching, automatic retries, fallback strategies, and comprehensive observability tools for production deployments.
-
-To use Portkey with Langroid:
-- Set up your `PORTKEY_API_KEY` environment variable (plus provider API keys like `OPENAI_API_KEY`)
-- Set `chat_model="portkey/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"portkey/openai/gpt-4o-mini"`)
-
-For detailed setup and usage instructions, see the [Portkey integration guide](../notes/portkey.md).
-
-### OpenRouter
-
-[OpenRouter](https://openrouter.ai/) provides access to a wide variety of both open and proprietary LLMs through a unified API. It features automatic routing and load balancing, making it particularly useful for accessing larger open LLMs without local resources and for using multiple providers through a single interface.
-
-To use OpenRouter with Langroid:
-- Set up your `OPENROUTER_API_KEY` environment variable
-- Set `chat_model="openrouter/<model_name>"` in the `OpenAIGPTConfig`
-
-For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
-
-## Working with the created `OpenAIGPTConfig` object
-
-From here you can proceed as usual, creating instances of `OpenAIGPT`,
-`ChatAgentConfig`, `ChatAgent` and `Task` object as usual.
-
-E.g. you can create an object of class `OpenAIGPT` (which represents any
-LLM with an OpenAI-compatible API) and interact with it directly:
-```python
-llm = lm.OpenAIGPT(llm_config)
-messages = [
-    LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM),
-    LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
-],
-response = mdl.chat(messages, max_tokens=50)
-```
-
-When you interact directly with the LLM, you are responsible for keeping dialog history.
-Also you would often want an LLM to have access to tools/functions and external
-data/documents (e.g. vector DB or traditional DB). An Agent class simplifies managing all of these.
-For example, you can create an Agent powered by the above LLM, wrap it in a Task and have it
-run as an interactive chat app:
-
-```python
-agent_config = lr.ChatAgentConfig(llm=llm_config, name="my-llm-agent")
-agent = lr.ChatAgent(agent_config)
-
-task = lr.Task(agent, name="my-llm-task")
-task.run()
-```
-
-## Example: Simple Chat script with a non-OpenAI proprietary model
-
-Many of the Langroid example scripts have a convenient `-m`  flag that lets you
-easily switch to a different model. For example, you can run 
-the `chat.py` script in the `examples/basic` folder with the 
-`litellm/claude-instant-v1` model:
-```bash
-python3 examples/basic/chat.py -m litellm/claude-instant-1
-```
-
-## Quick testing with non-OpenAI models
-
-There are numerous tests in the main [Langroid repo](https://github.com/langroid/langroid) that involve
-LLMs, and once you setup the dev environment as described in the README of the repo, 
-you can run any of those tests (which run against the default GPT4 model) against
-local/remote models that are proxied by `liteLLM` (or served locally via the options mentioned above,
-such as `oobabooga`, `ollama` or `llama-cpp-python`), using the `--m <model-name>` option,
-where `model-name` takes one of the forms above. Some examples of tests are:
-
-```bash
-pytest -s tests/test_llm.py --m local/localhost:8000
-pytest -s tests/test_llm.py --m litellm/claude-instant-1
-```
-When the `--m` option is omitted, the default OpenAI GPT4 model is used.
-
-!!! note "`chat_context_length` is not affected by `--m`"
-      Be aware that the `--m` only switches the model, but does not affect the `chat_context_length` 
-      parameter in the `OpenAIGPTConfig` object. which you may need to adjust for different models.
-      So this option is only meant for quickly testing against different models, and not meant as
-      a way to switch between models in a production environment.
-</file>
-
 <file path="docs/tutorials/postgresql-agent.md">
 # Chat with a PostgreSQL DB using SQLChatAgent
 
@@ -8908,93 +8652,6 @@ python3 examples/data-qa/sql-chat/sql_chat.py
 ```
 
 This script will prompt you for the database URI, and then start the agent.
-</file>
-
-<file path="docs/tutorials/supported-models.md">
-# Langroid Supported LLMs and Providers
-
-Langroid supports a wide range of Language Model providers through its 
-[`OpenAIGPTConfig`][langroid.language_models.openai_gpt.OpenAIGPTConfig] class. 
-
-!!! note "OpenAIGPTConfig is not just for OpenAI models!"
-    The `OpenAIGPTConfig` class is a generic configuration class that can be used
-    to configure any LLM provider that is OpenAI API-compatible.
-    This includes both local and remote models.
-
-You would typically set up the `OpenAIGPTConfig` class with the `chat_model`
-parameter, which specifies the model you want to use, and other 
-parameters such as `max_output_tokens`, `temperature`, etc
-(see the 
-[`OpenAIGPTConfig`][langroid.language_models.openai_gpt.OpenAIGPTConfig] class
-and its parent class 
-[`LLModelConfig`][langroid.language_models.base.LLMConfig] for
-full parameter details):
-
-
-
-```python
-import langroid.language_models as lm
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="<model-name>", # possibly includes a <provider-name> prefix
-    api_key="api-key", # optional, prefer setting in environment variables
-    # ... other params such as max_tokens, temperature, etc.
-)
-```
-
-Below are `chat_model` examples for each supported provider.
-For more details see the guides on setting up Langroid with 
-[local](https://langroid.github.io/langroid/tutorials/local-llm-setup/) 
-and [non-OpenAI LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
-Once you set up the `OpenAIGPTConfig`, you can then directly interact with the LLM,
-or set up an Agent with this LLM, and use it by itself, or in a multi-agent setup,
-as shown in the [Langroid quick tour](https://langroid.github.io/langroid/tutorials/langroid-tour/)
-
-
-Although we support specifying the `api_key` directly in the config
-(not recommended for security reasons),
-more typically you would set the `api_key` in your environment variables.
-Below is a table showing for each provider, an example `chat_model` setting, 
-and which environment variable to set for the API key.
-
-
-
-
-| Provider      | `chat_model` Example                                     | API Key Environment Variable |
-|---------------|----------------------------------------------------------|----------------------------|
-| OpenAI        | `gpt-4o`                                                 | `OPENAI_API_KEY` |
-| Groq          | `groq/llama3.3-70b-versatile`                            | `GROQ_API_KEY` |
-| Cerebras      | `cerebras/llama-3.3-70b`                                 | `CEREBRAS_API_KEY` |
-| Gemini        | `gemini/gemini-2.0-flash`                                | `GEMINI_API_KEY` |
-| DeepSeek      | `deepseek/deepseek-reasoner`                             | `DEEPSEEK_API_KEY` |
-| GLHF          | `glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct`                | `GLHF_API_KEY` |
-| OpenRouter    | `openrouter/deepseek/deepseek-r1-distill-llama-70b:free` | `OPENROUTER_API_KEY` |
-| Ollama        | `ollama/qwen2.5`                                         | `OLLAMA_API_KEY` (usually `ollama`) |
-| VLLM          | `vllm/mistral-7b-instruct`                               | `VLLM_API_KEY` |
-| LlamaCPP      | `llamacpp/localhost:8080`                                | `LLAMA_API_KEY` |
-| Generic Local | `local/localhost:8000/v1`                                | No specific env var required |
-| LiteLLM       | `litellm/anthropic/claude-3-7-sonnet`                    | Depends on provider |
-|               | `litellm/mistral-small`                                  | Depends on provider |
-| HF Template   | `local/localhost:8000/v1//mistral-instruct-v0.2`         | Depends on provider |
-|               | `litellm/ollama/mistral//hf`                             | |
-
-## HuggingFace Chat Template Formatting
-
-For models requiring specific prompt formatting:
-
-```python
-import langroid.language_models as lm
-
-# Specify formatter directly
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="local/localhost:8000/v1//mistral-instruct-v0.2",
-    formatter="mistral-instruct-v0.2"
-)
-
-# Using HF formatter auto-detection
-llm_config = lm.OpenAIGPTConfig(
-    chat_model="litellm/ollama/mistral//hf",
-)
-```
 </file>
 
 <file path="docs/auto_docstring.py">
@@ -16222,6 +15879,143 @@ class QueryPlanFeedbackTool(ToolMessage):
     suggested_fix: str
 </file>
 
+<file path="langroid/agent/special/relevance_extractor_agent.py">
+"""
+Agent to retrieve relevant segments from a body of text,
+that are relevant to a query.
+
+"""
+
+import logging
+from typing import Optional, no_type_check
+
+from rich.console import Console
+
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocument
+from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
+from langroid.language_models.base import LLMConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.parsing.utils import extract_numbered_segments, number_segments
+from langroid.utils.constants import DONE, NO_ANSWER
+
+console = Console()
+logger = logging.getLogger(__name__)
+
+
+class RelevanceExtractorAgentConfig(ChatAgentConfig):
+    llm: LLMConfig | None = OpenAIGPTConfig()
+    segment_length: int = 1  # number of sentences per segment
+    query: str = ""  # query for relevance extraction
+    handle_llm_no_tool: str = """
+    You FORGOT to use the `extract_segments` tool!
+    Remember that your response MUST be a JSON-formatted string
+    starting with `{"request": "extract_segments", ...}`
+    """
+    system_message: str = """
+    The user will give you a PASSAGE containing segments numbered as  
+    <#1#>, <#2#>, <#3#>, etc.,
+    followed by a QUERY. Extract ONLY the segment-numbers from 
+    the PASSAGE that are RELEVANT to the QUERY.
+    Present the extracted segment-numbers using the `extract_segments` tool/function.
+    Note that your response MUST be a JSON-formatted string 
+    starting with `{"request": "extract_segments", ...}`
+    """
+
+
+class RelevanceExtractorAgent(ChatAgent):
+    """
+    Agent for extracting segments from text, that are relevant to a given query.
+    """
+
+    def __init__(self, config: RelevanceExtractorAgentConfig):
+        super().__init__(config)
+        self.config: RelevanceExtractorAgentConfig = config
+        self.enable_message(SegmentExtractTool)
+        self.numbered_passage: Optional[str] = None
+
+    @no_type_check
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """Compose a prompt asking to extract relevant segments from a passage.
+        Steps:
+        - number the segments in the passage
+        - compose prompt
+        - send to LLM
+        """
+        assert self.config.query is not None, "No query specified"
+        assert message is not None, "No message specified"
+        message_str = message.content if isinstance(message, ChatDocument) else message
+        # number the segments in the passage
+        self.numbered_passage = number_segments(message_str, self.config.segment_length)
+        # compose prompt
+        prompt = f"""
+        <Instructions>
+        Given the PASSAGE below with NUMBERED segments, and the QUERY,
+        extract ONLY the segment-numbers that are RELEVANT to the QUERY,
+        and present them using the `extract_segments` tool/function,
+        i.e. your response MUST be a JSON-formatted string starting with
+        `{{"request": "extract_segments", ...}}`
+        </Instructions>
+        
+        PASSAGE:
+        {self.numbered_passage}
+        
+        QUERY: {self.config.query}
+        """
+        # send to LLM
+        response = super().llm_response(prompt)
+        return response
+
+    @no_type_check
+    async def llm_response_async(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """
+        Compose a prompt asking to extract relevant segments from a passage.
+        Steps:
+        - number the segments in the passage
+        - compose prompt
+        - send to LLM
+        The LLM is expected to generate a structured msg according to the
+        SegmentExtractTool schema, i.e. it should contain a `segment_list` field
+        whose value is a list of segment numbers or ranges, like "10,12,14-17".
+        """
+
+        assert self.config.query is not None, "No query specified"
+        assert message is not None, "No message specified"
+        message_str = message.content if isinstance(message, ChatDocument) else message
+        # number the segments in the passage
+        self.numbered_passage = number_segments(message_str, self.config.segment_length)
+        # compose prompt
+        prompt = f"""
+        PASSAGE:
+        {self.numbered_passage}
+        
+        QUERY: {self.config.query}
+        """
+        # send to LLM
+        response = await super().llm_response_async(prompt)
+        return response
+
+    def extract_segments(self, msg: SegmentExtractTool) -> str:
+        """Method to handle a segmentExtractTool message from LLM"""
+        spec = msg.segment_list
+        if len(self.message_history) == 0:
+            return DONE + " " + NO_ANSWER
+        if spec is None or spec.strip() in ["", NO_ANSWER]:
+            return DONE + " " + NO_ANSWER
+        assert self.numbered_passage is not None, "No numbered passage"
+        # assume this has numbered segments
+        try:
+            extracts = extract_numbered_segments(self.numbered_passage, spec)
+        except Exception:
+            return DONE + " " + NO_ANSWER
+        # this response ends the task by saying DONE
+        return DONE + " " + extracts
+</file>
+
 <file path="langroid/agent/special/retriever_agent.py">
 """
 DEPRECATED: use DocChatAgent instead, with DocChatAgentConfig.retrieve_only=True,
@@ -20599,65 +20393,6 @@ class Llama2Formatter(PromptFormatter):
             )
         text += f"{user_message.strip()} {E_INST}"
         return text
-</file>
-
-<file path="langroid/language_models/__init__.py">
-from . import utils
-from . import config
-from . import base
-from . import openai_gpt
-from . import azure_openai
-from . import prompt_formatter
-
-from .base import (
-    StreamEventType,
-    LLMConfig,
-    LLMMessage,
-    LLMFunctionCall,
-    LLMFunctionSpec,
-    Role,
-    LLMTokenUsage,
-    LLMResponse,
-)
-from .model_info import (
-    OpenAIChatModel,
-    AnthropicModel,
-    GeminiModel,
-    OpenAICompletionModel,
-)
-from .openai_gpt import OpenAIGPTConfig, OpenAIGPT, OpenAICallParams
-from .mock_lm import MockLM, MockLMConfig
-from .azure_openai import AzureConfig, AzureGPT
-
-
-__all__ = [
-    "utils",
-    "config",
-    "base",
-    "openai_gpt",
-    "model_info",
-    "azure_openai",
-    "prompt_formatter",
-    "StreamEventType",
-    "LLMConfig",
-    "LLMMessage",
-    "LLMFunctionCall",
-    "LLMFunctionSpec",
-    "Role",
-    "LLMTokenUsage",
-    "LLMResponse",
-    "OpenAIChatModel",
-    "AnthropicModel",
-    "GeminiModel",
-    "OpenAICompletionModel",
-    "OpenAIGPTConfig",
-    "OpenAIGPT",
-    "OpenAICallParams",
-    "AzureConfig",
-    "AzureGPT",
-    "MockLM",
-    "MockLMConfig",
-]
 </file>
 
 <file path="langroid/language_models/azure_openai.py">
@@ -36056,214 +35791,387 @@ approach eliminates the need to subclass `Task` and override `done()` for most
 use cases, leading to cleaner, more maintainable code.
 </file>
 
-<file path="docs/tutorials/langroid-tour.md">
-# A quick tour of Langroid
+<file path="docs/tutorials/local-llm-setup.md">
+# Setting up a Local/Open LLM to work with Langroid
 
-This is a quick tour of some Langroid features. For a more detailed guide,
-see the [Getting Started guide](https://langroid.github.io/langroid/quick-start/).
-There are many more features besides the ones shown here. To explore langroid more,
-see the sections of the main [docs](https://langroid.github.io/langroid/),
-and a 
-[Colab notebook](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
-you can try yourself.  
+!!! tip "Examples scripts in [`examples/`](https://github.com/langroid/langroid/tree/main/examples) directory."
+      There are numerous examples of scripts that can be run with local LLMs,
+      in the [`examples/`](https://github.com/langroid/langroid/tree/main/examples)
+      directory of the main `langroid` repo. These examples are also in the 
+      [`langroid-examples`](https://github.com/langroid/langroid-examples/tree/main/examples),
+      although the latter repo may contain some examples that are not in the `langroid` repo.
+      Most of these example scripts allow you to specify an LLM in the format `-m <model>`,
+      where the specification of `<model>` is described in the quide below for local/open LLMs, 
+      or in the [Non-OpenAI LLM](https://langroid.github.io/langroid/tutorials/non-openai-llms/) guide. Scripts 
+      that have the string `local` in their name have been especially designed to work with 
+      certain local LLMs, as described in the respective scripts.
+      If you want a pointer to a specific script that illustrates a 2-agent chat, have a look 
+      at [`chat-search-assistant.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-assistant.py).
+      This specific script, originally designed for GPT-4/GPT-4o, works well with `llama3-70b` 
+      (tested via Groq, mentioned below).
 
+## Easiest: with Ollama
 
-## Chat directly with LLM
+As of version 0.1.24, Ollama provides an OpenAI-compatible API server for the LLMs it supports,
+which massively simplifies running these LLMs with Langroid. Example below.
 
-Imports:
+```
+ollama pull mistral:7b-instruct-v0.2-q8_0
+```
+This provides an OpenAI-compatible 
+server for the `mistral:7b-instruct-v0.2-q8_0` model.
+
+You can run any Langroid script using this model, by setting the `chat_model`
+in the `OpenAIGPTConfig` to `ollama/mistral:7b-instruct-v0.2-q8_0`, e.g.
 
 ```python
-import langroid as lr
 import langroid.language_models as lm
-```
+import langroid as lr
 
-
-Set up the LLM; note how you can specify the chat model -- if omitted, defaults
-to OpenAI `GPT4o`. See the guide to using Langroid with 
-[local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
-and with [non-OpenAI LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
-    
-```python
-llm_config = lm.OpenAIGPTConfig( 
-   chat_model="gpt-5-mini"
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="ollama/mistral:7b-instruct-v0.2-q8_0",
+    chat_context_length=16_000, # adjust based on model
 )
-llm = lm.OpenAIGPT(llm_config)
-```
-
-Chat with bare LLM -- no chat accumulation, i.e. follow-up responses will *not*
-be aware of prior conversation history (you need an Agent for that, see below).
-
-```python
-llm.chat("1 2 4 7 11 ?")
-# ==> answers 16, with some explanation
-```
-
-## Agent
-
-Make a [`ChatAgent`][langroid.agent.chat_agent.ChatAgent], 
-and chat with it; now accumulates conv history
-
-```python
-agent = lr.ChatAgent(lr.ChatAgentConfig(llm=llm_config))
-agent.llm_response("Find the next number: 1 2 4 7 11 ?")
-# => responds 16
-agent.llm_response("and then?)
-# => answers 22
-```
-
-## Task
-
-Make a [`Task`][langroid.agent.task.Task] and create a chat loop with the user:
-
-```python
+agent_config = lr.ChatAgentConfig(
+    llm=llm_config,
+    system_message="You are helpful but concise",
+)
+agent = lr.ChatAgent(agent_config)
+# directly invoke agent's llm_response method
+# response = agent.llm_response("What is the capital of Russia?")
 task = lr.Task(agent, interactive=True)
-task.run()
+task.run() # for an interactive chat loop
 ```
 
-## Tools/Functions/Structured outputs:
+## Setup Ollama with a GGUF model from HuggingFace
 
-Define a [`ToolMessage`][langroid.agent.tool_message.ToolMessage] 
-using Pydantic (v1) -- this gets transpiled into system-message instructions
-to the LLM, so you never have to deal with writing a JSON schema.
-(Besides JSON-based tools, Langroid also supports 
-[XML-based tools](https://langroid.github.io/langroid/notes/xml-tools/), which 
-are far more reliable when having the LLM return code in a structured output.)
+Some models are not directly supported by Ollama out of the box. To server a GGUF
+model with Ollama, you can download the model from HuggingFace and set up a custom
+Modelfile for it.
+
+E.g. download the GGUF version of `dolphin-mixtral` from
+[here](https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF)
+
+(specifically, download this file `dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf`)
+
+To set up a custom ollama model based on this:
+
+- Save this model at a convenient place, e.g. `~/.ollama/models/`
+- Create a modelfile for this model. First see what an existing modelfile
+  for a similar model looks like, e.g. by running:
+
+```
+ollama show --modelfile dolphin-mixtral:latest
+```
+You will notice this file has a FROM line followed by a prompt template and other settings.
+Create a new file with these contents.
+Only  change the  `FROM ...` line with the path to the model you downloaded, e.g.
+```
+FROM /Users/blah/.ollama/models/dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf
+```
+
+- Save this modelfile somewhere, e.g. `~/.ollama/modelfiles/dolphin-mixtral-gguf`
+- Create a new ollama model based on this file:
+```
+ollama create dolphin-mixtral-gguf -f ~/.ollama/modelfiles/dolphin-mixtral-gguf
+``` 
+
+- Run this new model using `ollama run dolphin-mixtral-gguf`
+
+To use this model with Langroid you can then specify `ollama/dolphin-mixtral-gguf`
+as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
+When a script supports it, you can also pass in the model name via
+`-m ollama/dolphin-mixtral-gguf`
+
+## Local LLMs using LMStudio
+
+LMStudio is one of the simplest ways to download run open-weight LLMs locally.
+See their docs at [lmstudio.ai](https://lmstudio.ai/docs) for installation and usage 
+instructions. Once you download a model, you can use the "server" option to have it 
+served via an OpenAI-compatible API at a local IP like `https://127.0.0.1:1234/v1`.
+As with any other scenario of running a local LLM, you can use this with Langroid by
+setting `chat_model` as follows (note you should not include the `https://` part):
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="local/127.0.0.1234/v1",
+    ...
+)
+```
+
+## Setup llama.cpp with a GGUF model from HuggingFace
+
+See `llama.cpp`'s [GitHub page](https://github.com/ggerganov/llama.cpp/tree/master) for build and installation instructions.
+
+After installation, begin as above with downloading a GGUF model from HuggingFace; for example, the quantized `Qwen2.5-Coder-7B` from [here](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF); specifically, [this file](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/blob/main/qwen2.5-coder-7b-instruct-q2_k.gguf).
+
+Now, the server can be started with `llama-server -m qwen2.5-coder-7b-instruct-q2_k.gguf`.
+
+In addition, your `llama.cpp` may be built with support for simplified management of HuggingFace models (specifically, `libcurl` support is required); in this case, `llama.cpp` will download HuggingFace models to a cache directory, and the server may be run with:
+```bash
+llama-server \
+      --hf-repo Qwen/Qwen2.5-Coder-7B-Instruct-GGUF \
+      --hf-file qwen2.5-coder-7b-instruct-q2_k.gguf
+```
+
+To use the model with Langroid, specify `llamacpp/localhost:{port}` as the `chat_model`; the default port is 8080.
+
+## Setup vLLM with a model from HuggingFace
+
+See [the vLLM docs](https://docs.vllm.ai/en/stable/getting_started/installation.html) for installation and configuration options. To run a HuggingFace model with vLLM, use `vllm serve`, which provides an OpenAI-compatible server. 
+
+For example, to run `Qwen2.5-Coder-32B`, run `vllm serve Qwen/Qwen2.5-Coder-32B`.
+
+If the model is not publicly available, set the environment varaible `HF_TOKEN` to your HuggingFace token with read access to the model repo.
+
+To use the model with Langroid, specify `vllm/Qwen/Qwen2.5-Coder-32B` as the `chat_model` and, if a port other than the default 8000 was used, set `api_base` to `localhost:{port}`.
+
+## Setup vLLM with a GGUF model from HuggingFace
+
+`vLLM` supports running quantized models from GGUF files; however, this is currently an experimental feature. To run a quantized `Qwen2.5-Coder-32B`, download the model from [the repo](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF), specifically [this file](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF/blob/main/qwen2.5-coder-32b-instruct-q4_0.gguf). 
+
+The model can now be run with `vllm serve qwen2.5-coder-32b-instruct-q4_0.gguf --tokenizer Qwen/Qwen2.5-Coder-32B` (the tokenizer of the base model rather than the quantized model should be used).
+
+To use the model with Langroid, specify `vllm/qwen2.5-coder-32b-instruct-q4_0.gguf` as the `chat_model` and, if a port other than the default 8000 was used, set `api_base` to `localhost:{port}`.
+
+## "Local" LLMs hosted on Groq
+In this scenario, an open-source LLM (e.g. `llama3.1-8b-instant`) is hosted on a Groq server
+which provides an OpenAI-compatible API. Using this with langroid is exactly analogous
+to the Ollama scenario above: you can set the `chat_model` in the `OpenAIGPTConfig` to
+`groq/<model_name>`, e.g. `groq/llama3.1-8b-instant`. 
+For this to work, ensure you have a `GROQ_API_KEY` environment variable set in your
+`.env` file. See [groq docs](https://console.groq.com/docs/quickstart).
+
+## "Local" LLMs hosted on Cerebras
+This works exactly like with Groq, except you set up a `CEREBRAS_API_KEY` environment variable, and specify the `chat_model` as `cerebras/<model_name>`, e.g. `cerebras/llama3.1-8b`. See the Cerebras [docs](https://inference-docs.cerebras.ai/introduction) for details on which LLMs are supported.
+
+## Open/Proprietary LLMs via OpenRouter
+
+OpenRouter is a **paid service** that provides an OpenAI-compatible API 
+for practically any LLM, open or proprietary.
+Using this with Langroid is similar to the `groq` scenario above:
+
+- Ensure you have an `OPENROUTER_API_KEY` set up in your environment (or `.env` file), and 
+- Set the `chat_model` in the `OpenAIGPTConfig` to 
+  `openrouter/<model_name>`, where `<model_name>` is the name of the model on the 
+[OpenRouter](https://openrouter.ai/) website, e.g. `qwen/qwen-2.5-7b-instruct`.
+
+This is a good option if you want to use larger open LLMs without having to download
+them locally (especially if your local machine does not have the resources to run them).
+Besides using specific LLMs, OpenRouter also has smart routing/load-balancing.
+OpenRouter is also convenient for using proprietary LLMs (e.g. gemini, amazon) via 
+a single convenient API.
+
+## "Local" LLMs hosted on GLHF.chat
+
+See [glhf.chat](https://glhf.chat/chat/create) for a list of available models.
+
+To run with one of these models, set the `chat_model` in the `OpenAIGPTConfig` to
+`"glhf/<model_name>"`, where `model_name` is `hf:` followed by the HuggingFace repo 
+path, e.g. `Qwen/Qwen2.5-Coder-32B-Instruct`, so the full `chat_model` would be
+`"glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct"`. 
+
+## DeepSeek LLMs
+
+As of 26-Dec-2024, DeepSeek models are available via their [api](https://platform.deepseek.com).
+To use it with Langroid:
+
+- set up your `DEEPSEEK_API_KEY` environment variable in the `.env` file or as
+ an explicit export in your shell
+- set the `chat_model` in the `OpenAIGPTConfig` to `deepseek/deepseek-chat` to use the 
+`DeepSeek-V3` model, or `deepseek/deepseek-reasoner` to use the full (i.e. non-distilled) `DeepSeek-R1` "reasoning" model.
+
+The DeepSeek models are also available via OpenRouter (see the corresponding 
+in the OpenRouter section here) or ollama (see those instructions). E.g. you
+can use the DeepSeek R1 or its distilled variants by setting `chat_model` to 
+`openrouter/deepseek/deepseek-r1` or `ollama/deepseek-r1:8b`.
+
+## MiniMax LLMs
+
+[MiniMax](https://www.minimax.io/) provides high-performance language models
+with up to 1M context length via their OpenAI-compatible API.
+To use MiniMax models with Langroid:
+
+- set up your `MINIMAX_API_KEY` environment variable in the `.env` file or as
+ an explicit export in your shell
+- set the `chat_model` in the `OpenAIGPTConfig` to `minimax/<model_name>`, e.g.
+  `minimax/MiniMax-M2.7` for their flagship model, or
+  `minimax/MiniMax-M2.7-highspeed` for the faster, lower-cost variant.
+
+Available models include `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, and
+`MiniMax-M2`, each with a `-highspeed` variant offering reduced latency and cost.
+
+See the [`chat-minimax.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-minimax.py) example for a ready-to-run interactive chat script using MiniMax.
+
+## Other non-OpenAI LLMs supported by LiteLLM
+
+For other scenarios of running local/remote LLMs, it is possible that the `LiteLLM` library
+supports an "OpenAI adaptor" for these models (see their [docs](https://litellm.vercel.app/docs/providers)).
+
+Depending on the specific model, the `litellm` docs may say you need to 
+specify a model in the form `<provider>/<model>`, e.g. `palm/chat-bison`. 
+To use the model with Langroid, simply prepend `litellm/` to this string, e.g. `litellm/palm/chat-bison`,
+when you specify the `chat_model` in the `OpenAIGPTConfig`.
+
+To use `litellm`, ensure you have the `litellm` extra installed, 
+via `pip install langroid[litellm]` or equivalent.
+
+
+
+## Harder: with oobabooga
+Like Ollama, [oobabooga/text-generation-webui](https://github.com/oobabooga/text-generation-webui) provides an OpenAI-API-compatible API server, but the setup 
+is significantly more involved. See their github page for installation and model-download instructions.
+
+Once you have finished the installation, you can spin up the server for an LLM using
+something like this:
+
+```
+python server.py --api --model mistral-7b-instruct-v0.2.Q8_0.gguf --verbose --extensions openai --nowebui
+```
+This will show a message saying that the OpenAI-compatible API is running at `http://127.0.0.1:5000`
+
+Then in your Langroid code you can specify the LLM config using
+`chat_model="local/127.0.0.1:5000/v1` (the `v1` is the API version, which is required).
+As with Ollama, you can use the `-m` arg in many of the example scripts, e.g.
+```
+python examples/docqa/rag-local-simple.py -m local/127.0.0.1:5000/v1
+```
+
+Recommended: to ensure accurate chat formatting (and not use the defaults from ooba),
+  append the appropriate HuggingFace model name to the
+  -m arg, separated by //, e.g. 
+```
+python examples/docqa/rag-local-simple.py -m local/127.0.0.1:5000/v1//mistral-instruct-v0.2
+```
+  (no need to include the full model name, as long as you include enough to
+   uniquely identify the model's chat formatting template)
+
+
+## Other local LLM scenarios
+
+There may be scenarios where the above `local/...` or `ollama/...` syntactic shorthand
+does not work.(e.g. when using vLLM to spin up a local LLM at an OpenAI-compatible
+endpoint). For these scenarios, you will have to explicitly create an instance of 
+`lm.OpenAIGPTConfig` and set *both* the `chat_model` and `api_base` parameters.
+For example, suppose you are able to get responses from this endpoint using something like:
+```bash
+curl http://192.168.0.5:5078/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "model": "Mistral-7B-Instruct-v0.2",
+        "messages": [
+             {"role": "user", "content": "Who won the world series in 2020?"}
+        ]
+    }'
+```
+To use this endpoint with Langroid, you would create an `OpenAIGPTConfig` like this:
+```python
+import langroid.language_models as lm
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="Mistral-7B-Instruct-v0.2",
+    api_base="http://192.168.0.5:5078/v1",
+)
+```
+
+## Quick testing with local LLMs
+As mentioned [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/#quick-testing-with-non-openai-models), 
+you can run many of the [tests](https://github.com/langroid/langroid/tree/main/tests/main) in the main langroid repo against a local LLM
+(which by default run against an OpenAI model), 
+by specifying the model as `--m <model>`, 
+where `<model>` follows the syntax described in the previous sections. Here's an example:
+
+```bash
+pytest tests/main/test_chat_agent.py --m ollama/mixtral
+```
+Of course, bear in mind that the tests may not pass due to weaknesses of the local LLM.
+</file>
+
+<file path="docs/tutorials/supported-models.md">
+# Langroid Supported LLMs and Providers
+
+Langroid supports a wide range of Language Model providers through its 
+[`OpenAIGPTConfig`][langroid.language_models.openai_gpt.OpenAIGPTConfig] class. 
+
+!!! note "OpenAIGPTConfig is not just for OpenAI models!"
+    The `OpenAIGPTConfig` class is a generic configuration class that can be used
+    to configure any LLM provider that is OpenAI API-compatible.
+    This includes both local and remote models.
+
+You would typically set up the `OpenAIGPTConfig` class with the `chat_model`
+parameter, which specifies the model you want to use, and other 
+parameters such as `max_output_tokens`, `temperature`, etc
+(see the 
+[`OpenAIGPTConfig`][langroid.language_models.openai_gpt.OpenAIGPTConfig] class
+and its parent class 
+[`LLModelConfig`][langroid.language_models.base.LLMConfig] for
+full parameter details):
+
 
 
 ```python
-from pydantic import BaseModel
-
-class CityTemperature(BaseModel):
-    city: str
-    temp: float
-
-class WeatherTool(lr.ToolMessage):
-    request: str = "weather_tool" #(1)!
-    purpose: str = "To extract <city_temp> info from text" #(2)!
-
-    city_temp: CityTemperature
-
-    # tool handler
-    def handle(self) -> CityTemperature:
-        return self.city_temp
+import langroid.language_models as lm
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="<model-name>", # possibly includes a <provider-name> prefix
+    api_key="api-key", # optional, prefer setting in environment variables
+    # ... other params such as max_tokens, temperature, etc.
+)
 ```
 
-1. When this tool is enabled for an agent, a method named `weather_tool` gets auto-inserted in the agent class, 
-   with body being the `handle` method -- this method handles the LLM's generation 
-   of this tool.
-2. The value of the `purpose` field is used to populate the system message to the LLM,
-   along with the Tool's schema derived from its Pydantic-based definition.
+Below are `chat_model` examples for each supported provider.
+For more details see the guides on setting up Langroid with 
+[local](https://langroid.github.io/langroid/tutorials/local-llm-setup/) 
+and [non-OpenAI LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
+Once you set up the `OpenAIGPTConfig`, you can then directly interact with the LLM,
+or set up an Agent with this LLM, and use it by itself, or in a multi-agent setup,
+as shown in the [Langroid quick tour](https://langroid.github.io/langroid/tutorials/langroid-tour/)
 
-Enable the Agent to use the `ToolMessage`, and set a system message describing the 
-agent's task:
+
+Although we support specifying the `api_key` directly in the config
+(not recommended for security reasons),
+more typically you would set the `api_key` in your environment variables.
+Below is a table showing for each provider, an example `chat_model` setting, 
+and which environment variable to set for the API key.
+
+
+
+
+| Provider      | `chat_model` Example                                     | API Key Environment Variable |
+|---------------|----------------------------------------------------------|----------------------------|
+| OpenAI        | `gpt-4o`                                                 | `OPENAI_API_KEY` |
+| Groq          | `groq/llama3.3-70b-versatile`                            | `GROQ_API_KEY` |
+| Cerebras      | `cerebras/llama-3.3-70b`                                 | `CEREBRAS_API_KEY` |
+| Gemini        | `gemini/gemini-2.0-flash`                                | `GEMINI_API_KEY` |
+| DeepSeek      | `deepseek/deepseek-reasoner`                             | `DEEPSEEK_API_KEY` |
+| MiniMax       | `minimax/MiniMax-M2.7`                                   | `MINIMAX_API_KEY` |
+| GLHF          | `glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct`                | `GLHF_API_KEY` |
+| OpenRouter    | `openrouter/deepseek/deepseek-r1-distill-llama-70b:free` | `OPENROUTER_API_KEY` |
+| Ollama        | `ollama/qwen2.5`                                         | `OLLAMA_API_KEY` (usually `ollama`) |
+| VLLM          | `vllm/mistral-7b-instruct`                               | `VLLM_API_KEY` |
+| LlamaCPP      | `llamacpp/localhost:8080`                                | `LLAMA_API_KEY` |
+| Generic Local | `local/localhost:8000/v1`                                | No specific env var required |
+| LiteLLM       | `litellm/anthropic/claude-3-7-sonnet`                    | Depends on provider |
+|               | `litellm/mistral-small`                                  | Depends on provider |
+| HF Template   | `local/localhost:8000/v1//mistral-instruct-v0.2`         | Depends on provider |
+|               | `litellm/ollama/mistral//hf`                             | |
+
+## HuggingFace Chat Template Formatting
+
+For models requiring specific prompt formatting:
 
 ```python
-agent.enable_message(WeatherTool)
-agent.config.system_message = """
- Your job is to extract city and temperature info from user input
- and return it using the `weather_tool`.
-"""
-```
+import langroid.language_models as lm
 
-Create specialized task that returns a `CityTemperature` object:
-
-```python
-# configure task to terminate after (a) LLM emits a tool, (b) tool is handled by Agent
-task_config = lr.TaskConfig(done_sequences=["T,A"])
-
-# create a task that returns a CityTemperature object
-task = lr.Task(agent, interactive=False, config=task_config)[CityTemperature]
-
-# run task, with built-in tool-handling loop
-data = task.run("It is 45 degrees F in Boston")
-
-assert data.city == "Boston"
-assert int(data.temp) == 45
-```
-
-## Chat with a document (RAG)
-
-Create a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent].
-
-```python
-doc_agent_config = lr.agent.special.DocChatAgentConfig(llm=llm_config)
-doc_agent = lr.agent.special.DocChatAgent(doc_agent_config)
-```
-
-Ingest the contents of a web page into the agent 
-(this involves chunking, indexing into a vector-database, etc.):
-
-```python
-doc_agent.ingest_doc_paths("https://en.wikipedia.org/wiki/Ludwig_van_Beethoven")
-```
-
-Ask a question:
-
-```
-result = doc_agent.llm_response("When did Beethoven move from Bonn to Vienna?")
-```
-
-You should see the streamed response with citations like this:
-
-![langroid-tour-beethoven.png](langroid-tour-beethoven.png)
-
-## Two-agent interaction
-
-Set up a teacher agent:
-
-```python
-from langroid.agent.tools.orchestration import DoneTool
-
-teacher = lr.ChatAgent(
-    lr.ChatAgentConfig(
-        llm=llm_config,
-        system_message=f"""
-        Ask a numbers-based question, and your student will answer.
-        You can then provide feedback or hints to the student to help them
-        arrive at the right answer. Once you receive the right answer,
-        use the `{DoneTool.name()}` tool to end the session.
-        """
-    )
+# Specify formatter directly
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="local/localhost:8000/v1//mistral-instruct-v0.2",
+    formatter="mistral-instruct-v0.2"
 )
 
-teacher.enable_message(DoneTool)
-teacher_task = lr.Task(teacher, interactive=False)
-
-```
-
-Set up a student agent:
-
-```python
-student = lr.ChatAgent(
-    lr.ChatAgentConfig(
-        llm=llm_config,
-        system_message=f"""
-        You will receive a numbers-related question. Answer to the best of
-        your ability. If your answer is wrong, you will receive feedback or hints,
-        and you can revise your answer, and repeat this process until you get 
-        the right answer.
-        """
-    )
+# Using HF formatter auto-detection
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="litellm/ollama/mistral//hf",
 )
-
-student_task = lr.Task(student, interactive=False, single_round=True)
 ```
-
-Make the `student_task` a subtask of the `teacher_task`:
-
-```python
-teacher_task.add_sub_task(student_task)
-```
-
-Run the teacher task:
-
-```python
-teacher_task.run()
-```
-
-You should then see this type of interaction:
-
-![langroid-tour-teacher.png](langroid-tour-teacher.png)
 </file>
 
 <file path="issues/20251010-concurrent-rag-status.md">
@@ -37114,143 +37022,6 @@ vecdb_config = QdrantDBConfig(
 **Issue #919 is now resolved** with a robust, well-tested solution that handles all known llama.cpp embedding response formats. Users can now use local embeddings with llama.cpp without worrying about response format variations.
 
 **PR #920 is not needed** as our solution is more comprehensive and handles all cases, not just one specific format.
-</file>
-
-<file path="langroid/agent/special/relevance_extractor_agent.py">
-"""
-Agent to retrieve relevant segments from a body of text,
-that are relevant to a query.
-
-"""
-
-import logging
-from typing import Optional, no_type_check
-
-from rich.console import Console
-
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocument
-from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
-from langroid.language_models.base import LLMConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.parsing.utils import extract_numbered_segments, number_segments
-from langroid.utils.constants import DONE, NO_ANSWER
-
-console = Console()
-logger = logging.getLogger(__name__)
-
-
-class RelevanceExtractorAgentConfig(ChatAgentConfig):
-    llm: LLMConfig | None = OpenAIGPTConfig()
-    segment_length: int = 1  # number of sentences per segment
-    query: str = ""  # query for relevance extraction
-    handle_llm_no_tool: str = """
-    You FORGOT to use the `extract_segments` tool!
-    Remember that your response MUST be a JSON-formatted string
-    starting with `{"request": "extract_segments", ...}`
-    """
-    system_message: str = """
-    The user will give you a PASSAGE containing segments numbered as  
-    <#1#>, <#2#>, <#3#>, etc.,
-    followed by a QUERY. Extract ONLY the segment-numbers from 
-    the PASSAGE that are RELEVANT to the QUERY.
-    Present the extracted segment-numbers using the `extract_segments` tool/function.
-    Note that your response MUST be a JSON-formatted string 
-    starting with `{"request": "extract_segments", ...}`
-    """
-
-
-class RelevanceExtractorAgent(ChatAgent):
-    """
-    Agent for extracting segments from text, that are relevant to a given query.
-    """
-
-    def __init__(self, config: RelevanceExtractorAgentConfig):
-        super().__init__(config)
-        self.config: RelevanceExtractorAgentConfig = config
-        self.enable_message(SegmentExtractTool)
-        self.numbered_passage: Optional[str] = None
-
-    @no_type_check
-    def llm_response(
-        self, message: Optional[str | ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        """Compose a prompt asking to extract relevant segments from a passage.
-        Steps:
-        - number the segments in the passage
-        - compose prompt
-        - send to LLM
-        """
-        assert self.config.query is not None, "No query specified"
-        assert message is not None, "No message specified"
-        message_str = message.content if isinstance(message, ChatDocument) else message
-        # number the segments in the passage
-        self.numbered_passage = number_segments(message_str, self.config.segment_length)
-        # compose prompt
-        prompt = f"""
-        <Instructions>
-        Given the PASSAGE below with NUMBERED segments, and the QUERY,
-        extract ONLY the segment-numbers that are RELEVANT to the QUERY,
-        and present them using the `extract_segments` tool/function,
-        i.e. your response MUST be a JSON-formatted string starting with
-        `{{"request": "extract_segments", ...}}`
-        </Instructions>
-        
-        PASSAGE:
-        {self.numbered_passage}
-        
-        QUERY: {self.config.query}
-        """
-        # send to LLM
-        response = super().llm_response(prompt)
-        return response
-
-    @no_type_check
-    async def llm_response_async(
-        self, message: Optional[str | ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        """
-        Compose a prompt asking to extract relevant segments from a passage.
-        Steps:
-        - number the segments in the passage
-        - compose prompt
-        - send to LLM
-        The LLM is expected to generate a structured msg according to the
-        SegmentExtractTool schema, i.e. it should contain a `segment_list` field
-        whose value is a list of segment numbers or ranges, like "10,12,14-17".
-        """
-
-        assert self.config.query is not None, "No query specified"
-        assert message is not None, "No message specified"
-        message_str = message.content if isinstance(message, ChatDocument) else message
-        # number the segments in the passage
-        self.numbered_passage = number_segments(message_str, self.config.segment_length)
-        # compose prompt
-        prompt = f"""
-        PASSAGE:
-        {self.numbered_passage}
-        
-        QUERY: {self.config.query}
-        """
-        # send to LLM
-        response = await super().llm_response_async(prompt)
-        return response
-
-    def extract_segments(self, msg: SegmentExtractTool) -> str:
-        """Method to handle a segmentExtractTool message from LLM"""
-        spec = msg.segment_list
-        if len(self.message_history) == 0:
-            return DONE + " " + NO_ANSWER
-        if spec is None or spec.strip() in ["", NO_ANSWER]:
-            return DONE + " " + NO_ANSWER
-        assert self.numbered_passage is not None, "No numbered passage"
-        # assume this has numbered segments
-        try:
-            extracts = extract_numbered_segments(self.numbered_passage, spec)
-        except Exception:
-            return DONE + " " + NO_ANSWER
-        # this response ends the task by saying DONE
-        return DONE + " " + extracts
 </file>
 
 <file path="langroid/agent/tools/mcp/decorators.py">
@@ -41403,6 +41174,67 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         return SentenceTransformerEmbeddings  # type: ignore
 </file>
 
+<file path="langroid/language_models/__init__.py">
+from . import utils
+from . import config
+from . import base
+from . import openai_gpt
+from . import azure_openai
+from . import prompt_formatter
+
+from .base import (
+    StreamEventType,
+    LLMConfig,
+    LLMMessage,
+    LLMFunctionCall,
+    LLMFunctionSpec,
+    Role,
+    LLMTokenUsage,
+    LLMResponse,
+)
+from .model_info import (
+    OpenAIChatModel,
+    AnthropicModel,
+    GeminiModel,
+    MiniMaxModel,
+    OpenAICompletionModel,
+)
+from .openai_gpt import OpenAIGPTConfig, OpenAIGPT, OpenAICallParams
+from .mock_lm import MockLM, MockLMConfig
+from .azure_openai import AzureConfig, AzureGPT
+
+
+__all__ = [
+    "utils",
+    "config",
+    "base",
+    "openai_gpt",
+    "model_info",
+    "azure_openai",
+    "prompt_formatter",
+    "StreamEventType",
+    "LLMConfig",
+    "LLMMessage",
+    "LLMFunctionCall",
+    "LLMFunctionSpec",
+    "Role",
+    "LLMTokenUsage",
+    "LLMResponse",
+    "OpenAIChatModel",
+    "AnthropicModel",
+    "GeminiModel",
+    "MiniMaxModel",
+    "OpenAICompletionModel",
+    "OpenAIGPTConfig",
+    "OpenAIGPT",
+    "OpenAICallParams",
+    "AzureConfig",
+    "AzureGPT",
+    "MockLM",
+    "MockLMConfig",
+]
+</file>
+
 <file path="langroid/language_models/client_cache.py">
 """
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
@@ -45398,6 +45230,218 @@ async def main():
 ```
 
 See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full working example of this.
+</file>
+
+<file path="docs/tutorials/non-openai-llms.md">
+# Using Langroid with Non-OpenAI LLMs
+
+Langroid was initially written to work with OpenAI models via their API.
+This may sound limiting, but fortunately:
+
+- Many open-source LLMs can be served via 
+OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.io/langroid/tutorials/local-llm-setup/) guide for details.
+- There are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
+  that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
+(e.g. Anthropic's Claude, Google's Gemini).
+- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), and [OpenRouter](https://openrouter.ai/) provide unified access to multiple LLM providers with additional features like cost control, observability, caching, and fallback strategies.
+  
+Below we show how you can use these various options with Langroid.
+
+## Create an `OpenAIGPTConfig` object with `chat_model = "litellm/..."`
+
+!!! note "Install `litellm` extra"
+    To use `litellm` you need to install Langroid with the `litellm` extra, e.g.:
+    `pip install "langroid[litellm]"`
+
+Next, look up the instructions in LiteLLM docs for the specific model you are 
+interested. Here we take the example of Anthropic's `claude-instant-1` model.
+Set up the necessary environment variables as specified in the LiteLLM docs,
+e.g. for the `claude-instant-1` model, you will need to set the `ANTHROPIC_API_KEY`
+```bash
+export ANTHROPIC_API_KEY=my-api-key
+```
+
+Now you are ready to create an instance of `OpenAIGPTConfig` with the 
+`chat_model` set to `litellm/<model_spec>`, where you should set `model_spec` based on LiteLLM 
+docs. For example, for the `claude-instant-1` model, you would set `chat_model` to
+`litellm/claude-instant-1`. But if you are using the model via a 3rd party provider,
+(e.g. those via Amazon Bedrock), you may also need to have a `provider` part in the `model_spec`, e.g. 
+`litellm/bedrock/anthropic.claude-instant-v1`. In general you can see which of
+these to use, from the LiteLLM docs.
+
+```python
+import langroid.language_models as lm
+
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="litellm/claude-instant-v1",
+    chat_context_length=8000, # adjust according to model
+)
+```
+
+A similar process works for the `Gemini 1.5 Pro` LLM:
+
+- get the API key [here](https://aistudio.google.com/)
+- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="litellm/gemini/gemini-1.5-pro-latest"` in the `OpenAIGPTConfig` object
+
+For other gemini models supported by litellm, see [their docs](https://litellm.vercel.app/docs/providers/gemini)
+
+## Gemini LLMs via OpenAI client, without LiteLLM
+
+This is now the recommended way to use Gemini LLMs with Langroid,
+where you don't need to use LiteLLM. As of 11/20/2024, these models
+are [available via the OpenAI client](https://developers.googleblog.com/en/gemini-is-now-accessible-from-the-openai-library/).
+
+To use langroid with Gemini LLMs, all you have to do is:
+
+- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="gemini/<model_name>"` in the `OpenAIGPTConfig` object,  
+  where <model_name> is one of "gemini-1.5-flash", "gemini-1.5-flash-8b", or "gemini-1.5-pro"
+
+See [here](https://ai.google.dev/gemini-api/docs/models/gemini) for details on Gemini models.
+
+For example, you can use this `llm_config`:
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="gemini/" + lm.OpenAIChatModel.GEMINI_1_5_FLASH,
+)
+```
+
+In most tests you can switch to a gemini model, e.g. `--m gemini/gemini-1.5-flash`, 
+e.g.:
+
+```bash
+pytest -xvs tests/main/test_llm.py --m gemini/gemini-1.5-flash
+```
+
+Many of the example scripts allow switching the model using `-m` or `--model`, e.g.
+
+```bash
+python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
+```
+
+
+
+
+## MiniMax LLMs
+
+[MiniMax](https://www.minimax.io/) offers high-performance language models with
+up to 204K context length. Like Gemini, MiniMax models are available via a direct
+OpenAI-compatible API without needing LiteLLM.
+
+To use MiniMax with Langroid:
+
+- set the `MINIMAX_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="minimax/<model_name>"` in the `OpenAIGPTConfig` object
+
+For example:
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="minimax/MiniMax-M2.7",
+)
+```
+
+Available models include `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, and
+`MiniMax-M2`, each with a `-highspeed` variant.
+
+See the [`chat-minimax.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-minimax.py) example for a ready-to-run interactive chat script.
+
+## AI Gateways for Multiple LLM Providers
+
+In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
+
+### LangDB
+
+[LangDB](https://langdb.ai/) is an AI gateway offering OpenAI-compatible APIs to access 250+ LLMs with cost control, observability, and performance benchmarking. LangDB enables seamless model switching while providing detailed analytics and usage tracking.
+
+To use LangDB with Langroid:
+- Set up your `LANGDB_API_KEY` and `LANGDB_PROJECT_ID` environment variables
+- Set `chat_model="langdb/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"langdb/anthropic/claude-3.7-sonnet"`)
+
+For detailed setup and usage instructions, see the [LangDB integration guide](../notes/langdb.md).
+
+### Portkey
+
+[Portkey](https://portkey.ai) is a comprehensive AI gateway that provides access to 200+ models from various providers through a unified API. It offers advanced features like intelligent caching, automatic retries, fallback strategies, and comprehensive observability tools for production deployments.
+
+To use Portkey with Langroid:
+- Set up your `PORTKEY_API_KEY` environment variable (plus provider API keys like `OPENAI_API_KEY`)
+- Set `chat_model="portkey/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"portkey/openai/gpt-4o-mini"`)
+
+For detailed setup and usage instructions, see the [Portkey integration guide](../notes/portkey.md).
+
+### OpenRouter
+
+[OpenRouter](https://openrouter.ai/) provides access to a wide variety of both open and proprietary LLMs through a unified API. It features automatic routing and load balancing, making it particularly useful for accessing larger open LLMs without local resources and for using multiple providers through a single interface.
+
+To use OpenRouter with Langroid:
+- Set up your `OPENROUTER_API_KEY` environment variable
+- Set `chat_model="openrouter/<model_name>"` in the `OpenAIGPTConfig`
+
+For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
+
+## Working with the created `OpenAIGPTConfig` object
+
+From here you can proceed as usual, creating instances of `OpenAIGPT`,
+`ChatAgentConfig`, `ChatAgent` and `Task` object as usual.
+
+E.g. you can create an object of class `OpenAIGPT` (which represents any
+LLM with an OpenAI-compatible API) and interact with it directly:
+```python
+llm = lm.OpenAIGPT(llm_config)
+messages = [
+    LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM),
+    LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
+],
+response = mdl.chat(messages, max_tokens=50)
+```
+
+When you interact directly with the LLM, you are responsible for keeping dialog history.
+Also you would often want an LLM to have access to tools/functions and external
+data/documents (e.g. vector DB or traditional DB). An Agent class simplifies managing all of these.
+For example, you can create an Agent powered by the above LLM, wrap it in a Task and have it
+run as an interactive chat app:
+
+```python
+agent_config = lr.ChatAgentConfig(llm=llm_config, name="my-llm-agent")
+agent = lr.ChatAgent(agent_config)
+
+task = lr.Task(agent, name="my-llm-task")
+task.run()
+```
+
+## Example: Simple Chat script with a non-OpenAI proprietary model
+
+Many of the Langroid example scripts have a convenient `-m`  flag that lets you
+easily switch to a different model. For example, you can run 
+the `chat.py` script in the `examples/basic` folder with the 
+`litellm/claude-instant-v1` model:
+```bash
+python3 examples/basic/chat.py -m litellm/claude-instant-1
+```
+
+## Quick testing with non-OpenAI models
+
+There are numerous tests in the main [Langroid repo](https://github.com/langroid/langroid) that involve
+LLMs, and once you setup the dev environment as described in the README of the repo, 
+you can run any of those tests (which run against the default GPT4 model) against
+local/remote models that are proxied by `liteLLM` (or served locally via the options mentioned above,
+such as `oobabooga`, `ollama` or `llama-cpp-python`), using the `--m <model-name>` option,
+where `model-name` takes one of the forms above. Some examples of tests are:
+
+```bash
+pytest -s tests/test_llm.py --m local/localhost:8000
+pytest -s tests/test_llm.py --m litellm/claude-instant-1
+```
+When the `--m` option is omitted, the default OpenAI GPT4 model is used.
+
+!!! note "`chat_context_length` is not affected by `--m`"
+      Be aware that the `--m` only switches the model, but does not affect the `chat_context_length` 
+      parameter in the `OpenAIGPTConfig` object. which you may need to adjust for different models.
+      So this option is only meant for quickly testing against different models, and not meant as
+      a way to switch between models in a production environment.
 </file>
 
 <file path="langroid/agent/callbacks/chainlit.py">
@@ -54024,9 +54068,14 @@ class LLMConfig(BaseSettings):
 
     @property
     def model_max_output_tokens(self) -> int:
-        return (
-            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
-        )
+        if self.max_output_tokens:
+            return self.max_output_tokens
+        # Build fallback names by progressively stripping provider prefixes
+        # (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
+        # succeeds even before OpenAIGPT.__init__ strips the prefix.
+        parts = self.chat_model.split("/")
+        fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
+        return get_model_info(self.chat_model, fallbacks).max_output_tokens
 
 
 class LLMFunctionCall(BaseModel):
@@ -54248,6 +54297,9 @@ class LLMMessage(BaseModel):
         if "name" in dict_no_none and dict_no_none["name"] == "":
             # OpenAI API does not like empty name
             del dict_no_none["name"]
+        if dict_no_none.get("role") == Role.FUNCTION and "name" not in dict_no_none:
+            # OpenAI API requires 'name' for function role msgs
+            dict_no_none["name"] = "function"
         if "function_call" in dict_no_none:
             # arguments must be a string
             if "arguments" in dict_no_none["function_call"]:
@@ -54787,6 +54839,7 @@ class ModelProvider(str, Enum):
     ANTHROPIC = "anthropic"
     DEEPSEEK = "deepseek"
     GOOGLE = "google"
+    MINIMAX = "minimax"
     UNKNOWN = "unknown"
 
 
@@ -54873,6 +54926,18 @@ class GeminiModel(ModelName):
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMINI_3_FLASH = "gemini-3-flash"
     GEMINI_3_PRO = "gemini-3-pro"
+
+
+class MiniMaxModel(ModelName):
+    """Enum for MiniMax models"""
+
+    MINIMAX_M2_7 = "MiniMax-M2.7"
+    MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
+    MINIMAX_M2_5 = "MiniMax-M2.5"
+    MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
+    MINIMAX_M2_1 = "MiniMax-M2.1"
+    MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
+    MINIMAX_M2 = "MiniMax-M2"
 
 
 class OpenAI_API_ParamInfo(BaseModel):
@@ -55452,6 +55517,77 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=3.00,
         description="Gemini 3 Flash",
     ),
+    # MiniMax Models
+    MiniMaxModel.MINIMAX_M2_7.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_7.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=131_072,
+        input_cost_per_million=0.30,
+        output_cost_per_million=1.20,
+        has_structured_output=True,
+        description="MiniMax M2.7 (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=131_072,
+        input_cost_per_million=0.15,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="MiniMax M2.7 Highspeed (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_5.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_5.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.30,
+        output_cost_per_million=1.20,
+        has_structured_output=True,
+        description="MiniMax M2.5 (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.15,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="MiniMax M2.5 Highspeed (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_1.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_1.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.27,
+        output_cost_per_million=0.95,
+        has_structured_output=True,
+        description="MiniMax M2.1 (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.14,
+        output_cost_per_million=0.48,
+        has_structured_output=True,
+        description="MiniMax M2.1 Highspeed (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.27,
+        output_cost_per_million=0.95,
+        has_structured_output=True,
+        description="MiniMax M2 (204K context)",
+    ),
 }
 
 
@@ -55514,9 +55650,13 @@ def _normalize_gemini_model_name(model: str) -> str | None:
     if not base_model.startswith("gemini-"):
         return None
 
-    preview_base = base_model.split("-preview", maxsplit=1)[0]
-    if preview_base in GEMINI_CANONICAL_MODEL_NAMES:
-        return preview_base
+    # Try stripping known suffixes to find a canonical name.
+    # Use split (not endswith) for "-preview" so dated variants like
+    # "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
+    for suffix in ("-preview", "-exp", "-experimental", "-latest"):
+        stripped = base_model.split(suffix, maxsplit=1)[0]
+        if stripped != base_model and stripped in GEMINI_CANONICAL_MODEL_NAMES:
+            return stripped
     return None
 
 
@@ -58009,6 +58149,7 @@ from langroid.language_models.client_cache import (
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
     DeepSeekModel,
+    MiniMaxModel,
     OpenAI_API_ParamInfo,
 )
 from langroid.language_models.model_info import (
@@ -58046,6 +58187,7 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
+MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 OLLAMA_API_KEY = "ollama"
 
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
@@ -58498,6 +58640,7 @@ class OpenAIGPT(LanguageModel):
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
         self.is_gemini = self.is_gemini_model()
         self.is_deepseek = self.is_deepseek_model()
+        self.is_minimax = self.is_minimax_model()
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
         self.is_langdb = self.config.chat_model.startswith("langdb/")
@@ -58571,6 +58714,28 @@ class OpenAIGPT(LanguageModel):
                 self.api_base = DEEPSEEK_BASE_URL
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
+            elif self.is_minimax:
+                self.config.chat_model = self.config.chat_model.replace("minimax/", "")
+                # Honor caller-supplied base URL (e.g. regional endpoints,
+                # proxies) instead of always forcing the default.
+                openai_api_base = os.getenv("OPENAI_API_BASE")
+                explicit_api_base = (
+                    self.config.api_base
+                    if self.config.api_base and self.config.api_base != openai_api_base
+                    else None
+                )
+                self.api_base = explicit_api_base or MINIMAX_BASE_URL
+                if self.api_key == OPENAI_API_KEY:
+                    # Only overwrite with MINIMAX_API_KEY when it is actually
+                    # set, so users who intentionally put their MiniMax key in
+                    # OPENAI_API_KEY are not silently downgraded to a dummy key.
+                    minimax_key = os.getenv("MINIMAX_API_KEY", "")
+                    if minimax_key:
+                        self.api_key = minimax_key
+                # Recompute capabilities now that the prefix has been stripped
+                # and self.info() can find the model in MODEL_INFO.
+                self.supports_strict_tools = True
+                self.supports_json_schema = self.info().has_structured_output
             elif self.is_langdb:
                 self.config.chat_model = self.config.chat_model.replace("langdb/", "")
                 self.api_base = self.config.langdb_params.base_url
@@ -58610,6 +58775,10 @@ class OpenAIGPT(LanguageModel):
 
                 # Add Portkey-specific headers
                 self.config.headers.update(self.config.portkey_params.get_headers())
+
+            # Sanitize the API key: strip leading/trailing whitespace
+            # (including stray newlines from .env files or CI secrets).
+            self.api_key = self.api_key.strip()
 
             # Create http_client if needed - Priority order:
             # 1. http_client_factory (most flexibility, not cacheable)
@@ -58773,6 +58942,14 @@ class OpenAIGPT(LanguageModel):
         return (
             self.chat_model_orig in deepseek_models
             or self.chat_model_orig.startswith("deepseek/")
+        )
+
+    def is_minimax_model(self) -> bool:
+        """Are we using the MiniMax OpenAI-compatible API?"""
+        minimax_models = [e.value for e in MiniMaxModel]
+        return (
+            self.chat_model_orig in minimax_models
+            or self.chat_model_orig.startswith("minimax/")
         )
 
     def unsupported_params(self) -> List[str]:
@@ -60410,7 +60587,7 @@ class OpenAIGPT(LanguageModel):
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.15.6
+  rev: v0.15.8
   hooks:
     - id: ruff
 </file>
@@ -60418,7 +60595,7 @@ repos:
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.60.1"
+version = "0.61.1"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]

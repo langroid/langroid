@@ -87,16 +87,15 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
     assert capital in response.message
     assert response.cached == use_cache
 
-    # pass intentional bad msg to test error handling
-    messages = [
-        LLMMessage(
-            role=Role.FUNCTION,
-            content="Hello!",
-        ),
-    ]
-
-    with pytest.raises(Exception):
-        _ = mdl.chat(messages=messages, max_tokens=500)
+    # Verify that function-role messages get a default
+    # 'name' field when none is provided, avoiding the
+    # OpenAI API error about missing 'name'.
+    func_msg = LLMMessage(
+        role=Role.FUNCTION,
+        content="Hello!",
+    )
+    d = func_msg.api_dict(cfg.chat_model)
+    assert d.get("name") == "function"
 
 
 @pytest.mark.parametrize(

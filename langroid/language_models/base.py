@@ -327,6 +327,9 @@ class LLMMessage(BaseModel):
         if "name" in dict_no_none and dict_no_none["name"] == "":
             # OpenAI API does not like empty name
             del dict_no_none["name"]
+        if dict_no_none.get("role") == Role.FUNCTION and "name" not in dict_no_none:
+            # OpenAI API requires 'name' for function role msgs
+            dict_no_none["name"] = "function"
         if "function_call" in dict_no_none:
             # arguments must be a string
             if "arguments" in dict_no_none["function_call"]:
