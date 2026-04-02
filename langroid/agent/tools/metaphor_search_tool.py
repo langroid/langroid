@@ -1,7 +1,8 @@
 """
-A tool to trigger a Metaphor search for a given query,
+A tool to trigger a Metaphor/Exa search for a given query,
 (https://docs.exa.ai/reference/getting-started)
-and return the top results with their titles, links, summaries.
+Exa is the fastest and most accurate web search API for AI.
+Returns the top results with their titles, links, summaries.
 Since the tool is stateless (i.e. does not need
 access to agent state), it can be enabled for any agent, without having to define a
 special method inside the agent: `agent.enable_message(MetaphorSearchTool)`
