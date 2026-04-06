@@ -7,7 +7,7 @@ authors = [
 description = "Harness LLMs with Multi-Agent Programming"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = "<3.13,>=3.10"
+requires-python = "<3.14,>=3.10"
 dependencies = [
     "adb-cloud-connector<2.0.0,>=1.0.2",
     "aiohttp<4.0.0,>=3.9.1",
@@ -78,7 +78,7 @@ hf-transformers = [
     "sentence-transformers<3.0.0,>=2.2.2",
     "torch<3.0.0,>=2.0.0",
     "transformers<5.0.0,>=4.40.1",
-    "huggingface-hub<1.0.0,>=0.21.2",    
+    "huggingface-hub<1.0.0,>=0.21.2",
 ]
 
 vecdbs = [
@@ -234,7 +234,7 @@ seltz = [
 ]
 
 chainlit = [
-    "chainlit<3.0.0,>=2.0.1",    
+    "chainlit<3.0.0,>=2.0.1",
     "python-socketio<6.0.0,>=5.11.0",
 ]
 
