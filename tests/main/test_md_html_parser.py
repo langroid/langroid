@@ -241,6 +241,15 @@ def test_strip_yaml_frontmatter_url_not_treated_as_yaml() -> None:
     assert "Real content" in result
 
 
+def test_strip_yaml_frontmatter_preserves_leading_indentation() -> None:
+    """Leading spaces after front-matter must be preserved (e.g. indented code block)."""
+    doc = "---\ntitle: Doc\n---\n\n    indented code block\n\nNormal paragraph."
+    result = _strip_yaml_frontmatter(doc)
+    # The indented code block's spaces must survive
+    assert "    indented code block" in result
+    assert "Normal paragraph" in result
+
+
 def test_strip_yaml_frontmatter_prose_with_colon_not_stripped() -> None:
     """Prose containing a colon (e.g. 'Note: see below') must not trigger stripping."""
     doc = "---\nNote: this is not YAML key value because the key has a space\n---\n\nBody."

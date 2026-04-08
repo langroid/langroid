@@ -124,8 +124,11 @@ def _strip_yaml_frontmatter(text: str) -> str:
     """
     m = _FRONTMATTER_BLOCK_RE.match(text)
     if m and _YAML_KEY_RE.search(m.group(1)):
-        return text[m.end() :].strip()
-    return text.strip()
+        # Strip only leading newlines after the front-matter block; do not
+        # use full strip() which would remove semantically meaningful leading
+        # spaces (e.g. indented code blocks at the start of the document).
+        return text[m.end() :].lstrip("\n")
+    return text
 
 
 class DocumentParser(Parser):
