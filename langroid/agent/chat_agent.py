@@ -1738,8 +1738,16 @@ class ChatAgent(Agent):
                         _n_remaining = (
                             last_msg_idx_to_compress - msg_idx_to_compress + 1
                         )
-                        _msg_tokens = self._message_num_tokens(
-                            hist[msg_idx_to_compress]
+                        # Use only the *content* token count — not the full
+                        # _message_num_tokens which includes attachments.
+                        # truncate_message only trims message.content, so
+                        # including attachment tokens would inflate _msg_tokens
+                        # and make _keep_tokens too large, preventing convergence
+                        # for messages that carry file attachments.
+                        _msg_tokens = (
+                            self.parser.num_tokens(hist[msg_idx_to_compress].content)
+                            if self.parser is not None
+                            else len(hist[msg_idx_to_compress].content) // 4
                         )
                         _reduction = math.ceil(_current_excess / _n_remaining)
                         # Account for the warning string that truncate_message
