@@ -16,7 +16,11 @@ import os
 
 import pytest
 
-from langroid.parsing.document_parser import DocumentParser, DocumentType
+from langroid.parsing.document_parser import (
+    DocumentParser,
+    DocumentType,
+    _strip_yaml_frontmatter,
+)
 from langroid.parsing.parser import Parser, ParsingConfig
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -183,6 +187,50 @@ def test_md_bytes_with_doc_type_strips_frontmatter() -> None:
     full_text = " ".join(c.content for c in chunks)
     assert "title:" not in full_text
     assert "Heading One" in full_text
+
+
+# ---------------------------------------------------------------------------
+# _strip_yaml_frontmatter — unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_strip_yaml_frontmatter_strips_valid_block() -> None:
+    doc = "---\ntitle: My Doc\nauthor: Alice\n---\n\n# Heading\n\nBody text."
+    result = _strip_yaml_frontmatter(doc)
+    assert "title:" not in result
+    assert "author:" not in result
+    assert "Heading" in result
+    assert "Body text" in result
+
+
+def test_strip_yaml_frontmatter_preserves_thematic_break() -> None:
+    """A leading --- used as a thematic break (no key: value inside) must not be removed."""
+    doc = "---\n\nSome intro text.\n\n---\n\n# Section"
+    result = _strip_yaml_frontmatter(doc)
+    assert "Some intro text" in result
+
+
+def test_strip_yaml_frontmatter_preserves_content_between_dashes() -> None:
+    """A leading --- block whose content has no YAML keys must be kept."""
+    doc = "---\nThis is just a horizontal rule section.\n---\n\nReal content here."
+    result = _strip_yaml_frontmatter(doc)
+    assert "horizontal rule" in result
+    assert "Real content" in result
+
+
+def test_strip_yaml_frontmatter_no_frontmatter() -> None:
+    """A document with no --- block is returned unchanged (stripped)."""
+    doc = "# Title\n\nJust a normal document."
+    result = _strip_yaml_frontmatter(doc)
+    assert result == doc.strip()
+
+
+def test_strip_yaml_frontmatter_partial_yaml_keys() -> None:
+    """Even a single key: value line qualifies the block as YAML front-matter."""
+    doc = "---\ntitle: Single Key\n---\n\nContent."
+    result = _strip_yaml_frontmatter(doc)
+    assert "title:" not in result
+    assert "Content" in result
 
 
 # ---------------------------------------------------------------------------

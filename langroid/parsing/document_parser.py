@@ -106,6 +106,25 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
         return False
 
 
+# Matches a leading --- ... --- block (candidate front-matter).
+_FRONTMATTER_BLOCK_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+# A line that looks like a YAML key: value pair (e.g. "title: Foo").
+_YAML_KEY_RE = re.compile(r"^\s*\w[\w .-]*\s*:", re.MULTILINE)
+
+
+def _strip_yaml_frontmatter(text: str) -> str:
+    """Strip YAML front-matter from a Markdown string, if present.
+
+    Only strips the leading ``--- ... ---`` block when it genuinely contains
+    at least one ``key: value`` line.  Thematic breaks, content sections, or
+    other non-YAML dash-delimited blocks are left untouched.
+    """
+    m = _FRONTMATTER_BLOCK_RE.match(text)
+    if m and _YAML_KEY_RE.search(m.group(1)):
+        return text[m.end() :].strip()
+    return text.strip()
+
+
 class DocumentParser(Parser):
     """
     Abstract base class for extracting text from special types of docs
@@ -355,10 +374,11 @@ class DocumentParser(Parser):
                 soup = BeautifulSoup(content, "html.parser")
                 text = soup.get_text(separator="\n")
             elif dtype == DocumentType.MD:
-                # Return Markdown as-is; strip optional YAML front-matter.
-                text = re.sub(
-                    r"^---\s*\n.*?\n---\s*\n", "", content, flags=re.DOTALL
-                ).strip()
+                # Return Markdown as-is; strip YAML front-matter only when
+                # the leading --- block genuinely contains YAML key: value
+                # pairs.  A bare thematic break (---) or a non-metadata
+                # divider block must not be removed.
+                text = _strip_yaml_frontmatter(content)
             else:
                 # TXT and any unrecognised plain-text format.
                 soup = BeautifulSoup(content, "html.parser")
