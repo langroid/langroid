@@ -819,19 +819,51 @@ def _normalize_model_names(models: List[str | ModelName]) -> List[str]:
 
 
 def _normalize_gemini_model_name(model: str) -> str | None:
+    """Normalize a Gemini model name to its canonical form.
+
+    Handles dated variants (e.g. ``gemini-2.0-flash-thinking-exp-01-21``),
+    preview/exp/experimental/latest suffixes, and combinations thereof.
+    """
+    import re
+
     base_model = model.rsplit("/", 1)[-1]
     if base_model in GEMINI_CANONICAL_MODEL_NAMES:
         return base_model
     if not base_model.startswith("gemini-"):
         return None
 
-    # Try stripping known suffixes to find a canonical name.
+    # Pattern for trailing date components like "-01-21" or "-06-17".
+    _DATE_RE = re.compile(r"-\d{2}-\d{2}$")
+
+    def _strip_date(name: str) -> str:
+        return _DATE_RE.sub("", name)
+
+    # Step 1: strip a trailing date suffix alone (handles variants of canonical
+    # names that already contain "-exp", e.g. "gemini-2.0-flash-thinking-exp").
+    date_stripped = _strip_date(base_model)
+    if date_stripped != base_model and date_stripped in GEMINI_CANONICAL_MODEL_NAMES:
+        return date_stripped
+
+    # Step 2: strip a known keyword suffix, then optionally a trailing date.
     # Use split (not endswith) for "-preview" so dated variants like
     # "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
     for suffix in ("-preview", "-exp", "-experimental", "-latest"):
         stripped = base_model.split(suffix, maxsplit=1)[0]
-        if stripped != base_model and stripped in GEMINI_CANONICAL_MODEL_NAMES:
+        if stripped == base_model:
+            continue
+        if stripped in GEMINI_CANONICAL_MODEL_NAMES:
             return stripped
+        # After removing the keyword suffix, there may still be a trailing date
+        # (e.g. "gemini-2.0-pro-exp-03-07" → strip "-exp" → "gemini-2.0-pro"
+        # with trailing "-03-07" already gone via split; but cover the symmetric
+        # case where the date precedes the keyword suffix is unusual — keep for
+        # forward-compatibility).
+        date_stripped2 = _strip_date(stripped)
+        if (
+            date_stripped2 != stripped
+            and date_stripped2 in GEMINI_CANONICAL_MODEL_NAMES
+        ):
+            return date_stripped2
     return None
 
 
