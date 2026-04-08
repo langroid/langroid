@@ -148,6 +148,43 @@ def test_html_chunks_from_bytes() -> None:
     assert "<h1>" not in full_text
 
 
+def test_html_bytes_auto_detected_without_doc_type() -> None:
+    """HTML bytes must be detected as HTML (not TXT) even without doc_type.
+
+    Previously is_plain_text() short-circuited to TXT for any valid UTF-8
+    bytes before MIME detection could run, so HTML bytes were routed through
+    the BeautifulSoup/TXT path accidentally (same result here, but with the
+    wrong DocumentType).  This test verifies the MIME path is reached.
+
+    Requires libmagic (python-magic); skipped if the native library is absent.
+    """
+    magic = pytest.importorskip(
+        "magic",
+        reason="libmagic not available; skipping MIME-based bytes detection test",
+    )
+    # Verify that magic itself is functional (not just importable).
+    try:
+        magic.from_buffer(b"test", mime=True)
+    except Exception:
+        pytest.skip("libmagic not functional on this system")
+
+    with open(_HTML_PATH, "rb") as f:
+        raw = f.read()
+    detected = DocumentParser._document_type(raw)
+    assert detected == DocumentType.HTML
+
+
+def test_md_bytes_with_doc_type_strips_frontmatter() -> None:
+    """Markdown bytes passed with doc_type='md' must strip YAML front-matter."""
+    with open(_MD_PATH, "rb") as f:
+        raw = f.read()
+    parser = Parser(ParsingConfig())
+    chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser, doc_type="md")
+    full_text = " ".join(c.content for c in chunks)
+    assert "title:" not in full_text
+    assert "Heading One" in full_text
+
+
 # ---------------------------------------------------------------------------
 # DocumentParser.create() raises for MD / HTML
 # ---------------------------------------------------------------------------

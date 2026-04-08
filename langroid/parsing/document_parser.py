@@ -243,13 +243,15 @@ class DocumentParser(Parser):
                 return DocumentType.MD
             elif lower.endswith((".html", ".htm")):
                 return DocumentType.HTML
-        if is_plain_text(source):
-            return DocumentType.TXT
-        if isinstance(source, str):
+            # For strings with no recognised extension, fall back to the
+            # plain-text heuristic (covers .txt and bare URLs).
+            if is_plain_text(source):
+                return DocumentType.TXT
             raise ValueError(f"Unsupported document type: {source}")
         else:
-            # must be bytes: attempt to detect type from content
-            # using magic mime type detection
+            # Bytes: use MIME detection first so that HTML/Markdown bytes
+            # are not swallowed by is_plain_text() as TXT before we can
+            # assign the correct DocumentType.
             import magic
 
             mime_type = magic.from_buffer(source, mime=True)
@@ -273,6 +275,9 @@ class DocumentParser(Parser):
                 return DocumentType.HTML
             elif mime_type in ("text/markdown", "text/x-markdown"):
                 return DocumentType.MD
+            elif is_plain_text(source):
+                # Generic plain text (text/plain, etc.)
+                return DocumentType.TXT
             else:
                 raise ValueError("Unsupported document type from bytes")
 
