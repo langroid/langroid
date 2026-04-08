@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentType(str, Enum):
-    # TODO add `md` (Markdown) and `html`
     PDF = "pdf"
     DOCX = "docx"
     DOC = "doc"
@@ -45,6 +44,8 @@ class DocumentType(str, Enum):
     XLSX = "xlsx"
     XLS = "xls"
     PPTX = "pptx"
+    MD = "md"
+    HTML = "html"
 
 
 def find_last_full_char(possible_unicode: bytes) -> int:
@@ -176,6 +177,13 @@ class DocumentParser(Parser):
             return MarkitdownXLSXParser(source, config)
         elif inferred_doc_type == DocumentType.PPTX:
             return MarkitdownPPTXParser(source, config)
+        elif inferred_doc_type in (DocumentType.MD, DocumentType.HTML):
+            source_name = source if isinstance(source, str) else "bytes"
+            raise ValueError(
+                f"DocumentParser.create() does not handle {inferred_doc_type.value!r} "
+                f"documents directly. Use DocumentParser.chunks_from_path_or_bytes() "
+                f"instead, which processes Markdown and HTML as plain text."
+            )
         else:
             source_name = source if isinstance(source, str) else "bytes"
             raise ValueError(f"Unsupported document type: {source_name}")
@@ -214,24 +222,31 @@ class DocumentParser(Parser):
             return doc_type
         if doc_type:
             return DocumentType(doc_type.lower())
+        if isinstance(source, str):
+            # Detect file type from path/URL extension first so that
+            # format-specific types (md, html) are not mis-classified as TXT
+            # by the is_plain_text heuristic below.
+            lower = source.lower()
+            if lower.endswith(".pdf"):
+                return DocumentType.PDF
+            elif lower.endswith(".docx"):
+                return DocumentType.DOCX
+            elif lower.endswith(".doc"):
+                return DocumentType.DOC
+            elif lower.endswith(".xlsx"):
+                return DocumentType.XLSX
+            elif lower.endswith(".xls"):
+                return DocumentType.XLS
+            elif lower.endswith(".pptx"):
+                return DocumentType.PPTX
+            elif lower.endswith(".md"):
+                return DocumentType.MD
+            elif lower.endswith((".html", ".htm")):
+                return DocumentType.HTML
         if is_plain_text(source):
             return DocumentType.TXT
         if isinstance(source, str):
-            # detect file type from path extension
-            if source.lower().endswith(".pdf"):
-                return DocumentType.PDF
-            elif source.lower().endswith(".docx"):
-                return DocumentType.DOCX
-            elif source.lower().endswith(".doc"):
-                return DocumentType.DOC
-            elif source.lower().endswith(".xlsx"):
-                return DocumentType.XLSX
-            elif source.lower().endswith(".xls"):
-                return DocumentType.XLS
-            elif source.lower().endswith(".pptx"):
-                return DocumentType.PPTX
-            else:
-                raise ValueError(f"Unsupported document type: {source}")
+            raise ValueError(f"Unsupported document type: {source}")
         else:
             # must be bytes: attempt to detect type from content
             # using magic mime type detection
@@ -254,6 +269,10 @@ class DocumentParser(Parser):
                 return DocumentType.XLSX
             elif mime_type == "application/vnd.ms-excel":
                 return DocumentType.XLS
+            elif mime_type == "text/html":
+                return DocumentType.HTML
+            elif mime_type in ("text/markdown", "text/x-markdown"):
+                return DocumentType.MD
             else:
                 raise ValueError("Unsupported document type from bytes")
 
@@ -311,8 +330,8 @@ class DocumentParser(Parser):
                 chunks = doc_parser.get_doc_chunks()
             return chunks
         else:
-            # try getting as plain text; these will be chunked downstream
-            # -- could be a bytes object or a path
+            # Plain-text formats (TXT, MD, HTML) and unknown types:
+            # read content, extract text, and chunk.
             if isinstance(source, bytes):
                 content = source.decode()
                 if lines is not None:
@@ -325,8 +344,21 @@ class DocumentParser(Parser):
                         content = "\n".join(line.strip() for line in file_lines)
                     else:
                         content = f.read()
-            soup = BeautifulSoup(content, "html.parser")
-            text = soup.get_text()
+
+            if dtype == DocumentType.HTML:
+                # Strip HTML tags; preserve readable text.
+                soup = BeautifulSoup(content, "html.parser")
+                text = soup.get_text(separator="\n")
+            elif dtype == DocumentType.MD:
+                # Return Markdown as-is; strip optional YAML front-matter.
+                text = re.sub(
+                    r"^---\s*\n.*?\n---\s*\n", "", content, flags=re.DOTALL
+                ).strip()
+            else:
+                # TXT and any unrecognised plain-text format.
+                soup = BeautifulSoup(content, "html.parser")
+                text = soup.get_text()
+
             source_name = source if isinstance(source, str) else "bytes"
             doc = Document(
                 content=text,
