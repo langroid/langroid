@@ -233,6 +233,20 @@ def test_strip_yaml_frontmatter_partial_yaml_keys() -> None:
     assert "Content" in result
 
 
+def test_md_crlf_frontmatter_stripped() -> None:
+    """CRLF line endings in Markdown must not prevent front-matter stripping."""
+    parser = Parser(ParsingConfig())
+    crlf_md = (
+        "---\r\ntitle: CRLF Doc\r\nauthor: Bob\r\n---\r\n\r\n# Heading\r\n\r\nBody."
+    )
+    chunks = DocumentParser.chunks_from_path_or_bytes(
+        crlf_md.encode(), parser, doc_type="md"
+    )
+    full_text = " ".join(c.content for c in chunks)
+    assert "title:" not in full_text
+    assert "Heading" in full_text
+
+
 # ---------------------------------------------------------------------------
 # DocumentParser.create() raises for MD / HTML
 # ---------------------------------------------------------------------------

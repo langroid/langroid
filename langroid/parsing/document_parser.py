@@ -374,6 +374,9 @@ class DocumentParser(Parser):
                 soup = BeautifulSoup(content, "html.parser")
                 text = soup.get_text(separator="\n")
             elif dtype == DocumentType.MD:
+                # Normalise CRLF → LF so the front-matter regex matches
+                # consistently on Windows-saved files.
+                content = content.replace("\r\n", "\n")
                 # Return Markdown as-is; strip YAML front-matter only when
                 # the leading --- block genuinely contains YAML key: value
                 # pairs.  A bare thematic break (---) or a non-metadata
