@@ -109,7 +109,10 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
 # Matches a leading --- ... --- block (candidate front-matter).
 _FRONTMATTER_BLOCK_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 # A line that looks like a YAML key: value pair (e.g. "title: Foo").
-_YAML_KEY_RE = re.compile(r"^\s*\w[\w .-]*\s*:", re.MULTILINE)
+# Requirements to avoid false positives:
+#   - Key is a bare identifier: word chars and hyphens only (no spaces, slashes)
+#   - Colon is followed by whitespace or end-of-line (excludes "https://…")
+_YAML_KEY_RE = re.compile(r"^\s*[\w][\w-]*\s*:(?:\s|$)", re.MULTILINE)
 
 
 def _strip_yaml_frontmatter(text: str) -> str:

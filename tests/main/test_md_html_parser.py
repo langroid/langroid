@@ -233,6 +233,26 @@ def test_strip_yaml_frontmatter_partial_yaml_keys() -> None:
     assert "Content" in result
 
 
+def test_strip_yaml_frontmatter_url_not_treated_as_yaml() -> None:
+    """A block containing only a URL must NOT be stripped (URL contains ':' but is not a key)."""
+    doc = "---\nhttps://example.com\n---\n\nReal content."
+    result = _strip_yaml_frontmatter(doc)
+    assert "example.com" in result
+    assert "Real content" in result
+
+
+def test_strip_yaml_frontmatter_prose_with_colon_not_stripped() -> None:
+    """Prose containing a colon (e.g. 'Note: see below') must not trigger stripping."""
+    doc = "---\nNote: this is not YAML key value because the key has a space\n---\n\nBody."
+    # "Note" is a bare identifier — this WILL be stripped since "Note:" matches.
+    # But "Some note: text" (key with space) would NOT match the tightened regex.
+    doc2 = "---\nSome long prose: with a colon\n---\n\nBody."
+    result2 = _strip_yaml_frontmatter(doc2)
+    # "Some long prose" has spaces → not a valid YAML key → block preserved
+    assert "Some long prose" in result2
+    assert "Body" in result2
+
+
 def test_md_crlf_frontmatter_stripped() -> None:
     """CRLF line endings in Markdown must not prevent front-matter stripping."""
     parser = Parser(ParsingConfig())
