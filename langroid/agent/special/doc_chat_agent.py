@@ -220,6 +220,8 @@ class DocChatAgentConfig(ChatAgentConfig):
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
+    bm25_score_threshold: float = 0.0  # min BM25 score; 0.0 = no filtering
+    fuzzy_score_threshold: float = 0.0  # min fuzzy match score; 0.0 = no filtering
     use_reciprocal_rank_fusion: bool = False
     cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
@@ -1403,8 +1405,13 @@ class DocChatAgent(ChatAgent):
 
         id2_rank_bm25 = {}
         if self.config.use_bm25_search:
-            # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+            if self.config.bm25_score_threshold > 0.0:
+                docs_scores = [
+                    (d, s)
+                    for d, s in docs_scores
+                    if s >= self.config.bm25_score_threshold
+                ]
             id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,
@@ -1419,8 +1426,13 @@ class DocChatAgent(ChatAgent):
 
         id2_rank_fuzzy = {}
         if self.config.use_fuzzy_match:
-            # TODO: Add score threshold in config
             fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
+            if self.config.fuzzy_score_threshold > 0.0:
+                fuzzy_match_doc_scores = [
+                    (d, s)
+                    for d, s in fuzzy_match_doc_scores
+                    if s >= self.config.fuzzy_score_threshold
+                ]
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder,
                 # instead of accumulating the fuzzy match results into passages,
