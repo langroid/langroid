@@ -1179,6 +1179,7 @@ class DocChatAgent(ChatAgent):
                 k=self.config.n_similar_chunks * multiple,
                 words_before=self.config.n_fuzzy_neighbor_words or None,
                 words_after=self.config.n_fuzzy_neighbor_words or None,
+                score_threshold=self.config.fuzzy_score_threshold,
             )
         return fuzzy_match_docs
 
@@ -1427,12 +1428,6 @@ class DocChatAgent(ChatAgent):
         id2_rank_fuzzy = {}
         if self.config.use_fuzzy_match:
             fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
-            if self.config.fuzzy_score_threshold > 0.0:
-                fuzzy_match_doc_scores = [
-                    (d, s)
-                    for d, s in fuzzy_match_doc_scores
-                    if s >= self.config.fuzzy_score_threshold
-                ]
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder,
                 # instead of accumulating the fuzzy match results into passages,
