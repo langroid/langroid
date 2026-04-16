@@ -2,6 +2,7 @@
 Tests for OpenAIGPT client caching functionality.
 """
 
+import httpx
 import pytest
 
 import langroid.language_models.client_cache as client_cache_module
@@ -112,6 +113,58 @@ class TestOpenAIGPTClientCache:
 
         client3 = get_openai_client(api_key="test-key-refresh")
         assert client3 is client1
+
+    def test_openai_client_cache_hit_does_not_create_extra_httpx_client(
+        self, monkeypatch
+    ):
+        """Test cache hits avoid allocating a new sync transport for config."""
+        created_clients: list[httpx.Client] = []
+        real_client = httpx.Client
+
+        class TrackingClient(real_client):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                created_clients.append(self)
+
+        monkeypatch.setattr(httpx, "Client", TrackingClient)
+
+        client1 = get_openai_client(
+            api_key="test-key-http-client-config",
+            http_client_config={"timeout": 1.0},
+        )
+        client2 = get_openai_client(
+            api_key="test-key-http-client-config",
+            http_client_config={"timeout": 1.0},
+        )
+
+        assert client1 is client2
+        assert len(created_clients) == 1
+
+    def test_async_openai_client_cache_hit_does_not_create_extra_httpx_client(
+        self, monkeypatch
+    ):
+        """Test cache hits avoid allocating a new async transport for config."""
+        created_clients: list[httpx.AsyncClient] = []
+        real_async_client = httpx.AsyncClient
+
+        class TrackingAsyncClient(real_async_client):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                created_clients.append(self)
+
+        monkeypatch.setattr(httpx, "AsyncClient", TrackingAsyncClient)
+
+        client1 = get_async_openai_client(
+            api_key="test-key-async-http-client-config",
+            http_client_config={"timeout": 1.0},
+        )
+        client2 = get_async_openai_client(
+            api_key="test-key-async-http-client-config",
+            http_client_config={"timeout": 1.0},
+        )
+
+        assert client1 is client2
+        assert len(created_clients) == 1
 
     def test_prune_cache_negative_max_age_raises(self):
         """Test that negative max_age_seconds raises ValueError."""
