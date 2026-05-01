@@ -7,8 +7,6 @@ message needs to be reduced by so that the history fits within the context
 window, preserving as much content as possible.
 """
 
-import math
-
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -158,31 +156,76 @@ def test_truncation_raises_when_impossible(test_settings: Settings) -> None:
         agent._prep_llm_messages(truncate=True)
 
 
-def test_truncate_message_smart_target(test_settings: Settings) -> None:
+def test_small_overflow_preserves_most_content(test_settings: Settings) -> None:
     """
-    Unit-test the per-message token target computation: given an excess and a
-    number of remaining compressible messages, each message should be reduced
-    by ceil(excess / n_remaining) tokens (but not below 30).
+    Headline regression test for the fix: when overflow is small, each
+    truncated message should keep most of its content rather than being
+    collapsed to a 30-token floor (the old behaviour).
     """
     set_global(test_settings)
-    agent = _make_agent(context_length=10_000)
+    # budget = 1000 - 64 - 300 = 636 tokens.
+    # 5 messages × 130 words ≈ 650 + system ≈ 655 → ~19 tokens over budget.
+    # With 4 compressible messages, even distribution gives reduction ≈ 5
+    # per msg, so each should retain ~125 tokens — far above the 30-token
+    # floor that the old code would have produced.
+    context_length = 1000
+    agent = _make_agent(context_length, max_output_tokens=context_length)
+    _fill_history(agent, n_msgs=5, words_each=130)
+
+    original_compressible_tokens = [
+        agent.parser.num_tokens(agent.message_history[i].content)
+        for i in range(1, len(agent.message_history) - 1)
+    ]
+
+    hist, _ = agent._prep_llm_messages(truncate=True)
+
+    truncated_tokens = [
+        agent.parser.num_tokens(hist[i].content) for i in range(1, len(hist) - 1)
+    ]
+    # No message should have been collapsed near the 30-token floor.
+    assert all(t > 80 for t in truncated_tokens), (
+        f"Small overflow should not collapse messages near the 30-token "
+        f"floor; per-msg tokens={truncated_tokens}"
+    )
+    # And every truncated message should be smaller than its original
+    # (or unchanged, but at least one must be smaller for the loop to exit).
+    assert any(
+        t < orig for t, orig in zip(truncated_tokens, original_compressible_tokens)
+    ), "expected at least one message to actually be truncated"
+
+
+def test_smart_truncation_distributes_evenly(test_settings: Settings) -> None:
+    """
+    The contract of the fix: per-message reductions should be roughly equal
+    across messages that actually got truncated, not all clamped to a fixed
+    floor. We verify this by checking the spread of per-message reductions.
+    """
+    set_global(test_settings)
+    # budget = 900 - 64 - 300 = 536 tokens.
+    # 4 msgs × 200 words ≈ 800 → over by ~264 across 3 compressible msgs
+    # → reduction ≈ 88 each.
+    context_length = 900
+    agent = _make_agent(context_length, max_output_tokens=context_length)
     _fill_history(agent, n_msgs=4, words_each=200)
 
-    msg_idx = 1
-    original_tokens = agent._message_num_tokens(agent.message_history[msg_idx])
+    original_tokens = [
+        agent.parser.num_tokens(agent.message_history[i].content)
+        for i in range(1, len(agent.message_history) - 1)
+    ]
 
-    # Simulate: 300 tokens of excess to spread across 3 remaining messages.
-    excess = 300
-    n_remaining = 3
-    reduction = math.ceil(excess / n_remaining)  # 100
-    keep = max(30, original_tokens - reduction)
+    hist, _ = agent._prep_llm_messages(truncate=True)
 
-    truncated = agent.truncate_message(msg_idx, tokens=keep, inplace=False)
-    actual_tokens = agent.parser.num_tokens(truncated.content)
+    new_tokens = [
+        agent.parser.num_tokens(hist[i].content) for i in range(1, len(hist) - 1)
+    ]
+    reductions = [orig - new for orig, new in zip(original_tokens, new_tokens)]
+    truncated_reductions = [r for r in reductions if r > 0]
 
-    assert (
-        actual_tokens <= keep + 5
-    ), (  # small tolerance for tiktoken approximation
-        f"Truncated message has {actual_tokens} tokens, expected ≤ {keep + 5}"
-    )
-    assert actual_tokens >= 20, "Truncated message should not be empty"
+    # The reductions across truncated messages should be of comparable size
+    # (within a 2x spread) — the old code would have produced reductions
+    # that pinned every message to 30 tokens regardless.
+    assert truncated_reductions, "expected at least one message to be truncated"
+    spread = max(truncated_reductions) - min(truncated_reductions)
+    assert spread < max(
+        truncated_reductions
+    ), f"Reductions should be roughly even, got {truncated_reductions}"

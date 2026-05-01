@@ -1476,9 +1476,7 @@ class ChatAgent(Agent):
         response.metadata.tool_ids = (
             []
             if isinstance(message, str)
-            else message.metadata.tool_ids
-            if message is not None
-            else []
+            else message.metadata.tool_ids if message is not None else []
         )
 
         return response
@@ -1566,9 +1564,7 @@ class ChatAgent(Agent):
         response.metadata.tool_ids = (
             []
             if isinstance(message, str)
-            else message.metadata.tool_ids
-            if message is not None
-            else []
+            else message.metadata.tool_ids if message is not None else []
         )
 
         return response
@@ -1702,12 +1698,28 @@ class ChatAgent(Agent):
                         - 1
                     )
                     n_truncated = 0
-                    _target_tokens = (
+                    target_tokens = (
                         self.llm.chat_context_length()
                         - self.config.llm.min_output_tokens
                         - CHAT_HISTORY_BUFFER
                     )
-                    while self.chat_num_tokens(hist) > _target_tokens:
+                    # Distribute the overall excess evenly across the
+                    # compressible messages so each retains as much content as
+                    # possible, rather than collapsing every message to a
+                    # fixed 30-token floor. The warning suffix appended by
+                    # truncate_message ("\n" + warning) is subtracted from
+                    # the per-message `keep` target so the post-truncation
+                    # size matches the intended reduction.
+                    truncation_warning = "... [Contents truncated!]"
+                    warning_tokens = (
+                        self.parser.num_tokens("\n" + truncation_warning)
+                        if self.parser is not None
+                        else len(truncation_warning) // 4
+                    )
+                    while True:
+                        current_tokens = self.chat_num_tokens(hist)
+                        if current_tokens <= target_tokens:
+                            break
                         if msg_idx_to_compress > last_msg_idx_to_compress:
                             # We want to preserve the first message (typically
                             # system msg) and last message (user msg).
@@ -1728,44 +1740,26 @@ class ChatAgent(Agent):
                             """
                             )
                         n_truncated += 1
-                        # Compute how many tokens this message should be reduced to.
-                        # Distribute the total excess evenly across the remaining
-                        # compressible messages so that each message retains as much
-                        # content as possible rather than being collapsed to a fixed
-                        # minimum of 30 tokens.
-                        _truncation_warning = "... [Contents truncated!]"
-                        _current_excess = self.chat_num_tokens(hist) - _target_tokens
-                        _n_remaining = (
-                            last_msg_idx_to_compress - msg_idx_to_compress + 1
-                        )
+                        current_excess = current_tokens - target_tokens
+                        n_remaining = last_msg_idx_to_compress - msg_idx_to_compress + 1
                         # Use only the *content* token count — not the full
                         # _message_num_tokens which includes attachments.
                         # truncate_message only trims message.content, so
-                        # including attachment tokens would inflate _msg_tokens
-                        # and make _keep_tokens too large, preventing convergence
+                        # including attachment tokens would inflate msg_tokens
+                        # and make keep_tokens too large, preventing convergence
                         # for messages that carry file attachments.
-                        _msg_tokens = (
+                        msg_tokens = (
                             self.parser.num_tokens(hist[msg_idx_to_compress].content)
                             if self.parser is not None
                             else len(hist[msg_idx_to_compress].content) // 4
                         )
-                        _reduction = math.ceil(_current_excess / _n_remaining)
-                        # Account for the warning string that truncate_message
-                        # appends ("\n" + warning) so the final message token
-                        # count does not exceed the intended target.
-                        _warning_tokens = (
-                            self.parser.num_tokens("\n" + _truncation_warning)
-                            if self.parser is not None
-                            else len(_truncation_warning) // 4
-                        )
-                        _keep_tokens = max(
-                            30, _msg_tokens - _reduction - _warning_tokens
-                        )
+                        reduction = math.ceil(current_excess / n_remaining)
+                        keep_tokens = max(30, msg_tokens - reduction - warning_tokens)
                         # compress the msg at idx `msg_idx_to_compress`
                         hist[msg_idx_to_compress] = self.truncate_message(
                             msg_idx_to_compress,
-                            tokens=_keep_tokens,
-                            warning=_truncation_warning,
+                            tokens=keep_tokens,
+                            warning=truncation_warning,
                         )
                         msg_idx_to_compress += 1
 
@@ -2013,13 +2007,9 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            (
-                functions,
-                fun_call,
-                tools,
-                force_tool,
-                output_format,
-            ) = self._function_args()
+            functions, fun_call, tools, force_tool, output_format = (
+                self._function_args()
+            )
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
