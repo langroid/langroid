@@ -1,4 +1,5 @@
 import logging
+import re
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -176,6 +177,8 @@ class ModelInfo(BaseModel):
 
 
 GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
+# Trailing "-MM-DD" date stamp on Gemini variant names (e.g. "-01-21").
+_GEMINI_DATE_SUFFIX = re.compile(r"-\d{2}-\d{2}$")
 DEFAULT_MODEL_INFO = ModelInfo()
 WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
 
@@ -825,12 +828,18 @@ def _normalize_gemini_model_name(model: str) -> str | None:
     if not base_model.startswith("gemini-"):
         return None
 
-    # Try stripping known suffixes to find a canonical name.
-    # Use split (not endswith) for "-preview" so dated variants like
-    # "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
+    # Strip a trailing "-MM-DD" date stamp; covers names like
+    # "gemini-2.0-flash-thinking-exp-01-21" whose canonical form already
+    # ends with "-exp".
+    candidate = _GEMINI_DATE_SUFFIX.sub("", base_model)
+    if candidate in GEMINI_CANONICAL_MODEL_NAMES:
+        return candidate
+
+    # Strip a known keyword suffix. Split (not endswith) so dated variants
+    # like "gemini-2.5-flash-lite-preview-06-17" are handled.
     for suffix in ("-preview", "-exp", "-experimental", "-latest"):
-        stripped = base_model.split(suffix, maxsplit=1)[0]
-        if stripped != base_model and stripped in GEMINI_CANONICAL_MODEL_NAMES:
+        stripped = candidate.split(suffix, maxsplit=1)[0]
+        if stripped != candidate and stripped in GEMINI_CANONICAL_MODEL_NAMES:
             return stripped
     return None
 
