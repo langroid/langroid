@@ -220,6 +220,11 @@ class DocChatAgentConfig(ChatAgentConfig):
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
+    # Minimum BM25 score (exclusive) to keep a chunk; 0.0 = no filtering.
+    bm25_score_threshold: float = 0.0
+    # Minimum fuzzy-match score (exclusive) to keep a chunk. Defaults to 50.0
+    # to preserve the historical filter inside find_fuzzy_matches_in_docs.
+    fuzzy_score_threshold: float = 50.0
     use_reciprocal_rank_fusion: bool = False
     cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
@@ -1177,6 +1182,7 @@ class DocChatAgent(ChatAgent):
                 k=self.config.n_similar_chunks * multiple,
                 words_before=self.config.n_fuzzy_neighbor_words or None,
                 words_after=self.config.n_fuzzy_neighbor_words or None,
+                score_threshold=self.config.fuzzy_score_threshold,
             )
         return fuzzy_match_docs
 
@@ -1403,8 +1409,10 @@ class DocChatAgent(ChatAgent):
 
         id2_rank_bm25 = {}
         if self.config.use_bm25_search:
-            # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+            docs_scores = [
+                (d, s) for d, s in docs_scores if s > self.config.bm25_score_threshold
+            ]
             id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,
@@ -1419,7 +1427,6 @@ class DocChatAgent(ChatAgent):
 
         id2_rank_fuzzy = {}
         if self.config.use_fuzzy_match:
-            # TODO: Add score threshold in config
             fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder,

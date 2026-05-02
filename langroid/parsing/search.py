@@ -25,6 +25,7 @@ def find_fuzzy_matches_in_docs(
     k: int,
     words_before: int | None = None,
     words_after: int | None = None,
+    score_threshold: float = 50.0,
 ) -> List[Tuple[Document, float]]:
     """
     Find approximate matches of the query in the docs and return surrounding
@@ -39,6 +40,8 @@ def find_fuzzy_matches_in_docs(
             Default None => return max
         words_after (int|None): Number of words to include after each match.
             Default None => return max
+        score_threshold (float): Minimum partial-ratio score (exclusive) for a
+            match to be kept. Default 50.0 preserves the historical filter.
 
     Returns:
         List[Tuple[Document,float]]: List of (Document, score) tuples.
@@ -52,7 +55,7 @@ def find_fuzzy_matches_in_docs(
         scorer=fuzz.partial_ratio,
     )
 
-    real_matches = [(m, score) for m, score in best_matches if score > 50]
+    real_matches = [(m, score) for m, score in best_matches if score > score_threshold]
     # find the original docs that corresponding to the matches
     orig_doc_matches = []
     for i, (m, s) in enumerate(real_matches):

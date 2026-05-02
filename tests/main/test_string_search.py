@@ -74,6 +74,35 @@ def test_find_match_with_surrounding_words(
     assert all(e in results[0][0].content for e in expected)
 
 
+def test_score_threshold_filters_low_quality_matches(original_docs, sample_docs):
+    # A high threshold should drop all matches; a 0.0 threshold should keep
+    # everything that has a positive score.
+    query = "sample"
+    k = 3
+    strict = find_fuzzy_matches_in_docs(
+        query, original_docs, sample_docs, k, score_threshold=99.0
+    )
+    permissive = find_fuzzy_matches_in_docs(
+        query, original_docs, sample_docs, k, score_threshold=0.0
+    )
+    assert len(strict) == 0
+    assert len(permissive) >= len(
+        find_fuzzy_matches_in_docs(query, original_docs, sample_docs, k)
+    )
+
+
+def test_score_threshold_default_preserves_legacy_behavior(original_docs, sample_docs):
+    # The default threshold must match the historical hard-coded `> 50` filter,
+    # so callers that don't pass score_threshold see no behavior change.
+    query = "sample"
+    k = 3
+    default_results = find_fuzzy_matches_in_docs(query, original_docs, sample_docs, k)
+    explicit_results = find_fuzzy_matches_in_docs(
+        query, original_docs, sample_docs, k, score_threshold=50.0
+    )
+    assert [d.id() for d, _ in default_results] == [d.id() for d, _ in explicit_results]
+
+
 def test_empty_docs():
     docs = []
     docs_clean = []
