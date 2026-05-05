@@ -327,8 +327,8 @@ class Task:
         except Exception:
             logger.warning(
                 """
-                Failed to deep-copy Agent config during task creation, 
-                proceeding with original config. Be aware that changes to 
+                Failed to deep-copy Agent config during task creation,
+                proceeding with original config. Be aware that changes to
                 the config may affect other agents using the same config.
                 """
             )
@@ -665,12 +665,13 @@ class Task:
             and self.agent.system_message
         ):
             system_msg = self.agent._create_system_and_tools_message()
-            system_message_chat_doc = ChatDocument.from_LLMMessage(
+            system_message_temp_doc = ChatDocument.from_LLMMessage(
                 system_msg,
                 sender_name=self.name or "system",
             )
             # log the system message
-            self.log_message(Entity.SYSTEM, system_message_chat_doc, mark=True)
+            self.log_message(Entity.SYSTEM, system_message_temp_doc, mark=True)
+            ChatDocument.delete_id(system_message_temp_doc.id())
         self.log_message(Entity.USER, self.pending_message, mark=True)
         return self.pending_message
 
@@ -865,7 +866,7 @@ class Task:
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
                     You can adjust infinite loop detection (or turn it off)
-                    by changing the params in the TaskConfig passed to the Task 
+                    by changing the params in the TaskConfig passed to the Task
                     constructor; see here:
                     https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig
                     """
@@ -898,7 +899,7 @@ class Task:
                         A response adhering to the following JSON schema was expected:
                         {schema}
 
-                        Please resubmit with the correct schema. 
+                        Please resubmit with the correct schema.
                         """
                     )
 
@@ -1065,7 +1066,7 @@ class Task:
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
                     You can adjust infinite loop detection (or turn it off)
-                    by changing the params in the TaskConfig passed to the Task 
+                    by changing the params in the TaskConfig passed to the Task
                     constructor; see here:
                     https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig
                     """
@@ -1098,7 +1099,7 @@ class Task:
                         A response adhering to the following JSON schema was expected:
                         {schema}
 
-                        Please resubmit with the correct schema. 
+                        Please resubmit with the correct schema.
                         """
                     )
 
