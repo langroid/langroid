@@ -337,3 +337,40 @@ def test_llm_response_messages_no_registry_leak():
         f"This suggests ChatDocument objects are being created unnecessarily "
         f"(e.g., in callbacks or _render_llm_response) and not cleaned up."
     )
+
+
+def test_task_init_no_registry_leak() -> None:
+    """
+    Regression test for PR #1021: Task.init() builds a temporary ChatDocument
+    purely to feed log_message(Entity.SYSTEM, ...). That doc is auto-registered
+    by ChatDocument.__init__ and was never removed, leaking into the
+    class-level ObjectRegistry on every Task creation. The fix calls
+    ChatDocument.delete_id(...) on the temp doc after logging.
+    """
+    from langroid.language_models.mock_lm import MockLMConfig
+    from langroid.utils.object_registry import ObjectRegistry
+
+    config = ChatAgentConfig(
+        llm=MockLMConfig(default_response="Hello"),
+        system_message="You are a helpful assistant.",
+    )
+    agent = ChatAgent(config)
+
+    initial_count = sum(
+        1 for obj in ObjectRegistry.registry.values() if isinstance(obj, ChatDocument)
+    )
+
+    num_tasks = 5
+    for _ in range(num_tasks):
+        Task(agent, single_round=True).init()
+
+    final_count = sum(
+        1 for obj in ObjectRegistry.registry.values() if isinstance(obj, ChatDocument)
+    )
+
+    new_docs = final_count - initial_count
+    assert new_docs == 0, (
+        f"Expected 0 leaked ChatDocuments after {num_tasks} Task.init() calls, "
+        f"but found {new_docs}. The temporary system-message ChatDocument is "
+        f"being left in ObjectRegistry."
+    )

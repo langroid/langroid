@@ -671,6 +671,8 @@ class Task:
             )
             # log the system message
             self.log_message(Entity.SYSTEM, system_message_temp_doc, mark=True)
+            # ChatDocument.__init__ auto-registers in ObjectRegistry; remove
+            # the temp doc explicitly to avoid leaking it across Task creations.
             ChatDocument.delete_id(system_message_temp_doc.id())
         self.log_message(Entity.USER, self.pending_message, mark=True)
         return self.pending_message
