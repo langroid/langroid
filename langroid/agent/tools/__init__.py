@@ -5,6 +5,7 @@ from . import orchestration
 from .google_search_tool import GoogleSearchTool
 from .recipient_tool import AddRecipientTool, RecipientTool
 from .rewind_tool import RewindTool
+from .xquik_search_tool import XquikSearchTool
 from .orchestration import (
     AgentDoneTool,
     DoneTool,
@@ -19,6 +20,7 @@ from .orchestration import (
 
 __all__ = [
     "GoogleSearchTool",
+    "XquikSearchTool",
     "AddRecipientTool",
     "RecipientTool",
     "google_search_tool",

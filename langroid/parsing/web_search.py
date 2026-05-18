@@ -7,7 +7,7 @@ environment variables in your `.env` file, as explained in the
 """
 
 import os
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import requests
 from bs4 import BeautifulSoup
@@ -68,7 +68,7 @@ class WebSearchResult:
                 html_type in content_type
                 for html_type in ["text/html", "application/xhtml", "text/plain"]
             ):
-                return f"Skipping Content type '{content_type}' " f"in {self.link}"
+                return f"Skipping Content type '{content_type}' in {self.link}"
 
             response: Response = requests.get(self.link, timeout=10)
             if response.status_code != 200:
@@ -321,6 +321,70 @@ def seltz_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         result.link = doc.url
         result.full_content = doc.content[:3500]
         result.summary = doc.content[:300]
+        results.append(result)
+
+    return results
+
+
+def xquik_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Search public X posts with Xquik and return matching posts as web results.
+
+    Args:
+        query (str): X search query, including standard operators like from:user.
+        num_results (int): Maximum number of posts to return.
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("XQUIK_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "XQUIK_API_KEY environment variable is not set. "
+            "Please set it to your API key and try again."
+        )
+
+    response = requests.get(
+        "https://xquik.com/api/v1/x/tweets/search",
+        headers={
+            "x-api-key": api_key,
+            "xquik-api-contract": "2026-04-29",
+        },
+        params={
+            "q": query,
+            "queryType": "Latest",
+            "limit": num_results,
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+
+    data: dict[str, Any] = response.json()
+    tweets = data.get("tweets", [])
+    if not isinstance(tweets, list):
+        return []
+
+    results: list[WebSearchResult] = []
+    for tweet in tweets[:num_results]:
+        if not isinstance(tweet, dict):
+            continue
+        text = str(tweet.get("text") or "")
+        tweet_id = str(tweet.get("id") or "")
+        url = str(tweet.get("url") or "")
+        author = tweet.get("author")
+        username = ""
+        if isinstance(author, dict):
+            username = str(author.get("username") or "")
+        title = f"@{username}: {tweet_id}" if username else f"X post {tweet_id}"
+        result = WebSearchResult(
+            title=title,
+            link=None,
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        result.link = url or None
+        result.full_content = text[:3500]
+        result.summary = text[:300]
         results.append(result)
 
     return results
