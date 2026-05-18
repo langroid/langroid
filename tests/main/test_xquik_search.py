@@ -22,7 +22,6 @@ def mock_xquik_response() -> MagicMock:
             {
                 "id": "1234567890",
                 "text": "First Xquik result about agent tools.",
-                "url": "https://x.com/xquikcom/status/1234567890",
                 "author": {"username": "xquikcom"},
             },
             {

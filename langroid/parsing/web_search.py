@@ -375,6 +375,8 @@ def xquik_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         username = ""
         if isinstance(author, dict):
             username = str(author.get("username") or "")
+        if not url and username and tweet_id:
+            url = f"https://x.com/{username}/status/{tweet_id}"
         title = f"@{username}: {tweet_id}" if username else f"X post {tweet_id}"
         result = WebSearchResult(
             title=title,
