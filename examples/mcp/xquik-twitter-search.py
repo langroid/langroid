@@ -8,6 +8,8 @@ Before running:
 Run like this (-m model optional; defaults to gpt-4.1-mini):
 
     uv run examples/mcp/xquik-twitter-search.py -m ollama/qwen2.5-coder:32b
+
+The default query uses X advanced search syntax.
 """
 
 import asyncio
@@ -62,7 +64,7 @@ async def main(
     agent.enable_message(tools)
 
     task = lr.Task(agent, interactive=False)
-    await task.run_async(
+    result = await task.run_async(
         dedent(
             f"""
             Search X for `{query}` with Xquik. Return up to {limit} relevant
@@ -70,6 +72,7 @@ async def main(
             """
         ).strip()
     )
+    print(result.content)
 
 
 def run_main(**kwargs) -> None:
