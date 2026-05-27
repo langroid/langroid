@@ -1,6 +1,6 @@
 """
-Agent that allows interaction with an SQL database using SQLAlchemy library. 
-The agent can execute SQL queries in the database and return the result. 
+Agent that allows interaction with an SQL database using SQLAlchemy library.
+The agent can execute SQL queries in the database and return the result.
 
 Functionality includes:
 - adding table and column context
@@ -8,6 +8,7 @@ Functionality includes:
 """
 
 import logging
+import re
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 from rich.console import Console
@@ -96,6 +97,45 @@ and finally use the `{DoneTool.name()}` tool to send the correct answer to the u
 SQL_ERROR_MSG = "There was an error in your SQL Query"
 
 
+# Dialect-specific SQL patterns that enable code execution, arbitrary file
+# access, or other escapes from the database engine. Matched against the raw
+# query text (case-insensitive) as a defense-in-depth layer in addition to the
+# sqlglot-based statement-type allowlist.
+_DANGEROUS_SQL_PATTERNS: List["re.Pattern[str]"] = [
+    # PostgreSQL: COPY ... FROM/TO PROGRAM executes shell commands as the DB
+    # server OS user. This is the primitive used in CVE-2026-25879.
+    re.compile(r"\bcopy\b[\s\S]*\bprogram\b", re.IGNORECASE),
+    # PostgreSQL server-side filesystem access
+    re.compile(r"\bpg_read_server_files?\b", re.IGNORECASE),
+    re.compile(r"\bpg_read_binary_file\b", re.IGNORECASE),
+    re.compile(r"\bpg_ls_dir\b", re.IGNORECASE),
+    re.compile(r"\blo_(import|export)\b", re.IGNORECASE),
+    # MySQL/MariaDB filesystem
+    re.compile(r"\binto\s+(outfile|dumpfile)\b", re.IGNORECASE),
+    re.compile(r"\bload_file\s*\(", re.IGNORECASE),
+    re.compile(r"\bload\s+data\b", re.IGNORECASE),
+    # SQLite: load_extension enables loading arbitrary shared objects;
+    # ATTACH DATABASE can read/write arbitrary files.
+    re.compile(r"\bload_extension\s*\(", re.IGNORECASE),
+    re.compile(r"\battach\s+database\b", re.IGNORECASE),
+    # SQL Server: command execution and OLE automation
+    re.compile(r"\bxp_cmdshell\b", re.IGNORECASE),
+    re.compile(r"\bsp_oacreate\b", re.IGNORECASE),
+    re.compile(r"\bsp_oamethod\b", re.IGNORECASE),
+    re.compile(r"\bopenrowset\b", re.IGNORECASE),
+    re.compile(r"\bbulk\s+insert\b", re.IGNORECASE),
+    # Generic: stored-program creation and procedural language extensions
+    re.compile(r"\bcreate\s+(or\s+replace\s+)?(function|procedure|trigger)\b",
+               re.IGNORECASE),
+    re.compile(r"\bcreate\s+extension\b", re.IGNORECASE),
+]
+
+
+# Default set of SQL statement types the agent is allowed to execute when
+# `allow_dangerous_operations` is False. SELECT-only is safe for Q&A workloads.
+_DEFAULT_ALLOWED_STATEMENTS: List[str] = ["SELECT"]
+
+
 class SQLChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_SQL_CHAT_SYSTEM_MESSAGE
     user_message: None | str = None
@@ -116,6 +156,22 @@ class SQLChatAgentConfig(ChatAgentConfig):
     addressing_prefix: str = ""
     max_result_rows: int | None = None  # limit query results to this
     max_retained_tokens: int | None = None  # limit history of query results to this
+
+    # --- Security controls (see CVE-2026-25879) ---------------------------
+    # By default, the agent only executes SELECT statements and rejects any
+    # query that matches a known dangerous pattern (e.g. PostgreSQL
+    # `COPY ... FROM PROGRAM`, MySQL `INTO OUTFILE`, SQLite `load_extension`,
+    # MSSQL `xp_cmdshell`). The LLM-generated SQL is influenceable by prompt
+    # injection — including injection via data the LLM reads back from the
+    # database — so executing it without restrictions is unsafe when the DB
+    # role has elevated privileges.
+    #
+    # To enable writes: extend allowed_statement_types, e.g. ["SELECT",
+    # "INSERT", "UPDATE", "DELETE"]. To disable all checks (only do this with
+    # a least-privilege DB role and trusted prompts): set
+    # allow_dangerous_operations=True.
+    allowed_statement_types: List[str] = list(_DEFAULT_ALLOWED_STATEMENTS)
+    allow_dangerous_operations: bool = False
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
@@ -260,6 +316,19 @@ class SQLChatAgent(ChatAgent):
         """Initialize the system message."""
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
+
+        if not self.config.allow_dangerous_operations:
+            allowed = sorted(
+                t.strip().upper() for t in self.config.allowed_statement_types
+            )
+            self.config.system_message += (
+                f"\n\nIMPORTANT - SECURITY POLICY:\n"
+                f"You may ONLY issue SQL queries whose top-level statement "
+                f"type is one of: {allowed}. Any other statement type "
+                f"(e.g. DDL, COPY, EXEC, multi-statement scripts that "
+                f"include a disallowed type) will be REJECTED by the "
+                f"executor and not run.\n"
+            )
 
         if self.config.chat_mode:
             self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
@@ -455,6 +524,97 @@ class SQLChatAgent(ChatAgent):
                 set to the answer or result
                 """
 
+    def _sqlglot_dialect(self) -> Optional[str]:
+        """Map the SQLAlchemy dialect name to a sqlglot dialect name."""
+        if self.engine is None:
+            return None
+        name = self.engine.dialect.name
+        # sqlglot uses 'postgres', not 'postgresql'; 'tsql' for MSSQL.
+        return {"postgresql": "postgres", "mssql": "tsql"}.get(name, name)
+
+    def _validate_query(self, query: str) -> Optional[str]:
+        """
+        Check whether `query` is permitted under the agent's security config.
+
+        Returns None if the query may be executed, otherwise an error message
+        explaining why it was rejected (to be relayed to the LLM).
+        """
+        if self.config.allow_dangerous_operations:
+            return None
+
+        for pat in _DANGEROUS_SQL_PATTERNS:
+            if pat.search(query):
+                logger.warning(
+                    "SQLChatAgent rejected query matching dangerous pattern "
+                    f"{pat.pattern!r}: {query!r}"
+                )
+                return (
+                    f"Query REJECTED for safety: it matches a pattern "
+                    f"({pat.pattern!r}) that enables code execution, "
+                    f"filesystem access, or other unsafe operations. "
+                    f"Rewrite the query without using this construct, or ask "
+                    f"the operator to set `allow_dangerous_operations=True` "
+                    f"on the SQLChatAgent config."
+                )
+
+        try:
+            import sqlglot
+            from sqlglot import expressions as sqlglot_exp
+        except ImportError:
+            logger.warning(
+                "sqlglot is not installed; SQL statement-type allowlist "
+                "cannot be enforced. Install langroid[sql] for full safety, "
+                "or set allow_dangerous_operations=True to suppress this "
+                "warning."
+            )
+            return None
+
+        allowed = {t.strip().upper() for t in self.config.allowed_statement_types}
+        try:
+            statements = sqlglot.parse(query, read=self._sqlglot_dialect())
+        except Exception as e:
+            logger.warning(f"sqlglot failed to parse query {query!r}: {e}")
+            return (
+                f"Query REJECTED for safety: could not be parsed to verify it "
+                f"is a {sorted(allowed)} statement ({e}). Rewrite the query "
+                f"more simply, or ask the operator to set "
+                f"`allow_dangerous_operations=True` on the SQLChatAgent config."
+            )
+
+        kind_map = {
+            sqlglot_exp.Select: "SELECT",
+            sqlglot_exp.Insert: "INSERT",
+            sqlglot_exp.Update: "UPDATE",
+            sqlglot_exp.Delete: "DELETE",
+            sqlglot_exp.Merge: "MERGE",
+            sqlglot_exp.Create: "CREATE",
+            sqlglot_exp.Drop: "DROP",
+            sqlglot_exp.Alter: "ALTER",
+            sqlglot_exp.TruncateTable: "TRUNCATE",
+            sqlglot_exp.Command: "COMMAND",
+        }
+        for stmt in statements:
+            if stmt is None:
+                continue
+            kind = next(
+                (v for k, v in kind_map.items() if isinstance(stmt, k)),
+                type(stmt).__name__.upper(),
+            )
+            if kind not in allowed:
+                logger.warning(
+                    f"SQLChatAgent rejected {kind} statement (allowed: "
+                    f"{sorted(allowed)}): {query!r}"
+                )
+                return (
+                    f"Query REJECTED for safety: statement type {kind!r} is "
+                    f"not in the allowed list {sorted(allowed)}. Rewrite the "
+                    f"query as one of the allowed statement types, or ask "
+                    f"the operator to extend `allowed_statement_types` "
+                    f"(or set `allow_dangerous_operations=True`) on the "
+                    f"SQLChatAgent config."
+                )
+        return None
+
     def run_query(self, msg: RunQueryTool) -> str:
         """
         Handle a RunQueryTool message by executing a SQL query and returning the result.
@@ -468,6 +628,18 @@ class SQLChatAgent(ChatAgent):
         query = msg.query
         session = self.Session
         self.used_run_query = True
+
+        rejection = self._validate_query(query)
+        if rejection is not None:
+            return f"""
+        Below is the result from your use of the TOOL `{RunQueryTool.name()}`:
+        ==== result ====
+        {rejection}
+        ================
+
+        Try a different query that complies with the policy above.
+        """
+
         try:
             logger.info(f"Executing SQL query: {query}")
 

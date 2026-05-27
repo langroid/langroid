@@ -134,10 +134,14 @@ def _test_sql_chat_agent(
     use_schema_tools: bool = False,
     turns: int = 18,
     addressing_prefix: str = "",
+    allowed_statement_types: list[str] | None = None,
 ) -> None:
     """
     Test the SQLChatAgent with a uri as data source
     """
+    config_kwargs: dict = {}
+    if allowed_statement_types is not None:
+        config_kwargs["allowed_statement_types"] = allowed_statement_types
     agent_config = SQLChatAgentConfig(
         name="SQLChatAgent",
         database_session=db_session,
@@ -150,6 +154,7 @@ def _test_sql_chat_agent(
         chat_mode=False,
         use_helper=True,
         llm=OpenAIGPTConfig(supports_json_schema=json_schema),
+        **config_kwargs,
     )
     agent = SQLChatAgent(agent_config)
     task = Task(agent, interactive=False)
@@ -227,6 +232,7 @@ def test_sql_chat_db_update(
 ):
     set_global(test_settings)
     # with context descriptions:
+    # UPDATE requires extending the default SELECT-only allowlist.
     _test_sql_chat_agent(
         fn_api=fn_api,
         tools_api=tools_api,
@@ -235,6 +241,7 @@ def test_sql_chat_db_update(
         context=mock_context,
         prompt="Update Bob's sale amount to 900",
         answer="900",
+        allowed_statement_types=["SELECT", "UPDATE"],
     )
 
     _test_sql_chat_agent(
@@ -256,6 +263,7 @@ def test_sql_chat_db_update(
         context={},
         prompt="Update Bob's sale amount to 9100",
         answer="9100",
+        allowed_statement_types=["SELECT", "UPDATE"],
     )
 
     _test_sql_chat_agent(

@@ -17,6 +17,29 @@ automatically extracting schemas from the database.
 
 ## Before you begin
 
+!!! warning "Security: SQLChatAgent executes LLM-generated SQL"
+    `SQLChatAgent` runs SQL produced by a language model against your
+    database. Because the LLM is influenceable by prompt injection — both
+    through the user's question and through any data the LLM reads back from
+    the database — an attacker who can shape either input can attempt to
+    coerce the agent into running dangerous SQL.
+
+    The agent defaults to **SELECT-only** execution (CVE-2026-25879) and
+    rejects queries that match known dangerous primitives
+    (e.g. PostgreSQL `COPY ... FROM PROGRAM`, MySQL `INTO OUTFILE`, SQLite
+    `load_extension`, MSSQL `xp_cmdshell`). See
+    [Security configuration](#security-configuration) below.
+
+    Independently of the agent's defenses, you should always:
+
+    - Connect using a **least-privilege database role** that does not have
+      `pg_execute_server_program`, `FILE`, `xp_cmdshell`, or other
+      privileges enabling code execution or filesystem access.
+    - Treat the agent's prompt input as untrusted if it can come from end
+      users.
+    - Avoid pointing the agent at databases that contain other tenants'
+      data.
+
 !!! note "Data Privacy Considerations"
     Since the SQLChatAgent uses the OpenAI GPT-4 as the underlying language model,
     users should be aware that database information processed by the agent may be
@@ -99,6 +122,48 @@ agent will automatically generate the file using the built-in Postgres table/col
   By selectively using only the relevant parts of the context descriptions, this mode
   reduces token usage, though it may result in 1-3 additional OpenAI API calls before
   the final SQL query is generated.
+
+## Security configuration
+
+`SQLChatAgentConfig` exposes two flags that govern which SQL the agent will
+execute:
+
+* `allowed_statement_types: List[str] = ["SELECT"]` — the SQL statement
+  types the agent is permitted to run. Each query is parsed with
+  [`sqlglot`](https://github.com/tobymao/sqlglot); any statement whose top
+  level falls outside this list is rejected before it reaches the database.
+  Multi-statement queries are validated statement-by-statement, so a
+  payload like `SELECT 1; DROP TABLE t` is also rejected.
+* `allow_dangerous_operations: bool = False` — when `True`, **disables**
+  the statement-type allowlist and the dangerous-pattern blocklist. Only
+  set this if (a) the agent's prompt input is fully trusted, and (b) the
+  database connection uses a least-privilege role.
+
+In addition to the statement-type check, the agent maintains a dialect-aware
+blocklist of patterns that enable code execution, arbitrary file access, or
+other escape primitives — for example:
+
+| Dialect    | Blocked construct (examples)                                      |
+|------------|-------------------------------------------------------------------|
+| PostgreSQL | `COPY … FROM/TO PROGRAM`, `pg_read_server_files`, `lo_import/export`, `CREATE EXTENSION`, `CREATE FUNCTION` |
+| MySQL      | `INTO OUTFILE`, `INTO DUMPFILE`, `LOAD_FILE(…)`, `LOAD DATA`      |
+| SQLite     | `load_extension(…)`, `ATTACH DATABASE`                            |
+| SQL Server | `xp_cmdshell`, `sp_OACreate`, `OPENROWSET`, `BULK INSERT`         |
+
+To enable database writes from the agent, extend the allowlist explicitly
+rather than disabling all checks:
+
+```python
+config = SQLChatAgentConfig(
+    database_uri="postgresql://example.db",
+    allowed_statement_types=["SELECT", "INSERT", "UPDATE", "DELETE"],
+)
+```
+
+If you need DDL or other operations the allowlist doesn't cover, the
+recommended approach is still to keep `allow_dangerous_operations=False`
+and grant the DB role exactly the privileges you need, rather than relying
+on the agent to filter SQL.
 
 ## Putting it all together
 

@@ -95,6 +95,7 @@ db = [
     "psycopg2<3.0.0,>=2.9.7",
     "psycopg2-binary>=2.9.10",
     "pymysql<2.0.0,>=1.1.0",
+    "sqlglot>=23.0.0",
 ]
 
 all = [
@@ -109,6 +110,7 @@ all = [
     "sqlalchemy<3.0.0,>=2.0.19",
     "psycopg2<3.0.0,>=2.9.7",
     "pymysql<2.0.0,>=1.1.0",
+    "sqlglot>=23.0.0",
     "sentence-transformers<3.0.0,>=2.2.2",
     "torch<3.0.0,>=2.0.0",
     "transformers<5.0.0,>=4.40.1",
@@ -192,16 +194,19 @@ postgres = [
     "psycopg2<3.0.0,>=2.9.7",
     "psycopg2-binary>=2.9.10",
     "sqlalchemy<3.0.0,>=2.0.19",
+    "sqlglot>=23.0.0",
 ]
 
 mysql = [
     "pymysql<2.0.0,>=1.1.0",
+    "sqlglot>=23.0.0",
 ]
 
 sql = [
     "sqlalchemy<3.0.0,>=2.0.19",
     "pymysql<2.0.0,>=1.1.0",
     "psycopg2<3.0.0,>=2.9.7",
+    "sqlglot>=23.0.0",
 ]
 
 litellm = [
