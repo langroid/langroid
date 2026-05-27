@@ -25,6 +25,15 @@ try:
 except ImportError as e:
     raise LangroidImportError(extra="sql", error=str(e))
 
+try:
+    # sqlglot is required for the statement-type allowlist enforced in
+    # `_validate_query`. Importing it at module load ensures the security
+    # guarantee cannot be silently bypassed by a partial/stale install.
+    import sqlglot
+    from sqlglot import expressions as sqlglot_exp
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
+
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.sql.utils.description_extractors import (
@@ -557,18 +566,6 @@ class SQLChatAgent(ChatAgent):
                     f"the operator to set `allow_dangerous_operations=True` "
                     f"on the SQLChatAgent config."
                 )
-
-        try:
-            import sqlglot
-            from sqlglot import expressions as sqlglot_exp
-        except ImportError:
-            logger.warning(
-                "sqlglot is not installed; SQL statement-type allowlist "
-                "cannot be enforced. Install langroid[sql] for full safety, "
-                "or set allow_dangerous_operations=True to suppress this "
-                "warning."
-            )
-            return None
 
         allowed = {t.strip().upper() for t in self.config.allowed_statement_types}
         try:
