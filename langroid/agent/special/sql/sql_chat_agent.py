@@ -538,9 +538,10 @@ class SQLChatAgent(ChatAgent):
         """Map the SQLAlchemy dialect name to a sqlglot dialect name."""
         if self.engine is None:
             return None
-        name = self.engine.dialect.name
+        name: str = str(self.engine.dialect.name)
         # sqlglot uses 'postgres', not 'postgresql'; 'tsql' for MSSQL.
-        return {"postgresql": "postgres", "mssql": "tsql"}.get(name, name)
+        mapping: Dict[str, str] = {"postgresql": "postgres", "mssql": "tsql"}
+        return mapping.get(name, name)
 
     def _validate_query(self, query: str) -> Optional[str]:
         """
