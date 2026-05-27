@@ -125,8 +125,9 @@ _DANGEROUS_SQL_PATTERNS: List["re.Pattern[str]"] = [
     re.compile(r"\bopenrowset\b", re.IGNORECASE),
     re.compile(r"\bbulk\s+insert\b", re.IGNORECASE),
     # Generic: stored-program creation and procedural language extensions
-    re.compile(r"\bcreate\s+(or\s+replace\s+)?(function|procedure|trigger)\b",
-               re.IGNORECASE),
+    re.compile(
+        r"\bcreate\s+(or\s+replace\s+)?(function|procedure|trigger)\b", re.IGNORECASE
+    ),
     re.compile(r"\bcreate\s+extension\b", re.IGNORECASE),
 ]
 

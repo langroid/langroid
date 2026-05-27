@@ -142,10 +142,7 @@ def test_multi_statement_with_buried_drop_blocked(session):
 
 def test_allow_dangerous_operations_bypasses_all_checks(session):
     agent = _make_agent(session, allow_dangerous_operations=True)
-    poc = (
-        "DROP TABLE IF EXISTS log;\n"
-        "COPY log(content) FROM PROGRAM 'id';\n"
-    )
+    poc = "DROP TABLE IF EXISTS log;\n" "COPY log(content) FROM PROGRAM 'id';\n"
     assert agent._validate_query(poc) is None
     assert agent._validate_query("DROP TABLE items") is None
     assert agent._validate_query("EXEC xp_cmdshell 'id'") is None
