@@ -43,6 +43,7 @@ dependencies = [
     "pygithub<2.0.0,>=1.58.1",
     "pygments<3.0.0,>=2.15.1",
     "pyparsing<4.0.0,>=3.0.9",
+    "pypdfium2<5.0.0,>=4.30.0",
     "pytest-rerunfailures<16.0,>=15.0",
     "python-dotenv>=1.0.0,<2.0.0",
     "python-magic<1.0.0,>=0.4.27",
@@ -143,6 +144,10 @@ docling = [
 
 pymupdf4llm = [
     "pymupdf4llm<0.1.0,>=0.0.17",
+]
+
+pypdfium2 = [
+    "pypdfium2<5.0.0,>=4.30.0",
 ]
 
 pdf-parsers = [

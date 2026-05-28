@@ -141,6 +141,8 @@ class DocumentParser(Parser):
                 return FitzPDFParser(source, config)
             elif config.pdf.library == "pymupdf4llm":
                 return PyMuPDF4LLMParser(source, config)
+            elif config.pdf.library == "pypdfium2":
+                return PyPDFium2Parser(source, config)
             elif config.pdf.library == "docling":
                 return DoclingParser(source, config)
             elif config.pdf.library == "pypdf":
@@ -522,6 +524,58 @@ class PyMuPDF4LLMParser(DocumentParser):
         return Document(
             content=self.fix_text(page.get("text", "")),
             # TODO could possible use other metadata from page, see above link.
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class PyPDFium2Parser(DocumentParser):
+    """
+    Parser for processing PDFs using the `pypdfium2` library.
+
+    Unlike `pymupdf4llm`/`fitz` (AGPL-licensed), `pypdfium2` is permissively
+    licensed (Apache-2.0/BSD-3-Clause) and is installed by default with
+    Langroid, which is why it is the default PDF parser. It extracts plain
+    text page-by-page; for richer Markdown-structured output (headers, tables,
+    multi-column reflow) install an extra and set `library="pymupdf4llm"`.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, str], None, None]:
+        """
+        Yield the extracted text of each page using `pypdfium2`.
+
+        Returns:
+            Generator[Tuple[int, str]]: Generator yielding (page index, text).
+        """
+        try:
+            import pypdfium2 as pdfium
+        except ImportError:
+            raise LangroidImportError(
+                "pypdfium2", ["pypdfium2", "all", "pdf-parsers", "doc-chat"]
+            )
+        doc = pdfium.PdfDocument(self.doc_bytes.getvalue())
+        try:
+            for i in range(len(doc)):
+                page = doc[i]
+                textpage = page.get_textpage()
+                text = textpage.get_text_bounded()
+                textpage.close()
+                page.close()
+                yield i, text
+        finally:
+            doc.close()
+
+    def get_document_from_page(self, page: str) -> Document:
+        """
+        Get Document object from the extracted text of a `pypdfium2` page.
+
+        Args:
+            page (str): The text extracted from the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(page),
             metadata=DocMetaData(source=self.source),
         )
 

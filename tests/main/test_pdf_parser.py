@@ -13,6 +13,7 @@ from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
         "docling",
         "fitz",
         "pypdf",
+        "pypdfium2",
         "unstructured",
         "pymupdf4llm",
         "marker",
@@ -62,7 +63,8 @@ def test_get_pdf_doc_url(source, pdflib: str):
 )
 @pytest.mark.parametrize("source", ["path", "bytes"])
 @pytest.mark.parametrize(
-    "pdflib", ["unstructured", "docling", "fitz", "pypdf", "pymupdf4llm", "marker"]
+    "pdflib",
+    ["unstructured", "docling", "fitz", "pypdf", "pypdfium2", "pymupdf4llm", "marker"],
 )
 def test_get_pdf_doc_path(source, pdflib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -90,6 +92,54 @@ def test_get_pdf_doc_path(source, pdflib: str):
     assert len(docs) > 0
     assert all(d.metadata.is_chunk for d in docs)
     assert all(citation in d.metadata.source for d in docs)
+
+
+def test_default_pdf_library_is_permissive():
+    """
+    The default PDF parser must be the permissively-licensed `pypdfium2`
+    (Apache-2.0/BSD-3-Clause), NOT the AGPL-licensed `pymupdf4llm`, since
+    Langroid is MIT-licensed and the default parser ships in core deps.
+    See issue #1026.
+    """
+    assert PdfParsingConfig().library == "pypdfium2"
+
+
+@pytest.mark.parametrize("source", ["path", "bytes"])
+def test_pypdfium2_parser(source: str):
+    """
+    Dedicated functional test for the default `pypdfium2` PDF parser.
+
+    `pypdfium2` is installed by default (core dependency), so this test does
+    NOT require any optional `extras` to be installed -- it exercises the
+    out-of-the-box PDF-parsing path that a bare `pip install langroid` gets.
+    """
+    from langroid.parsing.document_parser import PyPDFium2Parser
+
+    path = "tests/main/data/dummy.pdf"
+    parser = DocumentParser.create(
+        path, ParsingConfig(pdf=PdfParsingConfig(library="pypdfium2"))
+    )
+    assert isinstance(parser, PyPDFium2Parser)
+
+    if source == "bytes":
+        with open(path, "rb") as f:
+            data = f.read()
+        parser = DocumentParser.create(data, parser.config)
+        assert isinstance(parser, PyPDFium2Parser)
+
+    citation = path if source == "path" else "bytes"
+
+    doc = parser.get_doc()
+    assert isinstance(doc.content, str)
+    # content correctness: known text from the sample PDF
+    assert "Design and Evaluation" in doc.content
+    assert "arXiv:2004.07606v1" in doc.content
+    assert doc.metadata.source == citation
+
+    chunks = parser.get_doc_chunks()
+    assert len(chunks) > 0
+    assert all(c.metadata.is_chunk for c in chunks)
+    assert all(citation in c.metadata.source for c in chunks)
 
 
 # @pytest.mark.skipif(

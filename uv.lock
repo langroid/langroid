@@ -590,7 +590,7 @@ name = "brotlicffi"
 version = "1.1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi" },
+    { name = "cffi", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/95/9d/70caa61192f570fcf0352766331b735afa931b4c6bc9a348a0925cc13288/brotlicffi-1.1.0.0.tar.gz", hash = "sha256:b77827a689905143f87915310b93b273ab17888fd43ef350d4832c4a71083c13", size = 465192, upload-time = "2023-09-14T14:22:40.707Z" }
 wheels = [
@@ -1266,8 +1266,8 @@ name = "cssselect2"
 version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tinycss2" },
-    { name = "webencodings" },
+    { name = "tinycss2", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "webencodings", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9f/86/fd7f58fc498b3166f3a7e8e0cddb6e620fe1da35b02248b1bd59e95dbaaa/cssselect2-0.8.0.tar.gz", hash = "sha256:7674ffb954a3b46162392aee2a3a0aedb2e14ecf99fcc28644900f4e6e3e9d3a", size = 35716, upload-time = "2025-03-05T14:46:07.988Z" }
 wheels = [
@@ -1279,7 +1279,7 @@ name = "cuda-bindings"
 version = "13.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-pathfinder", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "cuda-pathfinder", marker = "python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/fe/7351d7e586a8b4c9f89731bfe4cf0148223e8f9903ff09571f78b3fb0682/cuda_bindings-13.2.0-cp310-cp310-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:08b395f79cb89ce0cd8effff07c4a1e20101b873c256a1aeb286e8fd7bd0f556", size = 5744254, upload-time = "2026-03-11T00:12:29.798Z" },
@@ -1310,37 +1310,37 @@ wheels = [
 
 [package.optional-dependencies]
 cublas = [
-    { name = "nvidia-cublas", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-cublas", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 cudart = [
-    { name = "nvidia-cuda-runtime", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-cuda-runtime", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 cufft = [
-    { name = "nvidia-cufft", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-cufft", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 cufile = [
     { name = "nvidia-cufile", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 cupti = [
-    { name = "nvidia-cuda-cupti", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-cuda-cupti", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 curand = [
-    { name = "nvidia-curand", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-curand", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 cusolver = [
-    { name = "nvidia-cusolver", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-cusolver", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 cusparse = [
-    { name = "nvidia-cusparse", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-cusparse", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 nvjitlink = [
-    { name = "nvidia-nvjitlink", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-nvjitlink", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 nvrtc = [
-    { name = "nvidia-cuda-nvrtc", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-cuda-nvrtc", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 nvtx = [
-    { name = "nvidia-nvtx", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'win32')" },
+    { name = "nvidia-nvtx", marker = "python_full_version >= '3.13' and sys_platform == 'linux'" },
 ]
 
 [[package]]
@@ -1783,8 +1783,8 @@ name = "ebooklib"
 version = "0.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "lxml" },
-    { name = "six" },
+    { name = "lxml", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "six", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e8/1d/90bb33317d756c25b40bb55312dda30a94afb691755763fc00976250c82b/EbookLib-0.18.tar.gz", hash = "sha256:38562643a7bc94d9bf56e9930b4927e4e93b5d1d0917f697a6454db5a1c1a533", size = 115484, upload-time = "2022-11-30T22:29:13.394Z" }
 
@@ -2105,9 +2105,9 @@ wheels = [
 
 [package.optional-dependencies]
 woff = [
-    { name = "brotli", marker = "platform_python_implementation == 'CPython'" },
-    { name = "brotlicffi", marker = "platform_python_implementation != 'CPython'" },
-    { name = "zopfli" },
+    { name = "brotli", marker = "(platform_machine != 'x86_64' and platform_python_implementation == 'CPython') or (platform_python_implementation == 'CPython' and sys_platform != 'darwin')" },
+    { name = "brotlicffi", marker = "(platform_machine != 'x86_64' and platform_python_implementation != 'CPython') or (platform_python_implementation != 'CPython' and sys_platform != 'darwin')" },
+    { name = "zopfli", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
 ]
 
 [[package]]
@@ -3392,7 +3392,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.61.1"
+version = "0.63.0"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -3428,8 +3428,8 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pygithub" },
     { name = "pygments" },
-    { name = "pymupdf4llm" },
     { name = "pyparsing" },
+    { name = "pypdfium2" },
     { name = "pytest-rerunfailures" },
     { name = "python-dotenv" },
     { name = "python-magic" },
@@ -3475,6 +3475,7 @@ all = [
     { name = "seltz" },
     { name = "sentence-transformers" },
     { name = "sqlalchemy" },
+    { name = "sqlglot" },
     { name = "torch", version = "2.6.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')" },
     { name = "torch", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.13' and platform_machine != 'x86_64') or (python_full_version >= '3.13' and sys_platform != 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'darwin')" },
     { name = "transformers" },
@@ -3503,6 +3504,7 @@ db = [
     { name = "psycopg2-binary" },
     { name = "pymysql" },
     { name = "sqlalchemy" },
+    { name = "sqlglot" },
 ]
 doc-chat = [
     { name = "docling" },
@@ -3580,6 +3582,7 @@ metaphor = [
 ]
 mysql = [
     { name = "pymysql" },
+    { name = "sqlglot" },
 ]
 neo4j = [
     { name = "neo4j" },
@@ -3603,9 +3606,13 @@ postgres = [
     { name = "psycopg2" },
     { name = "psycopg2-binary" },
     { name = "sqlalchemy" },
+    { name = "sqlglot" },
 ]
 pymupdf4llm = [
     { name = "pymupdf4llm" },
+]
+pypdfium2 = [
+    { name = "pypdfium2" },
 ]
 scrapy = [
     { name = "scrapy" },
@@ -3617,6 +3624,7 @@ sql = [
     { name = "psycopg2" },
     { name = "pymysql" },
     { name = "sqlalchemy" },
+    { name = "sqlglot" },
 ]
 tavily = [
     { name = "tavily-python" },
@@ -3775,7 +3783,6 @@ requires-dist = [
     { name = "pymupdf", marker = "extra == 'all'", specifier = ">=1.23.3,<2.0.0" },
     { name = "pymupdf", marker = "extra == 'doc-chat'", specifier = ">=1.23.3,<2.0.0" },
     { name = "pymupdf", marker = "extra == 'pdf-parsers'", specifier = ">=1.23.3,<2.0.0" },
-    { name = "pymupdf4llm", specifier = ">=0.0.17,<0.1.0" },
     { name = "pymupdf4llm", marker = "extra == 'all'", specifier = ">=0.0.17,<0.1.0" },
     { name = "pymupdf4llm", marker = "extra == 'doc-chat'", specifier = ">=0.0.17,<0.1.0" },
     { name = "pymupdf4llm", marker = "extra == 'pdf-parsers'", specifier = ">=0.0.17,<0.1.0" },
@@ -3788,6 +3795,8 @@ requires-dist = [
     { name = "pypdf", marker = "extra == 'all'", specifier = ">=5.1.0" },
     { name = "pypdf", marker = "extra == 'doc-chat'", specifier = ">=5.1.0" },
     { name = "pypdf", marker = "extra == 'pdf-parsers'", specifier = ">=5.1.0" },
+    { name = "pypdfium2", specifier = ">=4.30.0,<5.0.0" },
+    { name = "pypdfium2", marker = "extra == 'pypdfium2'", specifier = ">=4.30.0,<5.0.0" },
     { name = "pytesseract", marker = "extra == 'all'", specifier = ">=0.3.10,<0.4.0" },
     { name = "pytesseract", marker = "extra == 'doc-chat'", specifier = ">=0.3.10,<0.4.0" },
     { name = "pytesseract", marker = "extra == 'pdf-parsers'", specifier = ">=0.3.10,<0.4.0" },
@@ -3820,6 +3829,11 @@ requires-dist = [
     { name = "sqlalchemy", marker = "extra == 'db'", specifier = ">=2.0.19,<3.0.0" },
     { name = "sqlalchemy", marker = "extra == 'postgres'", specifier = ">=2.0.19,<3.0.0" },
     { name = "sqlalchemy", marker = "extra == 'sql'", specifier = ">=2.0.19,<3.0.0" },
+    { name = "sqlglot", marker = "extra == 'all'", specifier = ">=23.0.0" },
+    { name = "sqlglot", marker = "extra == 'db'", specifier = ">=23.0.0" },
+    { name = "sqlglot", marker = "extra == 'mysql'", specifier = ">=23.0.0" },
+    { name = "sqlglot", marker = "extra == 'postgres'", specifier = ">=23.0.0" },
+    { name = "sqlglot", marker = "extra == 'sql'", specifier = ">=23.0.0" },
     { name = "tantivy", marker = "extra == 'lancedb'", specifier = ">=0.21.0,<0.22.0" },
     { name = "tantivy", marker = "extra == 'vecdbs'", specifier = ">=0.21.0,<0.22.0" },
     { name = "tavily-python", marker = "extra == 'tavily'", specifier = ">=0.5.0" },
@@ -3843,7 +3857,7 @@ requires-dist = [
     { name = "wget", specifier = ">=3.2,<4.0" },
     { name = "xlrd", marker = "extra == 'doc-parsers'", specifier = ">=2.0.1" },
 ]
-provides-extras = ["doc-chat", "hf-transformers", "vecdbs", "db", "all", "lancedb", "docling", "pymupdf4llm", "pdf-parsers", "docx", "markitdown", "marker-pdf", "scrapy", "hf-embeddings", "transformers", "unstructured", "postgres", "mysql", "sql", "litellm", "neo4j", "arango", "metaphor", "exa", "tavily", "seltz", "chainlit", "chromadb", "weaviate", "meilisearch", "fastembed", "google-genai", "google-generativeai", "doc-parsers", "pinecone", "asyncio", "firecrawl", "crawl4ai"]
+provides-extras = ["doc-chat", "hf-transformers", "vecdbs", "db", "all", "lancedb", "docling", "pymupdf4llm", "pypdfium2", "pdf-parsers", "docx", "markitdown", "marker-pdf", "scrapy", "hf-embeddings", "transformers", "unstructured", "postgres", "mysql", "sql", "litellm", "neo4j", "arango", "metaphor", "exa", "tavily", "seltz", "chainlit", "chromadb", "weaviate", "meilisearch", "fastembed", "google-genai", "google-generativeai", "doc-parsers", "pinecone", "asyncio", "firecrawl", "crawl4ai"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4216,11 +4230,11 @@ wheels = [
 
 [package.optional-dependencies]
 full = [
-    { name = "ebooklib" },
-    { name = "mammoth" },
-    { name = "openpyxl" },
-    { name = "python-pptx" },
-    { name = "weasyprint" },
+    { name = "ebooklib", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "mammoth", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "openpyxl", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "python-pptx", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "weasyprint", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
 ]
 
 [[package]]
@@ -5301,7 +5315,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.1.0.70"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')" },
+    { name = "nvidia-cublas-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", size = 664752741, upload-time = "2024-04-22T15:24:15.253Z" },
@@ -5312,7 +5326,7 @@ name = "nvidia-cudnn-cu13"
 version = "9.19.0.56"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "nvidia-cublas", marker = "python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/84/26025437c1e6b61a707442184fa0c03d083b661adf3a3eecfd6d21677740/nvidia_cudnn_cu13-9.19.0.56-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:6ed29ffaee1176c612daf442e4dd6cfeb6a0caa43ddcbeb59da94953030b1be4", size = 433781201, upload-time = "2026-02-03T20:40:53.805Z" },
@@ -5324,7 +5338,7 @@ name = "nvidia-cufft"
 version = "12.0.0.61"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "nvidia-nvjitlink", marker = "python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/ae/f417a75c0259e85c1d2f83ca4e960289a5f814ed0cea74d18c353d3e989d/nvidia_cufft-12.0.0.61-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:2708c852ef8cd89d1d2068bdbece0aa188813a0c934db3779b9b1faa8442e5f5", size = 214053554, upload-time = "2025-09-04T08:31:38.196Z" },
@@ -5336,7 +5350,7 @@ name = "nvidia-cufft-cu12"
 version = "11.2.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/27/94/3266821f65b92b3138631e9c8e7fe1fb513804ac934485a8d05776e1dd43/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_x86_64.whl", hash = "sha256:f083fc24912aa410be21fa16d157fed2055dab1cc4b6934a0e03cba69eb242b9", size = 211459117, upload-time = "2024-04-03T20:57:40.402Z" },
@@ -5373,9 +5387,9 @@ name = "nvidia-cusolver"
 version = "12.0.4.66"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
-    { name = "nvidia-cusparse", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
-    { name = "nvidia-nvjitlink", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "nvidia-cublas", marker = "python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'win32'" },
+    { name = "nvidia-cusparse", marker = "python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'win32'" },
+    { name = "nvidia-nvjitlink", marker = "python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/c3/b30c9e935fc01e3da443ec0116ed1b2a009bb867f5324d3f2d7e533e776b/nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:02c2457eaa9e39de20f880f4bd8820e6a1cfb9f9a34f820eb12a155aa5bc92d2", size = 223467760, upload-time = "2025-09-04T08:33:04.222Z" },
@@ -5387,9 +5401,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.6.1.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')" },
-    { name = "nvidia-cusparse-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')" },
-    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')" },
+    { name = "nvidia-cublas-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "nvidia-cusparse-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/e1/5b9089a4b2a4790dfdea8b3a006052cfecff58139d5a4e34cb1a51df8d6f/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_x86_64.whl", hash = "sha256:19e33fa442bcfd085b3086c4ebf7e8debc07cfe01e11513cc6d332fd918ac260", size = 127936057, upload-time = "2024-04-03T20:58:28.735Z" },
@@ -5400,7 +5414,7 @@ name = "nvidia-cusparse"
 version = "12.6.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "nvidia-nvjitlink", marker = "python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f8/94/5c26f33738ae35276672f12615a64bd008ed5be6d1ebcb23579285d960a9/nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:80bcc4662f23f1054ee334a15c72b8940402975e0eab63178fc7e670aa59472c", size = 162155568, upload-time = "2025-09-04T08:33:42.864Z" },
@@ -5412,7 +5426,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.3.1.170"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/db/f7/97a9ea26ed4bbbfc2d470994b8b4f338ef663be97b8f677519ac195e113d/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_x86_64.whl", hash = "sha256:ea4f11a2904e2a8dc4b1833cc1b5181cde564edd0d5cd33e3c168eff2d1863f1", size = 207454763, upload-time = "2024-04-03T20:58:59.995Z" },
@@ -9263,6 +9277,15 @@ wheels = [
 ]
 
 [[package]]
+name = "sqlglot"
+version = "30.8.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/64/89299aefc6ebdf4fc899f5dc14c7fcb7eb9da9290a2b4d615ae7ab884b17/sqlglot-30.8.0.tar.gz", hash = "sha256:1c5f93fb742dd9aaa75eee6bb33a637794a858b9a86375fac23a2dc0f7bc127e", size = 5869750, upload-time = "2026-05-13T09:04:38.923Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/4e/80705091aaf9c95e125d243f0aa871bc9f3670b4c9d963e6bad3b3dce8ff/sqlglot-30.8.0-py3-none-any.whl", hash = "sha256:af903378c331d5b72277a1b41118f07bc3e50cf4478e2d47eed12c96ee6a22a4", size = 687831, upload-time = "2026-05-13T09:04:36.336Z" },
+]
+
+[[package]]
 name = "sse-starlette"
 version = "2.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -9556,7 +9579,7 @@ name = "tinyhtml5"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "webencodings" },
+    { name = "webencodings", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fd/03/6111ed99e9bf7dfa1c30baeef0e0fb7e0bd387bd07f8e5b270776fe1de3f/tinyhtml5-2.0.0.tar.gz", hash = "sha256:086f998833da24c300c414d9fe81d9b368fd04cb9d2596a008421cbc705fcfcc", size = 179507, upload-time = "2024-10-29T15:37:14.078Z" }
 wheels = [
@@ -10536,14 +10559,14 @@ name = "weasyprint"
 version = "63.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi" },
-    { name = "cssselect2" },
-    { name = "fonttools", extra = ["woff"] },
-    { name = "pillow" },
-    { name = "pydyf" },
-    { name = "pyphen" },
-    { name = "tinycss2" },
-    { name = "tinyhtml5" },
+    { name = "cffi", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "cssselect2", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "fonttools", extra = ["woff"], marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "pillow", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "pydyf", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "pyphen", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "tinycss2", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "tinyhtml5", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2b/f0/1ac7d241b8cabaaf047278ef67b64869473a4e0a2218a1cbc0a6ffb0d8fd/weasyprint-63.1.tar.gz", hash = "sha256:cb424e63e8dd3f14195bfe5f203527646aa40a2f00ac819f9d39b8304cec0044", size = 491880, upload-time = "2024-12-10T15:51:29.034Z" }
 wheels = [

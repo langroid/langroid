@@ -266,7 +266,7 @@ class DocChatAgentConfig(ChatAgentConfig):
             # NOTE: PDF parsing is extremely challenging, and each library
             # has its own strengths and weaknesses.
             # Try one that works for your use case.
-            # or "unstructured", "fitz", "pymupdf4llm", "pypdf"
+            # or "unstructured", "fitz", "pymupdf4llm", "pypdfium2", "pypdf"
             library="pymupdf4llm",
         ),
     )
