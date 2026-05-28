@@ -5,7 +5,6 @@ import random
 import warnings
 from pathlib import Path
 
-import fitz  # PyMuPDF
 import openai
 import pytest
 from pydantic_settings import SettingsConfigDict
@@ -764,6 +763,8 @@ def test_llm_pdf_bytes_and_split():
     assert "Supply Chain" in response.message
 
     # Test splitting PDF into pages and sending individual pages
+    import fitz
+
     doc = fitz.open(pdf_path)
     page_attachments = []
 
