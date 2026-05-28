@@ -42,7 +42,6 @@ dependencies = [
     "pydantic-settings<3.0.0,>=2.0.0",
     "pygithub<2.0.0,>=1.58.1",
     "pygments<3.0.0,>=2.15.1",
-    "pymupdf4llm<0.1.0,>=0.0.17",
     "pyparsing<4.0.0,>=3.0.9",
     "pytest-rerunfailures<16.0,>=15.0",
     "python-dotenv>=1.0.0,<2.0.0",
