@@ -1,4 +1,5 @@
 import json
+import os
 from types import SimpleNamespace
 from typing import List
 
@@ -56,6 +57,9 @@ stored_docs = [
 
 @pytest.fixture(scope="function")
 def vecdb(request) -> VectorStore:
+    # Unique suffix per pytest-xdist worker so parallel workers don't collide
+    # on the same Qdrant collection in the shared local container (PR #1030).
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
     if request.param == "qdrant_local":
         qd_dir = ":memory:"
         qd_cfg = QdrantDBConfig(
@@ -73,7 +77,7 @@ def vecdb(request) -> VectorStore:
         qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
         qd_cfg_cloud = QdrantDBConfig(
             cloud=True,
-            collection_name="test-" + embed_cfg.model_type,
+            collection_name=f"test-{embed_cfg.model_type}-{worker}",
             storage_path=qd_dir,
             embedding=embed_cfg,
         )
@@ -126,7 +130,7 @@ def vecdb(request) -> VectorStore:
         qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
         qd_cfg_cloud = QdrantDBConfig(
             cloud=True,
-            collection_name="test-" + embed_cfg.model_type,
+            collection_name=f"test-hybrid-{embed_cfg.model_type}-{worker}",
             replace_collection=True,
             storage_path=qd_dir,
             embedding=embed_cfg,

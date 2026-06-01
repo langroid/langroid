@@ -96,6 +96,7 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     stream: bool = True  # allow streaming where needed
     conversation_mode: bool = True
     vecdb: VectorStoreConfig = QdrantDBConfig(
+        cloud=False,
         collection_name="test-data",
         replace_collection=True,
         storage_path=":memory:",

@@ -68,6 +68,14 @@ The first CI run against the empty, shared container surfaced two issues:
   xdist "different tests collected" abort). Previously hidden because the
   cloud collection persisted across runs. Fixed by setting `cloud=False` (the
   `storage_path=":memory:"` already intended embedded, per-worker storage).
+- **Shared-collection race under xdist (PR review P1):** the parametrized
+  `qdrant_cloud` / `qdrant_hybrid_cloud` fixtures in `test_vector_stores.py`
+  and the `qdrant_cloud` case in `test_doc_chat_agent.py` reused a fixed
+  `test-<model>` collection, so parallel workers on the shared container could
+  delete/recreate it mid-test (404/409/empty results). Fixed by suffixing
+  those collection names with the xdist worker id (`PYTEST_XDIST_WORKER`).
+  `test_doc_chat_relevance.py`'s `:memory:` config was switched to
+  `cloud=False` (embedded) for the same reason.
 
 ## Follow-up (not part of this change)
 
