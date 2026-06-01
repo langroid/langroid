@@ -24,7 +24,6 @@ on:
           tests/main/test_vector_stores.py
           tests/main/test_retriever_agent.py
           tests/main/test_concurrent_doc_chat_qdrant.py
-          tests/main/test_qdrant_lock_release.py
           tests/main/test_concurrent_rag_simple.py
           -k "not weaviate and not postgres and not chroma and not lancedb and not pinecone and not meilisearch"
 
