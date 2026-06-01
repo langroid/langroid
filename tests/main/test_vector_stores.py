@@ -423,7 +423,10 @@ def test_vector_stores_context_window(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="testcw", replace=True)
+    vecdb.create_collection(
+        collection_name=f"testcw-{os.environ.get('PYTEST_XDIST_WORKER', 'main')}",
+        replace=True,
+    )
     vecdb.add_documents(splits)
 
     # Test context window retrieval
@@ -558,7 +561,10 @@ def test_vector_stores_overlapping_matches(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="testcw", replace=True)
+    vecdb.create_collection(
+        collection_name=f"testcw-{os.environ.get('PYTEST_XDIST_WORKER', 'main')}",
+        replace=True,
+    )
     vecdb.add_documents(splits)
 
     # Test context window retrieval
