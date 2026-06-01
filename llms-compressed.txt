@@ -45959,6 +45959,237 @@ test_urls = ["https://example.com"]
 loader = URLLoader(urls=test_urls, crawler_config=config)
 </file>
 
+<file path="tests/main/test_vector_stores.py">
+embed_cfg = OpenAIEmbeddingsConfig(
+⋮----
+phrases = SimpleNamespace(
+⋮----
+class MyDocMetaData(DocMetaData)
+⋮----
+id: str
+⋮----
+class MyDoc(Document)
+⋮----
+content: str
+metadata: MyDocMetaData
+⋮----
+stored_docs = [
+⋮----
+@pytest.fixture(scope="function")
+def vecdb(request) -> VectorStore
+⋮----
+qd_dir = ":memory:"
+qd_cfg = QdrantDBConfig(
+qd = QdrantDB(qd_cfg)
+⋮----
+qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
+qd_cfg_cloud = QdrantDBConfig(
+qd_cloud = QdrantDB(qd_cfg_cloud)
+⋮----
+wv_cfg_cloud = WeaviateDBConfig(
+weaviate_cloud = WeaviateDB(wv_cfg_cloud)
+⋮----
+wv_dir = ".weaviate/" + embed_cfg.model_type
+⋮----
+wv_cfg_local = WeaviateDBConfig(
+weaviate_local = WeaviateDB(wv_cfg_local)
+⋮----
+wv_cfg_docker = WeaviateDBConfig(
+weaviate_docker = WeaviateDB(wv_cfg_docker)
+⋮----
+cd_dir = ".chroma/" + embed_cfg.model_type
+⋮----
+cd_cfg = ChromaDBConfig(
+cd = ChromaDB(cd_cfg)
+⋮----
+pg_cfg = PostgresDBConfig(
+pg = PostgresDB(pg_cfg)
+⋮----
+ms_cfg = MeiliSearchConfig(
+ms = MeiliSearch(ms_cfg)
+⋮----
+ldb_dir = ".lancedb/data/" + embed_cfg.model_type
+⋮----
+ldb_cfg = LanceDBConfig(
+⋮----
+# document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
+⋮----
+ldb = LanceDB(ldb_cfg)
+⋮----
+cfg = PineconeDBConfig(
+pinecone_serverless = PineconeDB(config=cfg)
+⋮----
+# we don't expect some of these to work,
+# e.g. MeiliSearch is a text search engine, not a vector store
+⋮----
+docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
+# first doc should be best match
+# scores are cosine similarities, so high means close
+matching_docs = [doc.content for doc, score in docs_and_scores if score > 0.7]
+⋮----
+def test_vector_stores_access(vecdb)
+⋮----
+# test that we can ingest docs that are created
+# via subclass of Document and  DocMetaData.
+class MyDocMeta(DocMetaData)
+⋮----
+category: str  # an extra field
+⋮----
+class MyDocument(Document)
+⋮----
+metadata: MyDocMeta
+⋮----
+coll_name = vecdb.config.collection_name
+⋮----
+# LanceDB.create_collection() does nothing, since we can't create a table
+# without a schema or data.
+⋮----
+# create random string of 10 arbitrary characters, not necessarily ascii
+⋮----
+# Generate a random string of 10 characters
+ingested_docs = [
+⋮----
+# test get ALL docs
+all_docs = vecdb.get_all_documents()
+ids = [doc.id() for doc in all_docs]
+⋮----
+# test get docs by ids
+docs = vecdb.get_documents_by_ids(ids)
+⋮----
+# test similarity search
+docs_and_scores = vecdb.similar_texts_with_scores("cow", k=1)
+⋮----
+# test collections: create, list, clear
+⋮----
+# pinecone only allows lowercase alphanumeric with "-" characters
+coll_names = [f"test-junk-{i}" for i in range(3)]
+⋮----
+# Weaviate enforces capitalized collection names;
+# verifying adherence.
+⋮----
+coll_names = [f"Test_junk_{i}" for i in range(3)]
+⋮----
+n_colls = len(
+n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
+⋮----
+coll_names = [f"test_junk_{i}" for i in range(3)]
+⋮----
+n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
+⋮----
+def test_vector_stores_context_window(vecdb)
+⋮----
+"""Test whether retrieving context-window around matches is working."""
+⋮----
+text = "\n\n".join(vars(phrases).values())
+doc = Document(content=text, metadata=DocMetaData(id="0"))
+cfg = ParsingConfig(
+⋮----
+parser = Parser(cfg)
+splits = parser.split([doc])
+⋮----
+# Test context window retrieval
+docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=1)
+docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
+⋮----
+# check they are in the right sequence
+indices = [
+⋮----
+def test_doc_chat_batch_with_vecdb_cloning(vecdb, test_settings)
+⋮----
+"""Ensure DocChatAgent batching works with cloned vector stores."""
+⋮----
+cfg = DocChatAgentConfig(
+⋮----
+agent = DocChatAgent(cfg)
+⋮----
+agent.llm = None  # retrieval-only, avoid external LLM calls
+⋮----
+task = Task(agent, interactive=False, single_round=True)
+⋮----
+queries = ["hello", "hi there", "people living in Canada"]
+⋮----
+results = run_batch_tasks(
+⋮----
+def test_vector_stores_overlapping_matches(vecdb)
+⋮----
+"""Test that overlapping windows are handled correctly."""
+⋮----
+# The windows around the first two giraffe matches should overlap.
+# The third giraffe match should be in a separate window.
+⋮----
+docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=3)
+# We expect to retrieve a window of -2, +2 around each of the three Giraffe matches.
+# The first two windows will overlap, so they form a connected component,
+# and we topological-sort and order the chunks in these windows, resulting in a
+# single window. The third Giraffe-match context window will not overlap with
+# the other two, so we will have a total of 2 final docs_scores components.
+⋮----
+# verify no overlap in d.metadata.window_ids for d in docs
+all_window_ids = [id for d, _ in docs_scores for id in d.metadata.window_ids]
+⋮----
+# verify giraffe occurs in each /match
+⋮----
+# verify correct sequence of chunks in each match
+sentences = vars(phrases).values()
+⋮----
+content = d.content
+indices = [content.find(p) for p in sentences]
+indices = [i for i in indices if i >= 0]
+⋮----
+def test_lance_metadata()
+⋮----
+"""
+    Test that adding documents with extra fields in metadata
+    (that are absent in the metadata of LanceDBConfig.document_class)
+    works as expected, i.e. the internal schemas and config.document_class
+    are dynamically updated as expected.
+    """
+⋮----
+ldb_dir = ".lancedb/data/test"
+⋮----
+DEFAULT_COLLECTION = "test-dummy"
+ACTUAL_COLLECTION = "test-metadata"
+⋮----
+vecdb = LanceDB(ldb_cfg)
+⋮----
+doc = Document(
+⋮----
+category="other",  # this is an extra field not defined in DocMetaData
+⋮----
+# since we're adding a document whose metadata has an extra field,
+# the config.document_class is updated to reflect the new schema.
+# and the schema is updated to accommodate the extra field,
+⋮----
+# re-init the vecdb like above
+⋮----
+# set to the SAME collection, so we don't create a new one
+⋮----
+# adding a new doc to an existing collection, it has a structure
+# consistent with the previous doc added to this collection,
+# BUT NOT consistent with the DEFAULT_COLLECTION.
+# We want to check that this goes well.
+⋮----
+category="main",  # this is an extra field not defined in DocMetaData
+⋮----
+category="rumor",  # this is an extra field not defined in DocMetaData
+⋮----
+def test_postgres_where_clause(vecdb: PostgresDB)
+⋮----
+"""Test the where clause in get_all_documents,get_similar_texts in PostgresDB"""
+⋮----
+docs = [
+⋮----
+all_docs = vecdb.get_all_documents(where=json.dumps({"category": "other"}))
+⋮----
+all_docs = vecdb.get_all_documents(where=json.dumps({"source": "web"}))
+⋮----
+all_docs = vecdb.get_all_documents(
+⋮----
+all_docs = vecdb.get_all_documents(where=json.dumps({"category": "news"}))
+⋮----
+all_docs = vecdb.get_all_documents(where=json.dumps({"source": "wiki"}))
+</file>
+
 <file path="tests/main/test_xml_tool_message.py">
 class CodeTool(XMLToolMessage)
 ⋮----

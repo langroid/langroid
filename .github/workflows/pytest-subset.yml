@@ -1,0 +1,106 @@
+name: Pytest subset (manual)
+
+# Run a chosen subset of the test suite on demand, instead of the full ~1.5h
+# `Pytest` workflow. Useful while iterating on a focused change.
+#
+# Trigger it from the Actions tab ("Run workflow") or with the CLI:
+#   gh workflow run pytest-subset.yml --ref <branch> \
+#       -f pytest_args="tests/main/test_vector_stores.py -k qdrant_cloud"
+#
+# NOTES:
+#   - workflow_dispatch only becomes available once this file is on the
+#     default branch (main). After that it can be run against ANY branch.
+#   - The Qdrant service container is always started (cheap), so the default
+#     Qdrant-focused subset works out of the box. Override `pytest_args` to
+#     run any other slice (paths / -k / -m).
+
+on:
+  workflow_dispatch:
+    inputs:
+      pytest_args:
+        description: "pytest paths / -k / -m selection (default: Qdrant tests)"
+        required: false
+        default: >-
+          tests/main/test_vector_stores.py
+          tests/main/test_retriever_agent.py
+          tests/main/test_concurrent_doc_chat_qdrant.py
+          tests/main/test_concurrent_rag_simple.py
+          -k "not weaviate and not postgres and not chroma and not lancedb and not pinecone and not meilisearch"
+
+jobs:
+  pytest-subset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.15.5
+        ports:
+          - "6333:6333"
+        env:
+          QDRANT__SERVICE__API_KEY: local-dev-key
+    env:
+      CI: true
+      OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      REDIS_HOST: ${{ secrets.REDIS_HOST }}
+      REDIS_PORT: ${{ secrets.REDIS_PORT }}
+      # Point Qdrant tests at the local service container, not Qdrant Cloud.
+      QDRANT_API_KEY: local-dev-key
+      QDRANT_API_URL: http://localhost:6333
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmagic1 poppler-utils tesseract-ocr
+
+      - name: Install project dependencies with uv
+        run: |
+          uv sync --dev \
+            --extra lancedb \
+            --extra chromadb \
+            --extra hf-embeddings \
+            --extra weaviate \
+            --extra pinecone \
+            --extra postgres \
+            --extra pdf-parsers \
+            --extra docx \
+            --extra unstructured
+
+      - name: Download minimal NLTK data
+        run: |
+          uv run python - <<'PY'
+          import nltk
+          for pkg in [
+              "punkt",
+              "punkt_tab",
+              "stopwords",
+              "wordnet",
+              "omw-1.4",
+              "gutenberg",
+          ]:
+              nltk.download(pkg)
+          PY
+
+      - name: Run pytest subset
+        # NOTE: input is substituted directly; workflow_dispatch is restricted
+        # to users with write access, so this is not an injection vector.
+        run: |
+          uv run pytest ${{ inputs.pytest_args }} \
+            --m gpt-4o-mini -rf -vv --show-capture=no --timeout=300 -n auto
