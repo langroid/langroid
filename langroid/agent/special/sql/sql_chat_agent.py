@@ -119,9 +119,7 @@ _DANGEROUS_SQL_PATTERNS: List["re.Pattern[str]"] = [
     # individual functions: near-name functions (pg_read_file vs
     # pg_read_server_file, pg_ls_logdir vs pg_ls_dir, pg_stat_file, ...) all
     # yield the same file/metadata disclosure primitive.
-    re.compile(
-        r"\bpg_(read|stat|ls|current_logfile)[A-Za-z0-9_]*\s*\(", re.IGNORECASE
-    ),
+    re.compile(r"\bpg_(read|stat|ls|current_logfile)[A-Za-z0-9_]*\s*\(", re.IGNORECASE),
     re.compile(r"\blo_(import|export)\b", re.IGNORECASE),
     # MySQL/MariaDB filesystem
     re.compile(r"\binto\s+(outfile|dumpfile)\b", re.IGNORECASE),
