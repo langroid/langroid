@@ -69,6 +69,7 @@ class _TestRetrieverAgentConfig(DocChatAgentConfig):
     n_similar_chunks: int = 5
     n_relevant_chunks: int = 5
     vecdb: QdrantDBConfig = QdrantDBConfig(
+        cloud=False,
         collection_name="test-retriever",
         storage_path=":memory:",
     )

@@ -51,6 +51,24 @@ every cloud/server-mode test derives its target solely from `QDRANT_API_URL`.
   local `qdrant/qdrant:v1.15.5` container, confirming `cloud=True` resolves to
   the local container.
 
+## CI fixes uncovered by the migration
+
+The first CI run against the empty, shared container surfaced two issues:
+
+- **`punkt_tab` (pre-existing on `main`):** NLTK 3.9 renamed the `punkt`
+  tokenizer resource to `punkt_tab`, but the workflow's `nltk.download` list
+  only fetched `punkt`. `test_retriever_agent.py` builds an agent and calls
+  `ingest()` at module import, so this raised `LookupError` at collection
+  time. On `main` it was masked by the `continue-on-error` / `--lf` retry
+  logic. Fixed by adding `punkt_tab` to the download list.
+- **Collection-creation race:** `test_retriever_agent.py` created its Qdrant
+  collection at module import with the default `cloud=True`. Under
+  `pytest -n auto`, every xdist worker raced to create the same
+  `test-retriever` collection on the shared container (409 Conflict, then an
+  xdist "different tests collected" abort). Previously hidden because the
+  cloud collection persisted across runs. Fixed by setting `cloud=False` (the
+  `storage_path=":memory:"` already intended embedded, per-worker storage).
+
 ## Follow-up (not part of this change)
 
 To actually stop the cloud bill, delete or suspend the Qdrant Cloud cluster

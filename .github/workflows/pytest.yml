@@ -195,6 +195,7 @@ jobs:
         import nltk
         for pkg in [
             "punkt",            # tokenization
+            "punkt_tab",        # tokenization (NLTK >=3.9 renamed punkt)
             "stopwords",        # stopword removal
             "wordnet",          # lemmatization
             "omw-1.4",          # wordnet data
