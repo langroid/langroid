@@ -35,24 +35,16 @@ class TestMiniMaxModelInfo:
 
     def test_minimax_model_enum_values(self):
         """MiniMaxModel enum contains the expected model names."""
+        assert MiniMaxModel.MINIMAX_M3.value == "MiniMax-M3"
         assert MiniMaxModel.MINIMAX_M2_7.value == "MiniMax-M2.7"
         assert MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value == "MiniMax-M2.7-highspeed"
-        assert MiniMaxModel.MINIMAX_M2_5.value == "MiniMax-M2.5"
-        assert MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value == "MiniMax-M2.5-highspeed"
-        assert MiniMaxModel.MINIMAX_M2_1.value == "MiniMax-M2.1"
-        assert MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value == "MiniMax-M2.1-highspeed"
-        assert MiniMaxModel.MINIMAX_M2.value == "MiniMax-M2"
 
     @pytest.mark.parametrize(
         "model",
         [
+            MiniMaxModel.MINIMAX_M3,
             MiniMaxModel.MINIMAX_M2_7,
             MiniMaxModel.MINIMAX_M2_7_HIGHSPEED,
-            MiniMaxModel.MINIMAX_M2_5,
-            MiniMaxModel.MINIMAX_M2_5_HIGHSPEED,
-            MiniMaxModel.MINIMAX_M2_1,
-            MiniMaxModel.MINIMAX_M2_1_HIGHSPEED,
-            MiniMaxModel.MINIMAX_M2,
         ],
     )
     def test_model_info_registered(self, model):
@@ -66,10 +58,15 @@ class TestMiniMaxModelInfo:
 
     def test_get_model_info_minimax(self):
         """get_model_info returns correct info for MiniMax models."""
-        info = get_model_info("MiniMax-M2.7")
+        info = get_model_info("MiniMax-M3")
         assert info.provider == ModelProvider.MINIMAX
-        assert info.context_length == 204_800
+        assert info.context_length == 524_288
         assert info.has_structured_output is True
+
+    def test_model_info_m3_context(self):
+        """M3 has 512K context length."""
+        info_m3 = MODEL_INFO[MiniMaxModel.MINIMAX_M3.value]
+        assert info_m3.context_length == 524_288
 
     def test_model_info_m27_context(self):
         """M2.7 models have 204K context length."""
@@ -77,13 +74,6 @@ class TestMiniMaxModelInfo:
         info_m27hs = MODEL_INFO[MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value]
         assert info_m27.context_length == 204_800
         assert info_m27hs.context_length == 204_800
-
-    def test_model_info_m25_context(self):
-        """M2.5 models have 204K context length."""
-        info_m25 = MODEL_INFO[MiniMaxModel.MINIMAX_M2_5.value]
-        info_m25hs = MODEL_INFO[MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value]
-        assert info_m25.context_length == 204_800
-        assert info_m25hs.context_length == 204_800
 
     def test_highspeed_models_cheaper(self):
         """Highspeed variants should cost less than standard variants."""
@@ -118,13 +108,13 @@ class TestMiniMaxProviderRouting:
         """Using minimax/ prefix should set the MiniMax API base URL."""
         config = OpenAIGPTConfig(
             api_key="test-minimax-key",
-            chat_model="minimax/MiniMax-M2.7",
+            chat_model="minimax/MiniMax-M3",
         )
         gpt = OpenAIGPT(config)
         assert gpt.is_minimax is True
         assert gpt.api_base == MINIMAX_BASE_URL
         # Prefix should be stripped from chat_model
-        assert gpt.config.chat_model == "MiniMax-M2.7"
+        assert gpt.config.chat_model == "MiniMax-M3"
 
     def test_minimax_prefix_strips_prefix(self):
         """minimax/ prefix should be stripped from the model name."""
@@ -139,7 +129,7 @@ class TestMiniMaxProviderRouting:
         """MiniMax should use the standard OpenAI client (not Groq/Cerebras)."""
         config = OpenAIGPTConfig(
             api_key="test-key",
-            chat_model="minimax/MiniMax-M2.7",
+            chat_model="minimax/MiniMax-M3",
         )
         gpt = OpenAIGPT(config)
         assert gpt.client.__class__.__name__ == "OpenAI"
@@ -149,7 +139,7 @@ class TestMiniMaxProviderRouting:
         """MINIMAX_API_KEY env var should be used when no explicit key is given."""
         with patch.dict(os.environ, {"MINIMAX_API_KEY": "env-minimax-key"}):
             config = OpenAIGPTConfig(
-                chat_model="minimax/MiniMax-M2.7",
+                chat_model="minimax/MiniMax-M3",
             )
             gpt = OpenAIGPT(config)
             assert gpt.api_key == "env-minimax-key"
@@ -159,7 +149,7 @@ class TestMiniMaxProviderRouting:
         with patch.dict(os.environ, {"MINIMAX_API_KEY": "env-key"}):
             config = OpenAIGPTConfig(
                 api_key="explicit-key",
-                chat_model="minimax/MiniMax-M2.7",
+                chat_model="minimax/MiniMax-M3",
             )
             gpt = OpenAIGPT(config)
             assert gpt.api_key == "explicit-key"
@@ -168,7 +158,7 @@ class TestMiniMaxProviderRouting:
         """is_minimax_model() should return True for minimax/ prefixed models."""
         config = OpenAIGPTConfig(
             api_key="test-key",
-            chat_model="minimax/MiniMax-M2.5",
+            chat_model="minimax/MiniMax-M3",
         )
         gpt = OpenAIGPT(config)
         assert gpt.is_minimax_model() is True
@@ -191,15 +181,15 @@ class TestMiniMaxProviderRouting:
         gpt = OpenAIGPT(config)
         assert gpt.is_minimax is False
 
-    def test_minimax_m25_highspeed_routing(self):
-        """M2.5-highspeed model should route correctly."""
+    def test_minimax_m27_highspeed_routing(self):
+        """M2.7-highspeed model should route correctly."""
         config = OpenAIGPTConfig(
             api_key="test-key",
-            chat_model="minimax/MiniMax-M2.5-highspeed",
+            chat_model="minimax/MiniMax-M2.7-highspeed",
         )
         gpt = OpenAIGPT(config)
         assert gpt.is_minimax is True
-        assert gpt.config.chat_model == "MiniMax-M2.5-highspeed"
+        assert gpt.config.chat_model == "MiniMax-M2.7-highspeed"
         assert gpt.api_base == MINIMAX_BASE_URL
 
     def test_minimax_base_url_constant(self):
@@ -212,7 +202,7 @@ class TestMiniMaxProviderRouting:
         config = OpenAIGPTConfig(
             api_key="test-key",
             api_base=custom_base,
-            chat_model="minimax/MiniMax-M2.5",
+            chat_model="minimax/MiniMax-M3",
         )
         gpt = OpenAIGPT(config)
         assert gpt.api_base == custom_base
@@ -221,22 +211,22 @@ class TestMiniMaxProviderRouting:
         """MiniMax models with has_structured_output should have JSON schema support.
 
         Regression test: supports_json_schema was computed before the minimax/
-        prefix was stripped, so self.info() looked up 'minimax/MiniMax-M2.7'
+        prefix was stripped, so self.info() looked up 'minimax/MiniMax-M3'
         (not in MODEL_INFO) and incorrectly disabled JSON schema support.
         """
         config = OpenAIGPTConfig(
             api_key="test-key",
-            chat_model="minimax/MiniMax-M2.7",
+            chat_model="minimax/MiniMax-M3",
         )
         gpt = OpenAIGPT(config)
-        # MiniMax-M2.7 has has_structured_output=True in MODEL_INFO
+        # MiniMax-M3 has has_structured_output=True in MODEL_INFO
         assert gpt.supports_json_schema is True
 
     def test_minimax_supports_strict_tools(self):
         """MiniMax models should support strict tools (OpenAI-compatible API)."""
         config = OpenAIGPTConfig(
             api_key="test-key",
-            chat_model="minimax/MiniMax-M2.7",
+            chat_model="minimax/MiniMax-M3",
         )
         gpt = OpenAIGPT(config)
         assert gpt.supports_strict_tools is True
@@ -249,7 +239,7 @@ class TestMiniMaxProviderRouting:
         env_clear.update(env)
         with patch.dict(os.environ, env_clear, clear=True):
             config = OpenAIGPTConfig(
-                chat_model="minimax/MiniMax-M2.5",
+                chat_model="minimax/MiniMax-M3",
             )
             gpt = OpenAIGPT(config)
             # Should keep the OPENAI_API_KEY value, not replace with dummy
@@ -263,7 +253,7 @@ class TestMiniMaxExports:
         """MiniMaxModel should be importable from langroid.language_models."""
         from langroid.language_models import MiniMaxModel
 
-        assert MiniMaxModel.MINIMAX_M2_7.value == "MiniMax-M2.7"
+        assert MiniMaxModel.MINIMAX_M3.value == "MiniMax-M3"
 
 
 # ──────────────────────── Integration Tests ────────────────────────
@@ -293,9 +283,9 @@ class TestMiniMaxIntegration:
         settings.chat_model = self._orig_chat_model
 
     def test_minimax_chat_completion(self):
-        """Test basic chat completion with MiniMax M2.7."""
+        """Test basic chat completion with MiniMax M3."""
         config = OpenAIGPTConfig(
-            chat_model="minimax/MiniMax-M2.7",
+            chat_model="minimax/MiniMax-M3",
             max_output_tokens=50,
             temperature=0.0,
         )
@@ -322,7 +312,7 @@ class TestMiniMaxIntegration:
     async def test_minimax_async_chat(self):
         """Test async chat completion with MiniMax."""
         config = OpenAIGPTConfig(
-            chat_model="minimax/MiniMax-M2.7-highspeed",
+            chat_model="minimax/MiniMax-M3",
             max_output_tokens=50,
             temperature=0.0,
         )

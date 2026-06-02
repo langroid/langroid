@@ -7,7 +7,7 @@
 """
 Basic chat example using MiniMax LLMs.
 
-MiniMax provides high-performance language models with up to 204K context length.
+MiniMax provides high-performance language models with up to 512K context length.
 
 Setup:
 - Set the MINIMAX_API_KEY environment variable (or add to .env file).
@@ -19,7 +19,7 @@ python3 examples/basic/chat-minimax.py
 
 Use optional arguments to change the settings:
 
--m <model_name>   # e.g. MiniMax-M2.7-highspeed, MiniMax-M2.5
+-m <model_name>   # e.g. MiniMax-M3, MiniMax-M2.7, MiniMax-M2.7-highspeed
 -ns               # no streaming
 -d                # debug mode
 -nc               # no cache
@@ -43,10 +43,10 @@ app = typer.Typer()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option(
-        "MiniMax-M2.7",
+        "MiniMax-M3",
         "--model",
         "-m",
-        help="MiniMax model name (e.g. MiniMax-M2.7, MiniMax-M2.7-highspeed)",
+        help="MiniMax model name (e.g. MiniMax-M3, MiniMax-M2.7, MiniMax-M2.7-highspeed)",
     ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
