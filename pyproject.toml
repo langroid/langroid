@@ -330,6 +330,26 @@ docs = [
 ]
 
 
+# Lock-only constraints (NOT part of published metadata / downstream installs).
+# The bulk `uv lock --upgrade` (to drain Dependabot alerts) moved these deps
+# -- none of which has a security alert -- to versions that break us:
+#   - qdrant-client>=1.16 removes Client.search_batch + CollectionInfo.vectors_count
+#     used by QdrantDB (runtime break). Public range stays broad pending a code migration.
+#   - onnxruntime>=1.24 ships no cp310 wheels/sdist, breaking `uv sync` on Python 3.10
+#     (we advertise >=3.10). pip installs are unaffected (they pick the newest cp310 wheel).
+#   - mypy>=1.16 (dev-only) adds stricter checks that flag safe Responder-union access.
+#   - pinecone-client>=6 is an import-time stub that raises ("renamed to `pinecone`"),
+#     breaking VectorStore.create() for every backend. Hold at the working 5.x line.
+# Pinning here (not in [project]/[dependency-groups]) keeps public ranges untouched.
+[tool.uv]
+constraint-dependencies = [
+    "qdrant-client<1.16",
+    "onnxruntime<1.24",
+    "mypy<1.16",
+    "pinecone-client<6",
+]
+
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
