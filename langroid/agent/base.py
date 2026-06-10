@@ -628,7 +628,7 @@ class Agent(ABC):
         recipient: str = "",
     ) -> ChatDocument:
         """Template for agent_response."""
-        doc = self.response_template(
+        return self.response_template(
             Entity.AGENT,
             content=content,
             files=files,
@@ -640,15 +640,6 @@ class Agent(ABC):
             function_call=function_call,
             recipient=recipient,
         )
-        if tool_messages:
-            # Tools explicitly produced as structured ToolMessages by this
-            # agent/handler (e.g. a handler returning AgentSendTool(tools=[...])
-            # or a tool object) are trusted like LLM output -- unlike content
-            # echoed from untrusted input, which carries no structured tools.
-            # Mark so they survive _filter_user_origin_tools after a Task
-            # relabels the sender to USER (GHSA-gjgq-w2m6-wr5q).
-            doc.metadata.tools_from_agent = True
-        return doc
 
     def render_agent_response(
         self,
@@ -904,7 +895,18 @@ class Agent(ABC):
             function_call=function_call,
             oai_tool_choice=oai_tool_choice,
             metadata=ChatDocMetaData(
-                source=e, sender=e, sender_name=self.config.name, recipient=recipient
+                source=e,
+                sender=e,
+                sender_name=self.config.name,
+                recipient=recipient,
+                # Trust tools structurally produced by an LLM or agent/handler
+                # (explicit `tool_messages`): they must survive
+                # _filter_user_origin_tools after a Task relabels the sender to
+                # USER for a handoff. Content-only / echoed responses carry no
+                # structured tool_messages, so they are NOT marked and stay
+                # filtered (GHSA-gjgq-w2m6-wr5q).
+                tools_from_agent=bool(tool_messages)
+                and e in (Entity.LLM, Entity.AGENT),
             ),
         )
 
