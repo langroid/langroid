@@ -16,7 +16,20 @@ from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
         "pypdfium2",
         "unstructured",
         "pymupdf4llm",
-        "marker",
+        pytest.param(
+            "marker",
+            marks=pytest.mark.xfail(
+                reason=(
+                    "marker-pdf pins openai<2 / litellm<1.83, which conflict "
+                    "with langroid's security-patched lock (openai 2.x, "
+                    "litellm 1.83+, transformers 4.57); the resulting locked "
+                    "marker 1.6.1 is too old for transformers 4.57. Users who "
+                    "install langroid[marker] get a working marker via normal "
+                    "pip resolution."
+                ),
+                strict=False,
+            ),
+        ),
     ],
 )
 def test_get_pdf_doc_url(source, pdflib: str):
