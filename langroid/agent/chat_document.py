@@ -77,14 +77,18 @@ class ChatDocMetaData(DocMetaData):
 
     @model_validator(mode="after")
     def _mark_tools_from_agent(self) -> "ChatDocMetaData":
-        # A message produced by an LLM or an agent (tool handler) carries tools
-        # the system itself generated. Mark it at construction so downstream
-        # tool-handling can dispatch handle-only tools even after a Task
-        # relabels the sender to USER for a multi-agent handoff (direct, via
-        # ForwardTool/SendTool, or multi-hop). We only ever SET the flag, never
-        # clear it: a raw USER input is never marked, so it stays filtered.
-        # See ChatAgent._filter_user_origin_tools and GHSA-gjgq-w2m6-wr5q.
-        if self.sender in (Entity.LLM, Entity.AGENT):
+        # Mark messages produced directly by an LLM: the tools in an LLM's
+        # output are the LLM's own decision (the trusted trigger for handle-only
+        # tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
+        # to another agent even after relabeling the sender to USER. The mark is
+        # only ever SET, never cleared, so it survives relabeling and deepcopies
+        # (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
+        # mark across the handoff). We deliberately do NOT mark generic AGENT
+        # messages: a pass-through/echoing agent could surface untrusted USER
+        # text (with embedded tool JSON) as AGENT content, and marking that
+        # would re-open the user-origin bypass. Raw USER input is never marked,
+        # so it stays filtered. See ChatAgent._filter_user_origin_tools.
+        if self.sender == Entity.LLM:
             self.tools_from_agent = True
         return self
 
