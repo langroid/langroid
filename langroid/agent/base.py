@@ -1286,19 +1286,32 @@ class Agent(ABC):
         msg: str | ChatDocument | None,
         tools: List[ToolMessage],
     ) -> List[ToolMessage]:
-        """If ``msg`` originates from :attr:`Entity.USER`, drop any tools whose
+        """If ``msg`` is raw input from :attr:`Entity.USER`, drop any tools whose
         ``request`` is not in :attr:`llm_tools_usable`.
 
         Rationale: ``enable_message(..., use=False, handle=True)`` is meant to
         register tools triggered by an LLM's output (this agent's, or another
         agent's in a multi-agent setup). A raw user input that happens to
         contain such a tool's JSON should not bypass the LLM and invoke the
-        handler directly (GHSA-gjgq-w2m6-wr5q). Non-``ChatDocument`` inputs and
-        non-``USER`` senders are returned unchanged.
+        handler directly (GHSA-gjgq-w2m6-wr5q).
+
+        Legitimate agent-to-agent handoffs are preserved: when a Task relays
+        another agent's LLM/handler output to a sub-agent it relabels the
+        sender to ``USER`` but sets ``metadata.tools_from_agent=True``; such
+        messages are returned unchanged, since their tools came from an LLM,
+        not from raw user input.
+
+        Non-``ChatDocument`` inputs and non-``USER`` senders are returned
+        unchanged.
         """
         if not isinstance(msg, ChatDocument):
             return tools
         if msg.metadata.sender != Entity.USER:
+            return tools
+        if msg.metadata.tools_from_agent:
+            # Tools were produced by an agent's LLM/handler (possibly relayed
+            # across a multi-agent handoff), not raw user input -- safe to
+            # dispatch handle-only tools.
             return tools
         return [t for t in tools if t.default_value("request") in self.llm_tools_usable]
 

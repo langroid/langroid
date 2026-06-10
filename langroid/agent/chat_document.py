@@ -6,7 +6,7 @@ from collections import OrderedDict
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
@@ -57,6 +57,12 @@ class ChatDocMetaData(DocMetaData):
     agent_id: str = ""  # ChatAgent that generated this message
     msg_idx: int = -1  # index of this message in the agent `message_history`
     sender: Entity  # sender of the message
+    # True if this msg was relayed from another agent's LLM/handler output in a
+    # multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
+    # tools be dispatched for legitimate handoffs while still blocking raw
+    # USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
+    # GHSA-gjgq-w2m6-wr5q.
+    tools_from_agent: bool = False
     # tool_id corresponding to single tool result in ChatDocument.content
     oai_tool_id: str | None = None
     tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
@@ -68,6 +74,19 @@ class ChatDocMetaData(DocMetaData):
     displayed: bool = False
     has_citation: bool = False
     status: Optional[StatusCode] = None
+
+    @model_validator(mode="after")
+    def _mark_tools_from_agent(self) -> "ChatDocMetaData":
+        # A message produced by an LLM or an agent (tool handler) carries tools
+        # the system itself generated. Mark it at construction so downstream
+        # tool-handling can dispatch handle-only tools even after a Task
+        # relabels the sender to USER for a multi-agent handoff (direct, via
+        # ForwardTool/SendTool, or multi-hop). We only ever SET the flag, never
+        # clear it: a raw USER input is never marked, so it stays filtered.
+        # See ChatAgent._filter_user_origin_tools and GHSA-gjgq-w2m6-wr5q.
+        if self.sender in (Entity.LLM, Entity.AGENT):
+            self.tools_from_agent = True
+        return self
 
     @property
     def parent(self) -> Optional["ChatDocument"]:

@@ -1814,6 +1814,16 @@ class Task:
                 tool_ids=tool_ids,
                 parent_id=result_msg.id() if result_msg else "",
                 agent_id=str(self.agent.id),
+                # Although we relabel sender to USER (to the parent task this
+                # result is equivalent to a USER response), the tools in this
+                # result were produced by this task's agent/LLM, not raw human
+                # input. Preserve that marking so the parent can still dispatch
+                # handle-only tools for the handoff (GHSA-gjgq-w2m6-wr5q).
+                tools_from_agent=(
+                    result_msg.metadata.tools_from_agent
+                    if result_msg is not None
+                    else False
+                ),
             ),
         )
         if self.pending_message is not None:
