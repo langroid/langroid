@@ -1815,14 +1815,17 @@ class Task:
                 parent_id=result_msg.id() if result_msg else "",
                 agent_id=str(self.agent.id),
                 # Although we relabel sender to USER (to the parent task this
-                # result is equivalent to a USER response), the tools in this
-                # result were produced by this task's agent/LLM, not raw human
-                # input. Preserve that marking so the parent can still dispatch
-                # handle-only tools for the handoff (GHSA-gjgq-w2m6-wr5q).
+                # result is equivalent to a USER response), structured tools
+                # being RELAYED here were produced by this task's agent/LLM, so
+                # the parent must still be able to dispatch them. Preserve the
+                # marking ONLY when actual `tool_messages` are relayed -- NOT
+                # for flattened/echoed content (e.g. a DoneTool whose `content`
+                # is untrusted text that happens to contain tool JSON), which
+                # must stay filtered (GHSA-gjgq-w2m6-wr5q; see also #1035).
                 tools_from_agent=(
-                    result_msg.metadata.tools_from_agent
-                    if result_msg is not None
-                    else False
+                    bool(tool_messages)
+                    and result_msg is not None
+                    and result_msg.metadata.tools_from_agent
                 ),
             ),
         )
