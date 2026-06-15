@@ -13504,843 +13504,6 @@ By adding explicit `close()` and context manager support to Langroid's QdrantDB 
 The QdrantDB lock file issue has been resolved by adding proper resource cleanup mechanisms to Langroid's QdrantDB wrapper. While the underlying `qdrant_client` doesn't provide context manager support, Langroid now offers both context manager and explicit `close()` methods. The context manager approach is the recommended best practice as it ensures cleanup even in error scenarios. For cases where context managers aren't suitable, the explicit `close()` method provides a reliable alternative.
 </file>
 
-<file path="langroid/agent/special/arangodb/aql_validator.py">
-"""Security validation for LLM-generated AQL queries (GHSA-2pq5-3q89-j7cc).
-
-``ArangoChatAgent`` executes AQL produced by an LLM, whose text is influenceable
-by prompt injection -- directly, or indirectly via content the agent reads back
-through RAG. ``bind_vars`` only parameterizes *values*, so the statement text is
-the raw LLM string: unrestricted, an attacker who can influence the prompt can
-read or destroy all graph data and, where user-defined AQL functions (UDFs),
-Foxx, or ``javascript.allow-admin-execute`` are enabled on the database role,
-escalate toward RCE. This mirrors the prompt-to-SQL-to-RCE issue fixed for
-``SQLChatAgent`` in CVE-2026-25879 and the sibling Cypher issue in
-``Neo4jChatAgent``.
-
-Unless the operator opts in with ``allow_dangerous_operations=True``:
-
-- the retrieval (read) path is restricted to read-only AQL -- any
-  data-modification operation (INSERT/UPDATE/REPLACE/REMOVE/UPSERT) is rejected;
-- both paths reject user-defined-function calls (``namespace::func``), which can
-  run server-side JavaScript.
-
-The checks are keyword/pattern based, applied after stripping comments and
-string/identifier literals to reduce false positives. A blocklist is inherently
-bypassable; the real guarantee is the default-off gate plus running the agent
-against a least-privilege ArangoDB role. Treat this as defense in depth, not a
-parser-grade allowlist.
-"""
-
-import logging
-import re
-from typing import List, Optional, Tuple
-
-logger = logging.getLogger(__name__)
-
-# How a rejected query can be allowed by the operator. Appended to every
-# rejection message relayed back to the LLM.
-_CONFIG_HINT = (
-    "ask the operator to set `allow_dangerous_operations=True` on the "
-    "ArangoChatAgentConfig (only safe with a least-privilege ArangoDB role and "
-    "trusted prompts)"
-)
-
-# Primitives that can run server-side code, regardless of read vs write context.
-# AQL user-defined functions are called as ``namespace::function(...)`` and can
-# execute registered JavaScript.
-_DANGEROUS_PATTERNS: List[Tuple["re.Pattern[str]", str]] = [
-    (
-        re.compile(r"[A-Za-z0-9_]+\s*::\s*[A-Za-z0-9_]+"),
-        "a user-defined function call (namespace::func)",
-    ),
-]
-
-# Data-modification operations; rejected only on the read (retrieval) path.
-# ``(?<!\.)`` avoids matching attribute access such as ``doc.update``.
-_WRITE_PATTERNS: List[Tuple["re.Pattern[str]", str]] = [
-    (re.compile(r"(?<!\.)\bINSERT\b", re.IGNORECASE), "INSERT"),
-    (re.compile(r"(?<!\.)\bUPDATE\b", re.IGNORECASE), "UPDATE"),
-    (re.compile(r"(?<!\.)\bREPLACE\b", re.IGNORECASE), "REPLACE"),
-    (re.compile(r"(?<!\.)\bREMOVE\b", re.IGNORECASE), "REMOVE"),
-    (re.compile(r"(?<!\.)\bUPSERT\b", re.IGNORECASE), "UPSERT"),
-]
-
-
-def _strip_literals_and_comments(query: str) -> str:
-    """Blank out comments and string/identifier literals in ``query``.
-
-    Keyword and pattern checks run against the result so they never match text
-    inside string literals, back-tick / forward-tick identifiers, ``//`` line
-    comments, or ``/* ... */`` block comments. Replaced spans become spaces of
-    equal length so character offsets are preserved. String literals use
-    backslash escaping.
-
-    Args:
-        query: Raw AQL text.
-
-    Returns:
-        The query with comment and literal spans replaced by spaces.
-    """
-    out: List[str] = []
-    i, n = 0, len(query)
-    while i < n:
-        two = query[i : i + 2]
-        if two == "//":
-            j = query.find("\n", i)
-            j = n if j == -1 else j
-            out.append(" " * (j - i))
-            i = j
-        elif two == "/*":
-            j = query.find("*/", i + 2)
-            j = n if j == -1 else j + 2
-            out.append(" " * (j - i))
-            i = j
-        elif query[i] in "'\"":
-            ch = query[i]
-            j = i + 1
-            while j < n:
-                if query[j] == "\\":
-                    j += 2
-                    continue
-                if query[j] == ch:
-                    break
-                j += 1
-            j = min(j + 1, n)
-            out.append(" " * (j - i))
-            i = j
-        elif query[i] in "`´":
-            ch = query[i]
-            j = query.find(ch, i + 1)
-            j = n if j == -1 else j + 1
-            out.append(" " * (j - i))
-            i = j
-        else:
-            out.append(query[i])
-            i += 1
-    return "".join(out)
-
-
-def validate_aql_query(
-    query: str, *, is_write: bool, allow_dangerous: bool
-) -> Optional[str]:
-    """Check an LLM-generated AQL query against the agent's safety policy.
-
-    Args:
-        query: The raw AQL string from the LLM.
-        is_write: True for the creation/write path (data-modification
-            operations are permitted), False for the retrieval/read path
-            (modifications are rejected so the path is read-only).
-        allow_dangerous: When True, skip all checks (operator opt-in).
-
-    Returns:
-        None if the query may be executed, otherwise a human-readable rejection
-        message to relay back to the LLM.
-    """
-    if allow_dangerous:
-        return None
-
-    scrubbed = _strip_literals_and_comments(query)
-
-    for pat, label in _DANGEROUS_PATTERNS:
-        if pat.search(scrubbed):
-            logger.warning("ArangoChatAgent rejected AQL using %s: %r", label, query)
-            return (
-                f"AQL query REJECTED for safety: it uses {label}, which can "
-                f"execute server-side code. Rewrite the query without it, or "
-                f"{_CONFIG_HINT}."
-            )
-
-    if not is_write:
-        for pat, label in _WRITE_PATTERNS:
-            if pat.search(scrubbed):
-                logger.warning(
-                    "ArangoChatAgent rejected write op %s on read path: %r",
-                    label,
-                    query,
-                )
-                return (
-                    f"AQL query REJECTED for safety: the retrieval tool runs "
-                    f"READ-ONLY AQL, but this query uses `{label}`. Use the "
-                    f"creation tool for writes, rewrite this as a read-only "
-                    f"(FOR ... RETURN) query, or {_CONFIG_HINT}."
-                )
-
-    return None
-</file>
-
-<file path="langroid/agent/special/arangodb/arangodb_agent.py">
-import datetime
-import json
-import logging
-import time
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
-
-from arango.client import ArangoClient
-from arango.database import StandardDatabase
-from arango.exceptions import ArangoError, ServerConnectionError
-from numpy import ceil
-from pydantic import BaseModel, ConfigDict
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from rich import print
-from rich.console import Console
-
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocument
-from langroid.agent.special.arangodb.aql_validator import validate_aql_query
-from langroid.agent.special.arangodb.system_messages import (
-    ADDRESSING_INSTRUCTION,
-    DEFAULT_ARANGO_CHAT_SYSTEM_MESSAGE,
-    DONE_INSTRUCTION,
-    SCHEMA_PROVIDED_SYS_MSG,
-    SCHEMA_TOOLS_SYS_MSG,
-)
-from langroid.agent.special.arangodb.tools import (
-    AQLCreationTool,
-    AQLRetrievalTool,
-    ArangoSchemaTool,
-    aql_retrieval_tool_name,
-    arango_schema_tool_name,
-)
-from langroid.agent.special.arangodb.utils import count_fields, trim_schema
-from langroid.agent.tools.orchestration import DoneTool, ForwardTool
-from langroid.exceptions import LangroidImportError
-from langroid.mytypes import Entity
-from langroid.utils.constants import SEND_TO
-
-logger = logging.getLogger(__name__)
-console = Console()
-
-ARANGO_ERROR_MSG = "There was an error in your AQL Query"
-T = TypeVar("T")
-
-
-class ArangoSettings(BaseSettings):
-    client: ArangoClient | None = None
-    db: StandardDatabase | None = None
-    url: str = ""
-    username: str = ""
-    password: str = ""
-    database: str = ""
-
-    model_config = SettingsConfigDict(env_prefix="ARANGO_")
-
-
-class QueryResult(BaseModel):
-    success: bool
-    data: Optional[
-        Union[
-            str,
-            int,
-            float,
-            bool,
-            None,
-            List[Any],
-            Dict[str, Any],
-            List[Dict[str, Any]],
-        ]
-    ] = None
-
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        json_encoders={
-            datetime.datetime: lambda v: v.isoformat(),
-        },
-        validate_assignment=True,
-        frozen=False,
-    )
-
-
-class ArangoChatAgentConfig(ChatAgentConfig):
-    arango_settings: ArangoSettings = ArangoSettings()
-    system_message: str = DEFAULT_ARANGO_CHAT_SYSTEM_MESSAGE
-    kg_schema: str | Dict[str, List[Dict[str, Any]]] | None = None
-    database_created: bool = False
-    prepopulate_schema: bool = True
-    use_functions_api: bool = True
-    max_num_results: int = 10  # how many results to return from AQL query
-    max_schema_fields: int = 500  # max fields to show in schema
-    max_tries: int = 10  # how many attempts to answer user question
-    use_tools: bool = False
-    schema_sample_pct: float = 0
-    # whether the agent is used in a continuous chat with user,
-    # as opposed to returning a result from the task.run()
-    chat_mode: bool = False
-    addressing_prefix: str = ""
-    # Security gate for LLM-generated AQL (GHSA-2pq5-3q89-j7cc). When False
-    # (default), the retrieval tool is restricted to read-only AQL and both
-    # tools reject user-defined-function calls (namespace::func) that can run
-    # server-side JavaScript. LLM-generated AQL is prompt-injectable (including
-    # via data the agent reads back), so only set this True with a
-    # least-privilege ArangoDB role and trusted prompts.
-    allow_dangerous_operations: bool = False
-
-
-class ArangoChatAgent(ChatAgent):
-    def __init__(self, config: ArangoChatAgentConfig):
-        super().__init__(config)
-        self.config: ArangoChatAgentConfig = config
-        self.init_state()
-        self._validate_config()
-        self._import_arango()
-        self._initialize_db()
-        self._init_tools_sys_message()
-
-    def init_state(self) -> None:
-        super().init_state()
-        self.current_retrieval_aql_query: str = ""
-        self.current_schema_params: ArangoSchemaTool = ArangoSchemaTool()
-        self.num_tries = 0  # how many attempts to answer user question
-
-    def user_response(
-        self,
-        msg: Optional[str | ChatDocument] = None,
-    ) -> Optional[ChatDocument]:
-        response = super().user_response(msg)
-        if response is None:
-            return None
-        response_str = response.content if response is not None else ""
-        if response_str != "":
-            self.num_tries = 0  # reset number of tries if user responds
-        return response
-
-    def llm_response(
-        self, message: Optional[str | ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        if self.num_tries > self.config.max_tries:
-            if self.config.chat_mode:
-                return self.create_llm_response(
-                    content=f"""
-                    {self.config.addressing_prefix}User
-                    I give up, since I have exceeded the 
-                    maximum number of tries ({self.config.max_tries}).
-                    Feel free to give me some hints!
-                    """
-                )
-            else:
-                return self.create_llm_response(
-                    tool_messages=[
-                        DoneTool(
-                            content=f"""
-                            Exceeded maximum number of tries ({self.config.max_tries}).
-                            """
-                        )
-                    ]
-                )
-
-        if isinstance(message, ChatDocument) and message.metadata.sender == Entity.USER:
-            message.content = (
-                message.content
-                + "\n"
-                + """
-                (REMEMBER, Do NOT use more than ONE TOOL/FUNCTION at a time!
-                you must WAIT for a helper to send you the RESULT(S) before
-                making another TOOL/FUNCTION call)
-                """
-            )
-
-        response = super().llm_response(message)
-        if (
-            response is not None
-            and self.config.chat_mode
-            and self.config.addressing_prefix in response.content
-            and self.has_tool_message_attempt(response)
-        ):
-            # response contains both a user-addressing and a tool, which
-            # is not allowed, so remove the user-addressing prefix
-            response.content = response.content.replace(
-                self.config.addressing_prefix, ""
-            )
-
-        return response
-
-    def _validate_config(self) -> None:
-        assert isinstance(self.config, ArangoChatAgentConfig)
-        if (
-            self.config.arango_settings.client is None
-            or self.config.arango_settings.db is None
-        ):
-            if not all(
-                [
-                    self.config.arango_settings.url,
-                    self.config.arango_settings.username,
-                    self.config.arango_settings.password,
-                    self.config.arango_settings.database,
-                ]
-            ):
-                raise ValueError("ArangoDB connection info must be provided")
-
-    def _import_arango(self) -> None:
-        global ArangoClient
-        try:
-            from arango.client import ArangoClient
-        except ImportError:
-            raise LangroidImportError("python-arango", "arango")
-
-    def _has_any_data(self) -> bool:
-        for c in self.db.collections():  # type: ignore
-            if c["name"].startswith("_"):
-                continue
-            if self.db.collection(c["name"]).count() > 0:  # type: ignore
-                return True
-        return False
-
-    def _initialize_db(self) -> None:
-        try:
-            logger.info("Initializing ArangoDB client connection...")
-            self.client = self.config.arango_settings.client or ArangoClient(
-                hosts=self.config.arango_settings.url
-            )
-
-            logger.info("Connecting to database...")
-            self.db = self.config.arango_settings.db or self.client.db(
-                self.config.arango_settings.database,
-                username=self.config.arango_settings.username,
-                password=self.config.arango_settings.password,
-            )
-
-            logger.info("Checking for existing data in collections...")
-            # Check if any non-system collection has data
-            self.config.database_created = self._has_any_data()
-
-            # If database has data, get schema
-            if self.config.database_created:
-                logger.info("Database has existing data, retrieving schema...")
-                # this updates self.config.kg_schema
-                self.arango_schema_tool(None)
-            else:
-                logger.info("No existing data found in database")
-
-        except Exception as e:
-            logger.error(f"Database initialization failed: {e}")
-            raise ConnectionError(f"Failed to initialize ArangoDB connection: {e}")
-
-    def close(self) -> None:
-        if self.client:
-            self.client.close()
-
-    @staticmethod
-    def cleanup_graph_db(db) -> None:  # type: ignore
-        # First delete graphs to properly handle edge collections
-        for graph in db.graphs():
-            graph_name = graph["name"]
-            if not graph_name.startswith("_"):  # Skip system graphs
-                try:
-                    db.delete_graph(graph_name)
-                except Exception as e:
-                    print(f"Failed to delete graph {graph_name}: {e}")
-
-        # Clear existing collections
-        for collection in db.collections():
-            if not collection["name"].startswith("_"):  # Skip system collections
-                try:
-                    db.delete_collection(collection["name"])
-                except Exception as e:
-                    print(f"Failed to delete collection {collection['name']}: {e}")
-
-    def with_retry(
-        self, func: Callable[[], T], max_retries: int = 3, delay: float = 1.0
-    ) -> T:
-        """Execute a function with retries on connection error"""
-        for attempt in range(max_retries):
-            try:
-                return func()
-            except ArangoError:
-                if attempt == max_retries - 1:
-                    raise
-                logger.warning(
-                    f"Connection failed (attempt {attempt + 1}/{max_retries}). "
-                    f"Retrying in {delay} seconds..."
-                )
-                time.sleep(delay)
-                # Reconnect if needed
-                self._initialize_db()
-        return func()  # Final attempt after loop if not raised
-
-    def read_query(
-        self, query: str, bind_vars: Optional[Dict[Any, Any]] = None
-    ) -> QueryResult:
-        """Execute a read query with connection retry."""
-        if not self.db:
-            return QueryResult(
-                success=False, data="No database connection is established."
-            )
-
-        def execute_read() -> QueryResult:
-            try:
-                cursor = self.db.aql.execute(query, bind_vars=bind_vars)
-                records = [doc for doc in cursor]  # type: ignore
-                records = records[: self.config.max_num_results]
-                logger.warning(f"Records retrieved: {records}")
-                return QueryResult(success=True, data=records if records else [])
-            except Exception as e:
-                if isinstance(e, ServerConnectionError):
-                    raise
-                logger.error(f"Failed to execute query: {query}\n{e}")
-                error_message = self.retry_query(e, query)
-                return QueryResult(success=False, data=error_message)
-
-        try:
-            return self.with_retry(execute_read)  # type: ignore
-        except Exception as e:
-            return QueryResult(
-                success=False, data=f"Failed after max retries: {str(e)}"
-            )
-
-    def write_query(
-        self, query: str, bind_vars: Optional[Dict[Any, Any]] = None
-    ) -> QueryResult:
-        """Execute a write query with connection retry."""
-        if not self.db:
-            return QueryResult(
-                success=False, data="No database connection is established."
-            )
-
-        def execute_write() -> QueryResult:
-            try:
-                self.db.aql.execute(query, bind_vars=bind_vars)
-                return QueryResult(success=True)
-            except Exception as e:
-                if isinstance(e, ServerConnectionError):
-                    raise
-                logger.error(f"Failed to execute query: {query}\n{e}")
-                error_message = self.retry_query(e, query)
-                return QueryResult(success=False, data=error_message)
-
-        try:
-            return self.with_retry(execute_write)  # type: ignore
-        except Exception as e:
-            return QueryResult(
-                success=False, data=f"Failed after max retries: {str(e)}"
-            )
-
-    def aql_retrieval_tool(self, msg: AQLRetrievalTool) -> str:
-        """Handle AQL query for data retrieval"""
-        if not self.tried_schema:
-            return f"""
-            You need to use `{arango_schema_tool_name}` first to get the 
-            database schema before using `{aql_retrieval_tool_name}`. This ensures
-            you know the correct collection names and edge definitions.
-            """
-        elif not self.config.database_created:
-            return """
-            You need to create the database first using `{aql_creation_tool_name}`.
-            """
-        self.num_tries += 1
-        query = msg.aql_query
-        rejection = validate_aql_query(
-            query,
-            is_write=False,
-            allow_dangerous=self.config.allow_dangerous_operations,
-        )
-        if rejection is not None:
-            return rejection
-        if query == self.current_retrieval_aql_query:
-            return """
-            You have already tried this query, so you will get the same results again!
-            If you need to retry, please MODIFY the query to get different results.
-            """
-        self.current_retrieval_aql_query = query
-        logger.info(f"Executing AQL query: {query}")
-        response = self.read_query(query)
-
-        if isinstance(response.data, list) and len(response.data) == 0:
-            return """
-            No results found. Check if your collection names are correct - 
-            they are case-sensitive. Use exact names from the schema.
-            Try modifying your query based on the RETRY-SUGGESTIONS 
-            in your instructions.
-            """
-        return str(response.data)
-
-    def aql_creation_tool(self, msg: AQLCreationTool) -> str:
-        """Handle AQL query for creating data"""
-        self.num_tries += 1
-        query = msg.aql_query
-        rejection = validate_aql_query(
-            query,
-            is_write=True,
-            allow_dangerous=self.config.allow_dangerous_operations,
-        )
-        if rejection is not None:
-            return rejection
-        logger.info(f"Executing AQL query: {query}")
-        response = self.write_query(query)
-
-        if response.success:
-            self.config.database_created = True
-            return "AQL query executed successfully"
-        return str(response.data)
-
-    def arango_schema_tool(
-        self,
-        msg: ArangoSchemaTool | None,
-    ) -> Dict[str, List[Dict[str, Any]]] | str:
-        """Get database schema. If collections=None, include all collections.
-        If properties=False, show only connection info,
-        else show all properties and example-docs.
-        """
-
-        if (
-            msg is not None
-            and msg.collections == self.current_schema_params.collections
-            and msg.properties == self.current_schema_params.properties
-        ):
-            return """
-            You have already tried this schema TOOL, so you will get the same results 
-            again! Please MODIFY the tool params `collections` or `properties` to get
-            different results.
-            """
-
-        if msg is not None:
-            collections = msg.collections
-            properties = msg.properties
-        else:
-            collections = None
-            properties = True
-        self.tried_schema = True
-        if (
-            self.config.kg_schema is not None
-            and len(self.config.kg_schema) > 0
-            and msg is None
-        ):
-            # we are trying to pre-populate full schema before the agent runs,
-            # so get it if it's already available
-            # (Note of course that this "full schema" may actually be incomplete)
-            return self.config.kg_schema
-
-        # increment tries only if the LLM is asking for the schema,
-        # in which case msg will not be None
-        self.num_tries += msg is not None
-
-        try:
-            # Get graph schemas (keeping full graph info)
-            graph_schema = [
-                {"graph_name": g["name"], "edge_definitions": g["edge_definitions"]}
-                for g in self.db.graphs()  # type: ignore
-            ]
-
-            # Get collection schemas
-            collection_schema = []
-            for collection in self.db.collections():  # type: ignore
-                if collection["name"].startswith("_"):
-                    continue
-
-                col_name = collection["name"]
-                if collections and col_name not in collections:
-                    continue
-
-                col_type = collection["type"]
-                col_size = self.db.collection(col_name).count()
-
-                if col_size == 0:
-                    continue
-
-                if properties:
-                    # Full property collection with sampling
-                    lim = self.config.schema_sample_pct * col_size  # type: ignore
-                    limit_amount = ceil(lim / 100.0) or 1
-                    sample_query = f"""
-                        FOR doc in {col_name}
-                        LIMIT {limit_amount}
-                        RETURN doc
-                    """
-
-                    properties_list = []
-                    example_doc = None
-
-                    def simplify_doc(doc: Any) -> Any:
-                        if isinstance(doc, list) and len(doc) > 0:
-                            return [simplify_doc(doc[0])]
-                        if isinstance(doc, dict):
-                            return {k: simplify_doc(v) for k, v in doc.items()}
-                        return doc
-
-                    for doc in self.db.aql.execute(sample_query):  # type: ignore
-                        if example_doc is None:
-                            example_doc = simplify_doc(doc)
-                        for key, value in doc.items():
-                            prop = {"name": key, "type": type(value).__name__}
-                            if prop not in properties_list:
-                                properties_list.append(prop)
-
-                    collection_schema.append(
-                        {
-                            "collection_name": col_name,
-                            "collection_type": col_type,
-                            f"{col_type}_properties": properties_list,
-                            f"example_{col_type}": example_doc,
-                        }
-                    )
-                else:
-                    # Basic info + from/to for edges only
-                    collection_info = {
-                        "collection_name": col_name,
-                        "collection_type": col_type,
-                    }
-                    if col_type == "edge":
-                        # Get a sample edge to extract from/to fields
-                        sample_edge = next(
-                            self.db.aql.execute(  # type: ignore
-                                f"FOR e IN {col_name} LIMIT 1 RETURN e"
-                            ),
-                            None,
-                        )
-                        if sample_edge:
-                            collection_info["from_collection"] = sample_edge[
-                                "_from"
-                            ].split("/")[0]
-                            collection_info["to_collection"] = sample_edge["_to"].split(
-                                "/"
-                            )[0]
-
-                    collection_schema.append(collection_info)
-
-            schema = {
-                "Graph Schema": graph_schema,
-                "Collection Schema": collection_schema,
-            }
-            schema_str = json.dumps(schema, indent=2)
-            logger.warning(f"Schema retrieved:\n{schema_str}")
-            with open("logs/arango-schema.json", "w") as f:
-                f.write(schema_str)
-            if (n_fields := count_fields(schema)) > self.config.max_schema_fields:
-                logger.warning(
-                    f"""
-                    Schema has {n_fields} fields, which exceeds the maximum of
-                    {self.config.max_schema_fields}. Showing a trimmed version
-                    that only includes edge info and no other properties.
-                    """
-                )
-                schema = trim_schema(schema)
-                n_fields = count_fields(schema)
-                logger.warning(f"Schema trimmed down to {n_fields} fields.")
-                schema_str = (
-                    json.dumps(schema)
-                    + "\n"
-                    + f"""
-                    
-                    CAUTION: The requested schema was too large, so 
-                    the schema has been trimmed down to show only all collection names,
-                    their types, 
-                    and edge relationships (from/to collections) without any properties.
-                    To find out more about the schema, you can EITHER:
-                    - Use the `{arango_schema_tool_name}` tool again with the 
-                      `properties` arg set to True, and `collections` arg set to
-                        specific collections you want to know more about, OR
-                    - Use the `{aql_retrieval_tool_name}` tool to learn more about
-                      the schema by querying the database.
-                      
-                    """
-                )
-                if msg is None:
-                    self.config.kg_schema = schema_str
-                return schema_str
-            self.config.kg_schema = schema
-            return schema
-
-        except Exception as e:
-            logger.error(f"Schema retrieval failed: {str(e)}")
-            return f"Failed to retrieve schema: {str(e)}"
-
-    def _init_tools_sys_message(self) -> None:
-        """Initialize system msg and enable tools"""
-        self.tried_schema = False
-        message = self._format_message()
-        self.config.system_message = self.config.system_message.format(mode=message)
-
-        if self.config.chat_mode:
-            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
-            self.config.system_message += ADDRESSING_INSTRUCTION.format(
-                prefix=self.config.addressing_prefix
-            )
-        else:
-            self.config.system_message += DONE_INSTRUCTION
-
-        super().__init__(self.config)
-        # Note we are enabling GraphSchemaTool regardless of whether
-        # self.config.prepopulate_schema is True or False, because
-        # even when schema provided, the agent may later want to get the schema,
-        # e.g. if the db evolves, or schema was trimmed due to size, or
-        # if it needs to bring in the schema into recent context.
-
-        self.enable_message(
-            [
-                ArangoSchemaTool,
-                AQLRetrievalTool,
-                AQLCreationTool,
-                ForwardTool,
-            ]
-        )
-        if not self.config.chat_mode:
-            self.enable_message(DoneTool)
-
-    def _format_message(self) -> str:
-        if self.db is None:
-            raise ValueError("Database connection not established")
-
-        assert isinstance(self.config, ArangoChatAgentConfig)
-        return (
-            SCHEMA_TOOLS_SYS_MSG
-            if not self.config.prepopulate_schema
-            else SCHEMA_PROVIDED_SYS_MSG.format(schema=self.arango_schema_tool(None))
-        )
-
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ForwardTool | None:
-        """When LLM sends a no-tool msg, assume user is the intended recipient,
-        and if in interactive mode, forward the msg to the user.
-        """
-        done_tool_name = DoneTool.default_value("request")
-        forward_tool_name = ForwardTool.default_value("request")
-        aql_retrieval_tool_instructions = AQLRetrievalTool.instructions()
-        # TODO the aql_retrieval_tool_instructions may be empty/minimal
-        # when using self.config.use_functions_api = True.
-        tools_instruction = f"""
-          For example you may want to use the TOOL
-          `{aql_retrieval_tool_name}`  according to these instructions:
-           {aql_retrieval_tool_instructions}
-        """
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            if self.interactive:
-                return ForwardTool(agent="User")
-            else:
-                if self.config.chat_mode:
-                    return f"""
-                    Since you did not explicitly address the User, it is not clear
-                    whether:
-                    - you intend this to be the final response to the 
-                      user's query/request, in which case you must use the 
-                      `{forward_tool_name}` to indicate this.
-                    - OR, you FORGOT to use an Appropriate TOOL,
-                      in which case you should use the available tools to
-                      make progress on the user's query/request.
-                      {tools_instruction}
-                    """
-                return f"""
-                The intent of your response is not clear:
-                - if you intended this to be the FINAL answer to the user's query,
-                    then use the `{done_tool_name}` to indicate so,
-                    with the `content` set to the answer or result.
-                - otherwise, use one of the available tools to make progress 
-                    to arrive at the final answer.
-                    {tools_instruction}
-                """
-        return None
-
-    def retry_query(self, e: Exception, query: str) -> str:
-        """Generate error message for failed AQL query"""
-        logger.error(f"AQL Query failed: {query}\nException: {e}")
-
-        error_message = f"""\
-        {ARANGO_ERROR_MSG}: '{query}'
-        {str(e)}
-        Please try again with a corrected query.
-        """
-
-        return error_message
-</file>
-
 <file path="langroid/agent/special/arangodb/system_messages.py">
 from langroid.agent.special.arangodb.tools import (
     aql_creation_tool_name,
@@ -15415,632 +14578,6 @@ class CSVGraphAgent(Neo4jChatAgent):
                     if counter == 0 and not response.success:
                         return str(response.data)
             return "Graph database successfully generated"
-</file>
-
-<file path="langroid/agent/special/neo4j/cypher_validator.py">
-"""Security validation for LLM-generated Cypher queries (GHSA-2pq5-3q89-j7cc).
-
-``Neo4jChatAgent`` executes Cypher produced by an LLM, whose text is
-influenceable by prompt injection -- directly, or indirectly via content the
-agent reads back through RAG. Executing such Cypher without restriction lets an
-attacker who can influence the prompt read or destroy all graph data and, when
-APOC or ``dbms.security`` procedures are enabled on the database role, reach the
-filesystem, network, or OS (config-conditional RCE). This mirrors the
-prompt-to-SQL-to-RCE issue fixed for ``SQLChatAgent`` in CVE-2026-25879.
-
-Unless the operator opts in with ``allow_dangerous_operations=True``:
-
-- the retrieval (read) path is restricted to read-only Cypher -- any
-  write or schema-mutating clause is rejected;
-- both paths reject the code-execution / file / network primitives
-  (``LOAD CSV``, ``apoc.*``, ``dbms.*``, ``CALL db.*``).
-
-Cypher has no lightweight AST parser in our dependency set, so the checks are
-keyword/pattern based, applied after stripping comments and string/identifier
-literals to reduce false positives. A blocklist is inherently bypassable; the
-real guarantee is the default-off gate plus running the agent against a
-least-privilege Neo4j role. Treat this as defense in depth, not a parser-grade
-allowlist.
-"""
-
-import logging
-import re
-from typing import List, Optional, Tuple
-
-logger = logging.getLogger(__name__)
-
-# How a rejected query can be allowed by the operator. Appended to every
-# rejection message relayed back to the LLM.
-_CONFIG_HINT = (
-    "ask the operator to set `allow_dangerous_operations=True` on the "
-    "Neo4jChatAgentConfig (only safe with a least-privilege Neo4j role and "
-    "trusted prompts)"
-)
-
-# Primitives that enable code execution, filesystem/network access, or admin
-# control regardless of read vs write context.
-_DANGEROUS_PATTERNS: List[Tuple["re.Pattern[str]", str]] = [
-    (re.compile(r"\bLOAD\s+CSV\b", re.IGNORECASE), "LOAD CSV file/URL access"),
-    (re.compile(r"\bapoc\.", re.IGNORECASE), "an apoc.* procedure/function"),
-    (re.compile(r"\bdbms\.", re.IGNORECASE), "a dbms.* admin procedure"),
-    (re.compile(r"\bCALL\s+db\.", re.IGNORECASE), "a CALL db.* admin procedure"),
-]
-
-# Clauses that modify the graph; rejected only on the read (retrieval) path.
-# ``(?<!\.)`` avoids matching property access such as ``n.set`` / ``n.create``
-# (a reserved word used as a property key must be back-ticked, which the
-# literal stripper blanks out).
-_WRITE_PATTERNS: List[Tuple["re.Pattern[str]", str]] = [
-    (re.compile(r"(?<!\.)\bCREATE\b", re.IGNORECASE), "CREATE"),
-    (re.compile(r"(?<!\.)\bMERGE\b", re.IGNORECASE), "MERGE"),
-    (re.compile(r"(?<!\.)\bSET\b", re.IGNORECASE), "SET"),
-    (re.compile(r"(?<!\.)\bDELETE\b", re.IGNORECASE), "DELETE"),
-    (re.compile(r"(?<!\.)\bREMOVE\b", re.IGNORECASE), "REMOVE"),
-    (re.compile(r"(?<!\.)\bDROP\b", re.IGNORECASE), "DROP"),
-    (re.compile(r"(?<!\.)\bFOREACH\b", re.IGNORECASE), "FOREACH"),
-]
-
-
-def _strip_literals_and_comments(query: str) -> str:
-    """Blank out comments and string/backtick literals in ``query``.
-
-    Keyword and pattern checks run against the result so they never match text
-    inside string literals, back-ticked identifiers, ``//`` line comments, or
-    ``/* ... */`` block comments. Replaced spans become spaces of equal length
-    so character offsets are preserved. String literals use backslash escaping;
-    back-ticked identifiers escape a backtick by doubling it.
-
-    Args:
-        query: Raw Cypher text.
-
-    Returns:
-        The query with comment and literal spans replaced by spaces.
-    """
-    out: List[str] = []
-    i, n = 0, len(query)
-    while i < n:
-        two = query[i : i + 2]
-        if two == "//":
-            j = query.find("\n", i)
-            j = n if j == -1 else j
-            out.append(" " * (j - i))
-            i = j
-        elif two == "/*":
-            j = query.find("*/", i + 2)
-            j = n if j == -1 else j + 2
-            out.append(" " * (j - i))
-            i = j
-        elif query[i] in "'\"":
-            ch = query[i]
-            j = i + 1
-            while j < n:
-                if query[j] == "\\":
-                    j += 2
-                    continue
-                if query[j] == ch:
-                    break
-                j += 1
-            j = min(j + 1, n)
-            out.append(" " * (j - i))
-            i = j
-        elif query[i] == "`":
-            j = i + 1
-            while j < n:
-                if query[j] == "`":
-                    if j + 1 < n and query[j + 1] == "`":
-                        j += 2
-                        continue
-                    break
-                j += 1
-            j = min(j + 1, n)
-            out.append(" " * (j - i))
-            i = j
-        else:
-            out.append(query[i])
-            i += 1
-    return "".join(out)
-
-
-def validate_cypher_query(
-    query: str, *, is_write: bool, allow_dangerous: bool
-) -> Optional[str]:
-    """Check an LLM-generated Cypher query against the agent's safety policy.
-
-    Args:
-        query: The raw Cypher string from the LLM.
-        is_write: True for the creation/write path (ordinary write clauses are
-            permitted), False for the retrieval/read path (write clauses are
-            rejected so the path is read-only).
-        allow_dangerous: When True, skip all checks (operator opt-in).
-
-    Returns:
-        None if the query may be executed, otherwise a human-readable rejection
-        message to relay back to the LLM.
-    """
-    if allow_dangerous:
-        return None
-
-    scrubbed = _strip_literals_and_comments(query)
-
-    for pat, label in _DANGEROUS_PATTERNS:
-        if pat.search(scrubbed):
-            logger.warning("Neo4jChatAgent rejected Cypher using %s: %r", label, query)
-            return (
-                f"Cypher query REJECTED for safety: it uses {label}, which can "
-                f"execute code or access the filesystem/network. Rewrite the "
-                f"query without it, or {_CONFIG_HINT}."
-            )
-
-    if not is_write:
-        for pat, label in _WRITE_PATTERNS:
-            if pat.search(scrubbed):
-                logger.warning(
-                    "Neo4jChatAgent rejected write clause %s on read path: %r",
-                    label,
-                    query,
-                )
-                return (
-                    f"Cypher query REJECTED for safety: the retrieval tool runs "
-                    f"READ-ONLY Cypher, but this query uses `{label}`. Use the "
-                    f"creation tool for writes, rewrite this as a read-only "
-                    f"(MATCH/RETURN) query, or {_CONFIG_HINT}."
-                )
-
-    return None
-</file>
-
-<file path="langroid/agent/special/neo4j/neo4j_chat_agent.py">
-import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
-
-from pydantic import BaseModel
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from rich import print
-from rich.console import Console
-
-if TYPE_CHECKING:
-    import neo4j
-
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocument
-from langroid.agent.special.neo4j.cypher_validator import validate_cypher_query
-from langroid.agent.special.neo4j.system_messages import (
-    ADDRESSING_INSTRUCTION,
-    DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE,
-    DONE_INSTRUCTION,
-    SCHEMA_PROVIDED_SYS_MSG,
-    SCHEMA_TOOLS_SYS_MSG,
-)
-from langroid.agent.special.neo4j.tools import (
-    CypherCreationTool,
-    CypherRetrievalTool,
-    GraphSchemaTool,
-    cypher_creation_tool_name,
-    cypher_retrieval_tool_name,
-    graph_schema_tool_name,
-)
-from langroid.agent.tools.orchestration import DoneTool, ForwardTool
-from langroid.exceptions import LangroidImportError
-from langroid.mytypes import Entity
-from langroid.utils.constants import SEND_TO
-
-logger = logging.getLogger(__name__)
-
-console = Console()
-
-NEO4J_ERROR_MSG = "There was an error in your Cypher Query"
-
-
-# TOOLS to be used by the agent
-
-
-class Neo4jSettings(BaseSettings):
-    uri: str = ""
-    username: str = ""
-    password: str = ""
-    database: str = ""
-
-    model_config = SettingsConfigDict(env_prefix="NEO4J_")
-
-
-class QueryResult(BaseModel):
-    success: bool
-    data: List[Dict[Any, Any]] | str | None = None
-
-
-class Neo4jChatAgentConfig(ChatAgentConfig):
-    neo4j_settings: Neo4jSettings = Neo4jSettings()
-    system_message: str = DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE
-    kg_schema: Optional[List[Dict[str, Any]]] = None
-    database_created: bool = False
-    # whether agent MUST use schema_tools to get schema, i.e.
-    # schema is NOT initially provided
-    use_schema_tools: bool = True
-    use_functions_api: bool = True
-    use_tools: bool = False
-    # whether the agent is used in a continuous chat with user,
-    # as opposed to returning a result from the task.run()
-    chat_mode: bool = False
-    addressing_prefix: str = ""
-    # Security gate for LLM-generated Cypher (GHSA-2pq5-3q89-j7cc). When False
-    # (default), the retrieval tool is restricted to read-only Cypher and both
-    # tools reject code-execution / file / network primitives (LOAD CSV,
-    # apoc.*, dbms.*, CALL db.*). LLM-generated Cypher is prompt-injectable
-    # (including via data the agent reads back), so only set this True with a
-    # least-privilege Neo4j role and trusted prompts.
-    allow_dangerous_operations: bool = False
-
-
-class Neo4jChatAgent(ChatAgent):
-    def __init__(self, config: Neo4jChatAgentConfig):
-        """Initialize the Neo4jChatAgent.
-
-        Raises:
-            ValueError: If database information is not provided in the config.
-        """
-        self.config: Neo4jChatAgentConfig = config
-        self._validate_config()
-        self._import_neo4j()
-        self._initialize_db()
-        self._init_tools_sys_message()
-        self.init_state()
-
-    def init_state(self) -> None:
-        super().init_state()
-        self.current_retrieval_cypher_query: str = ""
-        self.tried_schema: bool = False
-
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ForwardTool | None:
-        """
-        When LLM sends a no-tool msg, assume user is the intended recipient,
-        and if in interactive mode, forward the msg to the user.
-        """
-
-        done_tool_name = DoneTool.default_value("request")
-        forward_tool_name = ForwardTool.default_value("request")
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            if self.interactive:
-                return ForwardTool(agent="User")
-            else:
-                if self.config.chat_mode:
-                    return f"""
-                    Since you did not explicitly address the User, it is not clear
-                    whether:
-                    - you intend this to be the final response to the 
-                      user's query/request, in which case you must use the 
-                      `{forward_tool_name}` to indicate this.
-                    - OR, you FORGOT to use an Appropriate TOOL,
-                      in which case you should use the available tools to
-                      make progress on the user's query/request.
-                    """
-                return f"""
-                The intent of your response is not clear:
-                - if you intended this to be the final answer to the user's query,
-                    then use the `{done_tool_name}` to indicate so,
-                    with the `content` set to the answer or result.
-                - otherwise, use one of the available tools to make progress 
-                    to arrive at the final answer.
-                """
-        return None
-
-    def _validate_config(self) -> None:
-        """Validate the configuration to ensure all necessary fields are present."""
-        assert isinstance(self.config, Neo4jChatAgentConfig)
-        if (
-            self.config.neo4j_settings.username is None
-            and self.config.neo4j_settings.password is None
-            and self.config.neo4j_settings.database
-        ):
-            raise ValueError("Neo4j env information must be provided")
-
-    def _import_neo4j(self) -> None:
-        """Dynamically imports the Neo4j module and sets it as a global variable."""
-        global neo4j
-        try:
-            import neo4j
-        except ImportError:
-            raise LangroidImportError("neo4j", "neo4j")
-
-    def _initialize_db(self) -> None:
-        """
-        Initializes a connection to the Neo4j database using the configuration settings.
-        """
-        try:
-            assert isinstance(self.config, Neo4jChatAgentConfig)
-            self.driver = neo4j.GraphDatabase.driver(
-                self.config.neo4j_settings.uri,
-                auth=(
-                    self.config.neo4j_settings.username,
-                    self.config.neo4j_settings.password,
-                ),
-            )
-            with self.driver.session() as session:
-                result = session.run("MATCH (n) RETURN count(n) as count")
-                count = result.single()["count"]  # type: ignore
-                self.config.database_created = count > 0
-
-            # If database has data, get schema
-            if self.config.database_created:
-                # this updates self.config.kg_schema
-                self.graph_schema_tool(None)
-
-        except Exception as e:
-            raise ConnectionError(f"Failed to initialize Neo4j connection: {e}")
-
-    def close(self) -> None:
-        """close the connection"""
-        if self.driver:
-            self.driver.close()
-
-    def retry_query(self, e: Exception, query: str) -> str:
-        """
-        Generate an error message for a failed Cypher query and return it.
-
-        Args:
-            e (Exception): The exception raised during the Cypher query execution.
-            query (str): The Cypher query that failed.
-
-        Returns:
-            str: The error message.
-        """
-        logger.error(f"Cypher Query failed: {query}\nException: {e}")
-
-        # Construct the error message
-        error_message_template = f"""\
-        {NEO4J_ERROR_MSG}: '{query}'
-        {str(e)}
-        Run a new query, correcting the errors.
-        """
-
-        return error_message_template
-
-    def read_query(
-        self, query: str, parameters: Optional[Dict[Any, Any]] = None
-    ) -> QueryResult:
-        """
-        Executes a given Cypher query with parameters on the Neo4j database.
-
-        Args:
-            query (str): The Cypher query string to be executed.
-            parameters (Optional[Dict[Any, Any]]): A dictionary of parameters for
-                                                    the query.
-
-        Returns:
-            QueryResult: An object representing the outcome of the query execution.
-        """
-        if not self.driver:
-            return QueryResult(
-                success=False, data="No database connection is established."
-            )
-
-        try:
-            assert isinstance(self.config, Neo4jChatAgentConfig)
-            with self.driver.session(
-                database=self.config.neo4j_settings.database
-            ) as session:
-                result = session.run(query, parameters)
-                if result.peek():
-                    records = [record.data() for record in result]
-                    return QueryResult(success=True, data=records)
-                else:
-                    return QueryResult(success=True, data=[])
-        except Exception as e:
-            logger.error(f"Failed to execute query: {query}\n{e}")
-            error_message = self.retry_query(e, query)
-            return QueryResult(success=False, data=error_message)
-        finally:
-            self.close()
-
-    def write_query(
-        self, query: str, parameters: Optional[Dict[Any, Any]] = None
-    ) -> QueryResult:
-        """
-        Executes a write transaction using a given Cypher query on the Neo4j database.
-        This method should be used for queries that modify the database.
-
-        Args:
-            query (str): The Cypher query string to be executed.
-            parameters (dict, optional): A dict of parameters for the Cypher query.
-
-        Returns:
-            QueryResult: An object representing the outcome of the query execution.
-                         It contains a success flag and an optional error message.
-        """
-        # Check if query contains database/collection creation patterns
-        query_upper = query.upper()
-        is_creation_query = any(
-            [
-                "CREATE" in query_upper,
-                "MERGE" in query_upper,
-                "CREATE CONSTRAINT" in query_upper,
-                "CREATE INDEX" in query_upper,
-            ]
-        )
-
-        if is_creation_query:
-            self.config.database_created = True
-            logger.info("Detected database/collection creation query")
-
-        if not self.driver:
-            return QueryResult(
-                success=False, data="No database connection is established."
-            )
-
-        try:
-            assert isinstance(self.config, Neo4jChatAgentConfig)
-            with self.driver.session(
-                database=self.config.neo4j_settings.database
-            ) as session:
-                session.write_transaction(lambda tx: tx.run(query, parameters))
-                return QueryResult(success=True)
-        except Exception as e:
-            logging.warning(f"An error occurred: {e}")
-            error_message = self.retry_query(e, query)
-            return QueryResult(success=False, data=error_message)
-        finally:
-            self.close()
-
-    # TODO: test under enterprise edition because community edition doesn't allow
-    # database creation/deletion
-    def remove_database(self) -> None:
-        """Deletes all nodes and relationships from the current Neo4j database."""
-        delete_query = """
-                MATCH (n)
-                DETACH DELETE n
-            """
-        response = self.write_query(delete_query)
-
-        if response.success:
-            print("[green]Database is deleted!")
-        else:
-            print("[red]Database is not deleted!")
-
-    def cypher_retrieval_tool(self, msg: CypherRetrievalTool) -> str:
-        """ "
-        Handle a CypherRetrievalTool message by executing a Cypher query and
-        returning the result.
-        Args:
-            msg (CypherRetrievalTool): The tool-message to handle.
-
-        Returns:
-            str: The result of executing the cypher_query.
-        """
-        if not self.tried_schema:
-            return f"""
-            You did not yet use the `{graph_schema_tool_name}` tool to get the schema 
-            of the neo4j knowledge-graph db. Use that tool first before using 
-            the `{cypher_retrieval_tool_name}` tool, to ensure you know all the correct
-            node labels, relationship types, and property keys available in
-            the database.
-            """
-        elif not self.config.database_created:
-            return f"""
-            You have not yet created the Neo4j database. 
-            Use the `{cypher_creation_tool_name}`
-            tool to create the database first before using the 
-            `{cypher_retrieval_tool_name}` tool.
-            """
-        query = msg.cypher_query
-        rejection = validate_cypher_query(
-            query,
-            is_write=False,
-            allow_dangerous=self.config.allow_dangerous_operations,
-        )
-        if rejection is not None:
-            return rejection
-        self.current_retrieval_cypher_query = query
-        logger.info(f"Executing Cypher query: {query}")
-        response = self.read_query(query)
-        if isinstance(response.data, list) and len(response.data) == 0:
-            return """
-            No results found; check if your query used the right label names -- 
-            remember these are case sensitive, so you have to use the exact label
-            names you found in the schema. 
-            Or retry using one of the  RETRY-SUGGESTIONS in your instructions. 
-            """
-        return str(response.data)
-
-    def cypher_creation_tool(self, msg: CypherCreationTool) -> str:
-        """ "
-        Handle a CypherCreationTool message by executing a Cypher query and
-        returning the result.
-        Args:
-            msg (CypherCreationTool): The tool-message to handle.
-
-        Returns:
-            str: The result of executing the cypher_query.
-        """
-        query = msg.cypher_query
-        rejection = validate_cypher_query(
-            query,
-            is_write=True,
-            allow_dangerous=self.config.allow_dangerous_operations,
-        )
-        if rejection is not None:
-            return rejection
-
-        logger.info(f"Executing Cypher query: {query}")
-        response = self.write_query(query)
-        if response.success:
-            self.config.database_created = True
-            return "Cypher query executed successfully"
-        else:
-            return str(response.data)
-
-    # TODO: There are various ways to get the schema. The current one uses the func
-    # `read_query`, which requires post processing to identify whether the response upon
-    # the schema query is valid. Another way is to isolate this func from `read_query`.
-    # The current query works well. But we could use the queries here:
-    # https://github.com/neo4j/NaLLM/blob/1af09cd117ba0777d81075c597a5081583568f9f/api/
-    # src/driver/neo4j.py#L30
-    def graph_schema_tool(
-        self, msg: GraphSchemaTool | None
-    ) -> str | Optional[Union[str, List[Dict[Any, Any]]]]:
-        """
-        Retrieves the schema of a Neo4j graph database.
-
-        Args:
-            msg (GraphSchemaTool): An instance of GraphDatabaseSchema, typically
-            containing information or parameters needed for the database query.
-
-        Returns:
-            str: The visual representation of the database schema as a string, or a
-            message stating that the database schema is empty or not valid.
-
-        Raises:
-            This function does not explicitly raise exceptions but depends on the
-            behavior of 'self.read_query' method, which might raise exceptions related
-             to database connectivity or query execution.
-        """
-        self.tried_schema = True
-        if self.config.kg_schema is not None and len(self.config.kg_schema) > 0:
-            return self.config.kg_schema
-        schema_result = self.read_query("CALL db.schema.visualization()")
-        if schema_result.success:
-            # there is a possibility that the schema is empty, which is a valid response
-            # the schema.data will be: [{"nodes": [], "relationships": []}]
-            self.config.kg_schema = schema_result.data  # type: ignore
-            return schema_result.data
-        else:
-            return f"Failed to retrieve schema: {schema_result.data}"
-
-    def _init_tools_sys_message(self) -> None:
-        """Initialize message tools used for chatting."""
-        self.tried_schema = False
-        message = self._format_message()
-        self.config.system_message = self.config.system_message.format(mode=message)
-        if self.config.chat_mode:
-            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
-            self.config.system_message += ADDRESSING_INSTRUCTION.format(
-                prefix=self.config.addressing_prefix
-            )
-        else:
-            self.config.system_message += DONE_INSTRUCTION
-        super().__init__(self.config)
-        # Note we are enabling GraphSchemaTool regardless of whether
-        # self.config.use_schema_tools is True or False, because
-        # even when schema provided, the agent may later want to get the schema,
-        # e.g. if the db evolves, or if it needs to bring in the schema
-        self.enable_message(
-            [
-                GraphSchemaTool,
-                CypherRetrievalTool,
-                CypherCreationTool,
-                DoneTool,
-            ]
-        )
-
-    def _format_message(self) -> str:
-        if self.driver is None:
-            raise ValueError("Database driver None")
-        assert isinstance(self.config, Neo4jChatAgentConfig)
-        return (
-            SCHEMA_TOOLS_SYS_MSG
-            if self.config.use_schema_tools
-            else SCHEMA_PROVIDED_SYS_MSG.format(schema=self.graph_schema_tool(None))
-        )
 </file>
 
 <file path="langroid/agent/special/neo4j/system_messages.py">
@@ -36113,6 +34650,1469 @@ The first CI run against the empty, shared container surfaced two issues:
 To actually stop the cloud bill, delete or suspend the Qdrant Cloud cluster
 (and clear any retained backups) in the Qdrant Cloud console — deleting
 collections alone does not stop the hourly cluster charge.
+</file>
+
+<file path="langroid/agent/special/arangodb/aql_validator.py">
+"""Security validation for LLM-generated AQL queries (GHSA-2pq5-3q89-j7cc).
+
+``ArangoChatAgent`` executes AQL produced by an LLM, whose text is influenceable
+by prompt injection -- directly, or indirectly via content the agent reads back
+through RAG. ``bind_vars`` only parameterizes *values*, so the statement text is
+the raw LLM string: unrestricted, an attacker who can influence the prompt can
+read or destroy all graph data and, where user-defined AQL functions (UDFs),
+Foxx, or ``javascript.allow-admin-execute`` are enabled on the database role,
+escalate toward RCE. This mirrors the prompt-to-SQL-to-RCE issue fixed for
+``SQLChatAgent`` in CVE-2026-25879 and the sibling Cypher issue in
+``Neo4jChatAgent``.
+
+Unless the operator opts in with ``allow_dangerous_operations=True``:
+
+- the retrieval (read) path is restricted to read-only AQL -- any
+  data-modification operation (INSERT/UPDATE/REPLACE/REMOVE/UPSERT) is rejected;
+- both paths reject user-defined-function calls (``namespace::func``), which can
+  run server-side JavaScript.
+
+The checks are keyword/pattern based, applied after stripping comments and
+string/identifier literals to reduce false positives. A blocklist is inherently
+bypassable; the real guarantee is the default-off gate plus running the agent
+against a least-privilege ArangoDB role. Treat this as defense in depth, not a
+parser-grade allowlist.
+"""
+
+import logging
+import re
+from typing import List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+# How a rejected query can be allowed by the operator. Appended to every
+# rejection message relayed back to the LLM.
+_CONFIG_HINT = (
+    "ask the operator to set `allow_dangerous_operations=True` on the "
+    "ArangoChatAgentConfig (only safe with a least-privilege ArangoDB role and "
+    "trusted prompts)"
+)
+
+# Primitives that can run server-side code, regardless of read vs write context.
+# AQL user-defined functions are called as ``namespace::function(...)`` and can
+# execute registered JavaScript.
+_DANGEROUS_PATTERNS: List[Tuple["re.Pattern[str]", str]] = [
+    (
+        re.compile(r"[A-Za-z0-9_]+\s*::\s*[A-Za-z0-9_]+"),
+        "a user-defined function call (namespace::func)",
+    ),
+]
+
+# Data-modification operations; rejected only on the read (retrieval) path.
+# ``(?<!\.)`` avoids matching attribute access such as ``doc.update``.
+_WRITE_PATTERNS: List[Tuple["re.Pattern[str]", str]] = [
+    (re.compile(r"(?<!\.)\bINSERT\b", re.IGNORECASE), "INSERT"),
+    (re.compile(r"(?<!\.)\bUPDATE\b", re.IGNORECASE), "UPDATE"),
+    (re.compile(r"(?<!\.)\bREPLACE\b", re.IGNORECASE), "REPLACE"),
+    (re.compile(r"(?<!\.)\bREMOVE\b", re.IGNORECASE), "REMOVE"),
+    (re.compile(r"(?<!\.)\bUPSERT\b", re.IGNORECASE), "UPSERT"),
+]
+
+
+def _strip_literals_and_comments(query: str) -> str:
+    """Blank out comments and string/identifier literals in ``query``.
+
+    Keyword and pattern checks run against the result so they never match text
+    inside string literals, back-tick / forward-tick identifiers, ``//`` line
+    comments, or ``/* ... */`` block comments. Replaced spans become spaces of
+    equal length so character offsets are preserved. String literals use
+    backslash escaping.
+
+    Args:
+        query: Raw AQL text.
+
+    Returns:
+        The query with comment and literal spans replaced by spaces.
+    """
+    out: List[str] = []
+    i, n = 0, len(query)
+    while i < n:
+        two = query[i : i + 2]
+        if two == "//":
+            j = query.find("\n", i)
+            j = n if j == -1 else j
+            out.append(" " * (j - i))
+            i = j
+        elif two == "/*":
+            j = query.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            out.append(" " * (j - i))
+            i = j
+        elif query[i] in "'\"":
+            ch = query[i]
+            j = i + 1
+            while j < n:
+                if query[j] == "\\":
+                    j += 2
+                    continue
+                if query[j] == ch:
+                    break
+                j += 1
+            j = min(j + 1, n)
+            out.append(" " * (j - i))
+            i = j
+        elif query[i] in "`´":
+            ch = query[i]
+            j = query.find(ch, i + 1)
+            j = n if j == -1 else j + 1
+            out.append(" " * (j - i))
+            i = j
+        else:
+            out.append(query[i])
+            i += 1
+    return "".join(out)
+
+
+def validate_aql_query(
+    query: str, *, is_write: bool, allow_dangerous: bool
+) -> Optional[str]:
+    """Check an LLM-generated AQL query against the agent's safety policy.
+
+    Args:
+        query: The raw AQL string from the LLM.
+        is_write: True for the creation/write path (data-modification
+            operations are permitted), False for the retrieval/read path
+            (modifications are rejected so the path is read-only).
+        allow_dangerous: When True, skip all checks (operator opt-in).
+
+    Returns:
+        None if the query may be executed, otherwise a human-readable rejection
+        message to relay back to the LLM.
+    """
+    if allow_dangerous:
+        return None
+
+    scrubbed = _strip_literals_and_comments(query)
+
+    for pat, label in _DANGEROUS_PATTERNS:
+        if pat.search(scrubbed):
+            logger.warning("ArangoChatAgent rejected AQL using %s: %r", label, query)
+            return (
+                f"AQL query REJECTED for safety: it uses {label}, which can "
+                f"execute server-side code. Rewrite the query without it, or "
+                f"{_CONFIG_HINT}."
+            )
+
+    if not is_write:
+        for pat, label in _WRITE_PATTERNS:
+            if pat.search(scrubbed):
+                logger.warning(
+                    "ArangoChatAgent rejected write op %s on read path: %r",
+                    label,
+                    query,
+                )
+                return (
+                    f"AQL query REJECTED for safety: the retrieval tool runs "
+                    f"READ-ONLY AQL, but this query uses `{label}`. Use the "
+                    f"creation tool for writes, rewrite this as a read-only "
+                    f"(FOR ... RETURN) query, or {_CONFIG_HINT}."
+                )
+
+    return None
+</file>
+
+<file path="langroid/agent/special/arangodb/arangodb_agent.py">
+import datetime
+import json
+import logging
+import time
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+
+from arango.client import ArangoClient
+from arango.database import StandardDatabase
+from arango.exceptions import ArangoError, ServerConnectionError
+from numpy import ceil
+from pydantic import BaseModel, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from rich import print
+from rich.console import Console
+
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocument
+from langroid.agent.special.arangodb.aql_validator import validate_aql_query
+from langroid.agent.special.arangodb.system_messages import (
+    ADDRESSING_INSTRUCTION,
+    DEFAULT_ARANGO_CHAT_SYSTEM_MESSAGE,
+    DONE_INSTRUCTION,
+    SCHEMA_PROVIDED_SYS_MSG,
+    SCHEMA_TOOLS_SYS_MSG,
+)
+from langroid.agent.special.arangodb.tools import (
+    AQLCreationTool,
+    AQLRetrievalTool,
+    ArangoSchemaTool,
+    aql_retrieval_tool_name,
+    arango_schema_tool_name,
+)
+from langroid.agent.special.arangodb.utils import count_fields, trim_schema
+from langroid.agent.tools.orchestration import DoneTool, ForwardTool
+from langroid.exceptions import LangroidImportError
+from langroid.mytypes import Entity
+from langroid.utils.constants import SEND_TO
+
+logger = logging.getLogger(__name__)
+console = Console()
+
+ARANGO_ERROR_MSG = "There was an error in your AQL Query"
+T = TypeVar("T")
+
+
+class ArangoSettings(BaseSettings):
+    client: ArangoClient | None = None
+    db: StandardDatabase | None = None
+    url: str = ""
+    username: str = ""
+    password: str = ""
+    database: str = ""
+
+    model_config = SettingsConfigDict(env_prefix="ARANGO_")
+
+
+class QueryResult(BaseModel):
+    success: bool
+    data: Optional[
+        Union[
+            str,
+            int,
+            float,
+            bool,
+            None,
+            List[Any],
+            Dict[str, Any],
+            List[Dict[str, Any]],
+        ]
+    ] = None
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        json_encoders={
+            datetime.datetime: lambda v: v.isoformat(),
+        },
+        validate_assignment=True,
+        frozen=False,
+    )
+
+
+class ArangoChatAgentConfig(ChatAgentConfig):
+    arango_settings: ArangoSettings = ArangoSettings()
+    system_message: str = DEFAULT_ARANGO_CHAT_SYSTEM_MESSAGE
+    kg_schema: str | Dict[str, List[Dict[str, Any]]] | None = None
+    database_created: bool = False
+    prepopulate_schema: bool = True
+    use_functions_api: bool = True
+    max_num_results: int = 10  # how many results to return from AQL query
+    max_schema_fields: int = 500  # max fields to show in schema
+    max_tries: int = 10  # how many attempts to answer user question
+    use_tools: bool = False
+    schema_sample_pct: float = 0
+    # whether the agent is used in a continuous chat with user,
+    # as opposed to returning a result from the task.run()
+    chat_mode: bool = False
+    addressing_prefix: str = ""
+    # Security gate for LLM-generated AQL (GHSA-2pq5-3q89-j7cc). When False
+    # (default), the retrieval tool is restricted to read-only AQL and both
+    # tools reject user-defined-function calls (namespace::func) that can run
+    # server-side JavaScript. LLM-generated AQL is prompt-injectable (including
+    # via data the agent reads back), so only set this True with a
+    # least-privilege ArangoDB role and trusted prompts.
+    allow_dangerous_operations: bool = False
+
+
+class ArangoChatAgent(ChatAgent):
+    def __init__(self, config: ArangoChatAgentConfig):
+        super().__init__(config)
+        self.config: ArangoChatAgentConfig = config
+        self.init_state()
+        self._validate_config()
+        self._import_arango()
+        self._initialize_db()
+        self._init_tools_sys_message()
+
+    def init_state(self) -> None:
+        super().init_state()
+        self.current_retrieval_aql_query: str = ""
+        self.current_schema_params: ArangoSchemaTool = ArangoSchemaTool()
+        self.num_tries = 0  # how many attempts to answer user question
+
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        response = super().user_response(msg)
+        if response is None:
+            return None
+        response_str = response.content if response is not None else ""
+        if response_str != "":
+            self.num_tries = 0  # reset number of tries if user responds
+        return response
+
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        if self.num_tries > self.config.max_tries:
+            if self.config.chat_mode:
+                return self.create_llm_response(
+                    content=f"""
+                    {self.config.addressing_prefix}User
+                    I give up, since I have exceeded the 
+                    maximum number of tries ({self.config.max_tries}).
+                    Feel free to give me some hints!
+                    """
+                )
+            else:
+                return self.create_llm_response(
+                    tool_messages=[
+                        DoneTool(
+                            content=f"""
+                            Exceeded maximum number of tries ({self.config.max_tries}).
+                            """
+                        )
+                    ]
+                )
+
+        if isinstance(message, ChatDocument) and message.metadata.sender == Entity.USER:
+            message.content = (
+                message.content
+                + "\n"
+                + """
+                (REMEMBER, Do NOT use more than ONE TOOL/FUNCTION at a time!
+                you must WAIT for a helper to send you the RESULT(S) before
+                making another TOOL/FUNCTION call)
+                """
+            )
+
+        response = super().llm_response(message)
+        if (
+            response is not None
+            and self.config.chat_mode
+            and self.config.addressing_prefix in response.content
+            and self.has_tool_message_attempt(response)
+        ):
+            # response contains both a user-addressing and a tool, which
+            # is not allowed, so remove the user-addressing prefix
+            response.content = response.content.replace(
+                self.config.addressing_prefix, ""
+            )
+
+        return response
+
+    def _validate_config(self) -> None:
+        assert isinstance(self.config, ArangoChatAgentConfig)
+        if (
+            self.config.arango_settings.client is None
+            or self.config.arango_settings.db is None
+        ):
+            if not all(
+                [
+                    self.config.arango_settings.url,
+                    self.config.arango_settings.username,
+                    self.config.arango_settings.password,
+                    self.config.arango_settings.database,
+                ]
+            ):
+                raise ValueError("ArangoDB connection info must be provided")
+
+    def _import_arango(self) -> None:
+        global ArangoClient
+        try:
+            from arango.client import ArangoClient
+        except ImportError:
+            raise LangroidImportError("python-arango", "arango")
+
+    def _has_any_data(self) -> bool:
+        for c in self.db.collections():  # type: ignore
+            if c["name"].startswith("_"):
+                continue
+            if self.db.collection(c["name"]).count() > 0:  # type: ignore
+                return True
+        return False
+
+    def _initialize_db(self) -> None:
+        try:
+            logger.info("Initializing ArangoDB client connection...")
+            self.client = self.config.arango_settings.client or ArangoClient(
+                hosts=self.config.arango_settings.url
+            )
+
+            logger.info("Connecting to database...")
+            self.db = self.config.arango_settings.db or self.client.db(
+                self.config.arango_settings.database,
+                username=self.config.arango_settings.username,
+                password=self.config.arango_settings.password,
+            )
+
+            logger.info("Checking for existing data in collections...")
+            # Check if any non-system collection has data
+            self.config.database_created = self._has_any_data()
+
+            # If database has data, get schema
+            if self.config.database_created:
+                logger.info("Database has existing data, retrieving schema...")
+                # this updates self.config.kg_schema
+                self.arango_schema_tool(None)
+            else:
+                logger.info("No existing data found in database")
+
+        except Exception as e:
+            logger.error(f"Database initialization failed: {e}")
+            raise ConnectionError(f"Failed to initialize ArangoDB connection: {e}")
+
+    def close(self) -> None:
+        if self.client:
+            self.client.close()
+
+    @staticmethod
+    def cleanup_graph_db(db) -> None:  # type: ignore
+        # First delete graphs to properly handle edge collections
+        for graph in db.graphs():
+            graph_name = graph["name"]
+            if not graph_name.startswith("_"):  # Skip system graphs
+                try:
+                    db.delete_graph(graph_name)
+                except Exception as e:
+                    print(f"Failed to delete graph {graph_name}: {e}")
+
+        # Clear existing collections
+        for collection in db.collections():
+            if not collection["name"].startswith("_"):  # Skip system collections
+                try:
+                    db.delete_collection(collection["name"])
+                except Exception as e:
+                    print(f"Failed to delete collection {collection['name']}: {e}")
+
+    def with_retry(
+        self, func: Callable[[], T], max_retries: int = 3, delay: float = 1.0
+    ) -> T:
+        """Execute a function with retries on connection error"""
+        for attempt in range(max_retries):
+            try:
+                return func()
+            except ArangoError:
+                if attempt == max_retries - 1:
+                    raise
+                logger.warning(
+                    f"Connection failed (attempt {attempt + 1}/{max_retries}). "
+                    f"Retrying in {delay} seconds..."
+                )
+                time.sleep(delay)
+                # Reconnect if needed
+                self._initialize_db()
+        return func()  # Final attempt after loop if not raised
+
+    def read_query(
+        self, query: str, bind_vars: Optional[Dict[Any, Any]] = None
+    ) -> QueryResult:
+        """Execute a read query with connection retry."""
+        if not self.db:
+            return QueryResult(
+                success=False, data="No database connection is established."
+            )
+
+        def execute_read() -> QueryResult:
+            try:
+                cursor = self.db.aql.execute(query, bind_vars=bind_vars)
+                records = [doc for doc in cursor]  # type: ignore
+                records = records[: self.config.max_num_results]
+                logger.warning(f"Records retrieved: {records}")
+                return QueryResult(success=True, data=records if records else [])
+            except Exception as e:
+                if isinstance(e, ServerConnectionError):
+                    raise
+                logger.error(f"Failed to execute query: {query}\n{e}")
+                error_message = self.retry_query(e, query)
+                return QueryResult(success=False, data=error_message)
+
+        try:
+            return self.with_retry(execute_read)  # type: ignore
+        except Exception as e:
+            return QueryResult(
+                success=False, data=f"Failed after max retries: {str(e)}"
+            )
+
+    def write_query(
+        self, query: str, bind_vars: Optional[Dict[Any, Any]] = None
+    ) -> QueryResult:
+        """Execute a write query with connection retry."""
+        if not self.db:
+            return QueryResult(
+                success=False, data="No database connection is established."
+            )
+
+        def execute_write() -> QueryResult:
+            try:
+                self.db.aql.execute(query, bind_vars=bind_vars)
+                return QueryResult(success=True)
+            except Exception as e:
+                if isinstance(e, ServerConnectionError):
+                    raise
+                logger.error(f"Failed to execute query: {query}\n{e}")
+                error_message = self.retry_query(e, query)
+                return QueryResult(success=False, data=error_message)
+
+        try:
+            return self.with_retry(execute_write)  # type: ignore
+        except Exception as e:
+            return QueryResult(
+                success=False, data=f"Failed after max retries: {str(e)}"
+            )
+
+    def aql_retrieval_tool(self, msg: AQLRetrievalTool) -> str:
+        """Handle AQL query for data retrieval"""
+        if not self.tried_schema:
+            return f"""
+            You need to use `{arango_schema_tool_name}` first to get the 
+            database schema before using `{aql_retrieval_tool_name}`. This ensures
+            you know the correct collection names and edge definitions.
+            """
+        elif not self.config.database_created:
+            return """
+            You need to create the database first using `{aql_creation_tool_name}`.
+            """
+        self.num_tries += 1
+        query = msg.aql_query
+        rejection = validate_aql_query(
+            query,
+            is_write=False,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
+        if query == self.current_retrieval_aql_query:
+            return """
+            You have already tried this query, so you will get the same results again!
+            If you need to retry, please MODIFY the query to get different results.
+            """
+        self.current_retrieval_aql_query = query
+        logger.info(f"Executing AQL query: {query}")
+        response = self.read_query(query)
+
+        if isinstance(response.data, list) and len(response.data) == 0:
+            return """
+            No results found. Check if your collection names are correct - 
+            they are case-sensitive. Use exact names from the schema.
+            Try modifying your query based on the RETRY-SUGGESTIONS 
+            in your instructions.
+            """
+        return str(response.data)
+
+    def aql_creation_tool(self, msg: AQLCreationTool) -> str:
+        """Handle AQL query for creating data"""
+        self.num_tries += 1
+        query = msg.aql_query
+        rejection = validate_aql_query(
+            query,
+            is_write=True,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
+        logger.info(f"Executing AQL query: {query}")
+        response = self.write_query(query)
+
+        if response.success:
+            self.config.database_created = True
+            return "AQL query executed successfully"
+        return str(response.data)
+
+    def arango_schema_tool(
+        self,
+        msg: ArangoSchemaTool | None,
+    ) -> Dict[str, List[Dict[str, Any]]] | str:
+        """Get database schema. If collections=None, include all collections.
+        If properties=False, show only connection info,
+        else show all properties and example-docs.
+        """
+
+        if (
+            msg is not None
+            and msg.collections == self.current_schema_params.collections
+            and msg.properties == self.current_schema_params.properties
+        ):
+            return """
+            You have already tried this schema TOOL, so you will get the same results 
+            again! Please MODIFY the tool params `collections` or `properties` to get
+            different results.
+            """
+
+        if msg is not None:
+            collections = msg.collections
+            properties = msg.properties
+        else:
+            collections = None
+            properties = True
+        self.tried_schema = True
+        if (
+            self.config.kg_schema is not None
+            and len(self.config.kg_schema) > 0
+            and msg is None
+        ):
+            # we are trying to pre-populate full schema before the agent runs,
+            # so get it if it's already available
+            # (Note of course that this "full schema" may actually be incomplete)
+            return self.config.kg_schema
+
+        # increment tries only if the LLM is asking for the schema,
+        # in which case msg will not be None
+        self.num_tries += msg is not None
+
+        try:
+            # Get graph schemas (keeping full graph info)
+            graph_schema = [
+                {"graph_name": g["name"], "edge_definitions": g["edge_definitions"]}
+                for g in self.db.graphs()  # type: ignore
+            ]
+
+            # Get collection schemas
+            collection_schema = []
+            for collection in self.db.collections():  # type: ignore
+                if collection["name"].startswith("_"):
+                    continue
+
+                col_name = collection["name"]
+                if collections and col_name not in collections:
+                    continue
+
+                col_type = collection["type"]
+                col_size = self.db.collection(col_name).count()
+
+                if col_size == 0:
+                    continue
+
+                if properties:
+                    # Full property collection with sampling
+                    lim = self.config.schema_sample_pct * col_size  # type: ignore
+                    limit_amount = ceil(lim / 100.0) or 1
+                    sample_query = f"""
+                        FOR doc in {col_name}
+                        LIMIT {limit_amount}
+                        RETURN doc
+                    """
+
+                    properties_list = []
+                    example_doc = None
+
+                    def simplify_doc(doc: Any) -> Any:
+                        if isinstance(doc, list) and len(doc) > 0:
+                            return [simplify_doc(doc[0])]
+                        if isinstance(doc, dict):
+                            return {k: simplify_doc(v) for k, v in doc.items()}
+                        return doc
+
+                    for doc in self.db.aql.execute(sample_query):  # type: ignore
+                        if example_doc is None:
+                            example_doc = simplify_doc(doc)
+                        for key, value in doc.items():
+                            prop = {"name": key, "type": type(value).__name__}
+                            if prop not in properties_list:
+                                properties_list.append(prop)
+
+                    collection_schema.append(
+                        {
+                            "collection_name": col_name,
+                            "collection_type": col_type,
+                            f"{col_type}_properties": properties_list,
+                            f"example_{col_type}": example_doc,
+                        }
+                    )
+                else:
+                    # Basic info + from/to for edges only
+                    collection_info = {
+                        "collection_name": col_name,
+                        "collection_type": col_type,
+                    }
+                    if col_type == "edge":
+                        # Get a sample edge to extract from/to fields
+                        sample_edge = next(
+                            self.db.aql.execute(  # type: ignore
+                                f"FOR e IN {col_name} LIMIT 1 RETURN e"
+                            ),
+                            None,
+                        )
+                        if sample_edge:
+                            collection_info["from_collection"] = sample_edge[
+                                "_from"
+                            ].split("/")[0]
+                            collection_info["to_collection"] = sample_edge["_to"].split(
+                                "/"
+                            )[0]
+
+                    collection_schema.append(collection_info)
+
+            schema = {
+                "Graph Schema": graph_schema,
+                "Collection Schema": collection_schema,
+            }
+            schema_str = json.dumps(schema, indent=2)
+            logger.warning(f"Schema retrieved:\n{schema_str}")
+            with open("logs/arango-schema.json", "w") as f:
+                f.write(schema_str)
+            if (n_fields := count_fields(schema)) > self.config.max_schema_fields:
+                logger.warning(
+                    f"""
+                    Schema has {n_fields} fields, which exceeds the maximum of
+                    {self.config.max_schema_fields}. Showing a trimmed version
+                    that only includes edge info and no other properties.
+                    """
+                )
+                schema = trim_schema(schema)
+                n_fields = count_fields(schema)
+                logger.warning(f"Schema trimmed down to {n_fields} fields.")
+                schema_str = (
+                    json.dumps(schema)
+                    + "\n"
+                    + f"""
+                    
+                    CAUTION: The requested schema was too large, so 
+                    the schema has been trimmed down to show only all collection names,
+                    their types, 
+                    and edge relationships (from/to collections) without any properties.
+                    To find out more about the schema, you can EITHER:
+                    - Use the `{arango_schema_tool_name}` tool again with the 
+                      `properties` arg set to True, and `collections` arg set to
+                        specific collections you want to know more about, OR
+                    - Use the `{aql_retrieval_tool_name}` tool to learn more about
+                      the schema by querying the database.
+                      
+                    """
+                )
+                if msg is None:
+                    self.config.kg_schema = schema_str
+                return schema_str
+            self.config.kg_schema = schema
+            return schema
+
+        except Exception as e:
+            logger.error(f"Schema retrieval failed: {str(e)}")
+            return f"Failed to retrieve schema: {str(e)}"
+
+    def _init_tools_sys_message(self) -> None:
+        """Initialize system msg and enable tools"""
+        self.tried_schema = False
+        message = self._format_message()
+        self.config.system_message = self.config.system_message.format(mode=message)
+
+        if self.config.chat_mode:
+            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
+            self.config.system_message += ADDRESSING_INSTRUCTION.format(
+                prefix=self.config.addressing_prefix
+            )
+        else:
+            self.config.system_message += DONE_INSTRUCTION
+
+        super().__init__(self.config)
+        # Note we are enabling GraphSchemaTool regardless of whether
+        # self.config.prepopulate_schema is True or False, because
+        # even when schema provided, the agent may later want to get the schema,
+        # e.g. if the db evolves, or schema was trimmed due to size, or
+        # if it needs to bring in the schema into recent context.
+
+        self.enable_message(
+            [
+                ArangoSchemaTool,
+                AQLRetrievalTool,
+                AQLCreationTool,
+                ForwardTool,
+            ]
+        )
+        if not self.config.chat_mode:
+            self.enable_message(DoneTool)
+
+    def _format_message(self) -> str:
+        if self.db is None:
+            raise ValueError("Database connection not established")
+
+        assert isinstance(self.config, ArangoChatAgentConfig)
+        return (
+            SCHEMA_TOOLS_SYS_MSG
+            if not self.config.prepopulate_schema
+            else SCHEMA_PROVIDED_SYS_MSG.format(schema=self.arango_schema_tool(None))
+        )
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ForwardTool | None:
+        """When LLM sends a no-tool msg, assume user is the intended recipient,
+        and if in interactive mode, forward the msg to the user.
+        """
+        done_tool_name = DoneTool.default_value("request")
+        forward_tool_name = ForwardTool.default_value("request")
+        aql_retrieval_tool_instructions = AQLRetrievalTool.instructions()
+        # TODO the aql_retrieval_tool_instructions may be empty/minimal
+        # when using self.config.use_functions_api = True.
+        tools_instruction = f"""
+          For example you may want to use the TOOL
+          `{aql_retrieval_tool_name}`  according to these instructions:
+           {aql_retrieval_tool_instructions}
+        """
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            if self.interactive:
+                return ForwardTool(agent="User")
+            else:
+                if self.config.chat_mode:
+                    return f"""
+                    Since you did not explicitly address the User, it is not clear
+                    whether:
+                    - you intend this to be the final response to the 
+                      user's query/request, in which case you must use the 
+                      `{forward_tool_name}` to indicate this.
+                    - OR, you FORGOT to use an Appropriate TOOL,
+                      in which case you should use the available tools to
+                      make progress on the user's query/request.
+                      {tools_instruction}
+                    """
+                return f"""
+                The intent of your response is not clear:
+                - if you intended this to be the FINAL answer to the user's query,
+                    then use the `{done_tool_name}` to indicate so,
+                    with the `content` set to the answer or result.
+                - otherwise, use one of the available tools to make progress 
+                    to arrive at the final answer.
+                    {tools_instruction}
+                """
+        return None
+
+    def retry_query(self, e: Exception, query: str) -> str:
+        """Generate error message for failed AQL query"""
+        logger.error(f"AQL Query failed: {query}\nException: {e}")
+
+        error_message = f"""\
+        {ARANGO_ERROR_MSG}: '{query}'
+        {str(e)}
+        Please try again with a corrected query.
+        """
+
+        return error_message
+</file>
+
+<file path="langroid/agent/special/neo4j/cypher_validator.py">
+"""Security validation for LLM-generated Cypher queries (GHSA-2pq5-3q89-j7cc).
+
+``Neo4jChatAgent`` executes Cypher produced by an LLM, whose text is
+influenceable by prompt injection -- directly, or indirectly via content the
+agent reads back through RAG. Executing such Cypher without restriction lets an
+attacker who can influence the prompt read or destroy all graph data and, when
+APOC or ``dbms.security`` procedures are enabled on the database role, reach the
+filesystem, network, or OS (config-conditional RCE). This mirrors the
+prompt-to-SQL-to-RCE issue fixed for ``SQLChatAgent`` in CVE-2026-25879.
+
+Unless the operator opts in with ``allow_dangerous_operations=True``:
+
+- the retrieval (read) path is restricted to read-only Cypher -- any
+  write or schema-mutating clause is rejected;
+- both paths reject the code-execution / file / network primitives
+  (``LOAD CSV``, ``apoc.*``, ``dbms.*``, ``CALL db.*``).
+
+Cypher has no lightweight AST parser in our dependency set, so the checks are
+keyword/pattern based, applied after stripping comments and string/identifier
+literals to reduce false positives. A blocklist is inherently bypassable; the
+real guarantee is the default-off gate plus running the agent against a
+least-privilege Neo4j role. Treat this as defense in depth, not a parser-grade
+allowlist.
+"""
+
+import logging
+import re
+from typing import List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+# How a rejected query can be allowed by the operator. Appended to every
+# rejection message relayed back to the LLM.
+_CONFIG_HINT = (
+    "ask the operator to set `allow_dangerous_operations=True` on the "
+    "Neo4jChatAgentConfig (only safe with a least-privilege Neo4j role and "
+    "trusted prompts)"
+)
+
+# Primitives that enable code execution, filesystem/network access, or admin
+# control regardless of read vs write context.
+_DANGEROUS_PATTERNS: List[Tuple["re.Pattern[str]", str]] = [
+    (re.compile(r"\bLOAD\s+CSV\b", re.IGNORECASE), "LOAD CSV file/URL access"),
+    (re.compile(r"\bapoc\.", re.IGNORECASE), "an apoc.* procedure/function"),
+    (re.compile(r"\bdbms\.", re.IGNORECASE), "a dbms.* admin procedure"),
+    (re.compile(r"\bCALL\s+db\.", re.IGNORECASE), "a CALL db.* admin procedure"),
+]
+
+# Clauses that modify the graph; rejected only on the read (retrieval) path.
+# ``(?<!\.)`` avoids matching property access such as ``n.set`` / ``n.create``
+# (a reserved word used as a property key must be back-ticked, which the
+# literal stripper blanks out).
+_WRITE_PATTERNS: List[Tuple["re.Pattern[str]", str]] = [
+    (re.compile(r"(?<!\.)\bCREATE\b", re.IGNORECASE), "CREATE"),
+    (re.compile(r"(?<!\.)\bMERGE\b", re.IGNORECASE), "MERGE"),
+    (re.compile(r"(?<!\.)\bSET\b", re.IGNORECASE), "SET"),
+    (re.compile(r"(?<!\.)\bDELETE\b", re.IGNORECASE), "DELETE"),
+    (re.compile(r"(?<!\.)\bREMOVE\b", re.IGNORECASE), "REMOVE"),
+    (re.compile(r"(?<!\.)\bDROP\b", re.IGNORECASE), "DROP"),
+    (re.compile(r"(?<!\.)\bFOREACH\b", re.IGNORECASE), "FOREACH"),
+]
+
+
+def _strip_literals_and_comments(query: str) -> str:
+    """Blank out comments and string/backtick literals in ``query``.
+
+    Keyword and pattern checks run against the result so they never match text
+    inside string literals, back-ticked identifiers, ``//`` line comments, or
+    ``/* ... */`` block comments. Replaced spans become spaces of equal length
+    so character offsets are preserved. String literals use backslash escaping;
+    back-ticked identifiers escape a backtick by doubling it.
+
+    Args:
+        query: Raw Cypher text.
+
+    Returns:
+        The query with comment and literal spans replaced by spaces.
+    """
+    out: List[str] = []
+    i, n = 0, len(query)
+    while i < n:
+        two = query[i : i + 2]
+        if two == "//":
+            j = query.find("\n", i)
+            j = n if j == -1 else j
+            out.append(" " * (j - i))
+            i = j
+        elif two == "/*":
+            j = query.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            out.append(" " * (j - i))
+            i = j
+        elif query[i] in "'\"":
+            ch = query[i]
+            j = i + 1
+            while j < n:
+                if query[j] == "\\":
+                    j += 2
+                    continue
+                if query[j] == ch:
+                    break
+                j += 1
+            j = min(j + 1, n)
+            out.append(" " * (j - i))
+            i = j
+        elif query[i] == "`":
+            j = i + 1
+            while j < n:
+                if query[j] == "`":
+                    if j + 1 < n and query[j + 1] == "`":
+                        j += 2
+                        continue
+                    break
+                j += 1
+            j = min(j + 1, n)
+            out.append(" " * (j - i))
+            i = j
+        else:
+            out.append(query[i])
+            i += 1
+    return "".join(out)
+
+
+def validate_cypher_query(
+    query: str, *, is_write: bool, allow_dangerous: bool
+) -> Optional[str]:
+    """Check an LLM-generated Cypher query against the agent's safety policy.
+
+    Args:
+        query: The raw Cypher string from the LLM.
+        is_write: True for the creation/write path (ordinary write clauses are
+            permitted), False for the retrieval/read path (write clauses are
+            rejected so the path is read-only).
+        allow_dangerous: When True, skip all checks (operator opt-in).
+
+    Returns:
+        None if the query may be executed, otherwise a human-readable rejection
+        message to relay back to the LLM.
+    """
+    if allow_dangerous:
+        return None
+
+    scrubbed = _strip_literals_and_comments(query)
+
+    for pat, label in _DANGEROUS_PATTERNS:
+        if pat.search(scrubbed):
+            logger.warning("Neo4jChatAgent rejected Cypher using %s: %r", label, query)
+            return (
+                f"Cypher query REJECTED for safety: it uses {label}, which can "
+                f"execute code or access the filesystem/network. Rewrite the "
+                f"query without it, or {_CONFIG_HINT}."
+            )
+
+    if not is_write:
+        for pat, label in _WRITE_PATTERNS:
+            if pat.search(scrubbed):
+                logger.warning(
+                    "Neo4jChatAgent rejected write clause %s on read path: %r",
+                    label,
+                    query,
+                )
+                return (
+                    f"Cypher query REJECTED for safety: the retrieval tool runs "
+                    f"READ-ONLY Cypher, but this query uses `{label}`. Use the "
+                    f"creation tool for writes, rewrite this as a read-only "
+                    f"(MATCH/RETURN) query, or {_CONFIG_HINT}."
+                )
+
+    return None
+</file>
+
+<file path="langroid/agent/special/neo4j/neo4j_chat_agent.py">
+import logging
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from rich import print
+from rich.console import Console
+
+if TYPE_CHECKING:
+    import neo4j
+
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocument
+from langroid.agent.special.neo4j.cypher_validator import validate_cypher_query
+from langroid.agent.special.neo4j.system_messages import (
+    ADDRESSING_INSTRUCTION,
+    DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE,
+    DONE_INSTRUCTION,
+    SCHEMA_PROVIDED_SYS_MSG,
+    SCHEMA_TOOLS_SYS_MSG,
+)
+from langroid.agent.special.neo4j.tools import (
+    CypherCreationTool,
+    CypherRetrievalTool,
+    GraphSchemaTool,
+    cypher_creation_tool_name,
+    cypher_retrieval_tool_name,
+    graph_schema_tool_name,
+)
+from langroid.agent.tools.orchestration import DoneTool, ForwardTool
+from langroid.exceptions import LangroidImportError
+from langroid.mytypes import Entity
+from langroid.utils.constants import SEND_TO
+
+logger = logging.getLogger(__name__)
+
+console = Console()
+
+NEO4J_ERROR_MSG = "There was an error in your Cypher Query"
+
+
+# TOOLS to be used by the agent
+
+
+class Neo4jSettings(BaseSettings):
+    uri: str = ""
+    username: str = ""
+    password: str = ""
+    database: str = ""
+
+    model_config = SettingsConfigDict(env_prefix="NEO4J_")
+
+
+class QueryResult(BaseModel):
+    success: bool
+    data: List[Dict[Any, Any]] | str | None = None
+
+
+class Neo4jChatAgentConfig(ChatAgentConfig):
+    neo4j_settings: Neo4jSettings = Neo4jSettings()
+    system_message: str = DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE
+    kg_schema: Optional[List[Dict[str, Any]]] = None
+    database_created: bool = False
+    # whether agent MUST use schema_tools to get schema, i.e.
+    # schema is NOT initially provided
+    use_schema_tools: bool = True
+    use_functions_api: bool = True
+    use_tools: bool = False
+    # whether the agent is used in a continuous chat with user,
+    # as opposed to returning a result from the task.run()
+    chat_mode: bool = False
+    addressing_prefix: str = ""
+    # Security gate for LLM-generated Cypher (GHSA-2pq5-3q89-j7cc). When False
+    # (default), the retrieval tool is restricted to read-only Cypher and both
+    # tools reject code-execution / file / network primitives (LOAD CSV,
+    # apoc.*, dbms.*, CALL db.*). LLM-generated Cypher is prompt-injectable
+    # (including via data the agent reads back), so only set this True with a
+    # least-privilege Neo4j role and trusted prompts.
+    allow_dangerous_operations: bool = False
+
+
+class Neo4jChatAgent(ChatAgent):
+    def __init__(self, config: Neo4jChatAgentConfig):
+        """Initialize the Neo4jChatAgent.
+
+        Raises:
+            ValueError: If database information is not provided in the config.
+        """
+        self.config: Neo4jChatAgentConfig = config
+        self._validate_config()
+        self._import_neo4j()
+        self._initialize_db()
+        self._init_tools_sys_message()
+        self.init_state()
+
+    def init_state(self) -> None:
+        super().init_state()
+        self.current_retrieval_cypher_query: str = ""
+        self.tried_schema: bool = False
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ForwardTool | None:
+        """
+        When LLM sends a no-tool msg, assume user is the intended recipient,
+        and if in interactive mode, forward the msg to the user.
+        """
+
+        done_tool_name = DoneTool.default_value("request")
+        forward_tool_name = ForwardTool.default_value("request")
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            if self.interactive:
+                return ForwardTool(agent="User")
+            else:
+                if self.config.chat_mode:
+                    return f"""
+                    Since you did not explicitly address the User, it is not clear
+                    whether:
+                    - you intend this to be the final response to the 
+                      user's query/request, in which case you must use the 
+                      `{forward_tool_name}` to indicate this.
+                    - OR, you FORGOT to use an Appropriate TOOL,
+                      in which case you should use the available tools to
+                      make progress on the user's query/request.
+                    """
+                return f"""
+                The intent of your response is not clear:
+                - if you intended this to be the final answer to the user's query,
+                    then use the `{done_tool_name}` to indicate so,
+                    with the `content` set to the answer or result.
+                - otherwise, use one of the available tools to make progress 
+                    to arrive at the final answer.
+                """
+        return None
+
+    def _validate_config(self) -> None:
+        """Validate the configuration to ensure all necessary fields are present."""
+        assert isinstance(self.config, Neo4jChatAgentConfig)
+        if (
+            self.config.neo4j_settings.username is None
+            and self.config.neo4j_settings.password is None
+            and self.config.neo4j_settings.database
+        ):
+            raise ValueError("Neo4j env information must be provided")
+
+    def _import_neo4j(self) -> None:
+        """Dynamically imports the Neo4j module and sets it as a global variable."""
+        global neo4j
+        try:
+            import neo4j
+        except ImportError:
+            raise LangroidImportError("neo4j", "neo4j")
+
+    def _initialize_db(self) -> None:
+        """
+        Initializes a connection to the Neo4j database using the configuration settings.
+        """
+        try:
+            assert isinstance(self.config, Neo4jChatAgentConfig)
+            self.driver = neo4j.GraphDatabase.driver(
+                self.config.neo4j_settings.uri,
+                auth=(
+                    self.config.neo4j_settings.username,
+                    self.config.neo4j_settings.password,
+                ),
+            )
+            with self.driver.session() as session:
+                result = session.run("MATCH (n) RETURN count(n) as count")
+                count = result.single()["count"]  # type: ignore
+                self.config.database_created = count > 0
+
+            # If database has data, get schema
+            if self.config.database_created:
+                # this updates self.config.kg_schema
+                self.graph_schema_tool(None)
+
+        except Exception as e:
+            raise ConnectionError(f"Failed to initialize Neo4j connection: {e}")
+
+    def close(self) -> None:
+        """close the connection"""
+        if self.driver:
+            self.driver.close()
+
+    def retry_query(self, e: Exception, query: str) -> str:
+        """
+        Generate an error message for a failed Cypher query and return it.
+
+        Args:
+            e (Exception): The exception raised during the Cypher query execution.
+            query (str): The Cypher query that failed.
+
+        Returns:
+            str: The error message.
+        """
+        logger.error(f"Cypher Query failed: {query}\nException: {e}")
+
+        # Construct the error message
+        error_message_template = f"""\
+        {NEO4J_ERROR_MSG}: '{query}'
+        {str(e)}
+        Run a new query, correcting the errors.
+        """
+
+        return error_message_template
+
+    def read_query(
+        self, query: str, parameters: Optional[Dict[Any, Any]] = None
+    ) -> QueryResult:
+        """
+        Executes a given Cypher query with parameters on the Neo4j database.
+
+        Args:
+            query (str): The Cypher query string to be executed.
+            parameters (Optional[Dict[Any, Any]]): A dictionary of parameters for
+                                                    the query.
+
+        Returns:
+            QueryResult: An object representing the outcome of the query execution.
+        """
+        if not self.driver:
+            return QueryResult(
+                success=False, data="No database connection is established."
+            )
+
+        try:
+            assert isinstance(self.config, Neo4jChatAgentConfig)
+            with self.driver.session(
+                database=self.config.neo4j_settings.database
+            ) as session:
+                result = session.run(query, parameters)
+                if result.peek():
+                    records = [record.data() for record in result]
+                    return QueryResult(success=True, data=records)
+                else:
+                    return QueryResult(success=True, data=[])
+        except Exception as e:
+            logger.error(f"Failed to execute query: {query}\n{e}")
+            error_message = self.retry_query(e, query)
+            return QueryResult(success=False, data=error_message)
+        finally:
+            self.close()
+
+    def write_query(
+        self, query: str, parameters: Optional[Dict[Any, Any]] = None
+    ) -> QueryResult:
+        """
+        Executes a write transaction using a given Cypher query on the Neo4j database.
+        This method should be used for queries that modify the database.
+
+        Args:
+            query (str): The Cypher query string to be executed.
+            parameters (dict, optional): A dict of parameters for the Cypher query.
+
+        Returns:
+            QueryResult: An object representing the outcome of the query execution.
+                         It contains a success flag and an optional error message.
+        """
+        # Check if query contains database/collection creation patterns
+        query_upper = query.upper()
+        is_creation_query = any(
+            [
+                "CREATE" in query_upper,
+                "MERGE" in query_upper,
+                "CREATE CONSTRAINT" in query_upper,
+                "CREATE INDEX" in query_upper,
+            ]
+        )
+
+        if is_creation_query:
+            self.config.database_created = True
+            logger.info("Detected database/collection creation query")
+
+        if not self.driver:
+            return QueryResult(
+                success=False, data="No database connection is established."
+            )
+
+        try:
+            assert isinstance(self.config, Neo4jChatAgentConfig)
+            with self.driver.session(
+                database=self.config.neo4j_settings.database
+            ) as session:
+                session.write_transaction(lambda tx: tx.run(query, parameters))
+                return QueryResult(success=True)
+        except Exception as e:
+            logging.warning(f"An error occurred: {e}")
+            error_message = self.retry_query(e, query)
+            return QueryResult(success=False, data=error_message)
+        finally:
+            self.close()
+
+    # TODO: test under enterprise edition because community edition doesn't allow
+    # database creation/deletion
+    def remove_database(self) -> None:
+        """Deletes all nodes and relationships from the current Neo4j database."""
+        delete_query = """
+                MATCH (n)
+                DETACH DELETE n
+            """
+        response = self.write_query(delete_query)
+
+        if response.success:
+            print("[green]Database is deleted!")
+        else:
+            print("[red]Database is not deleted!")
+
+    def cypher_retrieval_tool(self, msg: CypherRetrievalTool) -> str:
+        """ "
+        Handle a CypherRetrievalTool message by executing a Cypher query and
+        returning the result.
+        Args:
+            msg (CypherRetrievalTool): The tool-message to handle.
+
+        Returns:
+            str: The result of executing the cypher_query.
+        """
+        if not self.tried_schema:
+            return f"""
+            You did not yet use the `{graph_schema_tool_name}` tool to get the schema 
+            of the neo4j knowledge-graph db. Use that tool first before using 
+            the `{cypher_retrieval_tool_name}` tool, to ensure you know all the correct
+            node labels, relationship types, and property keys available in
+            the database.
+            """
+        elif not self.config.database_created:
+            return f"""
+            You have not yet created the Neo4j database. 
+            Use the `{cypher_creation_tool_name}`
+            tool to create the database first before using the 
+            `{cypher_retrieval_tool_name}` tool.
+            """
+        query = msg.cypher_query
+        rejection = validate_cypher_query(
+            query,
+            is_write=False,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
+        self.current_retrieval_cypher_query = query
+        logger.info(f"Executing Cypher query: {query}")
+        response = self.read_query(query)
+        if isinstance(response.data, list) and len(response.data) == 0:
+            return """
+            No results found; check if your query used the right label names -- 
+            remember these are case sensitive, so you have to use the exact label
+            names you found in the schema. 
+            Or retry using one of the  RETRY-SUGGESTIONS in your instructions. 
+            """
+        return str(response.data)
+
+    def cypher_creation_tool(self, msg: CypherCreationTool) -> str:
+        """ "
+        Handle a CypherCreationTool message by executing a Cypher query and
+        returning the result.
+        Args:
+            msg (CypherCreationTool): The tool-message to handle.
+
+        Returns:
+            str: The result of executing the cypher_query.
+        """
+        query = msg.cypher_query
+        rejection = validate_cypher_query(
+            query,
+            is_write=True,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
+
+        logger.info(f"Executing Cypher query: {query}")
+        response = self.write_query(query)
+        if response.success:
+            self.config.database_created = True
+            return "Cypher query executed successfully"
+        else:
+            return str(response.data)
+
+    # TODO: There are various ways to get the schema. The current one uses the func
+    # `read_query`, which requires post processing to identify whether the response upon
+    # the schema query is valid. Another way is to isolate this func from `read_query`.
+    # The current query works well. But we could use the queries here:
+    # https://github.com/neo4j/NaLLM/blob/1af09cd117ba0777d81075c597a5081583568f9f/api/
+    # src/driver/neo4j.py#L30
+    def graph_schema_tool(
+        self, msg: GraphSchemaTool | None
+    ) -> str | Optional[Union[str, List[Dict[Any, Any]]]]:
+        """
+        Retrieves the schema of a Neo4j graph database.
+
+        Args:
+            msg (GraphSchemaTool): An instance of GraphDatabaseSchema, typically
+            containing information or parameters needed for the database query.
+
+        Returns:
+            str: The visual representation of the database schema as a string, or a
+            message stating that the database schema is empty or not valid.
+
+        Raises:
+            This function does not explicitly raise exceptions but depends on the
+            behavior of 'self.read_query' method, which might raise exceptions related
+             to database connectivity or query execution.
+        """
+        self.tried_schema = True
+        if self.config.kg_schema is not None and len(self.config.kg_schema) > 0:
+            return self.config.kg_schema
+        schema_result = self.read_query("CALL db.schema.visualization()")
+        if schema_result.success:
+            # there is a possibility that the schema is empty, which is a valid response
+            # the schema.data will be: [{"nodes": [], "relationships": []}]
+            self.config.kg_schema = schema_result.data  # type: ignore
+            return schema_result.data
+        else:
+            return f"Failed to retrieve schema: {schema_result.data}"
+
+    def _init_tools_sys_message(self) -> None:
+        """Initialize message tools used for chatting."""
+        self.tried_schema = False
+        message = self._format_message()
+        self.config.system_message = self.config.system_message.format(mode=message)
+        if self.config.chat_mode:
+            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
+            self.config.system_message += ADDRESSING_INSTRUCTION.format(
+                prefix=self.config.addressing_prefix
+            )
+        else:
+            self.config.system_message += DONE_INSTRUCTION
+        super().__init__(self.config)
+        # Note we are enabling GraphSchemaTool regardless of whether
+        # self.config.use_schema_tools is True or False, because
+        # even when schema provided, the agent may later want to get the schema,
+        # e.g. if the db evolves, or if it needs to bring in the schema
+        self.enable_message(
+            [
+                GraphSchemaTool,
+                CypherRetrievalTool,
+                CypherCreationTool,
+                DoneTool,
+            ]
+        )
+
+    def _format_message(self) -> str:
+        if self.driver is None:
+            raise ValueError("Database driver None")
+        assert isinstance(self.config, Neo4jChatAgentConfig)
+        return (
+            SCHEMA_TOOLS_SYS_MSG
+            if self.config.use_schema_tools
+            else SCHEMA_PROVIDED_SYS_MSG.format(schema=self.graph_schema_tool(None))
+        )
 </file>
 
 <file path="langroid/agent/special/doc_chat_agent.py">
@@ -61764,7 +61764,7 @@ class OpenAIGPT(LanguageModel):
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.65.4"
+version = "0.65.5"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
