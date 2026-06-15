@@ -624,6 +624,8 @@ class Task:
                 content=msg,
                 metadata=ChatDocMetaData(
                     sender=Entity.USER,
+                    # external user input -> untrusted (#1035)
+                    tainted=True,
                 ),
             )
         elif msg is None and len(self.agent.message_history) > 1:

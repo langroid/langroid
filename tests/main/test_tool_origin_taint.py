@@ -17,6 +17,7 @@ the end-to-end filter behavior. They are pure (no live LLM).
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
+from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import AgentDoneTool, DonePassTool, PassTool
 from langroid.mytypes import Entity
@@ -89,6 +90,15 @@ def test_system_user_response_not_tainted():
     assert doc is not None
     assert doc.metadata.sender == Entity.SYSTEM
     assert doc.metadata.tainted is False
+
+
+def test_task_init_user_string_is_tainted():
+    """Task.init(str) -- the init()/step() entry -- builds the USER message
+    directly (not via to_ChatDocument), so it must taint too."""
+    agent = _make_agent()
+    task = Task(agent, interactive=False)
+    doc = task.init(JSON_PAYLOAD)
+    assert doc is not None and doc.metadata.tainted is True
 
 
 # ---------------------------------------------------------------------------
