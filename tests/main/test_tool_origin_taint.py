@@ -101,6 +101,21 @@ def test_task_init_user_string_is_tainted():
     assert doc is not None and doc.metadata.tainted is True
 
 
+def test_root_task_user_chatdocument_input_is_tainted():
+    """A pre-built USER ChatDocument handed to a ROOT task bypasses the tainting
+    constructors (to_ChatDocument returns it unchanged), so Task.init taints it.
+    Sub-task handoffs (caller is not None) are left to their propagated taint."""
+    agent = _make_agent()
+    task = Task(agent, interactive=False)  # root task -> caller is None
+    user_doc = ChatDocument(
+        content=JSON_PAYLOAD,
+        metadata=ChatDocMetaData(sender=Entity.USER),  # untainted as constructed
+    )
+    assert user_doc.metadata.tainted is False
+    out = task.init(user_doc)
+    assert out is not None and out.metadata.tainted is True
+
+
 # ---------------------------------------------------------------------------
 # Propagation: deepcopy carries the mark; DonePassTool repackage carries it.
 # ---------------------------------------------------------------------------

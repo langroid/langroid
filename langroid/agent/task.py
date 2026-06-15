@@ -644,6 +644,16 @@ class Task:
                 self.pending_message = ChatDocument.deepcopy(msg)
                 # Preserve the parent pointer from the original message
                 self.pending_message.metadata.parent_id = original_parent_id
+                # A USER-origin ChatDocument handed to a ROOT task (caller is
+                # None) is external untrusted input (e.g. Task.run(ChatDocument(
+                # sender=USER, ...))) that bypassed the tainting constructors --
+                # taint it. Sub-task inputs (caller is not None, relabeled to
+                # USER just below) keep their propagated taint; we only set. #1035
+                if (
+                    self.caller is None
+                    and self.pending_message.metadata.sender == Entity.USER
+                ):
+                    self.pending_message.metadata.tainted = True
             if self.pending_message is not None and self.caller is not None:
                 # msg may have come from `caller`, so we pretend this is from
                 # the CURRENT task's USER entity
