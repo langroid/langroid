@@ -63,6 +63,14 @@ class ChatDocMetaData(DocMetaData):
     # USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
     # GHSA-gjgq-w2m6-wr5q.
     tools_from_agent: bool = False
+    # True if this msg's content/tools derive from external untrusted (USER)
+    # input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
+    # repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
+    # Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
+    # vetoes handle-only tool dispatch even across a USER relabel, closing the
+    # content-laundering hole. Propagated (deepcopy carries it), never cleared.
+    # See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
+    tainted: bool = False
     # tool_id corresponding to single tool result in ChatDocument.content
     oai_tool_id: str | None = None
     tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
@@ -381,6 +389,7 @@ class ChatDocument(Document):
                 source=Entity.USER,
                 sender=Entity.USER,
                 recipient=recipient,
+                tainted=True,  # external user input is untrusted (#1035)
             ),
         )
 

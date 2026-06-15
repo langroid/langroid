@@ -28,6 +28,9 @@ class AgentDoneTool(ToolMessage):
     tools: List[ToolMessage] = []
     # only meant for agent_response or tool-handlers, not for LLM generation:
     _allow_llm_use: bool = False
+    # DISTRUST mark (#1035): set by DonePassTool when the passed message is
+    # tainted, so the repackaged tools stay vetoed by _filter_user_origin_tools.
+    _tainted: bool = False
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         content_str = "" if self.content is None else to_string(self.content)
@@ -200,7 +203,11 @@ class DonePassTool(PassTool):
         new_doc = PassTool.response(self, agent, chat_doc)
         tools = agent.get_tool_messages(new_doc)
         # ...then return an AgentDoneTool with content, tools from this ChatDocument
-        return AgentDoneTool(content=new_doc.content, tools=tools)  # type: ignore
+        done_tool = AgentDoneTool(content=new_doc.content, tools=tools)
+        # Carry taint: if the passed message is USER-derived, these tools were
+        # parsed out of untrusted content -- keep them vetoed downstream (#1035).
+        done_tool._tainted = new_doc.metadata.tainted
+        return done_tool  # type: ignore
 
     @classmethod
     def instructions(cls) -> str:

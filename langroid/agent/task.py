@@ -1827,6 +1827,9 @@ class Task:
                     and result_msg is not None
                     and result_msg.metadata.tools_from_agent
                 ),
+                # Propagate the DISTRUST mark across the USER relabel so laundered
+                # (USER-derived) tools stay vetoed at the parent agent (#1035).
+                tainted=result_msg is not None and result_msg.metadata.tainted,
             ),
         )
         if self.pending_message is not None:
