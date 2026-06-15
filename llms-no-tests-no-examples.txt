@@ -16899,324 +16899,6 @@ class GoogleSearchTool(ToolMessage):
         ]
 </file>
 
-<file path="langroid/agent/tools/orchestration.py">
-"""
-Various tools to for agents to be able to control flow of Task, e.g.
-termination, routing to another agent, etc.
-"""
-
-from typing import Any, List, Tuple
-
-from pydantic import ConfigDict, field_validator
-
-from langroid.agent.chat_agent import ChatAgent
-from langroid.agent.chat_document import ChatDocument
-from langroid.agent.tool_message import ToolMessage
-from langroid.mytypes import Entity
-from langroid.utils.types import to_string
-
-
-class AgentDoneTool(ToolMessage):
-    """Tool for AGENT entity (i.e. agent_response or downstream tool handling fns) to
-    signal the current task is done."""
-
-    purpose: str = """
-    To signal the current task is done, along with an optional message <content>
-    of arbitrary type (default None) and an 
-    optional list of <tools> (default empty list).
-    """
-    request: str = "agent_done_tool"
-    content: Any = None
-    tools: List[ToolMessage] = []
-    # only meant for agent_response or tool-handlers, not for LLM generation:
-    _allow_llm_use: bool = False
-    # DISTRUST mark (#1035): set by DonePassTool when the passed message is
-    # tainted, so the repackaged tools stay vetoed by _filter_user_origin_tools.
-    _tainted: bool = False
-
-    def response(self, agent: ChatAgent) -> ChatDocument:
-        content_str = "" if self.content is None else to_string(self.content)
-        return agent.create_agent_response(
-            content=content_str,
-            content_any=self.content,
-            tool_messages=[self] + self.tools,
-        )
-
-
-class DoneTool(ToolMessage):
-    """Tool for Agent Entity (i.e. agent_response) or LLM entity (i.e. llm_response) to
-    signal the current task is done, with some content as the result."""
-
-    purpose: str = """
-    To signal the current task is done, along with an optional message <content>
-    of arbitrary type (default None).
-    """
-    request: str = "done_tool"
-    content: str = ""
-
-    @field_validator("content", mode="before")
-    @classmethod
-    def convert_content_to_string(cls, v: Any) -> str:
-        """Convert content to string if it's not already."""
-        return str(v) if v is not None else ""
-
-    def response(self, agent: ChatAgent) -> ChatDocument:
-        return agent.create_agent_response(
-            content=self.content,
-            content_any=self.content,
-            tool_messages=[self],
-        )
-
-    @classmethod
-    def instructions(cls) -> str:
-        tool_name = cls.default_value("request")
-        return f"""
-        When you determine your task is finished, 
-        use the tool `{tool_name}` to signal this,
-        along with any message or result, in the `content` field. 
-        """
-
-
-class ResultTool(ToolMessage):
-    """Class to use as a wrapper for sending arbitrary results from an Agent's
-    agent_response or tool handlers, to:
-    (a) trigger completion of the current task (similar to (Agent)DoneTool), and
-    (b) be returned as the result of the current task, i.e. this tool would appear
-         in the resulting ChatDocument's `tool_messages` list.
-    See test_tool_handlers_and_results in test_tool_messages.py, and
-    examples/basic/tool-extract-short-example.py.
-
-    Note:
-        - when defining a tool handler or agent_response, you can directly return
-            ResultTool(field1 = val1, ...),
-            where the values can be arbitrary data structures, including nested
-            Pydantic objs, or you can define a subclass of ResultTool with the
-            fields you want to return.
-        - This is a special ToolMessage that is NOT meant to be used or handled
-            by an agent.
-        - AgentDoneTool is more restrictive in that you can only send a `content`
-            or `tools` in the result.
-    """
-
-    request: str = "result_tool"
-    purpose: str = "Ignored; Wrapper for a structured message"
-    id: str = ""  # placeholder for OpenAI-API tool_call_id
-
-    model_config = ConfigDict(
-        extra="allow",
-        arbitrary_types_allowed=False,
-        validate_default=True,
-        validate_assignment=True,
-        json_schema_extra={"exclude": ["purpose", "id", "strict"]},
-    )
-
-    def handle(self) -> AgentDoneTool:
-        return AgentDoneTool(tools=[self])
-
-
-class FinalResultTool(ToolMessage):
-    """Class to use as a wrapper for sending arbitrary results from an Agent's
-    agent_response or tool handlers, to:
-    (a) trigger completion of the current task as well as all parent tasks, and
-    (b) be returned as the final result of the root task, i.e. this tool would appear
-         in the final ChatDocument's `tool_messages` list.
-    See test_tool_handlers_and_results in test_tool_messages.py, and
-    examples/basic/chat-tool-function.py.
-
-    Note:
-        - when defining a tool handler or agent_response, you can directly return
-            FinalResultTool(field1 = val1, ...),
-            where the values can be arbitrary data structures, including nested
-            Pydantic objs, or you can define a subclass of FinalResultTool with the
-            fields you want to return.
-        - This is a special ToolMessage that is NOT meant to be used by an agent's
-            llm_response, but only by agent_response or tool handlers.
-        - A subclass of this tool can be defined, with specific fields, and
-          with _allow_llm_use = True, to allow the LLM to generate this tool,
-          and have the effect of terminating the current and all parent tasks,
-          with the tool appearing in the final ChatDocument's `tool_messages` list.
-          See examples/basic/multi-agent-return-result.py.
-    """
-
-    request: str = ""
-    purpose: str = "Ignored; Wrapper for a structured message"
-    id: str = ""  # placeholder for OpenAI-API tool_call_id
-    _allow_llm_use: bool = False
-
-    model_config = ConfigDict(
-        extra="allow",
-        arbitrary_types_allowed=False,
-        validate_default=True,
-        validate_assignment=True,
-        json_schema_extra={"exclude": ["purpose", "id", "strict"]},
-    )
-
-
-class PassTool(ToolMessage):
-    """Tool for "passing" on the received msg (ChatDocument),
-    so that an as-yet-unspecified agent can handle it.
-    Similar to ForwardTool, but without specifying the recipient agent.
-    """
-
-    purpose: str = """
-    To pass the current message so that other agents can handle it.
-    """
-    request: str = "pass_tool"
-
-    def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
-        """When this tool is enabled for an Agent, this will result in a method
-        added to the Agent with signature:
-        `pass_tool(self, tool: PassTool, chat_doc: ChatDocument) -> ChatDocument:`
-        """
-        # if PassTool is in chat_doc, pass its parent, else pass chat_doc itself
-        doc = chat_doc
-        while True:
-            tools = agent.get_tool_messages(doc)
-            if not any(isinstance(t, type(self)) for t in tools):
-                break
-            if doc.parent is None:
-                break
-            doc = doc.parent
-        assert doc is not None, "PassTool: parent of chat_doc must not be None"
-        new_doc = ChatDocument.deepcopy(doc)
-        new_doc.metadata.sender = Entity.AGENT
-        return new_doc
-
-    @classmethod
-    def instructions(cls) -> str:
-        return """
-        Use the `pass_tool` to PASS the current message 
-        so that another agent can handle it.
-        """
-
-
-class DonePassTool(PassTool):
-    """Tool to signal DONE, AND Pass incoming/current msg as result.
-    Similar to PassTool, except we append a DoneTool to the result tool_messages.
-    """
-
-    purpose: str = """
-    To signal the current task is done, with results set to the current/incoming msg.
-    """
-    request: str = "done_pass_tool"
-
-    def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
-        # use PassTool to get the right ChatDocument to pass...
-        new_doc = PassTool.response(self, agent, chat_doc)
-        tools = agent.get_tool_messages(new_doc)
-        # ...then return an AgentDoneTool with content, tools from this ChatDocument
-        done_tool = AgentDoneTool(content=new_doc.content, tools=tools)
-        # Carry taint: if the passed message is USER-derived, these tools were
-        # parsed out of untrusted content -- keep them vetoed downstream (#1035).
-        done_tool._tainted = new_doc.metadata.tainted
-        return done_tool  # type: ignore
-
-    @classmethod
-    def instructions(cls) -> str:
-        return """
-        When you determine your task is finished,
-        and want to pass the current message as the result of the task,  
-        use the `done_pass_tool` to signal this.
-        """
-
-
-class ForwardTool(PassTool):
-    """Tool for forwarding the received msg (ChatDocument) to another agent or entity.
-    Similar to PassTool, but with a specified recipient agent.
-    """
-
-    purpose: str = """
-    To forward the current message to an <agent>, where <agent> 
-    could be the name of an agent, or an entity such as "user", "llm".
-    """
-    request: str = "forward_tool"
-    agent: str
-
-    def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
-        """When this tool is enabled for an Agent, this will result in a method
-        added to the Agent with signature:
-        `forward_tool(self, tool: ForwardTool, chat_doc: ChatDocument) -> ChatDocument:`
-        """
-        # if chat_doc contains ForwardTool, then we forward its parent ChatDocument;
-        # else forward chat_doc itself
-        new_doc = PassTool.response(self, agent, chat_doc)
-        new_doc.metadata.recipient = self.agent
-        return new_doc
-
-    @classmethod
-    def instructions(cls) -> str:
-        return """
-        If you need to forward the current message to another agent, 
-        use the `forward_tool` to do so, 
-        setting the `recipient` field to the name of the recipient agent.
-        """
-
-
-class SendTool(ToolMessage):
-    """Tool for agent or LLM to send content to a specified agent.
-    Similar to RecipientTool.
-    """
-
-    purpose: str = """
-    To send message <content> to agent specified in <to> field.
-    """
-    request: str = "send_tool"
-    to: str
-    content: str = ""
-
-    def response(self, agent: ChatAgent) -> ChatDocument:
-        return agent.create_agent_response(
-            self.content,
-            recipient=self.to,
-        )
-
-    @classmethod
-    def instructions(cls) -> str:
-        return """
-        If you need to send a message to another agent, 
-        use the `send_tool` to do so, with these field values:
-        - `to` field = name of the recipient agent,
-        - `content` field = the message to send.
-        """
-
-    @classmethod
-    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
-        return [
-            cls(to="agent1", content="Hello, agent1!"),
-            (
-                """
-                I need to send the content 'Who built the Gemini model?', 
-                to the 'Searcher' agent.
-                """,
-                cls(to="Searcher", content="Who built the Gemini model?"),
-            ),
-        ]
-
-
-class AgentSendTool(ToolMessage):
-    """Tool for Agent (i.e. agent_response) to send content or tool_messages
-    to a specified agent. Similar to SendTool except that AgentSendTool is only
-    usable by agent_response (or handler of another tool), to send content or
-    tools to another agent. SendTool does not allow sending tools.
-    """
-
-    purpose: str = """
-    To send message <content> and <tools> to agent specified in <to> field. 
-    """
-    request: str = "agent_send_tool"
-    to: str
-    content: str = ""
-    tools: List[ToolMessage] = []
-    _allow_llm_use: bool = False
-
-    def response(self, agent: ChatAgent) -> ChatDocument:
-        return agent.create_agent_response(
-            self.content,
-            tool_messages=self.tools,
-            recipient=self.to,
-        )
-</file>
-
 <file path="langroid/agent/tools/recipient_tool.py">
 """
 The `recipient_tool` is used to send a message to a specific recipient.
@@ -38518,6 +38200,324 @@ class MetaphorSearchTool(ToolMessage):
         ]
 </file>
 
+<file path="langroid/agent/tools/orchestration.py">
+"""
+Various tools to for agents to be able to control flow of Task, e.g.
+termination, routing to another agent, etc.
+"""
+
+from typing import Any, List, Tuple
+
+from pydantic import ConfigDict, field_validator
+
+from langroid.agent.chat_agent import ChatAgent
+from langroid.agent.chat_document import ChatDocument
+from langroid.agent.tool_message import ToolMessage
+from langroid.mytypes import Entity
+from langroid.utils.types import to_string
+
+
+class AgentDoneTool(ToolMessage):
+    """Tool for AGENT entity (i.e. agent_response or downstream tool handling fns) to
+    signal the current task is done."""
+
+    purpose: str = """
+    To signal the current task is done, along with an optional message <content>
+    of arbitrary type (default None) and an 
+    optional list of <tools> (default empty list).
+    """
+    request: str = "agent_done_tool"
+    content: Any = None
+    tools: List[ToolMessage] = []
+    # only meant for agent_response or tool-handlers, not for LLM generation:
+    _allow_llm_use: bool = False
+    # DISTRUST mark (#1035): set by DonePassTool when the passed message is
+    # tainted, so the repackaged tools stay vetoed by _filter_user_origin_tools.
+    _tainted: bool = False
+
+    def response(self, agent: ChatAgent) -> ChatDocument:
+        content_str = "" if self.content is None else to_string(self.content)
+        return agent.create_agent_response(
+            content=content_str,
+            content_any=self.content,
+            tool_messages=[self] + self.tools,
+        )
+
+
+class DoneTool(ToolMessage):
+    """Tool for Agent Entity (i.e. agent_response) or LLM entity (i.e. llm_response) to
+    signal the current task is done, with some content as the result."""
+
+    purpose: str = """
+    To signal the current task is done, along with an optional message <content>
+    of arbitrary type (default None).
+    """
+    request: str = "done_tool"
+    content: str = ""
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def convert_content_to_string(cls, v: Any) -> str:
+        """Convert content to string if it's not already."""
+        return str(v) if v is not None else ""
+
+    def response(self, agent: ChatAgent) -> ChatDocument:
+        return agent.create_agent_response(
+            content=self.content,
+            content_any=self.content,
+            tool_messages=[self],
+        )
+
+    @classmethod
+    def instructions(cls) -> str:
+        tool_name = cls.default_value("request")
+        return f"""
+        When you determine your task is finished, 
+        use the tool `{tool_name}` to signal this,
+        along with any message or result, in the `content` field. 
+        """
+
+
+class ResultTool(ToolMessage):
+    """Class to use as a wrapper for sending arbitrary results from an Agent's
+    agent_response or tool handlers, to:
+    (a) trigger completion of the current task (similar to (Agent)DoneTool), and
+    (b) be returned as the result of the current task, i.e. this tool would appear
+         in the resulting ChatDocument's `tool_messages` list.
+    See test_tool_handlers_and_results in test_tool_messages.py, and
+    examples/basic/tool-extract-short-example.py.
+
+    Note:
+        - when defining a tool handler or agent_response, you can directly return
+            ResultTool(field1 = val1, ...),
+            where the values can be arbitrary data structures, including nested
+            Pydantic objs, or you can define a subclass of ResultTool with the
+            fields you want to return.
+        - This is a special ToolMessage that is NOT meant to be used or handled
+            by an agent.
+        - AgentDoneTool is more restrictive in that you can only send a `content`
+            or `tools` in the result.
+    """
+
+    request: str = "result_tool"
+    purpose: str = "Ignored; Wrapper for a structured message"
+    id: str = ""  # placeholder for OpenAI-API tool_call_id
+
+    model_config = ConfigDict(
+        extra="allow",
+        arbitrary_types_allowed=False,
+        validate_default=True,
+        validate_assignment=True,
+        json_schema_extra={"exclude": ["purpose", "id", "strict"]},
+    )
+
+    def handle(self) -> AgentDoneTool:
+        return AgentDoneTool(tools=[self])
+
+
+class FinalResultTool(ToolMessage):
+    """Class to use as a wrapper for sending arbitrary results from an Agent's
+    agent_response or tool handlers, to:
+    (a) trigger completion of the current task as well as all parent tasks, and
+    (b) be returned as the final result of the root task, i.e. this tool would appear
+         in the final ChatDocument's `tool_messages` list.
+    See test_tool_handlers_and_results in test_tool_messages.py, and
+    examples/basic/chat-tool-function.py.
+
+    Note:
+        - when defining a tool handler or agent_response, you can directly return
+            FinalResultTool(field1 = val1, ...),
+            where the values can be arbitrary data structures, including nested
+            Pydantic objs, or you can define a subclass of FinalResultTool with the
+            fields you want to return.
+        - This is a special ToolMessage that is NOT meant to be used by an agent's
+            llm_response, but only by agent_response or tool handlers.
+        - A subclass of this tool can be defined, with specific fields, and
+          with _allow_llm_use = True, to allow the LLM to generate this tool,
+          and have the effect of terminating the current and all parent tasks,
+          with the tool appearing in the final ChatDocument's `tool_messages` list.
+          See examples/basic/multi-agent-return-result.py.
+    """
+
+    request: str = ""
+    purpose: str = "Ignored; Wrapper for a structured message"
+    id: str = ""  # placeholder for OpenAI-API tool_call_id
+    _allow_llm_use: bool = False
+
+    model_config = ConfigDict(
+        extra="allow",
+        arbitrary_types_allowed=False,
+        validate_default=True,
+        validate_assignment=True,
+        json_schema_extra={"exclude": ["purpose", "id", "strict"]},
+    )
+
+
+class PassTool(ToolMessage):
+    """Tool for "passing" on the received msg (ChatDocument),
+    so that an as-yet-unspecified agent can handle it.
+    Similar to ForwardTool, but without specifying the recipient agent.
+    """
+
+    purpose: str = """
+    To pass the current message so that other agents can handle it.
+    """
+    request: str = "pass_tool"
+
+    def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
+        """When this tool is enabled for an Agent, this will result in a method
+        added to the Agent with signature:
+        `pass_tool(self, tool: PassTool, chat_doc: ChatDocument) -> ChatDocument:`
+        """
+        # if PassTool is in chat_doc, pass its parent, else pass chat_doc itself
+        doc = chat_doc
+        while True:
+            tools = agent.get_tool_messages(doc)
+            if not any(isinstance(t, type(self)) for t in tools):
+                break
+            if doc.parent is None:
+                break
+            doc = doc.parent
+        assert doc is not None, "PassTool: parent of chat_doc must not be None"
+        new_doc = ChatDocument.deepcopy(doc)
+        new_doc.metadata.sender = Entity.AGENT
+        return new_doc
+
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+        Use the `pass_tool` to PASS the current message 
+        so that another agent can handle it.
+        """
+
+
+class DonePassTool(PassTool):
+    """Tool to signal DONE, AND Pass incoming/current msg as result.
+    Similar to PassTool, except we append a DoneTool to the result tool_messages.
+    """
+
+    purpose: str = """
+    To signal the current task is done, with results set to the current/incoming msg.
+    """
+    request: str = "done_pass_tool"
+
+    def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
+        # use PassTool to get the right ChatDocument to pass...
+        new_doc = PassTool.response(self, agent, chat_doc)
+        tools = agent.get_tool_messages(new_doc)
+        # ...then return an AgentDoneTool with content, tools from this ChatDocument
+        done_tool = AgentDoneTool(content=new_doc.content, tools=tools)
+        # Carry taint: if the passed message is USER-derived, these tools were
+        # parsed out of untrusted content -- keep them vetoed downstream (#1035).
+        done_tool._tainted = new_doc.metadata.tainted
+        return done_tool  # type: ignore
+
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+        When you determine your task is finished,
+        and want to pass the current message as the result of the task,  
+        use the `done_pass_tool` to signal this.
+        """
+
+
+class ForwardTool(PassTool):
+    """Tool for forwarding the received msg (ChatDocument) to another agent or entity.
+    Similar to PassTool, but with a specified recipient agent.
+    """
+
+    purpose: str = """
+    To forward the current message to an <agent>, where <agent> 
+    could be the name of an agent, or an entity such as "user", "llm".
+    """
+    request: str = "forward_tool"
+    agent: str
+
+    def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
+        """When this tool is enabled for an Agent, this will result in a method
+        added to the Agent with signature:
+        `forward_tool(self, tool: ForwardTool, chat_doc: ChatDocument) -> ChatDocument:`
+        """
+        # if chat_doc contains ForwardTool, then we forward its parent ChatDocument;
+        # else forward chat_doc itself
+        new_doc = PassTool.response(self, agent, chat_doc)
+        new_doc.metadata.recipient = self.agent
+        return new_doc
+
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+        If you need to forward the current message to another agent, 
+        use the `forward_tool` to do so, 
+        setting the `recipient` field to the name of the recipient agent.
+        """
+
+
+class SendTool(ToolMessage):
+    """Tool for agent or LLM to send content to a specified agent.
+    Similar to RecipientTool.
+    """
+
+    purpose: str = """
+    To send message <content> to agent specified in <to> field.
+    """
+    request: str = "send_tool"
+    to: str
+    content: str = ""
+
+    def response(self, agent: ChatAgent) -> ChatDocument:
+        return agent.create_agent_response(
+            self.content,
+            recipient=self.to,
+        )
+
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+        If you need to send a message to another agent, 
+        use the `send_tool` to do so, with these field values:
+        - `to` field = name of the recipient agent,
+        - `content` field = the message to send.
+        """
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
+        return [
+            cls(to="agent1", content="Hello, agent1!"),
+            (
+                """
+                I need to send the content 'Who built the Gemini model?', 
+                to the 'Searcher' agent.
+                """,
+                cls(to="Searcher", content="Who built the Gemini model?"),
+            ),
+        ]
+
+
+class AgentSendTool(ToolMessage):
+    """Tool for Agent (i.e. agent_response) to send content or tool_messages
+    to a specified agent. Similar to SendTool except that AgentSendTool is only
+    usable by agent_response (or handler of another tool), to send content or
+    tools to another agent. SendTool does not allow sending tools.
+    """
+
+    purpose: str = """
+    To send message <content> and <tools> to agent specified in <to> field. 
+    """
+    request: str = "agent_send_tool"
+    to: str
+    content: str = ""
+    tools: List[ToolMessage] = []
+    _allow_llm_use: bool = False
+
+    def response(self, agent: ChatAgent) -> ChatDocument:
+        return agent.create_agent_response(
+            self.content,
+            tool_messages=self.tools,
+            recipient=self.to,
+        )
+</file>
+
 <file path="langroid/agent/tools/seltz_search_tool.py">
 """
 A tool to trigger a Seltz search for a given query and return the top results.
@@ -47558,6 +47558,942 @@ corresponding document.
    - Reference: `./quiet-mode.md`
 </file>
 
+<file path="langroid/agent/special/sql/sql_chat_agent.py">
+"""
+Agent that allows interaction with an SQL database using SQLAlchemy library.
+The agent can execute SQL queries in the database and return the result.
+
+Functionality includes:
+- adding table and column context
+- asking a question about a SQL schema
+"""
+
+import logging
+import re
+from typing import (
+    Any,
+    Dict,
+    FrozenSet,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
+
+from rich.console import Console
+
+from langroid.exceptions import LangroidImportError
+from langroid.mytypes import Entity
+from langroid.utils.constants import SEND_TO
+
+try:
+    from sqlalchemy import MetaData, Row, create_engine, inspect, text
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.exc import ResourceClosedError, SQLAlchemyError
+    from sqlalchemy.orm import Session, sessionmaker
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
+
+try:
+    # sqlglot is required for the statement-type allowlist enforced in
+    # `_validate_query`. Importing it at module load ensures the security
+    # guarantee cannot be silently bypassed by a partial/stale install.
+    import sqlglot
+    from sqlglot import expressions as sqlglot_exp
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
+
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocument
+from langroid.agent.special.sql.utils.description_extractors import (
+    extract_schema_descriptions,
+)
+from langroid.agent.special.sql.utils.populate_metadata import (
+    populate_metadata,
+    populate_metadata_with_schema_tools,
+)
+from langroid.agent.special.sql.utils.system_message import (
+    DEFAULT_SYS_MSG,
+    SCHEMA_TOOLS_SYS_MSG,
+)
+from langroid.agent.special.sql.utils.tools import (
+    GetColumnDescriptionsTool,
+    GetTableNamesTool,
+    GetTableSchemaTool,
+    RunQueryTool,
+)
+from langroid.agent.tools.orchestration import (
+    DonePassTool,
+    DoneTool,
+    ForwardTool,
+    PassTool,
+)
+from langroid.language_models.base import Role
+from langroid.vector_store.base import VectorStoreConfig
+
+logger = logging.getLogger(__name__)
+
+console = Console()
+
+DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
+{mode}
+
+You do not need to attempt answering a question with just one query. 
+You could make a sequence of SQL queries to help you write the final query.
+Also if you receive a null or other unexpected result,
+(a) make sure you use the available TOOLs correctly, and 
+(b) see if you have made an assumption in your SQL query, and try another way, 
+   or use `run_query` to explore the database table contents before submitting your 
+   final query. For example when searching for "males" you may have used "gender= 'M'",
+in your query, because you did not know that the possible genders in the table
+are "Male" and "Female". 
+
+Start by asking what I would like to know about the data.
+
+"""
+
+ADDRESSING_INSTRUCTION = """
+IMPORTANT - Whenever you are NOT writing a SQL query, make sure you address the user
+using {prefix}User (NO SPACE between {prefix} and User). 
+You MUST use the EXACT syntax {prefix}User !!!
+
+In other words, you ALWAYS write EITHER:
+ - a SQL query using the `run_query` tool, 
+ - OR address the user using {prefix}User
+"""
+
+DONE_INSTRUCTION = f"""
+When you are SURE you have the CORRECT answer to a user's query or request, 
+use the `{DoneTool.name()}` with `content` set to the answer or result.
+If you DO NOT think you have the answer to the user's query or request,
+you SHOULD NOT use the `{DoneTool.name()}` tool.
+Instead, you must CONTINUE to improve your queries (tools) to get the correct answer,
+and finally use the `{DoneTool.name()}` tool to send the correct answer to the user.
+"""
+
+
+SQL_ERROR_MSG = "There was an error in your SQL Query"
+
+
+# Dialect-specific SQL patterns that enable code execution, arbitrary file
+# access, or other escapes from the database engine. Matched against the raw
+# query text (case-insensitive) as a defense-in-depth layer in addition to the
+# sqlglot-based statement-type allowlist.
+_DANGEROUS_SQL_PATTERNS: List["re.Pattern[str]"] = [
+    # PostgreSQL: COPY ... FROM/TO PROGRAM executes shell commands as the DB
+    # server OS user.
+    re.compile(r"\bcopy\b[\s\S]*\bprogram\b", re.IGNORECASE),
+    # PostgreSQL server-side filesystem / log / WAL access. Match the whole
+    # pg_read*, pg_stat*, pg_ls*, pg_current_logfile family rather than naming
+    # individual functions: near-name functions (pg_read_file vs
+    # pg_read_server_file, pg_ls_logdir vs pg_ls_dir, pg_stat_file, ...) all
+    # yield the same file/metadata disclosure primitive.
+    re.compile(r"\bpg_(read|stat|ls|current_logfile)[A-Za-z0-9_]*\s*\(", re.IGNORECASE),
+    re.compile(r"\blo_(import|export)\b", re.IGNORECASE),
+    # MySQL/MariaDB filesystem
+    re.compile(r"\binto\s+(outfile|dumpfile)\b", re.IGNORECASE),
+    re.compile(r"\bload_file\s*\(", re.IGNORECASE),
+    re.compile(r"\bload\s+data\b", re.IGNORECASE),
+    # SQLite: load_extension enables loading arbitrary shared objects;
+    # ATTACH can read/write arbitrary files. The DATABASE keyword is optional
+    # per the SQLite grammar (ATTACH [DATABASE] expr AS schema-name), so match
+    # both forms.
+    re.compile(r"\bload_extension\s*\(", re.IGNORECASE),
+    re.compile(r"\battach\b(\s+database)?\s+['\"\w]", re.IGNORECASE),
+    # SQL Server: command execution, OLE automation, and ad-hoc external data
+    # sources (OPENDATASOURCE is the connection-string counterpart of
+    # OPENROWSET; both can read remote/UNC files).
+    re.compile(r"\bxp_cmdshell\b", re.IGNORECASE),
+    re.compile(r"\bsp_oacreate\b", re.IGNORECASE),
+    re.compile(r"\bsp_oamethod\b", re.IGNORECASE),
+    re.compile(r"\b(openrowset|opendatasource)\b", re.IGNORECASE),
+    re.compile(r"\bbulk\s+insert\b", re.IGNORECASE),
+    # Generic: stored-program creation and procedural language extensions.
+    # LANGUAGE / RULE / EVENT TRIGGER / FOREIGN TABLE are additional PostgreSQL
+    # primitives that can register attacker-controlled code.
+    re.compile(
+        r"\bcreate\s+(or\s+replace\s+)?(function|procedure|trigger|language|rule|event\s+trigger|foreign\s+table)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bcreate\s+extension\b", re.IGNORECASE),
+]
+
+
+# AST-side blocklist of dangerous SQL function names, applied after sqlglot
+# parses the query. The raw-text regex above can be bypassed by quoted
+# identifiers, inline comments, or schema qualification -- e.g.
+# `"pg_read_file"(...)`, `pg_read_file/**/(...)`,
+# `pg_catalog."pg_read_file"(...)` -- but sqlglot normalizes all those forms
+# to the same function-call node, so a name-based check on the parsed tree
+# catches every variant (GHSA-6xc5-4r68-67fc).
+_DANGEROUS_FUNCTION_NAMES: FrozenSet[str] = frozenset(
+    {
+        "load_file",  # MySQL/MariaDB filesystem read
+        "load_extension",  # SQLite extension loader
+        "sp_oacreate",  # MSSQL OLE automation
+        "sp_oamethod",  # MSSQL OLE automation
+    }
+)
+# Prefix families: any function whose normalized name starts with one of these
+# is considered dangerous. Mirrors the `\bpg_(read|stat|ls|current_logfile)...`
+# and `\blo_(import|export)\b` regex coverage, but on the parsed AST.
+_DANGEROUS_FUNCTION_PREFIXES: Tuple[str, ...] = (
+    "pg_read",
+    "pg_stat",
+    "pg_ls",
+    "pg_current_logfile",
+    "lo_",
+)
+
+
+def _is_dangerous_function_name(name: str) -> bool:
+    """True if `name` (case-folded, unquoted) is a dangerous SQL function."""
+    if name in _DANGEROUS_FUNCTION_NAMES:
+        return True
+    return any(name.startswith(p) for p in _DANGEROUS_FUNCTION_PREFIXES)
+
+
+def _called_function_names(stmt: Any) -> Iterator[str]:
+    """Yield normalized (case-folded, unquoted, schema-stripped) names of
+    every function-call node in `stmt` (a parsed sqlglot expression)."""
+    for node in stmt.find_all(sqlglot_exp.Func):
+        if isinstance(node, sqlglot_exp.Anonymous):
+            this = node.this
+            if isinstance(this, sqlglot_exp.Expression):
+                name = this.name
+            else:
+                name = str(this) if this is not None else ""
+        else:
+            # Typed sqlglot Func subclass: its class key is the SQL keyword.
+            name = getattr(type(node), "key", "") or ""
+        # Strip any schema qualifier that leaked into the name string.
+        name = name.rsplit(".", 1)[-1].strip().lower()
+        if name:
+            yield name
+
+
+# Default set of SQL statement types the agent is allowed to execute when
+# `allow_dangerous_operations` is False. SELECT-only is safe for Q&A workloads.
+_DEFAULT_ALLOWED_STATEMENTS: List[str] = ["SELECT"]
+
+
+class SQLChatAgentConfig(ChatAgentConfig):
+    system_message: str = DEFAULT_SQL_CHAT_SYSTEM_MESSAGE
+    user_message: None | str = None
+    cache: bool = True  # cache results
+    debug: bool = False
+    use_helper: bool = True
+    is_helper: bool = False
+    stream: bool = True  # allow streaming where needed
+    database_uri: str = ""  # Database URI
+    database_session: None | Session = None  # Database session
+    vecdb: None | VectorStoreConfig = None
+    context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
+    use_schema_tools: bool = False
+    multi_schema: bool = False
+    # whether the agent is used in a continuous chat with user,
+    # as opposed to returning a result from the task.run()
+    chat_mode: bool = False
+    addressing_prefix: str = ""
+    max_result_rows: int | None = None  # limit query results to this
+    max_retained_tokens: int | None = None  # limit history of query results to this
+
+    # --- Security controls (see CVE-2026-25879) ---------------------------
+    # By default, the agent only executes SELECT statements and rejects any
+    # query that matches a known dangerous pattern (e.g. PostgreSQL
+    # `COPY ... FROM PROGRAM`, MySQL `INTO OUTFILE`, SQLite `load_extension`,
+    # MSSQL `xp_cmdshell`). The LLM-generated SQL is influenceable by prompt
+    # injection — including injection via data the LLM reads back from the
+    # database — so executing it without restrictions is unsafe when the DB
+    # role has elevated privileges.
+    #
+    # To enable writes: extend allowed_statement_types, e.g. ["SELECT",
+    # "INSERT", "UPDATE", "DELETE"]. To disable all checks (only do this with
+    # a least-privilege DB role and trusted prompts): set
+    # allow_dangerous_operations=True.
+    allowed_statement_types: List[str] = list(_DEFAULT_ALLOWED_STATEMENTS)
+    allow_dangerous_operations: bool = False
+
+    """
+    Optional, but strongly recommended, context descriptions for tables, columns, 
+    and relationships. It should be a dictionary where each key is a table name 
+    and its value is another dictionary. 
+
+    In this inner dictionary:
+    - The 'description' key corresponds to a string description of the table.
+    - The 'columns' key corresponds to another dictionary where each key is a 
+    column name and its value is a string description of that column.
+    - The 'relationships' key corresponds to another dictionary where each key 
+    is another table name and the value is a description of the relationship to 
+    that table.
+
+    If multi_schema support is enabled, the tables names in the description
+    should be of the form 'schema_name.table_name'.
+
+    For example:
+    {
+        'table1': {
+            'description': 'description of table1',
+            'columns': {
+                'column1': 'description of column1 in table1',
+                'column2': 'description of column2 in table1'
+            }
+        },
+        'table2': {
+            'description': 'description of table2',
+            'columns': {
+                'column3': 'description of column3 in table2',
+                'column4': 'description of column4 in table2'
+            }
+        }
+    }
+    """
+
+
+class SQLChatAgent(ChatAgent):
+    """
+    Agent for chatting with a SQL database
+    """
+
+    used_run_query: bool = False
+    llm_responded: bool = False
+
+    def __init__(self, config: "SQLChatAgentConfig") -> None:
+        """Initialize the SQLChatAgent.
+
+        Raises:
+            ValueError: If database information is not provided in the config.
+        """
+        self._validate_config(config)
+        self.config: SQLChatAgentConfig = config
+        self._init_database()
+        self._init_metadata()
+        self._init_table_metadata()
+        self.final_instructions = ""
+
+        # Caution - this updates the self.config.system_message!
+        self._init_system_message()
+        super().__init__(config)
+        self._init_tools()
+        if self.config.is_helper:
+            self.system_tool_format_instructions += self.final_instructions
+
+        if self.config.use_helper:
+            # helper_config.system_message is now the fully-populated sys msg of
+            # the main SQLAgent.
+            self.helper_config = self.config.model_copy()
+            self.helper_config.is_helper = True
+            self.helper_config.use_helper = False
+            self.helper_config.chat_mode = False
+            self.helper_agent = SQLHelperAgent(self.helper_config)
+
+    def _validate_config(self, config: "SQLChatAgentConfig") -> None:
+        """Validate the configuration to ensure all necessary fields are present."""
+        if config.database_session is None and config.database_uri is None:
+            raise ValueError("Database information must be provided")
+
+    def _init_database(self) -> None:
+        """Initialize the database engine and session."""
+        if self.config.database_session:
+            self.Session = self.config.database_session
+            self.engine = self.Session.bind
+        else:
+            self.engine = create_engine(self.config.database_uri)
+            self.Session = sessionmaker(bind=self.engine)()
+
+    def _init_metadata(self) -> None:
+        """Initialize the database metadata."""
+        if self.engine is None:
+            raise ValueError("Database engine is None")
+        self.metadata: MetaData | List[MetaData] = []
+
+        if self.config.multi_schema:
+            logger.info(
+                "Initializing SQLChatAgent with database: %s",
+                self.engine,
+            )
+
+            self.metadata = []
+            inspector = inspect(self.engine)
+
+            for schema in inspector.get_schema_names():
+                metadata = MetaData(schema=schema)
+                metadata.reflect(self.engine)
+                self.metadata.append(metadata)
+
+                logger.info(
+                    "Initializing SQLChatAgent with database: %s, schema: %s, "
+                    "and tables: %s",
+                    self.engine,
+                    schema,
+                    metadata.tables,
+                )
+        else:
+            self.metadata = MetaData()
+            self.metadata.reflect(self.engine)
+            logger.info(
+                "SQLChatAgent initialized with database: %s and tables: %s",
+                self.engine,
+                self.metadata.tables,
+            )
+
+    def _init_table_metadata(self) -> None:
+        """Initialize metadata for the tables present in the database."""
+        if not self.config.context_descriptions and isinstance(self.engine, Engine):
+            self.config.context_descriptions = extract_schema_descriptions(
+                self.engine, self.config.multi_schema
+            )
+
+        if self.config.use_schema_tools:
+            self.table_metadata = populate_metadata_with_schema_tools(
+                self.metadata, self.config.context_descriptions
+            )
+        else:
+            self.table_metadata = populate_metadata(
+                self.metadata, self.config.context_descriptions
+            )
+
+    def _init_system_message(self) -> None:
+        """Initialize the system message."""
+        message = self._format_message()
+        self.config.system_message = self.config.system_message.format(mode=message)
+
+        if not self.config.allow_dangerous_operations:
+            allowed = sorted(
+                t.strip().upper() for t in self.config.allowed_statement_types
+            )
+            self.config.system_message += (
+                f"\n\nIMPORTANT - SECURITY POLICY:\n"
+                f"You may ONLY issue SQL queries whose top-level statement "
+                f"type is one of: {allowed}. Any other statement type "
+                f"(e.g. DDL, COPY, EXEC, multi-statement scripts that "
+                f"include a disallowed type) will be REJECTED by the "
+                f"executor and not run.\n"
+            )
+
+        if self.config.chat_mode:
+            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
+            self.config.system_message += ADDRESSING_INSTRUCTION.format(
+                prefix=self.config.addressing_prefix
+            )
+        else:
+            self.config.system_message += DONE_INSTRUCTION
+
+    def _init_tools(self) -> None:
+        """Initialize sys msg and tools."""
+        # Create a custom RunQueryTool class with the desired max_retained_tokens
+        if self.config.max_retained_tokens is not None:
+
+            class CustomRunQueryTool(RunQueryTool):
+                _max_retained_tokens = self.config.max_retained_tokens
+
+            self.enable_message([CustomRunQueryTool, ForwardTool])
+        else:
+            self.enable_message([RunQueryTool, ForwardTool])
+
+        if self.config.use_schema_tools:
+            self._enable_schema_tools()
+        if not self.config.chat_mode:
+            self.enable_message(DoneTool)
+            self.enable_message(DonePassTool)
+
+    def _format_message(self) -> str:
+        if self.engine is None:
+            raise ValueError("Database engine is None")
+
+        """Format the system message based on the engine and table metadata."""
+        return (
+            SCHEMA_TOOLS_SYS_MSG.format(dialect=self.engine.dialect.name)
+            if self.config.use_schema_tools
+            else DEFAULT_SYS_MSG.format(
+                dialect=self.engine.dialect.name, schema_dict=self.table_metadata
+            )
+        )
+
+    def _enable_schema_tools(self) -> None:
+        """Enable tools for schema-related functionalities."""
+        self.enable_message(GetTableNamesTool)
+        self.enable_message(GetTableSchemaTool)
+        self.enable_message(GetColumnDescriptionsTool)
+
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        self.llm_responded = True
+        self.used_run_query = False
+        return super().llm_response(message)
+
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        self.llm_responded = False
+        self.used_run_query = False
+        return super().user_response(msg)
+
+    def _clarify_answer_instruction(self) -> str:
+        """
+        Prompt to use when asking LLM to clarify intent of
+        an already-generated response
+        """
+        if self.config.chat_mode:
+            return f"""
+                you must use the TOOL `{ForwardTool.name()}` with the `agent` 
+                parameter set to "User"
+                """
+        else:
+            return f"you must use the TOOL `{DonePassTool.name()}`"
+
+    def _clarifying_message(self) -> str:
+        tools_instruction = f"""
+          For example you may want to use the TOOL
+          `{RunQueryTool.name()}` to further explore the database contents
+        """
+        if self.config.use_schema_tools:
+            tools_instruction += """
+            OR you may want to use one of the schema tools to 
+            explore the database schema
+            """
+        return f"""
+            The intent of your response is not clear:
+            - if you intended this to be the FINAL answer to the user's query,
+                {self._clarify_answer_instruction()}
+            - otherwise, use one of the available tools to make progress 
+                to arrive at the final answer.
+                {tools_instruction}
+            """
+
+    def handle_message_fallback(
+        self, message: str | ChatDocument
+    ) -> str | ForwardTool | ChatDocument | None:
+        """
+        We'd end up here if the current msg has no tool.
+        If this is from LLM, we may need to handle the scenario where
+        it may have "forgotten" to generate a tool.
+        """
+        if (
+            not isinstance(message, ChatDocument)
+            or message.metadata.sender != Entity.LLM
+        ):
+            return None
+        if self.config.chat_mode:
+            # send any Non-tool msg to the user
+            return ForwardTool(agent="User")
+        # Agent intent not clear => use the helper agent to
+        # do what this agent should have done, e.g. generate tool, etc.
+        # This is likelier to succeed since this agent has no "baggage" of
+        # prior conversation, other than the system msg, and special
+        # "Intent-interpretation" instructions.
+        if self._json_schema_available() and self.config.strict_recovery:
+            AnyTool = self._get_any_tool_message(optional=False)
+            self.set_output_format(
+                AnyTool,
+                force_tools=True,
+                use=True,
+                handle=True,
+                instructions=True,
+            )
+            recovery_message = self._strict_recovery_instructions(
+                AnyTool, optional=False
+            )
+            result = self.llm_response(recovery_message)
+            # remove the recovery_message (it has User role) from the chat history,
+            # else it may cause the LLM to directly use the AnyTool.
+            self.delete_last_message(role=Role.USER)  # delete last User-role msg
+            return result
+        elif self.config.use_helper:
+            response = self.helper_agent.llm_response(message)
+            tools = self.try_get_tool_messages(response)
+            if tools:
+                return response
+        # fall back on the clarification message
+        return self._clarifying_message()
+
+    def retry_query(self, e: Exception, query: str) -> str:
+        """
+        Generate an error message for a failed SQL query and return it.
+
+        Parameters:
+        e (Exception): The exception raised during the SQL query execution.
+        query (str): The SQL query that failed.
+
+        Returns:
+        str: The error message.
+        """
+        logger.error(f"SQL Query failed: {query}\nException: {e}")
+
+        # Optional part to be included based on `use_schema_tools`
+        optional_schema_description = ""
+        if not self.config.use_schema_tools:
+            optional_schema_description = f"""\
+            This JSON schema maps SQL database structure. It outlines tables, each 
+            with a description and columns. Each table is identified by a key, and holds
+            a description and a dictionary of columns, with column 
+            names as keys and their descriptions as values.
+            
+            ```json
+            {self.config.context_descriptions}
+            ```"""
+
+        # Construct the error message
+        error_message_template = f"""\
+        {SQL_ERROR_MSG}: '{query}'
+        {str(e)}
+        Run a new query, correcting the errors.
+        {optional_schema_description}"""
+
+        return error_message_template
+
+    def _available_tool_names(self) -> str:
+        return ",".join(self.llm_tools_usable)
+
+    def _tool_result_llm_answer_prompt(self) -> str:
+        """
+        Prompt to use at end of tool result,
+        to guide LLM, for the case where it wants to answer the user's query
+        """
+        if self.config.chat_mode:
+            assert self.config.addressing_prefix != ""
+            return """
+                You must EXPLICITLY address the User with 
+                the addressing prefix according to your instructions,
+                to convey your answer to the User.
+                """
+        else:
+            return f"""
+                you must use the `{DoneTool.name()}` with the `content` 
+                set to the answer or result
+                """
+
+    def _sqlglot_dialect(self) -> Optional[str]:
+        """Map the SQLAlchemy dialect name to a sqlglot dialect name."""
+        if self.engine is None:
+            return None
+        name: str = str(self.engine.dialect.name)
+        # sqlglot uses 'postgres', not 'postgresql'; 'tsql' for MSSQL.
+        mapping: Dict[str, str] = {"postgresql": "postgres", "mssql": "tsql"}
+        return mapping.get(name, name)
+
+    def _validate_query(self, query: str) -> Optional[str]:
+        """
+        Check whether `query` is permitted under the agent's security config.
+
+        Returns None if the query may be executed, otherwise an error message
+        explaining why it was rejected (to be relayed to the LLM).
+        """
+        if self.config.allow_dangerous_operations:
+            return None
+
+        for pat in _DANGEROUS_SQL_PATTERNS:
+            if pat.search(query):
+                logger.warning(
+                    "SQLChatAgent rejected query matching dangerous pattern "
+                    f"{pat.pattern!r}: {query!r}"
+                )
+                return (
+                    f"Query REJECTED for safety: it matches a pattern "
+                    f"({pat.pattern!r}) that enables code execution, "
+                    f"filesystem access, or other unsafe operations. "
+                    f"Rewrite the query without using this construct, or ask "
+                    f"the operator to set `allow_dangerous_operations=True` "
+                    f"on the SQLChatAgent config."
+                )
+
+        allowed = {t.strip().upper() for t in self.config.allowed_statement_types}
+        try:
+            statements = sqlglot.parse(query, read=self._sqlglot_dialect())
+        except Exception as e:
+            logger.warning(f"sqlglot failed to parse query {query!r}: {e}")
+            return (
+                f"Query REJECTED for safety: could not be parsed to verify it "
+                f"is a {sorted(allowed)} statement ({e}). Rewrite the query "
+                f"more simply, or ask the operator to set "
+                f"`allow_dangerous_operations=True` on the SQLChatAgent config."
+            )
+
+        kind_map = {
+            sqlglot_exp.Select: "SELECT",
+            sqlglot_exp.Insert: "INSERT",
+            sqlglot_exp.Update: "UPDATE",
+            sqlglot_exp.Delete: "DELETE",
+            sqlglot_exp.Merge: "MERGE",
+            sqlglot_exp.Create: "CREATE",
+            sqlglot_exp.Drop: "DROP",
+            sqlglot_exp.Alter: "ALTER",
+            sqlglot_exp.TruncateTable: "TRUNCATE",
+            sqlglot_exp.Command: "COMMAND",
+        }
+        for stmt in statements:
+            if stmt is None:
+                continue
+            kind = next(
+                (v for k, v in kind_map.items() if isinstance(stmt, k)),
+                type(stmt).__name__.upper(),
+            )
+            if kind not in allowed:
+                logger.warning(
+                    f"SQLChatAgent rejected {kind} statement (allowed: "
+                    f"{sorted(allowed)}): {query!r}"
+                )
+                return (
+                    f"Query REJECTED for safety: statement type {kind!r} is "
+                    f"not in the allowed list {sorted(allowed)}. Rewrite the "
+                    f"query as one of the allowed statement types, or ask "
+                    f"the operator to extend `allowed_statement_types` "
+                    f"(or set `allow_dangerous_operations=True`) on the "
+                    f"SQLChatAgent config."
+                )
+            # AST-side dangerous-function check: catches calls that evaded
+            # `_DANGEROUS_SQL_PATTERNS` via quoted identifiers, inline comments,
+            # or schema qualification (GHSA-6xc5-4r68-67fc).
+            for fn_name in _called_function_names(stmt):
+                if _is_dangerous_function_name(fn_name):
+                    logger.warning(
+                        "SQLChatAgent rejected query calling dangerous "
+                        f"function {fn_name!r}: {query!r}"
+                    )
+                    return (
+                        f"Query REJECTED for safety: it calls function "
+                        f"{fn_name!r}, which enables code execution, "
+                        f"filesystem access, or other unsafe operations. "
+                        f"Rewrite the query without using this function, or "
+                        f"ask the operator to set "
+                        f"`allow_dangerous_operations=True` on the "
+                        f"SQLChatAgent config."
+                    )
+        return None
+
+    def run_query(self, msg: RunQueryTool) -> str:
+        """
+        Handle a RunQueryTool message by executing a SQL query and returning the result.
+
+        Args:
+            msg (RunQueryTool): The tool-message to handle.
+
+        Returns:
+            str: The result of executing the SQL query.
+        """
+        query = msg.query
+        session = self.Session
+        self.used_run_query = True
+
+        rejection = self._validate_query(query)
+        if rejection is not None:
+            return f"""
+        Below is the result from your use of the TOOL `{RunQueryTool.name()}`:
+        ==== result ====
+        {rejection}
+        ================
+
+        Try a different query that complies with the policy above.
+        """
+
+        try:
+            logger.info(f"Executing SQL query: {query}")
+
+            query_result = session.execute(text(query))
+            session.commit()
+            try:
+                # attempt to fetch results: should work for normal SELECT queries
+                rows = query_result.fetchall()
+                n_rows = len(rows)
+                if self.config.max_result_rows and n_rows > self.config.max_result_rows:
+                    rows = rows[: self.config.max_result_rows]
+                    logger.warning(
+                        f"SQL query produced {n_rows} rows, "
+                        f"limiting to {self.config.max_result_rows}"
+                    )
+
+                response_message = self._format_rows(rows)
+            except ResourceClosedError:
+                # If we get here, it's a non-SELECT query (UPDATE, INSERT, DELETE)
+                affected_rows = query_result.rowcount  # type: ignore
+                response_message = f"""
+                    Non-SELECT query executed successfully. 
+                    Rows affected: {affected_rows}
+                    """
+
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Failed to execute query: {query}\n{e}")
+            response_message = self.retry_query(e, query)
+        finally:
+            session.close()
+
+        final_message = f"""
+        Below is the result from your use of the TOOL `{RunQueryTool.name()}`:
+        ==== result ====
+        {response_message}
+        ================
+        
+        If you are READY to ANSWER the ORIGINAL QUERY:
+        {self._tool_result_llm_answer_prompt()}
+        OTHERWISE:
+             continue using one of your available TOOLs:
+             {",".join(self.llm_tools_usable)}
+        """
+        return final_message
+
+    def _format_rows(self, rows: Sequence[Row[Any]]) -> str:
+        """
+        Format the rows fetched from the query result into a string.
+
+        Args:
+            rows (list): List of rows fetched from the query result.
+
+        Returns:
+            str: Formatted string representation of rows.
+        """
+        # TODO: UPDATE FORMATTING
+        return (
+            ",\n".join(str(row) for row in rows)
+            if rows
+            else "Query executed successfully."
+        )
+
+    def get_table_names(self, msg: GetTableNamesTool) -> str:
+        """
+        Handle a GetTableNamesTool message by returning the names of all tables in the
+        database.
+
+        Returns:
+            str: The names of all tables in the database.
+        """
+        if isinstance(self.metadata, list):
+            table_names = [", ".join(md.tables.keys()) for md in self.metadata]
+            return ", ".join(table_names)
+
+        return ", ".join(self.metadata.tables.keys())
+
+    def get_table_schema(self, msg: GetTableSchemaTool) -> str:
+        """
+        Handle a GetTableSchemaTool message by returning the schema of all provided
+        tables in the database.
+
+        Returns:
+            str: The schema of all provided tables in the database.
+        """
+        tables = msg.tables
+        result = ""
+        for table_name in tables:
+            table = self.table_metadata.get(table_name)
+            if table is not None:
+                result += f"{table_name}: {table}\n"
+            else:
+                result += f"{table_name} is not a valid table name.\n"
+        return result
+
+    def get_column_descriptions(self, msg: GetColumnDescriptionsTool) -> str:
+        """
+        Handle a GetColumnDescriptionsTool message by returning the descriptions of all
+        provided columns from the database.
+
+        Returns:
+            str: The descriptions of all provided columns from the database.
+        """
+        table = msg.table
+        columns = msg.columns.split(", ")
+        result = f"\nTABLE: {table}"
+        descriptions = self.config.context_descriptions.get(table)
+
+        for col in columns:
+            result += f"\n{col} => {descriptions['columns'][col]}"  # type: ignore
+        return result
+
+
+class SQLHelperAgent(SQLChatAgent):
+
+    def _clarifying_message(self) -> str:
+        tools_instruction = f"""
+          For example the Agent may have forgotten to use the TOOL
+          `{RunQueryTool.name()}` to further explore the database contents
+        """
+        if self.config.use_schema_tools:
+            tools_instruction += """
+            OR the agent may have forgotten to use one of the schema tools to 
+            explore the database schema
+            """
+
+        return f"""
+            The intent of the Agent's response is not clear:
+            - if you think the Agent intended this as ANSWER to the 
+                user's query,
+                {self._clarify_answer_instruction()}
+            - otherwise, the Agent may have forgotten to 
+              use one of the available tools to make progress 
+                to arrive at the final answer.
+                {tools_instruction}
+            """
+
+    def _init_system_message(self) -> None:
+        """Set up helper sys msg"""
+
+        # Note that self.config.system_message is already set to the
+        # parent SQLAgent's system_message
+        self.config.system_message = f"""
+                You role is to help INTERPRET the INTENT of an 
+                AI agent in a conversation. This Agent was supposed to generate
+                a TOOL/Function-call but forgot to do so, and this is where 
+                you can help, by trying to generate the appropriate TOOL
+                based on your best guess of the Agent's INTENT.
+                
+                Below are the instructions that were given to this Agent: 
+                ===== AGENT INSTRUCTIONS =====
+                {self.config.system_message}
+                ===== END OF AGENT INSTRUCTIONS =====
+                """
+
+        # note that the initial msg in chat history will contain:
+        # - system message
+        # - tool instructions
+        # so the final_instructions will be at the end of this initial msg
+
+        self.final_instructions = f"""        
+        You must take note especially of the TOOLs that are
+        available to the Agent. Your reasoning process should be as follows:
+        
+        - If the Agent's message appears to be an ANSWER to the original query,
+          {self._clarify_answer_instruction()}.
+          CAUTION - You must be absolutely sure that the Agent's message is 
+          an ACTUAL ANSWER to the user's query, and not a failed attempt to use 
+          a TOOL without JSON, e.g. something like "run_query" or "done_tool"
+          without any actual JSON formatting.
+           
+        - Else, if you think the Agent intended to use some type of SQL
+          query tool to READ or UPDATE the table(s), 
+          AND it is clear WHICH TOOL is intended as well as the 
+          TOOL PARAMETERS, then you must generate the JSON-Formatted
+          TOOL with the parameters set based on your understanding.
+          Note that the `{RunQueryTool.name()}` is not ONLY for querying the tables,
+          but also for UPDATING the tables.
+           
+        - Else, use the `{PassTool.name()}` to pass the message unchanged.
+            CAUTION - ONLY use `{PassTool.name()}` if you think the Agent's response
+            is NEITHER an ANSWER, nor an intended SQL QUERY.
+        """
+
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        if message is None:
+            return None
+        message_str = message if isinstance(message, str) else message.content
+        instruc_msg = f"""
+        Below is the MESSAGE from the SQL Agent. 
+        Remember your instructions on how to respond based on your understanding
+        of the INTENT of this message:        
+        {self.final_instructions}
+        
+        === AGENT MESSAGE =========
+        {message_str}
+        === END OF AGENT MESSAGE ===
+        """
+        # user response_forget to avoid accumulating the chat history
+        return super().llm_response_forget(instruc_msg)
+</file>
+
 <file path="langroid/agent/base.py">
 import asyncio
 import copy
@@ -48473,11 +49409,16 @@ class Agent(ABC):
                 # trusted here -- see issue #1035 for the taint-propagation fix.
                 tools_from_agent=bool(tool_messages)
                 and e in (Entity.LLM, Entity.AGENT),
-                # DISTRUST signal (#1035): set when this response is built from
-                # external user input (to_ChatDocument of a USER string), or when
-                # it repackages a tool already marked tainted (e.g. DonePassTool/
-                # AgentDoneTool re-emitting tools parsed from a USER message).
+                # DISTRUST signal (#1035): set for any USER-origin response
+                # (external user input -- create_user_response / to_ChatDocument
+                # of a USER string), when the caller passes tainted=True, or when
+                # the response repackages an already-tainted tool (e.g.
+                # DonePassTool/AgentDoneTool re-emitting tools parsed from a USER
+                # message). The Task result-wrap relabel builds ChatDocMetaData
+                # directly (not via this template), so trusted agent->agent
+                # handoffs are unaffected.
                 tainted=tainted
+                or e == Entity.USER
                 or any(getattr(t, "_tainted", False) for t in tool_messages),
             ),
         )
@@ -48565,6 +49506,9 @@ class Agent(ABC):
                     agent_id=self.id,
                     source=source,
                     sender=sender,
+                    # interactive user input is external untrusted input; SYSTEM
+                    # (operator) input is trusted (#1035)
+                    tainted=sender == Entity.USER,
                     # preserve trail of tool_ids for OpenAI Assistant fn-calls
                     tool_ids=tool_ids,
                 ),
@@ -49552,14 +50496,9 @@ class Agent(ABC):
         is_agent_author = author_entity == Entity.AGENT
 
         if isinstance(msg, str):
-            # A raw string entering as USER (e.g. Task.run user input) is
-            # external untrusted input -> taint it (#1035).
-            return self.response_template(
-                author_entity,
-                content=msg,
-                content_any=msg,
-                tainted=author_entity == Entity.USER,
-            )
+            # USER-author strings (e.g. Task.run user input) are tainted by
+            # response_template (#1035).
+            return self.response_template(author_entity, content=msg, content_any=msg)
         elif isinstance(msg, ToolMessage):
             # result is a ToolMessage, so...
             result_tool_name = msg.default_value("request")
@@ -52410,940 +53349,195 @@ class Task:
         return seq_idx < 0
 </file>
 
-<file path="langroid/agent/special/sql/sql_chat_agent.py">
-"""
-Agent that allows interaction with an SQL database using SQLAlchemy library.
-The agent can execute SQL queries in the database and return the result.
-
-Functionality includes:
-- adding table and column context
-- asking a question about a SQL schema
-"""
-
-import logging
-import re
-from typing import (
-    Any,
-    Dict,
-    FrozenSet,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-)
-
-from rich.console import Console
-
-from langroid.exceptions import LangroidImportError
-from langroid.mytypes import Entity
-from langroid.utils.constants import SEND_TO
-
-try:
-    from sqlalchemy import MetaData, Row, create_engine, inspect, text
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.exc import ResourceClosedError, SQLAlchemyError
-    from sqlalchemy.orm import Session, sessionmaker
-except ImportError as e:
-    raise LangroidImportError(extra="sql", error=str(e))
-
-try:
-    # sqlglot is required for the statement-type allowlist enforced in
-    # `_validate_query`. Importing it at module load ensures the security
-    # guarantee cannot be silently bypassed by a partial/stale install.
-    import sqlglot
-    from sqlglot import expressions as sqlglot_exp
-except ImportError as e:
-    raise LangroidImportError(extra="sql", error=str(e))
-
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocument
-from langroid.agent.special.sql.utils.description_extractors import (
-    extract_schema_descriptions,
-)
-from langroid.agent.special.sql.utils.populate_metadata import (
-    populate_metadata,
-    populate_metadata_with_schema_tools,
-)
-from langroid.agent.special.sql.utils.system_message import (
-    DEFAULT_SYS_MSG,
-    SCHEMA_TOOLS_SYS_MSG,
-)
-from langroid.agent.special.sql.utils.tools import (
-    GetColumnDescriptionsTool,
-    GetTableNamesTool,
-    GetTableSchemaTool,
-    RunQueryTool,
-)
-from langroid.agent.tools.orchestration import (
-    DonePassTool,
-    DoneTool,
-    ForwardTool,
-    PassTool,
-)
-from langroid.language_models.base import Role
-from langroid.vector_store.base import VectorStoreConfig
-
-logger = logging.getLogger(__name__)
-
-console = Console()
-
-DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
-{mode}
-
-You do not need to attempt answering a question with just one query. 
-You could make a sequence of SQL queries to help you write the final query.
-Also if you receive a null or other unexpected result,
-(a) make sure you use the available TOOLs correctly, and 
-(b) see if you have made an assumption in your SQL query, and try another way, 
-   or use `run_query` to explore the database table contents before submitting your 
-   final query. For example when searching for "males" you may have used "gender= 'M'",
-in your query, because you did not know that the possible genders in the table
-are "Male" and "Female". 
-
-Start by asking what I would like to know about the data.
-
-"""
-
-ADDRESSING_INSTRUCTION = """
-IMPORTANT - Whenever you are NOT writing a SQL query, make sure you address the user
-using {prefix}User (NO SPACE between {prefix} and User). 
-You MUST use the EXACT syntax {prefix}User !!!
-
-In other words, you ALWAYS write EITHER:
- - a SQL query using the `run_query` tool, 
- - OR address the user using {prefix}User
-"""
-
-DONE_INSTRUCTION = f"""
-When you are SURE you have the CORRECT answer to a user's query or request, 
-use the `{DoneTool.name()}` with `content` set to the answer or result.
-If you DO NOT think you have the answer to the user's query or request,
-you SHOULD NOT use the `{DoneTool.name()}` tool.
-Instead, you must CONTINUE to improve your queries (tools) to get the correct answer,
-and finally use the `{DoneTool.name()}` tool to send the correct answer to the user.
-"""
-
-
-SQL_ERROR_MSG = "There was an error in your SQL Query"
-
-
-# Dialect-specific SQL patterns that enable code execution, arbitrary file
-# access, or other escapes from the database engine. Matched against the raw
-# query text (case-insensitive) as a defense-in-depth layer in addition to the
-# sqlglot-based statement-type allowlist.
-_DANGEROUS_SQL_PATTERNS: List["re.Pattern[str]"] = [
-    # PostgreSQL: COPY ... FROM/TO PROGRAM executes shell commands as the DB
-    # server OS user.
-    re.compile(r"\bcopy\b[\s\S]*\bprogram\b", re.IGNORECASE),
-    # PostgreSQL server-side filesystem / log / WAL access. Match the whole
-    # pg_read*, pg_stat*, pg_ls*, pg_current_logfile family rather than naming
-    # individual functions: near-name functions (pg_read_file vs
-    # pg_read_server_file, pg_ls_logdir vs pg_ls_dir, pg_stat_file, ...) all
-    # yield the same file/metadata disclosure primitive.
-    re.compile(r"\bpg_(read|stat|ls|current_logfile)[A-Za-z0-9_]*\s*\(", re.IGNORECASE),
-    re.compile(r"\blo_(import|export)\b", re.IGNORECASE),
-    # MySQL/MariaDB filesystem
-    re.compile(r"\binto\s+(outfile|dumpfile)\b", re.IGNORECASE),
-    re.compile(r"\bload_file\s*\(", re.IGNORECASE),
-    re.compile(r"\bload\s+data\b", re.IGNORECASE),
-    # SQLite: load_extension enables loading arbitrary shared objects;
-    # ATTACH can read/write arbitrary files. The DATABASE keyword is optional
-    # per the SQLite grammar (ATTACH [DATABASE] expr AS schema-name), so match
-    # both forms.
-    re.compile(r"\bload_extension\s*\(", re.IGNORECASE),
-    re.compile(r"\battach\b(\s+database)?\s+['\"\w]", re.IGNORECASE),
-    # SQL Server: command execution, OLE automation, and ad-hoc external data
-    # sources (OPENDATASOURCE is the connection-string counterpart of
-    # OPENROWSET; both can read remote/UNC files).
-    re.compile(r"\bxp_cmdshell\b", re.IGNORECASE),
-    re.compile(r"\bsp_oacreate\b", re.IGNORECASE),
-    re.compile(r"\bsp_oamethod\b", re.IGNORECASE),
-    re.compile(r"\b(openrowset|opendatasource)\b", re.IGNORECASE),
-    re.compile(r"\bbulk\s+insert\b", re.IGNORECASE),
-    # Generic: stored-program creation and procedural language extensions.
-    # LANGUAGE / RULE / EVENT TRIGGER / FOREIGN TABLE are additional PostgreSQL
-    # primitives that can register attacker-controlled code.
-    re.compile(
-        r"\bcreate\s+(or\s+replace\s+)?(function|procedure|trigger|language|rule|event\s+trigger|foreign\s+table)\b",
-        re.IGNORECASE,
-    ),
-    re.compile(r"\bcreate\s+extension\b", re.IGNORECASE),
-]
-
-
-# AST-side blocklist of dangerous SQL function names, applied after sqlglot
-# parses the query. The raw-text regex above can be bypassed by quoted
-# identifiers, inline comments, or schema qualification -- e.g.
-# `"pg_read_file"(...)`, `pg_read_file/**/(...)`,
-# `pg_catalog."pg_read_file"(...)` -- but sqlglot normalizes all those forms
-# to the same function-call node, so a name-based check on the parsed tree
-# catches every variant (GHSA-6xc5-4r68-67fc).
-_DANGEROUS_FUNCTION_NAMES: FrozenSet[str] = frozenset(
-    {
-        "load_file",  # MySQL/MariaDB filesystem read
-        "load_extension",  # SQLite extension loader
-        "sp_oacreate",  # MSSQL OLE automation
-        "sp_oamethod",  # MSSQL OLE automation
-    }
-)
-# Prefix families: any function whose normalized name starts with one of these
-# is considered dangerous. Mirrors the `\bpg_(read|stat|ls|current_logfile)...`
-# and `\blo_(import|export)\b` regex coverage, but on the parsed AST.
-_DANGEROUS_FUNCTION_PREFIXES: Tuple[str, ...] = (
-    "pg_read",
-    "pg_stat",
-    "pg_ls",
-    "pg_current_logfile",
-    "lo_",
-)
-
-
-def _is_dangerous_function_name(name: str) -> bool:
-    """True if `name` (case-folded, unquoted) is a dangerous SQL function."""
-    if name in _DANGEROUS_FUNCTION_NAMES:
-        return True
-    return any(name.startswith(p) for p in _DANGEROUS_FUNCTION_PREFIXES)
-
-
-def _called_function_names(stmt: Any) -> Iterator[str]:
-    """Yield normalized (case-folded, unquoted, schema-stripped) names of
-    every function-call node in `stmt` (a parsed sqlglot expression)."""
-    for node in stmt.find_all(sqlglot_exp.Func):
-        if isinstance(node, sqlglot_exp.Anonymous):
-            this = node.this
-            if isinstance(this, sqlglot_exp.Expression):
-                name = this.name
-            else:
-                name = str(this) if this is not None else ""
-        else:
-            # Typed sqlglot Func subclass: its class key is the SQL keyword.
-            name = getattr(type(node), "key", "") or ""
-        # Strip any schema qualifier that leaked into the name string.
-        name = name.rsplit(".", 1)[-1].strip().lower()
-        if name:
-            yield name
-
-
-# Default set of SQL statement types the agent is allowed to execute when
-# `allow_dangerous_operations` is False. SELECT-only is safe for Q&A workloads.
-_DEFAULT_ALLOWED_STATEMENTS: List[str] = ["SELECT"]
-
-
-class SQLChatAgentConfig(ChatAgentConfig):
-    system_message: str = DEFAULT_SQL_CHAT_SYSTEM_MESSAGE
-    user_message: None | str = None
-    cache: bool = True  # cache results
-    debug: bool = False
-    use_helper: bool = True
-    is_helper: bool = False
-    stream: bool = True  # allow streaming where needed
-    database_uri: str = ""  # Database URI
-    database_session: None | Session = None  # Database session
-    vecdb: None | VectorStoreConfig = None
-    context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
-    use_schema_tools: bool = False
-    multi_schema: bool = False
-    # whether the agent is used in a continuous chat with user,
-    # as opposed to returning a result from the task.run()
-    chat_mode: bool = False
-    addressing_prefix: str = ""
-    max_result_rows: int | None = None  # limit query results to this
-    max_retained_tokens: int | None = None  # limit history of query results to this
-
-    # --- Security controls (see CVE-2026-25879) ---------------------------
-    # By default, the agent only executes SELECT statements and rejects any
-    # query that matches a known dangerous pattern (e.g. PostgreSQL
-    # `COPY ... FROM PROGRAM`, MySQL `INTO OUTFILE`, SQLite `load_extension`,
-    # MSSQL `xp_cmdshell`). The LLM-generated SQL is influenceable by prompt
-    # injection — including injection via data the LLM reads back from the
-    # database — so executing it without restrictions is unsafe when the DB
-    # role has elevated privileges.
-    #
-    # To enable writes: extend allowed_statement_types, e.g. ["SELECT",
-    # "INSERT", "UPDATE", "DELETE"]. To disable all checks (only do this with
-    # a least-privilege DB role and trusted prompts): set
-    # allow_dangerous_operations=True.
-    allowed_statement_types: List[str] = list(_DEFAULT_ALLOWED_STATEMENTS)
-    allow_dangerous_operations: bool = False
-
-    """
-    Optional, but strongly recommended, context descriptions for tables, columns, 
-    and relationships. It should be a dictionary where each key is a table name 
-    and its value is another dictionary. 
-
-    In this inner dictionary:
-    - The 'description' key corresponds to a string description of the table.
-    - The 'columns' key corresponds to another dictionary where each key is a 
-    column name and its value is a string description of that column.
-    - The 'relationships' key corresponds to another dictionary where each key 
-    is another table name and the value is a description of the relationship to 
-    that table.
-
-    If multi_schema support is enabled, the tables names in the description
-    should be of the form 'schema_name.table_name'.
-
-    For example:
-    {
-        'table1': {
-            'description': 'description of table1',
-            'columns': {
-                'column1': 'description of column1 in table1',
-                'column2': 'description of column2 in table1'
-            }
-        },
-        'table2': {
-            'description': 'description of table2',
-            'columns': {
-                'column3': 'description of column3 in table2',
-                'column4': 'description of column4 in table2'
-            }
-        }
-    }
-    """
-
-
-class SQLChatAgent(ChatAgent):
-    """
-    Agent for chatting with a SQL database
-    """
-
-    used_run_query: bool = False
-    llm_responded: bool = False
-
-    def __init__(self, config: "SQLChatAgentConfig") -> None:
-        """Initialize the SQLChatAgent.
-
-        Raises:
-            ValueError: If database information is not provided in the config.
-        """
-        self._validate_config(config)
-        self.config: SQLChatAgentConfig = config
-        self._init_database()
-        self._init_metadata()
-        self._init_table_metadata()
-        self.final_instructions = ""
-
-        # Caution - this updates the self.config.system_message!
-        self._init_system_message()
-        super().__init__(config)
-        self._init_tools()
-        if self.config.is_helper:
-            self.system_tool_format_instructions += self.final_instructions
-
-        if self.config.use_helper:
-            # helper_config.system_message is now the fully-populated sys msg of
-            # the main SQLAgent.
-            self.helper_config = self.config.model_copy()
-            self.helper_config.is_helper = True
-            self.helper_config.use_helper = False
-            self.helper_config.chat_mode = False
-            self.helper_agent = SQLHelperAgent(self.helper_config)
-
-    def _validate_config(self, config: "SQLChatAgentConfig") -> None:
-        """Validate the configuration to ensure all necessary fields are present."""
-        if config.database_session is None and config.database_uri is None:
-            raise ValueError("Database information must be provided")
-
-    def _init_database(self) -> None:
-        """Initialize the database engine and session."""
-        if self.config.database_session:
-            self.Session = self.config.database_session
-            self.engine = self.Session.bind
-        else:
-            self.engine = create_engine(self.config.database_uri)
-            self.Session = sessionmaker(bind=self.engine)()
-
-    def _init_metadata(self) -> None:
-        """Initialize the database metadata."""
-        if self.engine is None:
-            raise ValueError("Database engine is None")
-        self.metadata: MetaData | List[MetaData] = []
-
-        if self.config.multi_schema:
-            logger.info(
-                "Initializing SQLChatAgent with database: %s",
-                self.engine,
-            )
-
-            self.metadata = []
-            inspector = inspect(self.engine)
-
-            for schema in inspector.get_schema_names():
-                metadata = MetaData(schema=schema)
-                metadata.reflect(self.engine)
-                self.metadata.append(metadata)
-
-                logger.info(
-                    "Initializing SQLChatAgent with database: %s, schema: %s, "
-                    "and tables: %s",
-                    self.engine,
-                    schema,
-                    metadata.tables,
-                )
-        else:
-            self.metadata = MetaData()
-            self.metadata.reflect(self.engine)
-            logger.info(
-                "SQLChatAgent initialized with database: %s and tables: %s",
-                self.engine,
-                self.metadata.tables,
-            )
-
-    def _init_table_metadata(self) -> None:
-        """Initialize metadata for the tables present in the database."""
-        if not self.config.context_descriptions and isinstance(self.engine, Engine):
-            self.config.context_descriptions = extract_schema_descriptions(
-                self.engine, self.config.multi_schema
-            )
-
-        if self.config.use_schema_tools:
-            self.table_metadata = populate_metadata_with_schema_tools(
-                self.metadata, self.config.context_descriptions
-            )
-        else:
-            self.table_metadata = populate_metadata(
-                self.metadata, self.config.context_descriptions
-            )
-
-    def _init_system_message(self) -> None:
-        """Initialize the system message."""
-        message = self._format_message()
-        self.config.system_message = self.config.system_message.format(mode=message)
-
-        if not self.config.allow_dangerous_operations:
-            allowed = sorted(
-                t.strip().upper() for t in self.config.allowed_statement_types
-            )
-            self.config.system_message += (
-                f"\n\nIMPORTANT - SECURITY POLICY:\n"
-                f"You may ONLY issue SQL queries whose top-level statement "
-                f"type is one of: {allowed}. Any other statement type "
-                f"(e.g. DDL, COPY, EXEC, multi-statement scripts that "
-                f"include a disallowed type) will be REJECTED by the "
-                f"executor and not run.\n"
-            )
-
-        if self.config.chat_mode:
-            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
-            self.config.system_message += ADDRESSING_INSTRUCTION.format(
-                prefix=self.config.addressing_prefix
-            )
-        else:
-            self.config.system_message += DONE_INSTRUCTION
-
-    def _init_tools(self) -> None:
-        """Initialize sys msg and tools."""
-        # Create a custom RunQueryTool class with the desired max_retained_tokens
-        if self.config.max_retained_tokens is not None:
-
-            class CustomRunQueryTool(RunQueryTool):
-                _max_retained_tokens = self.config.max_retained_tokens
-
-            self.enable_message([CustomRunQueryTool, ForwardTool])
-        else:
-            self.enable_message([RunQueryTool, ForwardTool])
-
-        if self.config.use_schema_tools:
-            self._enable_schema_tools()
-        if not self.config.chat_mode:
-            self.enable_message(DoneTool)
-            self.enable_message(DonePassTool)
-
-    def _format_message(self) -> str:
-        if self.engine is None:
-            raise ValueError("Database engine is None")
-
-        """Format the system message based on the engine and table metadata."""
-        return (
-            SCHEMA_TOOLS_SYS_MSG.format(dialect=self.engine.dialect.name)
-            if self.config.use_schema_tools
-            else DEFAULT_SYS_MSG.format(
-                dialect=self.engine.dialect.name, schema_dict=self.table_metadata
-            )
-        )
-
-    def _enable_schema_tools(self) -> None:
-        """Enable tools for schema-related functionalities."""
-        self.enable_message(GetTableNamesTool)
-        self.enable_message(GetTableSchemaTool)
-        self.enable_message(GetColumnDescriptionsTool)
-
-    def llm_response(
-        self, message: Optional[str | ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        self.llm_responded = True
-        self.used_run_query = False
-        return super().llm_response(message)
-
-    def user_response(
-        self,
-        msg: Optional[str | ChatDocument] = None,
-    ) -> Optional[ChatDocument]:
-        self.llm_responded = False
-        self.used_run_query = False
-        return super().user_response(msg)
-
-    def _clarify_answer_instruction(self) -> str:
-        """
-        Prompt to use when asking LLM to clarify intent of
-        an already-generated response
-        """
-        if self.config.chat_mode:
-            return f"""
-                you must use the TOOL `{ForwardTool.name()}` with the `agent` 
-                parameter set to "User"
-                """
-        else:
-            return f"you must use the TOOL `{DonePassTool.name()}`"
-
-    def _clarifying_message(self) -> str:
-        tools_instruction = f"""
-          For example you may want to use the TOOL
-          `{RunQueryTool.name()}` to further explore the database contents
-        """
-        if self.config.use_schema_tools:
-            tools_instruction += """
-            OR you may want to use one of the schema tools to 
-            explore the database schema
-            """
-        return f"""
-            The intent of your response is not clear:
-            - if you intended this to be the FINAL answer to the user's query,
-                {self._clarify_answer_instruction()}
-            - otherwise, use one of the available tools to make progress 
-                to arrive at the final answer.
-                {tools_instruction}
-            """
-
-    def handle_message_fallback(
-        self, message: str | ChatDocument
-    ) -> str | ForwardTool | ChatDocument | None:
-        """
-        We'd end up here if the current msg has no tool.
-        If this is from LLM, we may need to handle the scenario where
-        it may have "forgotten" to generate a tool.
-        """
-        if (
-            not isinstance(message, ChatDocument)
-            or message.metadata.sender != Entity.LLM
-        ):
-            return None
-        if self.config.chat_mode:
-            # send any Non-tool msg to the user
-            return ForwardTool(agent="User")
-        # Agent intent not clear => use the helper agent to
-        # do what this agent should have done, e.g. generate tool, etc.
-        # This is likelier to succeed since this agent has no "baggage" of
-        # prior conversation, other than the system msg, and special
-        # "Intent-interpretation" instructions.
-        if self._json_schema_available() and self.config.strict_recovery:
-            AnyTool = self._get_any_tool_message(optional=False)
-            self.set_output_format(
-                AnyTool,
-                force_tools=True,
-                use=True,
-                handle=True,
-                instructions=True,
-            )
-            recovery_message = self._strict_recovery_instructions(
-                AnyTool, optional=False
-            )
-            result = self.llm_response(recovery_message)
-            # remove the recovery_message (it has User role) from the chat history,
-            # else it may cause the LLM to directly use the AnyTool.
-            self.delete_last_message(role=Role.USER)  # delete last User-role msg
-            return result
-        elif self.config.use_helper:
-            response = self.helper_agent.llm_response(message)
-            tools = self.try_get_tool_messages(response)
-            if tools:
-                return response
-        # fall back on the clarification message
-        return self._clarifying_message()
-
-    def retry_query(self, e: Exception, query: str) -> str:
-        """
-        Generate an error message for a failed SQL query and return it.
-
-        Parameters:
-        e (Exception): The exception raised during the SQL query execution.
-        query (str): The SQL query that failed.
-
-        Returns:
-        str: The error message.
-        """
-        logger.error(f"SQL Query failed: {query}\nException: {e}")
-
-        # Optional part to be included based on `use_schema_tools`
-        optional_schema_description = ""
-        if not self.config.use_schema_tools:
-            optional_schema_description = f"""\
-            This JSON schema maps SQL database structure. It outlines tables, each 
-            with a description and columns. Each table is identified by a key, and holds
-            a description and a dictionary of columns, with column 
-            names as keys and their descriptions as values.
-            
-            ```json
-            {self.config.context_descriptions}
-            ```"""
-
-        # Construct the error message
-        error_message_template = f"""\
-        {SQL_ERROR_MSG}: '{query}'
-        {str(e)}
-        Run a new query, correcting the errors.
-        {optional_schema_description}"""
-
-        return error_message_template
-
-    def _available_tool_names(self) -> str:
-        return ",".join(self.llm_tools_usable)
-
-    def _tool_result_llm_answer_prompt(self) -> str:
-        """
-        Prompt to use at end of tool result,
-        to guide LLM, for the case where it wants to answer the user's query
-        """
-        if self.config.chat_mode:
-            assert self.config.addressing_prefix != ""
-            return """
-                You must EXPLICITLY address the User with 
-                the addressing prefix according to your instructions,
-                to convey your answer to the User.
-                """
-        else:
-            return f"""
-                you must use the `{DoneTool.name()}` with the `content` 
-                set to the answer or result
-                """
-
-    def _sqlglot_dialect(self) -> Optional[str]:
-        """Map the SQLAlchemy dialect name to a sqlglot dialect name."""
-        if self.engine is None:
-            return None
-        name: str = str(self.engine.dialect.name)
-        # sqlglot uses 'postgres', not 'postgresql'; 'tsql' for MSSQL.
-        mapping: Dict[str, str] = {"postgresql": "postgres", "mssql": "tsql"}
-        return mapping.get(name, name)
-
-    def _validate_query(self, query: str) -> Optional[str]:
-        """
-        Check whether `query` is permitted under the agent's security config.
-
-        Returns None if the query may be executed, otherwise an error message
-        explaining why it was rejected (to be relayed to the LLM).
-        """
-        if self.config.allow_dangerous_operations:
-            return None
-
-        for pat in _DANGEROUS_SQL_PATTERNS:
-            if pat.search(query):
-                logger.warning(
-                    "SQLChatAgent rejected query matching dangerous pattern "
-                    f"{pat.pattern!r}: {query!r}"
-                )
-                return (
-                    f"Query REJECTED for safety: it matches a pattern "
-                    f"({pat.pattern!r}) that enables code execution, "
-                    f"filesystem access, or other unsafe operations. "
-                    f"Rewrite the query without using this construct, or ask "
-                    f"the operator to set `allow_dangerous_operations=True` "
-                    f"on the SQLChatAgent config."
-                )
-
-        allowed = {t.strip().upper() for t in self.config.allowed_statement_types}
-        try:
-            statements = sqlglot.parse(query, read=self._sqlglot_dialect())
-        except Exception as e:
-            logger.warning(f"sqlglot failed to parse query {query!r}: {e}")
-            return (
-                f"Query REJECTED for safety: could not be parsed to verify it "
-                f"is a {sorted(allowed)} statement ({e}). Rewrite the query "
-                f"more simply, or ask the operator to set "
-                f"`allow_dangerous_operations=True` on the SQLChatAgent config."
-            )
-
-        kind_map = {
-            sqlglot_exp.Select: "SELECT",
-            sqlglot_exp.Insert: "INSERT",
-            sqlglot_exp.Update: "UPDATE",
-            sqlglot_exp.Delete: "DELETE",
-            sqlglot_exp.Merge: "MERGE",
-            sqlglot_exp.Create: "CREATE",
-            sqlglot_exp.Drop: "DROP",
-            sqlglot_exp.Alter: "ALTER",
-            sqlglot_exp.TruncateTable: "TRUNCATE",
-            sqlglot_exp.Command: "COMMAND",
-        }
-        for stmt in statements:
-            if stmt is None:
-                continue
-            kind = next(
-                (v for k, v in kind_map.items() if isinstance(stmt, k)),
-                type(stmt).__name__.upper(),
-            )
-            if kind not in allowed:
-                logger.warning(
-                    f"SQLChatAgent rejected {kind} statement (allowed: "
-                    f"{sorted(allowed)}): {query!r}"
-                )
-                return (
-                    f"Query REJECTED for safety: statement type {kind!r} is "
-                    f"not in the allowed list {sorted(allowed)}. Rewrite the "
-                    f"query as one of the allowed statement types, or ask "
-                    f"the operator to extend `allowed_statement_types` "
-                    f"(or set `allow_dangerous_operations=True`) on the "
-                    f"SQLChatAgent config."
-                )
-            # AST-side dangerous-function check: catches calls that evaded
-            # `_DANGEROUS_SQL_PATTERNS` via quoted identifiers, inline comments,
-            # or schema qualification (GHSA-6xc5-4r68-67fc).
-            for fn_name in _called_function_names(stmt):
-                if _is_dangerous_function_name(fn_name):
-                    logger.warning(
-                        "SQLChatAgent rejected query calling dangerous "
-                        f"function {fn_name!r}: {query!r}"
-                    )
-                    return (
-                        f"Query REJECTED for safety: it calls function "
-                        f"{fn_name!r}, which enables code execution, "
-                        f"filesystem access, or other unsafe operations. "
-                        f"Rewrite the query without using this function, or "
-                        f"ask the operator to set "
-                        f"`allow_dangerous_operations=True` on the "
-                        f"SQLChatAgent config."
-                    )
-        return None
-
-    def run_query(self, msg: RunQueryTool) -> str:
-        """
-        Handle a RunQueryTool message by executing a SQL query and returning the result.
-
-        Args:
-            msg (RunQueryTool): The tool-message to handle.
-
-        Returns:
-            str: The result of executing the SQL query.
-        """
-        query = msg.query
-        session = self.Session
-        self.used_run_query = True
-
-        rejection = self._validate_query(query)
-        if rejection is not None:
-            return f"""
-        Below is the result from your use of the TOOL `{RunQueryTool.name()}`:
-        ==== result ====
-        {rejection}
-        ================
-
-        Try a different query that complies with the policy above.
-        """
-
-        try:
-            logger.info(f"Executing SQL query: {query}")
-
-            query_result = session.execute(text(query))
-            session.commit()
-            try:
-                # attempt to fetch results: should work for normal SELECT queries
-                rows = query_result.fetchall()
-                n_rows = len(rows)
-                if self.config.max_result_rows and n_rows > self.config.max_result_rows:
-                    rows = rows[: self.config.max_result_rows]
-                    logger.warning(
-                        f"SQL query produced {n_rows} rows, "
-                        f"limiting to {self.config.max_result_rows}"
-                    )
-
-                response_message = self._format_rows(rows)
-            except ResourceClosedError:
-                # If we get here, it's a non-SELECT query (UPDATE, INSERT, DELETE)
-                affected_rows = query_result.rowcount  # type: ignore
-                response_message = f"""
-                    Non-SELECT query executed successfully. 
-                    Rows affected: {affected_rows}
-                    """
-
-        except SQLAlchemyError as e:
-            session.rollback()
-            logger.error(f"Failed to execute query: {query}\n{e}")
-            response_message = self.retry_query(e, query)
-        finally:
-            session.close()
-
-        final_message = f"""
-        Below is the result from your use of the TOOL `{RunQueryTool.name()}`:
-        ==== result ====
-        {response_message}
-        ================
-        
-        If you are READY to ANSWER the ORIGINAL QUERY:
-        {self._tool_result_llm_answer_prompt()}
-        OTHERWISE:
-             continue using one of your available TOOLs:
-             {",".join(self.llm_tools_usable)}
-        """
-        return final_message
-
-    def _format_rows(self, rows: Sequence[Row[Any]]) -> str:
-        """
-        Format the rows fetched from the query result into a string.
-
-        Args:
-            rows (list): List of rows fetched from the query result.
-
-        Returns:
-            str: Formatted string representation of rows.
-        """
-        # TODO: UPDATE FORMATTING
-        return (
-            ",\n".join(str(row) for row in rows)
-            if rows
-            else "Query executed successfully."
-        )
-
-    def get_table_names(self, msg: GetTableNamesTool) -> str:
-        """
-        Handle a GetTableNamesTool message by returning the names of all tables in the
-        database.
-
-        Returns:
-            str: The names of all tables in the database.
-        """
-        if isinstance(self.metadata, list):
-            table_names = [", ".join(md.tables.keys()) for md in self.metadata]
-            return ", ".join(table_names)
-
-        return ", ".join(self.metadata.tables.keys())
-
-    def get_table_schema(self, msg: GetTableSchemaTool) -> str:
-        """
-        Handle a GetTableSchemaTool message by returning the schema of all provided
-        tables in the database.
-
-        Returns:
-            str: The schema of all provided tables in the database.
-        """
-        tables = msg.tables
-        result = ""
-        for table_name in tables:
-            table = self.table_metadata.get(table_name)
-            if table is not None:
-                result += f"{table_name}: {table}\n"
-            else:
-                result += f"{table_name} is not a valid table name.\n"
-        return result
-
-    def get_column_descriptions(self, msg: GetColumnDescriptionsTool) -> str:
-        """
-        Handle a GetColumnDescriptionsTool message by returning the descriptions of all
-        provided columns from the database.
-
-        Returns:
-            str: The descriptions of all provided columns from the database.
-        """
-        table = msg.table
-        columns = msg.columns.split(", ")
-        result = f"\nTABLE: {table}"
-        descriptions = self.config.context_descriptions.get(table)
-
-        for col in columns:
-            result += f"\n{col} => {descriptions['columns'][col]}"  # type: ignore
-        return result
-
-
-class SQLHelperAgent(SQLChatAgent):
-
-    def _clarifying_message(self) -> str:
-        tools_instruction = f"""
-          For example the Agent may have forgotten to use the TOOL
-          `{RunQueryTool.name()}` to further explore the database contents
-        """
-        if self.config.use_schema_tools:
-            tools_instruction += """
-            OR the agent may have forgotten to use one of the schema tools to 
-            explore the database schema
-            """
-
-        return f"""
-            The intent of the Agent's response is not clear:
-            - if you think the Agent intended this as ANSWER to the 
-                user's query,
-                {self._clarify_answer_instruction()}
-            - otherwise, the Agent may have forgotten to 
-              use one of the available tools to make progress 
-                to arrive at the final answer.
-                {tools_instruction}
-            """
-
-    def _init_system_message(self) -> None:
-        """Set up helper sys msg"""
-
-        # Note that self.config.system_message is already set to the
-        # parent SQLAgent's system_message
-        self.config.system_message = f"""
-                You role is to help INTERPRET the INTENT of an 
-                AI agent in a conversation. This Agent was supposed to generate
-                a TOOL/Function-call but forgot to do so, and this is where 
-                you can help, by trying to generate the appropriate TOOL
-                based on your best guess of the Agent's INTENT.
-                
-                Below are the instructions that were given to this Agent: 
-                ===== AGENT INSTRUCTIONS =====
-                {self.config.system_message}
-                ===== END OF AGENT INSTRUCTIONS =====
-                """
-
-        # note that the initial msg in chat history will contain:
-        # - system message
-        # - tool instructions
-        # so the final_instructions will be at the end of this initial msg
-
-        self.final_instructions = f"""        
-        You must take note especially of the TOOLs that are
-        available to the Agent. Your reasoning process should be as follows:
-        
-        - If the Agent's message appears to be an ANSWER to the original query,
-          {self._clarify_answer_instruction()}.
-          CAUTION - You must be absolutely sure that the Agent's message is 
-          an ACTUAL ANSWER to the user's query, and not a failed attempt to use 
-          a TOOL without JSON, e.g. something like "run_query" or "done_tool"
-          without any actual JSON formatting.
-           
-        - Else, if you think the Agent intended to use some type of SQL
-          query tool to READ or UPDATE the table(s), 
-          AND it is clear WHICH TOOL is intended as well as the 
-          TOOL PARAMETERS, then you must generate the JSON-Formatted
-          TOOL with the parameters set based on your understanding.
-          Note that the `{RunQueryTool.name()}` is not ONLY for querying the tables,
-          but also for UPDATING the tables.
-           
-        - Else, use the `{PassTool.name()}` to pass the message unchanged.
-            CAUTION - ONLY use `{PassTool.name()}` if you think the Agent's response
-            is NEITHER an ANSWER, nor an intended SQL QUERY.
-        """
-
-    def llm_response(
-        self, message: Optional[str | ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        if message is None:
-            return None
-        message_str = message if isinstance(message, str) else message.content
-        instruc_msg = f"""
-        Below is the MESSAGE from the SQL Agent. 
-        Remember your instructions on how to respond based on your understanding
-        of the INTENT of this message:        
-        {self.final_instructions}
-        
-        === AGENT MESSAGE =========
-        {message_str}
-        === END OF AGENT MESSAGE ===
-        """
-        # user response_forget to avoid accumulating the chat history
-        return super().llm_response_forget(instruc_msg)
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path="langroid/agent/chat_document.py">
@@ -53922,197 +54116,6 @@ class ChatDocument(Document):
 
 LLMMessage.model_rebuild()
 ChatDocMetaData.model_rebuild()
-</file>
-
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path="README.md">

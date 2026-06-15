@@ -69,6 +69,28 @@ def test_agent_response_not_tainted():
     assert agent.create_agent_response("hi").metadata.tainted is False
 
 
+def test_create_user_response_is_tainted():
+    agent = _make_agent()
+    assert agent.create_user_response("hi").metadata.tainted is True
+
+
+def test_interactive_user_response_is_tainted():
+    """The interactive reply path builds the ChatDocument directly via
+    `_user_response_final`, bypassing from_str / to_ChatDocument."""
+    agent = _make_agent()
+    doc = agent._user_response_final(None, JSON_PAYLOAD)
+    assert doc is not None and doc.metadata.tainted is True
+
+
+def test_system_user_response_not_tainted():
+    """SYSTEM (operator) input is trusted -- not tainted."""
+    agent = _make_agent()
+    doc = agent._user_response_final(None, "SYSTEM trusted instruction")
+    assert doc is not None
+    assert doc.metadata.sender == Entity.SYSTEM
+    assert doc.metadata.tainted is False
+
+
 # ---------------------------------------------------------------------------
 # Propagation: deepcopy carries the mark; DonePassTool repackage carries it.
 # ---------------------------------------------------------------------------

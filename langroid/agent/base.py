@@ -912,11 +912,16 @@ class Agent(ABC):
                 # trusted here -- see issue #1035 for the taint-propagation fix.
                 tools_from_agent=bool(tool_messages)
                 and e in (Entity.LLM, Entity.AGENT),
-                # DISTRUST signal (#1035): set when this response is built from
-                # external user input (to_ChatDocument of a USER string), or when
-                # it repackages a tool already marked tainted (e.g. DonePassTool/
-                # AgentDoneTool re-emitting tools parsed from a USER message).
+                # DISTRUST signal (#1035): set for any USER-origin response
+                # (external user input -- create_user_response / to_ChatDocument
+                # of a USER string), when the caller passes tainted=True, or when
+                # the response repackages an already-tainted tool (e.g.
+                # DonePassTool/AgentDoneTool re-emitting tools parsed from a USER
+                # message). The Task result-wrap relabel builds ChatDocMetaData
+                # directly (not via this template), so trusted agent->agent
+                # handoffs are unaffected.
                 tainted=tainted
+                or e == Entity.USER
                 or any(getattr(t, "_tainted", False) for t in tool_messages),
             ),
         )
@@ -1004,6 +1009,9 @@ class Agent(ABC):
                     agent_id=self.id,
                     source=source,
                     sender=sender,
+                    # interactive user input is external untrusted input; SYSTEM
+                    # (operator) input is trusted (#1035)
+                    tainted=sender == Entity.USER,
                     # preserve trail of tool_ids for OpenAI Assistant fn-calls
                     tool_ids=tool_ids,
                 ),
@@ -1991,14 +1999,9 @@ class Agent(ABC):
         is_agent_author = author_entity == Entity.AGENT
 
         if isinstance(msg, str):
-            # A raw string entering as USER (e.g. Task.run user input) is
-            # external untrusted input -> taint it (#1035).
-            return self.response_template(
-                author_entity,
-                content=msg,
-                content_any=msg,
-                tainted=author_entity == Entity.USER,
-            )
+            # USER-author strings (e.g. Task.run user input) are tainted by
+            # response_template (#1035).
+            return self.response_template(author_entity, content=msg, content_any=msg)
         elif isinstance(msg, ToolMessage):
             # result is a ToolMessage, so...
             result_tool_name = msg.default_value("request")
