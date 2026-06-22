@@ -625,7 +625,16 @@ class OpenAIGPT(LanguageModel):
                 self.config.chat_model = self.config.chat_model.replace("requesty/", "")
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("REQUESTY_API_KEY", DUMMY_API_KEY)
-                self.api_base = REQUESTY_BASE_URL
+                # Honor caller-supplied base URL (e.g. Requesty's EU endpoint
+                # router.eu.requesty.ai/v1, or an internal proxy) instead of
+                # always forcing the default.
+                openai_api_base = os.getenv("OPENAI_API_BASE")
+                explicit_api_base = (
+                    self.config.api_base
+                    if self.config.api_base and self.config.api_base != openai_api_base
+                    else None
+                )
+                self.api_base = explicit_api_base or REQUESTY_BASE_URL
             elif self.is_deepseek:
                 self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
                 self.api_base = DEEPSEEK_BASE_URL
