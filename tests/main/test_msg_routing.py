@@ -33,6 +33,29 @@ def test_parse_address(address: str):
     assert content == "Hello"
 
 
+@pytest.mark.parametrize(
+    "msg,prefix,expected_addressee,expected_content",
+    [
+        # addressee is the final token, with no trailing character
+        (f"thanks, now {AT}Alice", AT, "Alice", ""),
+        (f"please reply {SEND_TO}Alice", SEND_TO, "Alice", ""),
+        # multiple addressees, the last one at end-of-string: must pick the last
+        (f"ok {AT}Bob then {AT}Alice", AT, "Alice", ""),
+        (f"ask {AT}Bob then {AT}Alice, where?", AT, "Alice", "where?"),
+        # whole message is just the address
+        (f"{AT}Alice", AT, "Alice", ""),
+    ],
+)
+def test_parse_address_at_end_of_string(
+    msg: str, prefix: str, expected_addressee: str, expected_content: str
+):
+    """An addressee appearing as the final token (no trailing char) must still be
+    recognized, and the *last* addressee must win even when it ends the string."""
+    (addressee, content) = parse_addressed_message(msg, addressing=prefix)
+    assert addressee == expected_addressee
+    assert content == expected_content
+
+
 @pytest.mark.parametrize("prefix", [AT, ""])  # enable AT-addressing?
 @pytest.mark.parametrize(
     "address",
