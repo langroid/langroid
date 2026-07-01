@@ -62,5 +62,13 @@ try:
     PineconeDB
     PineconeDBConfig
     __all__.extend(["pineconedb", "PineconeDB", "PineconeDBConfig"])
+
+    from . import dakera
+    from .dakera import DakeraDB, DakeraDBConfig
+
+    dakera
+    DakeraDB
+    DakeraDBConfig
+    __all__.extend(["dakera", "DakeraDB", "DakeraDBConfig"])
 except ImportError:
     pass
