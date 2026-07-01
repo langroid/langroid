@@ -5,11 +5,13 @@ import pytest
 import langroid as lr
 from langroid import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocMetaData
 from langroid.agent.task import Task, TaskConfig
 from langroid.language_models.mock_lm import MockLMConfig
+from langroid.mytypes import Entity
 from langroid.parsing.routing import parse_addressed_message
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import AT, DONE, SEND_TO
+from langroid.utils.constants import AT, DONE, PASS, SEND_TO
 
 ADDRESSES = [
     AT + "Alice ",
@@ -54,6 +56,32 @@ def test_parse_address_at_end_of_string(
     (addressee, content) = parse_addressed_message(msg, addressing=prefix)
     assert addressee == expected_addressee
     assert content == expected_content
+
+
+@pytest.mark.parametrize("prefix", [AT, SEND_TO])
+def test_bare_address_routes_as_pass_through(prefix: str):
+    """A responder ending with a bare address (e.g. "@Alice" / "__SEND__:Alice"
+    with no following content) is a pass-through: the pending message must be
+    forwarded to the recipient. _process_result_routing must therefore set the
+    recipient AND normalize the content to PASS, so that step() (which checks
+    `PASS in result.content`) recognizes the pass-through instead of forwarding
+    the literal address string."""
+    agent = ChatAgent(ChatAgentConfig(name="Bob"))
+    task = Task(agent, interactive=False, config=TaskConfig(addressing_prefix=AT))
+    task.pending_message = ChatDocument(
+        content="the original question",
+        metadata=ChatDocMetaData(sender=Entity.USER),
+    )
+    result = ChatDocument(
+        content=f"ok, over to you {prefix}Alice",
+        metadata=ChatDocMetaData(sender=Entity.LLM),
+    )
+    out = task._process_result_routing(result, Entity.LLM)
+    assert out is not None
+    # recipient recorded on the message that will be passed through
+    assert task.pending_message.metadata.recipient == "Alice"
+    # content normalized so step() recognizes the pass-through
+    assert PASS in out.content
 
 
 @pytest.mark.parametrize("prefix", [AT, ""])  # enable AT-addressing?
