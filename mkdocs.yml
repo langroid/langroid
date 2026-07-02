@@ -121,6 +121,7 @@ nav:
       - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
       - PGVector: notes/pgvector.md
       - Pinecone: notes/pinecone.md
+      - Dakera: notes/dakera.md
       - Tavily Search Tool: notes/tavily_search.md
       - Seltz Search Tool: notes/seltz_search.md
       - Twitter Search via Xquik MCP: notes/twitter-search.md
