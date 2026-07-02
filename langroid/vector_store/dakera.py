@@ -42,7 +42,8 @@ _METRIC_ALIASES = ("cosine", "euclidean", "dot_product")
 
 class DakeraDBConfig(VectorStoreConfig):
     collection_name: str | None = "temp"
-    url: str = "http://localhost:3000"
+    # Empty by default so DAKERA_URL is honored; falls back to localhost:3000.
+    url: str = ""
     api_key: str = ""  # falls back to the DAKERA_API_KEY env var
     metric: str = "cosine"
     # Upper bound on the number of documents returned by `get_all_documents`,

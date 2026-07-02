@@ -62,7 +62,13 @@ try:
     PineconeDB
     PineconeDBConfig
     __all__.extend(["pineconedb", "PineconeDB", "PineconeDBConfig"])
+except ImportError:
+    pass
 
+
+# Kept in its own try/except so installing only the `dakera` extra is enough to
+# import it, independent of the other optional backends above.
+try:
     from . import dakera
     from .dakera import DakeraDB, DakeraDBConfig
 

@@ -53,6 +53,16 @@ def test_init_configures_namespace(mock_client_cls):
     assert kwargs["distance"] == DistanceMetric.COSINE
 
 
+@patch(CLIENT_PATH)
+def test_url_honors_env_var(mock_client_cls, monkeypatch):
+    monkeypatch.setenv("DAKERA_URL", "http://env-host:9999")
+    _make_db(mock_client_cls)
+    # With the default (empty) config url, DAKERA_URL is used.
+    mock_client_cls.assert_called_once_with(
+        base_url="http://env-host:9999", api_key="dk-fake"
+    )
+
+
 def test_init_requires_api_key(monkeypatch):
     monkeypatch.delenv("DAKERA_API_KEY", raising=False)
     with patch(CLIENT_PATH), patch(EMB_CREATE_PATH, return_value=_FakeEmbeddingModel()):
