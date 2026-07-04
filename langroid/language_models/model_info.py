@@ -178,7 +178,9 @@ class ModelInfo(BaseModel):
 
 GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
 # Trailing "-MM-DD" date stamp on Gemini variant names (e.g. "-01-21").
-_GEMINI_DATE_SUFFIX = re.compile(r"-\d{2}-\d{2}$")
+_GEMINI_DATE_SUFFIX = re.compile(r"-[0-9]{2}-[0-9]{2}$")
+# Keyword suffixes marking preview/experimental Gemini variants.
+_GEMINI_KEYWORD_SUFFIXES = ("-preview", "-exp", "-experimental", "-latest")
 DEFAULT_MODEL_INFO = ModelInfo()
 WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
 
@@ -830,14 +832,18 @@ def _normalize_gemini_model_name(model: str) -> str | None:
 
     # Strip a trailing "-MM-DD" date stamp; covers names like
     # "gemini-2.0-flash-thinking-exp-01-21" whose canonical form already
-    # ends with "-exp".
+    # ends with "-exp". Accept the date-stripped candidate only when it
+    # ends with a keyword suffix: a bare-dated unknown name such as
+    # "gemini-2.5-pro-03-25" must not be guessed as "gemini-2.5-pro".
     candidate = _GEMINI_DATE_SUFFIX.sub("", base_model)
-    if candidate in GEMINI_CANONICAL_MODEL_NAMES:
+    if candidate in GEMINI_CANONICAL_MODEL_NAMES and candidate.endswith(
+        _GEMINI_KEYWORD_SUFFIXES
+    ):
         return candidate
 
     # Strip a known keyword suffix. Split (not endswith) so dated variants
     # like "gemini-2.5-flash-lite-preview-06-17" are handled.
-    for suffix in ("-preview", "-exp", "-experimental", "-latest"):
+    for suffix in _GEMINI_KEYWORD_SUFFIXES:
         stripped = candidate.split(suffix, maxsplit=1)[0]
         if stripped != candidate and stripped in GEMINI_CANONICAL_MODEL_NAMES:
             return stripped

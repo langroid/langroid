@@ -54,6 +54,11 @@ from langroid.language_models.model_info import (
         # canonical; we don't guess at the nearest match.
         ("gemini-99-ultra", None),
         ("gemini-2.0-pro-exp-03-07", None),
+        # Bare-dated unknown names (date but no -exp/-preview/-experimental/
+        # -latest keyword) must NOT be guessed as the nearest canonical model.
+        ("gemini-2.5-pro-03-25", None),
+        ("gemini-2.0-flash-lite-01-21", None),
+        ("gemini-3-pro-12-01", None),
     ],
 )
 def test_normalize_gemini_model_name(model: str, expected: str | None) -> None:
