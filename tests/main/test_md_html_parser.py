@@ -94,6 +94,23 @@ def test_document_type_extension_detection(
     assert result == expected
 
 
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("https://example.com/readme.md?version=1", DocumentType.MD),
+        ("https://example.com/README.md#intro", DocumentType.MD),
+        ("https://example.com/page.html?raw=1", DocumentType.HTML),
+        ("https://example.com/page.HTML#section", DocumentType.HTML),
+        ("https://example.com/page.htm?raw=1#section", DocumentType.HTML),
+    ],
+)
+def test_document_type_url_extension_detection_ignores_query_and_fragment(
+    url: str, expected: DocumentType
+) -> None:
+    result = DocumentParser._document_type(url)
+    assert result == expected
+
+
 def test_unrecognized_extension_text_file_falls_back_to_txt(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -582,6 +599,40 @@ def test_binary_bytes_when_magic_unavailable_raise_value_error(
         DocumentParser._document_type(binary)
 
 
+@pytest.mark.parametrize("binary", [b"abc\xff", b"\x80"])
+def test_trailing_invalid_utf8_bytes_when_magic_unavailable_raise_value_error(
+    monkeypatch: pytest.MonkeyPatch, binary: bytes
+) -> None:
+    """Invalid trailing UTF-8 bytes must not be truncated into TXT."""
+    monkeypatch.setitem(sys.modules, "magic", None)
+
+    with pytest.raises(ValueError, match="Unsupported document type from bytes"):
+        DocumentParser._document_type(binary)
+
+    parser = Parser(ParsingConfig())
+    with pytest.raises(ValueError, match="Unsupported document type from bytes"):
+        DocumentParser.chunks_from_path_or_bytes(binary, parser)
+
+
+def test_incomplete_trailing_utf8_when_magic_unavailable_ingests_as_txt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A read-boundary UTF-8 prefix is still accepted as plain text."""
+    monkeypatch.setitem(sys.modules, "magic", None)
+    assert DocumentParser._document_type(b"hello \xe2\x82") == DocumentType.TXT
+
+
+def test_pdf_like_utf8_bytes_when_magic_unavailable_raise_value_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Valid-UTF-8 binary signatures must not fall back to TXT."""
+    monkeypatch.setitem(sys.modules, "magic", None)
+    pdf = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
+
+    with pytest.raises(ValueError, match="Unsupported document type from bytes"):
+        DocumentParser._document_type(pdf)
+
+
 # ---------------------------------------------------------------------------
 # URL sources: .md / .html / .htm URLs must be fetched over HTTP(S)
 # ---------------------------------------------------------------------------
@@ -632,7 +683,24 @@ def test_md_url_chunks(doc_server_url: str) -> None:
     assert all(c.metadata.source == url for c in chunks)
 
 
-@pytest.mark.parametrize("filename", ["sample.html", "sample.htm"])
+def test_md_url_chunks_with_query_and_fragment(doc_server_url: str) -> None:
+    parser = Parser(ParsingConfig())
+    url = f"{doc_server_url}/sample.md?version=1#intro"
+    chunks = DocumentParser.chunks_from_path_or_bytes(url, parser)
+    full_text = "\n".join(c.content for c in chunks)
+    assert "**Markdown**" in full_text
+    assert "title:" not in full_text
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "sample.html",
+        "sample.htm",
+        "sample.html?raw=1",
+        "sample.htm?raw=1#section",
+    ],
+)
 def test_html_url_chunks(doc_server_url: str, filename: str) -> None:
     """.html / .htm URLs must be fetched over HTTP and tag-stripped."""
     parser = Parser(ParsingConfig())

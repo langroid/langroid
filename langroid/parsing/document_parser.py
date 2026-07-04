@@ -11,6 +11,7 @@ from io import BytesIO
 from itertools import accumulate
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Tuple, Union
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -63,6 +64,48 @@ def find_last_full_char(possible_unicode: bytes) -> int:
     return 0
 
 
+_BINARY_SIGNATURES = (
+    b"%PDF-",
+    b"\x89PNG\r\n\x1a\n",
+    b"\xff\xd8\xff",
+    b"GIF87a",
+    b"GIF89a",
+    b"PK\x03\x04",
+    b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",
+)
+
+
+def _looks_like_binary(content: bytes) -> bool:
+    """Return true for byte samples that are unlikely to be plain text."""
+    if any(content.startswith(signature) for signature in _BINARY_SIGNATURES):
+        return True
+    if b"\x00" in content:
+        return True
+    if not content:
+        return False
+
+    allowed_controls = {9, 10, 12, 13}
+    control_count = sum(
+        1 for byte in content if byte < 32 and byte not in allowed_controls
+    )
+    return control_count / len(content) > 0.30
+
+
+def _decodes_as_utf8_text(content: bytes) -> bool:
+    """Decode a text sample, tolerating only an incomplete trailing character."""
+    try:
+        content.decode("utf-8")
+        return True
+    except UnicodeDecodeError as e:
+        if e.reason == "unexpected end of data" and e.end == len(content):
+            try:
+                content[: e.start].decode("utf-8")
+                return True
+            except UnicodeDecodeError:
+                return False
+        return False
+
+
 def is_plain_text(path_or_bytes: str | bytes) -> bool:
     """
     Check if a file is plain text by attempting to decode it as UTF-8.
@@ -96,16 +139,17 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
         # check below, so plain-text detection keeps working.
         pass
 
-    # Attempt to decode the content as UTF-8
-    content = content[: find_last_full_char(content)]
-    try:
-        _ = content.decode("utf-8")
-        # Additional checks can go here, e.g., to verify that the content
-        # doesn't contain too many unusual characters for it to be considered text
-        return True
-    except UnicodeDecodeError:
-        # If decoding fails, it's likely not plain text (or not encoded in UTF-8)
+    if _looks_like_binary(content):
         return False
+
+    return _decodes_as_utf8_text(content)
+
+
+def _extension_source(source: str) -> str:
+    """Return the path component used for extension-based type detection."""
+    if source.startswith(("http://", "https://")):
+        return urlparse(source).path.lower()
+    return source.lower()
 
 
 # Matches a leading --- ... --- block (candidate front-matter). The
@@ -258,7 +302,7 @@ class DocumentParser(Parser):
             # Detect file type from path/URL extension first so that
             # format-specific types (md, html) are not mis-classified as TXT
             # by the is_plain_text heuristic below.
-            lower = source.lower()
+            lower = _extension_source(source)
             if lower.endswith(".pdf"):
                 return DocumentType.PDF
             elif lower.endswith(".docx"):
