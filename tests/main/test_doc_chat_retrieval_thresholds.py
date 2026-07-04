@@ -417,6 +417,8 @@ def test_fuzzy_invalid_runtime_threshold_yields_no_matches(bad_threshold):
     In particular `-inf` must not admit every candidate.
     """
     query = "quantum entanglement"
-    agent = _make_fuzzy_agent(None)
+    agent = _make_fuzzy_agent(None, use_reciprocal_rank_fusion=True)
+    assert {d.metadata.id for d in agent.get_relevant_chunks(query)} == {"high"}
+
     agent.config.fuzzy_score_threshold = bad_threshold
     assert agent.get_relevant_chunks(query) == []
