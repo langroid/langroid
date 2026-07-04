@@ -37,6 +37,7 @@ from typing import (
 import nest_asyncio
 import numpy as np
 import pandas as pd
+from pydantic import Field
 from rich.prompt import Prompt
 
 from langroid.agent.batch import run_batch_agent_method, run_batch_tasks
@@ -220,6 +221,29 @@ class DocChatAgentConfig(ChatAgentConfig):
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
+    bm25_score_threshold: float = Field(
+        default=0.0,
+        description="""
+        Keep a BM25-retrieved chunk only if its BM25 score satisfies
+        `score >= bm25_score_threshold`. The filter is applied only when
+        this threshold is > 0.0; the default 0.0 means no filtering.
+        NOTE: BM25 scores are unbounded and corpus-dependent (they vary
+        with document/corpus statistics), so no single value is right
+        for every collection; this is an expert opt-in knob to tune
+        per corpus.
+        """,
+    )
+    fuzzy_score_threshold: float = Field(
+        default=50.0,
+        description="""
+        Keep a fuzzy match only if its score satisfies
+        `score > fuzzy_score_threshold` (strictly greater), on the 0-100
+        `rapidfuzz` scale (100 = perfect match). The default 50.0
+        preserves the long-standing behavior of dropping matches with
+        score <= 50; lower it to admit weaker matches, or raise it to
+        keep only stronger ones.
+        """,
+    )
     use_reciprocal_rank_fusion: bool = False
     cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
@@ -1179,6 +1203,7 @@ class DocChatAgent(ChatAgent):
                 k=self.config.n_similar_chunks * multiple,
                 words_before=self.config.n_fuzzy_neighbor_words or None,
                 words_after=self.config.n_fuzzy_neighbor_words or None,
+                score_threshold=self.config.fuzzy_score_threshold,
             )
         return fuzzy_match_docs
 
@@ -1405,8 +1430,13 @@ class DocChatAgent(ChatAgent):
 
         id2_rank_bm25 = {}
         if self.config.use_bm25_search:
-            # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+            if self.config.bm25_score_threshold > 0.0:
+                docs_scores = [
+                    (d, s)
+                    for d, s in docs_scores
+                    if s >= self.config.bm25_score_threshold
+                ]
             id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,
@@ -1421,7 +1451,6 @@ class DocChatAgent(ChatAgent):
 
         id2_rank_fuzzy = {}
         if self.config.use_fuzzy_match:
-            # TODO: Add score threshold in config
             fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder,
