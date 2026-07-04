@@ -84,6 +84,42 @@ def test_bare_address_routes_as_pass_through(prefix: str):
     assert PASS in out.content
 
 
+class NudgeTool(lr.ToolMessage):
+    request: str = "nudge_tool"
+    purpose: str = "To nudge an agent."
+    who: str
+
+
+@pytest.mark.parametrize("prefix", [AT, SEND_TO])
+def test_bare_address_with_tool_attempt_is_not_routed(prefix: str):
+    """A message carrying a tool attempt must NOT be treated as a bare-address
+    pass-through: normalizing its content to PASS would make step() forward the
+    pending message instead, silently dropping the tool call. Such a message
+    must emerge from _process_result_routing with content and recipients
+    unchanged, and its tool attempt intact."""
+    agent = ChatAgent(ChatAgentConfig(name="Bob"))
+    agent.enable_message(NudgeTool)
+    task = Task(agent, interactive=False, config=TaskConfig(addressing_prefix=AT))
+    task.pending_message = ChatDocument(
+        content="the original question",
+        metadata=ChatDocMetaData(sender=Entity.USER),
+    )
+    content = f"{prefix}Alice"
+    result = ChatDocument(
+        content=content,
+        tool_messages=[NudgeTool(who="Alice")],
+        metadata=ChatDocMetaData(sender=Entity.LLM),
+    )
+    assert agent.has_tool_message_attempt(result)
+    out = task._process_result_routing(result, Entity.LLM)
+    assert out is not None
+    # content and recipients unchanged; tool attempt preserved
+    assert out.content == content
+    assert out.metadata.recipient == ""
+    assert task.pending_message.metadata.recipient == ""
+    assert out.tool_messages == [NudgeTool(who="Alice")]
+
+
 @pytest.mark.parametrize("prefix", [AT, ""])  # enable AT-addressing?
 @pytest.mark.parametrize(
     "address",
