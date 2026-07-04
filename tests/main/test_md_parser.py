@@ -198,6 +198,27 @@ print("Hello, world!")
     assert 'print("Hello, world!")' in code_block.content
 
 
+def test_longer_code_fence_not_closed_by_shorter_fence():
+    md = """# Real Header
+
+````python
+```text
+# Not a Header
+```
+````
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
 def test_multiple_same_level_headers():
     md = """# Header A
 Paragraph A.
