@@ -59,6 +59,19 @@ from langroid.language_models.model_info import (
         ("gemini-2.5-pro-03-25", None),
         ("gemini-2.0-flash-lite-01-21", None),
         ("gemini-3-pro-12-01", None),
+        # Hostile lookalikes must NOT normalize: only strict ASCII "-MM-DD"
+        # dates at the true end of the name count as dated variants.
+        # Fullwidth (unicode) date digits.
+        ("gemini-2.5-flash-preview-０５-２０", None),
+        # Trailing newline / control characters.
+        ("gemini-2.5-flash-preview-05-20\n", None),
+        ("gemini-2.5-flash-preview\n", None),
+        ("gemini-2.0-flash-thinking-exp-01-21\n", None),
+        ("gemini-2.5-flash-preview-05-20\x00", None),
+        # Arbitrary junk after the keyword suffix.
+        ("gemini-2.5-flash-preview-junk", None),
+        ("gemini-2.5-flash-previewer", None),
+        ("gemini-2.5-flash-preview-05-20-99-99", None),
     ],
 )
 def test_normalize_gemini_model_name(model: str, expected: str | None) -> None:

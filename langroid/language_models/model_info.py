@@ -178,7 +178,9 @@ class ModelInfo(BaseModel):
 
 GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
 # Trailing "-MM-DD" date stamp on Gemini variant names (e.g. "-01-21").
-_GEMINI_DATE_SUFFIX = re.compile(r"-[0-9]{2}-[0-9]{2}$")
+# ASCII digits only, anchored with \Z: "$" would also match just before a
+# trailing newline, letting hostile names like "...-05-20\n" through.
+_GEMINI_DATE_SUFFIX = re.compile(r"-[0-9]{2}-[0-9]{2}\Z")
 # Keyword suffixes marking preview/experimental Gemini variants.
 _GEMINI_KEYWORD_SUFFIXES = ("-preview", "-exp", "-experimental", "-latest")
 DEFAULT_MODEL_INFO = ModelInfo()
@@ -841,12 +843,18 @@ def _normalize_gemini_model_name(model: str) -> str | None:
     ):
         return candidate
 
-    # Strip a known keyword suffix. Split (not endswith) so dated variants
-    # like "gemini-2.5-flash-lite-preview-06-17" are handled.
+    # Strip a known keyword suffix, which must sit at the very end of the
+    # (date-stripped) candidate. Dated variants like
+    # "gemini-2.5-flash-lite-preview-06-17" still work because the strict
+    # ASCII date was stripped above. Using endswith -- not splitting on the
+    # keyword -- rejects hostile lookalikes such as unicode-digit dates
+    # ("gemini-2.5-flash-preview-０５-２０"), trailing
+    # newline/control characters, or any other junk after the keyword.
     for suffix in _GEMINI_KEYWORD_SUFFIXES:
-        stripped = candidate.split(suffix, maxsplit=1)[0]
-        if stripped != candidate and stripped in GEMINI_CANONICAL_MODEL_NAMES:
-            return stripped
+        if candidate.endswith(suffix):
+            stripped = candidate[: -len(suffix)]
+            if stripped in GEMINI_CANONICAL_MODEL_NAMES:
+                return stripped
     return None
 
 
