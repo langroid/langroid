@@ -383,6 +383,12 @@ def test_strip_yaml_frontmatter_strips_valid_block() -> None:
     assert "Body text" in result
 
 
+def test_strip_yaml_frontmatter_strips_valid_block_at_eof() -> None:
+    """A valid front-matter block may end at EOF."""
+    result = _strip_yaml_frontmatter("---\ntitle: Secret\n---")
+    assert result == ""
+
+
 def test_strip_yaml_frontmatter_preserves_thematic_break() -> None:
     """A leading --- thematic break (no key: value inside) must be kept."""
     doc = "---\n\nSome intro text.\n\n---\n\n# Section"
@@ -619,7 +625,13 @@ def test_incomplete_trailing_utf8_when_magic_unavailable_ingests_as_txt(
 ) -> None:
     """A read-boundary UTF-8 prefix is still accepted as plain text."""
     monkeypatch.setitem(sys.modules, "magic", None)
-    assert DocumentParser._document_type(b"hello \xe2\x82") == DocumentType.TXT
+    raw = b"hello \xe2\x82"
+    assert DocumentParser._document_type(raw) == DocumentType.TXT
+
+    parser = Parser(ParsingConfig())
+    chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser)
+    assert len(chunks) > 0
+    assert "hello" in " ".join(c.content for c in chunks)
 
 
 def test_pdf_like_utf8_bytes_when_magic_unavailable_raise_value_error(

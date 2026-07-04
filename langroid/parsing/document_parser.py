@@ -94,16 +94,20 @@ def _looks_like_binary(content: bytes) -> bool:
 def _decodes_as_utf8_text(content: bytes) -> bool:
     """Decode a text sample, tolerating only an incomplete trailing character."""
     try:
-        content.decode("utf-8")
+        _decode_utf8_text(content)
         return True
+    except UnicodeDecodeError:
+        return False
+
+
+def _decode_utf8_text(content: bytes) -> str:
+    """Decode UTF-8 bytes, trimming only an incomplete trailing character."""
+    try:
+        return content.decode("utf-8")
     except UnicodeDecodeError as e:
         if e.reason == "unexpected end of data" and e.end == len(content):
-            try:
-                content[: e.start].decode("utf-8")
-                return True
-            except UnicodeDecodeError:
-                return False
-        return False
+            return content[: e.start].decode("utf-8")
+        raise
 
 
 def is_plain_text(path_or_bytes: str | bytes) -> bool:
@@ -156,7 +160,7 @@ def _extension_source(source: str) -> str:
 # delimiter lines allow only trailing spaces/tabs ([ \t]*, NOT \s*, which
 # would match newlines and cause quadratic backtracking on hostile inputs
 # such as "---" followed by megabytes of blank lines).
-_FRONTMATTER_BLOCK_RE = re.compile(r"^---[ \t]*\n(.*?)\n---[ \t]*\n", re.DOTALL)
+_FRONTMATTER_BLOCK_RE = re.compile(r"^---[ \t]*\n(.*?)\n---[ \t]*(?:\n|$)", re.DOTALL)
 # A line that looks like a YAML key: value pair (e.g. "title: Foo").
 # Requirements to avoid false positives:
 #   - Key is a bare identifier: word chars and hyphens only (no spaces, slashes)
@@ -427,7 +431,7 @@ class DocumentParser(Parser):
             # Plain-text formats (TXT, MD, HTML) and unknown types:
             # read content, extract text, and chunk.
             if isinstance(source, bytes):
-                content = source.decode()
+                content = _decode_utf8_text(source)
                 if lines is not None:
                     file_lines = content.splitlines()[:lines]
                     content = "\n".join(line.strip() for line in file_lines)
