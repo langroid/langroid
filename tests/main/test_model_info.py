@@ -59,19 +59,28 @@ from langroid.language_models.model_info import (
         ("gemini-2.5-pro-03-25", None),
         ("gemini-2.0-flash-lite-01-21", None),
         ("gemini-3-pro-12-01", None),
-        # Hostile lookalikes must NOT normalize: only strict ASCII "-MM-DD"
-        # dates at the true end of the name count as dated variants.
-        # Fullwidth (unicode) date digits.
-        ("gemini-2.5-flash-preview-０５-２０", None),
-        # Trailing newline / control characters.
-        ("gemini-2.5-flash-preview-05-20\n", None),
-        ("gemini-2.5-flash-preview\n", None),
+        # Lookalike dates (unicode digits, trailing newline/control chars)
+        # must NOT take the date-stripping path: only a strict ASCII
+        # "-MM-DD" at the true end of the name counts. A lookalike date on
+        # an "-exp" canonical name therefore stays unrecognized.
+        ("gemini-2.0-flash-thinking-exp-０１-２１", None),
         ("gemini-2.0-flash-thinking-exp-01-21\n", None),
-        ("gemini-2.5-flash-preview-05-20\x00", None),
-        # Arbitrary junk after the keyword suffix.
-        ("gemini-2.5-flash-preview-junk", None),
-        ("gemini-2.5-flash-previewer", None),
-        ("gemini-2.5-flash-preview-05-20-99-99", None),
+        # Outside the date-stripped case, the first-occurrence keyword
+        # split keeps parity with historical behavior: any name with a
+        # canonical prefix before the first keyword still normalizes,
+        # regardless of what follows the keyword.
+        ("gemini-2.5-flash-preview-０５-２０", "gemini-2.5-flash"),
+        ("gemini-2.5-flash-preview-05-20\n", "gemini-2.5-flash"),
+        ("gemini-2.5-flash-preview\n", "gemini-2.5-flash"),
+        ("gemini-2.5-flash-preview-05-20\x00", "gemini-2.5-flash"),
+        ("gemini-2.5-flash-preview-junk", "gemini-2.5-flash"),
+        ("gemini-2.5-flash-previewer", "gemini-2.5-flash"),
+        ("gemini-2.5-flash-preview-05-20-99-99", "gemini-2.5-flash"),
+        # Empty input and case variants are rejected: matching is exact
+        # and case-sensitive.
+        ("", None),
+        ("Gemini-2.5-flash-preview-05-20", None),
+        ("gemini-2.5-FLASH-preview-05-20", None),
     ],
 )
 def test_normalize_gemini_model_name(model: str, expected: str | None) -> None:

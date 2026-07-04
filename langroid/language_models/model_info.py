@@ -834,27 +834,28 @@ def _normalize_gemini_model_name(model: str) -> str | None:
 
     # Strip a trailing "-MM-DD" date stamp; covers names like
     # "gemini-2.0-flash-thinking-exp-01-21" whose canonical form already
-    # ends with "-exp". Accept the date-stripped candidate only when it
-    # ends with a keyword suffix: a bare-dated unknown name such as
-    # "gemini-2.5-pro-03-25" must not be guessed as "gemini-2.5-pro".
+    # ends with "-exp" (#995). The regex is strict (ASCII digits, anchored
+    # with \Z), so lookalike dates -- unicode digits, trailing newline or
+    # control characters -- do not take this path. Accept the date-stripped
+    # candidate only when it ends with a keyword suffix: a bare-dated
+    # unknown name such as "gemini-2.5-pro-03-25" must not be guessed as
+    # "gemini-2.5-pro".
     candidate = _GEMINI_DATE_SUFFIX.sub("", base_model)
     if candidate in GEMINI_CANONICAL_MODEL_NAMES and candidate.endswith(
         _GEMINI_KEYWORD_SUFFIXES
     ):
         return candidate
 
-    # Strip a known keyword suffix, which must sit at the very end of the
-    # (date-stripped) candidate. Dated variants like
-    # "gemini-2.5-flash-lite-preview-06-17" still work because the strict
-    # ASCII date was stripped above. Using endswith -- not splitting on the
-    # keyword -- rejects hostile lookalikes such as unicode-digit dates
-    # ("gemini-2.5-flash-preview-０５-２０"), trailing
-    # newline/control characters, or any other junk after the keyword.
+    # Otherwise split at the first occurrence of each keyword suffix and
+    # return the canonical prefix when present, e.g.
+    # "gemini-2.5-flash-preview-05-20" -> "gemini-2.5-flash". This keeps
+    # parity with the historical behavior for every alias outside the
+    # date-stripped case above, including junk-suffixed names like
+    # "gemini-2.5-flash-preview-junk".
     for suffix in _GEMINI_KEYWORD_SUFFIXES:
-        if candidate.endswith(suffix):
-            stripped = candidate[: -len(suffix)]
-            if stripped in GEMINI_CANONICAL_MODEL_NAMES:
-                return stripped
+        stripped = candidate.split(suffix, maxsplit=1)[0]
+        if stripped != candidate and stripped in GEMINI_CANONICAL_MODEL_NAMES:
+            return stripped
     return None
 
 
