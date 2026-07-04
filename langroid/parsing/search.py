@@ -7,6 +7,7 @@ See tests for examples: tests/main/test_string_search.py
 """
 
 import difflib
+import math
 import re
 from typing import List, Tuple
 
@@ -44,11 +45,22 @@ def find_fuzzy_matches_in_docs(
             STRICTLY GREATER than this value, on the 0-100 `rapidfuzz` scale
             (100 = perfect match). The default 50.0 preserves the original
             behavior of this function, which hard-coded the filter
-            `score > 50`.
+            `score > 50`. A threshold that is not a finite number (e.g.
+            `None`, `nan`, `inf`, `-inf`, or a non-numeric value) yields
+            NO matches: the result is `[]`.
 
     Returns:
         List[Tuple[Document,float]]: List of (Document, score) tuples.
     """
+    # Normalize the threshold defensively: at runtime it may arrive as
+    # None or another non-numeric/non-finite value (e.g. from an
+    # unvalidated config); by contract such thresholds yield no matches.
+    try:
+        threshold = float(score_threshold)
+    except (TypeError, ValueError):
+        return []
+    if not math.isfinite(threshold):
+        return []
     if len(docs) == 0:
         return []
     best_matches = process.extract(
@@ -58,7 +70,7 @@ def find_fuzzy_matches_in_docs(
         scorer=fuzz.partial_ratio,
     )
 
-    real_matches = [(m, score) for m, score in best_matches if score > score_threshold]
+    real_matches = [(m, score) for m, score in best_matches if score > threshold]
     # find the original docs that corresponding to the matches
     orig_doc_matches = []
     for i, (m, s) in enumerate(real_matches):

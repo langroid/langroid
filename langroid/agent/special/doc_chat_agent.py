@@ -18,6 +18,7 @@ import asyncio
 import copy
 import importlib
 import logging
+import math
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -90,6 +91,29 @@ def apply_nest_asyncio() -> None:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _finite_positive_threshold(value: Any) -> Optional[float]:
+    """Normalize a runtime score-threshold value to an "active" filter value.
+
+    Args:
+        value (Any): The raw threshold read off a config object at runtime;
+            it may be absent/None or an oddly-shaped (non-numeric,
+            non-finite) value that never went through pydantic validation.
+
+    Returns:
+        Optional[float]: The threshold as a finite float strictly greater
+            than 0.0 if `value` coerces to one, else None, meaning the
+            score filter is INACTIVE (invalid, `None`, `NaN`, infinite,
+            zero, and negative values all deactivate the filter).
+    """
+    try:
+        threshold = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(threshold) or threshold <= 0.0:
+        return None
+    return threshold
 
 
 @dataclass
@@ -227,6 +251,8 @@ class DocChatAgentConfig(ChatAgentConfig):
         Keep a BM25-retrieved chunk only if its BM25 score satisfies
         `score >= bm25_score_threshold`. The filter is applied only when
         this threshold is > 0.0; the default 0.0 means no filtering.
+        Values that are not finite positive numbers (e.g. None, NaN,
+        +/-inf, negatives) also deactivate the filter at runtime.
         NOTE: BM25 scores are unbounded and corpus-dependent (they vary
         with document/corpus statistics), so no single value is right
         for every collection; this is an expert opt-in knob to tune
@@ -241,7 +267,8 @@ class DocChatAgentConfig(ChatAgentConfig):
         `rapidfuzz` scale (100 = perfect match). The default 50.0
         preserves the long-standing behavior of dropping matches with
         score <= 50; lower it to admit weaker matches, or raise it to
-        keep only stronger ones.
+        keep only stronger ones. A value that is not a finite number
+        (e.g. None, NaN, +/-inf) yields NO fuzzy matches at runtime.
         """,
     )
     use_reciprocal_rank_fusion: bool = False
@@ -1203,7 +1230,11 @@ class DocChatAgent(ChatAgent):
                 k=self.config.n_similar_chunks * multiple,
                 words_before=self.config.n_fuzzy_neighbor_words or None,
                 words_after=self.config.n_fuzzy_neighbor_words or None,
-                score_threshold=self.config.fuzzy_score_threshold,
+                # tolerate a config lacking the field (e.g. deserialized
+                # from an older version); 50.0 is the legacy default.
+                # Invalid/non-finite values are handled (=> no matches)
+                # inside find_fuzzy_matches_in_docs itself.
+                score_threshold=getattr(self.config, "fuzzy_score_threshold", 50.0),
             )
         return fuzzy_match_docs
 
@@ -1431,12 +1462,13 @@ class DocChatAgent(ChatAgent):
         id2_rank_bm25 = {}
         if self.config.use_bm25_search:
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
-            if self.config.bm25_score_threshold > 0.0:
-                docs_scores = [
-                    (d, s)
-                    for d, s in docs_scores
-                    if s >= self.config.bm25_score_threshold
-                ]
+            # Read the threshold defensively: tolerate absent/None or
+            # oddly-shaped runtime values by treating them as "no filtering".
+            bm25_threshold = _finite_positive_threshold(
+                getattr(self.config, "bm25_score_threshold", None)
+            )
+            if bm25_threshold is not None:
+                docs_scores = [(d, s) for d, s in docs_scores if s >= bm25_threshold]
             id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,

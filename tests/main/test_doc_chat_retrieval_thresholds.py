@@ -13,9 +13,15 @@ The tests drive `DocChatAgent.get_relevant_chunks()` — the retrieval path
 where these thresholds are applied — using a minimal stand-in vector store
 that returns no semantic-search results, so the BM25/fuzzy branches are
 isolated deterministically.
+
+Also covered: defensive handling of absent/null/odd runtime threshold
+values — invalid BM25 thresholds deactivate the filter, while invalid or
+non-finite fuzzy thresholds yield no fuzzy matches.
 """
 
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
+
+import pytest
 
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.language_models.mock_lm import MockLMConfig
@@ -176,3 +182,63 @@ def test_fuzzy_score_threshold_on_retrieval_path():
     # threshold 100.0: strict comparison excludes even a perfect match
     chunks = _make_fuzzy_agent(100.0).get_relevant_chunks(query)
     assert chunks == []
+
+
+# values that are not finite numbers: invalid for BOTH thresholds
+_NON_FINITE_THRESHOLDS: List[Any] = [
+    None,
+    float("nan"),
+    float("inf"),
+    float("-inf"),
+    "not-a-number",
+    object(),
+]
+# for BM25, negative (and zero) finite values also deactivate the filter;
+# for fuzzy, a negative finite threshold is a legitimate "keep all" setting
+_INVALID_BM25_THRESHOLDS: List[Any] = _NON_FINITE_THRESHOLDS + [-1.0]
+
+
+@pytest.mark.parametrize("bad_threshold", _INVALID_BM25_THRESHOLDS)
+def test_bm25_invalid_runtime_threshold_is_inactive(bad_threshold):
+    """Invalid/None/NaN/negative runtime values deactivate the BM25 filter.
+
+    Such values must neither crash retrieval nor filter anything out:
+    results must match the threshold-0.0 (filter off) baseline.
+    """
+    query = "tigers"
+    baseline_ids = {
+        d.metadata.id for d in _make_bm25_agent(0.0).get_relevant_chunks(query)
+    }
+    assert baseline_ids != set()  # sanity: baseline retrieves chunks
+
+    agent = _make_bm25_agent(0.0)
+    # simulate an unvalidated runtime value on the config (pydantic does
+    # not validate on assignment here)
+    agent.config.bm25_score_threshold = bad_threshold
+    chunks = agent.get_relevant_chunks(query)
+    assert {d.metadata.id for d in chunks} == baseline_ids
+
+
+def test_bm25_absent_threshold_attribute_is_inactive():
+    """A config lacking the attribute entirely must behave as filter-off."""
+    query = "tigers"
+    baseline_ids = {
+        d.metadata.id for d in _make_bm25_agent(0.0).get_relevant_chunks(query)
+    }
+    agent = _make_bm25_agent(0.0)
+    agent.config.__dict__.pop("bm25_score_threshold", None)
+    assert not hasattr(agent.config, "bm25_score_threshold")  # sanity
+    chunks = agent.get_relevant_chunks(query)
+    assert {d.metadata.id for d in chunks} == baseline_ids
+
+
+@pytest.mark.parametrize("bad_threshold", _NON_FINITE_THRESHOLDS)
+def test_fuzzy_invalid_runtime_threshold_yields_no_matches(bad_threshold):
+    """Invalid/non-finite fuzzy thresholds yield NO fuzzy matches (no crash).
+
+    In particular `-inf` must not admit every candidate.
+    """
+    query = "quantum entanglement"
+    agent = _make_fuzzy_agent(None)
+    agent.config.fuzzy_score_threshold = bad_threshold
+    assert agent.get_relevant_chunks(query) == []
