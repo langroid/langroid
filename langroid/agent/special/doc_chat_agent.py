@@ -1524,7 +1524,6 @@ class DocChatAgent(ChatAgent):
                 id2doc.update({d.id(): d for d, _ in fuzzy_match_doc_scores})
             else:
                 passages += [d for (d, _) in fuzzy_match_doc_scores]
-                id2doc.update({d.id(): d for d, _ in fuzzy_match_doc_scores})
                 # eliminate duplicate ids
                 passages = [id2doc[id] for id in id2doc.keys()]
 

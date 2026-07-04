@@ -229,19 +229,26 @@ def test_bm25_score_threshold_on_reciprocal_rank_fusion_path():
     assert chunks == []
 
 
-def test_fuzzy_score_threshold_on_retrieval_path():
+def test_fuzzy_only_non_rrf_retrieval_path_preserves_legacy_behavior():
+    """Default fuzzy-only, non-RRF behavior stays compatible with main.
+
+    In the legacy path, fuzzy-only results are not added to `id2doc`, so when
+    semantic and BM25 retrieval produce no hits, fuzzy matches are discarded
+    after de-duplication. Threshold behavior is covered on the RRF path below,
+    where fuzzy-only results are intentionally collected through `id2doc`.
+    """
     query = "quantum entanglement"
 
-    # default threshold (50.0): only the verbatim-match doc survives,
-    # matching the legacy hard-coded `score > 50` behavior
+    # default threshold (50.0) preserves the legacy hard-coded `score > 50`
+    # filter, and the non-RRF fuzzy-only path still preserves legacy behavior
+    # by dropping fuzzy-only matches after de-duplication.
     chunks = _make_fuzzy_agent(None).get_relevant_chunks(query)
-    assert {d.metadata.id for d in chunks} == {"high"}
+    assert chunks == []
 
-    # threshold 0.0 admits weaker matches (the "noise" doc passes the score
-    # filter too, but yields no usable fuzzy context window, so it's dropped
-    # downstream of the threshold)
+    # Even when threshold 0.0 admits weaker fuzzy matches, this compatibility
+    # path does not start returning fuzzy-only chunks by default.
     chunks = _make_fuzzy_agent(0.0).get_relevant_chunks(query)
-    assert {d.metadata.id for d in chunks} == {"high", "low"}
+    assert chunks == []
 
     # threshold 100.0: strict comparison excludes even a perfect match
     chunks = _make_fuzzy_agent(100.0).get_relevant_chunks(query)
