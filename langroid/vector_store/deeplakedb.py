@@ -181,7 +181,7 @@ class DeepLakeDB(VectorStore):
             return []
         filter_dict = json.loads(where) if where else None
         result = self.client.search(
-            filter=filter_dict if filter_dict else (lambda x: True),
+            filter={"metadata": filter_dict} if filter_dict else (lambda x: True),
             k=len(self.client),
         )
         return self._docs_from_result(result)
@@ -213,7 +213,7 @@ class DeepLakeDB(VectorStore):
         result = self.client.search(
             embedding=embedding,
             k=min(k, len(self.client)),
-            filter=filter_dict,
+            filter={"metadata": filter_dict} if filter_dict else None,
             distance_metric=self.config.distance_metric,
         )
         docs = self._docs_from_result(result)

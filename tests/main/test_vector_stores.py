@@ -728,3 +728,43 @@ def test_postgres_where_clause(vecdb: PostgresDB):
     assert len(all_docs) == 3
 
     vecdb.delete_collection("test_get_all_documents_where")
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    [
+        "deeplake",
+    ],
+    indirect=True,
+)
+def test_deeplake_where_clause(vecdb):
+    """Test metadata where clause filtering in DeepLakeDB."""
+    vecdb.create_collection(collection_name="test-deeplake-where", replace=True)
+    docs = [
+        Document(
+            content="cow" if i < 3 else "goat",
+            metadata=DocMetaData(
+                id=str(i),
+                source="wiki" if i % 2 == 0 else "web",
+                category="other" if i < 3 else "news",
+            ),
+        )
+        for i in range(5)
+    ]
+    vecdb.add_documents(docs)
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"category": "other"}))
+    assert len(all_docs) == 3
+
+    all_docs = vecdb.get_all_documents(
+        where=json.dumps({"category": "other", "source": "web"})
+    )
+    assert len(all_docs) == 1
+
+    matches = vecdb.similar_texts_with_scores(
+        "cow", k=5, where=json.dumps({"category": "other"})
+    )
+    assert len(matches) == 3
+    assert all(d.metadata.category == "other" for d, _ in matches)
+
+    vecdb.delete_collection("test-deeplake-where")
