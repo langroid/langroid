@@ -5,11 +5,13 @@ import pytest
 import langroid as lr
 from langroid import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocMetaData
 from langroid.agent.task import Task, TaskConfig
 from langroid.language_models.mock_lm import MockLMConfig
+from langroid.mytypes import Entity
 from langroid.parsing.routing import parse_addressed_message
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import AT, DONE, SEND_TO
+from langroid.utils.constants import AT, DONE, PASS, SEND_TO
 
 ADDRESSES = [
     AT + "Alice ",
@@ -31,6 +33,55 @@ def test_parse_address(address: str):
     )
     assert addressee == "Alice"
     assert content == "Hello"
+
+
+@pytest.mark.parametrize(
+    "msg,prefix,expected_addressee,expected_content",
+    [
+        # addressee is the final token, with no trailing character
+        (f"thanks, now {AT}Alice", AT, "Alice", ""),
+        (f"please reply {SEND_TO}Alice", SEND_TO, "Alice", ""),
+        # multiple addressees, the last one at end-of-string: must pick the last
+        (f"ok {AT}Bob then {AT}Alice", AT, "Alice", ""),
+        (f"ask {AT}Bob then {AT}Alice, where?", AT, "Alice", "where?"),
+        # whole message is just the address
+        (f"{AT}Alice", AT, "Alice", ""),
+    ],
+)
+def test_parse_address_at_end_of_string(
+    msg: str, prefix: str, expected_addressee: str, expected_content: str
+):
+    """An addressee appearing as the final token (no trailing char) must still be
+    recognized, and the *last* addressee must win even when it ends the string."""
+    (addressee, content) = parse_addressed_message(msg, addressing=prefix)
+    assert addressee == expected_addressee
+    assert content == expected_content
+
+
+@pytest.mark.parametrize("prefix", [AT, SEND_TO])
+def test_bare_address_routes_as_pass_through(prefix: str):
+    """A responder ending with a bare address (e.g. "@Alice" / "__SEND__:Alice"
+    with no following content) is a pass-through: the pending message must be
+    forwarded to the recipient. _process_result_routing must therefore set the
+    recipient AND normalize the content to PASS, so that step() (which checks
+    `PASS in result.content`) recognizes the pass-through instead of forwarding
+    the literal address string."""
+    agent = ChatAgent(ChatAgentConfig(name="Bob"))
+    task = Task(agent, interactive=False, config=TaskConfig(addressing_prefix=AT))
+    task.pending_message = ChatDocument(
+        content="the original question",
+        metadata=ChatDocMetaData(sender=Entity.USER),
+    )
+    result = ChatDocument(
+        content=f"ok, over to you {prefix}Alice",
+        metadata=ChatDocMetaData(sender=Entity.LLM),
+    )
+    out = task._process_result_routing(result, Entity.LLM)
+    assert out is not None
+    # recipient recorded on the message that will be passed through
+    assert task.pending_message.metadata.recipient == "Alice"
+    # content normalized so step() recognizes the pass-through
+    assert PASS in out.content
 
 
 @pytest.mark.parametrize("prefix", [AT, ""])  # enable AT-addressing?

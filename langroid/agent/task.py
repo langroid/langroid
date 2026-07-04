@@ -1656,6 +1656,14 @@ class Task:
             result.content = result.content.replace(
                 f"{PASS_TO}:{recipient}", PASS
             ).strip()
+            # The replace above only handles the PASS_TO:<recipient> form; a
+            # pass-through expressed via an address prefix (@<recipient> or
+            # SEND_TO:<recipient>) with no content leaves the literal address in
+            # result.content, so step() would not recognize it as a pass-through
+            # (it checks `PASS in result.content`) and would forward the address
+            # string instead of the pending message. Normalize to PASS here.
+            if PASS not in result.content:
+                result.content = PASS
             return result
         elif recipient is not None:
             # we are sending non-empty content to non-null recipient
