@@ -55,8 +55,33 @@ ai-notes/
   Langroid-repo-docs.md
   repomix-plan.md
 docs/
+  assets/
+    demos/
+      dependency_chatbot.gif
+      lease-extractor-demo.gif
+    DepChatbot.png
+    langroid_neo4j_logos.png
+    langroid-card-cobalt-blue-1200-630.png
+    langroid-card-cobalt-blue.png
+    langroid-card-lambda-ossem-rust-1200-630.png
+    langroid-card-ossem-rust-1200x630.png
+    langroid-card-ossem-rust.png
+    langroid-lance.png
+    nullify-logo.jpg
+    nullify-logo.png
+    orange-logo-lambda-563.png
+    orange-logo-lambda.png
+    orange-logo.png
+    pure-lambda-non-circular.png
   blog/
     posts/
+      figures/
+        confusion.png
+        langroid-arch.png
+        malade-arch.png
+        omop-ground-truth.png
+        omop-results.png
+        variance-histogram.png
       chat-completion.md
       langroid-architecture.md
       langroid-intro.md
@@ -72,11 +97,16 @@ docs/
   demos/
     targeting/
       audience-targeting.md
+      targeting.gif
+      targeting.png
   examples/
     agent-tree.md
+    chat-tree.png
     guide.md
   javascripts/
     mathjax.js
+  logos/
+    pure-lambda-non-circular.png
   notes/
     async-streaming.md
     azure-openai-models.md
@@ -125,18 +155,33 @@ docs/
       comments.html
   quick-start/
     chat-agent-docs.md
+    chat-agent-fn.png
     chat-agent-tool.md
+    chat-agent-tool.png
     chat-agent.md
+    chat-docs.png
+    chat.png
+    img.png
     index.md
     llm-interaction.md
     multi-agent-task-delegation.md
     setup.md
     three-agent-chat-num-router.md
     three-agent-chat-num.md
+    three-agent-num.png
+    three-agent-router-func.png
+    three-agent-router.png
+    try-llm.png
     two-agent-chat-num.md
+    two-agent-num.png
+    two-agent.png
+  screenshots/
+    planner-workflow-html-logs.png
   stylesheets/
     extra.css
   tutorials/
+    langroid-tour-beethoven.png
+    langroid-tour-teacher.png
     langroid-tour.md
     llm-usage-options.md
     local-llm-setup.md
@@ -149,17 +194,20 @@ docs/
 examples/
   basic/
     multi-agent-search-critic/
+      __init__.py
       assistant_agent.py
       critic_agent.py
       main.py
       search_agent.py
       tools.py
     multi-agent-search-critic-no-orch/
+      __init__.py
       assistant_agent.py
       critic_agent.py
       main.py
       search_agent.py
       tools.py
+    __init__.py
     1-agent-3-tools-address-user.py
     1-agent-3-tools.py
     1d-screen-click.py
@@ -212,6 +260,11 @@ examples/
       chat-stream.py
       chat-tool-no-callback.py
       README.md
+    public/
+      favicon
+      langroid-card.png
+      logo_dark.png
+      logo_light.png
     books.txt
     chainlit.md
     chat-doc-qa.py
@@ -236,8 +289,10 @@ examples/
     test-step-nesting.py
   data-qa/
     sql-chat/
+      __init__.py
       sql_chat.py
       utils.py
+    __init__.py
     table_chat.py
   docqa/
     streamlit-app/
@@ -245,6 +300,7 @@ examples/
       README.md
       requirements.txt
       utils.py
+    __init__.py
     books.txt
     chat_multi_extract.py
     chat_search.py
@@ -288,6 +344,7 @@ examples/
     pdf-json-no-parse.py
     pdf-json.py
     README.md
+    um-financial-report.pdf
   kg-chat/
     chat-arangodb-igvf.py
     chat-arangodb.py
@@ -359,6 +416,7 @@ examples/
   summarize/
     summ-batch.py
     summ.py
+  __init__.py
   langroid_quick_examples.ipynb
   Langroid_quick_start.ipynb
   Langroid_QuickStart_OpenAI_Assistants_API.ipynb
@@ -393,9 +451,11 @@ issues/
 langroid/
   agent/
     callbacks/
+      __init__.py
       chainlit.py
     special/
       arangodb/
+        __init__.py
         aql_validator.py
         arangodb_agent.py
         system_messages.py
@@ -407,6 +467,7 @@ langroid/
         lance_rag_task.py
         query_planner_agent.py
       neo4j/
+        __init__.py
         csv_kg_chat.py
         cypher_validator.py
         neo4j_chat_agent.py
@@ -463,6 +524,7 @@ langroid/
     redis_cachedb.py
   embedding_models/
     protoc/
+      __init__.py
       embeddings_pb2_grpc.py
       embeddings_pb2.py
       embeddings_pb2.pyi
@@ -549,6 +611,7 @@ langroid/
   __init__.py
   exceptions.py
   mytypes.py
+  py.typed
 plugins/
   langroid/
     skills/
@@ -563,6 +626,11 @@ plugins/
         run-batch-tasks.md
         SKILL.md
         task-return-tool.md
+public/
+  favicon
+  langroid-card.png
+  logo_dark.png
+  logo_light.png
 release-notes/
   v0-56-0-task-tool.md
   v0-56-11-openai-client-caching.md
@@ -3030,8 +3098,7 @@ Here is what a run starting with $n=12$ looks like:
 </file>
 
 <file path="docs/javascripts/mathjax.js">
-document$.subscribe(() => {
-MathJax.typesetPromise()
+
 </file>
 
 <file path="docs/notes/async-streaming.md">
@@ -9911,6 +9978,10 @@ The [Getting Started Guide](quick-start/index.md) and subsequent pages
 will help you get up to speed.
 </file>
 
+<file path="examples/basic/multi-agent-search-critic/__init__.py">
+
+</file>
+
 <file path="examples/basic/multi-agent-search-critic/assistant_agent.py">
 """
 AssistantAgent takes a user's question, breaks it down into smaller questions
@@ -10187,6 +10258,10 @@ suggested_fix: str
 # just example
 ⋮----
 # thought + example
+</file>
+
+<file path="examples/basic/multi-agent-search-critic-no-orch/__init__.py">
+
 </file>
 
 <file path="examples/basic/multi-agent-search-critic-no-orch/assistant_agent.py">
@@ -10516,6 +10591,10 @@ suggested_fix: str
 # just example
 ⋮----
 # thought + example
+</file>
+
+<file path="examples/basic/__init__.py">
+
 </file>
 
 <file path="examples/basic/1-agent-3-tools-address-user.py">
@@ -15080,6 +15159,10 @@ b_step = cl.Step(
 c_step = cl.Step(
 </file>
 
+<file path="examples/data-qa/sql-chat/__init__.py">
+
+</file>
+
 <file path="examples/data-qa/sql-chat/sql_chat.py">
 """
 Example showing how to chat with a SQL database.
@@ -15221,6 +15304,10 @@ databasename = Prompt.ask("Enter the database name")
 uri = _create_database_uri(scheme, username, password, hostname, port, databasename)
 </file>
 
+<file path="examples/data-qa/__init__.py">
+
+</file>
+
 <file path="examples/data-qa/table_chat.py">
 """
 Example showing how to chat with a tabular dataset:
@@ -15338,6 +15425,10 @@ rag_agent = st.session_state["rag_agent"]
 rag_agent = DocChatAgent(cfg)
 ⋮----
 response = rag_agent.llm_response(prompt)
+</file>
+
+<file path="examples/docqa/__init__.py">
+
 </file>
 
 <file path="examples/docqa/books.txt">
@@ -22140,7 +22231,6 @@ user_agent.llm = None  # User message without LLM completion
 # Handle timeout or invalid response gracefully
 ⋮----
 # Assign the input to the user agent's attributes
-user_agent.llm = None  # User message without LLM completion
 ⋮----
 # Set up langroid tasks and run the debate
 user_task = Task(user_agent, interactive=interactive_setting, restart=False)
@@ -23635,8 +23725,6 @@ response = llm.chat("Is 7.2 bigger than 7.11?", max_tokens=1000)
 agent = lr.ChatAgent(
 ⋮----
 response = agent.llm_response(
-⋮----
-# extract reasoning
 </file>
 
 <file path="examples/summarize/summ-batch.py">
@@ -23760,6 +23848,10 @@ config = lr.ChatAgentConfig(
 ⋮----
 agent = lr.ChatAgent(config)
 summary = agent.llm_response()
+</file>
+
+<file path="examples/__init__.py">
+
 </file>
 
 <file path="examples/langroid_quick_examples.ipynb">
@@ -30108,6 +30200,14 @@ By adding explicit `close()` and context manager support to Langroid's QdrantDB 
 The QdrantDB lock file issue has been resolved by adding proper resource cleanup mechanisms to Langroid's QdrantDB wrapper. While the underlying `qdrant_client` doesn't provide context manager support, Langroid now offers both context manager and explicit `close()` methods. The context manager approach is the recommended best practice as it ensures cleanup even in error scenarios. For cases where context managers aren't suitable, the explicit `close()` method provides a reliable alternative.
 </file>
 
+<file path="langroid/agent/callbacks/__init__.py">
+
+</file>
+
+<file path="langroid/agent/special/arangodb/__init__.py">
+
+</file>
+
 <file path="langroid/agent/special/arangodb/system_messages.py">
 done_tool_name = DoneTool.default_value("request")
 ⋮----
@@ -30410,6 +30510,10 @@ self.curr_query_plan = None  # reset
         """
 ⋮----
 self.n_query_plan_reminders = 0  # reset
+</file>
+
+<file path="langroid/agent/special/neo4j/__init__.py">
+
 </file>
 
 <file path="langroid/agent/special/neo4j/csv_kg_chat.py">
@@ -31105,8 +31209,6 @@ await self._cm.__aexit__(None, None, None)  # type: ignore
 # "Server session was closed unexpectedly". Treat as transient.
 emsg = str(e)
 ⋮----
-await self._cm.__aexit__(None, None, None)  # type: ignore
-⋮----
 # otherwise re-raise
 ⋮----
 # If we get here both attempts failed
@@ -31754,9 +31856,6 @@ default_recipient = self.__class__.default_value("default_recipient")
 or msg.metadata.recipient != ""  # there IS an explicit recipient
 ⋮----
 content = msg if isinstance(msg, str) else msg.content
-# save the content as a class-variable, so that
-# we can construct the ChatDocument once the LLM specifies a recipient.
-# This avoids having to re-generate the entire message, saving time + cost.
 </file>
 
 <file path="langroid/agent/tools/retrieval_tool.py">
@@ -32954,6 +33053,10 @@ class CacheDB(ABC)
         """
 </file>
 
+<file path="langroid/embedding_models/protoc/__init__.py">
+
+</file>
+
 <file path="langroid/embedding_models/protoc/embeddings_pb2_grpc.py">
 # Generated by the gRPC Python protocol compiler plugin. DO NOT EDIT!
 """Client and server classes corresponding to protobuf-defined services."""
@@ -32973,8 +33076,6 @@ def __init__(self, channel)
 class EmbeddingServicer(object)
 ⋮----
 def Embed(self, request, context)
-⋮----
-"""Missing associated documentation comment in .proto file."""
 ⋮----
 def add_EmbeddingServicer_to_server(servicer, server)
 ⋮----
@@ -33407,7 +33508,6 @@ embeddings = data[0]["embedding"]
 first_item = response_json[0]
 ⋮----
 embeddings = first_item["embedding"]
-# Check if it's [floats]
 ⋮----
 # Check if it's [[floats]]
 ⋮----
@@ -34162,422 +34262,6 @@ image_url_dict = {}
 # For non-image files
 </file>
 
-<file path="langroid/parsing/md_parser.py">
-HEADER_CONTEXT_SEP = "\n...\n"
-⋮----
-# Pydantic model definition for a node in the markdown hierarchy
-class Node(BaseModel)
-⋮----
-content: str  # The text of the header or content block
-path: List[str]  # List of header texts from root to this node
-children: List["Node"] = Field(default_factory=list)
-# Nested children nodes
-⋮----
-def __repr__(self) -> str
-⋮----
-# for debug printing
-⋮----
-# Pydantic v1 requires forward references for self-referencing models
-# Forward references will be resolved with the update_forward_refs call below.
-⋮----
-# Resolve forward references for Node (required for recursive models in Pydantic)
-⋮----
-def _cleanup_text(text: str) -> str
-⋮----
-# 1) Convert alternative newline representations (any CRLF or CR) to a single '\n'
-text = text.replace("\r\n", "\n").replace("\r", "\n")
-⋮----
-# 2) Replace 3 or more consecutive newlines with exactly 2 newlines
-text = re.sub(r"\n{3,}", "\n\n", text)
-⋮----
-HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
-⋮----
-def parse_markdown_headings(md_text: str) -> List[Node]
-⋮----
-"""
-    Parse `md_text` to extract a heading-based hierarchy, skipping lines
-    that look like headings inside fenced code blocks. Each heading node
-    will have a child node for the text that appears between this heading
-    and the next heading.
-
-    Returns a list of top-level Node objects.
-
-    Example structure:
-        Node(content='# Chapter 1', path=['# Chapter 1'], children=[
-            Node(content='Intro paragraph...', path=['# Chapter 1'], children=[]),
-            Node(content='## Section 1.1', path=['# Chapter 1', '## Section 1.1'],
-                 children=[
-                  Node(content='Some text in Section 1.1.', path=[...], children=[])
-            ]),
-            ...
-        ])
-    """
-# If doc is empty or only whitespace, return []
-⋮----
-lines = md_text.splitlines(True)  # keep the newline characters
-⋮----
-# We'll scan line-by-line, track code-fence status, collect headings
-headings = []  # list of (level, heading_line, start_line_idx)
-in_code_fence = False
-fence_marker = None  # track which triple-backtick or ~~~ opened
-⋮----
-# Check if we're toggling in/out of a fenced code block
-# Typically triple backtick or triple tilde: ``` or ~~~
-# We do a *loose* check: a line that starts with at least 3 backticks or tildes
-# ignoring trailing text. You can refine as needed.
-fence_match = re.match(r"^(```+|~~~+)", line.strip())
-⋮----
-# If we are not in a fence, we enter one;
-# If we are in a fence, we exit if the marker matches
-marker = fence_match.group(1)  # e.g. "```" or "~~~~"
-⋮----
-in_code_fence = True
-fence_marker = marker[:3]  # store triple backtick or triple tilde
-⋮----
-# only close if the fence_marker matches
-# E.g. if we opened with ```, we close only on ```
-⋮----
-fence_marker = None
-⋮----
-# Check if the line is a heading
-m = HEADING_RE.match(line)
-⋮----
-hashes = m.group(1)  # e.g. "##"
-heading_text = line.rstrip("\n")  # entire line, exact
-level = len(hashes)
-⋮----
-# If no headings found, return a single root node with the entire text
-⋮----
-# Add a sentinel heading at the end-of-file, so we can slice the last block
-# after the final real heading. We'll use level=0 so it doesn't form a real node.
-⋮----
-# Now we build "heading blocks" with
-# (level, heading_text, start_line, end_line, content)
-heading_blocks = []
-⋮----
-# Content is everything after the heading line until the next heading
-# i.e. lines[start_i+1 : next_start_i]
-block_content_lines = lines[start_i + 1 : next_start_i]
-block_content = "".join(block_content_lines).rstrip("\n")
-⋮----
-# (We skip the sentinel heading in the final result.)
-⋮----
-# We'll now convert heading_blocks into a tree using a stack-based approach
-root_nodes: List[Node] = []
-stack: List[Node] = []
-header_path: List[str] = []
-⋮----
-level = hb["level"]  # type: ignore
-heading_txt = hb["heading_text"]
-content_txt = hb["content"]
-⋮----
-# --- Pop stack first! ---
-⋮----
-# build new path, create a node for the heading
-new_path = header_path + [heading_txt]
-heading_node = Node(
-⋮----
-content=heading_txt, path=new_path, children=[]  # type: ignore
-⋮----
-# Possibly create a content child for whatever lines were below the heading
-if content_txt.strip():  # type: ignore
-content_node = Node(
-⋮----
-content=content_txt, path=new_path, children=[]  # type: ignore
-⋮----
-# Attach heading_node to the stack top or as a root
-⋮----
-header_path.append(heading_txt)  # type: ignore
-⋮----
-# The Chunk model for the final enriched chunks.
-class Chunk(BaseModel)
-⋮----
-text: str  # The chunk text (which includes header context)
-path: List[str]  # The header path (list of header strings)
-token_count: int
-⋮----
-# Configuration for chunking
-class MarkdownChunkConfig(BaseModel)
-⋮----
-chunk_size: int = 200  # desired chunk size in tokens
-overlap_tokens: int = 30  # number of tokens to overlap between chunks
-variation_percent: float = 0.3  # allowed variation
-rollup: bool = True  # whether to roll up chunks
-header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
-⋮----
-@field_validator("chunk_size", mode="before")
-@classmethod
-    def convert_chunk_size_to_int(cls, v: Any) -> int
-⋮----
-"""Convert chunk_size to int, maintaining backward compatibility
-        with Pydantic V1.
-        """
-⋮----
-# A simple tokenizer that counts tokens as whitespace-separated words.
-def count_words(text: str) -> int
-⋮----
-def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]
-⋮----
-"""
-    Enhanced chunker that:
-      1. Splits by paragraph (top-level).
-      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
-      3. Allows going over the upper bound rather than splitting a single sentence.
-      4. Overlaps only once between consecutive chunks.
-      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
-      6. Preserves \n\n (and other original spacing) as best as possible.
-    """
-⋮----
-# -------------------------------------------------
-# Helpers
-⋮----
-def count_words(text_block: str) -> int
-⋮----
-lower_bound = int(config.chunk_size * (1 - config.variation_percent))
-upper_bound = int(config.chunk_size * (1 + config.variation_percent))
-⋮----
-# Quick check: if the entire text is short enough, return as-is.
-⋮----
-# Split into paragraphs, preserving \n\n if it's there.
-raw_paragraphs = text.split("\n\n")
-paragraphs = []
-⋮----
-# Re-append the double-newline if not the last piece
-⋮----
-# Split paragraphs into "segments": each segment is either
-# a full short paragraph or (if too big) a list of sentences.
-sentence_regex = r"(?<=[.!?])\s+"
-⋮----
-def split_paragraph_into_sentences(paragraph: str) -> List[str]
-⋮----
-"""
-        Return a list of sentence-sized segments. If a single sentence
-        is bigger than upper_bound, do a word-level fallback.
-        """
-⋮----
-sentences = re.split(sentence_regex, paragraph)
-# Clean up stray whitespace
-sentences = [s.strip() for s in sentences if s.strip()]
-⋮----
-expanded = []
-⋮----
-def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]
-⋮----
-"""
-        As a last resort, split extremely large 'sentence' by words.
-        """
-words = long_text.split()
-pieces = []
-start = 0
-⋮----
-end = start + cfg.chunk_size
-chunk_words = words[start:end]
-⋮----
-start = end
-⋮----
-# Build a list of segments
-segments = []
-⋮----
-# split into sentences
-segs = split_paragraph_into_sentences(para)
-⋮----
-# Accumulate segments into final chunks
-⋮----
-chunks = []
-current_chunk = ""
-current_count = 0
-⋮----
-def flush_chunk() -> None
-⋮----
-trimmed = current_chunk.strip()
-⋮----
-def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int
-⋮----
-"""Sum of word counts from current_index onward."""
-⋮----
-seg_count = count_words(seg)
-⋮----
-# If this single segment alone exceeds upper_bound, we accept it as a big chunk.
-⋮----
-# If we have something in the current chunk, flush it first
-⋮----
-# Then store this large segment as its own chunk
-⋮----
-# Attempt to add seg to the current chunk
-⋮----
-# We would normally flush here, but let's see if we are nearing the end:
-# If the remaining tokens (including this one) is < lower_bound,
-# we just add it anyway to avoid creating a tiny final chunk.
-future_tokens = remaining_tokens_in_future(segments, i)
-⋮----
-# Just add it (allowing to exceed upper bound)
-⋮----
-# Add space or preserve newline carefully
-# We'll do a basic approach here:
-⋮----
-current_chunk += seg  # preserve double new line
-⋮----
-current_count = count_words(current_chunk)
-⋮----
-current_chunk = seg
-current_count = seg_count
-⋮----
-# Normal flush
-old_chunk = current_chunk
-⋮----
-# Overlap from old_chunk
-overlap_tokens_list = (
-overlap_str = (
-⋮----
-current_chunk = overlap_str + " " + seg
-⋮----
-# Just accumulate
-⋮----
-# Flush leftover
-⋮----
-# Return non-empty
-⋮----
-# Function to process a Node and produce enriched chunks.
-def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]
-⋮----
-chunks: List[Chunk] = []
-⋮----
-# Check if this is a header-only node.
-is_header_only = node.path and node.content.strip() == node.path[-1]
-⋮----
-# Only generate a chunk for the node if it has non-header content,
-# or if it’s header-only AND has no children (i.e., it's a leaf header).
-⋮----
-header_prefix = (
-content_chunks = recursive_chunk(node.content, config)
-⋮----
-full_text = header_prefix + chunk_text
-⋮----
-# Process children nodes recursively.
-⋮----
-child_chunks = chunk_node(child, config)
-⋮----
-# Function to process an entire tree of Nodes.
-def chunk_tree(root_nodes: List[Node], config: MarkdownChunkConfig) -> List[Chunk]
-⋮----
-all_chunks: List[Chunk] = []
-⋮----
-def aggregate_content(node: Node) -> str
-⋮----
-"""
-    Recursively aggregate the content from a node and all its descendants,
-    excluding header-only nodes to avoid duplication.
-    """
-parts = []
-⋮----
-# Skip header-only nodes in content aggregation
-is_header_only = node.path and node.content.strip() == node.path[-1].strip()
-⋮----
-# Recurse on children
-⋮----
-child_text = aggregate_content(child)
-⋮----
-def flatten_tree(node: Node, level: int = 0) -> str
-⋮----
-"""
-    Flatten a node and its children back into proper markdown text.
-
-    Args:
-        node: The node to flatten
-        level: The current heading level (depth in the tree)
-
-    Returns:
-        str: Properly formatted markdown text
-    """
-result = ""
-⋮----
-# Check if this is a header node (content matches last item in path)
-is_header = node.path and node.content.strip().startswith("#")
-⋮----
-# For header nodes, don't duplicate the hash marks
-⋮----
-result = node.content.strip() + "\n\n"
-⋮----
-# Process all children
-⋮----
-"""
-    Recursively produce rollup chunks from `node`, passing down a `prefix`
-    (e.g., parent heading(s)).
-
-    - If a node is heading-only (content == last path item) and has children,
-      we skip creating a chunk for that node alone and instead add that heading
-      to the `prefix` for child nodes.
-    - If a node is NOT heading-only OR has no children, we try to fit all of its
-      flattened content into a single chunk. If it's too large, we chunk it.
-    - We pass the (possibly updated) prefix down to children, so each child's
-      chunk is enriched exactly once with all ancestor headings.
-    """
-⋮----
-# Check if the node is "heading-only" and has children
-# e.g. node.content=="# Chapter 1" and node.path[-1]=="# Chapter 1"
-is_heading_only_with_children = (
-⋮----
-# We do NOT create a chunk for this node alone.
-# Instead, we add its heading to the prefix for child chunks.
-new_prefix = prefix + node.content.strip()
-⋮----
-sep = "\n\n" if i == 0 else config.header_context_sep
-⋮----
-# If not heading-only-with-children, we handle this node's own content:
-# Flatten the entire node (including sub-children) in standard Markdown form.
-flattened = flatten_tree(node, level=len(node.path))
-flattened_with_prefix = prefix + flattened
-total_tokens = count_words(flattened_with_prefix)
-⋮----
-# Check if we can roll up everything (node + children) in a single chunk
-⋮----
-# One single chunk for the entire subtree
-⋮----
-# It's too large overall. We'll chunk the node's own content first (if any),
-# then recurse on children.
-node_content = node.content.strip()
-⋮----
-# If we have actual content that is not just a heading, chunk it with the prefix
-# (like "preamble" text).
-# Note: if this node is heading-only but has NO children,
-# it will still land here
-# (because is_heading_only_with_children was False due to zero children).
-⋮----
-# The node is actual content (not purely heading).
-# We'll chunk it in paragraphs/sentences with the prefix.
-content_chunks = recursive_chunk(node_content, config)
-⋮----
-block_with_prefix = prefix + text_block
-⋮----
-# Now recurse on children, passing the same prefix so they get it too
-⋮----
-# Create a dummy root node that contains everything.
-dummy_root = Node(content="", path=[], children=root_nodes)
-⋮----
-# Now process just the dummy root node with an empty prefix.
-chunks = rollup_chunk_node(dummy_root, config, prefix="")
-⋮----
-def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]
-⋮----
-tree = parse_markdown_headings(markdown_text)
-⋮----
-# Pure text, no hierarchy, so just use recursive_chunk
-text_chunks = recursive_chunk(markdown_text, config)
-⋮----
-chunks = rollup_chunk_tree(tree, config)
-⋮----
-chunks = chunk_tree(tree, config)
-⋮----
-# Example usage:
-markdown_text = """# Title
-# Set up chunking config with very large chunk size.
-# (you can adjust chunk_size, overlap_tokens, variation_percent)
-config = MarkdownChunkConfig(
-chunks = chunk_markdown(markdown_text, config)
-⋮----
-# with rollup_chunk_tree we get entire doc as 1 chunk
-</file>
-
 <file path="langroid/parsing/para_sentence_split.py">
 def remove_extra_whitespace(s: str) -> str
 ⋮----
@@ -34615,6 +34299,118 @@ chunks = _chunk_sentences(sentences, chunk_size)
 chunks = paragraphs
 ⋮----
 chunks = [chunk.strip() for chunk in chunks if chunk.strip() != ""]
+</file>
+
+<file path="langroid/parsing/parse_json.py">
+def is_valid_json(json_str: str) -> bool
+⋮----
+"""Check if the input string is a valid JSON.
+
+    Args:
+        json_str (str): The input string to check.
+
+    Returns:
+        bool: True if the input string is a valid JSON, False otherwise.
+    """
+⋮----
+def flatten(nested_list) -> Iterator[str]:  # type: ignore
+⋮----
+"""Flatten a nested list into a single list of strings"""
+⋮----
+def get_json_candidates(s: str) -> List[str]
+⋮----
+"""Get top-level JSON candidates, i.e. strings between curly braces."""
+# Define the grammar for matching curly braces
+curly_braces = original_text_for(nested_expr("{", "}"))
+⋮----
+# Parse the string
+⋮----
+results = curly_braces.search_string(s)
+# Properly convert nested lists to strings
+⋮----
+def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]
+⋮----
+# First, try parsing with ast.literal_eval
+⋮----
+result = ast.literal_eval(json_string)
+⋮----
+# If ast.literal_eval fails or returns non-dict/list, try repair_json
+json_repaired_obj = repair_json(json_string, return_objects=True)
+⋮----
+# fallback on yaml
+yaml_result = yaml.safe_load(json_string)
+⋮----
+# If all methods fail, raise ValueError
+⋮----
+def try_repair_json_yaml(s: str) -> str | None
+⋮----
+"""
+    Attempt to load as json, and if it fails, try repairing the JSON.
+    If that fails, replace any \n with space as a last resort.
+    NOTE - replacing \n with space will result in format loss,
+    which may matter in generated code (e.g. python, toml, etc)
+    """
+s_repaired_obj = repair_json(s, return_objects=True)
+⋮----
+s_repaired_obj = s_repaired_obj[0]
+⋮----
+s_repaired_obj = None
+⋮----
+return json.dumps(s_repaired_obj)  # type: ignore
+⋮----
+yaml_result = yaml.safe_load(s)
+⋮----
+# If it still fails, replace any \n with space as a last resort
+s = s.replace("\n", " ")
+⋮----
+return None  # all failed
+⋮----
+def extract_top_level_json(s: str) -> List[str]
+⋮----
+"""Extract all top-level JSON-formatted substrings from a given string.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+
+    Returns:
+        List[str]: A list of top-level JSON-formatted substrings.
+    """
+# Find JSON object and array candidates
+json_candidates = get_json_candidates(s)
+maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
+⋮----
+def top_level_json_field(s: str, f: str) -> Any
+⋮----
+"""
+    Extract the value of a field f from a top-level JSON object.
+    If there are multiple, just return the first.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+        f (str): The field to extract from the JSON object.
+
+    Returns:
+        str: The value of the field f in the top-level JSON object, if any.
+            Otherwise, return an empty string.
+
+    Note:
+        This function is designed to never crash. If any exception occurs during
+        JSON parsing or field extraction, it gracefully returns an empty string.
+    """
+⋮----
+jsons = extract_top_level_json(s)
+⋮----
+json_data = json.loads(j)
+⋮----
+# Some responses wrap candidate JSON objects in a list; scan them.
+⋮----
+# If this specific JSON fails to parse, continue to next candidate
+⋮----
+# Catch any unexpected errors to ensure we never crash
+⋮----
+def datetime_to_json(obj: Any) -> Any
+⋮----
+# Let json.dumps() handle the raising of TypeError for non-serializable objects
 </file>
 
 <file path="langroid/parsing/pdf_utils.py">
@@ -38504,6 +38300,10 @@ class NonToolAction(str, Enum)
 ⋮----
 FORWARD_USER = "user"  # forward msg to user
 DONE = "done"  # task done
+</file>
+
+<file path="langroid/py.typed">
+
 </file>
 
 <file path="release-notes/v0-56-0-task-tool.md">
@@ -44165,8 +43965,6 @@ task = Task(
 ⋮----
 extracts: list[str] = run_batch_tasks(
 ⋮----
-)  # type: ignore
-⋮----
 # Caution: Retain ALL other fields in the Documents (which could be
 # other than just `content` and `metadata`), while simply replacing
 # `content` with the extracted portions
@@ -44806,8 +44604,6 @@ redis_password = os.getenv("REDIS_PASSWORD")
 redis_host = os.getenv("REDIS_HOST") or None
 redis_port = os.getenv("REDIS_PORT")
 ⋮----
-self.pool = fakeredis.FakeStrictRedis()  # type: ignore
-⋮----
 self.pool = redis.ConnectionPool(  # type: ignore
 ⋮----
 @contextmanager  # type: ignore
@@ -45400,8 +45196,6 @@ class PyMuPDF4LLMParser(DocumentParser)
     Parser for processing PDFs using the `pymupdf4llm` library.
     """
 ⋮----
-import pymupdf4llm  # noqa
-⋮----
 doc: fitz.Document = fitz.open(stream=self.doc_bytes, filetype="pdf")
 pages: List[Dict[str, Any]] = pymupdf4llm.to_markdown(doc, page_chunks=True)
 ⋮----
@@ -45475,8 +45269,6 @@ class DoclingParser(DocumentParser)
         Returns:
             Generator[docling.Page]: Generator yielding each page.
         """
-⋮----
-import docling  # noqa
 ⋮----
 from docling.datamodel.base_models import InputFormat  # type: ignore
 ⋮----
@@ -46003,116 +45795,420 @@ page_no = 0
         """
 </file>
 
-<file path="langroid/parsing/parse_json.py">
-def is_valid_json(json_str: str) -> bool
+<file path="langroid/parsing/md_parser.py">
+HEADER_CONTEXT_SEP = "\n...\n"
 ⋮----
-"""Check if the input string is a valid JSON.
-
-    Args:
-        json_str (str): The input string to check.
-
-    Returns:
-        bool: True if the input string is a valid JSON, False otherwise.
-    """
+# Pydantic model definition for a node in the markdown hierarchy
+class Node(BaseModel)
 ⋮----
-def flatten(nested_list) -> Iterator[str]:  # type: ignore
+content: str  # The text of the header or content block
+path: List[str]  # List of header texts from root to this node
+children: List["Node"] = Field(default_factory=list)
+# Nested children nodes
 ⋮----
-"""Flatten a nested list into a single list of strings"""
+def __repr__(self) -> str
 ⋮----
-def get_json_candidates(s: str) -> List[str]
+# for debug printing
 ⋮----
-"""Get top-level JSON candidates, i.e. strings between curly braces."""
-# Define the grammar for matching curly braces
-curly_braces = original_text_for(nested_expr("{", "}"))
+# Pydantic v1 requires forward references for self-referencing models
+# Forward references will be resolved with the update_forward_refs call below.
 ⋮----
-# Parse the string
+# Resolve forward references for Node (required for recursive models in Pydantic)
 ⋮----
-results = curly_braces.search_string(s)
-# Properly convert nested lists to strings
+def _cleanup_text(text: str) -> str
 ⋮----
-def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]
+# 1) Convert alternative newline representations (any CRLF or CR) to a single '\n'
+text = text.replace("\r\n", "\n").replace("\r", "\n")
 ⋮----
-# First, try parsing with ast.literal_eval
+# 2) Replace 3 or more consecutive newlines with exactly 2 newlines
+text = re.sub(r"\n{3,}", "\n\n", text)
 ⋮----
-result = ast.literal_eval(json_string)
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 ⋮----
-# If ast.literal_eval fails or returns non-dict/list, try repair_json
-json_repaired_obj = repair_json(json_string, return_objects=True)
-⋮----
-# fallback on yaml
-yaml_result = yaml.safe_load(json_string)
-⋮----
-# If all methods fail, raise ValueError
-⋮----
-def try_repair_json_yaml(s: str) -> str | None
+def parse_markdown_headings(md_text: str) -> List[Node]
 ⋮----
 """
-    Attempt to load as json, and if it fails, try repairing the JSON.
-    If that fails, replace any \n with space as a last resort.
-    NOTE - replacing \n with space will result in format loss,
-    which may matter in generated code (e.g. python, toml, etc)
-    """
-s_repaired_obj = repair_json(s, return_objects=True)
-⋮----
-s_repaired_obj = s_repaired_obj[0]
-⋮----
-s_repaired_obj = None
-⋮----
-return json.dumps(s_repaired_obj)  # type: ignore
-⋮----
-yaml_result = yaml.safe_load(s)
-⋮----
-# If it still fails, replace any \n with space as a last resort
-s = s.replace("\n", " ")
-⋮----
-return None  # all failed
-⋮----
-def extract_top_level_json(s: str) -> List[str]
-⋮----
-"""Extract all top-level JSON-formatted substrings from a given string.
+    Parse `md_text` to extract a heading-based hierarchy, skipping lines
+    that look like headings inside fenced code blocks. Each heading node
+    will have a child node for the text that appears between this heading
+    and the next heading.
 
-    Args:
-        s (str): The input string to search for JSON substrings.
+    Returns a list of top-level Node objects.
 
-    Returns:
-        List[str]: A list of top-level JSON-formatted substrings.
+    Example structure:
+        Node(content='# Chapter 1', path=['# Chapter 1'], children=[
+            Node(content='Intro paragraph...', path=['# Chapter 1'], children=[]),
+            Node(content='## Section 1.1', path=['# Chapter 1', '## Section 1.1'],
+                 children=[
+                  Node(content='Some text in Section 1.1.', path=[...], children=[])
+            ]),
+            ...
+        ])
     """
-# Find JSON object and array candidates
-json_candidates = get_json_candidates(s)
-maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
+# If doc is empty or only whitespace, return []
 ⋮----
-def top_level_json_field(s: str, f: str) -> Any
+lines = md_text.splitlines(True)  # keep the newline characters
+⋮----
+# We'll scan line-by-line, track code-fence status, collect headings
+headings = []  # list of (level, heading_line, start_line_idx)
+in_code_fence = False
+fence_marker = None  # track which triple-backtick or ~~~ opened
+⋮----
+# Check if we're toggling in/out of a fenced code block
+# Typically triple backtick or triple tilde: ``` or ~~~
+# We do a *loose* check: a line that starts with at least 3 backticks or tildes
+# ignoring trailing text. You can refine as needed.
+fence_match = re.match(r"^(```+|~~~+)", line.strip())
+⋮----
+# If we are not in a fence, we enter one;
+# If we are in a fence, we exit if the marker matches
+marker = fence_match.group(1)  # e.g. "```" or "~~~~"
+⋮----
+in_code_fence = True
+fence_marker = marker
+⋮----
+# only close if marker uses the same character and is at least
+# as long as the opening marker.
+⋮----
+fence_marker = None
+⋮----
+# Check if the line is a heading
+m = HEADING_RE.match(line)
+⋮----
+hashes = m.group(1)  # e.g. "##"
+heading_text = line.rstrip("\n")  # entire line, exact
+level = len(hashes)
+⋮----
+# If no headings found, return a single root node with the entire text
+⋮----
+# Add a sentinel heading at the end-of-file, so we can slice the last block
+# after the final real heading. We'll use level=0 so it doesn't form a real node.
+⋮----
+# Now we build "heading blocks" with
+# (level, heading_text, start_line, end_line, content)
+heading_blocks = []
+⋮----
+# Content is everything after the heading line until the next heading
+# i.e. lines[start_i+1 : next_start_i]
+block_content_lines = lines[start_i + 1 : next_start_i]
+block_content = "".join(block_content_lines).rstrip("\n")
+⋮----
+# (We skip the sentinel heading in the final result.)
+⋮----
+# We'll now convert heading_blocks into a tree using a stack-based approach
+root_nodes: List[Node] = []
+stack: List[Node] = []
+header_path: List[str] = []
+⋮----
+level = hb["level"]  # type: ignore
+heading_txt = hb["heading_text"]
+content_txt = hb["content"]
+⋮----
+# --- Pop stack first! ---
+⋮----
+# build new path, create a node for the heading
+new_path = header_path + [heading_txt]
+heading_node = Node(
+⋮----
+content=heading_txt, path=new_path, children=[]  # type: ignore
+⋮----
+# Possibly create a content child for whatever lines were below the heading
+if content_txt.strip():  # type: ignore
+content_node = Node(
+⋮----
+content=content_txt, path=new_path, children=[]  # type: ignore
+⋮----
+# Attach heading_node to the stack top or as a root
+⋮----
+header_path.append(heading_txt)  # type: ignore
+⋮----
+# The Chunk model for the final enriched chunks.
+class Chunk(BaseModel)
+⋮----
+text: str  # The chunk text (which includes header context)
+path: List[str]  # The header path (list of header strings)
+token_count: int
+⋮----
+# Configuration for chunking
+class MarkdownChunkConfig(BaseModel)
+⋮----
+chunk_size: int = 200  # desired chunk size in tokens
+overlap_tokens: int = 30  # number of tokens to overlap between chunks
+variation_percent: float = 0.3  # allowed variation
+rollup: bool = True  # whether to roll up chunks
+header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
+⋮----
+@field_validator("chunk_size", mode="before")
+@classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int
+⋮----
+"""Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+⋮----
+# A simple tokenizer that counts tokens as whitespace-separated words.
+def count_words(text: str) -> int
+⋮----
+def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]
 ⋮----
 """
-    Extract the value of a field f from a top-level JSON object.
-    If there are multiple, just return the first.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-        f (str): The field to extract from the JSON object.
-
-    Returns:
-        str: The value of the field f in the top-level JSON object, if any.
-            Otherwise, return an empty string.
-
-    Note:
-        This function is designed to never crash. If any exception occurs during
-        JSON parsing or field extraction, it gracefully returns an empty string.
+    Enhanced chunker that:
+      1. Splits by paragraph (top-level).
+      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
+      3. Allows going over the upper bound rather than splitting a single sentence.
+      4. Overlaps only once between consecutive chunks.
+      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
+      6. Preserves \n\n (and other original spacing) as best as possible.
     """
 ⋮----
-jsons = extract_top_level_json(s)
+# -------------------------------------------------
+# Helpers
 ⋮----
-json_data = json.loads(j)
+def count_words(text_block: str) -> int
 ⋮----
-# Some responses wrap candidate JSON objects in a list; scan them.
+lower_bound = int(config.chunk_size * (1 - config.variation_percent))
+upper_bound = int(config.chunk_size * (1 + config.variation_percent))
 ⋮----
-# If this specific JSON fails to parse, continue to next candidate
+# Quick check: if the entire text is short enough, return as-is.
 ⋮----
-# Catch any unexpected errors to ensure we never crash
+# Split into paragraphs, preserving \n\n if it's there.
+raw_paragraphs = text.split("\n\n")
+paragraphs = []
 ⋮----
-def datetime_to_json(obj: Any) -> Any
+# Re-append the double-newline if not the last piece
 ⋮----
-# Let json.dumps() handle the raising of TypeError for non-serializable objects
+# Split paragraphs into "segments": each segment is either
+# a full short paragraph or (if too big) a list of sentences.
+sentence_regex = r"(?<=[.!?])\s+"
+⋮----
+def split_paragraph_into_sentences(paragraph: str) -> List[str]
+⋮----
+"""
+        Return a list of sentence-sized segments. If a single sentence
+        is bigger than upper_bound, do a word-level fallback.
+        """
+⋮----
+sentences = re.split(sentence_regex, paragraph)
+# Clean up stray whitespace
+sentences = [s.strip() for s in sentences if s.strip()]
+⋮----
+expanded = []
+⋮----
+def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]
+⋮----
+"""
+        As a last resort, split extremely large 'sentence' by words.
+        """
+words = long_text.split()
+pieces = []
+start = 0
+⋮----
+end = start + cfg.chunk_size
+chunk_words = words[start:end]
+⋮----
+start = end
+⋮----
+# Build a list of segments
+segments = []
+⋮----
+# split into sentences
+segs = split_paragraph_into_sentences(para)
+⋮----
+# Accumulate segments into final chunks
+⋮----
+chunks = []
+current_chunk = ""
+current_count = 0
+⋮----
+def flush_chunk() -> None
+⋮----
+trimmed = current_chunk.strip()
+⋮----
+def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int
+⋮----
+"""Sum of word counts from current_index onward."""
+⋮----
+seg_count = count_words(seg)
+⋮----
+# If this single segment alone exceeds upper_bound, we accept it as a big chunk.
+⋮----
+# If we have something in the current chunk, flush it first
+⋮----
+# Then store this large segment as its own chunk
+⋮----
+# Attempt to add seg to the current chunk
+⋮----
+# We would normally flush here, but let's see if we are nearing the end:
+# If the remaining tokens (including this one) is < lower_bound,
+# we just add it anyway to avoid creating a tiny final chunk.
+future_tokens = remaining_tokens_in_future(segments, i)
+⋮----
+# Just add it (allowing to exceed upper bound)
+⋮----
+# Add space or preserve newline carefully
+# We'll do a basic approach here:
+⋮----
+current_chunk += seg  # preserve double new line
+⋮----
+current_count = count_words(current_chunk)
+⋮----
+current_chunk = seg
+current_count = seg_count
+⋮----
+# Normal flush
+old_chunk = current_chunk
+⋮----
+# Overlap from old_chunk
+overlap_tokens_list = (
+overlap_str = (
+⋮----
+current_chunk = overlap_str + " " + seg
+⋮----
+# Just accumulate
+⋮----
+# Flush leftover
+⋮----
+# Return non-empty
+⋮----
+# Function to process a Node and produce enriched chunks.
+def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]
+⋮----
+chunks: List[Chunk] = []
+⋮----
+# Check if this is a header-only node.
+is_header_only = node.path and node.content.strip() == node.path[-1]
+⋮----
+# Only generate a chunk for the node if it has non-header content,
+# or if it’s header-only AND has no children (i.e., it's a leaf header).
+⋮----
+header_prefix = (
+content_chunks = recursive_chunk(node.content, config)
+⋮----
+full_text = header_prefix + chunk_text
+⋮----
+# Process children nodes recursively.
+⋮----
+child_chunks = chunk_node(child, config)
+⋮----
+# Function to process an entire tree of Nodes.
+def chunk_tree(root_nodes: List[Node], config: MarkdownChunkConfig) -> List[Chunk]
+⋮----
+all_chunks: List[Chunk] = []
+⋮----
+def aggregate_content(node: Node) -> str
+⋮----
+"""
+    Recursively aggregate the content from a node and all its descendants,
+    excluding header-only nodes to avoid duplication.
+    """
+parts = []
+⋮----
+# Skip header-only nodes in content aggregation
+is_header_only = node.path and node.content.strip() == node.path[-1].strip()
+⋮----
+# Recurse on children
+⋮----
+child_text = aggregate_content(child)
+⋮----
+def flatten_tree(node: Node, level: int = 0) -> str
+⋮----
+"""
+    Flatten a node and its children back into proper markdown text.
+
+    Args:
+        node: The node to flatten
+        level: The current heading level (depth in the tree)
+
+    Returns:
+        str: Properly formatted markdown text
+    """
+result = ""
+⋮----
+# Check if this is a header node (content matches last item in path)
+is_header = node.path and node.content.strip().startswith("#")
+⋮----
+# For header nodes, don't duplicate the hash marks
+⋮----
+result = node.content.strip() + "\n\n"
+⋮----
+# Process all children
+⋮----
+"""
+    Recursively produce rollup chunks from `node`, passing down a `prefix`
+    (e.g., parent heading(s)).
+
+    - If a node is heading-only (content == last path item) and has children,
+      we skip creating a chunk for that node alone and instead add that heading
+      to the `prefix` for child nodes.
+    - If a node is NOT heading-only OR has no children, we try to fit all of its
+      flattened content into a single chunk. If it's too large, we chunk it.
+    - We pass the (possibly updated) prefix down to children, so each child's
+      chunk is enriched exactly once with all ancestor headings.
+    """
+⋮----
+# Check if the node is "heading-only" and has children
+# e.g. node.content=="# Chapter 1" and node.path[-1]=="# Chapter 1"
+is_heading_only_with_children = (
+⋮----
+# We do NOT create a chunk for this node alone.
+# Instead, we add its heading to the prefix for child chunks.
+new_prefix = prefix + node.content.strip()
+⋮----
+sep = "\n\n" if i == 0 else config.header_context_sep
+⋮----
+# If not heading-only-with-children, we handle this node's own content:
+# Flatten the entire node (including sub-children) in standard Markdown form.
+flattened = flatten_tree(node, level=len(node.path))
+flattened_with_prefix = prefix + flattened
+total_tokens = count_words(flattened_with_prefix)
+⋮----
+# Check if we can roll up everything (node + children) in a single chunk
+⋮----
+# One single chunk for the entire subtree
+⋮----
+# It's too large overall. We'll chunk the node's own content first (if any),
+# then recurse on children.
+node_content = node.content.strip()
+⋮----
+# If we have actual content that is not just a heading, chunk it with the prefix
+# (like "preamble" text).
+# Note: if this node is heading-only but has NO children,
+# it will still land here
+# (because is_heading_only_with_children was False due to zero children).
+⋮----
+# The node is actual content (not purely heading).
+# We'll chunk it in paragraphs/sentences with the prefix.
+content_chunks = recursive_chunk(node_content, config)
+⋮----
+block_with_prefix = prefix + text_block
+⋮----
+# Now recurse on children, passing the same prefix so they get it too
+⋮----
+# Create a dummy root node that contains everything.
+dummy_root = Node(content="", path=[], children=root_nodes)
+⋮----
+# Now process just the dummy root node with an empty prefix.
+chunks = rollup_chunk_node(dummy_root, config, prefix="")
+⋮----
+def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]
+⋮----
+tree = parse_markdown_headings(markdown_text)
+⋮----
+# Pure text, no hierarchy, so just use recursive_chunk
+text_chunks = recursive_chunk(markdown_text, config)
+⋮----
+chunks = rollup_chunk_tree(tree, config)
+⋮----
+chunks = chunk_tree(tree, config)
+⋮----
+# Example usage:
+markdown_text = """# Title
+# Set up chunking config with very large chunk size.
+# (you can adjust chunk_size, overlap_tokens, variation_percent)
+config = MarkdownChunkConfig(
+chunks = chunk_markdown(markdown_text, config)
+⋮----
+# with rollup_chunk_tree we get entire doc as 1 chunk
 </file>
 
 <file path="langroid/parsing/parser.py">
@@ -46357,7 +46453,6 @@ chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
 ⋮----
 # Append the chunk text to the list of chunks
 ⋮----
-# Remove the tokens corresponding to the chunk text
 # from the remaining tokens
 tokens = tokens[
 ⋮----
@@ -46802,8 +46897,6 @@ DynamicMetaData = DocMetaData  # type: ignore
 ⋮----
 # Define additional top-level fields for DynamicDocument
 additional_fields = {
-⋮----
-None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
 ⋮----
 # Create a dynamic subclass of Document
 DynamicDocumentFields = {
@@ -47536,8 +47629,6 @@ deleted_count = 0
 def clear_empty_collections(self) -> int
 ⋮----
 # Efficiently check for emptiness without fetching all rows
-⋮----
-# Use delete_collection to handle index and table deletion
 ⋮----
 session.commit()  # Commit is likely not needed here
 ⋮----
@@ -50951,197 +51042,6 @@ instruc_msg = f"""
 # user response_forget to avoid accumulating the chat history
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="langroid/agent/base.py">
 ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
 console = Console(quiet=settings.quiet)
@@ -51322,10 +51222,6 @@ def wrapper(obj: Any, chat_doc: Any) -> Any
 # Only agent parameter
 ⋮----
 # Only chat_doc parameter
-⋮----
-async def wrapper(obj: Any, chat_doc: Any) -> Any
-⋮----
-def wrapper(obj: Any, chat_doc: Any) -> Any
 ⋮----
 # No recognized parameters - backward compatibility
 # Assume single parameter is chat_doc (legacy behavior)
@@ -51607,8 +51503,6 @@ sender = Entity.USER
 # interactive user input is external untrusted input; SYSTEM
 # (operator) input is trusted (#1035)
 ⋮----
-# preserve trail of tool_ids for OpenAI Assistant fn-calls
-⋮----
 """
         Asynch version of `user_response`. See there for details.
         """
@@ -51690,7 +51584,6 @@ cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
 chat=False,  # i.e. it's a completion model not chat model
 ⋮----
 cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
-# Preserve trail of tool_ids for OpenAI Assistant fn-calls
 ⋮----
 """
         LLM response to a prompt.
@@ -51714,8 +51607,6 @@ response = self.llm.generate(prompt, output_len)
 # streaming was enabled, AND we did not find a cached response
 ⋮----
 cached = "[red](cached)[/red]" if response.cached else ""
-⋮----
-chat=False,  # i.e. it's a completion model not chat model
 ⋮----
 def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool
 ⋮----
@@ -51892,9 +51783,6 @@ tool_name = tc.function.name
 tool_msg = tc.function.arguments or {}
 ⋮----
 all_errors = False
-⋮----
-# Store tool class as an attribute on the exception
-ve.tool_class = tool_class  # type: ignore
 ⋮----
 # When no tool is valid and the message was produced
 # by the LLM, set the recovery flag
@@ -52310,378 +52198,6 @@ agent_type = type(agent).__name__
 user_response = Prompt.ask(
 ⋮----
 answer = agent.llm_response(request)
-</file>
-
-<file path="langroid/agent/chat_document.py">
-class ChatDocAttachment(BaseModel)
-⋮----
-# any additional data that should be attached to the document
-model_config = ConfigDict(extra="allow")
-⋮----
-class StatusCode(str, Enum)
-⋮----
-"""Codes meant to be returned by task.run(). Some are not used yet."""
-⋮----
-OK = "OK"
-ERROR = "ERROR"
-DONE = "DONE"
-STALLED = "STALLED"
-INF_LOOP = "INF_LOOP"
-KILL = "KILL"
-FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
-MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
-MAX_COST = "MAX_COST"
-MAX_TOKENS = "MAX_TOKENS"
-TIMEOUT = "TIMEOUT"
-NO_ANSWER = "NO_ANSWER"
-USER_QUIT = "USER_QUIT"
-⋮----
-class ChatDocMetaData(DocMetaData)
-⋮----
-parent_id: str = ""  # msg (ChatDocument) to which this is a response
-child_id: str = ""  # ChatDocument that has response to this message
-agent_id: str = ""  # ChatAgent that generated this message
-msg_idx: int = -1  # index of this message in the agent `message_history`
-sender: Entity  # sender of the message
-# True if this msg was relayed from another agent's LLM/handler output in a
-# multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
-# tools be dispatched for legitimate handoffs while still blocking raw
-# USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
-# GHSA-gjgq-w2m6-wr5q.
-tools_from_agent: bool = False
-# True if this msg's content/tools derive from external untrusted (USER)
-# input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
-# repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
-# Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
-# vetoes handle-only tool dispatch even across a USER relabel, closing the
-# content-laundering hole. Propagated (deepcopy carries it), never cleared.
-# See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
-tainted: bool = False
-# tool_id corresponding to single tool result in ChatDocument.content
-oai_tool_id: str | None = None
-tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
-block: None | Entity = None
-sender_name: str = ""
-recipient: str = ""
-usage: Optional[LLMTokenUsage] = None
-cached: bool = False
-displayed: bool = False
-has_citation: bool = False
-status: Optional[StatusCode] = None
-⋮----
-@model_validator(mode="after")
-    def _mark_tools_from_agent(self) -> "ChatDocMetaData"
-⋮----
-# Mark messages produced directly by an LLM: the tools in an LLM's
-# output are the LLM's own decision (the trusted trigger for handle-only
-# tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
-# to another agent even after relabeling the sender to USER. The mark is
-# only ever SET, never cleared, so it survives relabeling and deepcopies
-# (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
-# mark across the handoff). We deliberately do NOT mark generic AGENT
-# messages: a pass-through/echoing agent could surface untrusted USER
-# text (with embedded tool JSON) as AGENT content, and marking that
-# would re-open the user-origin bypass. Raw USER input is never marked,
-# so it stays filtered. See ChatAgent._filter_user_origin_tools.
-⋮----
-@property
-    def parent(self) -> Optional["ChatDocument"]
-⋮----
-@property
-    def child(self) -> Optional["ChatDocument"]
-⋮----
-class ChatDocLoggerFields(BaseModel)
-⋮----
-sender_entity: Entity = Entity.USER
-⋮----
-block: Entity | None = None
-tool_type: str = ""
-tool: str = ""
-content: str = ""
-⋮----
-@classmethod
-    def tsv_header(cls) -> str
-⋮----
-field_names = cls().model_dump().keys()
-⋮----
-class ChatDocument(Document)
-⋮----
-"""
-    Represents a message in a conversation among agents. All responders of an agent
-    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
-    and so does the Task.run() method.
-
-    Attributes:
-        oai_tool_calls (Optional[List[OpenAIToolCall]]):
-            Tool-calls from an OpenAI-compatible API
-        oai_tool_id2results (Optional[OrderedDict[str, str]]):
-            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
-        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
-            LLM should choose tool-use in its response
-            (auto, none, required, or a specific tool)
-        function_call (Optional[LLMFunctionCall]):
-            Function-call from an OpenAI-compatible API
-                (deprecated by OpenAI, in favor of tool-calls)
-        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
-            - `content` field (via JSON parsing),
-            - `oai_tool_calls`, or
-            - `function_call`
-        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
-        attachment (None | ChatDocAttachment): Any additional data attached.
-    """
-⋮----
-reasoning: str = ""  # reasoning produced by a reasoning LLM
-content_any: Any = None  # to hold arbitrary data returned by responders
-# Original LLM response text including inline thought signatures
-# (e.g. <thinking>...</thinking>). Only populated when reasoning was
-# extracted from inline tags in the message text. Used by to_LLMMessage()
-# to preserve thought signatures in message history, which is critical
-# for models like Gemini 3 Flash and Amazon Nova that rely on seeing
-# their own thought tags in context to maintain reasoning ability.
-content_with_reasoning: Optional[str] = None
-files: List[FileAttachment] = []  # list of file attachments
-oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-oai_tool_id2result: Optional[OrderedDict[str, str]] = None
-oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
-function_call: Optional[LLMFunctionCall] = None
-# tools that are explicitly added by agent response/handler,
-# or tools recognized in the ChatDocument as handle-able tools
-tool_messages: List[ToolMessage] = []
-# all known tools in the msg that are in an agent's llm_tools_known list,
-# even if non-used/handled
-# (the list is populated by Agent.has_tool_message_attempt())
-all_tool_messages: Optional[List[ToolMessage]] = None
-# ID of the agent that populated all_tool_messages (for cache validity)
-all_tool_messages_agent_id: Optional[str] = None
-⋮----
-metadata: ChatDocMetaData
-attachment: None | ChatDocAttachment = None
-⋮----
-def __init__(self, **data: Any)
-⋮----
-@staticmethod
-    def deepcopy(doc: ChatDocument) -> ChatDocument
-⋮----
-new_doc = copy.deepcopy(doc)
-⋮----
-@staticmethod
-    def from_id(id: str) -> Optional["ChatDocument"]
-⋮----
-@staticmethod
-    def delete_id(id: str) -> None
-⋮----
-"""Remove ChatDocument with given id from ObjectRegistry,
-        and all its descendants.
-        """
-chat_doc = ChatDocument.from_id(id)
-# first delete all descendants
-⋮----
-next_chat_doc = chat_doc.child
-⋮----
-chat_doc = next_chat_doc
-⋮----
-def __str__(self) -> str
-⋮----
-fields = self.log_fields()
-tool_str = ""
-⋮----
-tool_str = f"{fields.tool_type}[{fields.tool}]: "
-recipient_str = ""
-⋮----
-recipient_str = f"=>{fields.recipient}: "
-⋮----
-def get_tool_names(self) -> List[str]
-⋮----
-"""
-        Get names of attempted tool usages (JSON or non-JSON) in the content
-            of the message.
-        Returns:
-            List[str]: list of *attempted* tool names
-            (We say "attempted" since we ONLY look at the `request` component of the
-            tool-call representation, and we're not fully parsing it into the
-            corresponding tool message class)
-
-        """
-tool_candidates = XMLToolMessage.find_candidates(self.content)
-⋮----
-tool_candidates = extract_top_level_json(self.content)
-⋮----
-tools = [json.loads(tc).get("request") for tc in tool_candidates]
-⋮----
-tool_dicts = [
-tools = [td.get("request") for td in tool_dicts if td is not None]
-⋮----
-def log_fields(self) -> ChatDocLoggerFields
-⋮----
-"""
-        Fields for logging in csv/tsv logger
-        Returns:
-            List[str]: list of fields
-        """
-tool_type = ""  # FUNC or TOOL
-tool = ""  # tool name or function name
-⋮----
-# Skip tool detection for system messages - they contain tool instructions,
-# not actual tool calls
-⋮----
-oai_tools = (
-⋮----
-tool_type = "FUNC"
-tool = self.function_call.name
-⋮----
-tool_type = "OAI_TOOL"
-tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
-⋮----
-json_tools = self.get_tool_names()
-⋮----
-json_tools = []
-⋮----
-tool_type = "TOOL"
-tool = json_tools[0]
-recipient = self.metadata.recipient
-content = self.content
-sender_entity = self.metadata.sender
-sender_name = self.metadata.sender_name
-⋮----
-def tsv_str(self) -> str
-⋮----
-field_values = fields.model_dump().values()
-⋮----
-def pop_tool_ids(self) -> None
-⋮----
-"""
-        Pop the last tool_id from the stack of tool_ids.
-        """
-⋮----
-@staticmethod
-    def _clean_fn_call(fc: LLMFunctionCall | None) -> None
-⋮----
-# Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
-# with oddities:
-# (a) the `name` is set, as well as `arguments.request` is set,
-#  and in langroid we use the `request` value as the `name`.
-#  In this case we override the `name` with the `request` value.
-# (b) the `name` looks like "functions blah" or just "functions"
-#   In this case we strip the "functions" part.
-⋮----
-request = fc.arguments.get("request")
-⋮----
-"""
-        Convert LLMResponse to ChatDocument.
-        Args:
-            response (LLMResponse): LLMResponse to convert.
-            displayed (bool): Whether this response was displayed to the user.
-            recognize_recipient_in_content (bool): Whether to parse message text
-                for recipient routing (``TO[<recipient>]:`` and JSON
-                ``{"recipient": ...}``). Default True.
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMResponse.
-        """
-⋮----
-message = message.strip()
-⋮----
-message = ""
-⋮----
-# there must be at least one if it's not None
-⋮----
-@staticmethod
-    def from_str(msg: str) -> "ChatDocument"
-⋮----
-# first check whether msg is structured as TO <recipient>: <message>
-⋮----
-# check if any top level json specifies a 'recipient'
-recipient = top_level_json_field(msg, "recipient")
-message = msg  # retain the whole msg in this case
-⋮----
-tainted=True,  # external user input is untrusted (#1035)
-⋮----
-"""
-        Convert LLMMessage to ChatDocument.
-
-        Args:
-            message (LLMMessage): LLMMessage to convert.
-            sender_name (str): Name of the sender. Defaults to "".
-            recipient (str): Name of the recipient. Defaults to "".
-
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMMessage.
-        """
-# Map LLMMessage Role to ChatDocument Entity
-role_to_entity = {
-⋮----
-sender_entity = role_to_entity.get(message.role, Entity.USER)
-⋮----
-"""
-        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
-        Usually there will be just a single LLMMessage, but when the ChatDocument
-        contains results from multiple OpenAI tool-calls, we would have a sequence
-        LLMMessages, one per tool-call result.
-
-        Args:
-            message (str|ChatDocument): Message to convert.
-            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
-                response, from the ChatAgent's latest message.
-        Returns:
-            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
-        """
-⋮----
-sender_role = Role.USER
-⋮----
-message = ChatDocument.from_str(message)
-# Prefer content_with_reasoning when available — this preserves
-# inline thought signatures (e.g. <thinking>...</thinking>) in
-# message history, which certain models (Gemini 3 Flash, Amazon
-# Nova) need to maintain reasoning across turns.
-# content_with_reasoning is only set when inline tags were
-# actually extracted, so this won't interfere with models that
-# provide reasoning via a separate API field.
-content = (
-fun_call = message.function_call
-oai_tool_calls = message.oai_tool_calls
-⋮----
-# This may happen when a (parent agent's) LLM generates a
-# a Function-call, and it ends up being sent to the current task's
-# LLM (possibly because the function-call is mis-named or has other
-# issues and couldn't be handled by handler methods).
-# But a function-call can only be generated by an entity with
-# Role.ASSISTANT, so we instead put the content of the function-call
-# in the content of the message.
-⋮----
-fun_call = None
-⋮----
-# same reasoning as for function-call above
-⋮----
-oai_tool_calls = None
-# some LLM APIs (e.g. gemini) don't like empty msg
-content = content or " "
-sender_name = message.metadata.sender_name
-tool_ids = message.metadata.tool_ids
-tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
-chat_document_id = message.id()
-⋮----
-sender_role = Role.SYSTEM
-⋮----
-# This is a response to a function call, so set the role to FUNCTION.
-sender_role = Role.FUNCTION
-sender_name = message.metadata.parent.function_call.name
-⋮----
-pending_tool_ids = [tc.id for tc in oai_tools]
-# The ChatAgent has pending OpenAI tool-call(s),
-# so the current ChatDocument contains
-# results for some/all/none of them.
-⋮----
-# Case 1:
-# There was exactly 1 pending tool-call, and in this case
-# the result would be a plain string in `content`
-⋮----
-# Case 2:
-# ChatDocument.content has result of a single tool-call
-⋮----
-# There were > 1 tool-calls awaiting response,
-⋮----
-sender_role = Role.ASSISTANT
-⋮----
-tool_id=tool_id,  # for OpenAI Assistant
 </file>
 
 <file path="langroid/agent/task.py">
@@ -53506,12 +53022,10 @@ if is_pass is None:  # no routing, i.e. neither PASS nor SEND
             valid, None otherwise
         """
 ⋮----
-# e.callbacks.set_parent_agent(self.agent)
 result = await e.run_async(
 ⋮----
 response_fn = self._entity_responder_async_map[cast(Entity, e)]
 result = await response_fn(self.pending_message)
-# update result.tool_messages if any
 ⋮----
 def result(self, status: StatusCode | None = None) -> ChatDocument | None
 ⋮----
@@ -53936,6 +53450,569 @@ responder = current_responder
 matched = False
 ⋮----
 matched = True
+</file>
+
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+</file>
+
+<file path="langroid/agent/chat_document.py">
+class ChatDocAttachment(BaseModel)
+⋮----
+# any additional data that should be attached to the document
+model_config = ConfigDict(extra="allow")
+⋮----
+class StatusCode(str, Enum)
+⋮----
+"""Codes meant to be returned by task.run(). Some are not used yet."""
+⋮----
+OK = "OK"
+ERROR = "ERROR"
+DONE = "DONE"
+STALLED = "STALLED"
+INF_LOOP = "INF_LOOP"
+KILL = "KILL"
+FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
+MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
+MAX_COST = "MAX_COST"
+MAX_TOKENS = "MAX_TOKENS"
+TIMEOUT = "TIMEOUT"
+NO_ANSWER = "NO_ANSWER"
+USER_QUIT = "USER_QUIT"
+⋮----
+class ChatDocMetaData(DocMetaData)
+⋮----
+parent_id: str = ""  # msg (ChatDocument) to which this is a response
+child_id: str = ""  # ChatDocument that has response to this message
+agent_id: str = ""  # ChatAgent that generated this message
+msg_idx: int = -1  # index of this message in the agent `message_history`
+sender: Entity  # sender of the message
+# True if this msg was relayed from another agent's LLM/handler output in a
+# multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
+# tools be dispatched for legitimate handoffs while still blocking raw
+# USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
+# GHSA-gjgq-w2m6-wr5q.
+tools_from_agent: bool = False
+# True if this msg's content/tools derive from external untrusted (USER)
+# input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
+# repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
+# Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
+# vetoes handle-only tool dispatch even across a USER relabel, closing the
+# content-laundering hole. Propagated (deepcopy carries it), never cleared.
+# See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
+tainted: bool = False
+# tool_id corresponding to single tool result in ChatDocument.content
+oai_tool_id: str | None = None
+tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
+block: None | Entity = None
+sender_name: str = ""
+recipient: str = ""
+usage: Optional[LLMTokenUsage] = None
+cached: bool = False
+displayed: bool = False
+has_citation: bool = False
+status: Optional[StatusCode] = None
+⋮----
+@model_validator(mode="after")
+    def _mark_tools_from_agent(self) -> "ChatDocMetaData"
+⋮----
+# Mark messages produced directly by an LLM: the tools in an LLM's
+# output are the LLM's own decision (the trusted trigger for handle-only
+# tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
+# to another agent even after relabeling the sender to USER. The mark is
+# only ever SET, never cleared, so it survives relabeling and deepcopies
+# (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
+# mark across the handoff). We deliberately do NOT mark generic AGENT
+# messages: a pass-through/echoing agent could surface untrusted USER
+# text (with embedded tool JSON) as AGENT content, and marking that
+# would re-open the user-origin bypass. Raw USER input is never marked,
+# so it stays filtered. See ChatAgent._filter_user_origin_tools.
+⋮----
+@property
+    def parent(self) -> Optional["ChatDocument"]
+⋮----
+@property
+    def child(self) -> Optional["ChatDocument"]
+⋮----
+class ChatDocLoggerFields(BaseModel)
+⋮----
+sender_entity: Entity = Entity.USER
+⋮----
+block: Entity | None = None
+tool_type: str = ""
+tool: str = ""
+content: str = ""
+⋮----
+@classmethod
+    def tsv_header(cls) -> str
+⋮----
+field_names = cls().model_dump().keys()
+⋮----
+class ChatDocument(Document)
+⋮----
+"""
+    Represents a message in a conversation among agents. All responders of an agent
+    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
+    and so does the Task.run() method.
+
+    Attributes:
+        oai_tool_calls (Optional[List[OpenAIToolCall]]):
+            Tool-calls from an OpenAI-compatible API
+        oai_tool_id2results (Optional[OrderedDict[str, str]]):
+            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
+        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
+            LLM should choose tool-use in its response
+            (auto, none, required, or a specific tool)
+        function_call (Optional[LLMFunctionCall]):
+            Function-call from an OpenAI-compatible API
+                (deprecated by OpenAI, in favor of tool-calls)
+        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
+            - `content` field (via JSON parsing),
+            - `oai_tool_calls`, or
+            - `function_call`
+        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
+        attachment (None | ChatDocAttachment): Any additional data attached.
+    """
+⋮----
+reasoning: str = ""  # reasoning produced by a reasoning LLM
+content_any: Any = None  # to hold arbitrary data returned by responders
+# Original LLM response text including inline thought signatures
+# (e.g. <thinking>...</thinking>). Only populated when reasoning was
+# extracted from inline tags in the message text. Used by to_LLMMessage()
+# to preserve thought signatures in message history, which is critical
+# for models like Gemini 3 Flash and Amazon Nova that rely on seeing
+# their own thought tags in context to maintain reasoning ability.
+content_with_reasoning: Optional[str] = None
+files: List[FileAttachment] = []  # list of file attachments
+oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+oai_tool_id2result: Optional[OrderedDict[str, str]] = None
+oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
+function_call: Optional[LLMFunctionCall] = None
+# tools that are explicitly added by agent response/handler,
+# or tools recognized in the ChatDocument as handle-able tools
+tool_messages: List[ToolMessage] = []
+# all known tools in the msg that are in an agent's llm_tools_known list,
+# even if non-used/handled
+# (the list is populated by Agent.has_tool_message_attempt())
+all_tool_messages: Optional[List[ToolMessage]] = None
+# ID of the agent that populated all_tool_messages (for cache validity)
+all_tool_messages_agent_id: Optional[str] = None
+⋮----
+metadata: ChatDocMetaData
+attachment: None | ChatDocAttachment = None
+⋮----
+def __init__(self, **data: Any)
+⋮----
+@staticmethod
+    def deepcopy(doc: ChatDocument) -> ChatDocument
+⋮----
+new_doc = copy.deepcopy(doc)
+⋮----
+@staticmethod
+    def from_id(id: str) -> Optional["ChatDocument"]
+⋮----
+@staticmethod
+    def delete_id(id: str) -> None
+⋮----
+"""Remove ChatDocument with given id from ObjectRegistry,
+        and all its descendants.
+        """
+chat_doc = ChatDocument.from_id(id)
+# first delete all descendants
+⋮----
+next_chat_doc = chat_doc.child
+⋮----
+chat_doc = next_chat_doc
+⋮----
+def __str__(self) -> str
+⋮----
+fields = self.log_fields()
+tool_str = ""
+⋮----
+tool_str = f"{fields.tool_type}[{fields.tool}]: "
+recipient_str = ""
+⋮----
+recipient_str = f"=>{fields.recipient}: "
+⋮----
+def get_tool_names(self) -> List[str]
+⋮----
+"""
+        Get names of attempted tool usages (JSON or non-JSON) in the content
+            of the message.
+        Returns:
+            List[str]: list of *attempted* tool names
+            (We say "attempted" since we ONLY look at the `request` component of the
+            tool-call representation, and we're not fully parsing it into the
+            corresponding tool message class)
+
+        """
+tool_candidates = XMLToolMessage.find_candidates(self.content)
+⋮----
+tool_candidates = extract_top_level_json(self.content)
+⋮----
+tools = [json.loads(tc).get("request") for tc in tool_candidates]
+⋮----
+tool_dicts = [
+tools = [td.get("request") for td in tool_dicts if td is not None]
+⋮----
+def log_fields(self) -> ChatDocLoggerFields
+⋮----
+"""
+        Fields for logging in csv/tsv logger
+        Returns:
+            List[str]: list of fields
+        """
+tool_type = ""  # FUNC or TOOL
+tool = ""  # tool name or function name
+⋮----
+# Skip tool detection for system messages - they contain tool instructions,
+# not actual tool calls
+⋮----
+oai_tools = (
+⋮----
+tool_type = "FUNC"
+tool = self.function_call.name
+⋮----
+tool_type = "OAI_TOOL"
+tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
+⋮----
+json_tools = self.get_tool_names()
+⋮----
+json_tools = []
+⋮----
+tool_type = "TOOL"
+tool = json_tools[0]
+recipient = self.metadata.recipient
+content = self.content
+sender_entity = self.metadata.sender
+sender_name = self.metadata.sender_name
+⋮----
+def tsv_str(self) -> str
+⋮----
+field_values = fields.model_dump().values()
+⋮----
+def pop_tool_ids(self) -> None
+⋮----
+"""
+        Pop the last tool_id from the stack of tool_ids.
+        """
+⋮----
+@staticmethod
+    def _clean_fn_call(fc: LLMFunctionCall | None) -> None
+⋮----
+# Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
+# with oddities:
+# (a) the `name` is set, as well as `arguments.request` is set,
+#  and in langroid we use the `request` value as the `name`.
+#  In this case we override the `name` with the `request` value.
+# (b) the `name` looks like "functions blah" or just "functions"
+#   In this case we strip the "functions" part.
+⋮----
+request = fc.arguments.get("request")
+⋮----
+"""
+        Convert LLMResponse to ChatDocument.
+        Args:
+            response (LLMResponse): LLMResponse to convert.
+            displayed (bool): Whether this response was displayed to the user.
+            recognize_recipient_in_content (bool): Whether to parse message text
+                for recipient routing (``TO[<recipient>]:`` and JSON
+                ``{"recipient": ...}``). Default True.
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMResponse.
+        """
+⋮----
+message = message.strip()
+⋮----
+message = ""
+⋮----
+# there must be at least one if it's not None
+⋮----
+@staticmethod
+    def from_str(msg: str) -> "ChatDocument"
+⋮----
+# first check whether msg is structured as TO <recipient>: <message>
+⋮----
+# check if any top level json specifies a 'recipient'
+recipient = top_level_json_field(msg, "recipient")
+message = msg  # retain the whole msg in this case
+⋮----
+tainted=True,  # external user input is untrusted (#1035)
+⋮----
+"""
+        Convert LLMMessage to ChatDocument.
+
+        Args:
+            message (LLMMessage): LLMMessage to convert.
+            sender_name (str): Name of the sender. Defaults to "".
+            recipient (str): Name of the recipient. Defaults to "".
+
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMMessage.
+        """
+# Map LLMMessage Role to ChatDocument Entity
+role_to_entity = {
+⋮----
+sender_entity = role_to_entity.get(message.role, Entity.USER)
+⋮----
+"""
+        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
+        Usually there will be just a single LLMMessage, but when the ChatDocument
+        contains results from multiple OpenAI tool-calls, we would have a sequence
+        LLMMessages, one per tool-call result.
+
+        Args:
+            message (str|ChatDocument): Message to convert.
+            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
+                response, from the ChatAgent's latest message.
+        Returns:
+            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
+        """
+⋮----
+sender_role = Role.USER
+⋮----
+message = ChatDocument.from_str(message)
+# Prefer content_with_reasoning when available — this preserves
+# inline thought signatures (e.g. <thinking>...</thinking>) in
+# message history, which certain models (Gemini 3 Flash, Amazon
+# Nova) need to maintain reasoning across turns.
+# content_with_reasoning is only set when inline tags were
+# actually extracted, so this won't interfere with models that
+# provide reasoning via a separate API field.
+content = (
+fun_call = message.function_call
+oai_tool_calls = message.oai_tool_calls
+⋮----
+# This may happen when a (parent agent's) LLM generates a
+# a Function-call, and it ends up being sent to the current task's
+# LLM (possibly because the function-call is mis-named or has other
+# issues and couldn't be handled by handler methods).
+# But a function-call can only be generated by an entity with
+# Role.ASSISTANT, so we instead put the content of the function-call
+# in the content of the message.
+⋮----
+fun_call = None
+⋮----
+# same reasoning as for function-call above
+⋮----
+oai_tool_calls = None
+# some LLM APIs (e.g. gemini) don't like empty msg
+content = content or " "
+sender_name = message.metadata.sender_name
+tool_ids = message.metadata.tool_ids
+tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
+chat_document_id = message.id()
+⋮----
+sender_role = Role.SYSTEM
+⋮----
+# This is a response to a function call, so set the role to FUNCTION.
+sender_role = Role.FUNCTION
+sender_name = message.metadata.parent.function_call.name
+⋮----
+pending_tool_ids = [tc.id for tc in oai_tools]
+# The ChatAgent has pending OpenAI tool-call(s),
+# so the current ChatDocument contains
+# results for some/all/none of them.
+⋮----
+# Case 1:
+# There was exactly 1 pending tool-call, and in this case
+# the result would be a plain string in `content`
+⋮----
+# Case 2:
+# ChatDocument.content has result of a single tool-call
+⋮----
+# There were > 1 tool-calls awaiting response,
+⋮----
+sender_role = Role.ASSISTANT
+⋮----
+tool_id=tool_id,  # for OpenAI Assistant
 </file>
 
 <file path="README.md">
@@ -56571,8 +56648,6 @@ dict_no_none = {k: v for k, v in d.items() if v is not None}
 ⋮----
 # convert tool calls to API format
 ⋮----
-# arguments must be a string
-⋮----
 # IMPORTANT! drop fields that are not expected in API call
 ⋮----
 content = "FUNC: " + json.dumps(self.function_call)
@@ -56893,7 +56968,7 @@ def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.15.17
+  rev: v0.15.20
   hooks:
     - id: ruff
 </file>
@@ -57759,8 +57834,6 @@ result = await self._achat(
 ⋮----
 def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
 ⋮----
-# If it's not in the cache, call the API
-⋮----
 completion_call = self.client.chat.completions.create
 ⋮----
 # If streaming, cannot cache result
@@ -57955,7 +58028,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.65.5"
+version = "0.65.7"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
