@@ -19,6 +19,7 @@ DELETION_ALLOWED_PATHS = [
     ".chroma",
     ".lancedb",
     ".weaviate",
+    ".deeplake",
 ]
 
 

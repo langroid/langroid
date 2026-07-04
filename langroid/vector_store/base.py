@@ -59,6 +59,7 @@ class VectorStore(ABC):
     @staticmethod
     def create(config: VectorStoreConfig) -> Optional["VectorStore"]:
         from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+        from langroid.vector_store.deeplakedb import DeepLakeDB, DeepLakeDBConfig
         from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
         from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
         from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
@@ -72,6 +73,8 @@ class VectorStore(ABC):
             return ChromaDB(config)
         elif isinstance(config, LanceDBConfig):
             return LanceDB(config)
+        elif isinstance(config, DeepLakeDBConfig):
+            return DeepLakeDB(config)
         elif isinstance(config, MeiliSearchConfig):
             return MeiliSearch(config)
         elif isinstance(config, PostgresDBConfig):

@@ -185,6 +185,25 @@ def vecdb(request) -> VectorStore:
         ms.delete_collection(collection_name=ms_cfg.collection_name)
         return
 
+    if request.param == "deeplake":
+        try:
+            from langroid.vector_store.deeplakedb import DeepLakeDB, DeepLakeDBConfig
+        except ImportError:
+            pytest.skip("DeepLake not installed")
+            return
+        dl_dir = ".deeplake/data/" + embed_cfg.model_type
+        rmdir(dl_dir)
+        dl_cfg = DeepLakeDBConfig(
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=dl_dir,
+            embedding=embed_cfg,
+        )
+        dl = DeepLakeDB(dl_cfg)
+        dl.add_documents(stored_docs)
+        yield dl
+        rmdir(dl_dir)
+        return
+
     if request.param == "lancedb":
         ldb_dir = ".lancedb/data/" + embed_cfg.model_type
         rmdir(ldb_dir)
@@ -236,6 +255,7 @@ def vecdb(request) -> VectorStore:
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "lancedb",
         "chroma",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -299,6 +319,7 @@ def test_hybrid_vector_search(
         "qdrant_cloud",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_docker",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -395,6 +416,7 @@ def test_vector_stores_access(vecdb):
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_docker",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -464,6 +486,7 @@ def test_vector_stores_context_window(vecdb):
         "lancedb",
         "postgres",
         "weaviate_docker",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -521,6 +544,7 @@ def test_doc_chat_batch_with_vecdb_cloning(vecdb, test_settings):
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_docker",
+        "deeplake",
     ],
     indirect=True,
 )
