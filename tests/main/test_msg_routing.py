@@ -106,7 +106,8 @@ def test_parse_address_no_match(msg: str, prefix: str):
 
 
 @pytest.mark.parametrize("prefix", [AT, SEND_TO])
-def test_bare_address_routes_as_pass_through(prefix: str):
+@pytest.mark.parametrize("suffix", ["", ".", ","])
+def test_bare_address_routes_as_pass_through(prefix: str, suffix: str):
     """A responder ending with a bare address (e.g. "@Alice" / "__SEND__:Alice"
     with no following content) is a pass-through: the pending message must be
     forwarded to the recipient. _process_result_routing must therefore set the
@@ -120,7 +121,7 @@ def test_bare_address_routes_as_pass_through(prefix: str):
         metadata=ChatDocMetaData(sender=Entity.USER),
     )
     result = ChatDocument(
-        content=f"ok, over to you {prefix}Alice",
+        content=f"ok, over to you {prefix}Alice{suffix}",
         metadata=ChatDocMetaData(sender=Entity.LLM),
     )
     out = task._process_result_routing(result, Entity.LLM)
@@ -128,7 +129,7 @@ def test_bare_address_routes_as_pass_through(prefix: str):
     # recipient recorded on the message that will be passed through
     assert task.pending_message.metadata.recipient == "Alice"
     # content normalized so step() recognizes the pass-through
-    assert PASS in out.content
+    assert out.content == PASS
 
 
 class NudgeTool(lr.ToolMessage):
@@ -283,7 +284,9 @@ def test_routing_ignored_when_string_signals_disabled(content: str):
     assert task.pending_message.metadata.recipient == ""
 
 
-def test_bare_address_pass_through_task():
+@pytest.mark.parametrize("prefix", [AT, SEND_TO])
+@pytest.mark.parametrize("suffix", ["", ".", ","])
+def test_bare_address_pass_through_task(prefix: str, suffix: str):
     """Task-level pass-through (sync): an LLM response that is a bare address
     must cause the ORIGINAL pending message -- not the literal address string,
     and not PASS -- to be forwarded to the addressee, who then answers it."""
@@ -298,7 +301,7 @@ def test_bare_address_pass_through_task():
                 and message.metadata.sender_name == "Alice"
             ):
                 return self.create_llm_response(f"{DONE} {message.content}")
-            return self.create_llm_response(f"over to you {AT}Alice")
+            return self.create_llm_response(f"over to you {prefix}Alice{suffix}")
 
     class AliceAgent(ChatAgent):
         def llm_response(
@@ -330,8 +333,10 @@ def test_bare_address_pass_through_task():
     assert PASS not in result.content
 
 
+@pytest.mark.parametrize("prefix", [AT, SEND_TO])
+@pytest.mark.parametrize("suffix", ["", ".", ","])
 @pytest.mark.asyncio
-async def test_bare_address_pass_through_task_async():
+async def test_bare_address_pass_through_task_async(prefix: str, suffix: str):
     """Task-level pass-through (async): same contract as the sync version."""
     alice_received: List[Tuple[str, str]] = []
 
@@ -344,7 +349,7 @@ async def test_bare_address_pass_through_task_async():
                 and message.metadata.sender_name == "Alice"
             ):
                 return self.create_llm_response(f"{DONE} {message.content}")
-            return self.create_llm_response(f"over to you {AT}Alice")
+            return self.create_llm_response(f"over to you {prefix}Alice{suffix}")
 
     class AliceAgent(ChatAgent):
         async def llm_response_async(
