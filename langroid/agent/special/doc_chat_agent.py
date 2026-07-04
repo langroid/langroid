@@ -93,6 +93,27 @@ def apply_nest_asyncio() -> None:
 logger = logging.getLogger(__name__)
 
 
+def _coerce_finite_float(value: Any) -> Optional[float]:
+    """Coerce an arbitrary runtime value to a finite float, if possible.
+
+    Args:
+        value (Any): A value expected to be numeric (e.g. a retrieval
+            score or threshold), but which at runtime may be None or
+            oddly-shaped (non-numeric, or NaN/infinite).
+
+    Returns:
+        Optional[float]: The value as a finite float, or None if it
+            cannot be coerced to one.
+    """
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(result):
+        return None
+    return result
+
+
 def _finite_positive_threshold(value: Any) -> Optional[float]:
     """Normalize a runtime score-threshold value to an "active" filter value.
 
@@ -107,11 +128,8 @@ def _finite_positive_threshold(value: Any) -> Optional[float]:
             score filter is INACTIVE (invalid, `None`, `NaN`, infinite,
             zero, and negative values all deactivate the filter).
     """
-    try:
-        threshold = float(value)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(threshold) or threshold <= 0.0:
+    threshold = _coerce_finite_float(value)
+    if threshold is None or threshold <= 0.0:
         return None
     return threshold
 
@@ -1468,7 +1486,16 @@ class DocChatAgent(ChatAgent):
                 getattr(self.config, "bm25_score_threshold", None)
             )
             if bm25_threshold is not None:
-                docs_scores = [(d, s) for d, s in docs_scores if s >= bm25_threshold]
+                # Compare defensively: a runtime BM25/FTS backend may
+                # return scores that are None or otherwise non-orderable,
+                # so coerce each score first and drop pairs lacking a
+                # finite numeric score, rather than crash on `>=`.
+                filtered_docs_scores: List[Tuple[Document, float]] = []
+                for d, s in docs_scores:
+                    score = _coerce_finite_float(s)
+                    if score is not None and score >= bm25_threshold:
+                        filtered_docs_scores.append((d, score))
+                docs_scores = filtered_docs_scores
             id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,

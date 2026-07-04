@@ -16,7 +16,9 @@ isolated deterministically.
 
 Also covered: defensive handling of absent/null/odd runtime threshold
 values — invalid BM25 thresholds deactivate the filter, while invalid or
-non-finite fuzzy thresholds yield no fuzzy matches.
+non-finite fuzzy thresholds yield no fuzzy matches — and of odd runtime
+BM25 *scores* (None/non-numeric/non-finite), which an active filter must
+drop rather than crash on, and an inactive filter must pass through.
 """
 
 from typing import Any, List, Optional, Tuple
@@ -230,6 +232,67 @@ def test_bm25_absent_threshold_attribute_is_inactive():
     assert not hasattr(agent.config, "bm25_score_threshold")  # sanity
     chunks = agent.get_relevant_chunks(query)
     assert {d.metadata.id for d in chunks} == baseline_ids
+
+
+def _odd_bm25_docs_scores() -> List[Tuple[Document, Any]]:
+    """Docs paired with runtime BM25 scores of assorted odd shapes."""
+    docs = _mk_docs(
+        {
+            "kept": "Tigers are the largest cat species.",
+            "kept_str": "Lions are the second largest cat species.",
+            "none": "Chunk with a null score.",
+            "nan": "Chunk with a NaN score.",
+            "inf": "Chunk with an infinite score.",
+            "text": "Chunk with a non-numeric score.",
+            "obj": "Chunk with an arbitrary-object score.",
+            "low": "Chunk scored below the threshold.",
+        }
+    )
+    id2doc = {d.metadata.id: d for d in docs}
+    return [
+        (id2doc["kept"], 2.5),  # plain float above threshold
+        (id2doc["kept_str"], "3.5"),  # coercible string above threshold
+        (id2doc["none"], None),
+        (id2doc["nan"], float("nan")),
+        (id2doc["inf"], float("inf")),
+        (id2doc["text"], "not-a-number"),
+        (id2doc["obj"], object()),
+        (id2doc["low"], 0.5),  # finite but below threshold
+    ]
+
+
+def test_bm25_odd_runtime_scores_with_active_threshold():
+    """Oddly-shaped runtime BM25 scores must not crash an active filter.
+
+    A BM25/FTS backend may hand back scores that are None, non-numeric,
+    or non-finite; with the threshold active, such pairs are dropped
+    (never compared raw), while coercible scores are compared after
+    coercion to float.
+    """
+    docs_scores = _odd_bm25_docs_scores()
+    agent = _make_bm25_agent(1.0)
+    agent.get_similar_chunks_bm25 = (  # type: ignore[method-assign]
+        lambda query, multiple: list(docs_scores)
+    )
+    chunks = agent.get_relevant_chunks("tigers")
+    assert {d.metadata.id for d in chunks} == {"kept", "kept_str"}
+
+
+def test_bm25_odd_runtime_scores_with_inactive_threshold_pass_through():
+    """With the filter inactive (default 0.0), odd scores are untouched.
+
+    No filtering and no coercion happen: even a None-scored pair flows
+    through retrieval, preserving pre-threshold behavior (the final list
+    is just capped at `n_relevant_chunks`, in retrieval order).
+    """
+    docs_scores = _odd_bm25_docs_scores()
+    agent = _make_bm25_agent(0.0)
+    agent.get_similar_chunks_bm25 = (  # type: ignore[method-assign]
+        lambda query, multiple: list(docs_scores)
+    )
+    chunks = agent.get_relevant_chunks("tigers")
+    # first n_relevant_chunks (=3) pairs, including the None-scored one
+    assert {d.metadata.id for d in chunks} == {"kept", "kept_str", "none"}
 
 
 @pytest.mark.parametrize("bad_threshold", _NON_FINITE_THRESHOLDS)
