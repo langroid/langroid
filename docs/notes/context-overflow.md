@@ -63,12 +63,15 @@ budget = chat_context_length - min_output_tokens - CHAT_HISTORY_BUFFER
 excess = history_tokens - budget
 ```
 
-is divided by the number of remaining eligible messages, and the current
-message is trimmed by (roughly) that share of the excess, subject to:
+is divided by the number of remaining *compressible* messages — those whose
+content can actually shrink, i.e. is above the 30-token floor plus the
+truncation-marker overhead — and the current message is trimmed by (roughly)
+that share of the excess, subject to:
 
 - a floor of 30 tokens: no message's content is ever cut below 30 tokens, and
-  messages already at/below the floor are left untouched (truncating them
-  would save nothing);
+  messages already at/below the floor plus the truncation-marker overhead are
+  left untouched and excluded from the even-share split (truncating them
+  would save nothing — it could only *grow* them by the appended marker);
 - a capacity check: each message absorbs at least the portion of the excess
   that the messages after it *cannot* absorb (they can each shed only their
   content above the floor), so a single forward pass suffices whenever

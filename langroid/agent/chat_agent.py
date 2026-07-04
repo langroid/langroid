@@ -1767,32 +1767,36 @@ class ChatAgent(Agent):
                             continue
                         n_truncated += 1
                         # Distribute the current excess evenly across the
-                        # remaining compressible messages, so each retains as
-                        # much content as possible instead of being collapsed
-                        # to the fixed 30-token floor. The excess is recomputed
-                        # every iteration, so the distribution self-corrects
-                        # as we move forward through the history.
+                        # remaining *compressible* messages, so each retains
+                        # as much content as possible instead of being
+                        # collapsed to the fixed 30-token floor. The excess is
+                        # recomputed every iteration, so the distribution
+                        # self-corrects as we move forward through the
+                        # history.
                         _current_excess = self.chat_num_tokens(hist) - _target_tokens
-                        _n_remaining = (
-                            last_msg_idx_to_compress - msg_idx_to_compress + 1
-                        )
-                        _even_share = math.ceil(_current_excess / _n_remaining)
-                        # Messages after this one can shed at most their
-                        # content above the floor (net of the appended
-                        # warning); this message must absorb whatever they
-                        # cannot, so that this single forward pass reaches the
-                        # target whenever that is possible at all.
-                        _later_capacity = sum(
-                            max(
-                                0,
-                                _content_tokens(m.content)
-                                - _min_keep_tokens
-                                - _warning_tokens,
-                            )
+                        # Shrink capacity of each *later* message in the
+                        # compressible range: its content above the floor (net
+                        # of the appended warning). Non-positive entries are
+                        # the tiny messages the skip-check above will leave
+                        # untouched; they must not dilute the even share, so
+                        # only messages with positive capacity count toward
+                        # the denominator (plus this message, which passed the
+                        # skip-check and is therefore compressible).
+                        _later_capacities = [
+                            _content_tokens(m.content)
+                            - _min_keep_tokens
+                            - _warning_tokens
                             for m in hist[
                                 msg_idx_to_compress + 1 : last_msg_idx_to_compress + 1
                             ]
-                        )
+                        ]
+                        _n_remaining = 1 + sum(1 for c in _later_capacities if c > 0)
+                        _even_share = math.ceil(_current_excess / _n_remaining)
+                        # Later messages can shed at most their capacity; this
+                        # message must absorb whatever they cannot, so that
+                        # this single forward pass reaches the target whenever
+                        # that is possible at all.
+                        _later_capacity = sum(c for c in _later_capacities if c > 0)
                         _reduction = max(_even_share, _current_excess - _later_capacity)
                         # Extra 2-token slack: re-encoding truncated content
                         # plus the appended warning can merge/split tokens at
