@@ -388,6 +388,17 @@ def test_bm25_odd_runtime_scores_with_inactive_threshold_pass_through():
     assert {d.metadata.id for d in chunks} == {"kept", "kept_str", "none"}
 
 
+def test_bm25_odd_runtime_scores_inactive_threshold_with_rrf():
+    """RRF drops unrankable BM25 scores even when threshold is inactive."""
+    docs_scores = _odd_bm25_docs_scores()
+    agent = _make_bm25_agent(0.0, use_reciprocal_rank_fusion=True)
+    agent.get_similar_chunks_bm25 = (  # type: ignore[method-assign]
+        lambda query, multiple: list(docs_scores)
+    )
+    chunks = agent.get_relevant_chunks("tigers")
+    assert [d.metadata.id for d in chunks] == ["kept_str", "kept", "low"]
+
+
 @pytest.mark.parametrize("bad_threshold", _NON_FINITE_THRESHOLDS)
 def test_fuzzy_invalid_runtime_threshold_yields_no_matches(bad_threshold):
     """Invalid/non-finite fuzzy thresholds yield NO fuzzy matches (no crash).

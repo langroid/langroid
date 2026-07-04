@@ -1496,6 +1496,16 @@ class DocChatAgent(ChatAgent):
                     if score is not None and score >= bm25_threshold:
                         filtered_docs_scores.append((d, score))
                 docs_scores = filtered_docs_scores
+            elif self.config.use_reciprocal_rank_fusion:
+                # RRF always ranks BM25 pairs by score, so even when the
+                # threshold is inactive, normalize scores first and drop
+                # unrankable pairs rather than sorting mixed raw values.
+                normalized_docs_scores: List[Tuple[Document, float]] = []
+                for d, s in docs_scores:
+                    score = _coerce_finite_float(s)
+                    if score is not None:
+                        normalized_docs_scores.append((d, score))
+                docs_scores = normalized_docs_scores
             id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,
