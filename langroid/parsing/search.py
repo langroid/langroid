@@ -57,7 +57,7 @@ def find_fuzzy_matches_in_docs(
     # unvalidated config); by contract such thresholds yield no matches.
     try:
         threshold = float(score_threshold)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return []
     if not math.isfinite(threshold):
         return []

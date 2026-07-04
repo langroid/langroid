@@ -28,7 +28,7 @@ import pytest
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.search import find_closest_matches_with_bm25, preprocess_text
+from langroid.parsing.search import find_closest_matches_with_bm25
 from langroid.vector_store.base import VectorStoreConfig
 
 
@@ -61,6 +61,12 @@ BM25_CONTENTS = [
     "The stock market fluctuated wildly this quarter.",
 ]
 
+BM25_CONTENTS_CLEAN = [
+    "tigers largest cat species world",
+    "lions second largest cat species world",
+    "stock market fluctuated wildly quarter",
+]
+
 FUZZY_CONTENTS = {
     # for the query "quantum entanglement", fuzzy partial-ratio scores are
     # ~100 ("high": contains the query verbatim), ~42 ("low"), ~15 ("noise")
@@ -91,6 +97,20 @@ def _make_agent(**config_kwargs) -> DocChatAgent:
     return agent
 
 
+def _simple_preprocess_text(text: str) -> str:
+    """Small deterministic cleaner for these hermetic retrieval tests."""
+    return " ".join(word.strip(".,").lower() for word in text.split())
+
+
+@pytest.fixture(autouse=True)
+def _no_nltk_preprocess(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep BM25 tests offline by avoiding NLTK resource downloads."""
+    monkeypatch.setattr(
+        "langroid.parsing.search.preprocess_text",
+        _simple_preprocess_text,
+    )
+
+
 def _make_bm25_agent(
     bm25_score_threshold: float,
     use_reciprocal_rank_fusion: bool = False,
@@ -104,15 +124,17 @@ def _make_bm25_agent(
     docs = _mk_docs({str(i): c for i, c in enumerate(BM25_CONTENTS)})
     agent.chunked_docs = docs
     agent.chunked_docs_clean = [
-        Document(content=preprocess_text(d.content), metadata=d.metadata) for d in docs
+        Document(content=content, metadata=doc.metadata)
+        for doc, content in zip(docs, BM25_CONTENTS_CLEAN)
     ]
     return agent
 
 
-def _make_fuzzy_agent(fuzzy_score_threshold: Optional[float]) -> DocChatAgent:
+def _make_fuzzy_agent(
+    fuzzy_score_threshold: Optional[float],
+    use_reciprocal_rank_fusion: bool = False,
+) -> DocChatAgent:
     # None => use the config default, to verify default behavior end-to-end.
-    # With RRF enabled, fuzzy-match results are ranked and returned on their
-    # own, without needing semantic or bm25 results.
     kwargs = (
         {}
         if fuzzy_score_threshold is None
@@ -121,7 +143,7 @@ def _make_fuzzy_agent(fuzzy_score_threshold: Optional[float]) -> DocChatAgent:
     agent = _make_agent(
         use_bm25_search=False,
         use_fuzzy_match=True,
-        use_reciprocal_rank_fusion=True,
+        use_reciprocal_rank_fusion=use_reciprocal_rank_fusion,
         **kwargs,
     )
     docs = _mk_docs(FUZZY_CONTENTS)
@@ -226,6 +248,29 @@ def test_fuzzy_score_threshold_on_retrieval_path():
     assert chunks == []
 
 
+def test_fuzzy_score_threshold_on_reciprocal_rank_fusion_path():
+    """Fuzzy thresholding must happen before RRF rank collection."""
+    query = "quantum entanglement"
+
+    chunks = _make_fuzzy_agent(
+        None,
+        use_reciprocal_rank_fusion=True,
+    ).get_relevant_chunks(query)
+    assert {d.metadata.id for d in chunks} == {"high"}
+
+    chunks = _make_fuzzy_agent(
+        0.0,
+        use_reciprocal_rank_fusion=True,
+    ).get_relevant_chunks(query)
+    assert {d.metadata.id for d in chunks} == {"high", "low"}
+
+    chunks = _make_fuzzy_agent(
+        100.0,
+        use_reciprocal_rank_fusion=True,
+    ).get_relevant_chunks(query)
+    assert chunks == []
+
+
 # values that are not finite numbers: invalid for BOTH thresholds
 _NON_FINITE_THRESHOLDS: List[Any] = [
     None,
@@ -234,6 +279,7 @@ _NON_FINITE_THRESHOLDS: List[Any] = [
     float("-inf"),
     "not-a-number",
     object(),
+    pytest.param(10**10000, id="huge-int"),
 ]
 # for BM25, negative (and zero) finite values also deactivate the filter;
 # for fuzzy, a negative finite threshold is a legitimate "keep all" setting
