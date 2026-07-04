@@ -91,11 +91,15 @@ def _make_agent(**config_kwargs) -> DocChatAgent:
     return agent
 
 
-def _make_bm25_agent(bm25_score_threshold: float) -> DocChatAgent:
+def _make_bm25_agent(
+    bm25_score_threshold: float,
+    use_reciprocal_rank_fusion: bool = False,
+) -> DocChatAgent:
     agent = _make_agent(
         use_bm25_search=True,
         use_fuzzy_match=False,
         bm25_score_threshold=bm25_score_threshold,
+        use_reciprocal_rank_fusion=use_reciprocal_rank_fusion,
     )
     docs = _mk_docs({str(i): c for i, c in enumerate(BM25_CONTENTS)})
     agent.chunked_docs = docs
@@ -164,6 +168,42 @@ def test_bm25_score_threshold_on_retrieval_path():
 
     # threshold above the top score => all BM25 results are filtered out
     chunks = _make_bm25_agent(top_score + 1.0).get_relevant_chunks(query)
+    assert chunks == []
+
+
+def test_bm25_score_threshold_on_reciprocal_rank_fusion_path():
+    """BM25 thresholding must happen before RRF rank collection."""
+    query = "tigers"
+    baseline_agent = _make_bm25_agent(
+        0.0,
+        use_reciprocal_rank_fusion=True,
+    )
+    docs = baseline_agent.chunked_docs
+    docs_clean = baseline_agent.chunked_docs_clean
+    scored = find_closest_matches_with_bm25(docs, docs_clean, query, k=9)
+    scores = {d.metadata.id: score for d, score in scored}
+    top_id, top_score = max(scores.items(), key=lambda kv: kv[1])
+    assert top_score > 0.0
+
+    chunks = baseline_agent.get_relevant_chunks(query)
+    assert {d.metadata.id for d in chunks} == set(scores.keys())
+
+    chunks = _make_bm25_agent(
+        top_score / 2,
+        use_reciprocal_rank_fusion=True,
+    ).get_relevant_chunks(query)
+    assert {d.metadata.id for d in chunks} == {top_id}
+
+    chunks = _make_bm25_agent(
+        top_score,
+        use_reciprocal_rank_fusion=True,
+    ).get_relevant_chunks(query)
+    assert {d.metadata.id for d in chunks} == {top_id}
+
+    chunks = _make_bm25_agent(
+        top_score + 1.0,
+        use_reciprocal_rank_fusion=True,
+    ).get_relevant_chunks(query)
     assert chunks == []
 
 
