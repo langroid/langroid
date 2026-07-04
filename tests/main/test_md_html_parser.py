@@ -3,21 +3,33 @@ Tests for Markdown and HTML support in DocumentParser / DocumentType.
 
 Covers:
 - DocumentType enum has MD and HTML values
-- _document_type() detects .md, .html, .htm extensions correctly
+- _document_type() dispatches on extension (case-insensitive) for all
+  recognised extensions, and falls back to the plain-text heuristic (or
+  ValueError) for unrecognised ones
 - DocumentType.MD correctly precedes is_plain_text() heuristic
 - chunks_from_path_or_bytes() returns non-empty chunks for both formats
-- Markdown YAML front-matter is stripped
-- HTML tags are stripped; readable text is preserved
+- Markdown is returned as raw Markdown (syntax and embedded HTML-like
+  text preserved); YAML front-matter is stripped
+- HTML tags are stripped; adjacent elements are newline-separated
+- MIME-based bytes dispatch (text/html, text/markdown, text/x-markdown,
+  text/plain) is covered deterministically via a fake `magic` module
+- .md / .html / .htm URLs are fetched over HTTP(S) and parsed
 - DocumentParser.create() raises a clear ValueError for MD/HTML
   (they are handled via chunks_from_path_or_bytes, not via a subclass)
 - Plain-text bytes ingestion falls back to the UTF-8 heuristic (and never
   errors out) when python-magic / native libmagic is missing or broken
 """
 
+import functools
+import http.server
 import os
+import pathlib
+import shutil
 import sys
+import threading
 import time
 import types
+from typing import Any, Iterator
 
 import pytest
 
@@ -26,7 +38,7 @@ from langroid.parsing.document_parser import (
     DocumentType,
     _strip_yaml_frontmatter,
 )
-from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 _MD_PATH = os.path.join(_DATA_DIR, "sample.md")
@@ -56,6 +68,21 @@ def test_document_type_enum_has_md_and_html() -> None:
         ("page.html", DocumentType.HTML),
         ("page.htm", DocumentType.HTML),
         ("PAGE.HTML", DocumentType.HTML),
+        ("page.HtM", DocumentType.HTML),
+        # Legacy extensions must dispatch case-insensitively, BEFORE the
+        # plain-text heuristic (none of these files exist on disk).
+        ("paper.pdf", DocumentType.PDF),
+        ("Paper.PDF", DocumentType.PDF),
+        ("report.docx", DocumentType.DOCX),
+        ("Report.DocX", DocumentType.DOCX),
+        ("legacy.doc", DocumentType.DOC),
+        ("LEGACY.DOC", DocumentType.DOC),
+        ("sheet.xlsx", DocumentType.XLSX),
+        ("Sheet.XLSX", DocumentType.XLSX),
+        ("old.xls", DocumentType.XLS),
+        ("Old.XlS", DocumentType.XLS),
+        ("slides.pptx", DocumentType.PPTX),
+        ("Slides.PpTx", DocumentType.PPTX),
     ],
 )
 def test_document_type_extension_detection(
@@ -65,6 +92,25 @@ def test_document_type_extension_detection(
     # The file doesn't need to exist — we only care about extension dispatch.
     result = DocumentParser._document_type(filename)
     assert result == expected
+
+
+def test_unrecognized_extension_text_file_falls_back_to_txt(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Unknown extension + valid UTF-8 content → plain-text heuristic → TXT."""
+    path = tmp_path / "notes.customext"
+    path.write_text("Just ordinary readable text.\nSecond line of text.")
+    assert DocumentParser._document_type(str(path)) == DocumentType.TXT
+
+
+def test_unrecognized_extension_binary_file_raises_value_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Unknown extension + non-text content → ValueError."""
+    path = tmp_path / "blob.customext"
+    path.write_bytes(b"\x00\xff\xfe\x00\x01\x02binary\x80\x81\x00")
+    with pytest.raises(ValueError, match="Unsupported document type"):
+        DocumentParser._document_type(str(path))
 
 
 def test_md_extension_not_classified_as_txt() -> None:
@@ -85,12 +131,26 @@ def test_html_extension_not_classified_as_txt() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _assert_raw_markdown_preserved(full_text: str) -> None:
+    """Assert content is the RAW Markdown source, not rendered/tag-stripped.
+
+    These would all fail if the implementation rendered the Markdown or
+    passed it through BeautifulSoup's get_text() (which drops/alters
+    tag-like text such as ``<placeholder>``).
+    """
+    assert "# Heading One" in full_text
+    assert "**Markdown**" in full_text
+    assert "`code`" in full_text
+    assert "[link](https://example.com)" in full_text
+    assert "<placeholder>" in full_text
+
+
 def test_md_chunks_from_path() -> None:
     parser = Parser(ParsingConfig())
     chunks = DocumentParser.chunks_from_path_or_bytes(_MD_PATH, parser)
 
     assert len(chunks) > 0
-    full_text = " ".join(c.content for c in chunks)
+    full_text = "\n".join(c.content for c in chunks)
 
     # Front-matter should be stripped
     assert "title:" not in full_text
@@ -101,6 +161,9 @@ def test_md_chunks_from_path() -> None:
     assert "Item A" in full_text
     assert "blockquote" in full_text or "blockquote paragraph" in full_text
 
+    # Contract: MD returns the raw Markdown source (minus front-matter).
+    _assert_raw_markdown_preserved(full_text)
+
 
 def test_md_chunks_from_bytes() -> None:
     with open(_MD_PATH, "rb") as f:
@@ -109,8 +172,11 @@ def test_md_chunks_from_bytes() -> None:
     chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser, doc_type="md")
 
     assert len(chunks) > 0
-    full_text = " ".join(c.content for c in chunks)
+    full_text = "\n".join(c.content for c in chunks)
     assert "Heading One" in full_text
+
+    # Contract: MD returns the raw Markdown source (minus front-matter).
+    _assert_raw_markdown_preserved(full_text)
 
 
 def test_md_frontmatter_stripped() -> None:
@@ -157,6 +223,31 @@ def test_html_chunks_from_bytes() -> None:
     assert "<h1>" not in full_text
 
 
+def test_html_adjacent_elements_newline_separated_from_path() -> None:
+    """Adjacent HTML elements must be newline-separated, not concatenated.
+
+    sample.html contains ``<li>Item A</li><li>Item B</li>`` with no
+    whitespace between the elements: a regression from
+    ``get_text(separator="\\n")`` back to ``get_text()`` would concatenate
+    them into ``Item AItem B``.
+    """
+    parser = Parser(ParsingConfig())
+    chunks = DocumentParser.chunks_from_path_or_bytes(_HTML_PATH, parser)
+    full_text = "\n".join(c.content for c in chunks)
+    assert "Item AItem B" not in full_text
+    assert "Item A\nItem B" in full_text
+
+
+def test_html_adjacent_elements_newline_separated_from_bytes() -> None:
+    """Same newline-separation contract for the explicit HTML-bytes path."""
+    html = b"<html><body><ul><li>A1</li><li>B2</li></ul><p>C3</p></body></html>"
+    parser = Parser(ParsingConfig())
+    chunks = DocumentParser.chunks_from_path_or_bytes(html, parser, doc_type="html")
+    full_text = "\n".join(c.content for c in chunks)
+    assert "A1B2" not in full_text
+    assert "A1\nB2\nC3" in full_text
+
+
 def test_html_bytes_auto_detected_without_doc_type() -> None:
     """HTML bytes must be detected as HTML (not TXT) even without doc_type.
 
@@ -183,15 +274,82 @@ def test_html_bytes_auto_detected_without_doc_type() -> None:
     assert detected == DocumentType.HTML
 
 
-def test_md_bytes_with_doc_type_strips_frontmatter() -> None:
-    """Markdown bytes passed with doc_type='md' must strip YAML front-matter."""
+def _make_fake_magic(mime_type: str) -> types.ModuleType:
+    """Build a fake ``magic`` module whose from_buffer returns `mime_type`."""
+    fake = types.ModuleType("magic")
+
+    def _from_buffer(*args: object, **kwargs: object) -> str:
+        return mime_type
+
+    fake.from_buffer = _from_buffer  # type: ignore[attr-defined]
+    return fake
+
+
+@pytest.mark.parametrize(
+    "mime_type, expected",
+    [
+        ("text/html", DocumentType.HTML),
+        ("text/markdown", DocumentType.MD),
+        ("text/x-markdown", DocumentType.MD),
+        ("text/plain", DocumentType.TXT),
+    ],
+)
+def test_bytes_mime_type_dispatch(
+    monkeypatch: pytest.MonkeyPatch, mime_type: str, expected: DocumentType
+) -> None:
+    """Bytes dispatch per detected MIME type, independent of libmagic.
+
+    Deterministic version of the auto-detection tests: a fake ``magic``
+    module pins the MIME type, so this runs on systems without libmagic.
+    """
+    monkeypatch.setitem(sys.modules, "magic", _make_fake_magic(mime_type))
+    raw = b"---\ntitle: Front Matter\n---\n\n# Heading\n\nBody text."
+    assert DocumentParser._document_type(raw) == expected
+
+
+def test_text_plain_md_bytes_ingest_as_txt_and_keep_frontmatter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Markdown bytes MIME-detected as text/plain (no doc_type) become TXT.
+
+    Documented limitation: libmagic reports most Markdown content as
+    text/plain, so without ``doc_type="md"`` the bytes take the TXT path
+    and YAML front-matter is NOT stripped by the document parser.
+
+    Uses the TOKENS splitter: the default MARKDOWN splitter's chunker
+    strips front-matter downstream, which would mask what the TXT path
+    itself does.
+    """
+    monkeypatch.setitem(sys.modules, "magic", _make_fake_magic("text/plain"))
     with open(_MD_PATH, "rb") as f:
         raw = f.read()
-    parser = Parser(ParsingConfig())
+    assert DocumentParser._document_type(raw) == DocumentType.TXT
+
+    parser = Parser(ParsingConfig(splitter=Splitter.TOKENS))
+    chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser)
+    assert len(chunks) > 0
+    full_text = "\n".join(c.content for c in chunks)
+    # Front-matter is retained on the TXT path (doc_type="md" not passed).
+    assert "title: Test Document" in full_text
+    assert "Heading One" in full_text
+
+
+def test_md_bytes_with_doc_type_strips_frontmatter() -> None:
+    """Markdown bytes passed with doc_type='md' must strip YAML front-matter.
+
+    Uses the TOKENS splitter so the stripping is attributable to the MD
+    branch of chunks_from_path_or_bytes: the default MARKDOWN splitter's
+    chunker also strips front-matter, which would mask a regression.
+    """
+    with open(_MD_PATH, "rb") as f:
+        raw = f.read()
+    parser = Parser(ParsingConfig(splitter=Splitter.TOKENS))
     chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser, doc_type="md")
     full_text = " ".join(c.content for c in chunks)
     assert "title:" not in full_text
     assert "Heading One" in full_text
+    # Raw Markdown (including HTML-like tokens) survives on the MD path.
+    assert "<placeholder>" in full_text
 
 
 # ---------------------------------------------------------------------------
@@ -301,8 +459,13 @@ def test_strip_yaml_frontmatter_hostile_whitespace_is_fast() -> None:
 
 
 def test_md_crlf_frontmatter_stripped() -> None:
-    """CRLF line endings in Markdown must not prevent front-matter stripping."""
-    parser = Parser(ParsingConfig())
+    """CRLF line endings in Markdown must not prevent front-matter stripping.
+
+    TOKENS splitter for the same reason as
+    test_md_bytes_with_doc_type_strips_frontmatter: the MARKDOWN chunker
+    would strip the front-matter downstream, masking a regression here.
+    """
+    parser = Parser(ParsingConfig(splitter=Splitter.TOKENS))
     crlf_md = (
         "---\r\ntitle: CRLF Doc\r\nauthor: Bob\r\n---\r\n\r\n# Heading\r\n\r\nBody."
     )
@@ -376,6 +539,38 @@ def test_txt_bytes_ingest_when_magic_broken_at_runtime(
     assert "ordinary text" in " ".join(c.content for c in chunks)
 
 
+def test_txt_bytes_ingest_when_magic_raises_generic_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ANY Exception from magic at call time must trigger the fallback.
+
+    The contract requires surviving any Exception, not just OSError or
+    ImportError: a regression narrowing the except clause to specific
+    exception types would break this test.
+    """
+    fake_magic = types.ModuleType("magic")
+
+    def _broken_from_buffer(*args: object, **kwargs: object) -> str:
+        raise RuntimeError("magic exploded at call time")
+
+    fake_magic.from_buffer = _broken_from_buffer  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "magic", fake_magic)
+
+    # Valid UTF-8 bytes must still ingest as TXT.
+    raw = b"Generic-failure plain text content."
+    assert DocumentParser._document_type(raw) == DocumentType.TXT
+
+    parser = Parser(ParsingConfig())
+    chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser)
+    assert len(chunks) > 0
+    assert "Generic-failure" in " ".join(c.content for c in chunks)
+
+    # Non-text bytes must raise ValueError (not RuntimeError).
+    binary = b"\x00\xff\xfe\x00\x01binary-garbage\xff"
+    with pytest.raises(ValueError, match="Unsupported document type from bytes"):
+        DocumentParser._document_type(binary)
+
+
 def test_binary_bytes_when_magic_unavailable_raise_value_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -385,3 +580,67 @@ def test_binary_bytes_when_magic_unavailable_raise_value_error(
     binary = b"\x00\xff\xfe\x00\x01binary-garbage\xff"
     with pytest.raises(ValueError, match="Unsupported document type from bytes"):
         DocumentParser._document_type(binary)
+
+
+# ---------------------------------------------------------------------------
+# URL sources: .md / .html / .htm URLs must be fetched over HTTP(S)
+# ---------------------------------------------------------------------------
+
+
+class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+    """SimpleHTTPRequestHandler without per-request stderr logging."""
+
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
+
+@pytest.fixture(scope="module")
+def doc_server_url(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[str]:
+    """Serve copies of the sample docs over local HTTP; yield the base URL."""
+    serve_dir = tmp_path_factory.mktemp("docserve")
+    shutil.copy(_MD_PATH, serve_dir / "sample.md")
+    shutil.copy(_HTML_PATH, serve_dir / "sample.html")
+    shutil.copy(_HTML_PATH, serve_dir / "sample.htm")
+    handler = functools.partial(_QuietHandler, directory=str(serve_dir))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def test_md_url_chunks(doc_server_url: str) -> None:
+    """A .md URL must be fetched over HTTP and parsed as Markdown.
+
+    Regression test: extension-first detection classifies the URL as MD,
+    and chunks_from_path_or_bytes must fetch it rather than attempt
+    open() on the URL string (which raised FileNotFoundError).
+    """
+    parser = Parser(ParsingConfig())
+    url = f"{doc_server_url}/sample.md"
+    chunks = DocumentParser.chunks_from_path_or_bytes(url, parser)
+    assert len(chunks) > 0
+    full_text = "\n".join(c.content for c in chunks)
+    assert "Heading One" in full_text
+    assert "**Markdown**" in full_text  # raw Markdown preserved
+    assert "title:" not in full_text  # front-matter stripped
+    assert all(c.metadata.source == url for c in chunks)
+
+
+@pytest.mark.parametrize("filename", ["sample.html", "sample.htm"])
+def test_html_url_chunks(doc_server_url: str, filename: str) -> None:
+    """.html / .htm URLs must be fetched over HTTP and tag-stripped."""
+    parser = Parser(ParsingConfig())
+    url = f"{doc_server_url}/{filename}"
+    chunks = DocumentParser.chunks_from_path_or_bytes(url, parser)
+    assert len(chunks) > 0
+    full_text = "\n".join(c.content for c in chunks)
+    assert "Heading One" in full_text
+    assert "<h1>" not in full_text
+    # Adjacent elements are newline-separated on the URL path too.
+    assert "Item A\nItem B" in full_text

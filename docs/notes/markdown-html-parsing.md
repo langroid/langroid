@@ -28,6 +28,11 @@ parser = Parser(ParsingConfig())
 # From a file path: type inferred from the extension
 chunks = DocumentParser.chunks_from_path_or_bytes("notes/readme.md", parser)
 
+# From a URL: fetched over HTTP(S), type inferred from the extension
+chunks = DocumentParser.chunks_from_path_or_bytes(
+    "https://example.com/readme.md", parser
+)
+
 # From bytes: pass doc_type explicitly (see limitations below)
 with open("page.html", "rb") as f:
     raw = f.read()

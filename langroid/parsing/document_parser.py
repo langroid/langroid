@@ -387,6 +387,17 @@ class DocumentParser(Parser):
                 if lines is not None:
                     file_lines = content.splitlines()[:lines]
                     content = "\n".join(line.strip() for line in file_lines)
+            elif source.startswith(("http://", "https://")):
+                # URL (e.g. https://example.com/readme.md): extension
+                # detection above may classify it as MD/HTML/TXT, but it
+                # must be fetched over HTTP(S) — open() below only works
+                # for local paths.
+                response = requests.get(source)
+                response.raise_for_status()
+                content = response.content.decode("utf-8", errors="replace")
+                if lines is not None:
+                    file_lines = content.splitlines()[:lines]
+                    content = "\n".join(line.strip() for line in file_lines)
             else:
                 with open(source, "r") as f:
                     if lines is not None:

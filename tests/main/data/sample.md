@@ -15,6 +15,8 @@ This is a **Markdown** test document used by the Langroid test suite.
 
 Some inline `code` and a [link](https://example.com).
 
+A literal <placeholder> tag must survive as raw text.
+
 ### Subsection
 
 > A blockquote paragraph.
