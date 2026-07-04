@@ -142,6 +142,7 @@ nav:
       - Cross-Encoder Reranking: notes/cross-encoder.md
       - Task Logs: notes/html-logger.md
       - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Context-Overflow Handling: notes/context-overflow.md
 
   - Examples:
     - Guide: examples/guide.md
