@@ -1,5 +1,5 @@
 import ast
-from typing import Any
+from typing import Any, Dict
 
 import pandas as pd
 
@@ -293,6 +293,59 @@ def sanitize_command(expr: str, df_name: str = "df") -> str:
     tree = ast.parse(expr, mode="eval")
     CommandValidator(df_name).visit(tree)
     return expr
+
+
+# Curated ``__builtins__`` dict for ``eval()`` calls on LLM-generated pandas
+# expressions (GHSA-q9p7-wqxg-mrhc). Without this, Python implicitly injects
+# the full builtins into eval's globals -- so even with an empty ``locals={}``
+# and ``full_eval=True``, an expression like
+# ``__import__('os').system('...')`` would execute and yield RCE. Restricting
+# builtins to this curated read-only set closes the direct primitive while
+# leaving enough functionality for typical pandas expressions.
+_SAFE_BUILTINS: Dict[str, Any] = {
+    # Constants
+    "True": True,
+    "False": False,
+    "None": None,
+    # Safe builtins occasionally used in pandas-style expressions
+    "abs": abs,
+    "all": all,
+    "any": any,
+    "bool": bool,
+    "dict": dict,
+    "enumerate": enumerate,
+    "float": float,
+    "int": int,
+    "len": len,
+    "list": list,
+    "max": max,
+    "min": min,
+    "range": range,
+    "reversed": reversed,
+    "round": round,
+    "set": set,
+    "sorted": sorted,
+    "str": str,
+    "sum": sum,
+    "tuple": tuple,
+    "zip": zip,
+}
+
+
+def safe_eval_globals(local_vars: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a globals dict for :func:`eval` with ``__builtins__`` restricted
+    to a safe read-only set, so that LLM-generated expressions cannot reach
+    ``__import__``, ``eval``, ``exec``, ``open``, etc. via Python's implicit
+    builtin injection.
+
+    Args:
+        local_vars: User-provided variables to expose to the eval'd
+            expression (e.g. ``{"df": <DataFrame>}``).
+
+    Returns:
+        A new dict suitable as the ``globals`` argument of ``eval()``.
+    """
+    return {**local_vars, "__builtins__": _SAFE_BUILTINS}
 
 
 def stringify(x: Any) -> str:

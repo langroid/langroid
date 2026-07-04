@@ -33,7 +33,7 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.table_loader import read_tabular_data
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.constants import DONE, PASS
-from langroid.utils.pandas_utils import sanitize_command
+from langroid.utils.pandas_utils import safe_eval_globals, sanitize_command
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -231,12 +231,15 @@ class TableChatAgent(ChatAgent):
 
         # Evaluate the last line and get the result;
         # SECURITY MITIGATION: Eval input is sanitized by default to prevent most
-        # common code injection attack vectors.
+        # common code injection attack vectors. Additionally, the globals dict
+        # restricts ``__builtins__`` so that even with ``full_eval=True`` the
+        # expression cannot reach ``__import__``/``eval``/``exec`` via Python's
+        # implicit builtin injection (GHSA-q9p7-wqxg-mrhc).
         try:
             if not self.config.full_eval:
                 exprn = sanitize_command(exprn)
             code = compile(exprn, "<calc>", "eval")
-            eval_result = eval(code, vars, {})
+            eval_result = eval(code, safe_eval_globals(vars), {})
         except Exception as e:
             eval_result = f"ERROR: {type(e)}: {e}"
 

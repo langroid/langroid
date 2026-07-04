@@ -551,7 +551,7 @@ class OpenAIAssistant(ChatAgent):
             time.sleep(1)
             timeout -= 1
             if timeout <= 0:
-                return cast(RunStatus, RunStatus.TIMEOUT)
+                return RunStatus.TIMEOUT
 
     async def _wait_for_run_async(
         self,
@@ -569,7 +569,7 @@ class OpenAIAssistant(ChatAgent):
             await asyncio.sleep(1)
             timeout -= 1
             if timeout <= 0:
-                return cast(RunStatus, RunStatus.TIMEOUT)
+                return RunStatus.TIMEOUT
 
     def set_system_message(self, msg: str) -> None:
         """
@@ -651,6 +651,8 @@ class OpenAIAssistant(ChatAgent):
         if run.status != RunStatus.REQUIRES_ACTION:  # type: ignore
             return []
 
+        if run.required_action is None:
+            return []
         if (action := run.required_action.type) != "submit_tool_outputs":
             raise ValueError(f"Unexpected required_action type {action}")
         tool_calls = run.required_action.submit_tool_outputs.tool_calls

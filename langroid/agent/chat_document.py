@@ -6,7 +6,7 @@ from collections import OrderedDict
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
@@ -57,6 +57,20 @@ class ChatDocMetaData(DocMetaData):
     agent_id: str = ""  # ChatAgent that generated this message
     msg_idx: int = -1  # index of this message in the agent `message_history`
     sender: Entity  # sender of the message
+    # True if this msg was relayed from another agent's LLM/handler output in a
+    # multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
+    # tools be dispatched for legitimate handoffs while still blocking raw
+    # USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
+    # GHSA-gjgq-w2m6-wr5q.
+    tools_from_agent: bool = False
+    # True if this msg's content/tools derive from external untrusted (USER)
+    # input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
+    # repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
+    # Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
+    # vetoes handle-only tool dispatch even across a USER relabel, closing the
+    # content-laundering hole. Propagated (deepcopy carries it), never cleared.
+    # See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
+    tainted: bool = False
     # tool_id corresponding to single tool result in ChatDocument.content
     oai_tool_id: str | None = None
     tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
@@ -68,6 +82,23 @@ class ChatDocMetaData(DocMetaData):
     displayed: bool = False
     has_citation: bool = False
     status: Optional[StatusCode] = None
+
+    @model_validator(mode="after")
+    def _mark_tools_from_agent(self) -> "ChatDocMetaData":
+        # Mark messages produced directly by an LLM: the tools in an LLM's
+        # output are the LLM's own decision (the trusted trigger for handle-only
+        # tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
+        # to another agent even after relabeling the sender to USER. The mark is
+        # only ever SET, never cleared, so it survives relabeling and deepcopies
+        # (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
+        # mark across the handoff). We deliberately do NOT mark generic AGENT
+        # messages: a pass-through/echoing agent could surface untrusted USER
+        # text (with embedded tool JSON) as AGENT content, and marking that
+        # would re-open the user-origin bypass. Raw USER input is never marked,
+        # so it stays filtered. See ChatAgent._filter_user_origin_tools.
+        if self.sender == Entity.LLM:
+            self.tools_from_agent = True
+        return self
 
     @property
     def parent(self) -> Optional["ChatDocument"]:
@@ -358,6 +389,7 @@ class ChatDocument(Document):
                 source=Entity.USER,
                 sender=Entity.USER,
                 recipient=recipient,
+                tainted=True,  # external user input is untrusted (#1035)
             ),
         )
 

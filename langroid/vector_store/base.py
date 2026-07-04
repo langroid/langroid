@@ -14,7 +14,7 @@ from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output.printing import print_long_text
-from langroid.utils.pandas_utils import sanitize_command, stringify
+from langroid.utils.pandas_utils import safe_eval_globals, sanitize_command, stringify
 from langroid.utils.pydantic_utils import flatten_dict
 
 logger = logging.getLogger(__name__)
@@ -217,12 +217,16 @@ class VectorStore(ABC):
 
         try:
             # SECURITY MITIGATION: Eval input is sanitized to prevent most common
-            # code injection attack vectors when full_eval is False.
+            # code injection attack vectors when full_eval is False. The globals
+            # dict also restricts ``__builtins__`` so that even with
+            # ``full_eval=True`` the expression cannot reach
+            # ``__import__``/``eval``/``exec`` via Python's implicit builtin
+            # injection (GHSA-q9p7-wqxg-mrhc).
             vars = {"df": df}
             if not self.config.full_eval:
                 calc = sanitize_command(calc)
             code = compile(calc, "<calc>", "eval")
-            result = eval(code, vars, {})
+            result = eval(code, safe_eval_globals(vars), {})
         except Exception as e:
             # return error message so LLM can fix the calc string if needed
             err = f"""

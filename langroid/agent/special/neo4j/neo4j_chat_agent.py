@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
+from langroid.agent.special.neo4j.cypher_validator import validate_cypher_query
 from langroid.agent.special.neo4j.system_messages import (
     ADDRESSING_INSTRUCTION,
     DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE,
@@ -69,6 +70,13 @@ class Neo4jChatAgentConfig(ChatAgentConfig):
     # as opposed to returning a result from the task.run()
     chat_mode: bool = False
     addressing_prefix: str = ""
+    # Security gate for LLM-generated Cypher (GHSA-2pq5-3q89-j7cc). When False
+    # (default), the retrieval tool is restricted to read-only Cypher and both
+    # tools reject code-execution / file / network primitives (LOAD CSV,
+    # apoc.*, dbms.*, CALL db.*). LLM-generated Cypher is prompt-injectable
+    # (including via data the agent reads back), so only set this True with a
+    # least-privilege Neo4j role and trusted prompts.
+    allow_dangerous_operations: bool = False
 
 
 class Neo4jChatAgent(ChatAgent):
@@ -323,6 +331,13 @@ class Neo4jChatAgent(ChatAgent):
             `{cypher_retrieval_tool_name}` tool.
             """
         query = msg.cypher_query
+        rejection = validate_cypher_query(
+            query,
+            is_write=False,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
         self.current_retrieval_cypher_query = query
         logger.info(f"Executing Cypher query: {query}")
         response = self.read_query(query)
@@ -346,6 +361,13 @@ class Neo4jChatAgent(ChatAgent):
             str: The result of executing the cypher_query.
         """
         query = msg.cypher_query
+        rejection = validate_cypher_query(
+            query,
+            is_write=True,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
 
         logger.info(f"Executing Cypher query: {query}")
         response = self.write_query(query)

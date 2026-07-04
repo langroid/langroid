@@ -626,6 +626,7 @@ class Agent(ABC):
         oai_tool_id2result: OrderedDict[str, str] | None = None,
         function_call: LLMFunctionCall | None = None,
         recipient: str = "",
+        tainted: bool = False,
     ) -> ChatDocument:
         """Template for agent_response."""
         return self.response_template(
@@ -639,6 +640,7 @@ class Agent(ABC):
             oai_tool_id2result=oai_tool_id2result,
             function_call=function_call,
             recipient=recipient,
+            tainted=tainted,
         )
 
     def render_agent_response(
@@ -883,6 +885,7 @@ class Agent(ABC):
         oai_tool_id2result: OrderedDict[str, str] | None = None,
         function_call: LLMFunctionCall | None = None,
         recipient: str = "",
+        tainted: bool = False,
     ) -> ChatDocument:
         """Template for response from entity `e`."""
         return ChatDocument(
@@ -895,7 +898,31 @@ class Agent(ABC):
             function_call=function_call,
             oai_tool_choice=oai_tool_choice,
             metadata=ChatDocMetaData(
-                source=e, sender=e, sender_name=self.config.name, recipient=recipient
+                source=e,
+                sender=e,
+                sender_name=self.config.name,
+                recipient=recipient,
+                # Trust tools structurally produced by an LLM or agent/handler
+                # (explicit `tool_messages`): they must survive
+                # _filter_user_origin_tools after a Task relabels the sender to
+                # USER for a handoff. Content-only / echoed responses carry no
+                # structured tool_messages, so they are NOT marked and stay
+                # filtered (GHSA-gjgq-w2m6-wr5q). Known gap: tools repackaged
+                # from untrusted content (e.g. via get_tool_messages) are still
+                # trusted here -- see issue #1035 for the taint-propagation fix.
+                tools_from_agent=bool(tool_messages)
+                and e in (Entity.LLM, Entity.AGENT),
+                # DISTRUST signal (#1035): set for any USER-origin response
+                # (external user input -- create_user_response / to_ChatDocument
+                # of a USER string), when the caller passes tainted=True, or when
+                # the response repackages an already-tainted tool (e.g.
+                # DonePassTool/AgentDoneTool re-emitting tools parsed from a USER
+                # message). The Task result-wrap relabel builds ChatDocMetaData
+                # directly (not via this template), so trusted agent->agent
+                # handoffs are unaffected.
+                tainted=tainted
+                or e == Entity.USER
+                or any(getattr(t, "_tainted", False) for t in tool_messages),
             ),
         )
 
@@ -982,6 +1009,9 @@ class Agent(ABC):
                     agent_id=self.id,
                     source=source,
                     sender=sender,
+                    # interactive user input is external untrusted input; SYSTEM
+                    # (operator) input is trusted (#1035)
+                    tainted=sender == Entity.USER,
                     # preserve trail of tool_ids for OpenAI Assistant fn-calls
                     tool_ids=tool_ids,
                 ),
@@ -1280,6 +1310,61 @@ class Agent(ABC):
         if hasattr(tool, "recipient") and isinstance(tool.recipient, str):
             return tool.recipient == "" or tool.recipient == self.config.name
         return True
+
+    def _filter_user_origin_tools(
+        self,
+        msg: str | ChatDocument | None,
+        tools: List[ToolMessage],
+    ) -> List[ToolMessage]:
+        """If ``msg`` is raw input from :attr:`Entity.USER`, drop any tools whose
+        ``request`` is not in :attr:`llm_tools_usable`.
+
+        Rationale: ``enable_message(..., use=False, handle=True)`` is meant to
+        register tools triggered by an LLM's output (this agent's, or another
+        agent's in a multi-agent setup). A raw user input that happens to
+        contain such a tool's JSON should not bypass the LLM and invoke the
+        handler directly (GHSA-gjgq-w2m6-wr5q).
+
+        Legitimate agent-to-agent handoffs are preserved: when a Task relays
+        another agent's LLM/handler output to a sub-agent it relabels the
+        sender to ``USER`` but sets ``metadata.tools_from_agent=True``; such
+        messages are returned unchanged, since their tools came from an LLM,
+        not from raw user input.
+
+        Defense in depth (#1035): external user input is marked
+        ``metadata.tainted`` (ChatDocument.from_str / to_ChatDocument), the mark
+        propagates through deepcopies and the ``DonePassTool``/``AgentDoneTool``
+        repackage path, and a tainted message has its handle-only tools dropped
+        here even when ``tools_from_agent`` is set and the sender was relabeled
+        to USER. This closes the known content-laundering path through those
+        orchestration tools.
+
+        Residual: taint cannot flow through an LLM generation, so an LLM that is
+        prompt-injected into emitting tool JSON in its *content* stays out of
+        scope (the LLM-trust boundary). Broadening taint to every mechanical
+        derivation is tracked in issue #1035.
+
+        Non-``ChatDocument`` inputs and non-``USER`` senders are returned
+        unchanged.
+        """
+        if not isinstance(msg, ChatDocument):
+            return tools
+        if msg.metadata.tainted:
+            # Untrusted (USER-derived) content mechanically laundered into
+            # structured tools -- e.g. DonePassTool/AgentDoneTool re-emitting
+            # tools parsed from a USER message. Veto handle-only tools even when
+            # tools_from_agent is set and the sender was relabeled to USER. (#1035)
+            return [
+                t for t in tools if t.default_value("request") in self.llm_tools_usable
+            ]
+        if msg.metadata.sender != Entity.USER:
+            return tools
+        if msg.metadata.tools_from_agent:
+            # Tools were produced by an agent's LLM/handler (possibly relayed
+            # across a multi-agent handoff), not raw user input -- safe to
+            # dispatch handle-only tools.
+            return tools
+        return [t for t in tools if t.default_value("request") in self.llm_tools_usable]
 
     def has_only_unhandled_tools(self, msg: str | ChatDocument) -> bool:
         """
@@ -1661,6 +1746,14 @@ class Agent(ABC):
             # as a response to the tool message even though the tool was not intended
             # for this agent.
             return None
+        # Security: USER-origin tool JSON must not be able to invoke tools that
+        # the LLM itself is not allowed to use. ``enable_message(..., use=False,
+        # handle=True)`` is intended for tools triggered by an LLM's output (this
+        # agent's or, in multi-agent setups, another agent's), not by raw user
+        # input. Filtering here ensures that an end user typing tool JSON cannot
+        # bypass the LLM and directly invoke such a handler
+        # (GHSA-gjgq-w2m6-wr5q).
+        tools = self._filter_user_origin_tools(msg, tools)
         if len(tools) > 1 and not self.config.allow_multiple_tools:
             return self.to_ChatDocument("ERROR: Use ONE tool at a time!")
         if len(tools) == 0:
@@ -1725,6 +1818,9 @@ class Agent(ABC):
             # as a response to the tool message even though the tool was not intended
             # for this agent.
             return None
+        # Security: see ``handle_message_async`` -- the same USER-origin filter
+        # also applies on the sync path (GHSA-gjgq-w2m6-wr5q).
+        tools = self._filter_user_origin_tools(msg, tools)
         if len(tools) == 0:
             fallback_result = self.handle_message_fallback(msg)
             if fallback_result is None:
@@ -1903,6 +1999,8 @@ class Agent(ABC):
         is_agent_author = author_entity == Entity.AGENT
 
         if isinstance(msg, str):
+            # USER-author strings (e.g. Task.run user input) are tainted by
+            # response_template (#1035).
             return self.response_template(author_entity, content=msg, content_any=msg)
         elif isinstance(msg, ToolMessage):
             # result is a ToolMessage, so...

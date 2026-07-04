@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.61.1"
+version = "0.65.7"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -42,8 +42,8 @@ dependencies = [
     "pydantic-settings<3.0.0,>=2.0.0",
     "pygithub<2.0.0,>=1.58.1",
     "pygments<3.0.0,>=2.15.1",
-    "pymupdf4llm<0.1.0,>=0.0.17",
     "pyparsing<4.0.0,>=3.0.9",
+    "pypdfium2<5.0.0,>=4.30.0",
     "pytest-rerunfailures<16.0,>=15.0",
     "python-dotenv>=1.0.0,<2.0.0",
     "python-magic<1.0.0,>=0.4.27",
@@ -95,6 +95,7 @@ db = [
     "psycopg2<3.0.0,>=2.9.7",
     "psycopg2-binary>=2.9.10",
     "pymysql<2.0.0,>=1.1.0",
+    "sqlglot>=23.0.0",
 ]
 
 all = [
@@ -109,6 +110,7 @@ all = [
     "sqlalchemy<3.0.0,>=2.0.19",
     "psycopg2<3.0.0,>=2.9.7",
     "pymysql<2.0.0,>=1.1.0",
+    "sqlglot>=23.0.0",
     "sentence-transformers<3.0.0,>=2.2.2",
     "torch<3.0.0,>=2.0.0",
     "transformers<5.0.0,>=4.40.1",
@@ -142,6 +144,10 @@ docling = [
 
 pymupdf4llm = [
     "pymupdf4llm<0.1.0,>=0.0.17",
+]
+
+pypdfium2 = [
+    "pypdfium2<5.0.0,>=4.30.0",
 ]
 
 pdf-parsers = [
@@ -192,16 +198,19 @@ postgres = [
     "psycopg2<3.0.0,>=2.9.7",
     "psycopg2-binary>=2.9.10",
     "sqlalchemy<3.0.0,>=2.0.19",
+    "sqlglot>=23.0.0",
 ]
 
 mysql = [
     "pymysql<2.0.0,>=1.1.0",
+    "sqlglot>=23.0.0",
 ]
 
 sql = [
     "sqlalchemy<3.0.0,>=2.0.19",
     "pymysql<2.0.0,>=1.1.0",
     "psycopg2<3.0.0,>=2.9.7",
+    "sqlglot>=23.0.0",
 ]
 
 litellm = [
@@ -318,6 +327,26 @@ docs = [
     "mkdocs-jupyter<1.0.0,>=0.24.1",
     "nbconvert>=7.17.0",
     "griffe<1.0.0",
+]
+
+
+# Lock-only constraints (NOT part of published metadata / downstream installs).
+# The bulk `uv lock --upgrade` (to drain Dependabot alerts) moved these deps
+# -- none of which has a security alert -- to versions that break us:
+#   - qdrant-client>=1.16 removes Client.search_batch + CollectionInfo.vectors_count
+#     used by QdrantDB (runtime break). Public range stays broad pending a code migration.
+#   - onnxruntime>=1.24 ships no cp310 wheels/sdist, breaking `uv sync` on Python 3.10
+#     (we advertise >=3.10). pip installs are unaffected (they pick the newest cp310 wheel).
+#   - mypy>=1.16 (dev-only) adds stricter checks that flag safe Responder-union access.
+#   - pinecone-client>=6 is an import-time stub that raises ("renamed to `pinecone`"),
+#     breaking VectorStore.create() for every backend. Hold at the working 5.x line.
+# Pinning here (not in [project]/[dependency-groups]) keeps public ranges untouched.
+[tool.uv]
+constraint-dependencies = [
+    "qdrant-client<1.16",
+    "onnxruntime<1.24",
+    "mypy<1.16",
+    "pinecone-client<6",
 ]
 
 

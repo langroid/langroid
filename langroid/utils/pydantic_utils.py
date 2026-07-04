@@ -474,7 +474,7 @@ def dataframe_to_document_model(
         )
     else:
         # Use the base DocMetaData class directly
-        DynamicMetaData = DocMetaData
+        DynamicMetaData = DocMetaData  # type: ignore
 
     # Define additional top-level fields for DynamicDocument
     additional_fields = {
@@ -508,11 +508,11 @@ def dataframe_to_document_model(
         additional_values = {
             col: row[col] for col in additional_fields if col in row and col != content
         }
-        metadata = DynamicMetaData(**metadata_values)
-        return cls(content=content_val, metadata=metadata, **additional_values)
+        metadata_obj = DynamicMetaData(**metadata_values)
+        return cls(content=content_val, metadata=metadata_obj, **additional_values)
 
     # Bind the method to the class
-    DynamicDocument.from_df_row = classmethod(from_df_row)
+    DynamicDocument.from_df_row = classmethod(from_df_row)  # type: ignore
 
     return DynamicDocument  # type: ignore
 

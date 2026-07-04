@@ -266,8 +266,10 @@ class DocChatAgentConfig(ChatAgentConfig):
             # NOTE: PDF parsing is extremely challenging, and each library
             # has its own strengths and weaknesses.
             # Try one that works for your use case.
-            # or "unstructured", "fitz", "pymupdf4llm", "pypdf"
-            library="pymupdf4llm",
+            # `pypdfium2` is the permissive default and is installed by default;
+            # the others (e.g. "unstructured", "fitz", "pymupdf4llm", "docling",
+            # "pypdf") require installing an extra such as `doc-chat`.
+            library="pypdfium2",
         ),
     )
     crawler_config: Optional[BaseCrawlerConfig] = TrafilaturaConfig()

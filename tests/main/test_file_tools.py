@@ -308,3 +308,91 @@ def test_my_write_file_tool(
 
     assert not git_repo.is_dirty()
     assert file_path in git_repo.git.ls_files().split()
+
+
+# --- Path-traversal regression tests (GHSA-fg23-3346-88f5) -----------------
+# These exercise the tool handlers directly (no LLM needed): the tools must not
+# read/write/list outside the configured curr_dir, even when given ``..``,
+# absolute, or symlinked paths.
+
+_ESCAPE_MARKER = "is outside the allowed directory"
+
+
+@pytest.fixture
+def sandbox_with_secret(temp_dir):
+    """A sandbox dir (the curr_dir boundary) with a secret file just outside."""
+    sandbox = temp_dir / "sandbox"
+    sandbox.mkdir()
+    secret = temp_dir / "secret.txt"
+    secret.write_text("LANGROID_TOOL_ESCAPE_SECRET")
+    return sandbox, secret
+
+
+def test_read_file_tool_parent_traversal_blocked(sandbox_with_secret):
+    sandbox, _ = sandbox_with_secret
+    tool = ReadFileTool.create(get_curr_dir=lambda: sandbox)(file_path="../secret.txt")
+    result = tool.handle()
+    assert "LANGROID_TOOL_ESCAPE_SECRET" not in result
+    assert _ESCAPE_MARKER in result
+
+
+def test_read_file_tool_absolute_path_blocked(sandbox_with_secret):
+    sandbox, secret = sandbox_with_secret
+    tool = ReadFileTool.create(get_curr_dir=lambda: sandbox)(file_path=str(secret))
+    result = tool.handle()
+    assert "LANGROID_TOOL_ESCAPE_SECRET" not in result
+    assert _ESCAPE_MARKER in result
+
+
+def test_read_file_tool_symlink_escape_blocked(sandbox_with_secret):
+    sandbox, secret = sandbox_with_secret
+    link = sandbox / "link.txt"
+    try:
+        link.symlink_to(secret)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported on this platform")
+    tool = ReadFileTool.create(get_curr_dir=lambda: sandbox)(file_path="link.txt")
+    result = tool.handle()
+    assert "LANGROID_TOOL_ESCAPE_SECRET" not in result
+    assert _ESCAPE_MARKER in result
+
+
+def test_write_file_tool_parent_traversal_blocked(temp_dir):
+    sandbox = temp_dir / "sandbox"
+    sandbox.mkdir()
+    tool = WriteFileTool.create(get_curr_dir=lambda: sandbox, get_git_repo=None)(
+        file_path="../escaped.txt", content="PWNED", language="text"
+    )
+    result = tool.handle()
+    assert _ESCAPE_MARKER in result
+    assert not (temp_dir / "escaped.txt").exists()
+
+
+def test_list_dir_tool_parent_traversal_blocked(temp_dir):
+    sandbox = temp_dir / "sandbox"
+    sandbox.mkdir()
+    (temp_dir / "outside_file.txt").touch()
+    tool = ListDirTool.create(get_curr_dir=lambda: sandbox)(dir_path="..")
+    result = tool.handle()
+    assert _ESCAPE_MARKER in result
+    assert "outside_file.txt" not in result
+
+
+def test_file_tools_allow_paths_within_curr_dir(temp_dir):
+    """Normal relative paths inside curr_dir (incl. subdirs) must still work."""
+    sandbox = temp_dir / "sandbox"
+    sandbox.mkdir()
+
+    write_res = WriteFileTool.create(get_curr_dir=lambda: sandbox, get_git_repo=None)(
+        file_path="sub/inside.txt", content="hello", language="text"
+    ).handle()
+    assert _ESCAPE_MARKER not in write_res
+    assert (sandbox / "sub" / "inside.txt").read_text() == "hello"
+
+    read_res = ReadFileTool.create(get_curr_dir=lambda: sandbox)(
+        file_path="sub/inside.txt"
+    ).handle()
+    assert "hello" in read_res
+
+    list_res = ListDirTool.create(get_curr_dir=lambda: sandbox)(dir_path=".").handle()
+    assert "sub" in list_res

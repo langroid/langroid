@@ -58,6 +58,7 @@ class PdfParsingConfig(BaseParsingConfig):
     library: Literal[
         "fitz",
         "pymupdf4llm",
+        "pypdfium2",
         "docling",
         "pypdf",
         "unstructured",
@@ -65,7 +66,7 @@ class PdfParsingConfig(BaseParsingConfig):
         "markitdown",
         "llm-pdf-parser",
         "marker",
-    ] = "pymupdf4llm"
+    ] = "pypdfium2"
     llm_parser_config: Optional[LLMPdfParserConfig] = None
     marker_config: Optional[MarkerConfig] = None
 

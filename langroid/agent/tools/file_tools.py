@@ -9,7 +9,12 @@ from pydantic import Field
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.utils.git_utils import git_commit_file
-from langroid.utils.system import create_file, list_dir, read_file
+from langroid.utils.system import (
+    create_file,
+    list_dir,
+    read_file,
+    safe_resolve_path,
+)
 
 
 class ReadFileTool(ToolMessage):
@@ -58,6 +63,10 @@ class ReadFileTool(ToolMessage):
         # ASSUME: file_path should be relative to the curr_dir
         try:
             dir = (self._curr_dir and self._curr_dir()) or Path.cwd()
+            try:
+                safe_resolve_path(dir, self.file_path)
+            except ValueError as e:
+                return f"Error: {e}"
             with chdir(dir):
                 # if file doesn't exist, return an error message
                 content = read_file(self.file_path, self._line_nums)
@@ -164,6 +173,10 @@ This is the first sentence of the introduction.
 
     def handle(self) -> str:
         curr_dir = (self._curr_dir and self._curr_dir()) or Path.cwd()
+        try:
+            safe_resolve_path(curr_dir, self.file_path)
+        except ValueError as e:
+            return f"Error: {e}"
         with chdir(curr_dir):
             create_file(self.file_path, self.content)
             msg = f"Content written to {self.file_path}"
@@ -221,6 +234,10 @@ class ListDirTool(ToolMessage):
     def handle(self) -> str:
         # ASSUME: dir_path should be relative to the curr_dir_path
         dir = (self._curr_dir and self._curr_dir()) or Path.cwd()
+        try:
+            safe_resolve_path(dir, self.dir_path)
+        except ValueError as e:
+            return f"Error: {e}"
         with chdir(dir):
             contents = list_dir(self.dir_path)
 

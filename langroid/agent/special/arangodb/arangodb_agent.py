@@ -15,6 +15,7 @@ from rich.console import Console
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
+from langroid.agent.special.arangodb.aql_validator import validate_aql_query
 from langroid.agent.special.arangodb.system_messages import (
     ADDRESSING_INSTRUCTION,
     DEFAULT_ARANGO_CHAT_SYSTEM_MESSAGE,
@@ -94,6 +95,13 @@ class ArangoChatAgentConfig(ChatAgentConfig):
     # as opposed to returning a result from the task.run()
     chat_mode: bool = False
     addressing_prefix: str = ""
+    # Security gate for LLM-generated AQL (GHSA-2pq5-3q89-j7cc). When False
+    # (default), the retrieval tool is restricted to read-only AQL and both
+    # tools reject user-defined-function calls (namespace::func) that can run
+    # server-side JavaScript. LLM-generated AQL is prompt-injectable (including
+    # via data the agent reads back), so only set this True with a
+    # least-privilege ArangoDB role and trusted prompts.
+    allow_dangerous_operations: bool = False
 
 
 class ArangoChatAgent(ChatAgent):
@@ -348,6 +356,13 @@ class ArangoChatAgent(ChatAgent):
             """
         self.num_tries += 1
         query = msg.aql_query
+        rejection = validate_aql_query(
+            query,
+            is_write=False,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
         if query == self.current_retrieval_aql_query:
             return """
             You have already tried this query, so you will get the same results again!
@@ -370,6 +385,13 @@ class ArangoChatAgent(ChatAgent):
         """Handle AQL query for creating data"""
         self.num_tries += 1
         query = msg.aql_query
+        rejection = validate_aql_query(
+            query,
+            is_write=True,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
         logger.info(f"Executing AQL query: {query}")
         response = self.write_query(query)
 

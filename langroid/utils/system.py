@@ -187,6 +187,34 @@ def generate_unique_id() -> str:
     return str(uuid.uuid4())
 
 
+def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
+    """
+    Resolve ``user_path`` relative to ``base_dir`` and ensure the result stays
+    within ``base_dir`` (a path-traversal guard for file tools).
+
+    A ``user_path`` containing ``..`` segments, an absolute path, or a symlink
+    pointing outside ``base_dir`` is rejected. Symlinks are resolved via
+    :meth:`pathlib.Path.resolve`, so symlink-based escapes are caught as well.
+
+    Args:
+        base_dir (str|Path): Directory that file operations must stay within.
+        user_path (str|Path): User/agent-supplied path (relative or absolute).
+
+    Returns:
+        Path: The resolved absolute path, guaranteed to be inside ``base_dir``.
+
+    Raises:
+        ValueError: If the resolved path escapes ``base_dir``.
+    """
+    base = Path(base_dir).resolve()
+    target = (base / Path(user_path)).resolve()
+    if target != base and base not in target.parents:
+        raise ValueError(
+            f"Path '{user_path}' is outside the allowed directory '{base}'"
+        )
+    return target
+
+
 def create_file(
     filepath: str | Path,
     content: str = "",

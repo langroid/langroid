@@ -327,8 +327,8 @@ class Task:
         except Exception:
             logger.warning(
                 """
-                Failed to deep-copy Agent config during task creation, 
-                proceeding with original config. Be aware that changes to 
+                Failed to deep-copy Agent config during task creation,
+                proceeding with original config. Be aware that changes to
                 the config may affect other agents using the same config.
                 """
             )
@@ -624,6 +624,8 @@ class Task:
                 content=msg,
                 metadata=ChatDocMetaData(
                     sender=Entity.USER,
+                    # external user input -> untrusted (#1035)
+                    tainted=True,
                 ),
             )
         elif msg is None and len(self.agent.message_history) > 1:
@@ -642,6 +644,16 @@ class Task:
                 self.pending_message = ChatDocument.deepcopy(msg)
                 # Preserve the parent pointer from the original message
                 self.pending_message.metadata.parent_id = original_parent_id
+                # A USER-origin ChatDocument handed to a ROOT task (caller is
+                # None) is external untrusted input (e.g. Task.run(ChatDocument(
+                # sender=USER, ...))) that bypassed the tainting constructors --
+                # taint it. Sub-task inputs (caller is not None, relabeled to
+                # USER just below) keep their propagated taint; we only set. #1035
+                if (
+                    self.caller is None
+                    and self.pending_message.metadata.sender == Entity.USER
+                ):
+                    self.pending_message.metadata.tainted = True
             if self.pending_message is not None and self.caller is not None:
                 # msg may have come from `caller`, so we pretend this is from
                 # the CURRENT task's USER entity
@@ -665,12 +677,15 @@ class Task:
             and self.agent.system_message
         ):
             system_msg = self.agent._create_system_and_tools_message()
-            system_message_chat_doc = ChatDocument.from_LLMMessage(
+            system_message_temp_doc = ChatDocument.from_LLMMessage(
                 system_msg,
                 sender_name=self.name or "system",
             )
             # log the system message
-            self.log_message(Entity.SYSTEM, system_message_chat_doc, mark=True)
+            self.log_message(Entity.SYSTEM, system_message_temp_doc, mark=True)
+            # ChatDocument.__init__ auto-registers in ObjectRegistry; remove
+            # the temp doc explicitly to avoid leaking it across Task creations.
+            ChatDocument.delete_id(system_message_temp_doc.id())
         self.log_message(Entity.USER, self.pending_message, mark=True)
         return self.pending_message
 
@@ -865,7 +880,7 @@ class Task:
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
                     You can adjust infinite loop detection (or turn it off)
-                    by changing the params in the TaskConfig passed to the Task 
+                    by changing the params in the TaskConfig passed to the Task
                     constructor; see here:
                     https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig
                     """
@@ -898,7 +913,7 @@ class Task:
                         A response adhering to the following JSON schema was expected:
                         {schema}
 
-                        Please resubmit with the correct schema. 
+                        Please resubmit with the correct schema.
                         """
                     )
 
@@ -1065,7 +1080,7 @@ class Task:
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
                     You can adjust infinite loop detection (or turn it off)
-                    by changing the params in the TaskConfig passed to the Task 
+                    by changing the params in the TaskConfig passed to the Task
                     constructor; see here:
                     https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig
                     """
@@ -1098,7 +1113,7 @@ class Task:
                         A response adhering to the following JSON schema was expected:
                         {schema}
 
-                        Please resubmit with the correct schema. 
+                        Please resubmit with the correct schema.
                         """
                     )
 
@@ -1811,6 +1826,22 @@ class Task:
                 tool_ids=tool_ids,
                 parent_id=result_msg.id() if result_msg else "",
                 agent_id=str(self.agent.id),
+                # Although we relabel sender to USER (to the parent task this
+                # result is equivalent to a USER response), structured tools
+                # being RELAYED here were produced by this task's agent/LLM, so
+                # the parent must still be able to dispatch them. Preserve the
+                # marking ONLY when actual `tool_messages` are relayed -- NOT
+                # for flattened/echoed content (e.g. a DoneTool whose `content`
+                # is untrusted text that happens to contain tool JSON), which
+                # must stay filtered (GHSA-gjgq-w2m6-wr5q; see also #1035).
+                tools_from_agent=(
+                    bool(tool_messages)
+                    and result_msg is not None
+                    and result_msg.metadata.tools_from_agent
+                ),
+                # Propagate the DISTRUST mark across the USER relabel so laundered
+                # (USER-derived) tools stay vetoed at the parent agent (#1035).
+                tainted=result_msg is not None and result_msg.metadata.tainted,
             ),
         )
         if self.pending_message is not None:

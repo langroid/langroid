@@ -101,6 +101,9 @@ for _ in range(100):
 @pytest.fixture(scope="function")
 def vecdb(test_settings: Settings, request) -> VectorStore:
     set_global(test_settings)
+    # Unique suffix per pytest-xdist worker so parallel workers don't collide
+    # on the same Qdrant collection in the shared local container (PR #1030).
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
     if request.param == "qdrant_local":
         qd_dir = ":memory:"
         qd_cfg = QdrantDBConfig(
@@ -117,7 +120,7 @@ def vecdb(test_settings: Settings, request) -> VectorStore:
         qd_dir = ".qdrant/cloud/test-" + embed_cfg.model_type
         qd_cfg_cloud = QdrantDBConfig(
             cloud=True,
-            collection_name="test-" + embed_cfg.model_type,
+            collection_name=f"test-{embed_cfg.model_type}-{worker}",
             storage_path=qd_dir,
             embedding=embed_cfg,
         )

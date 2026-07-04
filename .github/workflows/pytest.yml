@@ -85,8 +85,12 @@ jobs:
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       REDIS_HOST: ${{ secrets.REDIS_HOST }}
       REDIS_PORT: ${{ secrets.REDIS_PORT }}
-      QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
-      QDRANT_API_URL: ${{ secrets.QDRANT_API_URL }}
+      # Point Qdrant tests at the local `qdrant` service container (defined
+      # above), NOT Qdrant Cloud, to avoid ongoing cloud-cluster billing.
+      # The cloud secrets are intentionally bypassed; restore them here if
+      # cloud-specific testing is ever needed again.
+      QDRANT_API_KEY: local-dev-key
+      QDRANT_API_URL: http://localhost:6333
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
@@ -191,6 +195,7 @@ jobs:
         import nltk
         for pkg in [
             "punkt",            # tokenization
+            "punkt_tab",        # tokenization (NLTK >=3.9 renamed punkt)
             "stopwords",        # stopword removal
             "wordnet",          # lemmatization
             "omw-1.4",          # wordnet data
