@@ -1299,3 +1299,81 @@ async def test_optional_fields_exclude_none_in_payload() -> None:
     assert captured_payload["pattern"] == "test"
     assert "path" not in captured_payload  # Should be excluded because it's None
     assert "case_insensitive" not in captured_payload  # Should be excluded
+
+
+def _make_list_tools_counter(monkeypatch: pytest.MonkeyPatch) -> Callable[[], int]:
+    """Patch fastmcp's Client.list_tools to count real tools/list round-trips.
+
+    fastmcp's ``Client.list_tools()`` is uncached: every call issues a live
+    ``tools/list`` request over the transport. Counting invocations therefore
+    measures the actual number of server round-trips.
+
+    Returns a zero-arg callable returning the current count.
+    """
+    from fastmcp.client import Client
+
+    original_list_tools = Client.list_tools
+    count = 0
+
+    async def counting_list_tools(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal count
+        count += 1
+        return await original_list_tools(self, *args, **kwargs)
+
+    monkeypatch.setattr(Client, "list_tools", counting_list_tools)
+    return lambda: count
+
+
+@pytest.mark.asyncio
+async def test_get_tools_async_single_list_tools_roundtrip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Benchmark/regression: building ALL tools via get_tools_async must issue
+    exactly ONE ``tools/list`` round-trip, regardless of the number of tools.
+
+    Before the fix, get_tools_async did ``1 + N`` round-trips: one initial
+    ``list_tools()`` plus one re-list per tool inside
+    ``get_tool_async -> get_mcp_tool_async``. This test fails on that old
+    behavior (observed count == 1 + N) and passes on the de-duplicated path.
+    """
+    server = mcp_server()
+    get_count = _make_list_tools_counter(monkeypatch)
+
+    tools = await get_tools_async(server)
+
+    n = len(tools)
+    assert n > 1, "Test server should expose several tools"
+    assert get_count() == 1, (
+        f"Expected exactly 1 list_tools() round-trip to build {n} tools, "
+        f"but observed {get_count()} (pre-fix behavior would be {1 + n})."
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_model_from_mcp_tool_no_extra_roundtrips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The public sync builder ``tool_model_from_mcp_tool`` must add zero
+    round-trips: a filtered subset can be built from a single ``list_tools()``
+    snapshot. This is the O(1) path for allow-list / subset consumers.
+    """
+    server = mcp_server()
+    get_count = _make_list_tools_counter(monkeypatch)
+
+    allowed = {"greet", "nabroski"}
+    async with FastMCPClient(server) as client:
+        assert client.client is not None
+        server_tools = await client.client.list_tools()  # the ONLY round-trip
+        subset = [
+            client.tool_model_from_mcp_tool(t)
+            for t in server_tools
+            if t.name in allowed
+        ]
+
+    assert get_count() == 1, (
+        f"Building a {len(subset)}-tool subset should need 1 list_tools() "
+        f"call, but observed {get_count()}."
+    )
+    assert {t.default_value("request") for t in subset} == allowed
+    for t in subset:
+        assert issubclass(t, lr.ToolMessage)
