@@ -321,6 +321,24 @@ class FastMCPClient:
         target = await self.get_mcp_tool_async(tool_name)
         if target is None:
             raise ValueError(f"No tool named {tool_name}")
+        return self.tool_model_from_mcp_tool(target)
+
+    def tool_model_from_mcp_tool(self, target: Tool) -> Type[ToolMessage]:
+        """
+        Build a Langroid ToolMessage subclass from an already-fetched MCP
+        `Tool` object.
+
+        This is a pure, synchronous, network-free conversion: it performs no
+        ``list_tools()`` round-trip. Pair it with a single ``list_tools()`` call
+        to build many tools without re-listing the server once per tool
+        (see :meth:`get_tools_async`).
+
+        Args:
+            target: The raw ``mcp.types.Tool`` (name, description, inputSchema).
+
+        Returns:
+            A dynamically created Langroid ToolMessage subclass for `target`.
+        """
         props = target.inputSchema.get("properties", {})
         # Get the list of required fields from JSON Schema
         required_fields = set(target.inputSchema.get("required", []))
@@ -476,7 +494,7 @@ class FastMCPClient:
                     "Client not initialized. Use async with FastMCPClient."
                 )
         resp = await self.client.list_tools()
-        return [await self.get_tool_async(t.name) for t in resp]
+        return [self.tool_model_from_mcp_tool(t) for t in resp]
 
     async def get_mcp_tool_async(self, name: str) -> Optional[Tool]:
         """Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
