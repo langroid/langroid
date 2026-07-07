@@ -238,7 +238,7 @@ class FastMCPClient:
             )
 
     def _schema_to_field(
-        self, name: str, schema: Dict[str, Any], prefix: str, is_required: bool = True
+        self, name: str, schema: Any, prefix: str, is_required: bool = True
     ) -> Tuple[Any, Any]:
         """Convert a JSON Schema snippet into a (type, Field) tuple.
 
@@ -251,6 +251,10 @@ class FastMCPClient:
         Returns:
             A tuple of (python_type, Field(...)) for create_model.
         """
+        if not isinstance(schema, dict):
+            default = ... if is_required else None
+            return Any, Field(default=default)
+
         t = schema.get("type")
         # Use schema default if present, otherwise:
         # ... for required fields, None for optional fields
@@ -263,9 +267,17 @@ class FastMCPClient:
         if t == "object" and "properties" in schema:
             sub_name = f"{prefix}_{name.capitalize()}"
             sub_fields: Dict[str, Tuple[type, Any]] = {}
+            nested_properties = schema.get("properties")
+            if not isinstance(nested_properties, dict):
+                nested_properties = {}
             # Get required fields for this nested object
-            nested_required = set(schema.get("required", []))
-            for k, sub_s in schema["properties"].items():
+            nested_required_list = schema.get("required", [])
+            if not isinstance(nested_required_list, list):
+                nested_required_list = []
+            nested_required = {
+                name for name in nested_required_list if isinstance(name, str)
+            }
+            for k, sub_s in nested_properties.items():
                 ftype, fld = self._schema_to_field(
                     sub_name + k, sub_s, sub_name, is_required=k in nested_required
                 )
@@ -280,7 +292,8 @@ class FastMCPClient:
             return model_type, Field(default=default, description=desc)  # type: ignore
         # Array → List of items
         if t == "array" and "items" in schema:
-            item_type, _ = self._schema_to_field(name, schema["items"], prefix)
+            items_schema = schema.get("items")
+            item_type, _ = self._schema_to_field(name, items_schema, prefix)
             array_type = List[item_type]  # type: ignore
             if not is_required:
                 array_type = Optional[array_type]  # type: ignore
@@ -339,18 +352,31 @@ class FastMCPClient:
         Returns:
             A dynamically created Langroid ToolMessage subclass for `target`.
         """
-        props = target.inputSchema.get("properties", {})
+        tool_name = getattr(target, "name", None)
+        if not isinstance(tool_name, str) or tool_name == "":
+            raise ValueError(f"Invalid MCP tool name for tool {target!r}")
+
+        input_schema = getattr(target, "inputSchema", None)
+        schema = input_schema if isinstance(input_schema, dict) else {}
+        props = schema.get("properties") or {}
+        if not isinstance(props, dict):
+            props = {}
         # Get the list of required fields from JSON Schema
-        required_fields = set(target.inputSchema.get("required", []))
+        required_fields = schema.get("required") or []
+        if not isinstance(required_fields, list):
+            required_fields = []
+        required_field_names = {
+            name for name in required_fields if isinstance(name, str)
+        }
         fields: Dict[str, Tuple[type, Any]] = {}
         for fname, schema in props.items():
             ftype, fld = self._schema_to_field(
-                fname, schema, target.name, is_required=fname in required_fields
+                fname, schema, tool_name, is_required=fname in required_field_names
             )
             fields[fname] = (ftype, fld)
 
         # Convert target.name to CamelCase and add Tool suffix
-        parts = target.name.replace("-", "_").split("_")
+        parts = tool_name.replace("-", "_").split("_")
         camel_case = "".join(part.capitalize() for part in parts)
         model_name = f"{camel_case}Tool"
 
@@ -377,8 +403,11 @@ class FastMCPClient:
             Type[ToolMessage],
             create_model(  # type: ignore[call-overload]
                 model_name,
-                request=(str, target.name),
-                purpose=(str, target.description or f"Use the tool {target.name}"),
+                request=(str, tool_name),
+                purpose=(
+                    str,
+                    getattr(target, "description", None) or f"Use the tool {tool_name}",
+                ),
                 __base__=ToolMessage,
                 **fields,
             ),
@@ -427,7 +456,9 @@ class FastMCPClient:
                 if new in payload:
                     payload[orig] = payload.pop(new)
 
-            client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
+            client_cfg = getattr(  # type: ignore
+                itself.__class__, "_client_config", None
+            )
             if not client_cfg:
                 # Fallback or error - ideally _client_config should always exist
                 raise RuntimeError(f"Client config missing on {itself.__class__}")

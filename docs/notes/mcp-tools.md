@@ -434,3 +434,28 @@ async def main():
 ```
 
 See [`exa-web-search.py`](https://github.com/langroid/langroid/blob/main/examples/mcp/exa-web-search.py) for a full working example of this. 
+
+---
+
+## Efficient bulk tool creation
+
+`FastMCPClient.get_tools_async()` builds all Langroid tool classes with a single
+`list_tools()` round-trip. Previously it used `1 + N` calls: one list plus one
+re-list per tool, which slowed tool-init on slow or remote MCP servers exposing
+many tools.
+
+The public, synchronous, network-free helper
+`FastMCPClient.tool_model_from_mcp_tool(target)` converts an already-fetched
+`mcp.types.Tool` into a Langroid `ToolMessage` subclass with no round-trip. Use
+it to build an allow-listed subset from a single `list_tools()` snapshot without
+re-listing the server per tool.
+
+```python
+from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient
+
+
+async with FastMCPClient(server) as client:
+    tools = await client.client.list_tools()
+    wanted = [t for t in tools if t.name in {"search", "fetch"}]
+    models = [client.tool_model_from_mcp_tool(t) for t in wanted]
+```

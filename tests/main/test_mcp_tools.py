@@ -1,7 +1,7 @@
 import asyncio
 import os
 import shutil
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional, Type
 
 import pytest
 from anyio import ClosedResourceError
@@ -1315,13 +1315,33 @@ def _make_list_tools_counter(monkeypatch: pytest.MonkeyPatch) -> Callable[[], in
     original_list_tools = Client.list_tools
     count = 0
 
-    async def counting_list_tools(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    async def counting_list_tools(self: Any, *args: Any, **kwargs: Any) -> Any:
         nonlocal count
         count += 1
         return await original_list_tools(self, *args, **kwargs)
 
     monkeypatch.setattr(Client, "list_tools", counting_list_tools)
     return lambda: count
+
+
+def _tool_model_signature(model: Type[lr.ToolMessage]) -> dict[str, Any]:
+    """Capture behaviorally relevant generated ToolMessage model details."""
+    fields = [
+        (
+            name,
+            repr(field.annotation),
+            repr(field.default),
+            field.is_required(),
+            field.description,
+        )
+        for name, field in model.model_fields.items()
+    ]
+    return {
+        "model_name": model.__name__,
+        "request": model.default_value("request"),
+        "fields": fields,
+        "renamed_fields": getattr(model, "_renamed_fields", {}),
+    }
 
 
 @pytest.mark.asyncio
@@ -1377,3 +1397,176 @@ async def test_tool_model_from_mcp_tool_no_extra_roundtrips(
     assert {t.default_value("request") for t in subset} == allowed
     for t in subset:
         assert issubclass(t, lr.ToolMessage)
+
+
+@pytest.mark.asyncio
+async def test_get_tools_async_matches_per_tool_model_generation() -> None:
+    """Bulk and per-tool MCP conversion must generate equivalent models."""
+    server = mcp_server()
+
+    bulk_tools = await get_tools_async(server)
+
+    async with FastMCPClient(server) as client:
+        assert client.client is not None
+        server_tools = await client.client.list_tools()
+        per_tools = [await client.get_tool_async(t.name) for t in server_tools]
+        per_tool_by_name = {tool.default_value("request"): tool for tool in per_tools}
+
+    assert [tool.default_value("request") for tool in bulk_tools] == [
+        t.name for t in server_tools
+    ]
+    assert len(per_tool_by_name) == len(server_tools)
+    for bulk_tool in bulk_tools:
+        request = bulk_tool.default_value("request")
+        assert _tool_model_signature(bulk_tool) == _tool_model_signature(
+            per_tool_by_name[request]
+        )
+
+
+def test_tool_model_from_mcp_tool_handles_missing_or_invalid_schema() -> None:
+    """Schema-less or malformed schemas should behave like empty schemas."""
+    client = FastMCPClient(mcp_server())
+
+    for input_schema in [None, [], "not-a-schema", {"properties": None}]:
+        tool = Tool.model_construct(
+            name="schema_less",
+            description="Schema-less tool",
+            inputSchema=input_schema,
+        )
+
+        tool_model = client.tool_model_from_mcp_tool(tool)
+
+        assert tool_model.default_value("request") == "schema_less"
+        assert tool_model.default_value("purpose") == "Schema-less tool"
+        assert list(tool_model.model_fields) == ["request", "purpose", "id"]
+
+    omitted_schema_tool = Tool.model_construct(
+        name="omitted_schema",
+        description="Omitted schema tool",
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(omitted_schema_tool)
+
+    assert tool_model.default_value("request") == "omitted_schema"
+    assert tool_model.default_value("purpose") == "Omitted schema tool"
+    assert list(tool_model.model_fields) == ["request", "purpose", "id"]
+
+
+def test_tool_model_from_mcp_tool_handles_omitted_description() -> None:
+    """Missing descriptions should use the default generated purpose."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="missing_description",
+        inputSchema={},
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.default_value("request") == "missing_description"
+    assert tool_model.default_value("purpose") == "Use the tool missing_description"
+    assert list(tool_model.model_fields) == ["request", "purpose", "id"]
+
+
+def test_tool_model_from_mcp_tool_rejects_invalid_names() -> None:
+    """Missing or empty MCP tool names should fail with a clear error."""
+    client = FastMCPClient(mcp_server())
+
+    for tool_name in [None, ""]:
+        tool = Tool.model_construct(
+            name=tool_name,
+            description="Bad name",
+            inputSchema={},
+        )
+
+        with pytest.raises(ValueError, match="Invalid MCP tool name"):
+            client.tool_model_from_mcp_tool(tool)
+
+    omitted_name_tool = Tool.model_construct(
+        description="Bad name",
+        inputSchema={},
+    )
+
+    with pytest.raises(ValueError, match="Invalid MCP tool name"):
+        client.tool_model_from_mcp_tool(omitted_name_tool)
+
+
+def test_tool_model_from_mcp_tool_handles_malformed_property_schemas() -> None:
+    """Malformed field schemas should degrade to permissive fields."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="malformed_properties",
+        description="Malformed properties",
+        inputSchema={
+            "properties": {
+                "null_field": None,
+                "list_field": [],
+                "object_field": {
+                    "type": "object",
+                    "properties": None,
+                    "required": None,
+                },
+                "array_field": {
+                    "type": "array",
+                    "items": None,
+                },
+                "nested_field": {
+                    "type": "object",
+                    "properties": {
+                        "child": None,
+                        "other": {
+                            "type": "string",
+                        },
+                    },
+                    "required": [{}, "child"],
+                },
+            },
+            "required": [{}, "null_field"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.default_value("request") == "malformed_properties"
+    assert list(tool_model.model_fields) == [
+        "request",
+        "purpose",
+        "id",
+        "null_field",
+        "list_field",
+        "object_field",
+        "array_field",
+        "nested_field",
+    ]
+    payload = tool_model(
+        null_field="anything",
+        list_field=123,
+        object_field={},
+        array_field=[object()],
+        nested_field={"child": object()},
+    )
+    assert payload.null_field == "anything"
+    assert payload.list_field == 123
+    assert payload.object_field.model_dump() == {}
+    assert payload.array_field
+    assert payload.nested_field.child is not None
+
+
+@pytest.mark.asyncio
+async def test_get_tools_async_rejects_invalid_tool_name() -> None:
+    """The optimized bulk path should report invalid tool names clearly."""
+    bad_tool = Tool.model_construct(
+        name=None,
+        description="Bad name",
+        inputSchema={},
+    )
+
+    async with FastMCPClient(mcp_server()) as client:
+        assert client.client is not None
+
+        async def list_tools() -> list[Tool]:
+            return [bad_tool]
+
+        client.client.list_tools = list_tools  # type: ignore[method-assign]
+
+        with pytest.raises(ValueError, match="Invalid MCP tool name"):
+            await client.get_tools_async()
