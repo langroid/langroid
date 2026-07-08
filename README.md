@@ -607,8 +607,12 @@ All of the following environment variable settings are optional, and some are on
 to use specific features (as noted below).
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
-  Alternatively [Chroma](https://docs.trychroma.com/) or [LanceDB](https://lancedb.com/) are also currently supported. 
+  Alternatively [Chroma](https://docs.trychroma.com/), [LanceDB](https://lancedb.com/), or [Milvus](https://milvus.io/) are also currently supported.
   We use the local-storage version of Chroma, so there is no need for an API key.
+- **Milvus** Vector Store URI, token, database name. These are optional.
+  Without them, Milvus uses local storage at `./milvus.db`. Set `MILVUS_URI`
+  for Milvus server or Zilliz Cloud, `MILVUS_TOKEN` for token-based access,
+  and `MILVUS_DB_NAME` for a named database.
 - **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
   using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
   which is more than sufficient to try out Langroid and even beyond.
@@ -1066,6 +1070,4 @@ Your support will help build Langroid's momentum and community.
 
 - [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
 - [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
-
-
 
