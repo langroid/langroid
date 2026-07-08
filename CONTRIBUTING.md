@@ -46,7 +46,7 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
     - [x] Pinecone 
     - [x] PostgresML (pgvector)
     - [x] Weaviate
-    - [ ] Milvus 
+    - [x] Milvus
     - [ ] Marqo 
     
 - Other LLM APIs, e.g.: 

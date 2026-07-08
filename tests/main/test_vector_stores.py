@@ -10,14 +10,16 @@ from sqlalchemy.exc import OperationalError
 from langroid.agent.batch import run_batch_tasks
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
+from langroid.embedding_models.base import EmbeddingModel
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Embeddings
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
+from langroid.vector_store.milvusdb import MilvusDB, MilvusDBConfig
 from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
 from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
@@ -53,6 +55,29 @@ stored_docs = [
     MyDoc(content=d, metadata=MyDocMetaData(id=str(i)))
     for i, d in enumerate(vars(phrases).values())
 ]
+
+
+class DeterministicEmbeddingModel(EmbeddingModel):
+    @property
+    def embedding_dims(self) -> int:
+        return 4
+
+    def embedding_fn(self):
+        def embed(texts: List[str]) -> Embeddings:
+            return [self._embed(text) for text in texts]
+
+        return embed
+
+    @staticmethod
+    def _embed(text: str) -> List[float]:
+        text = text.lower()
+        if "alpha" in text:
+            return [1.0, 0.0, 0.0, 0.0]
+        if "beta" in text:
+            return [0.0, 1.0, 0.0, 0.0]
+        if "gamma" in text:
+            return [0.0, 0.0, 1.0, 0.0]
+        return [0.0, 0.0, 0.0, 1.0]
 
 
 @pytest.fixture(scope="function")
@@ -211,6 +236,81 @@ def vecdb(request) -> VectorStore:
         yield pinecone_serverless
         pinecone_serverless.delete_collection(collection_name=cfg.collection_name)
         return
+
+
+@pytest.fixture(scope="function")
+def milvus_vecdb(tmp_path) -> MilvusDB:
+    cfg = MilvusDBConfig(
+        collection_name="test_milvus",
+        uri=str(tmp_path / "milvus.db"),
+        replace_collection=True,
+        embedding_model=DeterministicEmbeddingModel(),
+        batch_size=2,
+    )
+    vecdb = VectorStore.create(cfg)
+    assert isinstance(vecdb, MilvusDB)
+    yield vecdb
+    vecdb.clear_all_collections(really=True, prefix="test_")
+    vecdb.close()
+
+
+def test_milvus_vector_store_lite_add_search_list_delete_clear(
+    milvus_vecdb: MilvusDB,
+):
+    docs = [
+        Document(
+            content="alpha document",
+            metadata=DocMetaData(id="alpha", source="group_a"),
+        ),
+        Document(
+            content="beta document",
+            metadata=DocMetaData(id="beta", source="group_b"),
+        ),
+        Document(
+            content="gamma document",
+            metadata=DocMetaData(id="gamma", source="group_a"),
+        ),
+    ]
+    milvus_vecdb.add_documents(docs)
+
+    assert "test_milvus" in milvus_vecdb.list_collections(empty=True)
+    assert "test_milvus" in milvus_vecdb.list_collections()
+
+    all_docs = milvus_vecdb.get_all_documents()
+    assert {doc.id() for doc in all_docs} == {"alpha", "beta", "gamma"}
+
+    group_a_docs = milvus_vecdb.get_all_documents(json.dumps({"source": "group_a"}))
+    assert {doc.id() for doc in group_a_docs} == {"alpha", "gamma"}
+
+    ordered_docs = milvus_vecdb.get_documents_by_ids(["gamma", "alpha"])
+    assert [doc.id() for doc in ordered_docs] == ["gamma", "alpha"]
+
+    docs_and_scores = milvus_vecdb.similar_texts_with_scores("alpha", k=2)
+    assert docs_and_scores[0][0].content == "alpha document"
+    assert docs_and_scores[0][1] > docs_and_scores[1][1]
+
+    filtered_docs_and_scores = milvus_vecdb.similar_texts_with_scores(
+        "alpha",
+        k=3,
+        where=json.dumps({"source": {"$in": ["group_b"]}}),
+    )
+    assert [doc.id() for doc, _ in filtered_docs_and_scores] == ["beta"]
+
+    empty_collections = [f"test_empty_{i}" for i in range(2)]
+    for collection_name in empty_collections:
+        milvus_vecdb.create_collection(collection_name)
+    assert milvus_vecdb.clear_empty_collections() == len(empty_collections)
+
+    junk_collections = [f"test_junk_{i}" for i in range(3)]
+    for collection_name in junk_collections:
+        milvus_vecdb.create_collection(collection_name)
+    assert milvus_vecdb.clear_all_collections(
+        really=True,
+        prefix="test_junk_",
+    ) == len(junk_collections)
+
+    milvus_vecdb.delete_collection("test_milvus")
+    assert "test_milvus" not in milvus_vecdb.list_collections(empty=True)
 
 
 @pytest.mark.parametrize(
