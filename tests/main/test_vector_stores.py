@@ -247,7 +247,10 @@ def milvus_vecdb(tmp_path) -> MilvusDB:
         embedding_model=DeterministicEmbeddingModel(),
         batch_size=2,
     )
-    vecdb = VectorStore.create(cfg)
+    try:
+        vecdb = VectorStore.create(cfg)
+    except LangroidImportError as exc:
+        pytest.skip(f"Milvus not installed: {exc}")
     assert isinstance(vecdb, MilvusDB)
     yield vecdb
     vecdb.clear_all_collections(really=True, prefix="test_")
