@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from types import SimpleNamespace
 from typing import List
@@ -71,6 +72,8 @@ class DeterministicEmbeddingModel(EmbeddingModel):
     @staticmethod
     def _embed(text: str) -> List[float]:
         text = text.lower()
+        if "alpha beta" in text:
+            return [0.6, 0.8, 0.0, 0.0]
         if "alpha" in text:
             return [1.0, 0.0, 0.0, 0.0]
         if "beta" in text:
@@ -314,6 +317,62 @@ def test_milvus_vector_store_lite_add_search_list_delete_clear(
 
     milvus_vecdb.delete_collection("test_milvus")
     assert "test_milvus" not in milvus_vecdb.list_collections(empty=True)
+
+
+@pytest.mark.parametrize("metric_type", ["COSINE", "IP", "L2"])
+def test_milvus_vector_store_lite_score_semantics(tmp_path, metric_type: str):
+    cfg = MilvusDBConfig(
+        collection_name=f"test_milvus_scores_{metric_type.lower()}",
+        uri=str(tmp_path / f"milvus_{metric_type.lower()}.db"),
+        metric_type=metric_type,
+        replace_collection=True,
+        embedding_model=DeterministicEmbeddingModel(),
+    )
+    try:
+        vecdb = VectorStore.create(cfg)
+    except LangroidImportError as exc:
+        pytest.skip(f"Milvus not installed: {exc}")
+    assert isinstance(vecdb, MilvusDB)
+    try:
+        vecdb.add_documents(
+            [
+                Document(
+                    content="alpha document",
+                    metadata=DocMetaData(id="alpha"),
+                ),
+                Document(
+                    content="alpha beta document",
+                    metadata=DocMetaData(id="alpha_beta"),
+                ),
+                Document(
+                    content="beta document",
+                    metadata=DocMetaData(id="beta"),
+                ),
+            ]
+        )
+
+        docs_and_scores = vecdb.similar_texts_with_scores("alpha", k=3)
+        ids = [doc.id() for doc, _ in docs_and_scores]
+        scores = [score for _, score in docs_and_scores]
+
+        assert ids == ["alpha", "alpha_beta", "beta"]
+        assert scores == sorted(scores, reverse=True)
+        if metric_type in ["COSINE", "IP"]:
+            assert scores == pytest.approx([1.0, 0.6, 0.0], abs=1e-6)
+        else:
+            assert scores == pytest.approx(
+                [0.0, -math.sqrt(0.8), -math.sqrt(2.0)],
+                abs=1e-6,
+            )
+
+        if metric_type == "COSINE":
+            matches_above_threshold = [
+                doc.id() for doc, score in docs_and_scores if score > 0.7
+            ]
+            assert matches_above_threshold == ["alpha"]
+    finally:
+        vecdb.clear_all_collections(really=True, prefix="test_milvus_scores_")
+        vecdb.close()
 
 
 @pytest.mark.parametrize(
