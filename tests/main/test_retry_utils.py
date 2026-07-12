@@ -32,6 +32,12 @@ def _make_openai_error(exc_cls: type, status: int) -> openai.APIStatusError:
     return exc_cls(f"Error code: {status}", response=response, body=None)
 
 
+def _make_proxy_error(message: str) -> openai.APIError:
+    """Build a proxy-style API error containing its wrapped error class name."""
+    request = httpx.Request("POST", "https://proxy.example/v1/chat")
+    return openai.APIError(message, request=request, body=None)
+
+
 # 4xx client errors that must NOT be retried
 NON_RETRYABLE = [
     (openai.BadRequestError, 400),
@@ -78,6 +84,41 @@ async def test_async_non_retryable_fails_fast(exc_cls, status):
     assert calls["n"] == 1
 
 
+def test_sync_proxy_wrapped_notfound_fails_fast() -> None:
+    """Proxy-wrapped NotFoundError messages fail fast without retrying."""
+    calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        raise _make_proxy_error("litellm.NotFoundError: model 'x' not found")
+
+    wrapped = retry_with_exponential_backoff(
+        fn, max_retries=3, initial_delay=0.0, jitter=False
+    )
+    with pytest.raises(openai.APIError):
+        wrapped()
+
+    assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_async_proxy_wrapped_notfound_fails_fast() -> None:
+    """Async proxy-wrapped NotFoundError messages fail fast without retrying."""
+    calls = {"n": 0}
+
+    async def fn():
+        calls["n"] += 1
+        raise _make_proxy_error("litellm.NotFoundError: model 'x' not found")
+
+    wrapped = async_retry_with_exponential_backoff(
+        fn, max_retries=3, initial_delay=0.0, jitter=False
+    )
+    with pytest.raises(openai.APIError):
+        await wrapped()
+
+    assert calls["n"] == 1
+
+
 def test_sync_rate_limit_is_retried():
     """Regression guard: retryable errors (429) still retry until max_retries."""
     calls = {"n": 0}
@@ -103,6 +144,42 @@ async def test_async_rate_limit_is_retried():
     async def fn():
         calls["n"] += 1
         raise _make_openai_error(openai.RateLimitError, 429)
+
+    wrapped = async_retry_with_exponential_backoff(
+        fn, max_retries=2, initial_delay=0.0, jitter=False
+    )
+    with pytest.raises(Exception, match="Maximum number of retries"):
+        await wrapped()
+
+    assert calls["n"] == 3
+
+
+def test_sync_internal_server_error_is_retried() -> None:
+    """Regression guard: native 500 errors still retry until max_retries."""
+    calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        raise _make_openai_error(openai.InternalServerError, 500)
+
+    wrapped = retry_with_exponential_backoff(
+        fn, max_retries=2, initial_delay=0.0, jitter=False
+    )
+    with pytest.raises(Exception, match="Maximum number of retries"):
+        wrapped()
+
+    # initial attempt + max_retries retries
+    assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_async_internal_server_error_is_retried() -> None:
+    """Async native 500 errors still retry until max_retries."""
+    calls = {"n": 0}
+
+    async def fn():
+        calls["n"] += 1
+        raise _make_openai_error(openai.InternalServerError, 500)
 
     wrapped = async_retry_with_exponential_backoff(
         fn, max_retries=2, initial_delay=0.0, jitter=False

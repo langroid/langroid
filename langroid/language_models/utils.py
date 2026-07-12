@@ -25,7 +25,7 @@ def retry_with_exponential_backoff(
         requests.exceptions.RequestException,
         openai.APITimeoutError,
         openai.RateLimitError,
-        openai.AuthenticationError,
+        openai.AuthenticationError,  # redundant: also fast-failed by the 4xx guard
         openai.APIError,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
@@ -108,7 +108,7 @@ def async_retry_with_exponential_backoff(
     errors: tuple = (  # type: ignore
         openai.APITimeoutError,
         openai.RateLimitError,
-        openai.AuthenticationError,
+        openai.AuthenticationError,  # redundant: also fast-failed by the 4xx guard
         openai.APIError,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
