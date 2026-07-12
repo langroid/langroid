@@ -305,8 +305,12 @@ class FastMCPClient:
         # to `Any`. Resolved types are cached per tool so shared defs are built
         # once and reused.
         ref = schema.get("$ref")
+        if "$ref" in schema and (
+            not isinstance(ref, str) or not ref.startswith("#/$defs/")
+        ):
+            return Any, Field(default=default, description=desc)
         if isinstance(ref, str):
-            def_name = ref.rsplit("/", 1)[-1]
+            def_name = ref[len("#/$defs/") :]
             if def_name in ref_cache:
                 cached = ref_cache[def_name]
                 if cached is _REF_IN_PROGRESS:
@@ -431,6 +435,8 @@ class FastMCPClient:
                 if has_null or not is_required:
                     union_type = Optional[union_type]  # type: ignore
                 return union_type, Field(default=default, description=desc)
+            if has_null:
+                return type(None), Field(default=default, description=desc)
 
         # allOf: a single subschema is just that schema; a multi-schema
         # intersection has no clean typing analogue, so fall back to Any.

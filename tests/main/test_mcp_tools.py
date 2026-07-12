@@ -27,7 +27,11 @@ from mcp.types import (
 )
 
 # note we use pydantic v2 to define MCP server
-from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
+from pydantic import (  # keep - need pydantic v2 for MCP server
+    BaseModel,
+    Field,
+    ValidationError,
+)
 
 import langroid as lr
 import langroid.language_models as lm
@@ -1514,6 +1518,163 @@ def test_tool_model_from_mcp_tool_handles_malformed_enum() -> None:
     assert "bad_enum" in tool_model.model_fields
     # Falls through to the "integer" type branch, so an int still validates.
     assert tool_model(bad_enum=5).bad_enum == 5
+
+
+def test_tool_model_from_mcp_tool_maps_one_of_to_union() -> None:
+    """A oneOf schema should produce a union whose members both validate."""
+    from typing import Union, get_args, get_origin
+
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="one_of",
+        description="One-of tool",
+        inputSchema={
+            "properties": {
+                "value": {"oneOf": [{"type": "integer"}, {"type": "string"}]}
+            },
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+    annotation = tool_model.model_fields["value"].annotation
+
+    assert get_origin(annotation) is Union
+    assert set(get_args(annotation)) == {int, str}
+    assert tool_model(value=7).value == 7
+    assert tool_model(value="seven").value == "seven"
+
+
+def test_tool_model_from_mcp_tool_maps_const_to_literal() -> None:
+    """A const schema should produce a Literal that rejects other values."""
+    from typing import Literal, get_args, get_origin
+
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="const_value",
+        description="Const tool",
+        inputSchema={
+            "properties": {"value": {"const": "X"}},
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+    annotation = tool_model.model_fields["value"].annotation
+
+    assert get_origin(annotation) is Literal
+    assert get_args(annotation) == ("X",)
+    assert tool_model(value="X").value == "X"
+    with pytest.raises(ValidationError):
+        tool_model(value="Y")
+
+
+def test_tool_model_from_mcp_tool_inlines_single_all_of() -> None:
+    """A single-member allOf schema should inline its member type."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="single_all_of",
+        description="Single allOf tool",
+        inputSchema={
+            "properties": {"value": {"allOf": [{"type": "integer"}]}},
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.model_fields["value"].annotation is int
+    assert tool_model(value=7).value == 7
+
+
+def test_tool_model_from_mcp_tool_degrades_multi_all_of() -> None:
+    """A multi-member allOf schema should degrade to permissive Any."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="multi_all_of",
+        description="Multi allOf tool",
+        inputSchema={
+            "properties": {
+                "value": {"allOf": [{"type": "integer"}, {"type": "string"}]}
+            },
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.model_fields["value"].annotation is Any
+    assert tool_model(value={"anything": True}).value == {"anything": True}
+
+
+def test_tool_model_from_mcp_tool_maps_integer_enum_to_literal() -> None:
+    """An integer enum should produce a Literal that enforces its values."""
+    from typing import Literal, get_args, get_origin
+
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="integer_enum",
+        description="Integer enum tool",
+        inputSchema={
+            "properties": {"value": {"type": "integer", "enum": [1, 2, 3]}},
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+    annotation = tool_model.model_fields["value"].annotation
+
+    assert get_origin(annotation) is Literal
+    assert get_args(annotation) == (1, 2, 3)
+    assert tool_model(value=2).value == 2
+    with pytest.raises(ValidationError):
+        tool_model(value=4)
+
+
+@pytest.mark.parametrize(
+    "ref",
+    ["#/definitions/Node", "http://evil/x#/$defs/Node", 123],
+)
+def test_tool_model_from_mcp_tool_rejects_non_local_refs(ref: object) -> None:
+    """A non-local or non-string ref should degrade without resolving defs."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="bad_ref",
+        description="Bad ref tool",
+        inputSchema={
+            "$defs": {
+                "Node": {
+                    "type": "object",
+                    "properties": {"value": {"type": "integer"}},
+                }
+            },
+            "properties": {"node": {"$ref": ref}},
+            "required": ["node"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.model_fields["node"].annotation is Any
+    assert tool_model(node={"unrestricted": True}).node == {"unrestricted": True}
+
+
+def test_tool_model_from_mcp_tool_maps_all_null_any_of() -> None:
+    """An all-null anyOf schema should accept None as its only value."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="null_only",
+        description="Null-only tool",
+        inputSchema={
+            "properties": {"value": {"anyOf": [{"type": "null"}]}},
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.model_fields["value"].annotation is type(None)
+    assert tool_model(value=None).value is None
 
 
 def test_tool_model_from_mcp_tool_handles_malformed_property_schemas() -> None:
