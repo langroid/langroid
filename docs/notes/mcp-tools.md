@@ -459,3 +459,31 @@ async with FastMCPClient(server) as client:
     wanted = [t for t in tools if t.name in {"search", "fetch"}]
     models = [client.tool_model_from_mcp_tool(t) for t in wanted]
 ```
+
+## Tool parameter type mapping
+
+When an MCP tool is converted into a Langroid `ToolMessage`,
+`FastMCPClient._schema_to_field` maps each parameter's JSON Schema to a precise
+Python type. The generated tool therefore validates arguments and shows the LLM
+accurate parameter types.
+
+The mappings are:
+
+- Scalar `enum` and `const` values become `typing.Literal`.
+- `anyOf` and `oneOf` become `typing.Union`. A `{"type": "null"}` branch, or an
+  optional parameter, makes the type `Optional`. Because typing has no
+  exclusive-or, `oneOf` also maps to `Union`.
+- A single-schema `allOf` resolves to that subschema. A multi-schema `allOf`
+  intersection has no typing analogue and falls back to `Any`.
+- A `$ref` into the schema's `$defs` becomes a nested pydantic model. FastMCP
+  emits these references for pydantic-model parameters, including within unions
+  and array items. Reference cycles degrade the cyclic edge to `Any`.
+- An `object` with `properties` becomes a nested model, while an `array` becomes
+  `List[...]`.
+- Anything unrecognized or malformed falls back to `Any`, so a bad schema never
+  breaks tool construction.
+
+Because these constraints are preserved, out-of-set `enum` values and
+wrong-type union values now raise a `ValidationError` instead of being silently
+accepted. Pydantic also re-emits `enum`, `anyOf`, and nullability in the schema
+sent to the LLM, improving grounding.
