@@ -55,8 +55,33 @@ ai-notes/
   Langroid-repo-docs.md
   repomix-plan.md
 docs/
+  assets/
+    demos/
+      dependency_chatbot.gif
+      lease-extractor-demo.gif
+    DepChatbot.png
+    langroid_neo4j_logos.png
+    langroid-card-cobalt-blue-1200-630.png
+    langroid-card-cobalt-blue.png
+    langroid-card-lambda-ossem-rust-1200-630.png
+    langroid-card-ossem-rust-1200x630.png
+    langroid-card-ossem-rust.png
+    langroid-lance.png
+    nullify-logo.jpg
+    nullify-logo.png
+    orange-logo-lambda-563.png
+    orange-logo-lambda.png
+    orange-logo.png
+    pure-lambda-non-circular.png
   blog/
     posts/
+      figures/
+        confusion.png
+        langroid-arch.png
+        malade-arch.png
+        omop-ground-truth.png
+        omop-results.png
+        variance-histogram.png
       chat-completion.md
       langroid-architecture.md
       langroid-intro.md
@@ -72,16 +97,22 @@ docs/
   demos/
     targeting/
       audience-targeting.md
+      targeting.gif
+      targeting.png
   examples/
     agent-tree.md
+    chat-tree.png
     guide.md
   javascripts/
     mathjax.js
+  logos/
+    pure-lambda-non-circular.png
   notes/
     async-streaming.md
     azure-openai-models.md
     chunking.md
     code-injection-protection.md
+    context-overflow.md
     crawl4ai.md
     custom-azure-client.md
     enriching-for-retrieval.md
@@ -125,18 +156,33 @@ docs/
       comments.html
   quick-start/
     chat-agent-docs.md
+    chat-agent-fn.png
     chat-agent-tool.md
+    chat-agent-tool.png
     chat-agent.md
+    chat-docs.png
+    chat.png
+    img.png
     index.md
     llm-interaction.md
     multi-agent-task-delegation.md
     setup.md
     three-agent-chat-num-router.md
     three-agent-chat-num.md
+    three-agent-num.png
+    three-agent-router-func.png
+    three-agent-router.png
+    try-llm.png
     two-agent-chat-num.md
+    two-agent-num.png
+    two-agent.png
+  screenshots/
+    planner-workflow-html-logs.png
   stylesheets/
     extra.css
   tutorials/
+    langroid-tour-beethoven.png
+    langroid-tour-teacher.png
     langroid-tour.md
     llm-usage-options.md
     local-llm-setup.md
@@ -149,17 +195,20 @@ docs/
 examples/
   basic/
     multi-agent-search-critic/
+      __init__.py
       assistant_agent.py
       critic_agent.py
       main.py
       search_agent.py
       tools.py
     multi-agent-search-critic-no-orch/
+      __init__.py
       assistant_agent.py
       critic_agent.py
       main.py
       search_agent.py
       tools.py
+    __init__.py
     1-agent-3-tools-address-user.py
     1-agent-3-tools.py
     1d-screen-click.py
@@ -212,6 +261,11 @@ examples/
       chat-stream.py
       chat-tool-no-callback.py
       README.md
+    public/
+      favicon
+      langroid-card.png
+      logo_dark.png
+      logo_light.png
     books.txt
     chainlit.md
     chat-doc-qa.py
@@ -236,8 +290,10 @@ examples/
     test-step-nesting.py
   data-qa/
     sql-chat/
+      __init__.py
       sql_chat.py
       utils.py
+    __init__.py
     table_chat.py
   docqa/
     streamlit-app/
@@ -245,6 +301,7 @@ examples/
       README.md
       requirements.txt
       utils.py
+    __init__.py
     books.txt
     chat_multi_extract.py
     chat_search.py
@@ -288,6 +345,7 @@ examples/
     pdf-json-no-parse.py
     pdf-json.py
     README.md
+    um-financial-report.pdf
   kg-chat/
     chat-arangodb-igvf.py
     chat-arangodb.py
@@ -359,6 +417,7 @@ examples/
   summarize/
     summ-batch.py
     summ.py
+  __init__.py
   langroid_quick_examples.ipynb
   Langroid_quick_start.ipynb
   Langroid_QuickStart_OpenAI_Assistants_API.ipynb
@@ -393,9 +452,11 @@ issues/
 langroid/
   agent/
     callbacks/
+      __init__.py
       chainlit.py
     special/
       arangodb/
+        __init__.py
         aql_validator.py
         arangodb_agent.py
         system_messages.py
@@ -407,6 +468,7 @@ langroid/
         lance_rag_task.py
         query_planner_agent.py
       neo4j/
+        __init__.py
         csv_kg_chat.py
         cypher_validator.py
         neo4j_chat_agent.py
@@ -463,6 +525,7 @@ langroid/
     redis_cachedb.py
   embedding_models/
     protoc/
+      __init__.py
       embeddings_pb2_grpc.py
       embeddings_pb2.py
       embeddings_pb2.pyi
@@ -549,6 +612,7 @@ langroid/
   __init__.py
   exceptions.py
   mytypes.py
+  py.typed
 plugins/
   langroid/
     skills/
@@ -563,6 +627,11 @@ plugins/
         run-batch-tasks.md
         SKILL.md
         task-return-tool.md
+public/
+  favicon
+  langroid-card.png
+  logo_dark.png
+  logo_light.png
 release-notes/
   v0-56-0-task-tool.md
   v0-56-11-openai-client-caching.md
@@ -3030,8 +3099,7 @@ Here is what a run starting with $n=12$ looks like:
 </file>
 
 <file path="docs/javascripts/mathjax.js">
-document$.subscribe(() => {
-MathJax.typesetPromise()
+
 </file>
 
 <file path="docs/notes/async-streaming.md">
@@ -9911,6 +9979,10 @@ The [Getting Started Guide](quick-start/index.md) and subsequent pages
 will help you get up to speed.
 </file>
 
+<file path="examples/basic/multi-agent-search-critic/__init__.py">
+
+</file>
+
 <file path="examples/basic/multi-agent-search-critic/assistant_agent.py">
 """
 AssistantAgent takes a user's question, breaks it down into smaller questions
@@ -10187,6 +10259,10 @@ suggested_fix: str
 # just example
 ⋮----
 # thought + example
+</file>
+
+<file path="examples/basic/multi-agent-search-critic-no-orch/__init__.py">
+
 </file>
 
 <file path="examples/basic/multi-agent-search-critic-no-orch/assistant_agent.py">
@@ -10516,6 +10592,10 @@ suggested_fix: str
 # just example
 ⋮----
 # thought + example
+</file>
+
+<file path="examples/basic/__init__.py">
+
 </file>
 
 <file path="examples/basic/1-agent-3-tools-address-user.py">
@@ -15080,6 +15160,10 @@ b_step = cl.Step(
 c_step = cl.Step(
 </file>
 
+<file path="examples/data-qa/sql-chat/__init__.py">
+
+</file>
+
 <file path="examples/data-qa/sql-chat/sql_chat.py">
 """
 Example showing how to chat with a SQL database.
@@ -15221,6 +15305,10 @@ databasename = Prompt.ask("Enter the database name")
 uri = _create_database_uri(scheme, username, password, hostname, port, databasename)
 </file>
 
+<file path="examples/data-qa/__init__.py">
+
+</file>
+
 <file path="examples/data-qa/table_chat.py">
 """
 Example showing how to chat with a tabular dataset:
@@ -15338,6 +15426,10 @@ rag_agent = st.session_state["rag_agent"]
 rag_agent = DocChatAgent(cfg)
 ⋮----
 response = rag_agent.llm_response(prompt)
+</file>
+
+<file path="examples/docqa/__init__.py">
+
 </file>
 
 <file path="examples/docqa/books.txt">
@@ -22140,7 +22232,6 @@ user_agent.llm = None  # User message without LLM completion
 # Handle timeout or invalid response gracefully
 ⋮----
 # Assign the input to the user agent's attributes
-user_agent.llm = None  # User message without LLM completion
 ⋮----
 # Set up langroid tasks and run the debate
 user_task = Task(user_agent, interactive=interactive_setting, restart=False)
@@ -23635,8 +23726,6 @@ response = llm.chat("Is 7.2 bigger than 7.11?", max_tokens=1000)
 agent = lr.ChatAgent(
 ⋮----
 response = agent.llm_response(
-⋮----
-# extract reasoning
 </file>
 
 <file path="examples/summarize/summ-batch.py">
@@ -23760,6 +23849,10 @@ config = lr.ChatAgentConfig(
 ⋮----
 agent = lr.ChatAgent(config)
 summary = agent.llm_response()
+</file>
+
+<file path="examples/__init__.py">
+
 </file>
 
 <file path="examples/langroid_quick_examples.ipynb">
@@ -30108,6 +30201,14 @@ By adding explicit `close()` and context manager support to Langroid's QdrantDB 
 The QdrantDB lock file issue has been resolved by adding proper resource cleanup mechanisms to Langroid's QdrantDB wrapper. While the underlying `qdrant_client` doesn't provide context manager support, Langroid now offers both context manager and explicit `close()` methods. The context manager approach is the recommended best practice as it ensures cleanup even in error scenarios. For cases where context managers aren't suitable, the explicit `close()` method provides a reliable alternative.
 </file>
 
+<file path="langroid/agent/callbacks/__init__.py">
+
+</file>
+
+<file path="langroid/agent/special/arangodb/__init__.py">
+
+</file>
+
 <file path="langroid/agent/special/arangodb/system_messages.py">
 done_tool_name = DoneTool.default_value("request")
 ⋮----
@@ -30410,6 +30511,10 @@ self.curr_query_plan = None  # reset
         """
 ⋮----
 self.n_query_plan_reminders = 0  # reset
+</file>
+
+<file path="langroid/agent/special/neo4j/__init__.py">
+
 </file>
 
 <file path="langroid/agent/special/neo4j/csv_kg_chat.py">
@@ -31105,8 +31210,6 @@ await self._cm.__aexit__(None, None, None)  # type: ignore
 # "Server session was closed unexpectedly". Treat as transient.
 emsg = str(e)
 ⋮----
-await self._cm.__aexit__(None, None, None)  # type: ignore
-⋮----
 # otherwise re-raise
 ⋮----
 # If we get here both attempts failed
@@ -31754,9 +31857,6 @@ default_recipient = self.__class__.default_value("default_recipient")
 or msg.metadata.recipient != ""  # there IS an explicit recipient
 ⋮----
 content = msg if isinstance(msg, str) else msg.content
-# save the content as a class-variable, so that
-# we can construct the ChatDocument once the LLM specifies a recipient.
-# This avoids having to re-generate the entire message, saving time + cost.
 </file>
 
 <file path="langroid/agent/tools/retrieval_tool.py">
@@ -32954,6 +33054,10 @@ class CacheDB(ABC)
         """
 </file>
 
+<file path="langroid/embedding_models/protoc/__init__.py">
+
+</file>
+
 <file path="langroid/embedding_models/protoc/embeddings_pb2_grpc.py">
 # Generated by the gRPC Python protocol compiler plugin. DO NOT EDIT!
 """Client and server classes corresponding to protobuf-defined services."""
@@ -32973,8 +33077,6 @@ def __init__(self, channel)
 class EmbeddingServicer(object)
 ⋮----
 def Embed(self, request, context)
-⋮----
-"""Missing associated documentation comment in .proto file."""
 ⋮----
 def add_EmbeddingServicer_to_server(servicer, server)
 ⋮----
@@ -33407,7 +33509,6 @@ embeddings = data[0]["embedding"]
 first_item = response_json[0]
 ⋮----
 embeddings = first_item["embedding"]
-# Check if it's [floats]
 ⋮----
 # Check if it's [[floats]]
 ⋮----
@@ -34615,6 +34716,118 @@ chunks = _chunk_sentences(sentences, chunk_size)
 chunks = paragraphs
 ⋮----
 chunks = [chunk.strip() for chunk in chunks if chunk.strip() != ""]
+</file>
+
+<file path="langroid/parsing/parse_json.py">
+def is_valid_json(json_str: str) -> bool
+⋮----
+"""Check if the input string is a valid JSON.
+
+    Args:
+        json_str (str): The input string to check.
+
+    Returns:
+        bool: True if the input string is a valid JSON, False otherwise.
+    """
+⋮----
+def flatten(nested_list) -> Iterator[str]:  # type: ignore
+⋮----
+"""Flatten a nested list into a single list of strings"""
+⋮----
+def get_json_candidates(s: str) -> List[str]
+⋮----
+"""Get top-level JSON candidates, i.e. strings between curly braces."""
+# Define the grammar for matching curly braces
+curly_braces = original_text_for(nested_expr("{", "}"))
+⋮----
+# Parse the string
+⋮----
+results = curly_braces.search_string(s)
+# Properly convert nested lists to strings
+⋮----
+def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]
+⋮----
+# First, try parsing with ast.literal_eval
+⋮----
+result = ast.literal_eval(json_string)
+⋮----
+# If ast.literal_eval fails or returns non-dict/list, try repair_json
+json_repaired_obj = repair_json(json_string, return_objects=True)
+⋮----
+# fallback on yaml
+yaml_result = yaml.safe_load(json_string)
+⋮----
+# If all methods fail, raise ValueError
+⋮----
+def try_repair_json_yaml(s: str) -> str | None
+⋮----
+"""
+    Attempt to load as json, and if it fails, try repairing the JSON.
+    If that fails, replace any \n with space as a last resort.
+    NOTE - replacing \n with space will result in format loss,
+    which may matter in generated code (e.g. python, toml, etc)
+    """
+s_repaired_obj = repair_json(s, return_objects=True)
+⋮----
+s_repaired_obj = s_repaired_obj[0]
+⋮----
+s_repaired_obj = None
+⋮----
+return json.dumps(s_repaired_obj)  # type: ignore
+⋮----
+yaml_result = yaml.safe_load(s)
+⋮----
+# If it still fails, replace any \n with space as a last resort
+s = s.replace("\n", " ")
+⋮----
+return None  # all failed
+⋮----
+def extract_top_level_json(s: str) -> List[str]
+⋮----
+"""Extract all top-level JSON-formatted substrings from a given string.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+
+    Returns:
+        List[str]: A list of top-level JSON-formatted substrings.
+    """
+# Find JSON object and array candidates
+json_candidates = get_json_candidates(s)
+maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
+⋮----
+def top_level_json_field(s: str, f: str) -> Any
+⋮----
+"""
+    Extract the value of a field f from a top-level JSON object.
+    If there are multiple, just return the first.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+        f (str): The field to extract from the JSON object.
+
+    Returns:
+        str: The value of the field f in the top-level JSON object, if any.
+            Otherwise, return an empty string.
+
+    Note:
+        This function is designed to never crash. If any exception occurs during
+        JSON parsing or field extraction, it gracefully returns an empty string.
+    """
+⋮----
+jsons = extract_top_level_json(s)
+⋮----
+json_data = json.loads(j)
+⋮----
+# Some responses wrap candidate JSON objects in a list; scan them.
+⋮----
+# If this specific JSON fails to parse, continue to next candidate
+⋮----
+# Catch any unexpected errors to ensure we never crash
+⋮----
+def datetime_to_json(obj: Any) -> Any
+⋮----
+# Let json.dumps() handle the raising of TypeError for non-serializable objects
 </file>
 
 <file path="langroid/parsing/pdf_utils.py">
@@ -38504,6 +38717,10 @@ class NonToolAction(str, Enum)
 ⋮----
 FORWARD_USER = "user"  # forward msg to user
 DONE = "done"  # task done
+</file>
+
+<file path="langroid/py.typed">
+
 </file>
 
 <file path="release-notes/v0-56-0-task-tool.md">
@@ -44165,8 +44382,6 @@ task = Task(
 ⋮----
 extracts: list[str] = run_batch_tasks(
 ⋮----
-)  # type: ignore
-⋮----
 # Caution: Retain ALL other fields in the Documents (which could be
 # other than just `content` and `metadata`), while simply replacing
 # `content` with the extracted portions
@@ -44806,8 +45021,6 @@ redis_password = os.getenv("REDIS_PASSWORD")
 redis_host = os.getenv("REDIS_HOST") or None
 redis_port = os.getenv("REDIS_PORT")
 ⋮----
-self.pool = fakeredis.FakeStrictRedis()  # type: ignore
-⋮----
 self.pool = redis.ConnectionPool(  # type: ignore
 ⋮----
 @contextmanager  # type: ignore
@@ -45400,8 +45613,6 @@ class PyMuPDF4LLMParser(DocumentParser)
     Parser for processing PDFs using the `pymupdf4llm` library.
     """
 ⋮----
-import pymupdf4llm  # noqa
-⋮----
 doc: fitz.Document = fitz.open(stream=self.doc_bytes, filetype="pdf")
 pages: List[Dict[str, Any]] = pymupdf4llm.to_markdown(doc, page_chunks=True)
 ⋮----
@@ -45475,8 +45686,6 @@ class DoclingParser(DocumentParser)
         Returns:
             Generator[docling.Page]: Generator yielding each page.
         """
-⋮----
-import docling  # noqa
 ⋮----
 from docling.datamodel.base_models import InputFormat  # type: ignore
 ⋮----
@@ -46003,118 +46212,6 @@ page_no = 0
         """
 </file>
 
-<file path="langroid/parsing/parse_json.py">
-def is_valid_json(json_str: str) -> bool
-⋮----
-"""Check if the input string is a valid JSON.
-
-    Args:
-        json_str (str): The input string to check.
-
-    Returns:
-        bool: True if the input string is a valid JSON, False otherwise.
-    """
-⋮----
-def flatten(nested_list) -> Iterator[str]:  # type: ignore
-⋮----
-"""Flatten a nested list into a single list of strings"""
-⋮----
-def get_json_candidates(s: str) -> List[str]
-⋮----
-"""Get top-level JSON candidates, i.e. strings between curly braces."""
-# Define the grammar for matching curly braces
-curly_braces = original_text_for(nested_expr("{", "}"))
-⋮----
-# Parse the string
-⋮----
-results = curly_braces.search_string(s)
-# Properly convert nested lists to strings
-⋮----
-def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]
-⋮----
-# First, try parsing with ast.literal_eval
-⋮----
-result = ast.literal_eval(json_string)
-⋮----
-# If ast.literal_eval fails or returns non-dict/list, try repair_json
-json_repaired_obj = repair_json(json_string, return_objects=True)
-⋮----
-# fallback on yaml
-yaml_result = yaml.safe_load(json_string)
-⋮----
-# If all methods fail, raise ValueError
-⋮----
-def try_repair_json_yaml(s: str) -> str | None
-⋮----
-"""
-    Attempt to load as json, and if it fails, try repairing the JSON.
-    If that fails, replace any \n with space as a last resort.
-    NOTE - replacing \n with space will result in format loss,
-    which may matter in generated code (e.g. python, toml, etc)
-    """
-s_repaired_obj = repair_json(s, return_objects=True)
-⋮----
-s_repaired_obj = s_repaired_obj[0]
-⋮----
-s_repaired_obj = None
-⋮----
-return json.dumps(s_repaired_obj)  # type: ignore
-⋮----
-yaml_result = yaml.safe_load(s)
-⋮----
-# If it still fails, replace any \n with space as a last resort
-s = s.replace("\n", " ")
-⋮----
-return None  # all failed
-⋮----
-def extract_top_level_json(s: str) -> List[str]
-⋮----
-"""Extract all top-level JSON-formatted substrings from a given string.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-
-    Returns:
-        List[str]: A list of top-level JSON-formatted substrings.
-    """
-# Find JSON object and array candidates
-json_candidates = get_json_candidates(s)
-maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
-⋮----
-def top_level_json_field(s: str, f: str) -> Any
-⋮----
-"""
-    Extract the value of a field f from a top-level JSON object.
-    If there are multiple, just return the first.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-        f (str): The field to extract from the JSON object.
-
-    Returns:
-        str: The value of the field f in the top-level JSON object, if any.
-            Otherwise, return an empty string.
-
-    Note:
-        This function is designed to never crash. If any exception occurs during
-        JSON parsing or field extraction, it gracefully returns an empty string.
-    """
-⋮----
-jsons = extract_top_level_json(s)
-⋮----
-json_data = json.loads(j)
-⋮----
-# Some responses wrap candidate JSON objects in a list; scan them.
-⋮----
-# If this specific JSON fails to parse, continue to next candidate
-⋮----
-# Catch any unexpected errors to ensure we never crash
-⋮----
-def datetime_to_json(obj: Any) -> Any
-⋮----
-# Let json.dumps() handle the raising of TypeError for non-serializable objects
-</file>
-
 <file path="langroid/parsing/parser.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -46357,7 +46454,6 @@ chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
 ⋮----
 # Append the chunk text to the list of chunks
 ⋮----
-# Remove the tokens corresponding to the chunk text
 # from the remaining tokens
 tokens = tokens[
 ⋮----
@@ -46802,8 +46898,6 @@ DynamicMetaData = DocMetaData  # type: ignore
 ⋮----
 # Define additional top-level fields for DynamicDocument
 additional_fields = {
-⋮----
-None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
 ⋮----
 # Create a dynamic subclass of Document
 DynamicDocumentFields = {
@@ -47536,8 +47630,6 @@ deleted_count = 0
 def clear_empty_collections(self) -> int
 ⋮----
 # Efficiently check for emptiness without fetching all rows
-⋮----
-# Use delete_collection to handle index and table deletion
 ⋮----
 session.commit()  # Commit is likely not needed here
 ⋮----
@@ -49209,6 +49301,100 @@ handlers.
 
 **Recommendation: Request changes** — use `openai.APIStatusError` instead of
 `openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
+</file>
+
+<file path="docs/notes/context-overflow.md">
+# Context-Overflow Handling
+
+When a `ChatAgent`'s message history grows so large that
+(history tokens + requested output tokens) exceeds the model's context length,
+Langroid steps in before the LLM API call (in chat mode, i.e. the standard
+`llm_response` path) and tries to make the request fit. This happens in stages:
+
+1. **Shrink the requested output length.** The max output tokens for the request
+   is reduced to `chat_context_length - history_tokens - CHAT_HISTORY_BUFFER`,
+   where `CHAT_HISTORY_BUFFER` (300 tokens) is a safety margin that guards
+   against token-count inaccuracies. If this reduced output length is still at
+   least `llm.min_output_tokens` (default 64), nothing else is done.
+2. **Shrink the message history.** If the output length would fall below
+   `llm.min_output_tokens`, the history itself is compressed, using the
+   strategy configured via `ChatAgentConfig.context_overflow_strategy`.
+3. **Give up.** If even after compressing the history there is not enough room
+   for `llm.min_output_tokens` of output, a `ValueError` is raised with hints
+   (increase `chat_context_length`, decrease `max_output_tokens`, or shorten
+   the system/user messages).
+
+## The `context_overflow_strategy` config
+
+`ChatAgentConfig.context_overflow_strategy` accepts two values:
+
+- `"truncate"` (default): truncate the *content* of individual early messages,
+  while preserving the message sequence. Keeping every message in place is
+  important for LLM APIs that require strictly alternating USER/ASSISTANT
+  messages. The system message (index 0) and the final user message are never
+  touched; only the messages in between are eligible, oldest first. Each
+  truncated message gets a `... [Contents truncated!]` marker appended.
+- `"drop_turns"`: drop complete conversation turns, oldest first. A turn is a
+  USER message together with all messages that follow it, up to (but not
+  including) the next USER message. The system message and the last turn are
+  preserved. This is more aggressive but cleaner, e.g. for voice agents with
+  limited context.
+
+Example:
+
+```python
+import langroid as lr
+import langroid.language_models as lm
+
+config = lr.ChatAgentConfig(
+    llm=lm.OpenAIGPTConfig(
+        chat_model="gpt-4.1-mini",
+        max_output_tokens=1024,
+        min_output_tokens=64,
+    ),
+    context_overflow_strategy="drop_turns",  # or "truncate" (the default)
+)
+agent = lr.ChatAgent(config)
+```
+
+## Even distribution of truncation
+
+With the `"truncate"` strategy, the required token reduction is distributed
+evenly across the eligible messages, so each message retains as much content
+as possible. Walking forward from the oldest eligible message, at each step
+the current excess
+
+```text
+budget = chat_context_length - min_output_tokens - CHAT_HISTORY_BUFFER
+excess = history_tokens - budget
+```
+
+is divided by the number of remaining *compressible* messages — those whose
+content can actually shrink, i.e. is above the 30-token floor plus the
+truncation-marker overhead — and the current message is trimmed by (roughly)
+that share of the excess, subject to:
+
+- a floor of 30 tokens: no message's content is ever cut below 30 tokens, and
+  messages already at/below the floor plus the truncation-marker overhead are
+  left untouched and excluded from the even-share split (truncating them
+  would save nothing — it could only *grow* them by the appended marker);
+- a capacity check: each message absorbs at least the portion of the excess
+  that the messages after it *cannot* absorb (they can each shed only their
+  content above the floor), so a single forward pass suffices whenever
+  fitting is possible at all.
+
+The excess is recomputed after every message, so the process self-corrects as
+it walks forward through the history.
+
+For example, if the history is 400 tokens over budget and there are 4 eligible
+messages of 300 tokens each, each one is trimmed by about 100 tokens, keeping
+roughly 200 tokens apiece — instead of the previous behavior of collapsing
+each message to a fixed 30 tokens (which destroyed far more context than
+necessary; see issue
+[#838](https://github.com/langroid/langroid/issues/838)).
+
+If even cutting all eligible messages down to the 30-token floor cannot make
+the history fit, a `ValueError` is raised as described above.
 </file>
 
 <file path="docs/tutorials/non-openai-llms.md">
@@ -50951,197 +51137,6 @@ instruc_msg = f"""
 # user response_forget to avoid accumulating the chat history
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="langroid/agent/base.py">
 ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
 console = Console(quiet=settings.quiet)
@@ -51322,10 +51317,6 @@ def wrapper(obj: Any, chat_doc: Any) -> Any
 # Only agent parameter
 ⋮----
 # Only chat_doc parameter
-⋮----
-async def wrapper(obj: Any, chat_doc: Any) -> Any
-⋮----
-def wrapper(obj: Any, chat_doc: Any) -> Any
 ⋮----
 # No recognized parameters - backward compatibility
 # Assume single parameter is chat_doc (legacy behavior)
@@ -51607,8 +51598,6 @@ sender = Entity.USER
 # interactive user input is external untrusted input; SYSTEM
 # (operator) input is trusted (#1035)
 ⋮----
-# preserve trail of tool_ids for OpenAI Assistant fn-calls
-⋮----
 """
         Asynch version of `user_response`. See there for details.
         """
@@ -51690,7 +51679,6 @@ cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
 chat=False,  # i.e. it's a completion model not chat model
 ⋮----
 cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
-# Preserve trail of tool_ids for OpenAI Assistant fn-calls
 ⋮----
 """
         LLM response to a prompt.
@@ -51714,8 +51702,6 @@ response = self.llm.generate(prompt, output_len)
 # streaming was enabled, AND we did not find a cached response
 ⋮----
 cached = "[red](cached)[/red]" if response.cached else ""
-⋮----
-chat=False,  # i.e. it's a completion model not chat model
 ⋮----
 def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool
 ⋮----
@@ -51892,9 +51878,6 @@ tool_name = tc.function.name
 tool_msg = tc.function.arguments or {}
 ⋮----
 all_errors = False
-⋮----
-# Store tool class as an attribute on the exception
-ve.tool_class = tool_class  # type: ignore
 ⋮----
 # When no tool is valid and the message was produced
 # by the LLM, set the recovery flag
@@ -52310,378 +52293,6 @@ agent_type = type(agent).__name__
 user_response = Prompt.ask(
 ⋮----
 answer = agent.llm_response(request)
-</file>
-
-<file path="langroid/agent/chat_document.py">
-class ChatDocAttachment(BaseModel)
-⋮----
-# any additional data that should be attached to the document
-model_config = ConfigDict(extra="allow")
-⋮----
-class StatusCode(str, Enum)
-⋮----
-"""Codes meant to be returned by task.run(). Some are not used yet."""
-⋮----
-OK = "OK"
-ERROR = "ERROR"
-DONE = "DONE"
-STALLED = "STALLED"
-INF_LOOP = "INF_LOOP"
-KILL = "KILL"
-FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
-MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
-MAX_COST = "MAX_COST"
-MAX_TOKENS = "MAX_TOKENS"
-TIMEOUT = "TIMEOUT"
-NO_ANSWER = "NO_ANSWER"
-USER_QUIT = "USER_QUIT"
-⋮----
-class ChatDocMetaData(DocMetaData)
-⋮----
-parent_id: str = ""  # msg (ChatDocument) to which this is a response
-child_id: str = ""  # ChatDocument that has response to this message
-agent_id: str = ""  # ChatAgent that generated this message
-msg_idx: int = -1  # index of this message in the agent `message_history`
-sender: Entity  # sender of the message
-# True if this msg was relayed from another agent's LLM/handler output in a
-# multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
-# tools be dispatched for legitimate handoffs while still blocking raw
-# USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
-# GHSA-gjgq-w2m6-wr5q.
-tools_from_agent: bool = False
-# True if this msg's content/tools derive from external untrusted (USER)
-# input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
-# repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
-# Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
-# vetoes handle-only tool dispatch even across a USER relabel, closing the
-# content-laundering hole. Propagated (deepcopy carries it), never cleared.
-# See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
-tainted: bool = False
-# tool_id corresponding to single tool result in ChatDocument.content
-oai_tool_id: str | None = None
-tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
-block: None | Entity = None
-sender_name: str = ""
-recipient: str = ""
-usage: Optional[LLMTokenUsage] = None
-cached: bool = False
-displayed: bool = False
-has_citation: bool = False
-status: Optional[StatusCode] = None
-⋮----
-@model_validator(mode="after")
-    def _mark_tools_from_agent(self) -> "ChatDocMetaData"
-⋮----
-# Mark messages produced directly by an LLM: the tools in an LLM's
-# output are the LLM's own decision (the trusted trigger for handle-only
-# tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
-# to another agent even after relabeling the sender to USER. The mark is
-# only ever SET, never cleared, so it survives relabeling and deepcopies
-# (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
-# mark across the handoff). We deliberately do NOT mark generic AGENT
-# messages: a pass-through/echoing agent could surface untrusted USER
-# text (with embedded tool JSON) as AGENT content, and marking that
-# would re-open the user-origin bypass. Raw USER input is never marked,
-# so it stays filtered. See ChatAgent._filter_user_origin_tools.
-⋮----
-@property
-    def parent(self) -> Optional["ChatDocument"]
-⋮----
-@property
-    def child(self) -> Optional["ChatDocument"]
-⋮----
-class ChatDocLoggerFields(BaseModel)
-⋮----
-sender_entity: Entity = Entity.USER
-⋮----
-block: Entity | None = None
-tool_type: str = ""
-tool: str = ""
-content: str = ""
-⋮----
-@classmethod
-    def tsv_header(cls) -> str
-⋮----
-field_names = cls().model_dump().keys()
-⋮----
-class ChatDocument(Document)
-⋮----
-"""
-    Represents a message in a conversation among agents. All responders of an agent
-    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
-    and so does the Task.run() method.
-
-    Attributes:
-        oai_tool_calls (Optional[List[OpenAIToolCall]]):
-            Tool-calls from an OpenAI-compatible API
-        oai_tool_id2results (Optional[OrderedDict[str, str]]):
-            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
-        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
-            LLM should choose tool-use in its response
-            (auto, none, required, or a specific tool)
-        function_call (Optional[LLMFunctionCall]):
-            Function-call from an OpenAI-compatible API
-                (deprecated by OpenAI, in favor of tool-calls)
-        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
-            - `content` field (via JSON parsing),
-            - `oai_tool_calls`, or
-            - `function_call`
-        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
-        attachment (None | ChatDocAttachment): Any additional data attached.
-    """
-⋮----
-reasoning: str = ""  # reasoning produced by a reasoning LLM
-content_any: Any = None  # to hold arbitrary data returned by responders
-# Original LLM response text including inline thought signatures
-# (e.g. <thinking>...</thinking>). Only populated when reasoning was
-# extracted from inline tags in the message text. Used by to_LLMMessage()
-# to preserve thought signatures in message history, which is critical
-# for models like Gemini 3 Flash and Amazon Nova that rely on seeing
-# their own thought tags in context to maintain reasoning ability.
-content_with_reasoning: Optional[str] = None
-files: List[FileAttachment] = []  # list of file attachments
-oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-oai_tool_id2result: Optional[OrderedDict[str, str]] = None
-oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
-function_call: Optional[LLMFunctionCall] = None
-# tools that are explicitly added by agent response/handler,
-# or tools recognized in the ChatDocument as handle-able tools
-tool_messages: List[ToolMessage] = []
-# all known tools in the msg that are in an agent's llm_tools_known list,
-# even if non-used/handled
-# (the list is populated by Agent.has_tool_message_attempt())
-all_tool_messages: Optional[List[ToolMessage]] = None
-# ID of the agent that populated all_tool_messages (for cache validity)
-all_tool_messages_agent_id: Optional[str] = None
-⋮----
-metadata: ChatDocMetaData
-attachment: None | ChatDocAttachment = None
-⋮----
-def __init__(self, **data: Any)
-⋮----
-@staticmethod
-    def deepcopy(doc: ChatDocument) -> ChatDocument
-⋮----
-new_doc = copy.deepcopy(doc)
-⋮----
-@staticmethod
-    def from_id(id: str) -> Optional["ChatDocument"]
-⋮----
-@staticmethod
-    def delete_id(id: str) -> None
-⋮----
-"""Remove ChatDocument with given id from ObjectRegistry,
-        and all its descendants.
-        """
-chat_doc = ChatDocument.from_id(id)
-# first delete all descendants
-⋮----
-next_chat_doc = chat_doc.child
-⋮----
-chat_doc = next_chat_doc
-⋮----
-def __str__(self) -> str
-⋮----
-fields = self.log_fields()
-tool_str = ""
-⋮----
-tool_str = f"{fields.tool_type}[{fields.tool}]: "
-recipient_str = ""
-⋮----
-recipient_str = f"=>{fields.recipient}: "
-⋮----
-def get_tool_names(self) -> List[str]
-⋮----
-"""
-        Get names of attempted tool usages (JSON or non-JSON) in the content
-            of the message.
-        Returns:
-            List[str]: list of *attempted* tool names
-            (We say "attempted" since we ONLY look at the `request` component of the
-            tool-call representation, and we're not fully parsing it into the
-            corresponding tool message class)
-
-        """
-tool_candidates = XMLToolMessage.find_candidates(self.content)
-⋮----
-tool_candidates = extract_top_level_json(self.content)
-⋮----
-tools = [json.loads(tc).get("request") for tc in tool_candidates]
-⋮----
-tool_dicts = [
-tools = [td.get("request") for td in tool_dicts if td is not None]
-⋮----
-def log_fields(self) -> ChatDocLoggerFields
-⋮----
-"""
-        Fields for logging in csv/tsv logger
-        Returns:
-            List[str]: list of fields
-        """
-tool_type = ""  # FUNC or TOOL
-tool = ""  # tool name or function name
-⋮----
-# Skip tool detection for system messages - they contain tool instructions,
-# not actual tool calls
-⋮----
-oai_tools = (
-⋮----
-tool_type = "FUNC"
-tool = self.function_call.name
-⋮----
-tool_type = "OAI_TOOL"
-tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
-⋮----
-json_tools = self.get_tool_names()
-⋮----
-json_tools = []
-⋮----
-tool_type = "TOOL"
-tool = json_tools[0]
-recipient = self.metadata.recipient
-content = self.content
-sender_entity = self.metadata.sender
-sender_name = self.metadata.sender_name
-⋮----
-def tsv_str(self) -> str
-⋮----
-field_values = fields.model_dump().values()
-⋮----
-def pop_tool_ids(self) -> None
-⋮----
-"""
-        Pop the last tool_id from the stack of tool_ids.
-        """
-⋮----
-@staticmethod
-    def _clean_fn_call(fc: LLMFunctionCall | None) -> None
-⋮----
-# Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
-# with oddities:
-# (a) the `name` is set, as well as `arguments.request` is set,
-#  and in langroid we use the `request` value as the `name`.
-#  In this case we override the `name` with the `request` value.
-# (b) the `name` looks like "functions blah" or just "functions"
-#   In this case we strip the "functions" part.
-⋮----
-request = fc.arguments.get("request")
-⋮----
-"""
-        Convert LLMResponse to ChatDocument.
-        Args:
-            response (LLMResponse): LLMResponse to convert.
-            displayed (bool): Whether this response was displayed to the user.
-            recognize_recipient_in_content (bool): Whether to parse message text
-                for recipient routing (``TO[<recipient>]:`` and JSON
-                ``{"recipient": ...}``). Default True.
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMResponse.
-        """
-⋮----
-message = message.strip()
-⋮----
-message = ""
-⋮----
-# there must be at least one if it's not None
-⋮----
-@staticmethod
-    def from_str(msg: str) -> "ChatDocument"
-⋮----
-# first check whether msg is structured as TO <recipient>: <message>
-⋮----
-# check if any top level json specifies a 'recipient'
-recipient = top_level_json_field(msg, "recipient")
-message = msg  # retain the whole msg in this case
-⋮----
-tainted=True,  # external user input is untrusted (#1035)
-⋮----
-"""
-        Convert LLMMessage to ChatDocument.
-
-        Args:
-            message (LLMMessage): LLMMessage to convert.
-            sender_name (str): Name of the sender. Defaults to "".
-            recipient (str): Name of the recipient. Defaults to "".
-
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMMessage.
-        """
-# Map LLMMessage Role to ChatDocument Entity
-role_to_entity = {
-⋮----
-sender_entity = role_to_entity.get(message.role, Entity.USER)
-⋮----
-"""
-        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
-        Usually there will be just a single LLMMessage, but when the ChatDocument
-        contains results from multiple OpenAI tool-calls, we would have a sequence
-        LLMMessages, one per tool-call result.
-
-        Args:
-            message (str|ChatDocument): Message to convert.
-            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
-                response, from the ChatAgent's latest message.
-        Returns:
-            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
-        """
-⋮----
-sender_role = Role.USER
-⋮----
-message = ChatDocument.from_str(message)
-# Prefer content_with_reasoning when available — this preserves
-# inline thought signatures (e.g. <thinking>...</thinking>) in
-# message history, which certain models (Gemini 3 Flash, Amazon
-# Nova) need to maintain reasoning across turns.
-# content_with_reasoning is only set when inline tags were
-# actually extracted, so this won't interfere with models that
-# provide reasoning via a separate API field.
-content = (
-fun_call = message.function_call
-oai_tool_calls = message.oai_tool_calls
-⋮----
-# This may happen when a (parent agent's) LLM generates a
-# a Function-call, and it ends up being sent to the current task's
-# LLM (possibly because the function-call is mis-named or has other
-# issues and couldn't be handled by handler methods).
-# But a function-call can only be generated by an entity with
-# Role.ASSISTANT, so we instead put the content of the function-call
-# in the content of the message.
-⋮----
-fun_call = None
-⋮----
-# same reasoning as for function-call above
-⋮----
-oai_tool_calls = None
-# some LLM APIs (e.g. gemini) don't like empty msg
-content = content or " "
-sender_name = message.metadata.sender_name
-tool_ids = message.metadata.tool_ids
-tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
-chat_document_id = message.id()
-⋮----
-sender_role = Role.SYSTEM
-⋮----
-# This is a response to a function call, so set the role to FUNCTION.
-sender_role = Role.FUNCTION
-sender_name = message.metadata.parent.function_call.name
-⋮----
-pending_tool_ids = [tc.id for tc in oai_tools]
-# The ChatAgent has pending OpenAI tool-call(s),
-# so the current ChatDocument contains
-# results for some/all/none of them.
-⋮----
-# Case 1:
-# There was exactly 1 pending tool-call, and in this case
-# the result would be a plain string in `content`
-⋮----
-# Case 2:
-# ChatDocument.content has result of a single tool-call
-⋮----
-# There were > 1 tool-calls awaiting response,
-⋮----
-sender_role = Role.ASSISTANT
-⋮----
-tool_id=tool_id,  # for OpenAI Assistant
 </file>
 
 <file path="langroid/agent/task.py">
@@ -53506,12 +53117,10 @@ if is_pass is None:  # no routing, i.e. neither PASS nor SEND
             valid, None otherwise
         """
 ⋮----
-# e.callbacks.set_parent_agent(self.agent)
 result = await e.run_async(
 ⋮----
 response_fn = self._entity_responder_async_map[cast(Entity, e)]
 result = await response_fn(self.pending_message)
-# update result.tool_messages if any
 ⋮----
 def result(self, status: StatusCode | None = None) -> ChatDocument | None
 ⋮----
@@ -53936,6 +53545,570 @@ responder = current_responder
 matched = False
 ⋮----
 matched = True
+</file>
+
+<file path="langroid/agent/chat_document.py">
+class ChatDocAttachment(BaseModel)
+⋮----
+# any additional data that should be attached to the document
+model_config = ConfigDict(extra="allow")
+⋮----
+class StatusCode(str, Enum)
+⋮----
+"""Codes meant to be returned by task.run(). Some are not used yet."""
+⋮----
+OK = "OK"
+ERROR = "ERROR"
+DONE = "DONE"
+STALLED = "STALLED"
+INF_LOOP = "INF_LOOP"
+KILL = "KILL"
+FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
+MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
+MAX_COST = "MAX_COST"
+MAX_TOKENS = "MAX_TOKENS"
+TIMEOUT = "TIMEOUT"
+NO_ANSWER = "NO_ANSWER"
+USER_QUIT = "USER_QUIT"
+⋮----
+class ChatDocMetaData(DocMetaData)
+⋮----
+parent_id: str = ""  # msg (ChatDocument) to which this is a response
+child_id: str = ""  # ChatDocument that has response to this message
+agent_id: str = ""  # ChatAgent that generated this message
+msg_idx: int = -1  # index of this message in the agent `message_history`
+sender: Entity  # sender of the message
+# True if this msg was relayed from another agent's LLM/handler output in a
+# multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
+# tools be dispatched for legitimate handoffs while still blocking raw
+# USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
+# GHSA-gjgq-w2m6-wr5q.
+tools_from_agent: bool = False
+# True if this msg's content/tools derive from external untrusted (USER)
+# input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
+# repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
+# Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
+# vetoes handle-only tool dispatch even across a USER relabel, closing the
+# content-laundering hole. Propagated (deepcopy carries it), never cleared.
+# See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
+tainted: bool = False
+# tool_id corresponding to single tool result in ChatDocument.content
+oai_tool_id: str | None = None
+tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
+block: None | Entity = None
+sender_name: str = ""
+recipient: str = ""
+usage: Optional[LLMTokenUsage] = None
+cached: bool = False
+displayed: bool = False
+has_citation: bool = False
+status: Optional[StatusCode] = None
+⋮----
+@model_validator(mode="after")
+    def _mark_tools_from_agent(self) -> "ChatDocMetaData"
+⋮----
+# Mark messages produced directly by an LLM: the tools in an LLM's
+# output are the LLM's own decision (the trusted trigger for handle-only
+# tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
+# to another agent even after relabeling the sender to USER. The mark is
+# only ever SET, never cleared, so it survives relabeling and deepcopies
+# (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
+# mark across the handoff). We deliberately do NOT mark generic AGENT
+# messages: a pass-through/echoing agent could surface untrusted USER
+# text (with embedded tool JSON) as AGENT content, and marking that
+# would re-open the user-origin bypass. Raw USER input is never marked,
+# so it stays filtered. See ChatAgent._filter_user_origin_tools.
+⋮----
+@property
+    def parent(self) -> Optional["ChatDocument"]
+⋮----
+@property
+    def child(self) -> Optional["ChatDocument"]
+⋮----
+class ChatDocLoggerFields(BaseModel)
+⋮----
+sender_entity: Entity = Entity.USER
+⋮----
+block: Entity | None = None
+tool_type: str = ""
+tool: str = ""
+content: str = ""
+⋮----
+@classmethod
+    def tsv_header(cls) -> str
+⋮----
+field_names = cls().model_dump().keys()
+⋮----
+class ChatDocument(Document)
+⋮----
+"""
+    Represents a message in a conversation among agents. All responders of an agent
+    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
+    and so does the Task.run() method.
+
+    Attributes:
+        oai_tool_calls (Optional[List[OpenAIToolCall]]):
+            Tool-calls from an OpenAI-compatible API
+        oai_tool_id2results (Optional[OrderedDict[str, str]]):
+            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
+        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
+            LLM should choose tool-use in its response
+            (auto, none, required, or a specific tool)
+        function_call (Optional[LLMFunctionCall]):
+            Function-call from an OpenAI-compatible API
+                (deprecated by OpenAI, in favor of tool-calls)
+        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
+            - `content` field (via JSON parsing),
+            - `oai_tool_calls`, or
+            - `function_call`
+        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
+        attachment (None | ChatDocAttachment): Any additional data attached.
+    """
+⋮----
+reasoning: str = ""  # reasoning produced by a reasoning LLM
+content_any: Any = None  # to hold arbitrary data returned by responders
+# Original LLM response text including inline thought signatures
+# (e.g. <thinking>...</thinking>). Only populated when reasoning was
+# extracted from inline tags in the message text. Used by to_LLMMessage()
+# to preserve thought signatures in message history, which is critical
+# for models like Gemini 3 Flash and Amazon Nova that rely on seeing
+# their own thought tags in context to maintain reasoning ability.
+content_with_reasoning: Optional[str] = None
+files: List[FileAttachment] = []  # list of file attachments
+oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+oai_tool_id2result: Optional[OrderedDict[str, str]] = None
+oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
+function_call: Optional[LLMFunctionCall] = None
+# tools that are explicitly added by agent response/handler,
+# or tools recognized in the ChatDocument as handle-able tools
+tool_messages: List[ToolMessage] = []
+# all known tools in the msg that are in an agent's llm_tools_known list,
+# even if non-used/handled
+# (the list is populated by Agent.has_tool_message_attempt())
+all_tool_messages: Optional[List[ToolMessage]] = None
+# ID of the agent that populated all_tool_messages (for cache validity)
+all_tool_messages_agent_id: Optional[str] = None
+⋮----
+metadata: ChatDocMetaData
+attachment: None | ChatDocAttachment = None
+⋮----
+def __init__(self, **data: Any)
+⋮----
+@staticmethod
+    def deepcopy(doc: ChatDocument) -> ChatDocument
+⋮----
+new_doc = copy.deepcopy(doc)
+⋮----
+@staticmethod
+    def from_id(id: str) -> Optional["ChatDocument"]
+⋮----
+@staticmethod
+    def delete_id(id: str) -> None
+⋮----
+"""Remove ChatDocument with given id from ObjectRegistry,
+        and all its descendants.
+        """
+chat_doc = ChatDocument.from_id(id)
+# first delete all descendants
+⋮----
+next_chat_doc = chat_doc.child
+⋮----
+chat_doc = next_chat_doc
+⋮----
+def __str__(self) -> str
+⋮----
+fields = self.log_fields()
+tool_str = ""
+⋮----
+tool_str = f"{fields.tool_type}[{fields.tool}]: "
+recipient_str = ""
+⋮----
+recipient_str = f"=>{fields.recipient}: "
+⋮----
+def get_tool_names(self) -> List[str]
+⋮----
+"""
+        Get names of attempted tool usages (JSON or non-JSON) in the content
+            of the message.
+        Returns:
+            List[str]: list of *attempted* tool names
+            (We say "attempted" since we ONLY look at the `request` component of the
+            tool-call representation, and we're not fully parsing it into the
+            corresponding tool message class)
+
+        """
+tool_candidates = XMLToolMessage.find_candidates(self.content)
+⋮----
+tool_candidates = extract_top_level_json(self.content)
+⋮----
+tools = [json.loads(tc).get("request") for tc in tool_candidates]
+⋮----
+tool_dicts = [
+tools = [td.get("request") for td in tool_dicts if td is not None]
+⋮----
+def log_fields(self) -> ChatDocLoggerFields
+⋮----
+"""
+        Fields for logging in csv/tsv logger
+        Returns:
+            List[str]: list of fields
+        """
+tool_type = ""  # FUNC or TOOL
+tool = ""  # tool name or function name
+⋮----
+# Skip tool detection for system messages - they contain tool instructions,
+# not actual tool calls
+⋮----
+oai_tools = (
+⋮----
+tool_type = "FUNC"
+tool = self.function_call.name
+⋮----
+tool_type = "OAI_TOOL"
+tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
+⋮----
+json_tools = self.get_tool_names()
+⋮----
+json_tools = []
+⋮----
+tool_type = "TOOL"
+tool = json_tools[0]
+recipient = self.metadata.recipient
+content = self.content
+sender_entity = self.metadata.sender
+sender_name = self.metadata.sender_name
+⋮----
+def tsv_str(self) -> str
+⋮----
+field_values = fields.model_dump().values()
+⋮----
+def pop_tool_ids(self) -> None
+⋮----
+"""
+        Pop the last tool_id from the stack of tool_ids.
+        """
+⋮----
+@staticmethod
+    def _clean_fn_call(fc: LLMFunctionCall | None) -> None
+⋮----
+# Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
+# with oddities:
+# (a) the `name` is set, as well as `arguments.request` is set,
+#  and in langroid we use the `request` value as the `name`.
+#  In this case we override the `name` with the `request` value.
+# (b) the `name` looks like "functions blah" or just "functions"
+#   In this case we strip the "functions" part.
+⋮----
+request = fc.arguments.get("request")
+⋮----
+"""
+        Convert LLMResponse to ChatDocument.
+        Args:
+            response (LLMResponse): LLMResponse to convert.
+            displayed (bool): Whether this response was displayed to the user.
+            recognize_recipient_in_content (bool): Whether to parse message text
+                for recipient routing (``TO[<recipient>]:`` and JSON
+                ``{"recipient": ...}``). Default True.
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMResponse.
+        """
+⋮----
+message = message.strip()
+⋮----
+message = ""
+⋮----
+# there must be at least one if it's not None
+⋮----
+@staticmethod
+    def from_str(msg: str) -> "ChatDocument"
+⋮----
+# first check whether msg is structured as TO <recipient>: <message>
+⋮----
+# check if any top level json specifies a 'recipient'
+recipient = top_level_json_field(msg, "recipient")
+message = msg  # retain the whole msg in this case
+⋮----
+tainted=True,  # external user input is untrusted (#1035)
+⋮----
+"""
+        Convert LLMMessage to ChatDocument.
+
+        Args:
+            message (LLMMessage): LLMMessage to convert.
+            sender_name (str): Name of the sender. Defaults to "".
+            recipient (str): Name of the recipient. Defaults to "".
+
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMMessage.
+        """
+# Map LLMMessage Role to ChatDocument Entity
+role_to_entity = {
+⋮----
+sender_entity = role_to_entity.get(message.role, Entity.USER)
+⋮----
+"""
+        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
+        Usually there will be just a single LLMMessage, but when the ChatDocument
+        contains results from multiple OpenAI tool-calls, we would have a sequence
+        LLMMessages, one per tool-call result.
+
+        Args:
+            message (str|ChatDocument): Message to convert.
+            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
+                response, from the ChatAgent's latest message.
+        Returns:
+            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
+        """
+⋮----
+sender_role = Role.USER
+⋮----
+message = ChatDocument.from_str(message)
+# Prefer content_with_reasoning when available — this preserves
+# inline thought signatures (e.g. <thinking>...</thinking>) in
+# message history, which certain models (Gemini 3 Flash, Amazon
+# Nova) need to maintain reasoning across turns.
+# content_with_reasoning is only set when inline tags were
+# actually extracted, so this won't interfere with models that
+# provide reasoning via a separate API field.
+content = (
+fun_call = message.function_call
+oai_tool_calls = message.oai_tool_calls
+⋮----
+# This may happen when a (parent agent's) LLM generates a
+# a Function-call, and it ends up being sent to the current task's
+# LLM (possibly because the function-call is mis-named or has other
+# issues and couldn't be handled by handler methods).
+# But a function-call can only be generated by an entity with
+# Role.ASSISTANT, so we instead put the content of the function-call
+# in the content of the message.
+⋮----
+fun_call = None
+⋮----
+# same reasoning as for function-call above
+⋮----
+oai_tool_calls = None
+# some LLM APIs (e.g. gemini) don't like empty msg
+content = content or " "
+sender_name = message.metadata.sender_name
+tool_ids = message.metadata.tool_ids
+tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
+chat_document_id = message.id()
+⋮----
+sender_role = Role.SYSTEM
+⋮----
+# This is a response to a function call, so set the role to FUNCTION.
+sender_role = Role.FUNCTION
+sender_name = message.metadata.parent.function_call.name
+⋮----
+pending_tool_ids = [tc.id for tc in oai_tools]
+# The ChatAgent has pending OpenAI tool-call(s),
+# so the current ChatDocument contains
+# results for some/all/none of them.
+⋮----
+# Case 1:
+# There was exactly 1 pending tool-call, and in this case
+# the result would be a plain string in `content`
+⋮----
+# Case 2:
+# ChatDocument.content has result of a single tool-call
+⋮----
+# There were > 1 tool-calls awaiting response,
+⋮----
+sender_role = Role.ASSISTANT
+⋮----
+tool_id=tool_id,  # for OpenAI Assistant
+</file>
+
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Context-Overflow Handling: notes/context-overflow.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path="README.md">
@@ -55213,10 +55386,568 @@ model_names = tuple(_model_name(model) for model in models)
 def _model_name(model: str | ModelName) -> str
 </file>
 
+<file path="langroid/language_models/base.py">
+logger = logging.getLogger(__name__)
+⋮----
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
+⋮----
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
+⋮----
+FunctionCallTypes = Literal["none", "auto"]
+ToolChoiceTypes = Literal["none", "auto", "required"]
+ToolTypes = Literal["function"]
+⋮----
+DEFAULT_CONTEXT_LENGTH = 16_000
+⋮----
+class StreamEventType(Enum)
+⋮----
+TEXT = 1
+FUNC_NAME = 2
+FUNC_ARGS = 3
+TOOL_NAME = 4
+TOOL_ARGS = 5
+REASONING = 6
+⋮----
+class RetryParams(BaseSettings)
+⋮----
+max_retries: int = 5
+initial_delay: float = 1.0
+exponential_base: float = 1.3
+jitter: bool = True
+⋮----
+class LLMConfig(BaseSettings)
+⋮----
+"""
+    Common configuration for all language models.
+    """
+⋮----
+type: str = "openai"
+streamer: Optional[Callable[[Any], None]] = noop_fn
+streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
+api_base: str | None = None
+formatter: None | str = None
+# specify None if you want to use the full max output tokens of the model
+max_output_tokens: int | None = 8192
+timeout: int = 20  # timeout for API requests
+chat_model: str = ""
+completion_model: str = ""
+temperature: float = 0.0
+chat_context_length: int | None = None
+async_stream_quiet: bool = False  # suppress streaming output in async mode?
+completion_context_length: int | None = None
+# if input length + max_output_tokens > context length of model,
+# we will try shortening requested output
+min_output_tokens: int = 64
+use_completion_for_chat: bool = False  # use completion model for chat?
+# use chat model for completion? For OpenAI models, this MUST be set to True!
+use_chat_for_completion: bool = True
+stream: bool = True  # stream output from API?
+# TODO: we could have a `stream_reasoning` flag here to control whether to show
+# reasoning output from reasoning models
+cache_config: None | CacheDBConfig = RedisCacheConfig()
+thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
+retry_params: RetryParams = RetryParams()
+⋮----
+@property
+    def model_max_output_tokens(self) -> int
+⋮----
+# Build fallback names by progressively stripping provider prefixes
+# (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
+# succeeds even before OpenAIGPT.__init__ strips the prefix.
+parts = self.chat_model.split("/")
+fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
+⋮----
+class LLMFunctionCall(BaseModel)
+⋮----
+"""
+    Structure of LLM response indicating it "wants" to call a function.
+    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
+    """
+⋮----
+name: str  # name of function to call
+arguments: Optional[Dict[str, Any]] = None
+⋮----
+@staticmethod
+    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall"
+⋮----
+"""
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+fun_call = LLMFunctionCall(name=message["name"])
+fun_args_str = message["arguments"]
+# sometimes may be malformed with invalid indents,
+# so we try to be safe by removing newlines.
+⋮----
+fun_args_str = fun_args_str.replace("\n", "").strip()
+dict_or_list = parse_imperfect_json(fun_args_str)
+⋮----
+fun_args = dict_or_list
+⋮----
+fun_args = None
+⋮----
+def __str__(self) -> str
+⋮----
+class LLMFunctionSpec(BaseModel)
+⋮----
+"""
+    Description of a function available for the LLM to use.
+    To be used when calling the LLM `chat()` method with the `functions` parameter.
+    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
+    """
+⋮----
+name: str
+description: str
+parameters: Dict[str, Any]
+⋮----
+class OpenAIToolCall(BaseModel)
+⋮----
+"""
+    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
+    See https://platform.openai.com/docs/api-reference/chat/create
+
+    Attributes:
+        id: The id of the tool call.
+        type: The type of the tool call;
+            only "function" is currently possible (7/26/24).
+        function: The function call.
+    """
+⋮----
+id: str | None = None
+type: ToolTypes = "function"
+function: LLMFunctionCall | None = None
+extra_content: Dict[str, Any] | None = None
+⋮----
+@staticmethod
+    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall"
+⋮----
+id = message["id"]
+type = message["type"]
+function = LLMFunctionCall.from_dict(message["function"])
+extra_content = message.get("extra_content")
+⋮----
+class OpenAIToolSpec(BaseModel)
+⋮----
+type: ToolTypes
+strict: Optional[bool] = None
+function: LLMFunctionSpec
+⋮----
+class OpenAIJsonSchemaSpec(BaseModel)
+⋮----
+def to_dict(self) -> Dict[str, Any]
+⋮----
+json_schema: Dict[str, Any] = {
+⋮----
+class LLMTokenUsage(BaseModel)
+⋮----
+"""
+    Usage of tokens by an LLM.
+    """
+⋮----
+prompt_tokens: int = 0
+cached_tokens: int = 0
+completion_tokens: int = 0
+cost: float = 0.0
+calls: int = 0  # how many API calls - not used as of 2025-04-04
+⋮----
+def reset(self) -> None
+⋮----
+@property
+    def total_tokens(self) -> int
+⋮----
+class Role(str, Enum)
+⋮----
+"""
+    Possible roles for a message in a chat.
+    """
+⋮----
+USER = "user"
+SYSTEM = "system"
+ASSISTANT = "assistant"
+FUNCTION = "function"
+TOOL = "tool"
+⋮----
+class LLMMessage(BaseModel)
+⋮----
+"""
+    Class representing an entry in the msg-history sent to the LLM API.
+    It could be one of these:
+    - a user message
+    - an LLM ("Assistant") response
+    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
+    - a result or results from executing a fn or tool-call(s)
+    """
+⋮----
+role: Role
+name: Optional[str] = None
+tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
+tool_id: str = ""  # used by OpenAIAssistant
+content: str
+files: List[FileAttachment] = []
+function_call: Optional[LLMFunctionCall] = None
+tool_calls: Optional[List[OpenAIToolCall]] = None
+timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# link to corresponding chat document, for provenance/rewind purposes
+chat_document_id: str = ""
+⋮----
+def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]
+⋮----
+"""
+        Convert to dictionary for API request, keeping ONLY
+        the fields that are expected in an API call!
+        E.g., DROP the tool_id, since it is only for use in the Assistant API,
+            not the completion API.
+
+        Args:
+            has_system_role: whether the message has a system role (if not,
+                set to "user" role)
+        Returns:
+            dict: dictionary representation of LLM message
+        """
+d = self.model_dump()
+files: List[FileAttachment] = d.pop("files")
+⋮----
+# In there are files, then content is an array of
+# different content-parts
+⋮----
+# if there is a key k = "role" with value "system", change to "user"
+# in case has_system_role is False
+⋮----
+# drop None values since API doesn't accept them
+dict_no_none = {k: v for k, v in d.items() if v is not None}
+⋮----
+# OpenAI API does not like empty name
+⋮----
+# arguments must be a string
+⋮----
+# convert tool calls to API format
+⋮----
+# IMPORTANT! drop fields that are not expected in API call
+⋮----
+content = "FUNC: " + json.dumps(self.function_call)
+⋮----
+content = self.content
+name_str = f" ({self.name})" if self.name else ""
+⋮----
+class LLMResponse(BaseModel)
+⋮----
+"""
+    Class representing response from LLM.
+    """
+⋮----
+message: str
+reasoning: str = ""  # optional reasoning text from reasoning models
+# Original message text including inline thought signatures (e.g.
+# <thinking>...</thinking>). Only set when reasoning was extracted
+# from the message text via get_reasoning_final(); NOT set when
+# reasoning comes from a separate API field (e.g. reasoning_content),
+# since in that case the message text never contained thought tags.
+message_with_reasoning: Optional[str] = None
+# TODO tool_id needs to generalize to multi-tool calls
+⋮----
+oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+⋮----
+usage: Optional[LLMTokenUsage] = None
+cached: bool = False
+⋮----
+def tools_content(self) -> str
+⋮----
+def to_LLMMessage(self) -> LLMMessage
+⋮----
+"""Convert LLM response to an LLMMessage, to be included in the
+        message-list sent to the API.
+        This is currently NOT used in any significant way in the library, and is only
+        provided as a utility to construct a message list for the API when directly
+        working with an LLM object.
+
+        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
+        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
+        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
+        """
+⋮----
+"""
+        If `message` or `function_call` of an LLM response contains an explicit
+        recipient name, return this recipient name and `message` stripped
+        of the recipient name if specified.
+
+        Two cases:
+        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
+        (b) `message` is empty and function_call/tool_call with explicit `recipient`
+
+        Args:
+            recognize_recipient_in_content (bool): When True (default), parses
+                message text for ``TO[<recipient>]:<content>`` patterns and
+                top-level JSON ``{"recipient": "..."}`` fields. When False,
+                only function_call/tool_call ``recipient`` fields are checked.
+
+        Returns:
+            (str): name of recipient, which may be empty string if no recipient
+            (str): content of message
+
+        """
+⋮----
+# in this case we ignore message, since all information is in function_call
+msg = ""
+args = self.function_call.arguments
+recipient = ""
+⋮----
+recipient = args.get("recipient", "")
+⋮----
+msg = self.message
+⋮----
+# get the first tool that has a recipient field, if any
+⋮----
+recipient = tc.function.arguments.get(
+⋮----
+)  # type: ignore
+⋮----
+# It's not a function or tool call, so continue looking to see
+# if a recipient is specified in the message.
+⋮----
+# First check if message contains "TO: <recipient> <content>"
+⋮----
+# check if there is a top level json that specifies 'recipient',
+# and retain the entire message as content.
+⋮----
+recipient_name = top_level_json_field(msg, "recipient") if msg else ""
+content = msg
+⋮----
+# Define an abstract base class for language models
+class LanguageModel(ABC)
+⋮----
+"""
+    Abstract base class for language models.
+    """
+⋮----
+# usage cost by model, accumulates here
+usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+⋮----
+def __init__(self, config: LLMConfig = LLMConfig())
+⋮----
+@staticmethod
+    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]
+⋮----
+"""
+        Create a language model.
+        Args:
+            config: configuration for language model
+        Returns: instance of language model
+        """
+⋮----
+openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+⋮----
+openai = AzureGPT
+⋮----
+openai = OpenAIGPT
+cls = dict(
+return cls(config)  # type: ignore
+⋮----
+@staticmethod
+    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]
+⋮----
+"""
+        Given an even-length sequence of strings, split into a sequence of pairs
+
+        Args:
+            lst (List[str]): sequence of strings
+
+        Returns:
+            List[Tuple[str,str]]: sequence of pairs of strings
+        """
+evens = lst[::2]
+odds = lst[1::2]
+⋮----
+"""
+        From the chat history, extract system prompt, user-assistant turns, and
+        final user msg.
+
+        Args:
+            messages (List[LLMMessage]): List of messages in the chat history
+
+        Returns:
+            Tuple[str, List[Tuple[str,str]], str]:
+                system prompt, user-assistant turns, final user msg
+
+        """
+# Handle various degenerate cases
+messages = [m for m in messages]  # copy
+DUMMY_SYS_PROMPT = "You are a helpful assistant."
+DUMMY_USER_PROMPT = "Follow the instructions above."
+⋮----
+system_prompt = messages[0].content
+⋮----
+# now we have messages = [Sys,...]
+⋮----
+# now we have messages = [Sys, msg, ...]
+⋮----
+# now we have messages = [Sys, user, ...]
+⋮----
+# now we have messages = [Sys, user, ..., user]
+# so we omit the first and last elements and make pairs of user-asst messages
+conversation = [m.content for m in messages[1:-1]]
+user_prompt = messages[-1].content
+pairs = LanguageModel.user_assistant_pairs(conversation)
+⋮----
+@abstractmethod
+    def set_stream(self, stream: bool) -> bool
+⋮----
+"""Enable or disable streaming output from API.
+        Return previous value of stream."""
+⋮----
+@abstractmethod
+    def get_stream(self) -> bool
+⋮----
+"""Get streaming status"""
+⋮----
+@abstractmethod
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+@abstractmethod
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+"""
+        Get chat-completion response from LLM.
+
+        Args:
+            messages: message-history to send to the LLM
+            max_tokens: max tokens to generate
+            tools: tools available for the LLM to use in its response
+            tool_choice: tool call mode, one of "none", "auto", "required",
+                or a dict specifying a specific tool.
+            functions: functions available for LLM to call (deprecated)
+            function_call: function calling mode, "auto", "none", or a specific fn
+                    (deprecated)
+        """
+⋮----
+"""Async version of `chat`. See `chat` for details."""
+⋮----
+def __call__(self, prompt: str, max_tokens: int) -> LLMResponse
+⋮----
+@staticmethod
+    def _fallback_model_names(model: str) -> List[str]
+⋮----
+parts = model.split("/")
+fallbacks = []
+⋮----
+def info(self) -> ModelInfo
+⋮----
+"""Info of relevant chat model"""
+orig_model = (
+⋮----
+def completion_info(self) -> ModelInfo
+⋮----
+"""Info of relevant completion model"""
+⋮----
+def supports_functions_or_tools(self) -> bool
+⋮----
+"""
+        Does this Model's API support "native" tool-calling, i.e.
+        can we call the API with arguments that contain a list of available tools,
+        and their schemas?
+        Note that, given the plethora of LLM provider APIs this determination is
+        imperfect at best, and leans towards returning True.
+        When the API calls fails with an error indicating tools are not supported,
+        then users are encouraged to use the Langroid-based prompt-based
+        ToolMessage mechanism, which works with ANY LLM. To enable this,
+        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
+        """
+⋮----
+def chat_context_length(self) -> int
+⋮----
+def completion_context_length(self) -> int
+⋮----
+def chat_cost(self) -> Tuple[float, float, float]
+⋮----
+"""
+        Return the cost per 1000 tokens for chat completions.
+
+        Returns:
+            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
+                per 1000 tokens
+        """
+⋮----
+def reset_usage_cost(self) -> None
+⋮----
+counter = self.usage_cost_dict[mdl]
+⋮----
+"""
+        Update usage cost for this LLM.
+        Args:
+            chat (bool): whether to update for chat or completion model
+            prompts (int): number of tokens used for prompts
+            completions (int): number of tokens used for completions
+            cost (float): total token cost in USD
+        """
+mdl = self.config.chat_model if chat else self.config.completion_model
+⋮----
+@classmethod
+    def usage_cost_summary(cls) -> str
+⋮----
+s = ""
+⋮----
+@classmethod
+    def tot_tokens_cost(cls) -> Tuple[int, float]
+⋮----
+"""
+        Return total tokens used and total cost across all models.
+        """
+total_tokens = 0
+total_cost = 0.0
+⋮----
+def get_reasoning_final(self, message: str) -> Tuple[str, str]
+⋮----
+"""Extract "reasoning" and "final answer" from an LLM response, if the
+        reasoning is found within configured delimiters, like <think>, </think>.
+        E.g.,
+        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
+
+        Args:
+            message (str): message from LLM
+
+        Returns:
+            Tuple[str, str]: reasoning, final answer
+        """
+⋮----
+parts = message.split(start)
+⋮----
+"""
+        Given a chat history and a question, convert it to a standalone question.
+        Args:
+            chat_history: list of tuples of (question, answer)
+            query: follow-up question
+
+        Returns: standalone version of the question
+        """
+history = collate_chat_history(chat_history)
+⋮----
+prompt = f"""
+⋮----
+follow_up_question = f"""
+⋮----
+standalone = self.chat(
+⋮----
+class StreamingIfAllowed
+⋮----
+"""Context to temporarily enable or disable streaming, if allowed globally via
+    `settings.stream`"""
+⋮----
+def __init__(self, llm: LanguageModel, stream: bool = True)
+⋮----
+def __enter__(self) -> None
+⋮----
+def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
+</file>
+
 <file path="langroid/agent/chat_agent.py">
 console = Console()
 ⋮----
 logger = logging.getLogger(__name__)
+⋮----
+# Safety margin (in tokens) subtracted from the model context length when
+# shrinking chat history and/or the requested output length to fit, in case
+# our token-count estimates are off.
+CHAT_HISTORY_BUFFER = 300
 ⋮----
 class ChatAgentConfig(AgentConfig)
 ⋮----
@@ -56042,7 +56773,6 @@ done_tools = [m.tool_call_id for m in llm_msgs if m.role == Role.TOOL]
 hist = self.message_history
 output_len = self.config.llm.model_max_output_tokens
 ⋮----
-CHAT_HISTORY_BUFFER = 300
 # chat + output > max context length,
 # so first try to shorten requested output len to fit;
 # use an extra margin of CHAT_HISTORY_BUFFER tokens
@@ -56061,10 +56791,75 @@ msg_idx_to_compress = 1  # don't touch system msg
 # last user msg
 last_msg_idx_to_compress = (
 n_truncated = 0
+_target_tokens = (
+# Truncation floor: never reduce a message's content below
+# this many tokens.
+_min_keep_tokens = 30
+_truncation_warning = "... [Contents truncated!]"
+⋮----
+def _content_tokens(text: str) -> int
+⋮----
+"""Token count of message *content* only.
+
+                        `truncate_message` only trims `message.content`, so
+                        using the full `_message_num_tokens` (which includes
+                        attachment payloads) would inflate the count and make
+                        the keep-target too large to ever converge, for
+                        messages carrying file attachments.
+                        """
+⋮----
+# approx fallback, matches truncate_message
+⋮----
+# Account for the warning that truncate_message appends
+# ("\n" + warning), so the final token count of a
+# truncated message does not exceed its keep-target.
+_warning_tokens = _content_tokens("\n" + _truncation_warning)
+# NOTE: loop termination is guaranteed:
+# msg_idx_to_compress strictly increases every iteration
+# (truncate or skip), and once it exceeds
+# last_msg_idx_to_compress a ValueError is raised. (The
+# token count need not decrease every iteration, so
+# termination rests on the index advancing.)
 ⋮----
 # We want to preserve the first message (typically
 # system msg) and last message (user msg).
 ⋮----
+_msg_tokens = _content_tokens(hist[msg_idx_to_compress].content)
+⋮----
+# Truncating this message cannot shrink the total:
+# its content is already at/below the keep-floor
+# plus the appended warning; leave it intact.
+⋮----
+# Distribute the current excess evenly across the
+# remaining *compressible* messages, so each retains
+# as much content as possible instead of being
+# collapsed to the fixed 30-token floor. The excess is
+# recomputed every iteration, so the distribution
+# self-corrects as we move forward through the
+# history.
+_current_excess = self.chat_num_tokens(hist) - _target_tokens
+# Shrink capacity of each *later* message in the
+# compressible range: its content above the floor (net
+# of the appended warning). Non-positive entries are
+# the tiny messages the skip-check above will leave
+# untouched; they must not dilute the even share, so
+# only messages with positive capacity count toward
+# the denominator (plus this message, which passed the
+# skip-check and is therefore compressible).
+_later_capacities = [
+_n_remaining = 1 + sum(1 for c in _later_capacities if c > 0)
+_even_share = math.ceil(_current_excess / _n_remaining)
+# Later messages can shed at most their capacity; this
+# message must absorb whatever they cannot, so that
+# this single forward pass reaches the target whenever
+# that is possible at all.
+_later_capacity = sum(c for c in _later_capacities if c > 0)
+_reduction = max(_even_share, _current_excess - _later_capacity)
+# Extra 2-token slack: re-encoding truncated content
+# plus the appended warning can merge/split tokens at
+# the boundary, so aim slightly below the target to
+# keep the achieved reduction from falling short.
+_keep_tokens = max(
 # compress the msg at idx `msg_idx_to_compress`
 ⋮----
 output_len = min(
@@ -56334,566 +57129,11 @@ def __del__(self) -> None
 # Clients are now managed centrally in langroid.language_models.client_cache
 </file>
 
-<file path="langroid/language_models/base.py">
-logger = logging.getLogger(__name__)
-⋮----
-def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
-⋮----
-async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
-⋮----
-FunctionCallTypes = Literal["none", "auto"]
-ToolChoiceTypes = Literal["none", "auto", "required"]
-ToolTypes = Literal["function"]
-⋮----
-DEFAULT_CONTEXT_LENGTH = 16_000
-⋮----
-class StreamEventType(Enum)
-⋮----
-TEXT = 1
-FUNC_NAME = 2
-FUNC_ARGS = 3
-TOOL_NAME = 4
-TOOL_ARGS = 5
-REASONING = 6
-⋮----
-class RetryParams(BaseSettings)
-⋮----
-max_retries: int = 5
-initial_delay: float = 1.0
-exponential_base: float = 1.3
-jitter: bool = True
-⋮----
-class LLMConfig(BaseSettings)
-⋮----
-"""
-    Common configuration for all language models.
-    """
-⋮----
-type: str = "openai"
-streamer: Optional[Callable[[Any], None]] = noop_fn
-streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
-api_base: str | None = None
-formatter: None | str = None
-# specify None if you want to use the full max output tokens of the model
-max_output_tokens: int | None = 8192
-timeout: int = 20  # timeout for API requests
-chat_model: str = ""
-completion_model: str = ""
-temperature: float = 0.0
-chat_context_length: int | None = None
-async_stream_quiet: bool = False  # suppress streaming output in async mode?
-completion_context_length: int | None = None
-# if input length + max_output_tokens > context length of model,
-# we will try shortening requested output
-min_output_tokens: int = 64
-use_completion_for_chat: bool = False  # use completion model for chat?
-# use chat model for completion? For OpenAI models, this MUST be set to True!
-use_chat_for_completion: bool = True
-stream: bool = True  # stream output from API?
-# TODO: we could have a `stream_reasoning` flag here to control whether to show
-# reasoning output from reasoning models
-cache_config: None | CacheDBConfig = RedisCacheConfig()
-thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
-retry_params: RetryParams = RetryParams()
-⋮----
-@property
-    def model_max_output_tokens(self) -> int
-⋮----
-# Build fallback names by progressively stripping provider prefixes
-# (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
-# succeeds even before OpenAIGPT.__init__ strips the prefix.
-parts = self.chat_model.split("/")
-fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
-⋮----
-class LLMFunctionCall(BaseModel)
-⋮----
-"""
-    Structure of LLM response indicating it "wants" to call a function.
-    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
-    """
-⋮----
-name: str  # name of function to call
-arguments: Optional[Dict[str, Any]] = None
-⋮----
-@staticmethod
-    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall"
-⋮----
-"""
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-fun_call = LLMFunctionCall(name=message["name"])
-fun_args_str = message["arguments"]
-# sometimes may be malformed with invalid indents,
-# so we try to be safe by removing newlines.
-⋮----
-fun_args_str = fun_args_str.replace("\n", "").strip()
-dict_or_list = parse_imperfect_json(fun_args_str)
-⋮----
-fun_args = dict_or_list
-⋮----
-fun_args = None
-⋮----
-def __str__(self) -> str
-⋮----
-class LLMFunctionSpec(BaseModel)
-⋮----
-"""
-    Description of a function available for the LLM to use.
-    To be used when calling the LLM `chat()` method with the `functions` parameter.
-    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
-    """
-⋮----
-name: str
-description: str
-parameters: Dict[str, Any]
-⋮----
-class OpenAIToolCall(BaseModel)
-⋮----
-"""
-    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
-    See https://platform.openai.com/docs/api-reference/chat/create
-
-    Attributes:
-        id: The id of the tool call.
-        type: The type of the tool call;
-            only "function" is currently possible (7/26/24).
-        function: The function call.
-    """
-⋮----
-id: str | None = None
-type: ToolTypes = "function"
-function: LLMFunctionCall | None = None
-extra_content: Dict[str, Any] | None = None
-⋮----
-@staticmethod
-    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall"
-⋮----
-id = message["id"]
-type = message["type"]
-function = LLMFunctionCall.from_dict(message["function"])
-extra_content = message.get("extra_content")
-⋮----
-class OpenAIToolSpec(BaseModel)
-⋮----
-type: ToolTypes
-strict: Optional[bool] = None
-function: LLMFunctionSpec
-⋮----
-class OpenAIJsonSchemaSpec(BaseModel)
-⋮----
-def to_dict(self) -> Dict[str, Any]
-⋮----
-json_schema: Dict[str, Any] = {
-⋮----
-class LLMTokenUsage(BaseModel)
-⋮----
-"""
-    Usage of tokens by an LLM.
-    """
-⋮----
-prompt_tokens: int = 0
-cached_tokens: int = 0
-completion_tokens: int = 0
-cost: float = 0.0
-calls: int = 0  # how many API calls - not used as of 2025-04-04
-⋮----
-def reset(self) -> None
-⋮----
-@property
-    def total_tokens(self) -> int
-⋮----
-class Role(str, Enum)
-⋮----
-"""
-    Possible roles for a message in a chat.
-    """
-⋮----
-USER = "user"
-SYSTEM = "system"
-ASSISTANT = "assistant"
-FUNCTION = "function"
-TOOL = "tool"
-⋮----
-class LLMMessage(BaseModel)
-⋮----
-"""
-    Class representing an entry in the msg-history sent to the LLM API.
-    It could be one of these:
-    - a user message
-    - an LLM ("Assistant") response
-    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
-    - a result or results from executing a fn or tool-call(s)
-    """
-⋮----
-role: Role
-name: Optional[str] = None
-tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
-tool_id: str = ""  # used by OpenAIAssistant
-content: str
-files: List[FileAttachment] = []
-function_call: Optional[LLMFunctionCall] = None
-tool_calls: Optional[List[OpenAIToolCall]] = None
-timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-# link to corresponding chat document, for provenance/rewind purposes
-chat_document_id: str = ""
-⋮----
-def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]
-⋮----
-"""
-        Convert to dictionary for API request, keeping ONLY
-        the fields that are expected in an API call!
-        E.g., DROP the tool_id, since it is only for use in the Assistant API,
-            not the completion API.
-
-        Args:
-            has_system_role: whether the message has a system role (if not,
-                set to "user" role)
-        Returns:
-            dict: dictionary representation of LLM message
-        """
-d = self.model_dump()
-files: List[FileAttachment] = d.pop("files")
-⋮----
-# In there are files, then content is an array of
-# different content-parts
-⋮----
-# if there is a key k = "role" with value "system", change to "user"
-# in case has_system_role is False
-⋮----
-# drop None values since API doesn't accept them
-dict_no_none = {k: v for k, v in d.items() if v is not None}
-⋮----
-# OpenAI API does not like empty name
-⋮----
-# arguments must be a string
-⋮----
-# convert tool calls to API format
-⋮----
-# arguments must be a string
-⋮----
-# IMPORTANT! drop fields that are not expected in API call
-⋮----
-content = "FUNC: " + json.dumps(self.function_call)
-⋮----
-content = self.content
-name_str = f" ({self.name})" if self.name else ""
-⋮----
-class LLMResponse(BaseModel)
-⋮----
-"""
-    Class representing response from LLM.
-    """
-⋮----
-message: str
-reasoning: str = ""  # optional reasoning text from reasoning models
-# Original message text including inline thought signatures (e.g.
-# <thinking>...</thinking>). Only set when reasoning was extracted
-# from the message text via get_reasoning_final(); NOT set when
-# reasoning comes from a separate API field (e.g. reasoning_content),
-# since in that case the message text never contained thought tags.
-message_with_reasoning: Optional[str] = None
-# TODO tool_id needs to generalize to multi-tool calls
-⋮----
-oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-⋮----
-usage: Optional[LLMTokenUsage] = None
-cached: bool = False
-⋮----
-def tools_content(self) -> str
-⋮----
-def to_LLMMessage(self) -> LLMMessage
-⋮----
-"""Convert LLM response to an LLMMessage, to be included in the
-        message-list sent to the API.
-        This is currently NOT used in any significant way in the library, and is only
-        provided as a utility to construct a message list for the API when directly
-        working with an LLM object.
-
-        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
-        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
-        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
-        """
-⋮----
-"""
-        If `message` or `function_call` of an LLM response contains an explicit
-        recipient name, return this recipient name and `message` stripped
-        of the recipient name if specified.
-
-        Two cases:
-        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
-        (b) `message` is empty and function_call/tool_call with explicit `recipient`
-
-        Args:
-            recognize_recipient_in_content (bool): When True (default), parses
-                message text for ``TO[<recipient>]:<content>`` patterns and
-                top-level JSON ``{"recipient": "..."}`` fields. When False,
-                only function_call/tool_call ``recipient`` fields are checked.
-
-        Returns:
-            (str): name of recipient, which may be empty string if no recipient
-            (str): content of message
-
-        """
-⋮----
-# in this case we ignore message, since all information is in function_call
-msg = ""
-args = self.function_call.arguments
-recipient = ""
-⋮----
-recipient = args.get("recipient", "")
-⋮----
-msg = self.message
-⋮----
-# get the first tool that has a recipient field, if any
-⋮----
-recipient = tc.function.arguments.get(
-⋮----
-)  # type: ignore
-⋮----
-# It's not a function or tool call, so continue looking to see
-# if a recipient is specified in the message.
-⋮----
-# First check if message contains "TO: <recipient> <content>"
-⋮----
-# check if there is a top level json that specifies 'recipient',
-# and retain the entire message as content.
-⋮----
-recipient_name = top_level_json_field(msg, "recipient") if msg else ""
-content = msg
-⋮----
-# Define an abstract base class for language models
-class LanguageModel(ABC)
-⋮----
-"""
-    Abstract base class for language models.
-    """
-⋮----
-# usage cost by model, accumulates here
-usage_cost_dict: Dict[str, LLMTokenUsage] = {}
-⋮----
-def __init__(self, config: LLMConfig = LLMConfig())
-⋮----
-@staticmethod
-    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]
-⋮----
-"""
-        Create a language model.
-        Args:
-            config: configuration for language model
-        Returns: instance of language model
-        """
-⋮----
-openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
-⋮----
-openai = AzureGPT
-⋮----
-openai = OpenAIGPT
-cls = dict(
-return cls(config)  # type: ignore
-⋮----
-@staticmethod
-    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]
-⋮----
-"""
-        Given an even-length sequence of strings, split into a sequence of pairs
-
-        Args:
-            lst (List[str]): sequence of strings
-
-        Returns:
-            List[Tuple[str,str]]: sequence of pairs of strings
-        """
-evens = lst[::2]
-odds = lst[1::2]
-⋮----
-"""
-        From the chat history, extract system prompt, user-assistant turns, and
-        final user msg.
-
-        Args:
-            messages (List[LLMMessage]): List of messages in the chat history
-
-        Returns:
-            Tuple[str, List[Tuple[str,str]], str]:
-                system prompt, user-assistant turns, final user msg
-
-        """
-# Handle various degenerate cases
-messages = [m for m in messages]  # copy
-DUMMY_SYS_PROMPT = "You are a helpful assistant."
-DUMMY_USER_PROMPT = "Follow the instructions above."
-⋮----
-system_prompt = messages[0].content
-⋮----
-# now we have messages = [Sys,...]
-⋮----
-# now we have messages = [Sys, msg, ...]
-⋮----
-# now we have messages = [Sys, user, ...]
-⋮----
-# now we have messages = [Sys, user, ..., user]
-# so we omit the first and last elements and make pairs of user-asst messages
-conversation = [m.content for m in messages[1:-1]]
-user_prompt = messages[-1].content
-pairs = LanguageModel.user_assistant_pairs(conversation)
-⋮----
-@abstractmethod
-    def set_stream(self, stream: bool) -> bool
-⋮----
-"""Enable or disable streaming output from API.
-        Return previous value of stream."""
-⋮----
-@abstractmethod
-    def get_stream(self) -> bool
-⋮----
-"""Get streaming status"""
-⋮----
-@abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-@abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-"""
-        Get chat-completion response from LLM.
-
-        Args:
-            messages: message-history to send to the LLM
-            max_tokens: max tokens to generate
-            tools: tools available for the LLM to use in its response
-            tool_choice: tool call mode, one of "none", "auto", "required",
-                or a dict specifying a specific tool.
-            functions: functions available for LLM to call (deprecated)
-            function_call: function calling mode, "auto", "none", or a specific fn
-                    (deprecated)
-        """
-⋮----
-"""Async version of `chat`. See `chat` for details."""
-⋮----
-def __call__(self, prompt: str, max_tokens: int) -> LLMResponse
-⋮----
-@staticmethod
-    def _fallback_model_names(model: str) -> List[str]
-⋮----
-parts = model.split("/")
-fallbacks = []
-⋮----
-def info(self) -> ModelInfo
-⋮----
-"""Info of relevant chat model"""
-orig_model = (
-⋮----
-def completion_info(self) -> ModelInfo
-⋮----
-"""Info of relevant completion model"""
-⋮----
-def supports_functions_or_tools(self) -> bool
-⋮----
-"""
-        Does this Model's API support "native" tool-calling, i.e.
-        can we call the API with arguments that contain a list of available tools,
-        and their schemas?
-        Note that, given the plethora of LLM provider APIs this determination is
-        imperfect at best, and leans towards returning True.
-        When the API calls fails with an error indicating tools are not supported,
-        then users are encouraged to use the Langroid-based prompt-based
-        ToolMessage mechanism, which works with ANY LLM. To enable this,
-        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
-        """
-⋮----
-def chat_context_length(self) -> int
-⋮----
-def completion_context_length(self) -> int
-⋮----
-def chat_cost(self) -> Tuple[float, float, float]
-⋮----
-"""
-        Return the cost per 1000 tokens for chat completions.
-
-        Returns:
-            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
-                per 1000 tokens
-        """
-⋮----
-def reset_usage_cost(self) -> None
-⋮----
-counter = self.usage_cost_dict[mdl]
-⋮----
-"""
-        Update usage cost for this LLM.
-        Args:
-            chat (bool): whether to update for chat or completion model
-            prompts (int): number of tokens used for prompts
-            completions (int): number of tokens used for completions
-            cost (float): total token cost in USD
-        """
-mdl = self.config.chat_model if chat else self.config.completion_model
-⋮----
-@classmethod
-    def usage_cost_summary(cls) -> str
-⋮----
-s = ""
-⋮----
-@classmethod
-    def tot_tokens_cost(cls) -> Tuple[int, float]
-⋮----
-"""
-        Return total tokens used and total cost across all models.
-        """
-total_tokens = 0
-total_cost = 0.0
-⋮----
-def get_reasoning_final(self, message: str) -> Tuple[str, str]
-⋮----
-"""Extract "reasoning" and "final answer" from an LLM response, if the
-        reasoning is found within configured delimiters, like <think>, </think>.
-        E.g.,
-        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
-
-        Args:
-            message (str): message from LLM
-
-        Returns:
-            Tuple[str, str]: reasoning, final answer
-        """
-⋮----
-parts = message.split(start)
-⋮----
-"""
-        Given a chat history and a question, convert it to a standalone question.
-        Args:
-            chat_history: list of tuples of (question, answer)
-            query: follow-up question
-
-        Returns: standalone version of the question
-        """
-history = collate_chat_history(chat_history)
-⋮----
-prompt = f"""
-⋮----
-follow_up_question = f"""
-⋮----
-standalone = self.chat(
-⋮----
-class StreamingIfAllowed
-⋮----
-"""Context to temporarily enable or disable streaming, if allowed globally via
-    `settings.stream`"""
-⋮----
-def __init__(self, llm: LanguageModel, stream: bool = True)
-⋮----
-def __enter__(self) -> None
-⋮----
-def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
-</file>
-
 <file path=".pre-commit-config.yaml">
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.15.17
+  rev: v0.15.20
   hooks:
     - id: ruff
 </file>
@@ -57759,8 +57999,6 @@ result = await self._achat(
 ⋮----
 def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
 ⋮----
-# If it's not in the cache, call the API
-⋮----
 completion_call = self.client.chat.completions.create
 ⋮----
 # If streaming, cannot cache result
@@ -57955,7 +58193,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.65.5"
+version = "0.65.7"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
