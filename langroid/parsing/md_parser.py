@@ -83,11 +83,15 @@ def parse_markdown_headings(md_text: str) -> List[Node]:
             marker = fence_match.group(1)  # e.g. "```" or "~~~~"
             if not in_code_fence:
                 in_code_fence = True
-                fence_marker = marker[:3]  # store triple backtick or triple tilde
+                fence_marker = marker
             else:
-                # only close if the fence_marker matches
-                # E.g. if we opened with ```, we close only on ```
-                if fence_marker and marker.startswith(fence_marker):
+                # only close if marker uses the same character and is at least
+                # as long as the opening marker.
+                if (
+                    fence_marker
+                    and marker[0] == fence_marker[0]
+                    and len(marker) >= len(fence_marker)
+                ):
                     in_code_fence = False
                     fence_marker = None
 
