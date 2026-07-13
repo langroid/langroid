@@ -55,8 +55,33 @@ ai-notes/
   Langroid-repo-docs.md
   repomix-plan.md
 docs/
+  assets/
+    demos/
+      dependency_chatbot.gif
+      lease-extractor-demo.gif
+    DepChatbot.png
+    langroid_neo4j_logos.png
+    langroid-card-cobalt-blue-1200-630.png
+    langroid-card-cobalt-blue.png
+    langroid-card-lambda-ossem-rust-1200-630.png
+    langroid-card-ossem-rust-1200x630.png
+    langroid-card-ossem-rust.png
+    langroid-lance.png
+    nullify-logo.jpg
+    nullify-logo.png
+    orange-logo-lambda-563.png
+    orange-logo-lambda.png
+    orange-logo.png
+    pure-lambda-non-circular.png
   blog/
     posts/
+      figures/
+        confusion.png
+        langroid-arch.png
+        malade-arch.png
+        omop-ground-truth.png
+        omop-results.png
+        variance-histogram.png
       chat-completion.md
       langroid-architecture.md
       langroid-intro.md
@@ -72,11 +97,16 @@ docs/
   demos/
     targeting/
       audience-targeting.md
+      targeting.gif
+      targeting.png
   examples/
     agent-tree.md
+    chat-tree.png
     guide.md
   javascripts/
     mathjax.js
+  logos/
+    pure-lambda-non-circular.png
   notes/
     async-streaming.md
     azure-openai-models.md
@@ -96,6 +126,7 @@ docs/
     litellm-proxy.md
     llama-cpp-embeddings.md
     llm-pdf-parser.md
+    markdown-html-parsing.md
     marker-pdf.md
     markitdown.md
     mcp-tools.md
@@ -125,18 +156,33 @@ docs/
       comments.html
   quick-start/
     chat-agent-docs.md
+    chat-agent-fn.png
     chat-agent-tool.md
+    chat-agent-tool.png
     chat-agent.md
+    chat-docs.png
+    chat.png
+    img.png
     index.md
     llm-interaction.md
     multi-agent-task-delegation.md
     setup.md
     three-agent-chat-num-router.md
     three-agent-chat-num.md
+    three-agent-num.png
+    three-agent-router-func.png
+    three-agent-router.png
+    try-llm.png
     two-agent-chat-num.md
+    two-agent-num.png
+    two-agent.png
+  screenshots/
+    planner-workflow-html-logs.png
   stylesheets/
     extra.css
   tutorials/
+    langroid-tour-beethoven.png
+    langroid-tour-teacher.png
     langroid-tour.md
     llm-usage-options.md
     local-llm-setup.md
@@ -176,9 +222,11 @@ issues/
 langroid/
   agent/
     callbacks/
+      __init__.py
       chainlit.py
     special/
       arangodb/
+        __init__.py
         aql_validator.py
         arangodb_agent.py
         system_messages.py
@@ -190,6 +238,7 @@ langroid/
         lance_rag_task.py
         query_planner_agent.py
       neo4j/
+        __init__.py
         csv_kg_chat.py
         cypher_validator.py
         neo4j_chat_agent.py
@@ -246,6 +295,7 @@ langroid/
     redis_cachedb.py
   embedding_models/
     protoc/
+      __init__.py
       embeddings_pb2_grpc.py
       embeddings_pb2.py
       embeddings_pb2.pyi
@@ -332,6 +382,7 @@ langroid/
   __init__.py
   exceptions.py
   mytypes.py
+  py.typed
 plugins/
   langroid/
     skills/
@@ -346,6 +397,11 @@ plugins/
         run-batch-tasks.md
         SKILL.md
         task-return-tool.md
+public/
+  favicon
+  langroid-card.png
+  logo_dark.png
+  logo_light.png
 release-notes/
   v0-56-0-task-tool.md
   v0-56-11-openai-client-caching.md
@@ -2813,8 +2869,7 @@ Here is what a run starting with $n=12$ looks like:
 </file>
 
 <file path="docs/javascripts/mathjax.js">
-document$.subscribe(() => {
-MathJax.typesetPromise()
+
 </file>
 
 <file path="docs/notes/async-streaming.md">
@@ -13476,6 +13531,14 @@ By adding explicit `close()` and context manager support to Langroid's QdrantDB 
 The QdrantDB lock file issue has been resolved by adding proper resource cleanup mechanisms to Langroid's QdrantDB wrapper. While the underlying `qdrant_client` doesn't provide context manager support, Langroid now offers both context manager and explicit `close()` methods. The context manager approach is the recommended best practice as it ensures cleanup even in error scenarios. For cases where context managers aren't suitable, the explicit `close()` method provides a reliable alternative.
 </file>
 
+<file path="langroid/agent/callbacks/__init__.py">
+
+</file>
+
+<file path="langroid/agent/special/arangodb/__init__.py">
+
+</file>
+
 <file path="langroid/agent/special/arangodb/system_messages.py">
 done_tool_name = DoneTool.default_value("request")
 ⋮----
@@ -13778,6 +13841,10 @@ self.curr_query_plan = None  # reset
         """
 ⋮----
 self.n_query_plan_reminders = 0  # reset
+</file>
+
+<file path="langroid/agent/special/neo4j/__init__.py">
+
 </file>
 
 <file path="langroid/agent/special/neo4j/csv_kg_chat.py">
@@ -14473,8 +14540,6 @@ await self._cm.__aexit__(None, None, None)  # type: ignore
 # "Server session was closed unexpectedly". Treat as transient.
 emsg = str(e)
 ⋮----
-await self._cm.__aexit__(None, None, None)  # type: ignore
-⋮----
 # otherwise re-raise
 ⋮----
 # If we get here both attempts failed
@@ -15122,9 +15187,6 @@ default_recipient = self.__class__.default_value("default_recipient")
 or msg.metadata.recipient != ""  # there IS an explicit recipient
 ⋮----
 content = msg if isinstance(msg, str) else msg.content
-# save the content as a class-variable, so that
-# we can construct the ChatDocument once the LLM specifies a recipient.
-# This avoids having to re-generate the entire message, saving time + cost.
 </file>
 
 <file path="langroid/agent/tools/retrieval_tool.py">
@@ -16322,6 +16384,10 @@ class CacheDB(ABC)
         """
 </file>
 
+<file path="langroid/embedding_models/protoc/__init__.py">
+
+</file>
+
 <file path="langroid/embedding_models/protoc/embeddings_pb2_grpc.py">
 # Generated by the gRPC Python protocol compiler plugin. DO NOT EDIT!
 """Client and server classes corresponding to protobuf-defined services."""
@@ -16341,8 +16407,6 @@ def __init__(self, channel)
 class EmbeddingServicer(object)
 ⋮----
 def Embed(self, request, context)
-⋮----
-"""Missing associated documentation comment in .proto file."""
 ⋮----
 def add_EmbeddingServicer_to_server(servicer, server)
 ⋮----
@@ -16775,7 +16839,6 @@ embeddings = data[0]["embedding"]
 first_item = response_json[0]
 ⋮----
 embeddings = first_item["embedding"]
-# Check if it's [floats]
 ⋮----
 # Check if it's [[floats]]
 ⋮----
@@ -17983,6 +18046,118 @@ chunks = _chunk_sentences(sentences, chunk_size)
 chunks = paragraphs
 ⋮----
 chunks = [chunk.strip() for chunk in chunks if chunk.strip() != ""]
+</file>
+
+<file path="langroid/parsing/parse_json.py">
+def is_valid_json(json_str: str) -> bool
+⋮----
+"""Check if the input string is a valid JSON.
+
+    Args:
+        json_str (str): The input string to check.
+
+    Returns:
+        bool: True if the input string is a valid JSON, False otherwise.
+    """
+⋮----
+def flatten(nested_list) -> Iterator[str]:  # type: ignore
+⋮----
+"""Flatten a nested list into a single list of strings"""
+⋮----
+def get_json_candidates(s: str) -> List[str]
+⋮----
+"""Get top-level JSON candidates, i.e. strings between curly braces."""
+# Define the grammar for matching curly braces
+curly_braces = original_text_for(nested_expr("{", "}"))
+⋮----
+# Parse the string
+⋮----
+results = curly_braces.search_string(s)
+# Properly convert nested lists to strings
+⋮----
+def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]
+⋮----
+# First, try parsing with ast.literal_eval
+⋮----
+result = ast.literal_eval(json_string)
+⋮----
+# If ast.literal_eval fails or returns non-dict/list, try repair_json
+json_repaired_obj = repair_json(json_string, return_objects=True)
+⋮----
+# fallback on yaml
+yaml_result = yaml.safe_load(json_string)
+⋮----
+# If all methods fail, raise ValueError
+⋮----
+def try_repair_json_yaml(s: str) -> str | None
+⋮----
+"""
+    Attempt to load as json, and if it fails, try repairing the JSON.
+    If that fails, replace any \n with space as a last resort.
+    NOTE - replacing \n with space will result in format loss,
+    which may matter in generated code (e.g. python, toml, etc)
+    """
+s_repaired_obj = repair_json(s, return_objects=True)
+⋮----
+s_repaired_obj = s_repaired_obj[0]
+⋮----
+s_repaired_obj = None
+⋮----
+return json.dumps(s_repaired_obj)  # type: ignore
+⋮----
+yaml_result = yaml.safe_load(s)
+⋮----
+# If it still fails, replace any \n with space as a last resort
+s = s.replace("\n", " ")
+⋮----
+return None  # all failed
+⋮----
+def extract_top_level_json(s: str) -> List[str]
+⋮----
+"""Extract all top-level JSON-formatted substrings from a given string.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+
+    Returns:
+        List[str]: A list of top-level JSON-formatted substrings.
+    """
+# Find JSON object and array candidates
+json_candidates = get_json_candidates(s)
+maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
+⋮----
+def top_level_json_field(s: str, f: str) -> Any
+⋮----
+"""
+    Extract the value of a field f from a top-level JSON object.
+    If there are multiple, just return the first.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+        f (str): The field to extract from the JSON object.
+
+    Returns:
+        str: The value of the field f in the top-level JSON object, if any.
+            Otherwise, return an empty string.
+
+    Note:
+        This function is designed to never crash. If any exception occurs during
+        JSON parsing or field extraction, it gracefully returns an empty string.
+    """
+⋮----
+jsons = extract_top_level_json(s)
+⋮----
+json_data = json.loads(j)
+⋮----
+# Some responses wrap candidate JSON objects in a list; scan them.
+⋮----
+# If this specific JSON fails to parse, continue to next candidate
+⋮----
+# Catch any unexpected errors to ensure we never crash
+⋮----
+def datetime_to_json(obj: Any) -> Any
+⋮----
+# Let json.dumps() handle the raising of TypeError for non-serializable objects
 </file>
 
 <file path="langroid/parsing/pdf_utils.py">
@@ -21872,6 +22047,10 @@ class NonToolAction(str, Enum)
 ⋮----
 FORWARD_USER = "user"  # forward msg to user
 DONE = "done"  # task done
+</file>
+
+<file path="langroid/py.typed">
+
 </file>
 
 <file path="release-notes/v0-56-0-task-tool.md">
@@ -27390,8 +27569,6 @@ task = Task(
 ⋮----
 extracts: list[str] = run_batch_tasks(
 ⋮----
-)  # type: ignore
-⋮----
 # Caution: Retain ALL other fields in the Documents (which could be
 # other than just `content` and `metadata`), while simply replacing
 # `content` with the extracted portions
@@ -28031,8 +28208,6 @@ redis_password = os.getenv("REDIS_PASSWORD")
 redis_host = os.getenv("REDIS_HOST") or None
 redis_port = os.getenv("REDIS_PORT")
 ⋮----
-self.pool = fakeredis.FakeStrictRedis()  # type: ignore
-⋮----
 self.pool = redis.ConnectionPool(  # type: ignore
 ⋮----
 @contextmanager  # type: ignore
@@ -28351,995 +28526,6 @@ parser = to_field + message
 parsed = parser.parse_string(msg)
 </file>
 
-<file path="langroid/parsing/document_parser.py">
-import docling  # noqa
-⋮----
-import pymupdf4llm  # noqa
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-class DocumentType(str, Enum)
-⋮----
-# TODO add `md` (Markdown) and `html`
-PDF = "pdf"
-DOCX = "docx"
-DOC = "doc"
-TXT = "txt"
-XLSX = "xlsx"
-XLS = "xls"
-PPTX = "pptx"
-⋮----
-def find_last_full_char(possible_unicode: bytes) -> int
-⋮----
-"""
-    Find the index of the last full character in a byte string.
-    Args:
-        possible_unicode (bytes): The bytes to check.
-    Returns:
-        int: The index of the last full unicode character.
-    """
-⋮----
-def is_plain_text(path_or_bytes: str | bytes) -> bool
-⋮----
-"""
-    Check if a file is plain text by attempting to decode it as UTF-8.
-    Args:
-        path_or_bytes (str|bytes): The file path or bytes object.
-    Returns:
-        bool: True if the file is plain text, False otherwise.
-    """
-⋮----
-response = requests.get(path_or_bytes)
-⋮----
-content = response.content[:1024]
-⋮----
-content = f.read(1024)
-⋮----
-content = path_or_bytes[:1024]
-⋮----
-# Use magic to detect the MIME type
-⋮----
-mime_type = magic.from_buffer(content, mime=True)
-⋮----
-# Check if the MIME type is not a text type
-⋮----
-# Attempt to decode the content as UTF-8
-content = content[: find_last_full_char(content)]
-⋮----
-_ = content.decode("utf-8")
-# Additional checks can go here, e.g., to verify that the content
-# doesn't contain too many unusual characters for it to be considered text
-⋮----
-# If decoding fails, it's likely not plain text (or not encoded in UTF-8)
-⋮----
-class DocumentParser(Parser)
-⋮----
-"""
-    Abstract base class for extracting text from special types of docs
-    such as PDFs or Docx.
-
-    Attributes:
-        source (str): The source, either a URL or a file path.
-        doc_bytes (BytesIO): BytesIO object containing the doc data.
-    """
-⋮----
-"""
-        Create a DocumentParser instance based on source type
-            and config.<source_type>.library specified.
-
-        Args:
-            source (str|bytes): The source, could be a URL, file path,
-                or bytes object.
-            config (ParserConfig): The parser configuration.
-            doc_type (str|None): The type of document, if known
-
-        Returns:
-            DocumentParser: An instance of a DocumentParser subclass.
-        """
-inferred_doc_type = DocumentParser._document_type(source, doc_type)
-⋮----
-source_name = source if isinstance(source, str) else "bytes"
-⋮----
-def __init__(self, source: str | bytes, config: ParsingConfig)
-⋮----
-"""
-        Args:
-            source (str|bytes): The source, which could be
-            a path, a URL or a bytes object.
-        """
-⋮----
-"""
-        Determine the type of document based on the source.
-
-        Args:
-            source (str|bytes): The source, which could be a URL,
-                a file path, or a bytes object.
-            doc_type (str|DocumentType|None): The type of document, if known.
-
-        Returns:
-            str: The document type.
-        """
-⋮----
-# detect file type from path extension
-⋮----
-# must be bytes: attempt to detect type from content
-# using magic mime type detection
-⋮----
-mime_type = magic.from_buffer(source, mime=True)
-⋮----
-def _load_doc_as_bytesio(self) -> BytesIO
-⋮----
-"""
-        Load the docs into a BytesIO object.
-
-        Returns:
-            BytesIO: A BytesIO object containing the doc data.
-        """
-⋮----
-response = requests.get(self.source)
-⋮----
-"""
-        Get document chunks from a file path or bytes object.
-        Args:
-            source (str|bytes): The source, which could be a URL, path or bytes object.
-            parser (Parser): The parser instance (for splitting the document).
-            doc_type (str|DocumentType|None): The type of document, if known.
-            lines (int|None): The number of lines to read from a plain text file.
-        Returns:
-            List[Document]: A list of `Document` objects,
-                each containing a chunk of text, determined by the
-                chunking and splitting settings in the parser config.
-        """
-dtype: DocumentType = DocumentParser._document_type(source, doc_type)
-⋮----
-doc_parser = DocumentParser.create(
-chunks = doc_parser.get_doc_chunks()
-⋮----
-doc_parser = ImagePdfParser(source, parser.config)
-⋮----
-# try getting as plain text; these will be chunked downstream
-# -- could be a bytes object or a path
-⋮----
-content = source.decode()
-⋮----
-file_lines = content.splitlines()[:lines]
-content = "\n".join(line.strip() for line in file_lines)
-⋮----
-file_lines = list(itertools.islice(f, lines))
-⋮----
-content = f.read()
-soup = BeautifulSoup(content, "html.parser")
-text = soup.get_text()
-⋮----
-doc = Document(
-⋮----
-def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]
-⋮----
-"""Yield each page in the PDF."""
-⋮----
-def get_document_from_page(self, page: Any) -> Document
-⋮----
-"""
-        Get Langroid Document object (with possible metadata)
-        corresponding to a given page.
-        """
-⋮----
-def fix_text(self, text: str) -> str
-⋮----
-"""
-        Fix text extracted from a PDF.
-
-        Args:
-            text (str): The extracted text.
-
-        Returns:
-            str: The fixed text.
-        """
-# Some pdf parsers introduce extra space before hyphen,
-# so use regular expression to replace 'space-hyphen' with just 'hyphen'
-⋮----
-def get_doc(self) -> Document
-⋮----
-"""
-        Get entire text from source as a single document.
-
-        Returns:
-            a `Document` object containing the content of the pdf file,
-                and metadata containing source name (URL or path)
-        """
-⋮----
-text = "".join(
-⋮----
-def get_doc_chunks(self) -> List[Document]
-⋮----
-"""
-        Get document chunks from a pdf source,
-        with page references in the document metadata.
-
-        Returns:
-            List[Document]: a list of `Document` objects,
-                each containing a chunk of text
-        """
-⋮----
-split = []  # tokens in curr split
-pages: List[str] = []
-docs: List[Document] = []
-# metadata.id to be shared by ALL chunks of this document
-common_id = ObjectRegistry.new_id()
-n_chunks = 0  # how many chunk so far
-⋮----
-# not used but could be useful, esp to blend the
-# metadata from the pages into the chunks
-page_doc = self.get_document_from_page(page)
-page_text = page_doc.content
-⋮----
-# split could be so long it needs to be split
-# into multiple chunks. Or it could be so short
-# that it needs to be combined with the next chunk.
-⋮----
-# pretty formatting of pages (e.g. 1-3, 4, 5-7)
-p_0 = int(pages[0]) - self.config.page_number_offset
-p_n = int(pages[-1]) - self.config.page_number_offset
-page_str = f"pages {p_0}-{p_n}" if p_0 != p_n else f"page {p_0}"
-text = self.tokenizer.decode(split[: self.config.chunk_size])
-⋮----
-split = split[self.config.chunk_size - self.config.overlap :]
-pages = [str(i + 1)]
-# there may be a last split remaining:
-# if it's shorter than the overlap, we shouldn't make a chunk for it
-# since it's already included in the prior chunk;
-# the only exception is if there have been no chunks so far.
-⋮----
-class FitzPDFParser(DocumentParser)
-⋮----
-"""
-    Parser for processing PDFs using the `fitz` library.
-    """
-⋮----
-def iterate_pages(self) -> Generator[Tuple[int, "fitz.Page"], None, None]
-⋮----
-"""
-        Yield each page in the PDF using `fitz`.
-
-        Returns:
-            Generator[fitz.Page]: Generator yielding each page.
-        """
-⋮----
-doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
-⋮----
-def get_document_from_page(self, page: "fitz.Page") -> Document
-⋮----
-"""
-        Get Document object from a given `fitz` page.
-
-        Args:
-            page (fitz.Page): The `fitz` page object.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-⋮----
-class PyMuPDF4LLMParser(DocumentParser)
-⋮----
-"""
-    Parser for processing PDFs using the `pymupdf4llm` library.
-    """
-⋮----
-import pymupdf4llm  # noqa
-⋮----
-doc: fitz.Document = fitz.open(stream=self.doc_bytes, filetype="pdf")
-pages: List[Dict[str, Any]] = pymupdf4llm.to_markdown(doc, page_chunks=True)
-⋮----
-def get_document_from_page(self, page: Dict[str, Any]) -> Document
-⋮----
-"""
-        Get Document object corresponding to a given "page-chunk"
-        dictionary, see:
-         https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/api.html
-
-
-        Args:
-            page (Dict[str,Any]): The "page-chunk" dictionary.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-⋮----
-# TODO could possible use other metadata from page, see above link.
-⋮----
-class PyPDFium2Parser(DocumentParser)
-⋮----
-"""
-    Parser for processing PDFs using the `pypdfium2` library.
-
-    Unlike `pymupdf4llm`/`fitz` (AGPL-licensed), `pypdfium2` is permissively
-    licensed (Apache-2.0/BSD-3-Clause) and is installed by default with
-    Langroid, which is why it is the default PDF parser. It extracts plain
-    text page-by-page; for richer Markdown-structured output (headers, tables,
-    multi-column reflow) install an extra and set `library="pymupdf4llm"`.
-    """
-⋮----
-def iterate_pages(self) -> Generator[Tuple[int, str], None, None]
-⋮----
-"""
-        Yield the extracted text of each page using `pypdfium2`.
-
-        Returns:
-            Generator[Tuple[int, str]]: Generator yielding (page index, text).
-        """
-⋮----
-doc = pdfium.PdfDocument(self.doc_bytes.getvalue())
-⋮----
-page = doc[i]
-textpage = page.get_textpage()
-text = textpage.get_text_bounded()
-⋮----
-def get_document_from_page(self, page: str) -> Document
-⋮----
-"""
-        Get Document object from the extracted text of a `pypdfium2` page.
-
-        Args:
-            page (str): The text extracted from the page.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-⋮----
-class DoclingParser(DocumentParser)
-⋮----
-"""
-    Parser for processing PDFs using the `docling` library.
-    """
-⋮----
-"""
-        Yield each page in the PDF using `docling`.
-        Code largely from this example:
-        https://github.com/DS4SD/docling/blob/4d41db3f7abb86c8c65386bf94e7eb0bf22bb82b/docs/examples/export_figures.py
-
-        Returns:
-            Generator[docling.Page]: Generator yielding each page.
-        """
-⋮----
-import docling  # noqa
-⋮----
-from docling.datamodel.base_models import InputFormat  # type: ignore
-⋮----
-from docling.document_converter import (  # type: ignore
-⋮----
-from docling_core.types.doc import ImageRefMode  # type: ignore
-⋮----
-IMAGE_RESOLUTION_SCALE = 2.0
-pipeline_options = PdfPipelineOptions()
-⋮----
-converter = DocumentConverter(
-doc_path = self.source
-⋮----
-# write to tmp file, then use that path
-⋮----
-doc_path = temp_file.name
-⋮----
-output_dir = Path(str(Path(doc_path).with_suffix("")) + "-pages")
-⋮----
-result: ConversionResult = converter.convert(doc_path)
-⋮----
-def n_page_elements(page) -> int:  # type: ignore
-⋮----
-page_element_count = [n_page_elements(i) for i in result.pages]
-element_page_cutoff = list(accumulate([1] + page_element_count))
-⋮----
-page_start = element_page_cutoff[i]
-page_end = element_page_cutoff[i + 1]
-md_file = output_dir / f"page_{i}.md"
-# we could have just directly exported to a markdown string,
-# but we need to save to a file to force generation of image-files.
-⋮----
-def get_document_from_page(self, md_file: str) -> Document
-⋮----
-"""
-        Get Document object from a given 1-page markdown file,
-        possibly containing image refs.
-
-        Args:
-            md_file (str): The markdown file path for the page.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-⋮----
-text = f.read()
-⋮----
-class PyPDFParser(DocumentParser)
-⋮----
-"""
-    Parser for processing PDFs using the `pypdf` library.
-    """
-⋮----
-def iterate_pages(self) -> Generator[Tuple[int, pypdf.PageObject], None, None]
-⋮----
-"""
-        Yield each page in the PDF using `pypdf`.
-
-        Returns:
-            Generator[pypdf.pdf.PageObject]: Generator yielding each page.
-        """
-⋮----
-reader = pypdf.PdfReader(self.doc_bytes)
-⋮----
-def get_document_from_page(self, page: pypdf.PageObject) -> Document
-⋮----
-"""
-        Get Document object from a given `pypdf` page.
-
-        Args:
-            page (pypdf.pdf.PageObject): The `pypdf` page object.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-⋮----
-class ImagePdfParser(DocumentParser)
-⋮----
-"""
-    Parser for processing PDFs that are images, i.e. not "true" PDFs.
-    """
-⋮----
-) -> Generator[Tuple[int, "Image"], None, None]:  # type: ignore
-⋮----
-images = convert_from_bytes(self.doc_bytes.getvalue())
-⋮----
-def get_document_from_page(self, page: "Image") -> Document:  # type: ignore
-⋮----
-"""
-        Get Document object corresponding to a given `pdf2image` page.
-
-        Args:
-            page (Image): The PIL Image object.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-⋮----
-text = pytesseract.image_to_string(page)
-⋮----
-class UnstructuredPDFParser(DocumentParser)
-⋮----
-"""
-    Parser for processing PDF files using the `unstructured` library.
-    """
-⋮----
-def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
-⋮----
-# from unstructured.chunking.title import chunk_by_title
-⋮----
-elements = partition_pdf(file=self.doc_bytes, include_page_breaks=True)
-⋮----
-# elements = chunk_by_title(elements)
-page_number = 1
-page_elements = []  # type: ignore
-⋮----
-if page_elements:  # Avoid yielding empty pages at the start
-⋮----
-page_elements = []
-⋮----
-# Yield the last page if it's not empty
-⋮----
-"""
-        Get Document object from a given `unstructured` element.
-
-        Args:
-            page (unstructured element): The `unstructured` element object.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-text = " ".join(el.text for el in page)
-⋮----
-class UnstructuredDocxParser(DocumentParser)
-⋮----
-"""
-    Parser for processing DOCX files using the `unstructured` library.
-    """
-⋮----
-elements = partition_docx(file=self.doc_bytes, include_page_breaks=True)
-⋮----
-"""
-        Get Document object from a given `unstructured` element.
-
-        Note:
-            The concept of "pages" doesn't actually exist in the .docx file format in
-            the same way it does in formats like .pdf. A .docx file is made up of a
-            series of elements like paragraphs and tables, but the division into
-            pages is done dynamically based on the rendering settings (like the page
-            size, margin size, font size, etc.).
-
-        Args:
-            page (unstructured element): The `unstructured` element object.
-
-        Returns:
-            Document object, with content and possible metadata.
-        """
-⋮----
-class UnstructuredDocParser(UnstructuredDocxParser)
-⋮----
-elements = partition_doc(file=self.doc_bytes, include_page_breaks=True)
-⋮----
-class PythonDocxParser(DocumentParser)
-⋮----
-"""
-    Parser for processing DOCX files using the `python-docx` library.
-    """
-⋮----
-"""
-        Simulate iterating through pages.
-        In a DOCX file, pages are not explicitly defined,
-        so we consider each paragraph as a separate 'page' for simplicity.
-        """
-⋮----
-doc = docx.Document(self.doc_bytes)
-⋮----
-"""
-        Get Document object from a given 'page', which in this case is a single
-        paragraph.
-
-        Args:
-            page (list): A list containing a single Paragraph object.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-paragraph = page[0]
-⋮----
-class MarkitdownDocxParser(DocumentParser)
-⋮----
-md = MarkItDown()
-self.doc_bytes.seek(0)  # Reset to start
-⋮----
-# Direct conversion from stream works for DOCX (unlike XLSX)
-result = md.convert_stream(self.doc_bytes, file_extension=".docx")
-⋮----
-# Split content into logical sections (paragraphs, sections, etc.)
-# This approach differs from the strict page-based approach used for PDFs
-sections = re.split(r"(?=# |\n## |\n### )", result.text_content)
-⋮----
-# Filter out empty sections
-sections = [section for section in sections if section.strip()]
-⋮----
-def get_document_from_page(self, md_content: str) -> Document
-⋮----
-"""
-        Get Document object from a given markdown section.
-
-        Args:
-            md_content (str): The markdown content for the section.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-⋮----
-class MarkitdownXLSXParser(DocumentParser)
-⋮----
-# Save stream to a temp file since md.convert() expects a path or URL
-# Temporary workaround until markitdown fixes convert_stream function
-# for xls and xlsx files
-# See issue here https://github.com/microsoft/markitdown/issues/321
-⋮----
-temp_file.flush()  # Ensure data is written before reading
-result = md.convert(temp_file.name)
-⋮----
-sheets = re.split(r"(?=## Sheet\d+)", result.text_content)
-⋮----
-"""
-        Get Document object from a given 1-page markdown string.
-
-        Args:
-            md_content (str): The markdown content for the page.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-⋮----
-class MarkitdownPPTXParser(DocumentParser)
-⋮----
-result = md.convert_stream(self.doc_bytes, file_extension=".pptx")
-slides = re.split(r"(?=<!-- Slide number: \d+ -->)", result.text_content)
-⋮----
-class LLMPdfParser(DocumentParser)
-⋮----
-"""
-    This class converts PDFs to Markdown using multimodal LLMs.
-
-    It extracts pages, converts them with the LLM (replacing images with
-    detailed descriptions), and outputs Markdown page by page. The
-    conversion follows `LLM_PDF_MD_SYSTEM_INSTRUCTION`. It employs
-    multiprocessing for speed, async requests with rate limiting, and
-    handles errors.
-
-    It supports page-by-page splitting or chunking multiple pages into
-    one, respecting page boundaries and a `max_token_limit`.
-    """
-⋮----
-DEFAULT_MAX_TOKENS = 7000
-OUTPUT_DIR = Path(".llm_pdfparser")  # Fixed output directory
-⋮----
-LLM_PDF_MD_SYSTEM_INSTRUCTION = """
-⋮----
-def __init__(self, source: Union[str, bytes], config: ParsingConfig)
-⋮----
-# Ensure output directory exists
-⋮----
-prefix = (
-temp_file = tempfile.NamedTemporaryFile(
-⋮----
-"""
-        If True, each PDF page is processed as a separate chunk,
-        resulting in one LLM request per page. If False, pages are
-        grouped into chunks based on `max_token_limit` before being sent
-        to the LLM.
-        """
-⋮----
-# Rate limiting parameters
-⋮----
-"""
-        A semaphore to control the number of concurrent requests to the LLM,
-        preventing rate limit errors.  A semaphore slot is acquired before
-        making an LLM request and released after the request is complete.
-        """
-⋮----
-self.retry_delay = 5  # seconds, for exponential backoff
-⋮----
-def _extract_page(self, page_num: int) -> Dict[str, Any]
-⋮----
-"""
-        Extracts a single page and estimates token count.
-        Opens the PDF from self.doc_bytes (a BytesIO object).
-        """
-⋮----
-# Always open the document from in-memory bytes.
-doc = fitz.open(stream=self.doc_bytes.getvalue(), filetype="pdf")
-new_pdf = fitz.open()
-⋮----
-pdf_bytes = new_pdf.write()
-text = doc[page_num].get_text("text")
-token_count = len(text) // 4 if text else len(pdf_bytes) // 4
-⋮----
-"""Parallel PDF page extraction using self.doc_bytes."""
-⋮----
-total_pages = len(doc)
-⋮----
-num_workers = num_workers or cpu_count()
-⋮----
-results = []
-⋮----
-"""Groups pages into chunks where each chunk is approximately `max_tokens`."""
-chunks: List[List[Dict[str, Any]]] = []
-current_chunk: List[Dict[str, Any]] = []
-current_tokens = 0
-⋮----
-current_chunk = []
-⋮----
-if current_chunk:  # Add remaining pages
-⋮----
-"""
-        Merges grouped pages into a single binary chunk so that
-        it does not exceed max token limit
-        """
-⋮----
-merged_pdf = fitz.open()
-page_numbers = []
-⋮----
-temp_pdf = fitz.open("pdf", page["pdf_bytes"])
-⋮----
-"pdf_bytes": merged_pdf.write(),  # Binary PDF data
-"page_numbers": page_numbers,  # List of page numbers in this chunk
-⋮----
-"""
-        Extracts, groups, and merges PDF pages into chunks with embedded page markers.
-        """
-⋮----
-pages = self._extract_pdf_pages_parallel(num_workers)
-⋮----
-# Each page becomes its own chunk
-⋮----
-# Group pages based on token limit
-chunks = self._group_pages_by_token_limit(pages, max_tokens)
-⋮----
-pdf_chunks = pool.map(self._merge_pages_into_pdf_with_metadata, chunks)
-⋮----
-@staticmethod
-    def _page_num_str(page_numbers: Any) -> str
-⋮----
-"""
-        Converts page numbers to a formatted string.
-        """
-⋮----
-async def _send_chunk_to_llm(self, chunk: Dict[str, Any]) -> str
-⋮----
-"""
-        Sends a PDF chunk to the LLM API and returns the response text.
-        Uses retries with exponential backoff to handle transient failures.
-        """
-⋮----
-async with self.semaphore:  # Limit concurrent API requests
-⋮----
-llm_config = OpenAIGPTConfig(
-llm = OpenAIGPT(config=llm_config)
-page_nums = self._page_num_str(chunk.get("page_numbers", "?"))
-base64_string = base64.b64encode(chunk["pdf_bytes"]).decode("utf-8")
-data_uri = f"data:application/pdf;base64,{base64_string}"
-⋮----
-file_content = dict(
-⋮----
-# optimistically try this: some API proxies like litellm
-# support this, and others may not.
-⋮----
-# fallback: assume file upload is similar to OpenAI API
-⋮----
-prompt = (
-system_prompt = (
-⋮----
-# Send the request with PDF content and system instructions
-response = await llm.async_client.chat.completions.create(  # type: ignore
-⋮----
-dict(  # type: ignore
-⋮----
-# Return extracted text if available
-⋮----
-# Log error with page numbers for debugging
-⋮----
-# Apply exponential backoff before retrying
-delay = self.retry_delay * (2**attempt)
-⋮----
-# Log failure after max retries
-page_nums = chunk.get("page_numbers", "Unknown")
-⋮----
-return ""  # Return empty string if all retries fail
-⋮----
-async def process_chunks(self, chunks: List[Dict[str, Any]]) -> List[str]
-⋮----
-"""
-        Processes PDF chunks by sending them to the LLM API and
-        collecting the results.
-
-        Args:
-            chunks: A list of dictionaries, where each dictionary represents
-                a PDF chunk and contains the PDF data and page numbers.
-        """
-# To show nice progress bar
-⋮----
-# Create a list of asynchronous tasks to send each chunk to the LLM.
-# Chunk in this case might be single page or group of pages returned
-# by prepare_pdf_chunks function
-tasks = [self._send_chunk_to_llm(chunk) for chunk in chunks]
-⋮----
-# Gather the results from all tasks, allowing exceptions to be returned.
-# tqdm_asyncio is wrapper around asyncio.gather
-gathered_results = await tqdm_asyncio.gather(
-⋮----
-chunk = chunks[i]  # Get the corresponding chunk.
-⋮----
-# Handle exceptions that occurred during chunk processing.
-⋮----
-# Process successful results and append page/chunk markers.
-markdown = str(result)
-⋮----
-return results  # Return the list of results.
-⋮----
-"""
-        Iterates over the document pages, extracting content using the
-        LLM API, saves them to a markdown file, and yields page numbers
-        along with their corresponding content.
-
-        Yields:
-            A generator of tuples, where each tuple contains the page number
-            (int) and the page content (Any).
-        """
-⋮----
-# This involves extracting pages, grouping them according to the
-# `max_tokens` limit (if `split_on_page` is False), and
-# merging pages into larger PDF chunks. The result
-# is a list of dictionaries, where each dictionary contains the
-# PDF bytes and the associated page numbers or single page if
-# `split_on_page` is true
-⋮----
-pdf_chunks = self._prepare_pdf_chunks_for_llm(
-⋮----
-# We asynchronously processes each chunk, sending it
-# to the LLM and retrieving the Markdown output. It handles rate
-# limiting and retries.
-markdown_results = asyncio.run(self.process_chunks(pdf_chunks))
-⋮----
-# This file serves as an intermediate storage location for the
-# complete Markdown output.
-⋮----
-# Read the full Markdown content from the temporary file.
-⋮----
-full_markdown = infile.read()
-⋮----
-# The splitting is based on the `split_on_page` setting. If True,
-# the Markdown is split using the "Page-" marker. Otherwise, it's
-# split using the "Chunk-" marker.
-⋮----
-pages = full_markdown.split("<!----Page-")
-⋮----
-pages = full_markdown.split("<!----Chunk-")
-⋮----
-# Remove the first element if it's empty (due to the split).
-⋮----
-pages = pages[1:]
-⋮----
-# Iterate over the pages or chunks and yield their content.
-⋮----
-# Check for errors during processing.
-⋮----
-page_content = page
-⋮----
-# Extract the actual page content by removing the marker.
-page_content = (
-⋮----
-# Yield the page number and content.
-⋮----
-"""
-        Get a Document object from a given markdown page.
-        """
-⋮----
-class MarkerPdfParser(DocumentParser)
-⋮----
-"""
-    Parse PDF files using the `marker` library: https://github.com/VikParuchuri/marker
-    """
-⋮----
-DEFAULT_CONFIG = {"paginate_output": True, "output_format": "markdown"}
-⋮----
-user_config = (
-⋮----
-"""
-        Yield each page in the PDF using `marker`.
-        """
-⋮----
-import marker  # noqa
-⋮----
-config_parser = ConfigParser(self.config_dict)
-converter = PdfConverter(
-⋮----
-filename = Path(doc_path).stem + "_converted"
-⋮----
-rendered = converter(doc_path)
-⋮----
-file_path = output_dir / f"{filename}.md"
-⋮----
-full_markdown = f.read()
-⋮----
-# Regex for splitting pages
-pages = re.split(r"\{\d+\}----+", full_markdown)
-⋮----
-page_no = 0
-⋮----
-"""
-        Get Document object from a given 1-page markdown file,
-        possibly containing image refs.
-
-        Args:
-            page (str): The page we get by splitting large md file from
-            marker
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-</file>
-
-<file path="langroid/parsing/parse_json.py">
-def is_valid_json(json_str: str) -> bool
-⋮----
-"""Check if the input string is a valid JSON.
-
-    Args:
-        json_str (str): The input string to check.
-
-    Returns:
-        bool: True if the input string is a valid JSON, False otherwise.
-    """
-⋮----
-def flatten(nested_list) -> Iterator[str]:  # type: ignore
-⋮----
-"""Flatten a nested list into a single list of strings"""
-⋮----
-def get_json_candidates(s: str) -> List[str]
-⋮----
-"""Get top-level JSON candidates, i.e. strings between curly braces."""
-# Define the grammar for matching curly braces
-curly_braces = original_text_for(nested_expr("{", "}"))
-⋮----
-# Parse the string
-⋮----
-results = curly_braces.search_string(s)
-# Properly convert nested lists to strings
-⋮----
-def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]
-⋮----
-# First, try parsing with ast.literal_eval
-⋮----
-result = ast.literal_eval(json_string)
-⋮----
-# If ast.literal_eval fails or returns non-dict/list, try repair_json
-json_repaired_obj = repair_json(json_string, return_objects=True)
-⋮----
-# fallback on yaml
-yaml_result = yaml.safe_load(json_string)
-⋮----
-# If all methods fail, raise ValueError
-⋮----
-def try_repair_json_yaml(s: str) -> str | None
-⋮----
-"""
-    Attempt to load as json, and if it fails, try repairing the JSON.
-    If that fails, replace any \n with space as a last resort.
-    NOTE - replacing \n with space will result in format loss,
-    which may matter in generated code (e.g. python, toml, etc)
-    """
-s_repaired_obj = repair_json(s, return_objects=True)
-⋮----
-s_repaired_obj = s_repaired_obj[0]
-⋮----
-s_repaired_obj = None
-⋮----
-return json.dumps(s_repaired_obj)  # type: ignore
-⋮----
-yaml_result = yaml.safe_load(s)
-⋮----
-# If it still fails, replace any \n with space as a last resort
-s = s.replace("\n", " ")
-⋮----
-return None  # all failed
-⋮----
-def extract_top_level_json(s: str) -> List[str]
-⋮----
-"""Extract all top-level JSON-formatted substrings from a given string.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-
-    Returns:
-        List[str]: A list of top-level JSON-formatted substrings.
-    """
-# Find JSON object and array candidates
-json_candidates = get_json_candidates(s)
-maybe_repaired_jsons = map(try_repair_json_yaml, json_candidates)
-⋮----
-def top_level_json_field(s: str, f: str) -> Any
-⋮----
-"""
-    Extract the value of a field f from a top-level JSON object.
-    If there are multiple, just return the first.
-
-    Args:
-        s (str): The input string to search for JSON substrings.
-        f (str): The field to extract from the JSON object.
-
-    Returns:
-        str: The value of the field f in the top-level JSON object, if any.
-            Otherwise, return an empty string.
-
-    Note:
-        This function is designed to never crash. If any exception occurs during
-        JSON parsing or field extraction, it gracefully returns an empty string.
-    """
-⋮----
-jsons = extract_top_level_json(s)
-⋮----
-json_data = json.loads(j)
-⋮----
-# Some responses wrap candidate JSON objects in a list; scan them.
-⋮----
-# If this specific JSON fails to parse, continue to next candidate
-⋮----
-# Catch any unexpected errors to ensure we never crash
-⋮----
-def datetime_to_json(obj: Any) -> Any
-⋮----
-# Let json.dumps() handle the raising of TypeError for non-serializable objects
-</file>
-
 <file path="langroid/parsing/parser.py">
 logger = logging.getLogger(__name__)
 ⋮----
@@ -29582,7 +28768,6 @@ chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
 ⋮----
 # Append the chunk text to the list of chunks
 ⋮----
-# Remove the tokens corresponding to the chunk text
 # from the remaining tokens
 tokens = tokens[
 ⋮----
@@ -30027,8 +29212,6 @@ DynamicMetaData = DocMetaData  # type: ignore
 ⋮----
 # Define additional top-level fields for DynamicDocument
 additional_fields = {
-⋮----
-None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
 ⋮----
 # Create a dynamic subclass of Document
 DynamicDocumentFields = {
@@ -30761,8 +29944,6 @@ deleted_count = 0
 def clear_empty_collections(self) -> int
 ⋮----
 # Efficiently check for emptiness without fetching all rows
-⋮----
-# Use delete_collection to handle index and table deletion
 ⋮----
 session.commit()  # Commit is likely not needed here
 ⋮----
@@ -32434,6 +31615,111 @@ handlers.
 
 **Recommendation: Request changes** — use `openai.APIStatusError` instead of
 `openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
+</file>
+
+<file path="docs/notes/markdown-html-parsing.md">
+# Markdown and HTML Parsing
+
+Available since Langroid v0.66.0.
+
+`DocumentType` (in `langroid.parsing.document_parser`) includes two values for
+plain-text-like formats, in addition to `PDF`, `DOCX`, `DOC`, `TXT`, `XLSX`,
+`XLS`, `PPTX`:
+
+- `DocumentType.MD = "md"` — Markdown; detected from a `.md` path/URL
+  extension, a `text/markdown` or `text/x-markdown` MIME type (bytes input),
+  or an explicit `doc_type="md"`.
+- `DocumentType.HTML = "html"` — HTML; detected from a `.html`/`.htm`
+  path/URL extension, a `text/html` MIME type (bytes input), or an explicit
+  `doc_type="html"`.
+
+Markdown and HTML are *not* handled by `DocumentParser.create()` (there is no
+page-oriented parser subclass for them); calling `create()` with an MD/HTML
+source raises a `ValueError`. Instead, use the static method
+`DocumentParser.chunks_from_path_or_bytes()`, which extracts the text and
+chunks it according to the `Parser` config:
+
+```python
+from langroid.parsing.document_parser import DocumentParser
+from langroid.parsing.parser import Parser, ParsingConfig
+
+parser = Parser(ParsingConfig())
+
+# From a file path: type inferred from the extension
+chunks = DocumentParser.chunks_from_path_or_bytes("notes/readme.md", parser)
+
+# From a URL: fetched over HTTP(S), type inferred from the extension
+chunks = DocumentParser.chunks_from_path_or_bytes(
+    "https://example.com/readme.md", parser
+)
+
+# From bytes: pass doc_type explicitly (see limitations below)
+with open("page.html", "rb") as f:
+    raw = f.read()
+chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser, doc_type="html")
+```
+
+Each returned `Document` chunk carries the source path (or `"bytes"`) in its
+metadata.
+
+## What each format does
+
+- **Markdown** (`DocumentType.MD`): content is kept as raw Markdown — no tag
+  stripping — except that a leading YAML front-matter block
+  (`--- ... ---`) is removed when it contains at least one `key: value`
+  line. CRLF line endings are normalized to LF before front-matter
+  detection. Leading `---` blocks that do *not* look like YAML (e.g. a
+  thematic break, or prose between two horizontal rules) are preserved.
+- **HTML** (`DocumentType.HTML`): tags are stripped with BeautifulSoup's
+  `get_text(separator="\n")`, so text from adjacent elements is separated by
+  newlines rather than concatenated.
+
+## Behavior changes (vs. langroid < 0.66)
+
+If you have existing ingestion pipelines, note that chunk contents — and
+therefore embeddings, similarity scores, and retrieval results — can differ
+after this change:
+
+- **`.md` files** were previously mis-detected as plain text and passed
+  through BeautifulSoup's `get_text()`, which could silently drop
+  Markdown-embedded HTML and text resembling tags (e.g. `<placeholder>`).
+  They now return the raw Markdown source, minus any YAML front-matter.
+- **`.html` files** previously used `get_text()` with no separator, which
+  concatenated text of adjacent elements (`<li>A</li><li>B</li>` → `AB`).
+  Extraction now uses `get_text(separator="\n")`, producing one line per
+  element.
+- **`.txt` files and unrecognized plain text** are unchanged: still passed
+  through BeautifulSoup `get_text()` as before.
+
+## Limitations
+
+- **Front-matter ambiguity**: a document that *opens* with a prose block
+  between two `---` lines, where the prose looks like a YAML key
+  (a single word followed by a colon), is indistinguishable from YAML
+  front-matter and *will* be stripped. For example:
+
+  ```markdown
+  ---
+  Note: important
+  ---
+  body text
+  ```
+
+  Here `Note: important` matches the `key: value` shape, so the block is
+  removed. This is inherent Markdown/YAML ambiguity: rejecting such blocks
+  would break legitimate single-key front-matter (`title: My Post`) used by
+  Jekyll/Hugo. Blocks whose lines do not look like YAML keys (multi-word
+  prose before the colon, bare URLs, plain text) are preserved.
+- **Markdown bytes are usually MIME-detected as plain text**: `libmagic`
+  reports most Markdown content as `text/plain`, so when passing raw bytes
+  *without* `doc_type`, the content is typically ingested as `TXT` and YAML
+  front-matter is **not** stripped. Pass `doc_type="md"` explicitly to get
+  Markdown treatment for bytes input.
+- **MIME detection fallback**: for bytes input, if `python-magic` (or the
+  native `libmagic` library it wraps) is unavailable or broken, MIME
+  detection is skipped and ingestion falls back to the plain-text (UTF-8
+  decode) heuristic, so plain-text bytes still ingest as `TXT`; binary
+  formats then raise `ValueError` instead of being detected.
 </file>
 
 <file path="docs/tutorials/non-openai-llms.md">
@@ -34135,197 +33421,6 @@ instruc_msg = f"""
 # user response_forget to avoid accumulating the chat history
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="langroid/agent/base.py">
 ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
 console = Console(quiet=settings.quiet)
@@ -34506,10 +33601,6 @@ def wrapper(obj: Any, chat_doc: Any) -> Any
 # Only agent parameter
 ⋮----
 # Only chat_doc parameter
-⋮----
-async def wrapper(obj: Any, chat_doc: Any) -> Any
-⋮----
-def wrapper(obj: Any, chat_doc: Any) -> Any
 ⋮----
 # No recognized parameters - backward compatibility
 # Assume single parameter is chat_doc (legacy behavior)
@@ -34791,8 +33882,6 @@ sender = Entity.USER
 # interactive user input is external untrusted input; SYSTEM
 # (operator) input is trusted (#1035)
 ⋮----
-# preserve trail of tool_ids for OpenAI Assistant fn-calls
-⋮----
 """
         Asynch version of `user_response`. See there for details.
         """
@@ -34874,7 +33963,6 @@ cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
 chat=False,  # i.e. it's a completion model not chat model
 ⋮----
 cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
-# Preserve trail of tool_ids for OpenAI Assistant fn-calls
 ⋮----
 """
         LLM response to a prompt.
@@ -34898,8 +33986,6 @@ response = self.llm.generate(prompt, output_len)
 # streaming was enabled, AND we did not find a cached response
 ⋮----
 cached = "[red](cached)[/red]" if response.cached else ""
-⋮----
-chat=False,  # i.e. it's a completion model not chat model
 ⋮----
 def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool
 ⋮----
@@ -35076,9 +34162,6 @@ tool_name = tc.function.name
 tool_msg = tc.function.arguments or {}
 ⋮----
 all_errors = False
-⋮----
-# Store tool class as an attribute on the exception
-ve.tool_class = tool_class  # type: ignore
 ⋮----
 # When no tool is valid and the message was produced
 # by the LLM, set the recovery flag
@@ -35494,378 +34577,6 @@ agent_type = type(agent).__name__
 user_response = Prompt.ask(
 ⋮----
 answer = agent.llm_response(request)
-</file>
-
-<file path="langroid/agent/chat_document.py">
-class ChatDocAttachment(BaseModel)
-⋮----
-# any additional data that should be attached to the document
-model_config = ConfigDict(extra="allow")
-⋮----
-class StatusCode(str, Enum)
-⋮----
-"""Codes meant to be returned by task.run(). Some are not used yet."""
-⋮----
-OK = "OK"
-ERROR = "ERROR"
-DONE = "DONE"
-STALLED = "STALLED"
-INF_LOOP = "INF_LOOP"
-KILL = "KILL"
-FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
-MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
-MAX_COST = "MAX_COST"
-MAX_TOKENS = "MAX_TOKENS"
-TIMEOUT = "TIMEOUT"
-NO_ANSWER = "NO_ANSWER"
-USER_QUIT = "USER_QUIT"
-⋮----
-class ChatDocMetaData(DocMetaData)
-⋮----
-parent_id: str = ""  # msg (ChatDocument) to which this is a response
-child_id: str = ""  # ChatDocument that has response to this message
-agent_id: str = ""  # ChatAgent that generated this message
-msg_idx: int = -1  # index of this message in the agent `message_history`
-sender: Entity  # sender of the message
-# True if this msg was relayed from another agent's LLM/handler output in a
-# multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
-# tools be dispatched for legitimate handoffs while still blocking raw
-# USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
-# GHSA-gjgq-w2m6-wr5q.
-tools_from_agent: bool = False
-# True if this msg's content/tools derive from external untrusted (USER)
-# input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
-# repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
-# Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
-# vetoes handle-only tool dispatch even across a USER relabel, closing the
-# content-laundering hole. Propagated (deepcopy carries it), never cleared.
-# See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
-tainted: bool = False
-# tool_id corresponding to single tool result in ChatDocument.content
-oai_tool_id: str | None = None
-tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
-block: None | Entity = None
-sender_name: str = ""
-recipient: str = ""
-usage: Optional[LLMTokenUsage] = None
-cached: bool = False
-displayed: bool = False
-has_citation: bool = False
-status: Optional[StatusCode] = None
-⋮----
-@model_validator(mode="after")
-    def _mark_tools_from_agent(self) -> "ChatDocMetaData"
-⋮----
-# Mark messages produced directly by an LLM: the tools in an LLM's
-# output are the LLM's own decision (the trusted trigger for handle-only
-# tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
-# to another agent even after relabeling the sender to USER. The mark is
-# only ever SET, never cleared, so it survives relabeling and deepcopies
-# (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
-# mark across the handoff). We deliberately do NOT mark generic AGENT
-# messages: a pass-through/echoing agent could surface untrusted USER
-# text (with embedded tool JSON) as AGENT content, and marking that
-# would re-open the user-origin bypass. Raw USER input is never marked,
-# so it stays filtered. See ChatAgent._filter_user_origin_tools.
-⋮----
-@property
-    def parent(self) -> Optional["ChatDocument"]
-⋮----
-@property
-    def child(self) -> Optional["ChatDocument"]
-⋮----
-class ChatDocLoggerFields(BaseModel)
-⋮----
-sender_entity: Entity = Entity.USER
-⋮----
-block: Entity | None = None
-tool_type: str = ""
-tool: str = ""
-content: str = ""
-⋮----
-@classmethod
-    def tsv_header(cls) -> str
-⋮----
-field_names = cls().model_dump().keys()
-⋮----
-class ChatDocument(Document)
-⋮----
-"""
-    Represents a message in a conversation among agents. All responders of an agent
-    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
-    and so does the Task.run() method.
-
-    Attributes:
-        oai_tool_calls (Optional[List[OpenAIToolCall]]):
-            Tool-calls from an OpenAI-compatible API
-        oai_tool_id2results (Optional[OrderedDict[str, str]]):
-            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
-        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
-            LLM should choose tool-use in its response
-            (auto, none, required, or a specific tool)
-        function_call (Optional[LLMFunctionCall]):
-            Function-call from an OpenAI-compatible API
-                (deprecated by OpenAI, in favor of tool-calls)
-        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
-            - `content` field (via JSON parsing),
-            - `oai_tool_calls`, or
-            - `function_call`
-        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
-        attachment (None | ChatDocAttachment): Any additional data attached.
-    """
-⋮----
-reasoning: str = ""  # reasoning produced by a reasoning LLM
-content_any: Any = None  # to hold arbitrary data returned by responders
-# Original LLM response text including inline thought signatures
-# (e.g. <thinking>...</thinking>). Only populated when reasoning was
-# extracted from inline tags in the message text. Used by to_LLMMessage()
-# to preserve thought signatures in message history, which is critical
-# for models like Gemini 3 Flash and Amazon Nova that rely on seeing
-# their own thought tags in context to maintain reasoning ability.
-content_with_reasoning: Optional[str] = None
-files: List[FileAttachment] = []  # list of file attachments
-oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-oai_tool_id2result: Optional[OrderedDict[str, str]] = None
-oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
-function_call: Optional[LLMFunctionCall] = None
-# tools that are explicitly added by agent response/handler,
-# or tools recognized in the ChatDocument as handle-able tools
-tool_messages: List[ToolMessage] = []
-# all known tools in the msg that are in an agent's llm_tools_known list,
-# even if non-used/handled
-# (the list is populated by Agent.has_tool_message_attempt())
-all_tool_messages: Optional[List[ToolMessage]] = None
-# ID of the agent that populated all_tool_messages (for cache validity)
-all_tool_messages_agent_id: Optional[str] = None
-⋮----
-metadata: ChatDocMetaData
-attachment: None | ChatDocAttachment = None
-⋮----
-def __init__(self, **data: Any)
-⋮----
-@staticmethod
-    def deepcopy(doc: ChatDocument) -> ChatDocument
-⋮----
-new_doc = copy.deepcopy(doc)
-⋮----
-@staticmethod
-    def from_id(id: str) -> Optional["ChatDocument"]
-⋮----
-@staticmethod
-    def delete_id(id: str) -> None
-⋮----
-"""Remove ChatDocument with given id from ObjectRegistry,
-        and all its descendants.
-        """
-chat_doc = ChatDocument.from_id(id)
-# first delete all descendants
-⋮----
-next_chat_doc = chat_doc.child
-⋮----
-chat_doc = next_chat_doc
-⋮----
-def __str__(self) -> str
-⋮----
-fields = self.log_fields()
-tool_str = ""
-⋮----
-tool_str = f"{fields.tool_type}[{fields.tool}]: "
-recipient_str = ""
-⋮----
-recipient_str = f"=>{fields.recipient}: "
-⋮----
-def get_tool_names(self) -> List[str]
-⋮----
-"""
-        Get names of attempted tool usages (JSON or non-JSON) in the content
-            of the message.
-        Returns:
-            List[str]: list of *attempted* tool names
-            (We say "attempted" since we ONLY look at the `request` component of the
-            tool-call representation, and we're not fully parsing it into the
-            corresponding tool message class)
-
-        """
-tool_candidates = XMLToolMessage.find_candidates(self.content)
-⋮----
-tool_candidates = extract_top_level_json(self.content)
-⋮----
-tools = [json.loads(tc).get("request") for tc in tool_candidates]
-⋮----
-tool_dicts = [
-tools = [td.get("request") for td in tool_dicts if td is not None]
-⋮----
-def log_fields(self) -> ChatDocLoggerFields
-⋮----
-"""
-        Fields for logging in csv/tsv logger
-        Returns:
-            List[str]: list of fields
-        """
-tool_type = ""  # FUNC or TOOL
-tool = ""  # tool name or function name
-⋮----
-# Skip tool detection for system messages - they contain tool instructions,
-# not actual tool calls
-⋮----
-oai_tools = (
-⋮----
-tool_type = "FUNC"
-tool = self.function_call.name
-⋮----
-tool_type = "OAI_TOOL"
-tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
-⋮----
-json_tools = self.get_tool_names()
-⋮----
-json_tools = []
-⋮----
-tool_type = "TOOL"
-tool = json_tools[0]
-recipient = self.metadata.recipient
-content = self.content
-sender_entity = self.metadata.sender
-sender_name = self.metadata.sender_name
-⋮----
-def tsv_str(self) -> str
-⋮----
-field_values = fields.model_dump().values()
-⋮----
-def pop_tool_ids(self) -> None
-⋮----
-"""
-        Pop the last tool_id from the stack of tool_ids.
-        """
-⋮----
-@staticmethod
-    def _clean_fn_call(fc: LLMFunctionCall | None) -> None
-⋮----
-# Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
-# with oddities:
-# (a) the `name` is set, as well as `arguments.request` is set,
-#  and in langroid we use the `request` value as the `name`.
-#  In this case we override the `name` with the `request` value.
-# (b) the `name` looks like "functions blah" or just "functions"
-#   In this case we strip the "functions" part.
-⋮----
-request = fc.arguments.get("request")
-⋮----
-"""
-        Convert LLMResponse to ChatDocument.
-        Args:
-            response (LLMResponse): LLMResponse to convert.
-            displayed (bool): Whether this response was displayed to the user.
-            recognize_recipient_in_content (bool): Whether to parse message text
-                for recipient routing (``TO[<recipient>]:`` and JSON
-                ``{"recipient": ...}``). Default True.
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMResponse.
-        """
-⋮----
-message = message.strip()
-⋮----
-message = ""
-⋮----
-# there must be at least one if it's not None
-⋮----
-@staticmethod
-    def from_str(msg: str) -> "ChatDocument"
-⋮----
-# first check whether msg is structured as TO <recipient>: <message>
-⋮----
-# check if any top level json specifies a 'recipient'
-recipient = top_level_json_field(msg, "recipient")
-message = msg  # retain the whole msg in this case
-⋮----
-tainted=True,  # external user input is untrusted (#1035)
-⋮----
-"""
-        Convert LLMMessage to ChatDocument.
-
-        Args:
-            message (LLMMessage): LLMMessage to convert.
-            sender_name (str): Name of the sender. Defaults to "".
-            recipient (str): Name of the recipient. Defaults to "".
-
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMMessage.
-        """
-# Map LLMMessage Role to ChatDocument Entity
-role_to_entity = {
-⋮----
-sender_entity = role_to_entity.get(message.role, Entity.USER)
-⋮----
-"""
-        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
-        Usually there will be just a single LLMMessage, but when the ChatDocument
-        contains results from multiple OpenAI tool-calls, we would have a sequence
-        LLMMessages, one per tool-call result.
-
-        Args:
-            message (str|ChatDocument): Message to convert.
-            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
-                response, from the ChatAgent's latest message.
-        Returns:
-            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
-        """
-⋮----
-sender_role = Role.USER
-⋮----
-message = ChatDocument.from_str(message)
-# Prefer content_with_reasoning when available — this preserves
-# inline thought signatures (e.g. <thinking>...</thinking>) in
-# message history, which certain models (Gemini 3 Flash, Amazon
-# Nova) need to maintain reasoning across turns.
-# content_with_reasoning is only set when inline tags were
-# actually extracted, so this won't interfere with models that
-# provide reasoning via a separate API field.
-content = (
-fun_call = message.function_call
-oai_tool_calls = message.oai_tool_calls
-⋮----
-# This may happen when a (parent agent's) LLM generates a
-# a Function-call, and it ends up being sent to the current task's
-# LLM (possibly because the function-call is mis-named or has other
-# issues and couldn't be handled by handler methods).
-# But a function-call can only be generated by an entity with
-# Role.ASSISTANT, so we instead put the content of the function-call
-# in the content of the message.
-⋮----
-fun_call = None
-⋮----
-# same reasoning as for function-call above
-⋮----
-oai_tool_calls = None
-# some LLM APIs (e.g. gemini) don't like empty msg
-content = content or " "
-sender_name = message.metadata.sender_name
-tool_ids = message.metadata.tool_ids
-tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
-chat_document_id = message.id()
-⋮----
-sender_role = Role.SYSTEM
-⋮----
-# This is a response to a function call, so set the role to FUNCTION.
-sender_role = Role.FUNCTION
-sender_name = message.metadata.parent.function_call.name
-⋮----
-pending_tool_ids = [tc.id for tc in oai_tools]
-# The ChatAgent has pending OpenAI tool-call(s),
-# so the current ChatDocument contains
-# results for some/all/none of them.
-⋮----
-# Case 1:
-# There was exactly 1 pending tool-call, and in this case
-# the result would be a plain string in `content`
-⋮----
-# Case 2:
-# ChatDocument.content has result of a single tool-call
-⋮----
-# There were > 1 tool-calls awaiting response,
-⋮----
-sender_role = Role.ASSISTANT
-⋮----
-tool_id=tool_id,  # for OpenAI Assistant
 </file>
 
 <file path="langroid/agent/task.py">
@@ -36690,12 +35401,10 @@ if is_pass is None:  # no routing, i.e. neither PASS nor SEND
             valid, None otherwise
         """
 ⋮----
-# e.callbacks.set_parent_agent(self.agent)
 result = await e.run_async(
 ⋮----
 response_fn = self._entity_responder_async_map[cast(Entity, e)]
 result = await response_fn(self.pending_message)
-# update result.tool_messages if any
 ⋮----
 def result(self, status: StatusCode | None = None) -> ChatDocument | None
 ⋮----
@@ -37120,6 +35829,1526 @@ responder = current_responder
 matched = False
 ⋮----
 matched = True
+</file>
+
+<file path="langroid/agent/chat_document.py">
+class ChatDocAttachment(BaseModel)
+⋮----
+# any additional data that should be attached to the document
+model_config = ConfigDict(extra="allow")
+⋮----
+class StatusCode(str, Enum)
+⋮----
+"""Codes meant to be returned by task.run(). Some are not used yet."""
+⋮----
+OK = "OK"
+ERROR = "ERROR"
+DONE = "DONE"
+STALLED = "STALLED"
+INF_LOOP = "INF_LOOP"
+KILL = "KILL"
+FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
+MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
+MAX_COST = "MAX_COST"
+MAX_TOKENS = "MAX_TOKENS"
+TIMEOUT = "TIMEOUT"
+NO_ANSWER = "NO_ANSWER"
+USER_QUIT = "USER_QUIT"
+⋮----
+class ChatDocMetaData(DocMetaData)
+⋮----
+parent_id: str = ""  # msg (ChatDocument) to which this is a response
+child_id: str = ""  # ChatDocument that has response to this message
+agent_id: str = ""  # ChatAgent that generated this message
+msg_idx: int = -1  # index of this message in the agent `message_history`
+sender: Entity  # sender of the message
+# True if this msg was relayed from another agent's LLM/handler output in a
+# multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
+# tools be dispatched for legitimate handoffs while still blocking raw
+# USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
+# GHSA-gjgq-w2m6-wr5q.
+tools_from_agent: bool = False
+# True if this msg's content/tools derive from external untrusted (USER)
+# input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
+# repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
+# Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
+# vetoes handle-only tool dispatch even across a USER relabel, closing the
+# content-laundering hole. Propagated (deepcopy carries it), never cleared.
+# See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
+tainted: bool = False
+# tool_id corresponding to single tool result in ChatDocument.content
+oai_tool_id: str | None = None
+tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
+block: None | Entity = None
+sender_name: str = ""
+recipient: str = ""
+usage: Optional[LLMTokenUsage] = None
+cached: bool = False
+displayed: bool = False
+has_citation: bool = False
+status: Optional[StatusCode] = None
+⋮----
+@model_validator(mode="after")
+    def _mark_tools_from_agent(self) -> "ChatDocMetaData"
+⋮----
+# Mark messages produced directly by an LLM: the tools in an LLM's
+# output are the LLM's own decision (the trusted trigger for handle-only
+# tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
+# to another agent even after relabeling the sender to USER. The mark is
+# only ever SET, never cleared, so it survives relabeling and deepcopies
+# (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
+# mark across the handoff). We deliberately do NOT mark generic AGENT
+# messages: a pass-through/echoing agent could surface untrusted USER
+# text (with embedded tool JSON) as AGENT content, and marking that
+# would re-open the user-origin bypass. Raw USER input is never marked,
+# so it stays filtered. See ChatAgent._filter_user_origin_tools.
+⋮----
+@property
+    def parent(self) -> Optional["ChatDocument"]
+⋮----
+@property
+    def child(self) -> Optional["ChatDocument"]
+⋮----
+class ChatDocLoggerFields(BaseModel)
+⋮----
+sender_entity: Entity = Entity.USER
+⋮----
+block: Entity | None = None
+tool_type: str = ""
+tool: str = ""
+content: str = ""
+⋮----
+@classmethod
+    def tsv_header(cls) -> str
+⋮----
+field_names = cls().model_dump().keys()
+⋮----
+class ChatDocument(Document)
+⋮----
+"""
+    Represents a message in a conversation among agents. All responders of an agent
+    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
+    and so does the Task.run() method.
+
+    Attributes:
+        oai_tool_calls (Optional[List[OpenAIToolCall]]):
+            Tool-calls from an OpenAI-compatible API
+        oai_tool_id2results (Optional[OrderedDict[str, str]]):
+            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
+        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
+            LLM should choose tool-use in its response
+            (auto, none, required, or a specific tool)
+        function_call (Optional[LLMFunctionCall]):
+            Function-call from an OpenAI-compatible API
+                (deprecated by OpenAI, in favor of tool-calls)
+        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
+            - `content` field (via JSON parsing),
+            - `oai_tool_calls`, or
+            - `function_call`
+        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
+        attachment (None | ChatDocAttachment): Any additional data attached.
+    """
+⋮----
+reasoning: str = ""  # reasoning produced by a reasoning LLM
+content_any: Any = None  # to hold arbitrary data returned by responders
+# Original LLM response text including inline thought signatures
+# (e.g. <thinking>...</thinking>). Only populated when reasoning was
+# extracted from inline tags in the message text. Used by to_LLMMessage()
+# to preserve thought signatures in message history, which is critical
+# for models like Gemini 3 Flash and Amazon Nova that rely on seeing
+# their own thought tags in context to maintain reasoning ability.
+content_with_reasoning: Optional[str] = None
+files: List[FileAttachment] = []  # list of file attachments
+oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+oai_tool_id2result: Optional[OrderedDict[str, str]] = None
+oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
+function_call: Optional[LLMFunctionCall] = None
+# tools that are explicitly added by agent response/handler,
+# or tools recognized in the ChatDocument as handle-able tools
+tool_messages: List[ToolMessage] = []
+# all known tools in the msg that are in an agent's llm_tools_known list,
+# even if non-used/handled
+# (the list is populated by Agent.has_tool_message_attempt())
+all_tool_messages: Optional[List[ToolMessage]] = None
+# ID of the agent that populated all_tool_messages (for cache validity)
+all_tool_messages_agent_id: Optional[str] = None
+⋮----
+metadata: ChatDocMetaData
+attachment: None | ChatDocAttachment = None
+⋮----
+def __init__(self, **data: Any)
+⋮----
+@staticmethod
+    def deepcopy(doc: ChatDocument) -> ChatDocument
+⋮----
+new_doc = copy.deepcopy(doc)
+⋮----
+@staticmethod
+    def from_id(id: str) -> Optional["ChatDocument"]
+⋮----
+@staticmethod
+    def delete_id(id: str) -> None
+⋮----
+"""Remove ChatDocument with given id from ObjectRegistry,
+        and all its descendants.
+        """
+chat_doc = ChatDocument.from_id(id)
+# first delete all descendants
+⋮----
+next_chat_doc = chat_doc.child
+⋮----
+chat_doc = next_chat_doc
+⋮----
+def __str__(self) -> str
+⋮----
+fields = self.log_fields()
+tool_str = ""
+⋮----
+tool_str = f"{fields.tool_type}[{fields.tool}]: "
+recipient_str = ""
+⋮----
+recipient_str = f"=>{fields.recipient}: "
+⋮----
+def get_tool_names(self) -> List[str]
+⋮----
+"""
+        Get names of attempted tool usages (JSON or non-JSON) in the content
+            of the message.
+        Returns:
+            List[str]: list of *attempted* tool names
+            (We say "attempted" since we ONLY look at the `request` component of the
+            tool-call representation, and we're not fully parsing it into the
+            corresponding tool message class)
+
+        """
+tool_candidates = XMLToolMessage.find_candidates(self.content)
+⋮----
+tool_candidates = extract_top_level_json(self.content)
+⋮----
+tools = [json.loads(tc).get("request") for tc in tool_candidates]
+⋮----
+tool_dicts = [
+tools = [td.get("request") for td in tool_dicts if td is not None]
+⋮----
+def log_fields(self) -> ChatDocLoggerFields
+⋮----
+"""
+        Fields for logging in csv/tsv logger
+        Returns:
+            List[str]: list of fields
+        """
+tool_type = ""  # FUNC or TOOL
+tool = ""  # tool name or function name
+⋮----
+# Skip tool detection for system messages - they contain tool instructions,
+# not actual tool calls
+⋮----
+oai_tools = (
+⋮----
+tool_type = "FUNC"
+tool = self.function_call.name
+⋮----
+tool_type = "OAI_TOOL"
+tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
+⋮----
+json_tools = self.get_tool_names()
+⋮----
+json_tools = []
+⋮----
+tool_type = "TOOL"
+tool = json_tools[0]
+recipient = self.metadata.recipient
+content = self.content
+sender_entity = self.metadata.sender
+sender_name = self.metadata.sender_name
+⋮----
+def tsv_str(self) -> str
+⋮----
+field_values = fields.model_dump().values()
+⋮----
+def pop_tool_ids(self) -> None
+⋮----
+"""
+        Pop the last tool_id from the stack of tool_ids.
+        """
+⋮----
+@staticmethod
+    def _clean_fn_call(fc: LLMFunctionCall | None) -> None
+⋮----
+# Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
+# with oddities:
+# (a) the `name` is set, as well as `arguments.request` is set,
+#  and in langroid we use the `request` value as the `name`.
+#  In this case we override the `name` with the `request` value.
+# (b) the `name` looks like "functions blah" or just "functions"
+#   In this case we strip the "functions" part.
+⋮----
+request = fc.arguments.get("request")
+⋮----
+"""
+        Convert LLMResponse to ChatDocument.
+        Args:
+            response (LLMResponse): LLMResponse to convert.
+            displayed (bool): Whether this response was displayed to the user.
+            recognize_recipient_in_content (bool): Whether to parse message text
+                for recipient routing (``TO[<recipient>]:`` and JSON
+                ``{"recipient": ...}``). Default True.
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMResponse.
+        """
+⋮----
+message = message.strip()
+⋮----
+message = ""
+⋮----
+# there must be at least one if it's not None
+⋮----
+@staticmethod
+    def from_str(msg: str) -> "ChatDocument"
+⋮----
+# first check whether msg is structured as TO <recipient>: <message>
+⋮----
+# check if any top level json specifies a 'recipient'
+recipient = top_level_json_field(msg, "recipient")
+message = msg  # retain the whole msg in this case
+⋮----
+tainted=True,  # external user input is untrusted (#1035)
+⋮----
+"""
+        Convert LLMMessage to ChatDocument.
+
+        Args:
+            message (LLMMessage): LLMMessage to convert.
+            sender_name (str): Name of the sender. Defaults to "".
+            recipient (str): Name of the recipient. Defaults to "".
+
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMMessage.
+        """
+# Map LLMMessage Role to ChatDocument Entity
+role_to_entity = {
+⋮----
+sender_entity = role_to_entity.get(message.role, Entity.USER)
+⋮----
+"""
+        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
+        Usually there will be just a single LLMMessage, but when the ChatDocument
+        contains results from multiple OpenAI tool-calls, we would have a sequence
+        LLMMessages, one per tool-call result.
+
+        Args:
+            message (str|ChatDocument): Message to convert.
+            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
+                response, from the ChatAgent's latest message.
+        Returns:
+            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
+        """
+⋮----
+sender_role = Role.USER
+⋮----
+message = ChatDocument.from_str(message)
+# Prefer content_with_reasoning when available — this preserves
+# inline thought signatures (e.g. <thinking>...</thinking>) in
+# message history, which certain models (Gemini 3 Flash, Amazon
+# Nova) need to maintain reasoning across turns.
+# content_with_reasoning is only set when inline tags were
+# actually extracted, so this won't interfere with models that
+# provide reasoning via a separate API field.
+content = (
+fun_call = message.function_call
+oai_tool_calls = message.oai_tool_calls
+⋮----
+# This may happen when a (parent agent's) LLM generates a
+# a Function-call, and it ends up being sent to the current task's
+# LLM (possibly because the function-call is mis-named or has other
+# issues and couldn't be handled by handler methods).
+# But a function-call can only be generated by an entity with
+# Role.ASSISTANT, so we instead put the content of the function-call
+# in the content of the message.
+⋮----
+fun_call = None
+⋮----
+# same reasoning as for function-call above
+⋮----
+oai_tool_calls = None
+# some LLM APIs (e.g. gemini) don't like empty msg
+content = content or " "
+sender_name = message.metadata.sender_name
+tool_ids = message.metadata.tool_ids
+tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
+chat_document_id = message.id()
+⋮----
+sender_role = Role.SYSTEM
+⋮----
+# This is a response to a function call, so set the role to FUNCTION.
+sender_role = Role.FUNCTION
+sender_name = message.metadata.parent.function_call.name
+⋮----
+pending_tool_ids = [tc.id for tc in oai_tools]
+# The ChatAgent has pending OpenAI tool-call(s),
+# so the current ChatDocument contains
+# results for some/all/none of them.
+⋮----
+# Case 1:
+# There was exactly 1 pending tool-call, and in this case
+# the result would be a plain string in `content`
+⋮----
+# Case 2:
+# ChatDocument.content has result of a single tool-call
+⋮----
+# There were > 1 tool-calls awaiting response,
+⋮----
+sender_role = Role.ASSISTANT
+⋮----
+tool_id=tool_id,  # for OpenAI Assistant
+</file>
+
+<file path="langroid/parsing/document_parser.py">
+import docling  # noqa
+⋮----
+import pymupdf4llm  # noqa
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+class DocumentType(str, Enum)
+⋮----
+PDF = "pdf"
+DOCX = "docx"
+DOC = "doc"
+TXT = "txt"
+XLSX = "xlsx"
+XLS = "xls"
+PPTX = "pptx"
+MD = "md"
+HTML = "html"
+⋮----
+def find_last_full_char(possible_unicode: bytes) -> int
+⋮----
+"""
+    Find the index of the last full character in a byte string.
+    Args:
+        possible_unicode (bytes): The bytes to check.
+    Returns:
+        int: The index of the last full unicode character.
+    """
+⋮----
+_BINARY_SIGNATURES = (
+⋮----
+def _looks_like_binary(content: bytes) -> bool
+⋮----
+"""Return true for byte samples that are unlikely to be plain text."""
+⋮----
+allowed_controls = {9, 10, 12, 13}
+control_count = sum(
+⋮----
+def _decodes_as_utf8_text(content: bytes) -> bool
+⋮----
+"""Decode a text sample, tolerating only an incomplete trailing character."""
+⋮----
+def _decode_utf8_text(content: bytes) -> str
+⋮----
+"""Decode UTF-8 bytes, trimming only an incomplete trailing character."""
+⋮----
+def is_plain_text(path_or_bytes: str | bytes) -> bool
+⋮----
+"""
+    Check if a file is plain text by attempting to decode it as UTF-8.
+    Args:
+        path_or_bytes (str|bytes): The file path or bytes object.
+    Returns:
+        bool: True if the file is plain text, False otherwise.
+    """
+⋮----
+response = requests.get(path_or_bytes)
+⋮----
+content = response.content[:1024]
+⋮----
+content = f.read(1024)
+⋮----
+content = path_or_bytes[:1024]
+⋮----
+# Use magic to detect the MIME type
+⋮----
+mime_type = magic.from_buffer(content, mime=True)
+⋮----
+# Check if the MIME type is not a text type
+⋮----
+# python-magic not installed, or the native libmagic library is
+# missing/broken: skip MIME screening and rely on the UTF-8 decode
+# check below, so plain-text detection keeps working.
+⋮----
+def _extension_source(source: str) -> str
+⋮----
+"""Return the path component used for extension-based type detection."""
+⋮----
+# Matches a leading --- ... --- block (candidate front-matter). The
+# delimiter lines allow only trailing spaces/tabs ([ \t]*, NOT \s*, which
+# would match newlines and cause quadratic backtracking on hostile inputs
+# such as "---" followed by megabytes of blank lines).
+_FRONTMATTER_BLOCK_RE = re.compile(r"^---[ \t]*\n(.*?)\n---[ \t]*(?:\n|$)", re.DOTALL)
+# A line that looks like a YAML key: value pair (e.g. "title: Foo").
+# Requirements to avoid false positives:
+#   - Key is a bare identifier: word chars and hyphens only (no spaces, slashes)
+#   - Colon is followed by whitespace or end-of-line (excludes "https://…")
+# [ \t]* (not \s*) keeps the scan single-line and linear-time.
+_YAML_KEY_RE = re.compile(r"^[ \t]*[\w][\w-]*[ \t]*:(?:\s|$)", re.MULTILINE)
+⋮----
+def _strip_yaml_frontmatter(text: str) -> str
+⋮----
+"""Strip YAML front-matter from a Markdown string, if present.
+
+    Only strips the leading ``--- ... ---`` block when it genuinely contains
+    at least one ``key: value`` line.  Thematic breaks, content sections, or
+    other non-YAML dash-delimited blocks are left untouched.
+    """
+m = _FRONTMATTER_BLOCK_RE.match(text)
+⋮----
+# Strip only leading newlines after the front-matter block; do not
+# use full strip() which would remove semantically meaningful leading
+# spaces (e.g. indented code blocks at the start of the document).
+⋮----
+class DocumentParser(Parser)
+⋮----
+"""
+    Abstract base class for extracting text from special types of docs
+    such as PDFs or Docx.
+
+    Attributes:
+        source (str): The source, either a URL or a file path.
+        doc_bytes (BytesIO): BytesIO object containing the doc data.
+    """
+⋮----
+"""
+        Create a DocumentParser instance based on source type
+            and config.<source_type>.library specified.
+
+        Args:
+            source (str|bytes): The source, could be a URL, file path,
+                or bytes object.
+            config (ParserConfig): The parser configuration.
+            doc_type (str|None): The type of document, if known
+
+        Returns:
+            DocumentParser: An instance of a DocumentParser subclass.
+        """
+inferred_doc_type = DocumentParser._document_type(source, doc_type)
+⋮----
+source_name = source if isinstance(source, str) else "bytes"
+⋮----
+def __init__(self, source: str | bytes, config: ParsingConfig)
+⋮----
+"""
+        Args:
+            source (str|bytes): The source, which could be
+            a path, a URL or a bytes object.
+        """
+⋮----
+"""
+        Determine the type of document based on the source.
+
+        Args:
+            source (str|bytes): The source, which could be a URL,
+                a file path, or a bytes object.
+            doc_type (str|DocumentType|None): The type of document, if known.
+
+        Returns:
+            str: The document type.
+        """
+⋮----
+# Detect file type from path/URL extension first so that
+# format-specific types (md, html) are not mis-classified as TXT
+# by the is_plain_text heuristic below.
+lower = _extension_source(source)
+⋮----
+# For strings with no recognised extension, fall back to the
+# plain-text heuristic (covers .txt and bare URLs).
+⋮----
+# Bytes: use MIME detection first so that HTML/Markdown bytes
+# are not swallowed by is_plain_text() as TXT before we can
+# assign the correct DocumentType.
+mime_type: str | None
+⋮----
+mime_type = magic.from_buffer(source, mime=True)
+⋮----
+# python-magic not installed, or the native libmagic library
+# is missing/broken: fall through to the is_plain_text()
+# fallback below, so plain-text bytes ingestion never
+# regresses in environments without functional magic.
+⋮----
+mime_type = None
+⋮----
+# Generic plain text (text/plain, etc.)
+⋮----
+def _load_doc_as_bytesio(self) -> BytesIO
+⋮----
+"""
+        Load the docs into a BytesIO object.
+
+        Returns:
+            BytesIO: A BytesIO object containing the doc data.
+        """
+⋮----
+response = requests.get(self.source)
+⋮----
+"""
+        Get document chunks from a file path or bytes object.
+        Args:
+            source (str|bytes): The source, which could be a URL, path or bytes object.
+            parser (Parser): The parser instance (for splitting the document).
+            doc_type (str|DocumentType|None): The type of document, if known.
+            lines (int|None): The number of lines to read from a plain text file.
+        Returns:
+            List[Document]: A list of `Document` objects,
+                each containing a chunk of text, determined by the
+                chunking and splitting settings in the parser config.
+        """
+dtype: DocumentType = DocumentParser._document_type(source, doc_type)
+⋮----
+doc_parser = DocumentParser.create(
+chunks = doc_parser.get_doc_chunks()
+⋮----
+doc_parser = ImagePdfParser(source, parser.config)
+⋮----
+# Plain-text formats (TXT, MD, HTML) and unknown types:
+# read content, extract text, and chunk.
+⋮----
+content = _decode_utf8_text(source)
+⋮----
+file_lines = content.splitlines()[:lines]
+content = "\n".join(line.strip() for line in file_lines)
+⋮----
+# URL (e.g. https://example.com/readme.md): extension
+# detection above may classify it as MD/HTML/TXT, but it
+# must be fetched over HTTP(S) — open() below only works
+# for local paths.
+response = requests.get(source)
+⋮----
+content = response.content.decode("utf-8", errors="replace")
+⋮----
+file_lines = list(itertools.islice(f, lines))
+⋮----
+content = f.read()
+⋮----
+# Strip HTML tags; preserve readable text.
+soup = BeautifulSoup(content, "html.parser")
+text = soup.get_text(separator="\n")
+⋮----
+# Normalise CRLF → LF so the front-matter regex matches
+# consistently on Windows-saved files.
+content = content.replace("\r\n", "\n")
+# Return Markdown as-is; strip YAML front-matter only when
+# the leading --- block genuinely contains YAML key: value
+# pairs.  A bare thematic break (---) or a non-metadata
+# divider block must not be removed.
+text = _strip_yaml_frontmatter(content)
+⋮----
+# TXT and any unrecognised plain-text format.
+⋮----
+text = soup.get_text()
+⋮----
+doc = Document(
+⋮----
+def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]
+⋮----
+"""Yield each page in the PDF."""
+⋮----
+def get_document_from_page(self, page: Any) -> Document
+⋮----
+"""
+        Get Langroid Document object (with possible metadata)
+        corresponding to a given page.
+        """
+⋮----
+def fix_text(self, text: str) -> str
+⋮----
+"""
+        Fix text extracted from a PDF.
+
+        Args:
+            text (str): The extracted text.
+
+        Returns:
+            str: The fixed text.
+        """
+# Some pdf parsers introduce extra space before hyphen,
+# so use regular expression to replace 'space-hyphen' with just 'hyphen'
+⋮----
+def get_doc(self) -> Document
+⋮----
+"""
+        Get entire text from source as a single document.
+
+        Returns:
+            a `Document` object containing the content of the pdf file,
+                and metadata containing source name (URL or path)
+        """
+⋮----
+text = "".join(
+⋮----
+def get_doc_chunks(self) -> List[Document]
+⋮----
+"""
+        Get document chunks from a pdf source,
+        with page references in the document metadata.
+
+        Returns:
+            List[Document]: a list of `Document` objects,
+                each containing a chunk of text
+        """
+⋮----
+split = []  # tokens in curr split
+pages: List[str] = []
+docs: List[Document] = []
+# metadata.id to be shared by ALL chunks of this document
+common_id = ObjectRegistry.new_id()
+n_chunks = 0  # how many chunk so far
+⋮----
+# not used but could be useful, esp to blend the
+# metadata from the pages into the chunks
+page_doc = self.get_document_from_page(page)
+page_text = page_doc.content
+⋮----
+# split could be so long it needs to be split
+# into multiple chunks. Or it could be so short
+# that it needs to be combined with the next chunk.
+⋮----
+# pretty formatting of pages (e.g. 1-3, 4, 5-7)
+p_0 = int(pages[0]) - self.config.page_number_offset
+p_n = int(pages[-1]) - self.config.page_number_offset
+page_str = f"pages {p_0}-{p_n}" if p_0 != p_n else f"page {p_0}"
+text = self.tokenizer.decode(split[: self.config.chunk_size])
+⋮----
+split = split[self.config.chunk_size - self.config.overlap :]
+pages = [str(i + 1)]
+# there may be a last split remaining:
+# if it's shorter than the overlap, we shouldn't make a chunk for it
+# since it's already included in the prior chunk;
+# the only exception is if there have been no chunks so far.
+⋮----
+class FitzPDFParser(DocumentParser)
+⋮----
+"""
+    Parser for processing PDFs using the `fitz` library.
+    """
+⋮----
+def iterate_pages(self) -> Generator[Tuple[int, "fitz.Page"], None, None]
+⋮----
+"""
+        Yield each page in the PDF using `fitz`.
+
+        Returns:
+            Generator[fitz.Page]: Generator yielding each page.
+        """
+⋮----
+doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
+⋮----
+def get_document_from_page(self, page: "fitz.Page") -> Document
+⋮----
+"""
+        Get Document object from a given `fitz` page.
+
+        Args:
+            page (fitz.Page): The `fitz` page object.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+⋮----
+class PyMuPDF4LLMParser(DocumentParser)
+⋮----
+"""
+    Parser for processing PDFs using the `pymupdf4llm` library.
+    """
+⋮----
+doc: fitz.Document = fitz.open(stream=self.doc_bytes, filetype="pdf")
+pages: List[Dict[str, Any]] = pymupdf4llm.to_markdown(doc, page_chunks=True)
+⋮----
+def get_document_from_page(self, page: Dict[str, Any]) -> Document
+⋮----
+"""
+        Get Document object corresponding to a given "page-chunk"
+        dictionary, see:
+         https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/api.html
+
+
+        Args:
+            page (Dict[str,Any]): The "page-chunk" dictionary.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+⋮----
+# TODO could possible use other metadata from page, see above link.
+⋮----
+class PyPDFium2Parser(DocumentParser)
+⋮----
+"""
+    Parser for processing PDFs using the `pypdfium2` library.
+
+    Unlike `pymupdf4llm`/`fitz` (AGPL-licensed), `pypdfium2` is permissively
+    licensed (Apache-2.0/BSD-3-Clause) and is installed by default with
+    Langroid, which is why it is the default PDF parser. It extracts plain
+    text page-by-page; for richer Markdown-structured output (headers, tables,
+    multi-column reflow) install an extra and set `library="pymupdf4llm"`.
+    """
+⋮----
+def iterate_pages(self) -> Generator[Tuple[int, str], None, None]
+⋮----
+"""
+        Yield the extracted text of each page using `pypdfium2`.
+
+        Returns:
+            Generator[Tuple[int, str]]: Generator yielding (page index, text).
+        """
+⋮----
+doc = pdfium.PdfDocument(self.doc_bytes.getvalue())
+⋮----
+page = doc[i]
+textpage = page.get_textpage()
+text = textpage.get_text_bounded()
+⋮----
+def get_document_from_page(self, page: str) -> Document
+⋮----
+"""
+        Get Document object from the extracted text of a `pypdfium2` page.
+
+        Args:
+            page (str): The text extracted from the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+⋮----
+class DoclingParser(DocumentParser)
+⋮----
+"""
+    Parser for processing PDFs using the `docling` library.
+    """
+⋮----
+"""
+        Yield each page in the PDF using `docling`.
+        Code largely from this example:
+        https://github.com/DS4SD/docling/blob/4d41db3f7abb86c8c65386bf94e7eb0bf22bb82b/docs/examples/export_figures.py
+
+        Returns:
+            Generator[docling.Page]: Generator yielding each page.
+        """
+⋮----
+from docling.datamodel.base_models import InputFormat  # type: ignore
+⋮----
+from docling.document_converter import (  # type: ignore
+⋮----
+from docling_core.types.doc import ImageRefMode  # type: ignore
+⋮----
+IMAGE_RESOLUTION_SCALE = 2.0
+pipeline_options = PdfPipelineOptions()
+⋮----
+converter = DocumentConverter(
+doc_path = self.source
+⋮----
+# write to tmp file, then use that path
+⋮----
+doc_path = temp_file.name
+⋮----
+output_dir = Path(str(Path(doc_path).with_suffix("")) + "-pages")
+⋮----
+result: ConversionResult = converter.convert(doc_path)
+⋮----
+def n_page_elements(page) -> int:  # type: ignore
+⋮----
+page_element_count = [n_page_elements(i) for i in result.pages]
+element_page_cutoff = list(accumulate([1] + page_element_count))
+⋮----
+page_start = element_page_cutoff[i]
+page_end = element_page_cutoff[i + 1]
+md_file = output_dir / f"page_{i}.md"
+# we could have just directly exported to a markdown string,
+# but we need to save to a file to force generation of image-files.
+⋮----
+def get_document_from_page(self, md_file: str) -> Document
+⋮----
+"""
+        Get Document object from a given 1-page markdown file,
+        possibly containing image refs.
+
+        Args:
+            md_file (str): The markdown file path for the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+⋮----
+text = f.read()
+⋮----
+class PyPDFParser(DocumentParser)
+⋮----
+"""
+    Parser for processing PDFs using the `pypdf` library.
+    """
+⋮----
+def iterate_pages(self) -> Generator[Tuple[int, pypdf.PageObject], None, None]
+⋮----
+"""
+        Yield each page in the PDF using `pypdf`.
+
+        Returns:
+            Generator[pypdf.pdf.PageObject]: Generator yielding each page.
+        """
+⋮----
+reader = pypdf.PdfReader(self.doc_bytes)
+⋮----
+def get_document_from_page(self, page: pypdf.PageObject) -> Document
+⋮----
+"""
+        Get Document object from a given `pypdf` page.
+
+        Args:
+            page (pypdf.pdf.PageObject): The `pypdf` page object.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+⋮----
+class ImagePdfParser(DocumentParser)
+⋮----
+"""
+    Parser for processing PDFs that are images, i.e. not "true" PDFs.
+    """
+⋮----
+) -> Generator[Tuple[int, "Image"], None, None]:  # type: ignore
+⋮----
+images = convert_from_bytes(self.doc_bytes.getvalue())
+⋮----
+def get_document_from_page(self, page: "Image") -> Document:  # type: ignore
+⋮----
+"""
+        Get Document object corresponding to a given `pdf2image` page.
+
+        Args:
+            page (Image): The PIL Image object.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+⋮----
+text = pytesseract.image_to_string(page)
+⋮----
+class UnstructuredPDFParser(DocumentParser)
+⋮----
+"""
+    Parser for processing PDF files using the `unstructured` library.
+    """
+⋮----
+def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
+⋮----
+# from unstructured.chunking.title import chunk_by_title
+⋮----
+elements = partition_pdf(file=self.doc_bytes, include_page_breaks=True)
+⋮----
+# elements = chunk_by_title(elements)
+page_number = 1
+page_elements = []  # type: ignore
+⋮----
+if page_elements:  # Avoid yielding empty pages at the start
+⋮----
+page_elements = []
+⋮----
+# Yield the last page if it's not empty
+⋮----
+"""
+        Get Document object from a given `unstructured` element.
+
+        Args:
+            page (unstructured element): The `unstructured` element object.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+text = " ".join(el.text for el in page)
+⋮----
+class UnstructuredDocxParser(DocumentParser)
+⋮----
+"""
+    Parser for processing DOCX files using the `unstructured` library.
+    """
+⋮----
+elements = partition_docx(file=self.doc_bytes, include_page_breaks=True)
+⋮----
+"""
+        Get Document object from a given `unstructured` element.
+
+        Note:
+            The concept of "pages" doesn't actually exist in the .docx file format in
+            the same way it does in formats like .pdf. A .docx file is made up of a
+            series of elements like paragraphs and tables, but the division into
+            pages is done dynamically based on the rendering settings (like the page
+            size, margin size, font size, etc.).
+
+        Args:
+            page (unstructured element): The `unstructured` element object.
+
+        Returns:
+            Document object, with content and possible metadata.
+        """
+⋮----
+class UnstructuredDocParser(UnstructuredDocxParser)
+⋮----
+elements = partition_doc(file=self.doc_bytes, include_page_breaks=True)
+⋮----
+class PythonDocxParser(DocumentParser)
+⋮----
+"""
+    Parser for processing DOCX files using the `python-docx` library.
+    """
+⋮----
+"""
+        Simulate iterating through pages.
+        In a DOCX file, pages are not explicitly defined,
+        so we consider each paragraph as a separate 'page' for simplicity.
+        """
+⋮----
+doc = docx.Document(self.doc_bytes)
+⋮----
+"""
+        Get Document object from a given 'page', which in this case is a single
+        paragraph.
+
+        Args:
+            page (list): A list containing a single Paragraph object.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+paragraph = page[0]
+⋮----
+class MarkitdownDocxParser(DocumentParser)
+⋮----
+md = MarkItDown()
+self.doc_bytes.seek(0)  # Reset to start
+⋮----
+# Direct conversion from stream works for DOCX (unlike XLSX)
+result = md.convert_stream(self.doc_bytes, file_extension=".docx")
+⋮----
+# Split content into logical sections (paragraphs, sections, etc.)
+# This approach differs from the strict page-based approach used for PDFs
+sections = re.split(r"(?=# |\n## |\n### )", result.text_content)
+⋮----
+# Filter out empty sections
+sections = [section for section in sections if section.strip()]
+⋮----
+def get_document_from_page(self, md_content: str) -> Document
+⋮----
+"""
+        Get Document object from a given markdown section.
+
+        Args:
+            md_content (str): The markdown content for the section.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+⋮----
+class MarkitdownXLSXParser(DocumentParser)
+⋮----
+# Save stream to a temp file since md.convert() expects a path or URL
+# Temporary workaround until markitdown fixes convert_stream function
+# for xls and xlsx files
+# See issue here https://github.com/microsoft/markitdown/issues/321
+⋮----
+temp_file.flush()  # Ensure data is written before reading
+result = md.convert(temp_file.name)
+⋮----
+sheets = re.split(r"(?=## Sheet\d+)", result.text_content)
+⋮----
+"""
+        Get Document object from a given 1-page markdown string.
+
+        Args:
+            md_content (str): The markdown content for the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+⋮----
+class MarkitdownPPTXParser(DocumentParser)
+⋮----
+result = md.convert_stream(self.doc_bytes, file_extension=".pptx")
+slides = re.split(r"(?=<!-- Slide number: \d+ -->)", result.text_content)
+⋮----
+class LLMPdfParser(DocumentParser)
+⋮----
+"""
+    This class converts PDFs to Markdown using multimodal LLMs.
+
+    It extracts pages, converts them with the LLM (replacing images with
+    detailed descriptions), and outputs Markdown page by page. The
+    conversion follows `LLM_PDF_MD_SYSTEM_INSTRUCTION`. It employs
+    multiprocessing for speed, async requests with rate limiting, and
+    handles errors.
+
+    It supports page-by-page splitting or chunking multiple pages into
+    one, respecting page boundaries and a `max_token_limit`.
+    """
+⋮----
+DEFAULT_MAX_TOKENS = 7000
+OUTPUT_DIR = Path(".llm_pdfparser")  # Fixed output directory
+⋮----
+LLM_PDF_MD_SYSTEM_INSTRUCTION = """
+⋮----
+def __init__(self, source: Union[str, bytes], config: ParsingConfig)
+⋮----
+# Ensure output directory exists
+⋮----
+prefix = (
+temp_file = tempfile.NamedTemporaryFile(
+⋮----
+"""
+        If True, each PDF page is processed as a separate chunk,
+        resulting in one LLM request per page. If False, pages are
+        grouped into chunks based on `max_token_limit` before being sent
+        to the LLM.
+        """
+⋮----
+# Rate limiting parameters
+⋮----
+"""
+        A semaphore to control the number of concurrent requests to the LLM,
+        preventing rate limit errors.  A semaphore slot is acquired before
+        making an LLM request and released after the request is complete.
+        """
+⋮----
+self.retry_delay = 5  # seconds, for exponential backoff
+⋮----
+def _extract_page(self, page_num: int) -> Dict[str, Any]
+⋮----
+"""
+        Extracts a single page and estimates token count.
+        Opens the PDF from self.doc_bytes (a BytesIO object).
+        """
+⋮----
+# Always open the document from in-memory bytes.
+doc = fitz.open(stream=self.doc_bytes.getvalue(), filetype="pdf")
+new_pdf = fitz.open()
+⋮----
+pdf_bytes = new_pdf.write()
+text = doc[page_num].get_text("text")
+token_count = len(text) // 4 if text else len(pdf_bytes) // 4
+⋮----
+"""Parallel PDF page extraction using self.doc_bytes."""
+⋮----
+total_pages = len(doc)
+⋮----
+num_workers = num_workers or cpu_count()
+⋮----
+results = []
+⋮----
+"""Groups pages into chunks where each chunk is approximately `max_tokens`."""
+chunks: List[List[Dict[str, Any]]] = []
+current_chunk: List[Dict[str, Any]] = []
+current_tokens = 0
+⋮----
+current_chunk = []
+⋮----
+if current_chunk:  # Add remaining pages
+⋮----
+"""
+        Merges grouped pages into a single binary chunk so that
+        it does not exceed max token limit
+        """
+⋮----
+merged_pdf = fitz.open()
+page_numbers = []
+⋮----
+temp_pdf = fitz.open("pdf", page["pdf_bytes"])
+⋮----
+"pdf_bytes": merged_pdf.write(),  # Binary PDF data
+"page_numbers": page_numbers,  # List of page numbers in this chunk
+⋮----
+"""
+        Extracts, groups, and merges PDF pages into chunks with embedded page markers.
+        """
+⋮----
+pages = self._extract_pdf_pages_parallel(num_workers)
+⋮----
+# Each page becomes its own chunk
+⋮----
+# Group pages based on token limit
+chunks = self._group_pages_by_token_limit(pages, max_tokens)
+⋮----
+pdf_chunks = pool.map(self._merge_pages_into_pdf_with_metadata, chunks)
+⋮----
+@staticmethod
+    def _page_num_str(page_numbers: Any) -> str
+⋮----
+"""
+        Converts page numbers to a formatted string.
+        """
+⋮----
+async def _send_chunk_to_llm(self, chunk: Dict[str, Any]) -> str
+⋮----
+"""
+        Sends a PDF chunk to the LLM API and returns the response text.
+        Uses retries with exponential backoff to handle transient failures.
+        """
+⋮----
+async with self.semaphore:  # Limit concurrent API requests
+⋮----
+llm_config = OpenAIGPTConfig(
+llm = OpenAIGPT(config=llm_config)
+page_nums = self._page_num_str(chunk.get("page_numbers", "?"))
+base64_string = base64.b64encode(chunk["pdf_bytes"]).decode("utf-8")
+data_uri = f"data:application/pdf;base64,{base64_string}"
+⋮----
+file_content = dict(
+⋮----
+# optimistically try this: some API proxies like litellm
+# support this, and others may not.
+⋮----
+# fallback: assume file upload is similar to OpenAI API
+⋮----
+prompt = (
+system_prompt = (
+⋮----
+# Send the request with PDF content and system instructions
+response = await llm.async_client.chat.completions.create(  # type: ignore
+⋮----
+dict(  # type: ignore
+⋮----
+# Return extracted text if available
+⋮----
+# Log error with page numbers for debugging
+⋮----
+# Apply exponential backoff before retrying
+delay = self.retry_delay * (2**attempt)
+⋮----
+# Log failure after max retries
+page_nums = chunk.get("page_numbers", "Unknown")
+⋮----
+return ""  # Return empty string if all retries fail
+⋮----
+async def process_chunks(self, chunks: List[Dict[str, Any]]) -> List[str]
+⋮----
+"""
+        Processes PDF chunks by sending them to the LLM API and
+        collecting the results.
+
+        Args:
+            chunks: A list of dictionaries, where each dictionary represents
+                a PDF chunk and contains the PDF data and page numbers.
+        """
+# To show nice progress bar
+⋮----
+# Create a list of asynchronous tasks to send each chunk to the LLM.
+# Chunk in this case might be single page or group of pages returned
+# by prepare_pdf_chunks function
+tasks = [self._send_chunk_to_llm(chunk) for chunk in chunks]
+⋮----
+# Gather the results from all tasks, allowing exceptions to be returned.
+# tqdm_asyncio is wrapper around asyncio.gather
+gathered_results = await tqdm_asyncio.gather(
+⋮----
+chunk = chunks[i]  # Get the corresponding chunk.
+⋮----
+# Handle exceptions that occurred during chunk processing.
+⋮----
+# Process successful results and append page/chunk markers.
+markdown = str(result)
+⋮----
+return results  # Return the list of results.
+⋮----
+"""
+        Iterates over the document pages, extracting content using the
+        LLM API, saves them to a markdown file, and yields page numbers
+        along with their corresponding content.
+
+        Yields:
+            A generator of tuples, where each tuple contains the page number
+            (int) and the page content (Any).
+        """
+⋮----
+# This involves extracting pages, grouping them according to the
+# `max_tokens` limit (if `split_on_page` is False), and
+# merging pages into larger PDF chunks. The result
+# is a list of dictionaries, where each dictionary contains the
+# PDF bytes and the associated page numbers or single page if
+# `split_on_page` is true
+⋮----
+pdf_chunks = self._prepare_pdf_chunks_for_llm(
+⋮----
+# We asynchronously processes each chunk, sending it
+# to the LLM and retrieving the Markdown output. It handles rate
+# limiting and retries.
+markdown_results = asyncio.run(self.process_chunks(pdf_chunks))
+⋮----
+# This file serves as an intermediate storage location for the
+# complete Markdown output.
+⋮----
+# Read the full Markdown content from the temporary file.
+⋮----
+full_markdown = infile.read()
+⋮----
+# The splitting is based on the `split_on_page` setting. If True,
+# the Markdown is split using the "Page-" marker. Otherwise, it's
+# split using the "Chunk-" marker.
+⋮----
+pages = full_markdown.split("<!----Page-")
+⋮----
+pages = full_markdown.split("<!----Chunk-")
+⋮----
+# Remove the first element if it's empty (due to the split).
+⋮----
+pages = pages[1:]
+⋮----
+# Iterate over the pages or chunks and yield their content.
+⋮----
+# Check for errors during processing.
+⋮----
+page_content = page
+⋮----
+# Extract the actual page content by removing the marker.
+page_content = (
+⋮----
+# Yield the page number and content.
+⋮----
+"""
+        Get a Document object from a given markdown page.
+        """
+⋮----
+class MarkerPdfParser(DocumentParser)
+⋮----
+"""
+    Parse PDF files using the `marker` library: https://github.com/VikParuchuri/marker
+    """
+⋮----
+DEFAULT_CONFIG = {"paginate_output": True, "output_format": "markdown"}
+⋮----
+user_config = (
+⋮----
+"""
+        Yield each page in the PDF using `marker`.
+        """
+⋮----
+import marker  # noqa
+⋮----
+config_parser = ConfigParser(self.config_dict)
+converter = PdfConverter(
+⋮----
+filename = Path(doc_path).stem + "_converted"
+⋮----
+rendered = converter(doc_path)
+⋮----
+file_path = output_dir / f"{filename}.md"
+⋮----
+full_markdown = f.read()
+⋮----
+# Regex for splitting pages
+pages = re.split(r"\{\d+\}----+", full_markdown)
+⋮----
+page_no = 0
+⋮----
+"""
+        Get Document object from a given 1-page markdown file,
+        possibly containing image refs.
+
+        Args:
+            page (str): The page we get by splitting large md file from
+            marker
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+</file>
+
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Markdown, HTML Parsing: notes/markdown-html-parsing.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path="README.md">
@@ -39755,8 +39984,6 @@ dict_no_none = {k: v for k, v in d.items() if v is not None}
 ⋮----
 # convert tool calls to API format
 ⋮----
-# arguments must be a string
-⋮----
 # IMPORTANT! drop fields that are not expected in API call
 ⋮----
 content = "FUNC: " + json.dumps(self.function_call)
@@ -40077,7 +40304,7 @@ def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.15.17
+  rev: v0.15.20
   hooks:
     - id: ruff
 </file>
@@ -40943,8 +41170,6 @@ result = await self._achat(
 ⋮----
 def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
 ⋮----
-# If it's not in the cache, call the API
-⋮----
 completion_call = self.client.chat.completions.create
 ⋮----
 # If streaming, cannot cache result
@@ -41139,7 +41364,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 <file path="pyproject.toml">
 [project]
 name = "langroid"
-version = "0.65.5"
+version = "0.65.7"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
