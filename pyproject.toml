@@ -88,6 +88,7 @@ vecdbs = [
     "chromadb<=0.4.23,>=0.4.21",
     "weaviate-client>=4.9.6",
     "pinecone-client>=5.0.1",
+    "deeplake<4.0.0,>=3.8.0",
 ]
 
 db = [
@@ -117,6 +118,7 @@ all = [
     "huggingface-hub<1.0.0,>=0.21.2",
     "chromadb<=0.4.23,>=0.4.21",
     "weaviate-client>=4.9.6",
+    "deeplake<4.0.0,>=3.8.0",
     "metaphor-python<0.2.0,>=0.1.23",
     "neo4j<6.0.0,>=5.14.1",
     "python-arango<9.0.0,>=8.1.2",
@@ -278,6 +280,9 @@ doc-parsers = [
 
 pinecone = [
     "pinecone-client>=5.0.1"
+]
+deeplake = [
+    "deeplake<4.0.0,>=3.8.0",
 ]
 asyncio = [
     "asyncio>=3.4.3",

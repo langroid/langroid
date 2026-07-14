@@ -185,6 +185,25 @@ def vecdb(request) -> VectorStore:
         ms.delete_collection(collection_name=ms_cfg.collection_name)
         return
 
+    if request.param == "deeplake":
+        try:
+            from langroid.vector_store.deeplakedb import DeepLakeDB, DeepLakeDBConfig
+        except ImportError:
+            pytest.skip("DeepLake not installed")
+            return
+        dl_dir = ".deeplake/data/" + embed_cfg.model_type
+        rmdir(dl_dir)
+        dl_cfg = DeepLakeDBConfig(
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=dl_dir,
+            embedding=embed_cfg,
+        )
+        dl = DeepLakeDB(dl_cfg)
+        dl.add_documents(stored_docs)
+        yield dl
+        rmdir(dl_dir)
+        return
+
     if request.param == "lancedb":
         ldb_dir = ".lancedb/data/" + embed_cfg.model_type
         rmdir(ldb_dir)
@@ -236,6 +255,7 @@ def vecdb(request) -> VectorStore:
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "lancedb",
         "chroma",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -299,6 +319,7 @@ def test_hybrid_vector_search(
         "qdrant_cloud",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_docker",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -395,6 +416,7 @@ def test_vector_stores_access(vecdb):
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_docker",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -464,6 +486,7 @@ def test_vector_stores_context_window(vecdb):
         "lancedb",
         "postgres",
         "weaviate_docker",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -521,6 +544,7 @@ def test_doc_chat_batch_with_vecdb_cloning(vecdb, test_settings):
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_docker",
+        "deeplake",
     ],
     indirect=True,
 )
@@ -704,3 +728,43 @@ def test_postgres_where_clause(vecdb: PostgresDB):
     assert len(all_docs) == 3
 
     vecdb.delete_collection("test_get_all_documents_where")
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    [
+        "deeplake",
+    ],
+    indirect=True,
+)
+def test_deeplake_where_clause(vecdb):
+    """Test metadata where clause filtering in DeepLakeDB."""
+    vecdb.create_collection(collection_name="test-deeplake-where", replace=True)
+    docs = [
+        Document(
+            content="cow" if i < 3 else "goat",
+            metadata=DocMetaData(
+                id=str(i),
+                source="wiki" if i % 2 == 0 else "web",
+                category="other" if i < 3 else "news",
+            ),
+        )
+        for i in range(5)
+    ]
+    vecdb.add_documents(docs)
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"category": "other"}))
+    assert len(all_docs) == 3
+
+    all_docs = vecdb.get_all_documents(
+        where=json.dumps({"category": "other", "source": "web"})
+    )
+    assert len(all_docs) == 1
+
+    matches = vecdb.similar_texts_with_scores(
+        "cow", k=5, where=json.dumps({"category": "other"})
+    )
+    assert len(matches) == 3
+    assert all(d.metadata.category == "other" for d, _ in matches)
+
+    vecdb.delete_collection("test-deeplake-where")

@@ -62,5 +62,13 @@ try:
     PineconeDB
     PineconeDBConfig
     __all__.extend(["pineconedb", "PineconeDB", "PineconeDBConfig"])
+
+    from . import deeplakedb
+    from .deeplakedb import DeepLakeDB, DeepLakeDBConfig
+
+    deeplakedb
+    DeepLakeDB
+    DeepLakeDBConfig
+    __all__.extend(["deeplakedb", "DeepLakeDB", "DeepLakeDBConfig"])
 except ImportError:
     pass
