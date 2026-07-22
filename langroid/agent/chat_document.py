@@ -151,6 +151,12 @@ class ChatDocument(Document):
 
     reasoning: str = ""  # reasoning produced by a reasoning LLM
     content_any: Any = None  # to hold arbitrary data returned by responders
+    # True when the underlying LLM response had NO content (only a tool/function
+    # call), as opposed to content == "" (present but empty). `content` itself
+    # stays a mandatory str (""), so this flag is what carries "missing" through
+    # to to_LLMMessage(), which reproduces it as LLMMessage.content = None.
+    # (content_any cannot serve this role — it defaults to None on every doc.)
+    content_is_none: bool = False
     # Original LLM response text including inline thought signatures
     # (e.g. <thinking>...</thinking>). Only populated when reasoning was
     # extracted from inline tags in the message text. Used by to_LLMMessage()
@@ -345,10 +351,13 @@ class ChatDocument(Document):
         Returns:
             ChatDocument: ChatDocument representation of this LLMResponse.
         """
+        # Capture "no content" from the source response (None, not "") before
+        # recipient parsing can turn it into "".
+        content_is_none = response.message is None
         recipient, message = response.get_recipient_and_message(
             recognize_recipient_in_content
         )
-        message = message.strip()
+        message = message.strip() if message is not None else ""
         if message in ["''", '""']:
             message = ""
         if response.function_call is not None:
@@ -359,6 +368,7 @@ class ChatDocument(Document):
                 ChatDocument._clean_fn_call(oai_tc.function)
         return ChatDocument(
             content=message,
+            content_is_none=content_is_none,
             reasoning=response.reasoning,
             content_with_reasoning=response.message_with_reasoning,
             content_any=message,
@@ -423,6 +433,7 @@ class ChatDocument(Document):
 
         return ChatDocument(
             content=message.content or "",
+            content_is_none=message.content is None,
             content_any=message.content,
             files=message.files,
             function_call=message.function_call,
@@ -466,7 +477,7 @@ class ChatDocument(Document):
         # content_with_reasoning is only set when inline tags were
         # actually extracted, so this won't interfere with models that
         # provide reasoning via a separate API field.
-        content = (
+        content: Optional[str] = (
             message.content_with_reasoning
             or message.content
             or to_string(message.content_any)
@@ -488,8 +499,17 @@ class ChatDocument(Document):
             # same reasoning as for function-call above
             content += " " + "\n\n".join(str(tc) for tc in oai_tool_calls)
             oai_tool_calls = None
-        # some LLM APIs (e.g. gemini) don't like empty msg
-        content = content or " "
+        # Faithfully carry the response shape: if the underlying LLM response
+        # had NO content (content_is_none), reproduce that as None ("missing"),
+        # distinct from a present-but-empty "". content_any is NOT used as the
+        # signal here — it defaults to None on every ChatDocument. How a missing
+        # content is rendered on the wire is left to LLMMessage.api_dict (it
+        # drops None, and pads a lone space only when a message would otherwise
+        # be completely empty). This is what lets an assistant tool-call turn
+        # omit `content`: Gemini 3.x rejects an assistant turn that has BOTH a
+        # tool/function call and (even whitespace) text content.
+        if message.content_is_none and not content:
+            content = None
         sender_name = message.metadata.sender_name
         tool_ids = message.metadata.tool_ids
         tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""

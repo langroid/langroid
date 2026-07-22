@@ -4,7 +4,13 @@ import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.language_models.base import LLMMessage, Role
+from langroid.language_models.base import (
+    LLMFunctionCall,
+    LLMMessage,
+    LLMResponse,
+    OpenAIToolCall,
+    Role,
+)
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.parsing.file_attachment import FileAttachment
@@ -381,3 +387,83 @@ def test_drop_turns_accounts_for_buffer():
     # History should have been compressed
     assert hist[0].role == Role.SYSTEM
     assert hist[-1].role == Role.USER
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for "missing" (None) vs "empty" ("") message content.
+#
+# Gemini 3.x rejects (400 INVALID_ARGUMENT) an assistant turn that carries BOTH
+# a tool/function call AND non-empty text content. Langroid used to pad empty
+# content with a single space (" "), which tripped this on every tool-result
+# turn. Content is now carried faithfully: a response with no content becomes
+# LLMMessage.content=None (dropped from the wire), distinct from "".
+# ---------------------------------------------------------------------------
+
+MODEL = "gpt-4o"
+
+
+def _tool_call():
+    return OpenAIToolCall(
+        id="call_1",
+        type="function",
+        function=LLMFunctionCall(name="check_weather", arguments={"city": "London"}),
+    )
+
+
+def test_api_dict_omits_content_for_tool_call_message():
+    """An assistant tool-call turn with no content omits `content` on the wire
+    (never emits " ", which Gemini 3.x rejects alongside a tool call)."""
+    d = LLMMessage(
+        role=Role.ASSISTANT, content=None, tool_calls=[_tool_call()]
+    ).api_dict(MODEL)
+    assert "content" not in d
+    assert "tool_calls" in d
+
+
+def test_api_dict_pads_empty_message_without_tools():
+    """A message with empty content (None or "") and no tool/function call must
+    still send something, since some APIs (e.g. Gemini) reject an empty msg."""
+    assert LLMMessage(role=Role.USER, content=None).api_dict(MODEL)["content"] == " "
+    assert LLMMessage(role=Role.USER, content="").api_dict(MODEL)["content"] == " "
+
+
+def test_api_dict_keeps_real_content():
+    d = LLMMessage(role=Role.USER, content="hello").api_dict(MODEL)
+    assert d["content"] == "hello"
+
+
+def test_missing_content_is_none_end_to_end():
+    """A tool-only LLM response (message=None) is carried faithfully as
+    content_is_none -> LLMMessage.content=None -> omitted from api_dict."""
+    resp = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+    doc = ChatDocument.from_LLMResponse(resp)
+    assert doc.content == ""  # ChatDocument.content stays a mandatory str
+    assert doc.content_is_none is True
+
+    msg = ChatDocument.to_LLMMessage(doc)[0]
+    assert msg.role == Role.ASSISTANT
+    assert msg.content is None
+    assert msg.tool_calls is not None
+    assert "content" not in msg.api_dict(MODEL)
+
+
+def test_empty_content_stays_empty_not_none():
+    """A present-but-empty response (message="") is distinct from missing:
+    it must NOT be coerced to None."""
+    resp = LLMResponse(message="", oai_tool_calls=[_tool_call()])
+    doc = ChatDocument.from_LLMResponse(resp)
+    assert doc.content_is_none is False
+
+    msg = ChatDocument.to_LLMMessage(doc)[0]
+    assert msg.content == ""
+
+
+def test_none_content_round_trips_through_chatdocument():
+    """LLMMessage.content=None survives an LLMMessage -> ChatDocument ->
+    LLMMessage round-trip (history is rebuilt this way)."""
+    original = LLMMessage(role=Role.ASSISTANT, content=None, tool_calls=[_tool_call()])
+    doc = ChatDocument.from_LLMMessage(original)
+    assert doc.content_is_none is True
+
+    rebuilt = ChatDocument.to_LLMMessage(doc)[0]
+    assert rebuilt.content is None

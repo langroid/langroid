@@ -283,7 +283,10 @@ class LLMMessage(BaseModel):
     name: Optional[str] = None
     tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
     tool_id: str = ""  # used by OpenAIAssistant
-    content: str
+    # None means "no content" (the model returned only a tool/function call).
+    # This is distinct from "" and is dropped from the API payload by api_dict;
+    # see api_dict for how a fully-empty message is handled per-API.
+    content: Optional[str] = None
     files: List[FileAttachment] = []
     function_call: Optional[LLMFunctionCall] = None
     tool_calls: Optional[List[OpenAIToolCall]] = None
@@ -312,7 +315,7 @@ class LLMMessage(BaseModel):
             d["content"] = [
                 dict(
                     type="text",
-                    text=self.content,
+                    text=self.content or "",
                 )
             ] + [f.to_dict(model) for f in self.files]
 
@@ -320,9 +323,10 @@ class LLMMessage(BaseModel):
         # in case has_system_role is False
         if not has_system_role and "role" in d and d["role"] == "system":
             d["role"] = "user"
-            if "content" in d:
+            if d.get("content"):
                 d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
-        # drop None values since API doesn't accept them
+        # drop None values since API doesn't accept them (this omits `content`
+        # entirely when it is None, i.e. "no content")
         dict_no_none = {k: v for k, v in d.items() if v is not None}
         if "name" in dict_no_none and dict_no_none["name"] == "":
             # OpenAI API does not like empty name
@@ -346,6 +350,15 @@ class LLMMessage(BaseModel):
                         )
                 if "extra_content" in tc and tc["extra_content"] is None:
                     del tc["extra_content"]
+        # A message with empty content (None was dropped above, or "") AND no
+        # tool/function call would be an entirely empty message, which some APIs
+        # (e.g. Gemini) reject; fall back to a single space in that case only.
+        # When there IS a tool/function call, empty content is fine (and Gemini
+        # 3.x in fact REQUIRES it — it rejects an assistant turn that carries
+        # both a call and non-empty text content).
+        has_call = "tool_calls" in dict_no_none or "function_call" in dict_no_none
+        if not has_call and not dict_no_none.get("content"):
+            dict_no_none["content"] = " "
         # IMPORTANT! drop fields that are not expected in API call
         dict_no_none.pop("tool_id", None)
         dict_no_none.pop("timestamp", None)
@@ -356,7 +369,7 @@ class LLMMessage(BaseModel):
         if self.function_call is not None:
             content = "FUNC: " + json.dumps(self.function_call)
         else:
-            content = self.content
+            content = self.content or ""
         name_str = f" ({self.name})" if self.name else ""
         return f"{self.role} {name_str}: {content}"
 
@@ -366,7 +379,11 @@ class LLMResponse(BaseModel):
     Class representing response from LLM.
     """
 
-    message: str
+    # None means the model returned NO content (e.g. only a tool/function
+    # call), which is distinct from an empty string "". Preserving this
+    # distinction lets the message be faithfully reproduced downstream
+    # (see ChatDocument.content_is_none and LLMMessage.content).
+    message: Optional[str] = None
     reasoning: str = ""  # optional reasoning text from reasoning models
     # Original message text including inline thought signatures (e.g.
     # <thinking>...</thinking>). Only set when reasoning was extracted
@@ -387,7 +404,7 @@ class LLMResponse(BaseModel):
         elif self.oai_tool_calls:
             return "\n".join(str(tc) for tc in self.oai_tool_calls)
         else:
-            return self.message
+            return self.message or ""
 
     def tools_content(self) -> str:
         if self.function_call is not None:
@@ -567,7 +584,7 @@ class LanguageModel(ABC):
         if len(messages) == 0 or messages[0].role != Role.SYSTEM:
             logger.warning("No system msg, creating dummy system prompt")
             messages.insert(0, LLMMessage(content=DUMMY_SYS_PROMPT, role=Role.SYSTEM))
-        system_prompt = messages[0].content
+        system_prompt = messages[0].content or ""
 
         # now we have messages = [Sys,...]
         if len(messages) == 1:
@@ -591,8 +608,8 @@ class LanguageModel(ABC):
 
         # now we have messages = [Sys, user, ..., user]
         # so we omit the first and last elements and make pairs of user-asst messages
-        conversation = [m.content for m in messages[1:-1]]
-        user_prompt = messages[-1].content
+        conversation = [m.content or "" for m in messages[1:-1]]
+        user_prompt = messages[-1].content or ""
         pairs = LanguageModel.user_assistant_pairs(conversation)
         return system_prompt, pairs, user_prompt
 
@@ -822,13 +839,17 @@ class LanguageModel(ABC):
         """.strip()
 
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
-        standalone = self.chat(
-            messages=[
-                LLMMessage(role=Role.SYSTEM, content=prompt),
-                LLMMessage(role=Role.USER, content=follow_up_question),
-            ],
-            max_tokens=1024,
-        ).message.strip()
+        standalone = (
+            self.chat(
+                messages=[
+                    LLMMessage(role=Role.SYSTEM, content=prompt),
+                    LLMMessage(role=Role.USER, content=follow_up_question),
+                ],
+                max_tokens=1024,
+            ).message
+            or ""
+        )
+        standalone = standalone.strip()
 
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone

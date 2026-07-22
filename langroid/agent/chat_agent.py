@@ -1345,7 +1345,7 @@ class ChatAgent(Agent):
             llm_msg = self.message_history[idx]
         else:
             llm_msg = copy.deepcopy(self.message_history[idx])
-        orig_content = llm_msg.content
+        orig_content = llm_msg.content or ""
         new_content = (
             self.parser.truncate_tokens(orig_content, tokens)
             if self.parser is not None
@@ -1640,8 +1640,9 @@ class ChatAgent(Agent):
                 # different from the last message in the history
                 llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
                 # LLM only responds to the content, so only those msgs with
-                # non-empty content should be kept
-                llm_msgs = [m for m in llm_msgs if m.content.strip() != ""]
+                # non-empty content should be kept (content may be None, i.e.
+                # "no content", e.g. an assistant turn that is only a tool call)
+                llm_msgs = [m for m in llm_msgs if (m.content or "").strip() != ""]
                 if len(llm_msgs) == 0:
                     return [], 0
                 # process tools if any
@@ -1999,7 +2000,7 @@ class ChatAgent(Agent):
             self._call_callback_with_reasoning(
                 "finish_llm_stream",
                 reasoning=response.reasoning,
-                content=response.message,
+                content=response.message or "",
                 tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
             )
@@ -2069,7 +2070,7 @@ class ChatAgent(Agent):
             self._call_callback_with_reasoning(
                 "finish_llm_stream",
                 reasoning=response.reasoning,
-                content=response.message,
+                content=response.message or "",
                 tools_content=response.tools_content(),
                 is_tool=self.has_tool_message_attempt(temp_doc),
             )
@@ -2167,7 +2168,7 @@ class ChatAgent(Agent):
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
             if isinstance(response, LLMResponse):
-                content = response.message
+                content = response.message or ""
                 tools_content = response.tools_content()
             else:
                 content = response.content
@@ -2331,9 +2332,9 @@ class ChatAgent(Agent):
                 "before calling _message_num_tokens()."
             )
 
-        return self.parser.num_tokens(message.content) + self._attachment_num_tokens(
-            message
-        )
+        return self.parser.num_tokens(
+            message.content or ""
+        ) + self._attachment_num_tokens(message)
 
     def _attachment_num_tokens(self, message: LLMMessage) -> int:
         """

@@ -803,7 +803,7 @@ class OpenAIAssistant(ChatAgent):
                 self.cached_tool_ids += [response.tool_id]
             response_str = str(response.function_call)
         else:
-            response_str = response.message
+            response_str = response.message or ""
         cache_str = "[red](cached)[/red]" if cached else ""
         if not settings.quiet:
             if not cached and self._get_code_logs_str():

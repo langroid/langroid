@@ -1863,9 +1863,9 @@ class OpenAIGPT(LanguageModel):
         if not isinstance(response, dict):
             response = response.model_dump()
         if "message" in response["choices"][0]:
-            msg = response["choices"][0]["message"]["content"].strip()
+            msg = (response["choices"][0]["message"]["content"] or "").strip()
         else:
-            msg = response["choices"][0]["text"].strip()
+            msg = (response["choices"][0]["text"] or "").strip()
         return LLMResponse(message=msg, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
@@ -1945,9 +1945,9 @@ class OpenAIGPT(LanguageModel):
         if not isinstance(response, dict):
             response = response.model_dump()
         if "message" in response["choices"][0]:
-            msg = response["choices"][0]["message"]["content"].strip()
+            msg = (response["choices"][0]["message"]["content"] or "").strip()
         else:
-            msg = response["choices"][0]["text"].strip()
+            msg = (response["choices"][0]["text"] or "").strip()
         return LLMResponse(message=msg, cached=cached)
 
     def chat(
@@ -2398,7 +2398,10 @@ class OpenAIGPT(LanguageModel):
                     )
                     msg = msg + "\n" + json.dumps(tool_call_dict)
         return LLMResponse(
-            message=msg.strip() if msg is not None else "",
+            # None (no content, e.g. a tool-call-only response) is preserved as
+            # None rather than coerced to "", so the distinction survives
+            # downstream (see LLMMessage.content / ChatDocument.content_is_none).
+            message=msg.strip() if msg is not None else None,
             reasoning=reasoning.strip() if reasoning is not None else "",
             message_with_reasoning=message_with_reasoning,
             function_call=fun_call,
