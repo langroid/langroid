@@ -480,7 +480,10 @@ class ChatDocument(Document):
         content: Optional[str] = (
             message.content_with_reasoning
             or message.content
-            or to_string(message.content_any)
+            # content_any may hold parsed structured output (e.g. tool-call
+            # args loaded under a strict output_format), which is NOT message
+            # text — never let it stand in for content on a call-only turn.
+            or ("" if message.content_is_none else to_string(message.content_any))
             or ""
         )
         fun_call = message.function_call
@@ -501,13 +504,16 @@ class ChatDocument(Document):
             oai_tool_calls = None
         # Faithfully carry the response shape: if the underlying LLM response
         # had NO content (content_is_none), reproduce that as None ("missing"),
-        # distinct from a present-but-empty "". content_any is NOT used as the
-        # signal here — it defaults to None on every ChatDocument. How a missing
-        # content is rendered on the wire is left to LLMMessage.api_dict (it
-        # drops None, and pads a lone space only when a message would otherwise
-        # be completely empty). This is what lets an assistant tool-call turn
-        # omit `content`: Gemini 3.x rejects an assistant turn that has BOTH a
-        # tool/function call and (even whitespace) text content.
+        # distinct from a present-but-empty "". content_is_none is the signal
+        # (content_any can't be — it defaults to None on every ChatDocument,
+        # and may carry parsed structured output rather than text; see above).
+        # `not content` still lets a USER-sender fold a function/tool call into
+        # content above. How a missing content is rendered on the wire is left
+        # to LLMMessage.api_dict (it drops None, and pads a lone space only when
+        # a message would otherwise be completely empty). This is what lets an
+        # assistant tool-call turn omit `content`: Gemini 3.x rejects an
+        # assistant turn that has BOTH a tool/function call and (even
+        # whitespace) text content.
         if message.content_is_none and not content:
             content = None
         sender_name = message.metadata.sender_name

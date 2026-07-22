@@ -467,3 +467,21 @@ def test_none_content_round_trips_through_chatdocument():
 
     rebuilt = ChatDocument.to_LLMMessage(doc)[0]
     assert rebuilt.content is None
+
+
+def test_content_is_none_overrides_populated_content_any():
+    """A call-only turn stays content=None even when content_any was populated
+    (e.g. by _load_output_format parsing the tool args under a strict
+    output_format). Otherwise the serialized args would be sent as assistant
+    text alongside tool_calls, which is the Gemini 3.x rejection this avoids."""
+    doc = ChatDocument(
+        content="",
+        content_is_none=True,
+        # parsed structured output (tool args), NOT message text:
+        content_any={"city": "London"},
+        oai_tool_calls=[_tool_call()],
+        metadata=ChatDocMetaData(sender=Entity.LLM, source=Entity.LLM),
+    )
+    msg = ChatDocument.to_LLMMessage(doc)[0]
+    assert msg.content is None
+    assert "content" not in msg.api_dict(MODEL)
