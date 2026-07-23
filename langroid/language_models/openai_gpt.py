@@ -2426,7 +2426,8 @@ class OpenAIGPT(LanguageModel):
                         f"{json.dumps(tool_call_dict)} "
                         "treating as normal non-tool message"
                     )
-                    msg = msg + "\n" + json.dumps(tool_call_dict)
+                    serialized_tool_call = json.dumps(tool_call_dict)
+                    msg = (msg or "") + ("\n" if msg else "") + serialized_tool_call
         return LLMResponse(
             # None (no content, e.g. a tool-call-only response) is preserved as
             # None rather than coerced to "", so the distinction survives

@@ -49,10 +49,13 @@ def agent():
 
     # Create a mock LLM that returns a fixed context length
     class MockLLM:
-        def chat_context_length(self):
+        def chat_context_length(self) -> int:
             return CHAT_CONTEXT_LENGTH
 
-        def supports_functions_or_tools(self):
+        def get_stream(self) -> bool:
+            return False
+
+        def supports_functions_or_tools(self) -> bool:
             return False
 
     agent.llm = MockLLM()
@@ -467,6 +470,48 @@ def test_none_content_round_trips_through_chatdocument():
 
     rebuilt = ChatDocument.to_LLMMessage(doc)[0]
     assert rebuilt.content is None
+
+
+def test_prep_retains_fresh_tool_only_message(agent: ChatAgent) -> None:
+    """History preparation retains a fresh call-only assistant turn."""
+    doc = ChatDocument.from_LLMResponse(
+        LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+    )
+
+    messages, _ = agent._prep_llm_messages(doc)
+
+    assert messages[-1].content is None
+    assert messages[-1].tool_calls == [_tool_call()]
+
+
+def test_render_tool_only_response_uses_empty_display_content(
+    agent: ChatAgent,
+) -> None:
+    """Rendering safely separates absent text from displayed tool-call data."""
+    displayed: dict[str, object] = {}
+
+    def show_llm_response(
+        content: str,
+        tools_content: str,
+        is_tool: bool,
+        cached: bool,
+        reasoning: str,
+    ) -> None:
+        displayed.update(
+            content=content,
+            tools_content=tools_content,
+            is_tool=is_tool,
+            cached=cached,
+            reasoning=reasoning,
+        )
+
+    agent.callbacks.show_llm_response = show_llm_response
+    response = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+
+    agent._render_llm_response(response)
+
+    assert displayed["content"] == ""
+    assert "check_weather" in str(displayed["tools_content"])
 
 
 def test_none_content_is_safe_for_token_counting(agent):

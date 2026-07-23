@@ -2,6 +2,8 @@
 Tests for LLMResponse class, particularly the tools_content() method.
 """
 
+import json
+
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.language_models.base import (
     LLMFunctionCall,
@@ -10,7 +12,7 @@ from langroid.language_models.base import (
     OpenAIToolCall,
     Role,
 )
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 
 MODEL = "gemini/gemini-3-pro-preview"
 
@@ -56,6 +58,38 @@ def test_truncate_tool_only_message_preserves_none_content() -> None:
     assert truncated.content is None
     assert "content" not in truncated.api_dict(MODEL)
     assert truncated.api_dict(MODEL)["tool_calls"]
+
+
+def test_malformed_tool_call_with_absent_content_becomes_message() -> None:
+    """Malformed call data is preserved as text when content is absent."""
+    model = OpenAIGPT(OpenAIGPTConfig(stream=False))
+    malformed_tool_call = {
+        "id": "call_bad",
+        "type": "function",
+        "function": {
+            "name": "lookup",
+            "arguments": "not valid json",
+        },
+    }
+    api_response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [malformed_tool_call],
+                }
+            }
+        ],
+        "usage": {},
+    }
+
+    response = model._process_chat_completion_response(
+        cached=False,
+        response=api_response,
+    )
+
+    assert response.message == json.dumps(malformed_tool_call)
+    assert response.oai_tool_calls is None
 
 
 class TestLLMResponseToolsContent:
