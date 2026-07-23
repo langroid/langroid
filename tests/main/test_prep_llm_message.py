@@ -423,6 +423,23 @@ def test_api_dict_omits_content_for_tool_call_message():
     assert "tool_calls" in d
 
 
+def test_api_dict_omits_content_for_function_call_message():
+    """A legacy function-call-only turn also omits `content` on the wire."""
+    function_call = LLMFunctionCall(
+        name="check_weather",
+        arguments={"city": "London"},
+    )
+
+    message = LLMMessage(
+        role=Role.ASSISTANT,
+        content=None,
+        function_call=function_call,
+    ).api_dict(MODEL)
+
+    assert "content" not in message
+    assert message["function_call"]["name"] == "check_weather"
+
+
 def test_api_dict_pads_empty_message_without_tools():
     """A message with empty content (None or "") and no tool/function call must
     still send something, since some APIs (e.g. Gemini) reject an empty msg."""
