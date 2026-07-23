@@ -26,11 +26,13 @@ The following are **best-effort hardening, not security boundaries**:
 - `_DANGEROUS_SQL_PATTERNS` and the `sqlglot` AST checks in `SQLChatAgent`
 - `validate_cypher_query()` / `validate_aql_query()` in the graph agents
 
-They exist to stop an *unlucky* LLM, not a *determined attacker*. They are
-denylists layered over the full SQL, Cypher, and Python grammars — across
-multiple dialects, quoting and escaping forms, and function families — and such
-a denylist cannot be made complete. We patch clear gaps opportunistically, but
-we do not treat a newly-found way around them as a vulnerability in Langroid.
+They exist to stop an *unlucky* LLM, not a *determined attacker*. The pandas
+path uses explicit allowlists for AST nodes, methods, operators, variables, and
+builtins. The SQL, Cypher, and AQL paths use denylists over full query grammars
+that span multiple dialects, quoting and escaping forms, and function families.
+Such denylists cannot be made complete. We patch clear gaps opportunistically,
+but we do not treat a newly found way around them as a vulnerability in
+Langroid.
 
 The **actual** security boundaries for a Langroid deployment are:
 
@@ -44,24 +46,32 @@ If you expose any of the code- or query-executing agents to untrusted input:
 
 - **Give the agent a least-privilege database role.** For `SQLChatAgent`, a
   read-only, non-superuser role with `GRANT SELECT` on only the intended
-  tables. Nearly every PostgreSQL file-read, file-write, and command-execution
-  primitive that gets reported to us — `pg_read_file`, `pg_write_file`,
-  `COPY ... FROM/TO PROGRAM`, `dblink`, `lo_import` / `lo_export` — requires
-  superuser or explicit `pg_read_server_files` / `pg_write_server_files` role
-  membership. A least-privilege role closes that entire family regardless of
-  what our filters catch.
+  tables. In PostgreSQL, server-side file reads and writes normally require a
+  superuser, membership in `pg_read_server_files` or
+  `pg_write_server_files`, or a direct grant on a privileged function.
+  `COPY ... PROGRAM` instead requires superuser access or membership in the
+  distinct `pg_execute_server_program` role. Server-side `lo_import` and
+  `lo_export` default to superuser-only use, but an administrator can grant
+  access to those functions directly. Ordinary password-authenticated
+  `dblink` connections do not require any of those roles. Do not install
+  unneeded extensions, and revoke access to dangerous extensions and
+  functions, including `dblink`, in addition to granting only the intended
+  table privileges. Review any site-specific functions and grants as well.
 - **Run the process in a container or VM** with no credentials, secrets, or
   data you are unwilling to expose to the LLM.
 - **Treat `allow_dangerous_operations=True` and `full_eval=True` as
-  "I am providing my own sandbox."** These flags disable Langroid's hardening
-  by design and are documented as trusted-environment-only.
+  "I am providing my own sandbox."** The first permits dangerous database
+  operations. The second disables pandas AST validation while retaining the
+  restricted globals from `safe_eval_globals()`. Both are documented as
+  trusted-environment-only.
 
 ## Reporting a vulnerability
 
 Report privately — **not** via GitHub Issues, Discussions, or any other public
 forum:
 
-1. Go to **[Security Advisories](https://github.com/langroid/langroid/security/advisories)**.
+1. Go to
+   **[Security Advisories](https://github.com/langroid/langroid/security/advisories)**.
 2. Click **"Report a vulnerability"**.
 3. Include a proof of concept that works against a **default configuration**.
 
@@ -75,7 +85,9 @@ We aim to acknowledge in-scope reports within 7 days.
   bombs) in the document and message parsers.
 - Path traversal in the file tools (`ReadFileTool`, `WriteFileTool`,
   `ListDirTool`) and in repository / folder ingestion.
-- Credential or secret leakage.
+- Credential or secret leakage in a default configuration that does not depend
+  on any of the specific exclusions below. The out-of-scope rules take
+  precedence over this category.
 - **A code path that skips a documented safety gate entirely** — that is, a
   *missing call* to a validator, not a *bypass* of one.
 - Vulnerable dependencies with a demonstrated impact on Langroid.
