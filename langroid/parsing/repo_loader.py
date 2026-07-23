@@ -28,6 +28,29 @@ from langroid.parsing.parser import Parser, ParsingConfig
 logger = logging.getLogger(__name__)
 
 
+def _is_within(path: str, root: str) -> bool:
+    """
+    Whether `path`, with all symlinks resolved, stays inside `root`.
+
+    Used to prevent an ingested repo or folder from reaching host files via
+    symlinks that point outside the intended root (GHSA-99m6-3pvg-q66h).
+    Symlinks whose targets remain inside `root` are still followed.
+
+    Args:
+        path (str): The candidate file or directory path.
+        root (str): The root directory that ingestion is confined to.
+
+    Returns:
+        bool: True if the resolved `path` is `root` or lies under it.
+    """
+    try:
+        resolved = Path(path).resolve()
+        resolved_root = Path(root).resolve()
+    except OSError:  # broken symlink, permission error, loop, ...
+        return False
+    return resolved == resolved_root or resolved_root in resolved.parents
+
+
 def _get_decoded_content(content_file: "ContentFile") -> str:
     if content_file.encoding == "base64":
         return content_file.decoded_content.decode("utf-8") or ""
@@ -458,6 +481,12 @@ class RepoLoader:
 
             for item in os.listdir(current_path):
                 item_path = os.path.join(current_path, item)
+                if not _is_within(item_path, path):
+                    logger.warning(
+                        f"Skipping {item_path!r}: resolves outside the ingested "
+                        f"root {path!r}"
+                    )
+                    continue
                 relative_path = os.path.relpath(item_path, path)
                 if (os.path.isdir(item_path) and item in exclude_dirs) or (
                     os.path.isfile(item_path)
@@ -563,6 +592,12 @@ class RepoLoader:
                     if depth == -1 or current_depth <= depth:
                         for file in files:
                             file_path = str(Path(root) / file)
+                            if not _is_within(file_path, str(path_obj)):
+                                logger.warning(
+                                    f"Skipping {file_path!r}: resolves outside "
+                                    f"the ingested root {str(path_obj)!r}"
+                                )
+                                continue
                             if (
                                 file_types is None
                                 or RepoLoader._file_type(file_path) in file_types
