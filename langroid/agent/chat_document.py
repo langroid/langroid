@@ -477,15 +477,20 @@ class ChatDocument(Document):
         # content_with_reasoning is only set when inline tags were
         # actually extracted, so this won't interfere with models that
         # provide reasoning via a separate API field.
-        content: Optional[str] = (
-            message.content_with_reasoning
-            or message.content
-            # content_any may hold parsed structured output (e.g. tool-call
-            # args loaded under a strict output_format), which is NOT message
-            # text — never let it stand in for content on a call-only turn.
-            or ("" if message.content_is_none else to_string(message.content_any))
-            or ""
-        )
+        # content_is_none is the authoritative serialized representation of an
+        # absent LLM response body. It must win over stale text fields when a
+        # ChatDocument is persisted and reconstructed.
+        content: Optional[str] = None
+        if not message.content_is_none:
+            content = (
+                message.content_with_reasoning
+                or message.content
+                # content_any may hold parsed structured output (e.g. tool-call
+                # args loaded under a strict output_format), which is NOT message
+                # text — never let it stand in for content on a call-only turn.
+                or to_string(message.content_any)
+                or ""
+            )
         fun_call = message.function_call
         oai_tool_calls = message.oai_tool_calls
         if message.metadata.sender == Entity.USER and fun_call is not None:

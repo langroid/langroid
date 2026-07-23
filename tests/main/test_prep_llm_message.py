@@ -574,3 +574,21 @@ def test_content_is_none_overrides_populated_content_any():
     msg = ChatDocument.to_LLMMessage(doc)[0]
     assert msg.content is None
     assert "content" not in msg.api_dict(MODEL)
+
+
+def test_content_is_none_overrides_stale_text_after_serialization():
+    """The explicit missing-content flag wins after a hostile round-trip."""
+    doc = ChatDocument(
+        content="stale text",
+        content_with_reasoning="<thinking>stale reasoning</thinking>",
+        content_is_none=True,
+        oai_tool_calls=[_tool_call()],
+        metadata=ChatDocMetaData(sender=Entity.LLM, source=Entity.LLM),
+    )
+    reloaded = ChatDocument.model_validate(doc.model_dump())
+
+    msg = ChatDocument.to_LLMMessage(reloaded)[0]
+
+    assert msg.content is None
+    assert msg.tool_calls == [_tool_call()]
+    assert "content" not in msg.api_dict(MODEL)
