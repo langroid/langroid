@@ -469,6 +469,33 @@ def test_none_content_round_trips_through_chatdocument():
     assert rebuilt.content is None
 
 
+def test_none_content_is_safe_for_token_counting(agent):
+    """Token counting treats missing content as zero text tokens."""
+    message = LLMMessage(
+        role=Role.ASSISTANT,
+        content=None,
+        tool_calls=[_tool_call()],
+    )
+
+    assert agent.chat_num_tokens([message]) == 0
+
+
+def test_truncate_tool_only_message_preserves_none(agent):
+    """Truncation must not add warning text alongside a tool call."""
+    agent.message_history.append(
+        LLMMessage(
+            role=Role.ASSISTANT,
+            content=None,
+            tool_calls=[_tool_call()],
+        )
+    )
+
+    truncated = agent.truncate_message(-1)
+
+    assert truncated.content is None
+    assert "content" not in truncated.api_dict(MODEL)
+
+
 def test_content_is_none_overrides_populated_content_any():
     """A call-only turn stays content=None even when content_any was populated
     (e.g. by _load_output_format parsing the tool args under a strict

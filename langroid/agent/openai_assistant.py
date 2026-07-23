@@ -200,7 +200,7 @@ class OpenAIAssistant(ChatAgent):
             return
         if self.config.use_tools:
             sys_msg = self._create_system_and_tools_message()
-            self.set_system_message(sys_msg.content)
+            self.set_system_message(sys_msg.content or "")
         if not self.config.use_functions_api:
             return
         functions, _, _, _, _ = self._function_args()
@@ -610,7 +610,7 @@ class OpenAIAssistant(ChatAgent):
     def _process_run_result(self, status: RunStatus) -> LLMResponse:
         """Process the result of the run."""
         function_call: LLMFunctionCall | None = None
-        response = ""
+        response: str | None = ""
         tool_id = ""
         # IMPORTANT: FIRST save hash key to store result,
         # before it gets updated with the response
@@ -630,6 +630,7 @@ class OpenAIAssistant(ChatAgent):
             # revisit later: multi-tools affects the task.run() loop.
             function_call = tool_call_fn.function
             tool_id = tool_call_fn.id
+            response = None
         result = LLMResponse(
             message=response,
             tool_id=tool_id,
@@ -674,7 +675,7 @@ class OpenAIAssistant(ChatAgent):
         tool_outputs = [
             {
                 "tool_call_id": msg.tool_id,
-                "output": msg.content,
+                "output": msg.content or "",
             }
         ]
         # run enters queued, in_progress state after this
@@ -739,11 +740,12 @@ class OpenAIAssistant(ChatAgent):
             # But for OAI Assistant, we only assume exactly one tool-call at a time.
             # TODO look into multi-tools
             llm_msg = ChatDocument.to_LLMMessage(message)[0]
+            llm_content = llm_msg.content or ""
             tool_id = llm_msg.tool_id
             if tool_id in self.pending_tool_ids:
                 if isinstance(message, ChatDocument):
                     message.pop_tool_ids()
-                result_msg = f"Result for Tool_id {tool_id}: {llm_msg.content}"
+                result_msg = f"Result for Tool_id {tool_id}: {llm_content}"
                 if tool_id in self.cached_tool_ids:
                     self.cached_tool_ids.remove(tool_id)
                     # add actual result of cached fn-call
@@ -761,7 +763,7 @@ class OpenAIAssistant(ChatAgent):
                 self.pending_tool_ids.remove(tool_id)
             else:
                 # add message to the thread
-                self._add_thread_message(llm_msg.content, role=Role.USER)
+                self._add_thread_message(llm_content, role=Role.USER)
 
         # When message is None, the thread may have no user msgs,
         # Note: system message is NOT placed in the thread by the OpenAI system.

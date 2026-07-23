@@ -337,7 +337,7 @@ class LLMMessage(BaseModel):
                 dict_no_none["function_call"]["arguments"] = json.dumps(
                     dict_no_none["function_call"]["arguments"]
                 )
-        if "tool_calls" in dict_no_none:
+        if dict_no_none.get("tool_calls"):
             # convert tool calls to API format
             for tc in dict_no_none["tool_calls"]:
                 if "arguments" in tc["function"]:
@@ -350,13 +350,20 @@ class LLMMessage(BaseModel):
                         )
                 if "extra_content" in tc and tc["extra_content"] is None:
                     del tc["extra_content"]
+        else:
+            # An empty tool-call list is not a call and conveys no useful API
+            # information. Omitting it also lets the empty-message fallback
+            # below produce a valid message.
+            dict_no_none.pop("tool_calls", None)
         # A message with empty content (None was dropped above, or "") AND no
         # tool/function call would be an entirely empty message, which some APIs
         # (e.g. Gemini) reject; fall back to a single space in that case only.
         # When there IS a tool/function call, empty content is fine (and Gemini
         # 3.x in fact REQUIRES it — it rejects an assistant turn that carries
         # both a call and non-empty text content).
-        has_call = "tool_calls" in dict_no_none or "function_call" in dict_no_none
+        has_call = bool(dict_no_none.get("tool_calls")) or (
+            dict_no_none.get("function_call") is not None
+        )
         if not has_call and not dict_no_none.get("content"):
             dict_no_none["content"] = " "
         # IMPORTANT! drop fields that are not expected in API call
@@ -467,7 +474,7 @@ class LLMResponse(BaseModel):
                 recipient = args.get("recipient", "")
             return recipient, msg
         else:
-            msg = self.message
+            msg = self.message or ""
             if self.oai_tool_calls is not None:
                 # get the first tool that has a recipient field, if any
                 for tc in self.oai_tool_calls:

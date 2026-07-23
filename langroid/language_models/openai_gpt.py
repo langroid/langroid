@@ -1316,8 +1316,16 @@ class OpenAIGPT(LanguageModel):
         token_usage: Dict[str, int] = {}
         done: bool = False
         in_reasoning: bool = False  # Track if we're inside reasoning delimiters
+        content_present = False
         try:
             for event in response:
+                event_dict = event if isinstance(event, dict) else event.model_dump()
+                choices = event_dict.get("choices") or []
+                if chat and choices:
+                    delta = choices[0].get("delta") or {}
+                    content_present = content_present or (
+                        "content" in delta and delta["content"] is not None
+                    )
                 (
                     is_break,
                     has_function,
@@ -1365,6 +1373,7 @@ class OpenAIGPT(LanguageModel):
             function_args=function_args,
             function_name=function_name,
             usage=token_usage,
+            content_present=content_present,
         )
 
     @async_retry_with_exponential_backoff
@@ -1395,8 +1404,16 @@ class OpenAIGPT(LanguageModel):
         token_usage: Dict[str, int] = {}
         done: bool = False
         in_reasoning: bool = False  # Track if we're inside reasoning delimiters
+        content_present = False
         try:
             async for event in response:
+                event_dict = event if isinstance(event, dict) else event.model_dump()
+                choices = event_dict.get("choices") or []
+                if chat and choices:
+                    delta = choices[0].get("delta") or {}
+                    content_present = content_present or (
+                        "content" in delta and delta["content"] is not None
+                    )
                 (
                     is_break,
                     has_function,
@@ -1444,6 +1461,7 @@ class OpenAIGPT(LanguageModel):
             function_args=function_args,
             function_name=function_name,
             usage=token_usage,
+            content_present=content_present,
         )
 
     @staticmethod
@@ -1589,6 +1607,7 @@ class OpenAIGPT(LanguageModel):
         function_args: str = "",
         function_name: str = "",
         usage: Dict[str, int] = {},
+        content_present: bool = False,
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
         """
         Create an LLMResponse object from the streaming API response.
@@ -1602,6 +1621,7 @@ class OpenAIGPT(LanguageModel):
             function_args: string representing function args
             function_name: name of the function
             usage: token usage dict
+            content_present: whether a stream delta explicitly contained content
         Returns:
             Tuple consisting of:
                 LLMResponse object (with message, usage),
@@ -1623,10 +1643,18 @@ class OpenAIGPT(LanguageModel):
             failed_content, tool_calls, tool_dicts = OpenAIGPT.tool_deltas_to_tools(
                 tool_deltas,
             )
-            completion = completion + "\n" + failed_content
+            if failed_content:
+                completion += ("\n" if completion else "") + failed_content
+                content_present = True
+            has_valid_call = len(tool_dicts) > 0 or has_function
+            response_content = (
+                None
+                if has_valid_call and not content_present and completion == ""
+                else completion
+            )
             msg: Dict[str, Any] = dict(
                 message=dict(
-                    content=completion,
+                    content=response_content,
                     reasoning_content=reasoning,
                 ),
             )
@@ -1645,6 +1673,7 @@ class OpenAIGPT(LanguageModel):
         else:
             # non-chat mode has no function_call
             msg = dict(text=completion)
+            response_content = completion
             # TODO: Ignoring reasoning content for non-chat models
 
         # create an OpenAIResponse object so we can cache it as if it were
@@ -1660,17 +1689,18 @@ class OpenAIGPT(LanguageModel):
         # (e.g. reasoning_content), the message text doesn't contain
         # thought signatures, so there's nothing extra to preserve.
         message_with_reasoning = None
-        if reasoning == "":
+        message: str | None
+        if reasoning == "" and response_content is not None:
             # some LLM APIs may not return a separate reasoning field,
             # and the reasoning may be included in the message content
             # within delimiters like <think> ... </think>
-            reasoning, message = self.get_reasoning_final(completion)
+            reasoning, message = self.get_reasoning_final(response_content)
             if reasoning:
                 # Inline tags were found and extracted; preserve the
                 # original text so it can be restored in message history.
-                message_with_reasoning = completion
+                message_with_reasoning = response_content
         else:
-            message = completion
+            message = response_content
 
         prompt_tokens = usage.get("prompt_tokens", 0)
         prompt_tokens_details: Any = usage.get("prompt_tokens_details", {})
@@ -2346,7 +2376,7 @@ class OpenAIGPT(LanguageModel):
             message = {}
         if message is None:
             message = {}
-        content = message.get("content", "")
+        content = message.get("content")
         reasoning = message.get("reasoning_content", "")
         # Track whether we extracted inline thought tags from the text.
         # Only set message_with_reasoning when get_reasoning_final()

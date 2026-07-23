@@ -204,7 +204,7 @@ class ChatAgent(Agent):
         if task is not None:
             # if task contains a system msg, we override the config system msg
             if len(task) > 0 and task[0].role == Role.SYSTEM:
-                self.system_message = task[0].content
+                self.system_message = task[0].content or ""
             # if task contains a user msg, we override the config user msg
             if len(task) > 1 and task[1].role == Role.USER:
                 self.user_message = task[1].content
@@ -1345,7 +1345,9 @@ class ChatAgent(Agent):
             llm_msg = self.message_history[idx]
         else:
             llm_msg = copy.deepcopy(self.message_history[idx])
-        orig_content = llm_msg.content or ""
+        if llm_msg.content is None:
+            return llm_msg
+        orig_content = llm_msg.content
         new_content = (
             self.parser.truncate_tokens(orig_content, tokens)
             if self.parser is not None
