@@ -12,6 +12,7 @@ needed; ``validate_cypher_query`` itself is the real implementation.
 
 from typing import Any, Dict, List, Optional
 
+import pandas as pd
 import pytest
 
 from langroid.agent.special.neo4j.csv_kg_chat import CSVGraphAgent, PandasToKGTool
@@ -32,13 +33,13 @@ class _StubAgent:
 
     def __init__(self, allow_dangerous: bool = False) -> None:
         self.config = _Config(allow_dangerous)
-        self.df = None  # no rows => no execution beyond the gate
-        self.executed: List[str] = []
+        self.df = pd.DataFrame([{"name": "Ada"}])
+        self.executed: List[tuple[str, Optional[Dict[str, Any]]]] = []
 
     def write_query(
         self, query: str, parameters: Optional[Dict[str, Any]] = None
     ) -> _Response:
-        self.executed.append(query)
+        self.executed.append((query, parameters))
         return _Response()
 
 
@@ -61,19 +62,23 @@ def test_pandas_to_kg_rejects_dangerous_cypher(query: str) -> None:
 
 def test_pandas_to_kg_allows_benign_cypher() -> None:
     agent = _StubAgent()
+    query = "MERGE (p:Person {name: $name})"
     msg = PandasToKGTool(
-        cypherQuery="MERGE (p:Person {name: $name})",
+        cypherQuery=query,
         args=["name"],
     )
     result = CSVGraphAgent.pandas_to_kg(agent, msg)  # type: ignore[arg-type]
 
     assert "REJECTED" not in result.upper()
+    assert agent.executed == [(query, {"name": "Ada"})]
 
 
 def test_allow_dangerous_operations_bypasses_the_gate() -> None:
     """The documented opt-in still disables the gate, as elsewhere."""
     agent = _StubAgent(allow_dangerous=True)
-    msg = PandasToKGTool(cypherQuery=DANGEROUS[0], args=[])
+    query = DANGEROUS[0]
+    msg = PandasToKGTool(cypherQuery=query, args=["name"])
     result = CSVGraphAgent.pandas_to_kg(agent, msg)  # type: ignore[arg-type]
 
     assert "REJECTED" not in result.upper()
+    assert agent.executed == [(query, {"name": "Ada"})]
