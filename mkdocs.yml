@@ -117,6 +117,7 @@ nav:
       - Custom Azure OpenAI client: notes/custom-azure-client.md
       - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
       - Reasoning Content: notes/reasoning-content.md
+      - None Content in LLM Messages: notes/llm-none-content.md
       - Weaviate: notes/weaviate.md
       - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
       - PGVector: notes/pgvector.md
@@ -186,4 +187,3 @@ extra_javascript:
   - javascripts/mathjax.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-
