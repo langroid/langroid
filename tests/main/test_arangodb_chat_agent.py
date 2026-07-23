@@ -5,6 +5,7 @@ import time
 import pytest
 from adb_cloud_connector import get_temp_credentials
 from arango.client import ArangoClient
+from arango.database import StandardDatabase
 from arango_datasets import Datasets
 
 import langroid as lr
@@ -427,16 +428,34 @@ def test_multiple_relationships(number_kg_agent):
     assert set(plus4_values) == {6}
 
 
-def test_arangodb_cloud_datasets():
-    connection = get_temp_credentials(tutorialName="langroid")
-    client = ArangoClient(hosts=connection["url"])
+def _connect_arango_cloud() -> "tuple[StandardDatabase, ArangoClient]":
+    """Connect to a temporary ArangoDB cloud instance for tutorial datasets.
 
-    db = client.db(
-        connection["dbName"],
-        connection["username"],
-        connection["password"],
-        verify=True,
-    )
+    Credentials come from ArangoDB's external free-tier ``get_temp_credentials``
+    service, which is occasionally unreachable or returns an unusable host
+    (e.g. an empty host yielding ``https://:::8529``). Skip rather than fail in
+    that case, so a transient outage of that external service does not turn CI
+    (and the README build badge) red.
+
+    Returns:
+        A ``(db, client)`` tuple for the connected temporary cloud database.
+    """
+    try:
+        connection = get_temp_credentials(tutorialName="langroid")
+        client = ArangoClient(hosts=connection["url"])
+        db = client.db(
+            connection["dbName"],
+            connection["username"],
+            connection["password"],
+            verify=True,
+        )
+    except Exception as e:
+        pytest.skip(f"ArangoDB cloud credential service unavailable: {e}")
+    return db, client
+
+
+def test_arangodb_cloud_datasets():
+    db, _client = _connect_arango_cloud()
 
     datasets = Datasets(db)
     assert len(datasets.list_datasets()) > 0
@@ -449,15 +468,7 @@ def test_arangodb_cloud_datasets():
 def arango_agent_from_db():
     """Arango Agent created from a cloud arango dataset"""
 
-    connection = get_temp_credentials(tutorialName="langroid")
-    client = ArangoClient(hosts=connection["url"])
-
-    db = client.db(
-        connection["dbName"],
-        connection["username"],
-        connection["password"],
-        verify=True,
-    )
+    db, client = _connect_arango_cloud()
 
     ArangoChatAgent.cleanup_graph_db(db)
 
