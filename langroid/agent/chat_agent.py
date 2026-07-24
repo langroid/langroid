@@ -1641,14 +1641,20 @@ class ChatAgent(Agent):
                 # either the message is a str, or it is a fresh ChatDocument
                 # different from the last message in the history
                 llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
-                # Keep messages that have text or a function/tool call. A call-only
-                # assistant turn has no content but is still required in history.
+                # Keep messages that have text, a function/tool call, or ARE a
+                # function/tool call result. A call-only assistant turn has no
+                # content but is still required in history, and so is a
+                # legitimately-empty tool/function result: neither carries
+                # function_call/tool_calls (those live on the assistant turn
+                # that made the call), so dropping it here would silently
+                # un-answer the pending call it responds to (issue #1063).
                 llm_msgs = [
                     m
                     for m in llm_msgs
                     if (m.content or "").strip() != ""
                     or m.function_call is not None
                     or bool(m.tool_calls)
+                    or m.role in (Role.FUNCTION, Role.TOOL)
                 ]
                 if len(llm_msgs) == 0:
                     return [], 0

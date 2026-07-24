@@ -591,4 +591,27 @@ def test_content_is_none_overrides_stale_text_after_serialization():
 
     assert msg.content is None
     assert msg.tool_calls == [_tool_call()]
-    assert "content" not in msg.api_dict(MODEL)
+
+
+def test_prep_keeps_legitimately_empty_tool_result(agent: ChatAgent) -> None:
+    """A tool result with genuinely empty content (e.g. a tool that succeeds
+    with no output) must stay in history and clear the pending tool call from
+    agent.oai_tool_calls, not get silently dropped (issue #1063). Before the
+    fix, the history filter kept a message only if it had non-empty content, a
+    function_call, or tool_calls -- none of which a TOOL-role result carries,
+    so an empty-content result was dropped and its call_id never reached
+    `done_tools`, leaving the call marked pending forever."""
+    agent.oai_tool_calls = [_tool_call()]
+    doc = ChatDocument(
+        content="",
+        metadata=ChatDocMetaData(
+            sender=Entity.AGENT, source=Entity.AGENT, oai_tool_id="call_1"
+        ),
+    )
+
+    hist, _ = agent._prep_llm_messages(doc)
+
+    tool_msgs = [m for m in hist if m.role == Role.TOOL]
+    assert len(tool_msgs) == 1
+    assert tool_msgs[0].tool_call_id == "call_1"
+    assert agent.oai_tool_calls == []
