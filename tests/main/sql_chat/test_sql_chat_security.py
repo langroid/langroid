@@ -284,3 +284,68 @@ def test_ast_dangerous_function_bypasses_blocked(session, query):
 def test_ast_check_does_not_overmatch_benign_functions(session, query):
     agent = _make_agent(session)
     assert agent._validate_query(query) is None
+
+
+# ---------------------------------------------------------------------------
+# Nested writes: the top-level parse node does not determine what a statement
+# writes (GHSA-3gpx-vwr3-xvwx / GHSA-wc83-4cvx-p8xc).
+# ---------------------------------------------------------------------------
+
+
+NESTED_WRITE_QUERIES = [
+    # Data-modifying CTEs: top node parses as Select, the CTE still executes.
+    "WITH x AS (DELETE FROM items RETURNING *) SELECT count(*) FROM x",
+    "WITH x AS (UPDATE items SET name='b' RETURNING *) SELECT * FROM x",
+    "WITH x AS (INSERT INTO items VALUES (2,'b') RETURNING *) SELECT * FROM x",
+    # Nested a level deeper, to be sure the walk is recursive.
+    "WITH a AS (WITH b AS (DELETE FROM items RETURNING *) SELECT * FROM b)"
+    " SELECT * FROM a",
+    # SELECT ... INTO creates and populates a table; no nested Create node,
+    # it is carried on the Select's `into` arg.
+    "SELECT * INTO evil FROM items",
+]
+
+
+@pytest.mark.parametrize("query", NESTED_WRITE_QUERIES)
+def test_nested_writes_blocked_under_select_only_default(session, query):
+    agent = _make_agent(session)
+    rejection = agent._validate_query(query)
+    assert rejection is not None, f"nested write slipped through: {query}"
+    assert "REJECTED" in rejection
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM items",
+        "SELECT count(*) FROM items WHERE name = 'a'",
+        # A read-only CTE must still be allowed -- the check keys on the
+        # embedded statement type, not on the presence of a WITH clause.
+        "WITH x AS (SELECT * FROM items) SELECT count(*) FROM x",
+        "WITH a AS (SELECT 1 AS n), b AS (SELECT n FROM a) SELECT * FROM b",
+    ],
+)
+def test_read_only_queries_still_allowed(session, query):
+    agent = _make_agent(session)
+    assert agent._validate_query(query) is None
+
+
+def test_nested_write_allowed_when_operator_extends_allowlist(session):
+    """The gate keys on `allowed_statement_types`, not on nesting itself."""
+    agent = _make_agent(
+        session,
+        allowed_statement_types=["SELECT", "DELETE"],
+    )
+    query = "WITH x AS (DELETE FROM items RETURNING *) SELECT count(*) FROM x"
+    assert agent._validate_query(query) is None
+    # An embedded INSERT is still not in the extended allowlist.
+    insert_q = (
+        "WITH x AS (INSERT INTO items VALUES (2,'b') RETURNING *) SELECT * FROM x"
+    )
+    assert agent._validate_query(insert_q) is not None
+
+
+def test_nested_write_bypass_when_dangerous_ops_allowed(session):
+    agent = _make_agent(session, allow_dangerous_operations=True)
+    query = "WITH x AS (DELETE FROM items RETURNING *) SELECT count(*) FROM x"
+    assert agent._validate_query(query) is None

@@ -17,6 +17,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Union,
 )
@@ -211,6 +212,49 @@ def _called_function_names(stmt: Any) -> Iterator[str]:
         name = name.rsplit(".", 1)[-1].strip().lower()
         if name:
             yield name
+
+
+def _nested_write_kinds(stmt: Any, kind_map: Dict[Any, str]) -> Set[str]:
+    """Statement kinds that `stmt` performs *below* its top-level node.
+
+    A statement's top-level node does not determine what it writes. Both
+
+    - ``WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x`` (a
+      data-modifying CTE), and
+    - ``SELECT * INTO new_tbl FROM t`` (which creates and populates a table)
+
+    parse with a ``Select`` top node, so classifying on that node alone reports
+    "SELECT" while the engine still performs the write
+    (GHSA-3gpx-vwr3-xvwx / GHSA-wc83-4cvx-p8xc).
+
+    Args:
+        stmt: A parsed sqlglot statement.
+        kind_map: Mapping of sqlglot expression type to statement-kind name.
+
+    Returns:
+        The set of kind names written by nested nodes, plus ``"CREATE"`` for
+        the ``SELECT ... INTO`` form. Empty for an ordinary read-only query.
+    """
+    write_types = (
+        sqlglot_exp.Insert,
+        sqlglot_exp.Update,
+        sqlglot_exp.Delete,
+        sqlglot_exp.Merge,
+        sqlglot_exp.Create,
+        sqlglot_exp.Drop,
+        sqlglot_exp.Alter,
+        sqlglot_exp.TruncateTable,
+    )
+    kinds = {
+        kind_map[type(node)]
+        for node in stmt.find_all(*write_types)
+        if node is not stmt and type(node) in kind_map
+    }
+    # `SELECT ... INTO tbl` carries no nested Create node; it is flagged by the
+    # `into` arg on the Select itself.
+    if isinstance(stmt, sqlglot_exp.Select) and stmt.args.get("into") is not None:
+        kinds.add("CREATE")
+    return kinds
 
 
 # Default set of SQL statement types the agent is allowed to execute when
@@ -683,6 +727,29 @@ class SQLChatAgent(ChatAgent):
                     f"the operator to extend `allowed_statement_types` "
                     f"(or set `allow_dangerous_operations=True`) on the "
                     f"SQLChatAgent config."
+                )
+            # The top-level node alone does not determine what a statement
+            # writes. A data-modifying CTE
+            # (``WITH x AS (DELETE ... RETURNING *) SELECT ...``) and
+            # ``SELECT ... INTO tbl`` both parse with a ``Select`` top node, so
+            # the check above classifies them as SELECT while the engine still
+            # performs the write (GHSA-3gpx-vwr3-xvwx / GHSA-wc83-4cvx-p8xc).
+            nested = _nested_write_kinds(stmt, kind_map)
+            disallowed = sorted(nested - allowed)
+            if disallowed:
+                logger.warning(
+                    f"SQLChatAgent rejected {kind} statement embedding "
+                    f"{disallowed} (allowed: {sorted(allowed)}): {query!r}"
+                )
+                return (
+                    f"Query REJECTED for safety: although this parses as a "
+                    f"{kind} statement, it embeds {disallowed}, which is not "
+                    f"in the allowed list {sorted(allowed)} -- the database "
+                    f"would still perform that write. Rewrite the query "
+                    f"without the embedded statement, or ask the operator to "
+                    f"extend `allowed_statement_types` (or set "
+                    f"`allow_dangerous_operations=True`) on the SQLChatAgent "
+                    f"config."
                 )
             # AST-side dangerous-function check: catches calls that evaded
             # `_DANGEROUS_SQL_PATTERNS` via quoted identifiers, inline comments,

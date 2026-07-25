@@ -90,6 +90,12 @@ We aim to acknowledge in-scope reports within 7 days.
   precedence over this category.
 - **A code path that skips a documented safety gate entirely** — that is, a
   *missing call* to a validator, not a *bypass* of one.
+- **A statement the `allowed_statement_types` allowlist misclassifies.** The
+  allowlist is a different kind of control from the denylists above: it decides
+  what a statement *does* over a closed set of statement kinds, so a query that
+  performs a write the allowlist did not authorize — for example by nesting it
+  where the classifier does not look — is a bounded, fixable defect and is in
+  scope.
 - Vulnerable dependencies with a demonstrated impact on Langroid.
 
 ### Out of scope
@@ -98,8 +104,8 @@ The following will be closed without a fix, an advisory, or a CVE request:
 
 - New bypasses of the SQL, Cypher, or AQL denylists: previously unlisted
   functions, alternate quoting or escaping forms (backticks, Unicode escapes,
-  schema qualification), dialect-specific syntax, or statement shapes such as
-  writable CTEs. See "What is, and is not, a security boundary" above.
+  schema qualification), or dialect-specific syntax. See "What is, and is not,
+  a security boundary" above.
 - Sandbox escapes from the pandas `eval()` path when `full_eval=True`,
   including object-graph traversal via dunder attributes. `full_eval=True`
   disables the AST validator by design.
