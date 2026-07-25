@@ -608,6 +608,30 @@ def test_gemini_api_base():
             os.environ["GEMINI_API_BASE"] = saved_gemini_api_base
 
 
+def test_gemini_google_prefix():
+    """`google/`-prefixed Gemini models route to the Gemini API (issue #995)."""
+    from langroid.language_models.openai_gpt import GEMINI_BASE_URL
+
+    original_chat_model = settings.chat_model
+    settings.chat_model = ""
+
+    saved_openai_api_base = os.environ.pop("OPENAI_API_BASE", None)
+    saved_gemini_api_base = os.environ.pop("GEMINI_API_BASE", None)
+
+    try:
+        for chat_model in ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"):
+            llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=chat_model))
+            assert llm.is_gemini
+            assert llm.config.chat_model == "gemini-2.0-flash"
+            assert llm.api_base == GEMINI_BASE_URL
+    finally:
+        settings.chat_model = original_chat_model
+        if saved_openai_api_base is not None:
+            os.environ["OPENAI_API_BASE"] = saved_openai_api_base
+        if saved_gemini_api_base is not None:
+            os.environ["GEMINI_API_BASE"] = saved_gemini_api_base
+
+
 def test_followup_standalone():
     """Test that followup_to_standalone works."""
 

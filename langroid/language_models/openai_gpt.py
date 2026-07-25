@@ -96,6 +96,8 @@ else:
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+# Provider prefixes that route to the Gemini OpenAI-compatible API.
+GEMINI_MODEL_PREFIXES = ("gemini/", "google/")
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 OLLAMA_API_KEY = "ollama"
@@ -592,7 +594,12 @@ class OpenAIGPT(LanguageModel):
                     self.api_key = self.config.litellm_proxy.api_key or self.api_key
                 self.api_base = self.config.litellm_proxy.api_base or self.api_base
             elif self.is_gemini:
-                self.config.chat_model = self.config.chat_model.replace("gemini/", "")
+                for prefix in GEMINI_MODEL_PREFIXES:
+                    if self.config.chat_model.startswith(prefix):
+                        self.config.chat_model = self.config.chat_model.replace(
+                            prefix, "", 1
+                        )
+                        break
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
                 # Use GEMINI_API_BASE env var if set (e.g. for Vertex AI),
@@ -845,7 +852,7 @@ class OpenAIGPT(LanguageModel):
 
     def is_gemini_model(self) -> bool:
         """Are we using the gemini OpenAI-compatible API?"""
-        return self.chat_model_orig.startswith("gemini/")
+        return self.chat_model_orig.startswith(GEMINI_MODEL_PREFIXES)
 
     def is_deepseek_model(self) -> bool:
         deepseek_models = [e.value for e in DeepSeekModel]
