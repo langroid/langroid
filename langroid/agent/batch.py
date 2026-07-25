@@ -393,11 +393,10 @@ def run_batch_tasks(
         output_map (Callable[[ChatDocument|str], U]): function to map result
             to final result
         stop_on_first_result (bool): whether to stop after the first valid
-            (non-None) result. Successful results are evaluated after
-            `output_map`; with `ExceptionHandling.RETURN_EXCEPTION` the returned
-            exception object is itself non-None and also stops the batch.
-            Processing continues past None results; once a non-None result
-            appears, pending tasks are cancelled and their entries in the
+            (non-None, after `output_map`) result. Processing continues past
+            None-mapped results; exceptions propagate, since this function
+            always uses the default `RAISE` exception handling. Once a non-None
+            result appears, pending tasks are cancelled and their entries in the
             returned list are None.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
