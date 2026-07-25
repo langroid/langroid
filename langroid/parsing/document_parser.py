@@ -1346,16 +1346,17 @@ class LLMPdfParser(DocumentParser):
                         ],
                     )
 
-                    # Return extracted text if available
-                    return (
-                        ""
-                        if (
-                            response is None
-                            or not hasattr(response, "choices")
-                            or not isinstance(response.choices, list)
-                        )
-                        else (response.choices[0].message.content)
+                    # Return extracted text if available. `async_client` spans
+                    # several vendor SDKs whose choice objects differ (only some
+                    # carry `.message`, and its `.content` may be None), so probe
+                    # each step rather than assuming the OpenAI shape.
+                    choices = getattr(response, "choices", None)
+                    if not isinstance(choices, list) or not choices:
+                        return ""
+                    content = getattr(
+                        getattr(choices[0], "message", None), "content", None
                     )
+                    return content if isinstance(content, str) else ""
 
                 except Exception as e:
                     # Log error with page numbers for debugging
