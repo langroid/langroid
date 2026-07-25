@@ -258,5 +258,9 @@ class LanceDocChatAgent(DocChatAgent):
             .limit(self.config.n_similar_chunks * multiple)
         )
         docs = self.vecdb._lance_result_to_docs(result)
-        scores = [r["score"] for r in result.to_list()]
+        # LanceDB renamed the FTS relevance column from `score` to `_score`;
+        # accept either so we work across the supported version range.
+        scores = [
+            r.get("_score", r.get("score", 0.0)) for r in result.to_list()  # type: ignore[union-attr]
+        ]
         return list(zip(docs, scores))
