@@ -515,39 +515,52 @@ def test_process_batch_async_stop_on_first(stop_on_first_result):
         assert all("Processed" in r for r in results)
 
 
-def test_process_batch_async_stop_on_first_skips_none_result():
+def test_process_batch_async_stop_on_first_skips_none_result() -> None:
     """Keep waiting when the first completed task has no valid result."""
 
     async def run_batch() -> list[Any]:
-        invalid_done = asyncio.Event()
         release_valid = asyncio.Event()
 
-        async def release_after_invalid() -> None:
-            await invalid_done.wait()
-            await asyncio.sleep(0)
-            release_valid.set()
+        def output_map(result: Any) -> Any:
+            if result is None:
+                release_valid.set()
+            return result
 
         async def mock_task(input: str, i: int) -> str | None:
             if input == "invalid":
-                invalid_done.set()
                 return None
             if input == "valid":
                 await release_valid.wait()
                 return "Processed valid"
             await asyncio.Event().wait()
+            raise AssertionError("Unreachable")
 
-        controller = asyncio.create_task(release_after_invalid())
-        await asyncio.sleep(0)
-        try:
-            return await _process_batch_async(
-                ["invalid", "valid", "slow"],
-                mock_task,
-                stop_on_first_result=True,
-                handle_exceptions=ExceptionHandling.RAISE,
-            )
-        finally:
-            await controller
+        return await _process_batch_async(
+            ["invalid", "valid", "slow"],
+            mock_task,
+            stop_on_first_result=True,
+            handle_exceptions=ExceptionHandling.RAISE,
+            output_map=output_map,
+        )
 
     results = asyncio.run(run_batch())
 
     assert results == [None, "Processed valid", None]
+
+
+def test_process_batch_async_stop_on_first_all_none() -> None:
+    """Return after all tasks complete when every mapped result is None."""
+
+    async def mock_task(input: str, i: int) -> None:
+        return None
+
+    results = asyncio.run(
+        _process_batch_async(
+            ["invalid-1", "invalid-2"],
+            mock_task,
+            stop_on_first_result=True,
+            handle_exceptions=ExceptionHandling.RAISE,
+        )
+    )
+
+    assert results == [None, None]
