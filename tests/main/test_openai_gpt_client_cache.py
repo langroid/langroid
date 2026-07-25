@@ -42,6 +42,54 @@ class TestOpenAIGPTClientCache:
         client2 = get_openai_client(api_key="key2")
         assert client1 is not client2
 
+    def test_cache_hit_does_not_create_extra_httpx_client(self, monkeypatch):
+        """A cache hit must not construct an unused httpx.Client."""
+        import httpx
+
+        created = []
+        real_client = httpx.Client
+
+        class TrackingClient(real_client):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                created.append(self)
+
+        monkeypatch.setattr(httpx, "Client", TrackingClient)
+
+        client1 = get_openai_client(
+            api_key="test-key-httpx", http_client_config={"timeout": 1.0}
+        )
+        client2 = get_openai_client(
+            api_key="test-key-httpx", http_client_config={"timeout": 1.0}
+        )
+
+        assert client1 is client2
+        assert len(created) == 1
+
+    def test_async_cache_hit_does_not_create_extra_httpx_client(self, monkeypatch):
+        """A cache hit must not construct an unused httpx.AsyncClient."""
+        import httpx
+
+        created = []
+        real_client = httpx.AsyncClient
+
+        class TrackingAsyncClient(real_client):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                created.append(self)
+
+        monkeypatch.setattr(httpx, "AsyncClient", TrackingAsyncClient)
+
+        client1 = get_async_openai_client(
+            api_key="test-key-httpx-async", http_client_config={"timeout": 1.0}
+        )
+        client2 = get_async_openai_client(
+            api_key="test-key-httpx-async", http_client_config={"timeout": 1.0}
+        )
+
+        assert client1 is client2
+        assert len(created) == 1
+
     def test_async_openai_client_singleton(self):
         """Test that same config returns same AsyncOpenAI client instance."""
         api_key = "test-key-async"
