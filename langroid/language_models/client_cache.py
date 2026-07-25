@@ -111,19 +111,6 @@ def get_openai_client(
         _all_clients.add(client)
         return client
 
-    # If http_client_config is provided, create client from config and cache
-    created_http_client = None
-    if http_client_config is not None:
-        try:
-            from httpx import Client
-
-            created_http_client = Client(**http_client_config)
-        except ImportError:
-            raise ValueError(
-                "httpx is required to use http_client_config. "
-                "Install it with: pip install httpx"
-            )
-
     cache_key = _get_cache_key(
         "openai",
         api_key=api_key,
@@ -138,6 +125,17 @@ def get_openai_client(
         cached_client = _get_cached_client(cache_key)
         if cached_client is not None:
             return cast(OpenAI, cached_client)
+
+        created_http_client = None
+        if http_client_config is not None:
+            try:
+                from httpx import Client
+            except ImportError:
+                raise ValueError(
+                    "httpx is required to use http_client_config. "
+                    "Install it with: pip install httpx"
+                )
+            created_http_client = Client(**http_client_config)
 
         client = OpenAI(
             api_key=api_key,
@@ -192,19 +190,6 @@ def get_async_openai_client(
         _all_clients.add(client)
         return client
 
-    # If http_client_config is provided, create async client from config and cache
-    created_http_client = None
-    if http_client_config is not None:
-        try:
-            from httpx import AsyncClient
-
-            created_http_client = AsyncClient(**http_client_config)
-        except ImportError:
-            raise ValueError(
-                "httpx is required to use http_client_config. "
-                "Install it with: pip install httpx"
-            )
-
     cache_key = _get_cache_key(
         "async_openai",
         api_key=api_key,
@@ -219,6 +204,17 @@ def get_async_openai_client(
         cached_client = _get_cached_client(cache_key)
         if cached_client is not None:
             return cast(AsyncOpenAI, cached_client)
+
+        created_http_client = None
+        if http_client_config is not None:
+            try:
+                from httpx import AsyncClient
+            except ImportError:
+                raise ValueError(
+                    "httpx is required to use http_client_config. "
+                    "Install it with: pip install httpx"
+                )
+            created_http_client = AsyncClient(**http_client_config)
 
         client = AsyncOpenAI(
             api_key=api_key,
