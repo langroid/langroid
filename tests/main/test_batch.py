@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import pytest
 
@@ -513,3 +513,41 @@ def test_process_batch_async_stop_on_first(stop_on_first_result):
     else:
         assert all(r is not None for r in results)
         assert all("Processed" in r for r in results)
+
+
+def test_process_batch_async_stop_on_first_skips_none_result():
+    """Keep waiting when the first completed task has no valid result."""
+
+    async def run_batch() -> list[Any]:
+        invalid_done = asyncio.Event()
+        release_valid = asyncio.Event()
+
+        async def release_after_invalid() -> None:
+            await invalid_done.wait()
+            await asyncio.sleep(0)
+            release_valid.set()
+
+        async def mock_task(input: str, i: int) -> str | None:
+            if input == "invalid":
+                invalid_done.set()
+                return None
+            if input == "valid":
+                await release_valid.wait()
+                return "Processed valid"
+            await asyncio.Event().wait()
+
+        controller = asyncio.create_task(release_after_invalid())
+        await asyncio.sleep(0)
+        try:
+            return await _process_batch_async(
+                ["invalid", "valid", "slow"],
+                mock_task,
+                stop_on_first_result=True,
+                handle_exceptions=ExceptionHandling.RAISE,
+            )
+        finally:
+            await controller
+
+    results = asyncio.run(run_batch())
+
+    assert results == [None, "Processed valid", None]
