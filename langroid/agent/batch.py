@@ -295,9 +295,9 @@ def run_batch_task_gen(
             map any invalid output to None. We continue until some non-None
             result is obtained.
         stop_on_first_result (bool): whether to stop after the first valid
-            (not-None) result. In this case all other tasks are
-            cancelled, and their corresponding result is None in the
-            returned list.
+            (non-None, after `output_map`) result. Processing continues past
+            None-mapped results. Once a non-None result appears, pending tasks
+            are cancelled and their entries in the returned list are None.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -389,6 +389,10 @@ def run_batch_tasks(
             initial message to process
         output_map (Callable[[ChatDocument|str], U]): function to map result
             to final result
+        stop_on_first_result (bool): whether to stop after the first valid
+            (non-None, after `output_map`) result. Processing continues past
+            None-mapped results. Once a non-None result appears, pending tasks
+            are cancelled and their entries in the returned list are None.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -453,6 +457,9 @@ def run_batch_agent_method(
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         stop_on_first_result (bool): whether to stop after the first valid
+            (non-None, after `output_map`) result. Processing continues past
+            None-mapped results. Once a non-None result appears, pending tasks
+            are cancelled and their entries in the returned list are None.
         handle_exceptions: How to handle exceptions:
             - RAISE or False: Let exceptions propagate
             - RETURN_NONE or True: Convert exceptions to None in results
