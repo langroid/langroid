@@ -214,6 +214,28 @@ def _called_function_names(stmt: Any) -> Iterator[str]:
             yield name
 
 
+def _creates_table(into: Any) -> bool:
+    """Whether a Select's ``into`` arg names a table rather than a variable.
+
+    ``SELECT ... INTO tbl`` creates and populates a table, but MySQL's
+    ``SELECT ... INTO @var`` merely assigns a user variable and writes nothing.
+    sqlglot models the latter as a ``Table`` wrapping a ``Parameter``, so the
+    target's inner node distinguishes them.
+
+    Args:
+        into: The ``into`` arg of a sqlglot ``Select``, or None.
+
+    Returns:
+        True if the target names a table.
+    """
+    if into is None:
+        return False
+    target = into.this
+    if target is None:
+        return False
+    return not isinstance(getattr(target, "this", None), sqlglot_exp.Parameter)
+
+
 def _nested_write_kinds(stmt: Any, kind_map: Dict[Any, str]) -> Set[str]:
     """Statement kinds that `stmt` performs *below* its top-level node.
 
@@ -266,8 +288,13 @@ def _nested_write_kinds(stmt: Any, kind_map: Dict[Any, str]) -> Set[str]:
         if node is not stmt and type(node) in kind_map and not _is_merge_action(node)
     }
     # `SELECT ... INTO tbl` carries no nested Create node; it is flagged by the
-    # `into` arg on the Select itself.
-    if isinstance(stmt, sqlglot_exp.Select) and stmt.args.get("into") is not None:
+    # `into` arg on a Select. Check every Select, not just the top-level one:
+    # under a set operation (`SELECT ... INTO t UNION ALL SELECT ...`) the top
+    # node is a Union and the `into` sits on a branch.
+    selects = list(stmt.find_all(sqlglot_exp.Select))
+    if isinstance(stmt, sqlglot_exp.Select):
+        selects.append(stmt)
+    if any(_creates_table(sel.args.get("into")) for sel in selects):
         kinds.add("CREATE")
     return kinds
 

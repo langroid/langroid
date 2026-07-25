@@ -16,9 +16,13 @@ try:
 except ImportError as e:
     raise LangroidImportError(extra="sql", error=str(e))
 
+import sqlglot
+from sqlglot import expressions as sqlglot_exp
+
 from langroid.agent.special.sql.sql_chat_agent import (
     SQLChatAgent,
     SQLChatAgentConfig,
+    _nested_write_kinds,
 )
 from langroid.agent.special.sql.utils.tools import RunQueryTool
 
@@ -387,3 +391,67 @@ def test_merge_nested_in_cte_is_still_caught(session):
     rejection = agent._validate_query(query)
     assert rejection is not None
     assert "REJECTED" in rejection
+
+
+# ---------------------------------------------------------------------------
+# `_nested_write_kinds` unit tests. The agent fixture is SQLite-backed, so
+# dialect-specific parse shapes are exercised against the helper directly with
+# an explicit dialect rather than through a fake agent.
+# ---------------------------------------------------------------------------
+
+_KIND_MAP = {
+    sqlglot_exp.Select: "SELECT",
+    sqlglot_exp.Insert: "INSERT",
+    sqlglot_exp.Update: "UPDATE",
+    sqlglot_exp.Delete: "DELETE",
+    sqlglot_exp.Merge: "MERGE",
+    sqlglot_exp.Create: "CREATE",
+    sqlglot_exp.Drop: "DROP",
+    sqlglot_exp.Alter: "ALTER",
+    sqlglot_exp.TruncateTable: "TRUNCATE",
+    sqlglot_exp.Command: "COMMAND",
+}
+
+
+def _kinds(query: str, dialect: str) -> set:
+    return _nested_write_kinds(sqlglot.parse(query, read=dialect)[0], _KIND_MAP)
+
+
+@pytest.mark.parametrize(
+    "dialect, query, expected",
+    [
+        # MySQL `SELECT ... INTO @var` assigns a user variable and writes
+        # nothing; sqlglot models it as Table(this=Parameter(...)). Treating it
+        # as a table creation would reject a legitimate read under the
+        # SELECT-only default.
+        ("mysql", "SELECT name INTO @x FROM items", set()),
+        # A real table target still counts.
+        ("postgres", "SELECT * INTO evil FROM items", {"CREATE"}),
+        ("tsql", "SELECT * INTO evil FROM items", {"CREATE"}),
+        # `into` on a branch of a set operation: the top node is a Union, so
+        # checking only the top-level Select would miss the table creation.
+        (
+            "tsql",
+            "SELECT 1 AS x INTO new_t UNION ALL SELECT 2",
+            {"CREATE"},
+        ),
+        # Ordinary reads.
+        ("postgres", "SELECT * FROM items", set()),
+        ("postgres", "WITH x AS (SELECT 1) SELECT * FROM x", set()),
+        # Nested DML under a CTE.
+        (
+            "postgres",
+            "WITH x AS (DELETE FROM items RETURNING *) SELECT * FROM x",
+            {"DELETE"},
+        ),
+        # MERGE actions belong to the merge, not to the allowlist.
+        (
+            "postgres",
+            "MERGE INTO a USING b ON a.id = b.id "
+            "WHEN MATCHED THEN UPDATE SET a.n = b.n",
+            set(),
+        ),
+    ],
+)
+def test_nested_write_kinds_across_dialects(dialect, query, expected):
+    assert _kinds(query, dialect) == expected
