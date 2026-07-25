@@ -231,6 +231,11 @@ def _nested_write_kinds(stmt: Any, kind_map: Dict[Any, str]) -> Set[str]:
         stmt: A parsed sqlglot statement.
         kind_map: Mapping of sqlglot expression type to statement-kind name.
 
+    Only independently executable nested statements count. A ``MERGE``'s
+    ``WHEN ... THEN UPDATE/INSERT/DELETE`` actions parse as child write nodes
+    but are part of the merge itself, so an operator who allows ``MERGE`` must
+    not also be forced to allow standalone ``UPDATE``/``INSERT``/``DELETE``.
+
     Returns:
         The set of kind names written by nested nodes, plus ``"CREATE"`` for
         the ``SELECT ... INTO`` form. Empty for an ordinary read-only query.
@@ -245,10 +250,20 @@ def _nested_write_kinds(stmt: Any, kind_map: Dict[Any, str]) -> Set[str]:
         sqlglot_exp.Alter,
         sqlglot_exp.TruncateTable,
     )
+
+    def _is_merge_action(node: Any) -> bool:
+        """Whether `node` is a MERGE ``WHEN`` action rather than a statement."""
+        ancestor = node.parent
+        while ancestor is not None:
+            if isinstance(ancestor, sqlglot_exp.When):
+                return True
+            ancestor = ancestor.parent
+        return False
+
     kinds = {
         kind_map[type(node)]
         for node in stmt.find_all(*write_types)
-        if node is not stmt and type(node) in kind_map
+        if node is not stmt and type(node) in kind_map and not _is_merge_action(node)
     }
     # `SELECT ... INTO tbl` carries no nested Create node; it is flagged by the
     # `into` arg on the Select itself.

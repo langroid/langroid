@@ -349,3 +349,41 @@ def test_nested_write_bypass_when_dangerous_ops_allowed(session):
     agent = _make_agent(session, allow_dangerous_operations=True)
     query = "WITH x AS (DELETE FROM items RETURNING *) SELECT count(*) FROM x"
     assert agent._validate_query(query) is None
+
+
+MERGE_QUERY = (
+    "MERGE INTO items t USING items s ON t.id = s.id "
+    "WHEN MATCHED THEN UPDATE SET name = s.name "
+    "WHEN NOT MATCHED THEN INSERT (id, name) VALUES (s.id, s.name)"
+)
+
+
+def test_merge_actions_are_not_treated_as_nested_statements(session):
+    """A MERGE's WHEN actions belong to the merge, not to the allowlist.
+
+    sqlglot parses `WHEN MATCHED THEN UPDATE/INSERT/DELETE` as child write
+    nodes. Counting them as nested statements would force an operator who
+    allows MERGE to also allow standalone UPDATE/INSERT/DELETE.
+    """
+    agent = _make_agent(session, allowed_statement_types=["MERGE"])
+    assert agent._validate_query(MERGE_QUERY) is None
+
+
+def test_merge_still_blocked_when_not_allowlisted(session):
+    agent = _make_agent(session)  # SELECT-only default
+    rejection = agent._validate_query(MERGE_QUERY)
+    assert rejection is not None
+    assert "REJECTED" in rejection
+
+
+def test_merge_nested_in_cte_is_still_caught(session):
+    """Only the top-level MERGE's own actions are exempt."""
+    agent = _make_agent(session)
+    query = (
+        "WITH x AS (MERGE INTO items t USING items s ON t.id = s.id "
+        "WHEN MATCHED THEN UPDATE SET name = s.name RETURNING *) "
+        "SELECT * FROM x"
+    )
+    rejection = agent._validate_query(query)
+    assert rejection is not None
+    assert "REJECTED" in rejection
