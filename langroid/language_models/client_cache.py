@@ -130,13 +130,12 @@ def get_openai_client(
         if http_client_config is not None:
             try:
                 from httpx import Client
-
-                created_http_client = Client(**http_client_config)
             except ImportError:
                 raise ValueError(
                     "httpx is required to use http_client_config. "
                     "Install it with: pip install httpx"
                 )
+            created_http_client = Client(**http_client_config)
 
         client = OpenAI(
             api_key=api_key,
@@ -210,13 +209,12 @@ def get_async_openai_client(
         if http_client_config is not None:
             try:
                 from httpx import AsyncClient
-
-                created_http_client = AsyncClient(**http_client_config)
             except ImportError:
                 raise ValueError(
                     "httpx is required to use http_client_config. "
                     "Install it with: pip install httpx"
                 )
+            created_http_client = AsyncClient(**http_client_config)
 
         client = AsyncOpenAI(
             api_key=api_key,

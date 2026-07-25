@@ -312,6 +312,40 @@ class TestOpenAIGPTClientCache:
         assert len(construction_calls) == 2
 
     @pytest.mark.parametrize(
+        "getter,httpx_attr,api_key",
+        [
+            (get_openai_client, "Client", "test-key-import-error-sync"),
+            (
+                get_async_openai_client,
+                "AsyncClient",
+                "test-key-import-error-async",
+            ),
+        ],
+        ids=["sync", "async"],
+    )
+    def test_httpx_constructor_import_error_propagates_and_is_not_cached(
+        self, monkeypatch, getter, httpx_attr, api_key
+    ):
+        """Constructor ImportError propagates unchanged and caches nothing."""
+        constructor_error = ImportError("optional transport dependency is missing")
+        real_http_client_cls = getattr(httpx, httpx_attr)
+
+        class FailingHttpClient(real_http_client_cls):
+            def __init__(self, *args, **kwargs):
+                raise constructor_error
+
+        monkeypatch.setattr(httpx, httpx_attr, FailingHttpClient)
+
+        with pytest.raises(ImportError) as excinfo:
+            getter(
+                api_key=api_key,
+                http_client_config={"timeout": 1.0},
+            )
+
+        assert excinfo.value is constructor_error
+        assert len(client_cache_module._client_cache) == 0
+
+    @pytest.mark.parametrize(
         "getter,openai_cls,api_key",
         [
             (get_openai_client, OpenAI, "test-key-no-httpx-sync"),
