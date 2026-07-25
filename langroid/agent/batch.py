@@ -295,9 +295,12 @@ def run_batch_task_gen(
             map any invalid output to None. We continue until some non-None
             result is obtained.
         stop_on_first_result (bool): whether to stop after the first valid
-            (non-None, after `output_map`) result. Processing continues past
-            None-mapped results. Once a non-None result appears, pending tasks
-            are cancelled and their entries in the returned list are None.
+            (non-None) result. Successful results are evaluated after
+            `output_map`; with `ExceptionHandling.RETURN_EXCEPTION` the returned
+            exception object is itself non-None and also stops the batch.
+            Processing continues past None results; once a non-None result
+            appears, pending tasks are cancelled and their entries in the
+            returned list are None.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -390,9 +393,12 @@ def run_batch_tasks(
         output_map (Callable[[ChatDocument|str], U]): function to map result
             to final result
         stop_on_first_result (bool): whether to stop after the first valid
-            (non-None, after `output_map`) result. Processing continues past
-            None-mapped results. Once a non-None result appears, pending tasks
-            are cancelled and their entries in the returned list are None.
+            (non-None) result. Successful results are evaluated after
+            `output_map`; with `ExceptionHandling.RETURN_EXCEPTION` the returned
+            exception object is itself non-None and also stops the batch.
+            Processing continues past None results; once a non-None result
+            appears, pending tasks are cancelled and their entries in the
+            returned list are None.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -457,9 +463,12 @@ def run_batch_agent_method(
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         stop_on_first_result (bool): whether to stop after the first valid
-            (non-None, after `output_map`) result. Processing continues past
-            None-mapped results. Once a non-None result appears, pending tasks
-            are cancelled and their entries in the returned list are None.
+            (non-None) result. Successful results are evaluated after
+            `output_map`; with `ExceptionHandling.RETURN_EXCEPTION` the returned
+            exception object is itself non-None and also stops the batch.
+            Processing continues past None results; once a non-None result
+            appears, pending tasks are cancelled and their entries in the
+            returned list are None.
         handle_exceptions: How to handle exceptions:
             - RAISE or False: Let exceptions propagate
             - RETURN_NONE or True: Convert exceptions to None in results
