@@ -63,6 +63,28 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
+def _is_identified_result(message: LLMMessage) -> bool:
+    """Whether a TOOL/FUNCTION result has its identifier and no call payload.
+
+    Such results must survive even with empty content so their calls can be
+    marked complete (issue #1063).
+    """
+    has_identifier = (
+        message.role == Role.TOOL and bool((message.tool_call_id or "").strip())
+    ) or (message.role == Role.FUNCTION and bool((message.name or "").strip()))
+    return has_identifier and message.function_call is None and not message.tool_calls
+
+
+def _llm_message_has_payload(message: LLMMessage) -> bool:
+    """Whether a message has the fields required for a valid history entry."""
+    return (
+        (message.content or "").strip() != ""
+        or message.function_call is not None
+        or bool(message.tool_calls)
+        or _is_identified_result(message)
+    )
+
+
 class ChatAgentConfig(AgentConfig):
     """
     Configuration for ChatAgent
@@ -1345,7 +1367,9 @@ class ChatAgent(Agent):
             llm_msg = self.message_history[idx]
         else:
             llm_msg = copy.deepcopy(self.message_history[idx])
-        if llm_msg.content is None:
+        if llm_msg.content is None or (
+            llm_msg.content == "" and _is_identified_result(llm_msg)
+        ):
             return llm_msg
         orig_content = llm_msg.content
         new_content = (
@@ -1641,15 +1665,15 @@ class ChatAgent(Agent):
                 # either the message is a str, or it is a fresh ChatDocument
                 # different from the last message in the history
                 llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
-                # Keep messages that have text or a function/tool call. A call-only
-                # assistant turn has no content but is still required in history.
-                llm_msgs = [
-                    m
-                    for m in llm_msgs
-                    if (m.content or "").strip() != ""
-                    or m.function_call is not None
-                    or bool(m.tool_calls)
-                ]
+                llm_msgs = [m for m in llm_msgs if _llm_message_has_payload(m)]
+                # Canonicalize retained whitespace-only results before token counting.
+                for llm_msg in llm_msgs:
+                    if (
+                        _is_identified_result(llm_msg)
+                        and llm_msg.content is not None
+                        and llm_msg.content.strip() == ""
+                    ):
+                        llm_msg.content = ""
                 if len(llm_msgs) == 0:
                     return [], 0
                 # process tools if any
