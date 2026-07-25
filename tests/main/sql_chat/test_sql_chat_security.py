@@ -451,6 +451,24 @@ def _kinds(query: str, dialect: str) -> set:
             "WHEN MATCHED THEN UPDATE SET a.n = b.n",
             set(),
         ),
+        # ...but only the WHEN ... THEN action itself is exempt. A write in the
+        # WHEN *condition* is a separate statement and must still be reported,
+        # otherwise the exemption becomes a smuggling route.
+        (
+            "postgres",
+            "MERGE INTO a USING b ON a.id = b.id "
+            "WHEN MATCHED AND EXISTS ("
+            "WITH x AS (DELETE FROM c RETURNING *) SELECT * FROM x"
+            ") THEN UPDATE SET a.n = b.n",
+            {"DELETE"},
+        ),
+        # A MERGE nested inside a CTE is still reported, as MERGE.
+        (
+            "postgres",
+            "WITH x AS (MERGE INTO a USING b ON a.id = b.id "
+            "WHEN MATCHED THEN UPDATE SET a.n = b.n RETURNING *) SELECT * FROM x",
+            {"MERGE"},
+        ),
     ],
 )
 def test_nested_write_kinds_across_dialects(dialect, query, expected):

@@ -273,19 +273,21 @@ def _nested_write_kinds(stmt: Any, kind_map: Dict[Any, str]) -> Set[str]:
         sqlglot_exp.TruncateTable,
     )
 
-    def _is_merge_action(node: Any) -> bool:
-        """Whether `node` is a MERGE ``WHEN`` action rather than a statement."""
-        ancestor = node.parent
-        while ancestor is not None:
-            if isinstance(ancestor, sqlglot_exp.When):
-                return True
-            ancestor = ancestor.parent
-        return False
+    # Exempt only the node that *is* a ``WHEN ... THEN`` action, by identity.
+    # Exempting everything beneath a ``When`` would also hide a write nested in
+    # the WHEN *condition* -- e.g.
+    # ``WHEN MATCHED AND EXISTS (WITH x AS (DELETE ...) SELECT * FROM x) THEN
+    # UPDATE ...`` -- or one buried inside the action's own subqueries.
+    merge_actions = {
+        id(when.args["then"])
+        for when in stmt.find_all(sqlglot_exp.When)
+        if when.args.get("then") is not None
+    }
 
     kinds = {
         kind_map[type(node)]
         for node in stmt.find_all(*write_types)
-        if node is not stmt and type(node) in kind_map and not _is_merge_action(node)
+        if node is not stmt and type(node) in kind_map and id(node) not in merge_actions
     }
     # `SELECT ... INTO tbl` carries no nested Create node; it is flagged by the
     # `into` arg on a Select. Check every Select, not just the top-level one:
