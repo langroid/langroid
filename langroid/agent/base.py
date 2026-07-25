@@ -1129,8 +1129,16 @@ class Agent(ABC):
         oai_tool_id2result: OrderedDict[str, str] | None = None,
         function_call: LLMFunctionCall | None = None,
         recipient: str = "",
+        tainted: bool = False,
     ) -> ChatDocument:
-        """Template for llm_response."""
+        """Template for llm_response.
+
+        Args:
+            tainted: Mark the response as USER-derived. Handlers that re-emit
+                attacker-influenceable content as an LLM-labelled message must
+                pass the taint of the message they read it from, so the content
+                stays vetoed by :meth:`_filter_user_origin_tools` (#1035).
+        """
         return self.response_template(
             Entity.LLM,
             content=content,
@@ -1141,6 +1149,7 @@ class Agent(ABC):
             oai_tool_id2result=oai_tool_id2result,
             function_call=function_call,
             recipient=recipient,
+            tainted=tainted,
         )
 
     @no_type_check

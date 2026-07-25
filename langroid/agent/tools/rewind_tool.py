@@ -11,7 +11,7 @@ a previous message, to get a better response.
 See usage examples in `tests/main/test_rewind_tool.py`.
 """
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import langroid.language_models as lm
 from langroid.agent.chat_agent import ChatAgent
@@ -90,7 +90,11 @@ class RewindTool(ToolMessage):
             ),
         ]
 
-    def response(self, agent: ChatAgent) -> str | ChatDocument:
+    def response(
+        self,
+        agent: ChatAgent,
+        chat_doc: Optional[ChatDocument] = None,
+    ) -> str | ChatDocument:
         """
         Define the tool-handler method for this tool here itself,
         since it is a generic tool whose functionality should be the
@@ -120,8 +124,15 @@ class RewindTool(ToolMessage):
 
         parent = prune_messages(agent, idx)
 
-        # create ChatDocument with new content, to be returned as result of this tool
-        result_doc = agent.create_llm_response(self.content)
+        # create ChatDocument with new content, to be returned as result of this tool.
+        # `self.content` is attacker-influenceable, and this re-emits it as an
+        # LLM-labelled message; carry the source message's taint so laundered
+        # USER content stays vetoed by _filter_user_origin_tools
+        # (GHSA-4fpx-72j9-gwg3, #1035).
+        result_doc = agent.create_llm_response(
+            self.content,
+            tainted=chat_doc is not None and chat_doc.metadata.tainted,
+        )
         result_doc.metadata.parent_id = "" if parent is None else parent.id()
         result_doc.metadata.agent_id = agent.id
         result_doc.metadata.msg_idx = idx
