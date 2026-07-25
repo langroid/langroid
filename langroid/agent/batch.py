@@ -118,21 +118,23 @@ async def _process_batch_async(
             task_indices = {task: i for i, task in enumerate(tasks)}
             results = [None] * len(tasks)
 
-            done, pending = await asyncio.wait(
-                tasks, return_when=asyncio.FIRST_COMPLETED
-            )
+            pending = set(tasks)
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending, return_when=asyncio.FIRST_COMPLETED
+                )
 
-            # Process completed tasks
-            for task in done:
-                index = task_indices[task]
-                try:
-                    result = await task
-                    results[index] = output_map(result)
-                except BaseException as e:
-                    results[index] = handle_error(e)
+                # Process completed tasks
+                for task in done:
+                    index = task_indices[task]
+                    try:
+                        result = await task
+                        results[index] = output_map(result)
+                    except BaseException as e:
+                        results[index] = handle_error(e)
 
-            if any(r is not None for r in results):
-                return results
+                if any(r is not None for r in results):
+                    return results
         finally:
             for task in pending:
                 task.cancel()
