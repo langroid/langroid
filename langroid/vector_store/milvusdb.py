@@ -188,7 +188,7 @@ class MilvusDB(VectorStore):
             self.create_collection(self.config.collection_name, replace=True)
 
         for doc in documents:
-            self._document_to_record(doc, [])
+            self._validate_document(doc)
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
         if len(embedding_vecs) != len(documents):
             raise ValueError(
@@ -342,18 +342,8 @@ class MilvusDB(VectorStore):
     def _document_to_record(
         self, doc: Document, embedding: List[float]
     ) -> Dict[str, Any]:
+        self._validate_document(doc)
         doc_id = str(doc.id())
-        if len(doc_id.encode("utf-8")) > self.config.id_field_max_length:
-            raise ValueError(
-                f"Document id exceeds Milvus max length "
-                f"{self.config.id_field_max_length}: {doc_id}"
-            )
-        if len(doc.content.encode("utf-8")) > self.config.text_field_max_length:
-            raise ValueError(
-                "Document content exceeds Milvus VARCHAR max length "
-                f"{self.config.text_field_max_length}"
-            )
-
         metadata = doc.metadata.model_dump()
         metadata["id"] = doc_id
         extra = {
@@ -369,6 +359,24 @@ class MilvusDB(VectorStore):
             "doc_extra": extra,
             **self._dynamic_metadata_fields(metadata),
         }
+
+    def _validate_document(self, doc: Document) -> None:
+        """Validate document field lengths for Milvus storage.
+
+        Args:
+            doc: Document to validate.
+        """
+        doc_id = str(doc.id())
+        if len(doc_id.encode("utf-8")) > self.config.id_field_max_length:
+            raise ValueError(
+                f"Document id exceeds Milvus max length "
+                f"{self.config.id_field_max_length}: {doc_id}"
+            )
+        if len(doc.content.encode("utf-8")) > self.config.text_field_max_length:
+            raise ValueError(
+                "Document content exceeds Milvus VARCHAR max length "
+                f"{self.config.text_field_max_length}"
+            )
 
     @staticmethod
     def _dynamic_metadata_fields(metadata: Dict[str, Any]) -> Dict[str, Any]:
