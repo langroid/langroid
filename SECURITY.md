@@ -96,16 +96,27 @@ We aim to acknowledge in-scope reports within 7 days.
   performs a write the allowlist did not authorize — for example by nesting it
   where the classifier does not look — is a bounded, fixable defect and is in
   scope.
+- **A *normalization* bug that lets a language-defined escaping mechanism
+  defeat a check.** Distinct from a gap in the denylist's contents: if the
+  grammar says two spellings mean the same thing (Cypher's back-ticked
+  identifiers, SQL's quoted or schema-qualified names) and our check sees only
+  one of them, that is a finite, completely fixable defect, and in scope.
 - Vulnerable dependencies with a demonstrated impact on Langroid.
+
+The distinction that decides scope, in one question: **does the fix
+terminate?** "Add another name to a list" does not. "This control fails to
+normalize a form the grammar defines, or misclassifies a closed set of
+statement kinds" does.
 
 ### Out of scope
 
 The following will be closed without a fix, an advisory, or a CVE request:
 
-- New bypasses of the SQL, Cypher, or AQL denylists: previously unlisted
-  functions, alternate quoting or escaping forms (backticks, Unicode escapes,
-  schema qualification), or dialect-specific syntax. See "What is, and is not,
-  a security boundary" above.
+- **Gaps in the *contents* of the SQL, Cypher, or AQL denylists**: a function,
+  procedure, or dialect-specific construct that is not on the list. There is no
+  terminating fix for this — the lists cover an unbounded grammar — so adding
+  one more name is not a security fix. See "What is, and is not, a security
+  boundary" above.
 - Sandbox escapes from the pandas `eval()` path when `full_eval=True`,
   including object-graph traversal via dunder attributes. `full_eval=True`
   disables the AST validator by design.

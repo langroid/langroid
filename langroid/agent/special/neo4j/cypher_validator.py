@@ -121,6 +121,76 @@ def _strip_literals_and_comments(query: str) -> str:
     return "".join(out)
 
 
+def _unescape_backticked_names(query: str) -> str:
+    """Like :func:`_strip_literals_and_comments`, but keep back-ticked *names*.
+
+    Blanking back-ticked identifiers stops false positives on labels and
+    property keys, but it also erases the text the procedure-namespace patterns
+    need: ``CALL `apoc`.load.json(...)`` scrubs to ``CALL       .load.json(...)``
+    and no longer matches ``\\bapoc\\.``. Neo4j resolves ```apoc``` and ``apoc``
+    identically (openCypher ``EscapedSymbolicName``), so the escape is a pure
+    evasion (GHSA-v5gj-pcf6-jjh7 / GHSA-h75w-m9jv-2c6v / GHSA-8c3r-3hgh-c8hv).
+
+    The inner text is left-padded with spaces to the width of the original span,
+    so character offsets are preserved and the unquoted name sits flush against
+    the ``.`` that follows it -- which is what the namespace patterns match on.
+
+    Args:
+        query: Raw Cypher text.
+
+    Returns:
+        The query with comments and string literals blanked, and back-ticked
+        identifiers replaced by their unquoted contents.
+    """
+    out: List[str] = []
+    i, n = 0, len(query)
+    while i < n:
+        two = query[i : i + 2]
+        if two == "//":
+            j = query.find("\n", i)
+            j = n if j == -1 else j
+            out.append(" " * (j - i))
+            i = j
+        elif two == "/*":
+            j = query.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            out.append(" " * (j - i))
+            i = j
+        elif query[i] in "'\"":
+            ch = query[i]
+            j = i + 1
+            while j < n:
+                if query[j] == "\\":
+                    j += 2
+                    continue
+                if query[j] == ch:
+                    break
+                j += 1
+            j = min(j + 1, n)
+            out.append(" " * (j - i))
+            i = j
+        elif query[i] == "`":
+            j = i + 1
+            inner: List[str] = []
+            while j < n:
+                if query[j] == "`":
+                    if j + 1 < n and query[j + 1] == "`":
+                        inner.append("`")
+                        j += 2
+                        continue
+                    break
+                inner.append(query[j])
+                j += 1
+            j = min(j + 1, n)
+            name = "".join(inner)
+            out.append(name.rjust(j - i))
+            i = j
+        else:
+            out.append(query[i])
+            i += 1
+    return "".join(out)
+
+
 def validate_cypher_query(
     query: str, *, is_write: bool, allow_dangerous: bool
 ) -> Optional[str]:
@@ -141,9 +211,16 @@ def validate_cypher_query(
         return None
 
     scrubbed = _strip_literals_and_comments(query)
+    # Procedure namespaces are matched against a second normalization that keeps
+    # back-ticked names, so `` `apoc`.load.json `` cannot hide behind the escape.
+    # The write-clause checks below deliberately stay on `scrubbed`: a
+    # back-ticked keyword is an identifier, not a clause -- ```CREATE` (n:X)``
+    # is a syntax error to Neo4j, so matching it there would only cause false
+    # positives on labels and property keys legitimately named after keywords.
+    unescaped = _unescape_backticked_names(query)
 
     for pat, label in _DANGEROUS_PATTERNS:
-        if pat.search(scrubbed):
+        if pat.search(scrubbed) or pat.search(unescaped):
             logger.warning("Neo4jChatAgent rejected Cypher using %s: %r", label, query)
             return (
                 f"Cypher query REJECTED for safety: it uses {label}, which can "

