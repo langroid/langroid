@@ -1,5 +1,6 @@
 """Tests for the Milvus vector-store provider against Milvus Lite."""
 
+import inspect
 import json
 import math
 from typing import List
@@ -310,6 +311,12 @@ def test_milvus_config_environment_prefix(
         "explicit-token",
         "explicit-db",
     )
+
+
+def test_milvus_config_default_is_not_shared() -> None:
+    # Issue #1079 tracks the repo-wide counterparts.
+    config = inspect.signature(MilvusDB.__init__).parameters["config"]
+    assert config.default is None
 
 
 @pytest.mark.parametrize("metric_type", ["COSINE", "IP", "L2"])

@@ -38,7 +38,8 @@ class MilvusDBConfig(VectorStoreConfig):
 
 
 class MilvusDB(VectorStore):
-    def __init__(self, config: MilvusDBConfig = MilvusDBConfig()):
+    def __init__(self, config: Optional[MilvusDBConfig] = None):
+        config = config or MilvusDBConfig()
         super().__init__(config)
         self.config: MilvusDBConfig = config
         load_dotenv()
