@@ -4,8 +4,10 @@ import math
 import os
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from pydantic_settings import SettingsConfigDict
 
 from langroid.embedding_models.base import EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -22,6 +24,8 @@ _OUTPUT_FIELDS = ["id", "content", "metadata", "doc_extra"]
 
 
 class MilvusDBConfig(VectorStoreConfig):
+    model_config = SettingsConfigDict(env_prefix="MILVUS_")
+
     collection_name: str | None = "temp"
     uri: str = ""
     token: str | None = None
@@ -47,7 +51,10 @@ class MilvusDB(VectorStore):
             from pymilvus import MilvusClient
         except ImportError as exc:
             raise LangroidImportError("pymilvus", "milvus") from exc
-        if "://" not in self.config.uri and self._milvus_lite_version() is None:
+        if (
+            self._is_local_lite_uri(self.config.uri)
+            and self._milvus_lite_version() is None
+        ):
             raise ValueError(
                 "Milvus Lite is unavailable on this platform; set MILVUS_URI "
                 "to a Milvus server or Zilliz Cloud endpoint"
@@ -160,6 +167,17 @@ class MilvusDB(VectorStore):
             consistency_level=self.config.consistency_level,
         )
 
+    def set_collection(self, collection_name: str, replace: bool = False) -> None:
+        """Set the active collection and load it when it already exists.
+
+        Args:
+            collection_name: Name of the collection.
+            replace: Whether to replace an existing collection.
+        """
+        super().set_collection(collection_name, replace)
+        if not replace and self.client.has_collection(collection_name=collection_name):
+            self.create_collection(collection_name, replace=False)
+
     def add_documents(self, documents: Sequence[Document]) -> None:
         if len(documents) == 0:
             return
@@ -169,6 +187,8 @@ class MilvusDB(VectorStore):
         if not self.client.has_collection(collection_name=self.config.collection_name):
             self.create_collection(self.config.collection_name, replace=True)
 
+        for doc in documents:
+            self._document_to_record(doc, [])
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
         if len(embedding_vecs) != len(documents):
             raise ValueError(
@@ -212,6 +232,8 @@ class MilvusDB(VectorStore):
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
+        if not self.client.has_collection(collection_name=self.config.collection_name):
+            return []
         if len(ids) == 0:
             return []
         records = self.client.get(
@@ -274,7 +296,9 @@ class MilvusDB(VectorStore):
         """Return the row count, or -1 when collection stats are unavailable."""
         try:
             stats = self.client.get_collection_stats(collection_name=collection_name)
-            return int(stats.get("row_count", 0))
+            if "row_count" not in stats:
+                return -1
+            return int(stats["row_count"])
         except Exception:
             logger.warning(f"Error getting collection stats for {collection_name}")
             return -1
@@ -388,10 +412,15 @@ class MilvusDB(VectorStore):
 
     @staticmethod
     def _uses_milvus_lite_3_0(uri: str) -> bool:
-        if "://" in uri:
+        if not MilvusDB._is_local_lite_uri(uri):
             return False
         milvus_lite_version = MilvusDB._milvus_lite_version()
         return milvus_lite_version in {"3.0", "3.0.0"}
+
+    @staticmethod
+    def _is_local_lite_uri(uri: str) -> bool:
+        server_schemes = {"unix", "http", "https", "tcp", "grpc"}
+        return urlparse(uri).scheme.lower() not in server_schemes
 
     @staticmethod
     def _milvus_lite_version() -> Optional[str]:
@@ -422,7 +451,6 @@ class MilvusDB(VectorStore):
 
     @classmethod
     def _filter_expression(cls, field_name: str, value: Any) -> str:
-        cls._validate_filter_field(field_name)
         field = f"metadata[{json.dumps(field_name, ensure_ascii=False)}]"
         if isinstance(value, dict):
             if set(value.keys()) == {"$eq"}:
@@ -445,11 +473,6 @@ class MilvusDB(VectorStore):
             f"{field} == {cls._format_filter_value(value)}" for value in values
         )
         return f"({comparisons})"
-
-    @staticmethod
-    def _validate_filter_field(field_name: str) -> None:
-        if _FIELD_NAME_RE.match(field_name) is None:
-            raise ValueError(f"Invalid Milvus filter field name: {field_name}")
 
     @staticmethod
     def _format_filter_value(value: Any) -> str:

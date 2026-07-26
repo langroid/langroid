@@ -277,7 +277,12 @@ def test_milvus_vector_store_lite_add_search_list_delete_clear(
                 id="alpha",
                 source="group_a",
                 note="line1\nline2",
-                **{"content": "meta-content", "and": "kw"},
+                **{
+                    "content": "meta-content",
+                    "and": "kw",
+                    "tenant-id": "tenant_a",
+                    "source.type": "paper",
+                },
             ),
         ),
         Document(
@@ -308,6 +313,15 @@ def test_milvus_vector_store_lite_add_search_list_delete_clear(
     newline_docs = milvus_vecdb.get_all_documents(json.dumps({"note": "line1\nline2"}))
     assert [doc.id() for doc in newline_docs] == ["alpha"]
 
+    for key, value in {"tenant-id": "tenant_a", "source.type": "paper"}.items():
+        punctuation_where = json.dumps({key: value})
+        punctuation_docs = milvus_vecdb.get_all_documents(punctuation_where)
+        assert [doc.id() for doc in punctuation_docs] == ["alpha"]
+        punctuation_matches = milvus_vecdb.similar_texts_with_scores(
+            "alpha", k=3, where=punctuation_where
+        )
+        assert [doc.id() for doc, _ in punctuation_matches] == ["alpha"]
+
     ordered_docs = milvus_vecdb.get_documents_by_ids(["gamma", "alpha"])
     assert [doc.id() for doc in ordered_docs] == ["gamma", "alpha"]
 
@@ -337,6 +351,40 @@ def test_milvus_vector_store_lite_add_search_list_delete_clear(
 
     milvus_vecdb.delete_collection("test_milvus")
     assert "test_milvus" not in milvus_vecdb.list_collections(empty=True)
+    assert milvus_vecdb.get_documents_by_ids(["alpha"]) == []
+
+
+def test_milvus_unknown_row_count_is_not_empty(
+    milvus_vecdb: MilvusDB, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    milvus_vecdb.add_documents(
+        [Document(content="alpha", metadata=DocMetaData(id="alpha"))]
+    )
+    monkeypatch.setattr(milvus_vecdb.client, "get_collection_stats", lambda **_: {})
+
+    assert milvus_vecdb._row_count("test_milvus") == -1
+    assert "test_milvus" in milvus_vecdb.list_collections()
+    assert milvus_vecdb.clear_empty_collections() == 0
+    assert milvus_vecdb.client.has_collection(collection_name="test_milvus")
+
+
+def test_milvus_validates_all_documents_before_upsert(
+    milvus_vecdb: MilvusDB,
+) -> None:
+    milvus_vecdb.config.batch_size = 1
+    documents = [
+        Document(content="alpha", metadata=DocMetaData(id="alpha")),
+        Document(
+            content="beta",
+            metadata=DocMetaData(
+                id="x" * (milvus_vecdb.config.id_field_max_length + 1)
+            ),
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="Document id exceeds Milvus max length"):
+        milvus_vecdb.add_documents(documents)
+    assert milvus_vecdb.get_all_documents() == []
 
 
 def test_milvus_reuses_loaded_collection_across_clients(
@@ -365,13 +413,14 @@ def test_milvus_reuses_loaded_collection_across_clients(
 
     second = MilvusDB(
         MilvusDBConfig(
-            collection_name=collection_name,
+            collection_name=f"{collection_name}_other",
             uri=uri,
             replace_collection=False,
             embedding_model=DeterministicEmbeddingModel(),
         )
     )
     try:
+        second.set_collection(collection_name, replace=False)
         assert [doc.id() for doc in second.get_all_documents()] == ["alpha"]
         matches = second.similar_texts_with_scores("alpha", k=1)
         assert [doc.id() for doc, _ in matches] == ["alpha"]
@@ -417,10 +466,52 @@ def test_milvus_document_subclass_round_trip(milvus_vecdb: MilvusDB):
 
 def test_milvus_lite_version_detection_by_uri():
     milvus_lite_version = MilvusDB._milvus_lite_version()
-    assert not MilvusDB._uses_milvus_lite_3_0("http://host:19530")
-    assert not MilvusDB._uses_milvus_lite_3_0("https://x.zillizcloud.com")
+    server_uris = [
+        "unix:/tmp/milvus.sock",
+        "tcp://host:19530",
+        "grpc://host:19530",
+        "http://host:19530",
+        "https://x.zillizcloud.com",
+    ]
+    assert all(not MilvusDB._is_local_lite_uri(uri) for uri in server_uris)
+    assert all(not MilvusDB._uses_milvus_lite_3_0(uri) for uri in server_uris)
+    assert MilvusDB._is_local_lite_uri("local.db")
     assert MilvusDB._uses_milvus_lite_3_0("local.db") == (
         milvus_lite_version in {"3.0", "3.0.0"}
+    )
+
+
+def test_milvus_config_environment_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("MILVUS_URI", "MILVUS_TOKEN", "MILVUS_DB_NAME"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("URI", "leaked-uri")
+    monkeypatch.setenv("TOKEN", "leaked-token")
+    monkeypatch.setenv("DB_NAME", "leaked-db")
+
+    config = MilvusDBConfig()
+    assert (config.uri, config.token, config.db_name) == ("", None, None)
+
+    monkeypatch.setenv("MILVUS_URI", "milvus-uri")
+    monkeypatch.setenv("MILVUS_TOKEN", "milvus-token")
+    monkeypatch.setenv("MILVUS_DB_NAME", "milvus-db")
+    config = MilvusDBConfig()
+    assert (config.uri, config.token, config.db_name) == (
+        "milvus-uri",
+        "milvus-token",
+        "milvus-db",
+    )
+
+    config = MilvusDBConfig(
+        uri="explicit-uri",
+        token="explicit-token",
+        db_name="explicit-db",
+    )
+    assert (config.uri, config.token, config.db_name) == (
+        "explicit-uri",
+        "explicit-token",
+        "explicit-db",
     )
 
 
