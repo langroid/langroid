@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 _FIELD_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _STATIC_FIELDS = {"id", "vector", "content", "metadata"}
-_OUTPUT_FIELDS = ["id", "content", "metadata"]
+_OUTPUT_FIELDS = ["id", "content", "metadata", "doc_extra"]
 
 
 class MilvusDBConfig(VectorStoreConfig):
@@ -47,6 +47,11 @@ class MilvusDB(VectorStore):
             from pymilvus import MilvusClient
         except ImportError as exc:
             raise LangroidImportError("pymilvus", "milvus") from exc
+        if "://" not in self.config.uri and self._milvus_lite_version() is None:
+            raise ValueError(
+                "Milvus Lite is unavailable on this platform; set MILVUS_URI "
+                "to a Milvus server or Zilliz Cloud endpoint"
+            )
 
         self._milvus_lite_3_0 = self._uses_milvus_lite_3_0(self.config.uri)
 
@@ -108,7 +113,7 @@ class MilvusDB(VectorStore):
         return [
             collection_name
             for collection_name in collection_names
-            if self._row_count(collection_name) > 0
+            if self._row_count(collection_name) != 0
         ]
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
@@ -118,6 +123,7 @@ class MilvusDB(VectorStore):
                 self.client.drop_collection(collection_name=collection_name)
             else:
                 self._validate_collection_schema(collection_name)
+                self.client.load_collection(collection_name=collection_name)
                 return
 
         from pymilvus import DataType
@@ -164,6 +170,11 @@ class MilvusDB(VectorStore):
             self.create_collection(self.config.collection_name, replace=True)
 
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+        if len(embedding_vecs) != len(documents):
+            raise ValueError(
+                f"Embedding count {len(embedding_vecs)} does not match "
+                f"document count {len(documents)}"
+            )
         batch_size = self.config.batch_size
         for i in range(0, len(documents), batch_size):
             rows = [
@@ -231,6 +242,7 @@ class MilvusDB(VectorStore):
         row_count = self._row_count(self.config.collection_name)
         if row_count == 0:
             return []
+        limit = k if row_count < 0 else min(k, row_count)
 
         embedding = self.embedding_fn([text])[0]
         results = self.client.search(
@@ -238,7 +250,7 @@ class MilvusDB(VectorStore):
             data=[embedding],
             anns_field="vector",
             filter=self._where_to_filter(where),
-            limit=min(k, row_count),
+            limit=limit,
             output_fields=_OUTPUT_FIELDS,
             search_params={"metric_type": self.config.metric_type},
         )
@@ -259,12 +271,13 @@ class MilvusDB(VectorStore):
         return doc_score_pairs
 
     def _row_count(self, collection_name: str) -> int:
+        """Return the row count, or -1 when collection stats are unavailable."""
         try:
             stats = self.client.get_collection_stats(collection_name=collection_name)
             return int(stats.get("row_count", 0))
         except Exception:
             logger.warning(f"Error getting collection stats for {collection_name}")
-            return 0
+            return -1
 
     def _validate_collection_schema(self, collection_name: str) -> None:
         from pymilvus import DataType
@@ -306,7 +319,7 @@ class MilvusDB(VectorStore):
         self, doc: Document, embedding: List[float]
     ) -> Dict[str, Any]:
         doc_id = str(doc.id())
-        if len(doc_id) > self.config.id_field_max_length:
+        if len(doc_id.encode("utf-8")) > self.config.id_field_max_length:
             raise ValueError(
                 f"Document id exceeds Milvus max length "
                 f"{self.config.id_field_max_length}: {doc_id}"
@@ -319,11 +332,17 @@ class MilvusDB(VectorStore):
 
         metadata = doc.metadata.model_dump()
         metadata["id"] = doc_id
+        extra = {
+            key: value
+            for key, value in doc.model_dump().items()
+            if key not in ("content", "metadata")
+        }
         return {
             "id": doc_id,
             "vector": embedding,
             "content": doc.content,
             "metadata": metadata,
+            "doc_extra": extra,
             **self._dynamic_metadata_fields(metadata),
         }
 
@@ -331,6 +350,8 @@ class MilvusDB(VectorStore):
     def _dynamic_metadata_fields(metadata: Dict[str, Any]) -> Dict[str, Any]:
         dynamic_fields: Dict[str, Any] = {}
         for key, value in metadata.items():
+            if key == "doc_extra":
+                continue
             if key in _STATIC_FIELDS or _FIELD_NAME_RE.match(key) is None:
                 continue
             if isinstance(value, (str, int, float, bool)):
@@ -342,10 +363,14 @@ class MilvusDB(VectorStore):
         for record in records:
             metadata = dict(record.get("metadata") or {})
             metadata["id"] = str(record.get("id", metadata.get("id", "")))
+            extra = record.get("doc_extra") or {}
+            if not isinstance(extra, dict):
+                extra = {}
             docs.append(
                 self.config.document_class(
                     content=record["content"],
                     metadata=self.config.metadata_class(**metadata),
+                    **extra,
                 )
             )
         return docs
@@ -365,14 +390,19 @@ class MilvusDB(VectorStore):
     def _uses_milvus_lite_3_0(uri: str) -> bool:
         if "://" in uri:
             return False
+        milvus_lite_version = MilvusDB._milvus_lite_version()
+        return milvus_lite_version in {"3.0", "3.0.0"}
+
+    @staticmethod
+    def _milvus_lite_version() -> Optional[str]:
         try:
             from milvus_lite import __version__ as milvus_lite_version
         except ImportError:
-            return False
+            return None
         # Lite 3.0 reports COSINE as a distance and L2 as Euclidean distance.
         # Server, cloud, and newer Lite releases report COSINE similarity and
         # squared L2 distance. See https://github.com/milvus-io/milvus-lite/issues/343.
-        return milvus_lite_version in {"3.0", "3.0.0"}
+        return str(milvus_lite_version)
 
     @classmethod
     def _where_to_filter(cls, where: Optional[str]) -> str:
@@ -393,15 +423,16 @@ class MilvusDB(VectorStore):
     @classmethod
     def _filter_expression(cls, field_name: str, value: Any) -> str:
         cls._validate_filter_field(field_name)
+        field = f"metadata[{json.dumps(field_name, ensure_ascii=False)}]"
         if isinstance(value, dict):
             if set(value.keys()) == {"$eq"}:
-                return f"{field_name} == {cls._format_filter_value(value['$eq'])}"
+                return f"{field} == {cls._format_filter_value(value['$eq'])}"
             if set(value.keys()) == {"$in"}:
                 return cls._in_filter_expression(field_name, value["$in"])
             raise ValueError(f"Unsupported Milvus filter operator for {field_name}")
         if isinstance(value, list):
             return cls._in_filter_expression(field_name, value)
-        return f"{field_name} == {cls._format_filter_value(value)}"
+        return f"{field} == {cls._format_filter_value(value)}"
 
     @classmethod
     def _in_filter_expression(cls, field_name: str, values: Any) -> str:
@@ -409,10 +440,11 @@ class MilvusDB(VectorStore):
             raise ValueError(
                 f"Milvus filter for {field_name} requires a non-empty list"
             )
-        formatted_values = ", ".join(
-            cls._format_filter_value(value) for value in values
+        field = f"metadata[{json.dumps(field_name, ensure_ascii=False)}]"
+        comparisons = " or ".join(
+            f"{field} == {cls._format_filter_value(value)}" for value in values
         )
-        return f"{field_name} in [{formatted_values}]"
+        return f"({comparisons})"
 
     @staticmethod
     def _validate_filter_field(field_name: str) -> None:
@@ -424,7 +456,7 @@ class MilvusDB(VectorStore):
         if isinstance(value, bool):
             return "true" if value else "false"
         if isinstance(value, str):
-            return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+            return json.dumps(value, ensure_ascii=False)
         if isinstance(value, int):
             return str(value)
         if isinstance(value, float):

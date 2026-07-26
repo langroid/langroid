@@ -18,6 +18,11 @@ You can also install it with `pip`:
 pip install "langroid[milvus]"
 ```
 
+## Platform support
+
+Milvus Lite is not available on Windows. Windows users must set `MILVUS_URI` to
+a Milvus server or Zilliz Cloud endpoint.
+
 ## Configuration
 
 By default, `MilvusDBConfig()` connects to Milvus Lite:

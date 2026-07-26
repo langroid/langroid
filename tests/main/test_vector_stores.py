@@ -50,6 +50,7 @@ class MyDocMetaData(DocMetaData):
 class MyDoc(Document):
     content: str
     metadata: MyDocMetaData
+    category: str = ""
 
 
 stored_docs = [
@@ -241,8 +242,14 @@ def vecdb(request) -> VectorStore:
         return
 
 
+@pytest.fixture
+def milvus_lite() -> None:
+    pytest.importorskip("pymilvus")
+    pytest.importorskip("milvus_lite")
+
+
 @pytest.fixture(scope="function")
-def milvus_vecdb(tmp_path) -> MilvusDB:
+def milvus_vecdb(tmp_path, milvus_lite: None) -> MilvusDB:
     cfg = MilvusDBConfig(
         collection_name="test_milvus",
         uri=str(tmp_path / "milvus.db"),
@@ -266,7 +273,12 @@ def test_milvus_vector_store_lite_add_search_list_delete_clear(
     docs = [
         Document(
             content="alpha document",
-            metadata=DocMetaData(id="alpha", source="group_a"),
+            metadata=DocMetaData(
+                id="alpha",
+                source="group_a",
+                note="line1\nline2",
+                **{"content": "meta-content", "and": "kw"},
+            ),
         ),
         Document(
             content="beta document",
@@ -287,6 +299,14 @@ def test_milvus_vector_store_lite_add_search_list_delete_clear(
 
     group_a_docs = milvus_vecdb.get_all_documents(json.dumps({"source": "group_a"}))
     assert {doc.id() for doc in group_a_docs} == {"alpha", "gamma"}
+
+    where = json.dumps({"content": "meta-content"})
+    content_docs = milvus_vecdb.get_all_documents(where)
+    assert [doc.id() for doc in content_docs] == ["alpha"]
+    keyword_docs = milvus_vecdb.get_all_documents(json.dumps({"and": "kw"}))
+    assert [doc.id() for doc in keyword_docs] == ["alpha"]
+    newline_docs = milvus_vecdb.get_all_documents(json.dumps({"note": "line1\nline2"}))
+    assert [doc.id() for doc in newline_docs] == ["alpha"]
 
     ordered_docs = milvus_vecdb.get_documents_by_ids(["gamma", "alpha"])
     assert [doc.id() for doc in ordered_docs] == ["gamma", "alpha"]
@@ -319,8 +339,95 @@ def test_milvus_vector_store_lite_add_search_list_delete_clear(
     assert "test_milvus" not in milvus_vecdb.list_collections(empty=True)
 
 
+def test_milvus_reuses_loaded_collection_across_clients(
+    tmp_path, monkeypatch, milvus_lite: None
+):
+    uri = str(tmp_path / "milvus_reuse.db")
+    collection_name = "test_milvus_reuse"
+    first = MilvusDB(
+        MilvusDBConfig(
+            collection_name=collection_name,
+            uri=uri,
+            replace_collection=True,
+            embedding_model=DeterministicEmbeddingModel(),
+        )
+    )
+    first.add_documents(
+        [
+            Document(
+                content="alpha document",
+                metadata=DocMetaData(id="alpha"),
+            )
+        ]
+    )
+    first.client.release_collection(collection_name=collection_name)
+    first.close()
+
+    second = MilvusDB(
+        MilvusDBConfig(
+            collection_name=collection_name,
+            uri=uri,
+            replace_collection=False,
+            embedding_model=DeterministicEmbeddingModel(),
+        )
+    )
+    try:
+        assert [doc.id() for doc in second.get_all_documents()] == ["alpha"]
+        matches = second.similar_texts_with_scores("alpha", k=1)
+        assert [doc.id() for doc, _ in matches] == ["alpha"]
+
+        different_embedding = DeterministicEmbeddingModel()
+        monkeypatch.setattr(
+            different_embedding,
+            "_embed",
+            lambda text: [1.0, 0.0, 0.0],
+        )
+        with pytest.raises(ValueError, match=r"vector dim 4.*embedding dim 3"):
+            MilvusDB(
+                MilvusDBConfig(
+                    collection_name=collection_name,
+                    uri=uri,
+                    replace_collection=False,
+                    embedding_model=different_embedding,
+                )
+            )
+    finally:
+        second.clear_all_collections(really=True, prefix="test_milvus_reuse")
+        second.close()
+
+
+def test_milvus_document_subclass_round_trip(milvus_vecdb: MilvusDB):
+    milvus_vecdb.config.document_class = MyDoc
+    milvus_vecdb.config.metadata_class = MyDocMetaData
+    milvus_vecdb.add_documents(
+        [
+            MyDoc(
+                content="alpha document",
+                metadata=MyDocMetaData(id="alpha", doc_extra="metadata value"),
+                category="research",
+            )
+        ]
+    )
+    docs = milvus_vecdb.get_all_documents()
+
+    assert len(docs) == 1
+    assert isinstance(docs[0], MyDoc)
+    assert docs[0].category == "research"
+
+
+def test_milvus_lite_version_detection_by_uri():
+    milvus_lite_version = MilvusDB._milvus_lite_version()
+    assert not MilvusDB._uses_milvus_lite_3_0("http://host:19530")
+    assert not MilvusDB._uses_milvus_lite_3_0("https://x.zillizcloud.com")
+    assert MilvusDB._uses_milvus_lite_3_0("local.db") == (
+        milvus_lite_version in {"3.0", "3.0.0"}
+    )
+
+
 @pytest.mark.parametrize("metric_type", ["COSINE", "IP", "L2"])
-def test_milvus_vector_store_lite_score_semantics(tmp_path, metric_type: str):
+def test_milvus_vector_store_lite_score_semantics(
+    tmp_path, metric_type: str, milvus_lite: None
+):
     cfg = MilvusDBConfig(
         collection_name=f"test_milvus_scores_{metric_type.lower()}",
         uri=str(tmp_path / f"milvus_{metric_type.lower()}.db"),

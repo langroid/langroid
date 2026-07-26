@@ -103,12 +103,15 @@ to use specific features (as noted below).
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
   Langroid uses LanceDB as the default vector store in its `DocChatAgent` class (for RAG).
-  Alternatively [Chroma](https://docs.trychroma.com/) and [Milvus](https://milvus.io/) are also currently supported.
+  Alternatively [Chroma](https://docs.trychroma.com/) and
+  [Milvus](https://milvus.io/) are also currently supported.
   We use the local-storage version of Chroma, so there is no need for an API key.
 - **Milvus** Vector Store URI, token, database name. These are optional.
   Without them, Milvus uses local storage at `./milvus.db`. Set `MILVUS_URI`
   for Milvus server or Zilliz Cloud, `MILVUS_TOKEN` for token-based access,
-  and `MILVUS_DB_NAME` for a named database.
+  and `MILVUS_DB_NAME` for a named database. Milvus Lite is unavailable on
+  Windows, so Windows users must set `MILVUS_URI` to a Milvus server or Zilliz
+  Cloud endpoint.
 - **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
   using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
   which is more than sufficient to try out Langroid and even beyond.
@@ -130,7 +133,7 @@ to use specific features (as noted below).
   [`tests/main/test_web_search_tools.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_web_search_tools.py) to see how to use it.
 
 
-If you add all of these optional variables, your `.env` file should look like this:
+An `.env` file with commonly used optional variables looks like this:
 ```bash
 OPENAI_API_KEY=your-key-here-without-quotes
 GITHUB_ACCESS_TOKEN=your-personal-access-token-no-quotes
@@ -173,6 +176,7 @@ provides more information, and you can set each environment variable as follows:
 Now you should be ready to use Langroid!
 As a next step, you may want to see how you can use Langroid to [interact 
 directly with the LLM](llm-interaction.md) (OpenAI GPT models only for now).
+
 
 
 
