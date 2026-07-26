@@ -376,6 +376,30 @@ def test_milvus_vector_store_lite_score_semantics(tmp_path, metric_type: str):
 
 
 @pytest.mark.parametrize(
+    "metric_type,raw_score,lite_3_0,expected_score",
+    [
+        ("COSINE", 0.4, True, 0.6),
+        ("COSINE", 0.6, False, 0.6),
+        ("IP", 0.6, True, 0.6),
+        ("IP", 0.6, False, 0.6),
+        ("L2", math.sqrt(0.8), True, -math.sqrt(0.8)),
+        ("L2", 0.8, False, -math.sqrt(0.8)),
+    ],
+)
+def test_milvus_score_normalization(
+    metric_type: str,
+    raw_score: float,
+    lite_3_0: bool,
+    expected_score: float,
+):
+    vecdb = object.__new__(MilvusDB)
+    vecdb.config = MilvusDBConfig(metric_type=metric_type)
+    vecdb._milvus_lite_3_0 = lite_3_0
+
+    assert vecdb._score_from_distance(raw_score) == pytest.approx(expected_score)
+
+
+@pytest.mark.parametrize(
     "query,results,exceptions",
     [
         ("which city is Belgium's capital?", [phrases.BELGIUM], ["meilisearch"]),
