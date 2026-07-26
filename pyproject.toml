@@ -88,6 +88,7 @@ vecdbs = [
     "chromadb<=0.4.23,>=0.4.21",
     "weaviate-client>=4.9.6",
     "pinecone-client>=5.0.1",
+    "dakera>=0.12.8",
 ]
 
 db = [
@@ -278,6 +279,9 @@ doc-parsers = [
 
 pinecone = [
     "pinecone-client>=5.0.1"
+]
+dakera = [
+    "dakera>=0.12.8"
 ]
 asyncio = [
     "asyncio>=3.4.3",
