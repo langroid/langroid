@@ -182,8 +182,18 @@ def _unescape_backticked_names(query: str) -> str:
                 inner.append(query[j])
                 j += 1
             j = min(j + 1, n)
-            name = "".join(inner)
-            out.append(name.rjust(j - i))
+            # A back-ticked name that FOLLOWS a dot is a property/map key
+            # (``n.`apoc`.name``), never the head of a procedure namespace.
+            # Keep blanking those, exactly as before, or an ordinary map access
+            # named `apoc` or `dbms` would be rejected. A namespace head is not
+            # dot-preceded (`` `apoc`.load ``), and later segments of a
+            # namespace stay blanked without weakening the check, since the
+            # head plus its trailing dot is what the patterns match on.
+            prev = "".join(out).rstrip()
+            if prev.endswith("."):
+                out.append(" " * (j - i))
+            else:
+                out.append("".join(inner).rjust(j - i))
             i = j
         else:
             out.append(query[i])

