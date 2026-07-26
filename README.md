@@ -700,7 +700,6 @@ python examples/<Path/To/Example.py>
 
 
 
-
 # 🎉 Usage Examples
 
 These are quick teasers to give a glimpse of what you can do with Langroid
