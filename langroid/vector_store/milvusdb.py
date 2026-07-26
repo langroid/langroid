@@ -48,6 +48,8 @@ class MilvusDB(VectorStore):
         except ImportError as exc:
             raise LangroidImportError("pymilvus", "milvus") from exc
 
+        self._milvus_lite_3_0 = self._uses_milvus_lite_3_0(self.config.uri)
+
         client_kwargs: Dict[str, Any] = {
             "uri": self.config.uri,
             "timeout": self.config.timeout,
@@ -351,10 +353,26 @@ class MilvusDB(VectorStore):
     def _score_from_distance(self, distance: float) -> float:
         metric_type = self.config.metric_type.upper()
         if metric_type == "COSINE":
-            return 1.0 - distance
+            return 1.0 - distance if self._milvus_lite_3_0 else distance
         if metric_type == "L2":
-            return -distance
+            l2_distance = (
+                distance if self._milvus_lite_3_0 else math.sqrt(max(distance, 0.0))
+            )
+            return -l2_distance
         return distance
+
+    @staticmethod
+    def _uses_milvus_lite_3_0(uri: str) -> bool:
+        if "://" in uri:
+            return False
+        try:
+            from milvus_lite import __version__ as milvus_lite_version
+        except ImportError:
+            return False
+        # Lite 3.0 reports COSINE as a distance and L2 as Euclidean distance.
+        # Server, cloud, and newer Lite releases report COSINE similarity and
+        # squared L2 distance. See https://github.com/milvus-io/milvus-lite/issues/343.
+        return milvus_lite_version in {"3.0", "3.0.0"}
 
     @classmethod
     def _where_to_filter(cls, where: Optional[str]) -> str:
