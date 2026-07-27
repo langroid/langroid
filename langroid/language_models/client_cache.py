@@ -2,13 +2,14 @@
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
 """
 
+import asyncio
 import atexit
 import hashlib
 import inspect
 import threading
 import time
 import weakref
-from typing import Any, Dict, Optional, Tuple, Union, cast
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Union, cast
 
 from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
@@ -48,6 +49,47 @@ def _get_cache_key(client_type: str, **kwargs: Any) -> str:
     return hashed_key
 
 
+def wrap_api_key_provider_async(
+    provider: Callable[[], str],
+) -> Callable[[], Awaitable[str]]:
+    """
+    Wrap a sync API-key provider for use with ``AsyncOpenAI``.
+
+    ``AsyncOpenAI`` awaits its ``api_key`` callable, so a plain sync
+    provider must be wrapped in an async function. The sync provider is run
+    in a worker thread, so a blocking token refresh cannot stall the event
+    loop. Providers must therefore be thread-safe -- the sync client may
+    call them from arbitrary threads anyway.
+
+    Args:
+        provider: Callable returning a (possibly short-lived) API key.
+
+    Returns:
+        Async callable returning the same key.
+    """
+
+    async def _provider() -> str:
+        return await asyncio.to_thread(provider)
+
+    return _provider
+
+
+def _api_key_cache_component(api_key: Union[str, Callable[[], str]]) -> Any:
+    """
+    Cache-key component for an API key that may be a rotating-key provider.
+
+    A callable provider is keyed on its identity rather than any token value,
+    so rotating tokens never create new cache entries and tokens are never
+    retained in cache keys. The id() cannot be recycled while the entry
+    lives, because the cached client holds a strong reference to the
+    provider (directly for sync clients, via the async wrapper's closure
+    for async clients).
+    """
+    if callable(api_key):
+        return ("api_key_provider", id(api_key))
+    return api_key
+
+
 def _get_cached_client(cache_key: str) -> Optional[Any]:
     """Get cached client and refresh its last-used timestamp.
 
@@ -72,7 +114,7 @@ def _store_client(cache_key: str, client: Any) -> None:
 
 
 def get_openai_client(
-    api_key: str,
+    api_key: Union[str, Callable[[], str]],
     base_url: Optional[str] = None,
     organization: Optional[str] = None,
     timeout: Union[float, Timeout] = 120.0,
@@ -84,7 +126,10 @@ def get_openai_client(
     Get or create a singleton OpenAI client with the given configuration.
 
     Args:
-        api_key: OpenAI API key
+        api_key: OpenAI API key, or a callable returning a fresh key
+            (for short-lived rotating credentials); a callable is resolved
+            per-request by the OpenAI client and is excluded from the
+            cache key (the cache is keyed on the provider's identity)
         base_url: Optional base URL for API
         organization: Optional organization ID
         timeout: Request timeout
@@ -113,7 +158,7 @@ def get_openai_client(
 
     cache_key = _get_cache_key(
         "openai",
-        api_key=api_key,
+        api_key=_api_key_cache_component(api_key),
         base_url=base_url,
         organization=organization,
         timeout=timeout,
@@ -151,7 +196,7 @@ def get_openai_client(
 
 
 def get_async_openai_client(
-    api_key: str,
+    api_key: Union[str, Callable[[], str]],
     base_url: Optional[str] = None,
     organization: Optional[str] = None,
     timeout: Union[float, Timeout] = 120.0,
@@ -163,7 +208,10 @@ def get_async_openai_client(
     Get or create a singleton AsyncOpenAI client with the given configuration.
 
     Args:
-        api_key: OpenAI API key
+        api_key: OpenAI API key, or a callable returning a fresh key
+            (for short-lived rotating credentials); a callable is resolved
+            per-request by the OpenAI client and is excluded from the
+            cache key (the cache is keyed on the provider's identity)
         base_url: Optional base URL for API
         organization: Optional organization ID
         timeout: Request timeout
@@ -177,10 +225,17 @@ def get_async_openai_client(
     if isinstance(timeout, (int, float)):
         timeout = Timeout(timeout)
 
+    api_key_arg: Union[str, Callable[[], Awaitable[str]]]
+    if callable(api_key):
+        # AsyncOpenAI awaits its api_key callable, so wrap the sync provider
+        api_key_arg = wrap_api_key_provider_async(api_key)
+    else:
+        api_key_arg = api_key
+
     # If http_client is provided directly, don't cache (complex object)
     if http_client is not None:
         client = AsyncOpenAI(
-            api_key=api_key,
+            api_key=api_key_arg,
             base_url=base_url,
             organization=organization,
             timeout=timeout,
@@ -192,7 +247,7 @@ def get_async_openai_client(
 
     cache_key = _get_cache_key(
         "async_openai",
-        api_key=api_key,
+        api_key=_api_key_cache_component(api_key),
         base_url=base_url,
         organization=organization,
         timeout=timeout,
@@ -217,7 +272,7 @@ def get_async_openai_client(
             created_http_client = AsyncClient(**http_client_config)
 
         client = AsyncOpenAI(
-            api_key=api_key,
+            api_key=api_key_arg,
             base_url=base_url,
             organization=organization,
             timeout=timeout,

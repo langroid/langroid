@@ -55,6 +55,7 @@ from langroid.language_models.client_cache import (
     get_cerebras_client,
     get_groq_client,
     get_openai_client,
+    wrap_api_key_provider_async,
 )
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
@@ -256,6 +257,15 @@ class OpenAIGPTConfig(LLMConfig):
 
     type: str = "openai"
     api_key: str = DUMMY_API_KEY
+    # Callable returning a fresh API key/bearer token, for endpoints that
+    # authenticate with short-lived rotating credentials (e.g. Vertex AI
+    # OAuth tokens, Azure Entra ID). Resolved per-request by the OpenAI
+    # client, and excluded from the client-cache key (the cache is keyed on
+    # the provider's identity), so rotating tokens neither go stale nor grow
+    # the cache. Takes precedence over `api_key`. Only supported for models
+    # served via an OpenAI-compatible endpoint (not Groq/Cerebras/litellm).
+    # See docs/notes/rotating-api-keys.md.
+    api_key_provider: Optional[Callable[[], str]] = None
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
@@ -425,7 +435,16 @@ class OpenAIGPT(LanguageModel):
         """
         # copy the config to avoid modifying the original; deep to decouple
         # nested models while preserving their concrete subclasses
+        # The api_key_provider must NOT be deep-copied: the client cache is
+        # keyed on its identity (so a copy would defeat cache sharing), and it
+        # may hold non-copyable state (e.g. a threading.Lock). Clear it in a
+        # shallow copy first, then restore the original callable afterwards.
+        api_key_provider = config.api_key_provider
+        if api_key_provider is not None:
+            config = config.model_copy(update={"api_key_provider": None})
         config = config.model_copy(deep=True)
+        if api_key_provider is not None:
+            config.api_key_provider = api_key_provider
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
         # save original model name such as `provider/model` before
@@ -556,6 +575,15 @@ class OpenAIGPT(LanguageModel):
         self.is_langdb = self.config.chat_model.startswith("langdb/")
         self.is_portkey = self.config.chat_model.startswith("portkey/")
         self.is_litellm_proxy = self.config.chat_model.startswith("litellm-proxy/")
+
+        if self.config.api_key_provider is not None and (
+            self.is_groq or self.is_cerebras or self.config.litellm
+        ):
+            raise ValueError(
+                "api_key_provider is only supported for models served via an "
+                "OpenAI-compatible endpoint (using the OpenAI client); it "
+                "cannot be used with Groq, Cerebras, or the litellm adapter."
+            )
 
         if self.is_groq:
             # use groq-specific client
@@ -725,9 +753,17 @@ class OpenAIGPT(LanguageModel):
                     "corporate networks with self-signed certificates)."
                 )
 
+            # With an api_key_provider, hand the callable itself to the
+            # OpenAI client, which resolves a fresh token on each request.
+            openai_api_key: Union[str, Callable[[], str]] = (
+                self.config.api_key_provider
+                if self.config.api_key_provider is not None
+                else self.api_key
+            )
+
             if self.config.use_cached_client:
                 self.client = get_openai_client(
-                    api_key=self.api_key,
+                    api_key=openai_api_key,
                     base_url=self.api_base,
                     organization=self.config.organization,
                     timeout=Timeout(self.config.timeout),
@@ -736,7 +772,7 @@ class OpenAIGPT(LanguageModel):
                     http_client_config=http_client_config_used,
                 )
                 self.async_client = get_async_openai_client(
-                    api_key=self.api_key,
+                    api_key=openai_api_key,
                     base_url=self.api_base,
                     organization=self.config.organization,
                     timeout=Timeout(self.config.timeout),
@@ -747,7 +783,7 @@ class OpenAIGPT(LanguageModel):
             else:
                 # Create new clients without caching
                 client_kwargs: Dict[str, Any] = dict(
-                    api_key=self.api_key,
+                    api_key=openai_api_key,
                     base_url=self.api_base,
                     organization=self.config.organization,
                     timeout=Timeout(self.config.timeout),
@@ -769,7 +805,12 @@ class OpenAIGPT(LanguageModel):
                 self.client = OpenAI(**client_kwargs)
 
                 async_client_kwargs: Dict[str, Any] = dict(
-                    api_key=self.api_key,
+                    api_key=(
+                        # AsyncOpenAI awaits its api_key callable
+                        wrap_api_key_provider_async(openai_api_key)
+                        if callable(openai_api_key)
+                        else openai_api_key
+                    ),
                     base_url=self.api_base,
                     organization=self.config.organization,
                     timeout=Timeout(self.config.timeout),

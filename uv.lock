@@ -3732,7 +3732,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.65.12"
+version = "0.65.14"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -4091,7 +4091,7 @@ requires-dist = [
     { name = "nest-asyncio", specifier = ">=1.6.0,<2.0.0" },
     { name = "nltk", specifier = ">=3.8.2,<4.0.0" },
     { name = "onnxruntime", specifier = ">=1.16.1,<2.0.0" },
-    { name = "openai", specifier = ">=1.61.1,<3.0.0" },
+    { name = "openai", specifier = ">=1.106.0,<3.0.0" },
     { name = "opencv-python", marker = "extra == 'marker-pdf'", specifier = ">=4.11.0.86" },
     { name = "openpyxl", marker = "extra == 'doc-parsers'", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=2.0.3,<3.0.0" },
