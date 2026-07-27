@@ -3402,11 +3402,11 @@ wheels = [
 
 [[package]]
 name = "json-repair"
-version = "0.61.7"
+version = "0.60.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f0/a3/6001c2448ee54a80f35a2501b848f4bbd87987bd41ead8cc17367a2bfd56/json_repair-0.61.7.tar.gz", hash = "sha256:a3754543f050093efcda6c9ab00b20a236b5d082c8c622bc65b88fa74ff8d51f", size = 51573 }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/a6/d69888cb4ffde30e80db1e6c32caaadd2f984a80067d5ea72c2cb3f61c3f/json_repair-0.60.1.tar.gz", hash = "sha256:841661cdd2df507c9a4e189097f38ca6bc372e06d4b4e36d72e590f68176c290", size = 49451 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/da/7f9e2b0a1120b107a204bbab6d0ef7ff2ae37790bddc5ee21c9c1f961f3b/json_repair-0.61.7-py3-none-any.whl", hash = "sha256:45c99b8cffef404e846b60d3dc21fc6f0fd5a4595cebad169dfab083ffb8246a", size = 50146 },
+    { url = "https://files.pythonhosted.org/packages/32/1f/2a2b5eea8ef5762a86ad3f8fddddaaba2c0d76dd44e644b9158900868bec/json_repair-0.60.1-py3-none-any.whl", hash = "sha256:ba6ff974f2a8bef2f7768144a7f03f870a816443f03da27a49cdd0ec31a78049", size = 48045 },
 ]
 
 [[package]]
@@ -4069,7 +4069,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'hf-transformers'", specifier = ">=0.21.2,<1.0.0" },
     { name = "huggingface-hub", marker = "extra == 'transformers'", specifier = ">=0.21.2,<1.0.0" },
     { name = "jinja2", specifier = ">=3.1.2,<4.0.0" },
-    { name = "json-repair", specifier = ">=0.29.9,<1.0.0" },
+    { name = "json-repair", specifier = ">=0.29.9,<0.61" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.9.0" },
     { name = "lancedb", marker = "extra == 'vecdbs'", specifier = ">=0.9.0" },
     { name = "litellm", marker = "extra == 'all'", specifier = ">=1.30.1,<2.0.0" },
