@@ -91,8 +91,8 @@ a network call when the token has actually expired.
   Python SDK client (`OpenAI(api_key=<callable>)`), which resolves it before
   every request, including streaming requests and retries. Tokens therefore
   never go stale, no matter how long the process runs. This relies on the
-  SDK's native support for callable API keys (`openai>=2.x`, already a
-  Langroid dependency).
+  SDK's native support for callable API keys, introduced in `openai` 1.106.0
+  (Langroid's dependency floor guarantees this).
 - **Async is handled for you.** `AsyncOpenAI` awaits its `api_key` callable,
   so Langroid automatically wraps your synchronous provider in an async
   wrapper. You always supply a plain sync callable returning `str`, and both

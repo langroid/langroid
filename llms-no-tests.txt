@@ -6266,218 +6266,6 @@ with quiet_mode(silent):
 ```
 </file>
 
-<file path="docs/notes/rotating-api-keys.md">
-# Rotating / Short-Lived API Keys
-
-As of version 0.65.14, `OpenAIGPTConfig` supports short-lived, rotating
-credentials via the `api_key_provider` field: a callable that returns a
-currently-valid API key or bearer token.
-
-## The Problem
-
-Some OpenAI-compatible endpoints do not authenticate with a permanent API key.
-Instead they expect a short-lived bearer token that must be periodically
-refreshed:
-
-- **Google Vertex AI** uses OAuth / Application Default Credentials (ADC)
-  tokens, which typically expire after about an hour.
-- **Azure OpenAI with Microsoft Entra ID** uses Entra ID access tokens.
-
-Neither of the obvious workarounds is satisfactory:
-
-- Passing the token as a static `api_key` bakes it into the underlying client
-  at construction time. Once the token expires, every subsequent request fails
-  with a 401, and the only fix is to rebuild the LLM object.
-- Rebuilding the config with a fresh token on each call works, but each new
-  token value produces a new client-cache entry, so the process-wide client
-  cache grows without bound.
-
-`api_key_provider` solves both: the callable is resolved before every request,
-and the client cache is keyed on the callable itself rather than on any token
-value.
-
-## Basic Usage
-
-Supply a plain synchronous function that returns a valid key each time it is
-called:
-
-```python
-import langroid.language_models as lm
-
-def get_token() -> str:
-    ...  # fetch/refresh and return a currently-valid token
-
-config = lm.OpenAIGPTConfig(
-    chat_model="...",
-    api_base="...",
-    api_key_provider=get_token,
-)
-
-llm = lm.OpenAIGPT(config)
-```
-
-Your provider is responsible for caching and refreshing: it is called on every
-request, so it should return a cached token when the current one is still
-valid, and refresh only when needed.
-
-## Example: Google Vertex AI
-
-The canonical use case. Point `api_base` at Vertex AI's OpenAI-compatible
-endpoint, and use `google-auth` to mint and refresh the ADC token:
-
-```python
-import google.auth
-import google.auth.transport.requests
-import langroid.language_models as lm
-
-creds, _ = google.auth.default(
-    scopes=["https://www.googleapis.com/auth/cloud-platform"]
-)
-
-def vertex_token() -> str:
-    if not creds.valid:
-        creds.refresh(google.auth.transport.requests.Request())
-    return creds.token
-
-config = lm.OpenAIGPTConfig(
-    chat_model="google/gemini-2.5-flash",
-    api_base=(
-        "https://aiplatform.googleapis.com/v1beta1/projects/<project>"
-        "/locations/global/endpoints/openapi"
-    ),
-    api_key_provider=vertex_token,
-)
-
-llm = lm.OpenAIGPT(config)
-```
-
-The `creds` object caches the token internally, so `vertex_token()` only makes
-a network call when the token has actually expired.
-
-## How It Works
-
-- **Resolved per request.** The callable is handed directly to the OpenAI
-  Python SDK client (`OpenAI(api_key=<callable>)`), which resolves it before
-  every request, including streaming requests and retries. Tokens therefore
-  never go stale, no matter how long the process runs. This relies on the
-  SDK's native support for callable API keys (`openai>=2.x`, already a
-  Langroid dependency).
-- **Async is handled for you.** `AsyncOpenAI` awaits its `api_key` callable,
-  so Langroid automatically wraps your synchronous provider in an async
-  wrapper. You always supply a plain sync callable returning `str`, and both
-  `llm.chat(...)` and `llm.achat(...)` work.
-- **The provider is excluded from the client-cache key.** The process-wide
-  client cache is keyed on the provider's *identity* (`id()`), never on a
-  token value. Rotating tokens thus create no new cache entries, and token
-  values are never retained in cache keys. Two `OpenAIGPT` instances that
-  share the same provider callable share one cached client.
-- **Precedence.** When `api_key_provider` is set, it takes precedence over
-  `api_key` and over the `OPENAI_API_KEY` environment variable.
-
-It works with `use_cached_client=True` (the default) and with
-`use_cached_client=False`, and composes with `http_client_factory` and
-`http_client_config` — see
-[OpenAI HTTP Client Configuration](openai-http-client.md) and
-[OpenAI Client Caching](openai-client-caching.md).
-
-## Limitations
-
-`api_key_provider` is only supported for models served via an
-OpenAI-compatible endpoint, i.e. those that go through the OpenAI client path.
-This includes plain OpenAI models as well as the `gemini/`, `litellm-proxy/`,
-`openrouter/`, `deepseek/`, `vllm/`, and `local/` prefixes.
-
-Constructing an `OpenAIGPT` with `api_key_provider` raises a `ValueError` for:
-
-- `groq/...` models, which use the Groq SDK client
-- `cerebras/...` models, which use the Cerebras SDK client
-- the litellm adapter library, i.e. `litellm=True` or `litellm/...` models
-
-## Alternative: Transport-Level Auth with `http_client_factory`
-
-If you need more control than a bearer token string — custom headers, request
-signing (e.g. AWS SigV4 for Bedrock-style auth), or an asynchronous token
-fetch — you can instead attach an `httpx.Auth` to a custom HTTP client. The
-auth flow then runs at the transport layer, on every request:
-
-```python
-import httpx
-import google.auth
-import google.auth.transport.requests
-import langroid.language_models as lm
-
-class _BearerRefresh(httpx.Auth):
-    def __init__(self):
-        self._creds, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
-
-    def auth_flow(self, request):
-        if not self._creds.valid:
-            self._creds.refresh(google.auth.transport.requests.Request())
-        request.headers["Authorization"] = f"Bearer {self._creds.token}"
-        yield request
-
-config = lm.OpenAIGPTConfig(
-    chat_model="google/gemini-2.5-flash",
-    api_base="...",
-    http_client_factory=lambda: (
-        httpx.Client(auth=_BearerRefresh()),
-        httpx.AsyncClient(auth=_BearerRefresh()),
-    ),
-)
-```
-
-The factory may return either a single `httpx.Client` or a tuple of
-`(httpx.Client, httpx.AsyncClient)`. Returning a single client attaches your
-auth flow to synchronous calls (`llm.chat(...)`) only; the tuple form, as
-above, covers asynchronous calls (`llm.achat(...)`) as well.
-
-Note that a factory-supplied client bypasses the client cache: the
-`OpenAIGPT` instance builds its own client around it. But if the factory
-returns only a sync client, the async client is still created through the
-normal cached path, using the static `api_key` — so `llm.achat(...)` would
-not carry your transport-level auth. Prefer `api_key_provider` unless you
-specifically need transport-level control.
-
-## Azure OpenAI with Entra ID
-
-For Azure-deployed models (`AzureConfig` / `AzureGPT`), use the existing
-`azure_openai_client_provider` and `azure_openai_async_client_provider` config
-fields to supply clients built with the SDK's native `azure_ad_token_provider`:
-
-```python
-import langroid.language_models as lm
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from openai import AsyncAzureOpenAI, AzureOpenAI
-
-token_provider = get_bearer_token_provider(
-    DefaultAzureCredential(),
-    "https://cognitiveservices.azure.com/.default",
-)
-
-lm_config = lm.AzureConfig(
-    azure_openai_client_provider=lambda: AzureOpenAI(
-        azure_ad_token_provider=token_provider,
-        # ... azure_endpoint, api_version, etc.
-    ),
-    azure_openai_async_client_provider=lambda: AsyncAzureOpenAI(
-        azure_ad_token_provider=token_provider,
-        # ... azure_endpoint, api_version, etc.
-    ),
-)
-```
-
-See [Custom Azure OpenAI client](custom-azure-client.md) for details.
-
-## See Also
-
-- [OpenAI HTTP Client Configuration](openai-http-client.md) — proxies,
-  custom CA bundles, and custom HTTP clients
-- [OpenAI Client Caching](openai-client-caching.md) — how clients are cached
-  and shared
-</file>
-
 <file path="docs/notes/structured-output.md">
 # Structured Output
 
@@ -61885,6 +61673,218 @@ agent.callbacks.show_llm_response = my_show_llm_response
 ```
 </file>
 
+<file path="docs/notes/rotating-api-keys.md">
+# Rotating / Short-Lived API Keys
+
+As of version 0.65.14, `OpenAIGPTConfig` supports short-lived, rotating
+credentials via the `api_key_provider` field: a callable that returns a
+currently-valid API key or bearer token.
+
+## The Problem
+
+Some OpenAI-compatible endpoints do not authenticate with a permanent API key.
+Instead they expect a short-lived bearer token that must be periodically
+refreshed:
+
+- **Google Vertex AI** uses OAuth / Application Default Credentials (ADC)
+  tokens, which typically expire after about an hour.
+- **Azure OpenAI with Microsoft Entra ID** uses Entra ID access tokens.
+
+Neither of the obvious workarounds is satisfactory:
+
+- Passing the token as a static `api_key` bakes it into the underlying client
+  at construction time. Once the token expires, every subsequent request fails
+  with a 401, and the only fix is to rebuild the LLM object.
+- Rebuilding the config with a fresh token on each call works, but each new
+  token value produces a new client-cache entry, so the process-wide client
+  cache grows without bound.
+
+`api_key_provider` solves both: the callable is resolved before every request,
+and the client cache is keyed on the callable itself rather than on any token
+value.
+
+## Basic Usage
+
+Supply a plain synchronous function that returns a valid key each time it is
+called:
+
+```python
+import langroid.language_models as lm
+
+def get_token() -> str:
+    ...  # fetch/refresh and return a currently-valid token
+
+config = lm.OpenAIGPTConfig(
+    chat_model="...",
+    api_base="...",
+    api_key_provider=get_token,
+)
+
+llm = lm.OpenAIGPT(config)
+```
+
+Your provider is responsible for caching and refreshing: it is called on every
+request, so it should return a cached token when the current one is still
+valid, and refresh only when needed.
+
+## Example: Google Vertex AI
+
+The canonical use case. Point `api_base` at Vertex AI's OpenAI-compatible
+endpoint, and use `google-auth` to mint and refresh the ADC token:
+
+```python
+import google.auth
+import google.auth.transport.requests
+import langroid.language_models as lm
+
+creds, _ = google.auth.default(
+    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+)
+
+def vertex_token() -> str:
+    if not creds.valid:
+        creds.refresh(google.auth.transport.requests.Request())
+    return creds.token
+
+config = lm.OpenAIGPTConfig(
+    chat_model="google/gemini-2.5-flash",
+    api_base=(
+        "https://aiplatform.googleapis.com/v1beta1/projects/<project>"
+        "/locations/global/endpoints/openapi"
+    ),
+    api_key_provider=vertex_token,
+)
+
+llm = lm.OpenAIGPT(config)
+```
+
+The `creds` object caches the token internally, so `vertex_token()` only makes
+a network call when the token has actually expired.
+
+## How It Works
+
+- **Resolved per request.** The callable is handed directly to the OpenAI
+  Python SDK client (`OpenAI(api_key=<callable>)`), which resolves it before
+  every request, including streaming requests and retries. Tokens therefore
+  never go stale, no matter how long the process runs. This relies on the
+  SDK's native support for callable API keys, introduced in `openai` 1.106.0
+  (Langroid's dependency floor guarantees this).
+- **Async is handled for you.** `AsyncOpenAI` awaits its `api_key` callable,
+  so Langroid automatically wraps your synchronous provider in an async
+  wrapper. You always supply a plain sync callable returning `str`, and both
+  `llm.chat(...)` and `llm.achat(...)` work.
+- **The provider is excluded from the client-cache key.** The process-wide
+  client cache is keyed on the provider's *identity* (`id()`), never on a
+  token value. Rotating tokens thus create no new cache entries, and token
+  values are never retained in cache keys. Two `OpenAIGPT` instances that
+  share the same provider callable share one cached client.
+- **Precedence.** When `api_key_provider` is set, it takes precedence over
+  `api_key` and over the `OPENAI_API_KEY` environment variable.
+
+It works with `use_cached_client=True` (the default) and with
+`use_cached_client=False`, and composes with `http_client_factory` and
+`http_client_config` — see
+[OpenAI HTTP Client Configuration](openai-http-client.md) and
+[OpenAI Client Caching](openai-client-caching.md).
+
+## Limitations
+
+`api_key_provider` is only supported for models served via an
+OpenAI-compatible endpoint, i.e. those that go through the OpenAI client path.
+This includes plain OpenAI models as well as the `gemini/`, `litellm-proxy/`,
+`openrouter/`, `deepseek/`, `vllm/`, and `local/` prefixes.
+
+Constructing an `OpenAIGPT` with `api_key_provider` raises a `ValueError` for:
+
+- `groq/...` models, which use the Groq SDK client
+- `cerebras/...` models, which use the Cerebras SDK client
+- the litellm adapter library, i.e. `litellm=True` or `litellm/...` models
+
+## Alternative: Transport-Level Auth with `http_client_factory`
+
+If you need more control than a bearer token string — custom headers, request
+signing (e.g. AWS SigV4 for Bedrock-style auth), or an asynchronous token
+fetch — you can instead attach an `httpx.Auth` to a custom HTTP client. The
+auth flow then runs at the transport layer, on every request:
+
+```python
+import httpx
+import google.auth
+import google.auth.transport.requests
+import langroid.language_models as lm
+
+class _BearerRefresh(httpx.Auth):
+    def __init__(self):
+        self._creds, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+
+    def auth_flow(self, request):
+        if not self._creds.valid:
+            self._creds.refresh(google.auth.transport.requests.Request())
+        request.headers["Authorization"] = f"Bearer {self._creds.token}"
+        yield request
+
+config = lm.OpenAIGPTConfig(
+    chat_model="google/gemini-2.5-flash",
+    api_base="...",
+    http_client_factory=lambda: (
+        httpx.Client(auth=_BearerRefresh()),
+        httpx.AsyncClient(auth=_BearerRefresh()),
+    ),
+)
+```
+
+The factory may return either a single `httpx.Client` or a tuple of
+`(httpx.Client, httpx.AsyncClient)`. Returning a single client attaches your
+auth flow to synchronous calls (`llm.chat(...)`) only; the tuple form, as
+above, covers asynchronous calls (`llm.achat(...)`) as well.
+
+Note that a factory-supplied client bypasses the client cache: the
+`OpenAIGPT` instance builds its own client around it. But if the factory
+returns only a sync client, the async client is still created through the
+normal cached path, using the static `api_key` — so `llm.achat(...)` would
+not carry your transport-level auth. Prefer `api_key_provider` unless you
+specifically need transport-level control.
+
+## Azure OpenAI with Entra ID
+
+For Azure-deployed models (`AzureConfig` / `AzureGPT`), use the existing
+`azure_openai_client_provider` and `azure_openai_async_client_provider` config
+fields to supply clients built with the SDK's native `azure_ad_token_provider`:
+
+```python
+import langroid.language_models as lm
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from openai import AsyncAzureOpenAI, AzureOpenAI
+
+token_provider = get_bearer_token_provider(
+    DefaultAzureCredential(),
+    "https://cognitiveservices.azure.com/.default",
+)
+
+lm_config = lm.AzureConfig(
+    azure_openai_client_provider=lambda: AzureOpenAI(
+        azure_ad_token_provider=token_provider,
+        # ... azure_endpoint, api_version, etc.
+    ),
+    azure_openai_async_client_provider=lambda: AsyncAzureOpenAI(
+        azure_ad_token_provider=token_provider,
+        # ... azure_endpoint, api_version, etc.
+    ),
+)
+```
+
+See [Custom Azure OpenAI client](custom-azure-client.md) for details.
+
+## See Also
+
+- [OpenAI HTTP Client Configuration](openai-http-client.md) — proxies,
+  custom CA bundles, and custom HTTP clients
+- [OpenAI Client Caching](openai-client-caching.md) — how clients are cached
+  and shared
+</file>
+
 <file path="docs/notes/seltz_search.md">
 ---
 
@@ -76030,448 +76030,6 @@ class OpenAIAssistant(ChatAgent):
             return response
 </file>
 
-<file path="langroid/language_models/client_cache.py">
-"""
-Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
-"""
-
-import asyncio
-import atexit
-import hashlib
-import inspect
-import threading
-import time
-import weakref
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Union, cast
-
-from cerebras.cloud.sdk import AsyncCerebras, Cerebras
-from groq import AsyncGroq, Groq
-from httpx import Timeout
-from openai import AsyncOpenAI, OpenAI
-
-# Cache for client instances, keyed by hashed configuration parameters.
-# Value is a tuple of (client instance, last_used_monotonic_seconds).
-_client_cache: Dict[str, Tuple[Any, float]] = {}
-_client_cache_lock = threading.RLock()
-
-# Keep track of clients for cleanup
-_all_clients: weakref.WeakSet[Any] = weakref.WeakSet()
-
-
-def _get_cache_key(client_type: str, **kwargs: Any) -> str:
-    """
-    Generate a cache key from client type and configuration parameters.
-    Uses the same approach as OpenAIGPT._cache_lookup for consistency.
-
-    Args:
-        client_type: Type of client (e.g., "openai", "groq", "cerebras")
-        **kwargs: Configuration parameters (api_key, base_url, timeout, etc.)
-
-    Returns:
-        SHA256 hash of the configuration as a hex string
-    """
-    # Convert kwargs to sorted string representation
-    sorted_kwargs_str = str(sorted(kwargs.items()))
-
-    # Create raw key combining client type and sorted kwargs
-    raw_key = f"{client_type}:{sorted_kwargs_str}"
-
-    # Hash the key for consistent length and to handle complex objects
-    hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
-
-    return hashed_key
-
-
-def wrap_api_key_provider_async(
-    provider: Callable[[], str],
-) -> Callable[[], Awaitable[str]]:
-    """
-    Wrap a sync API-key provider for use with ``AsyncOpenAI``.
-
-    ``AsyncOpenAI`` awaits its ``api_key`` callable, so a plain sync
-    provider must be wrapped in an async function. The sync provider is run
-    in a worker thread, so a blocking token refresh cannot stall the event
-    loop. Providers must therefore be thread-safe -- the sync client may
-    call them from arbitrary threads anyway.
-
-    Args:
-        provider: Callable returning a (possibly short-lived) API key.
-
-    Returns:
-        Async callable returning the same key.
-    """
-
-    async def _provider() -> str:
-        return await asyncio.to_thread(provider)
-
-    return _provider
-
-
-def _api_key_cache_component(api_key: Union[str, Callable[[], str]]) -> Any:
-    """
-    Cache-key component for an API key that may be a rotating-key provider.
-
-    A callable provider is keyed on its identity rather than any token value,
-    so rotating tokens never create new cache entries and tokens are never
-    retained in cache keys. The id() cannot be recycled while the entry
-    lives, because the cached client holds a strong reference to the
-    provider (directly for sync clients, via the async wrapper's closure
-    for async clients).
-    """
-    if callable(api_key):
-        return ("api_key_provider", id(api_key))
-    return api_key
-
-
-def _get_cached_client(cache_key: str) -> Optional[Any]:
-    """Get cached client and refresh its last-used timestamp.
-
-    Must be called while holding ``_client_cache_lock``.
-    """
-    entry = _client_cache.get(cache_key)
-    if entry is None:
-        return None
-
-    client, _ = entry
-    _client_cache[cache_key] = (client, time.monotonic())
-    return client
-
-
-def _store_client(cache_key: str, client: Any) -> None:
-    """Store a client in the cache with the current timestamp.
-
-    Must be called while holding ``_client_cache_lock``.
-    """
-    _client_cache[cache_key] = (client, time.monotonic())
-    _all_clients.add(client)
-
-
-def get_openai_client(
-    api_key: Union[str, Callable[[], str]],
-    base_url: Optional[str] = None,
-    organization: Optional[str] = None,
-    timeout: Union[float, Timeout] = 120.0,
-    default_headers: Optional[Dict[str, str]] = None,
-    http_client: Optional[Any] = None,
-    http_client_config: Optional[Dict[str, Any]] = None,
-) -> OpenAI:
-    """
-    Get or create a singleton OpenAI client with the given configuration.
-
-    Args:
-        api_key: OpenAI API key, or a callable returning a fresh key
-            (for short-lived rotating credentials); a callable is resolved
-            per-request by the OpenAI client and is excluded from the
-            cache key (the cache is keyed on the provider's identity)
-        base_url: Optional base URL for API
-        organization: Optional organization ID
-        timeout: Request timeout
-        default_headers: Optional default headers
-        http_client: Optional httpx.Client instance
-        http_client_config: Optional config dict for creating httpx.Client
-
-    Returns:
-        OpenAI client instance
-    """
-    if isinstance(timeout, (int, float)):
-        timeout = Timeout(timeout)
-
-    # If http_client is provided directly, don't cache (complex object)
-    if http_client is not None:
-        client = OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            organization=organization,
-            timeout=timeout,
-            default_headers=default_headers,
-            http_client=http_client,
-        )
-        _all_clients.add(client)
-        return client
-
-    cache_key = _get_cache_key(
-        "openai",
-        api_key=_api_key_cache_component(api_key),
-        base_url=base_url,
-        organization=organization,
-        timeout=timeout,
-        default_headers=default_headers,
-        http_client_config=http_client_config,  # Include config in cache key
-    )
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(OpenAI, cached_client)
-
-        created_http_client = None
-        if http_client_config is not None:
-            try:
-                from httpx import Client
-            except ImportError:
-                raise ValueError(
-                    "httpx is required to use http_client_config. "
-                    "Install it with: pip install httpx"
-                )
-            created_http_client = Client(**http_client_config)
-
-        client = OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            organization=organization,
-            timeout=timeout,
-            default_headers=default_headers,
-            http_client=created_http_client,  # Use the client created from config
-        )
-
-        _store_client(cache_key, client)
-    return client
-
-
-def get_async_openai_client(
-    api_key: Union[str, Callable[[], str]],
-    base_url: Optional[str] = None,
-    organization: Optional[str] = None,
-    timeout: Union[float, Timeout] = 120.0,
-    default_headers: Optional[Dict[str, str]] = None,
-    http_client: Optional[Any] = None,
-    http_client_config: Optional[Dict[str, Any]] = None,
-) -> AsyncOpenAI:
-    """
-    Get or create a singleton AsyncOpenAI client with the given configuration.
-
-    Args:
-        api_key: OpenAI API key, or a callable returning a fresh key
-            (for short-lived rotating credentials); a callable is resolved
-            per-request by the OpenAI client and is excluded from the
-            cache key (the cache is keyed on the provider's identity)
-        base_url: Optional base URL for API
-        organization: Optional organization ID
-        timeout: Request timeout
-        default_headers: Optional default headers
-        http_client: Optional httpx.AsyncClient instance
-        http_client_config: Optional config dict for creating httpx.AsyncClient
-
-    Returns:
-        AsyncOpenAI client instance
-    """
-    if isinstance(timeout, (int, float)):
-        timeout = Timeout(timeout)
-
-    api_key_arg: Union[str, Callable[[], Awaitable[str]]]
-    if callable(api_key):
-        # AsyncOpenAI awaits its api_key callable, so wrap the sync provider
-        api_key_arg = wrap_api_key_provider_async(api_key)
-    else:
-        api_key_arg = api_key
-
-    # If http_client is provided directly, don't cache (complex object)
-    if http_client is not None:
-        client = AsyncOpenAI(
-            api_key=api_key_arg,
-            base_url=base_url,
-            organization=organization,
-            timeout=timeout,
-            default_headers=default_headers,
-            http_client=http_client,
-        )
-        _all_clients.add(client)
-        return client
-
-    cache_key = _get_cache_key(
-        "async_openai",
-        api_key=_api_key_cache_component(api_key),
-        base_url=base_url,
-        organization=organization,
-        timeout=timeout,
-        default_headers=default_headers,
-        http_client_config=http_client_config,  # Include config in cache key
-    )
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(AsyncOpenAI, cached_client)
-
-        created_http_client = None
-        if http_client_config is not None:
-            try:
-                from httpx import AsyncClient
-            except ImportError:
-                raise ValueError(
-                    "httpx is required to use http_client_config. "
-                    "Install it with: pip install httpx"
-                )
-            created_http_client = AsyncClient(**http_client_config)
-
-        client = AsyncOpenAI(
-            api_key=api_key_arg,
-            base_url=base_url,
-            organization=organization,
-            timeout=timeout,
-            default_headers=default_headers,
-            http_client=created_http_client,  # Use the client created from config
-        )
-
-        _store_client(cache_key, client)
-    return client
-
-
-def get_groq_client(api_key: str) -> Groq:
-    """
-    Get or create a singleton Groq client with the given configuration.
-
-    Args:
-        api_key: Groq API key
-
-    Returns:
-        Groq client instance
-    """
-    cache_key = _get_cache_key("groq", api_key=api_key)
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(Groq, cached_client)
-
-        client = Groq(api_key=api_key)
-        _store_client(cache_key, client)
-    return client
-
-
-def get_async_groq_client(api_key: str) -> AsyncGroq:
-    """
-    Get or create a singleton AsyncGroq client with the given configuration.
-
-    Args:
-        api_key: Groq API key
-
-    Returns:
-        AsyncGroq client instance
-    """
-    cache_key = _get_cache_key("async_groq", api_key=api_key)
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(AsyncGroq, cached_client)
-
-        client = AsyncGroq(api_key=api_key)
-        _store_client(cache_key, client)
-    return client
-
-
-def get_cerebras_client(api_key: str) -> Cerebras:
-    """
-    Get or create a singleton Cerebras client with the given configuration.
-
-    Args:
-        api_key: Cerebras API key
-
-    Returns:
-        Cerebras client instance
-    """
-    cache_key = _get_cache_key("cerebras", api_key=api_key)
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(Cerebras, cached_client)
-
-        client = Cerebras(api_key=api_key)
-        _store_client(cache_key, client)
-    return client
-
-
-def get_async_cerebras_client(api_key: str) -> AsyncCerebras:
-    """
-    Get or create a singleton AsyncCerebras client with the given configuration.
-
-    Args:
-        api_key: Cerebras API key
-
-    Returns:
-        AsyncCerebras client instance
-    """
-    cache_key = _get_cache_key("async_cerebras", api_key=api_key)
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(AsyncCerebras, cached_client)
-
-        client = AsyncCerebras(api_key=api_key)
-        _store_client(cache_key, client)
-    return client
-
-
-def prune_cache(max_age_seconds: float) -> int:
-    """
-    Remove cache entries whose last-used time exceeds *max_age_seconds*.
-
-    Evicted clients are **not** closed here because they may still be serving
-    in-flight requests.  Cleanup is handled by the ``atexit`` handler and the
-    garbage collector.
-
-    Args:
-        max_age_seconds: Maximum age (in seconds) for cache entries to keep.
-            Entries older than this value are removed.
-
-    Returns:
-        Number of cache entries removed.
-    """
-    if max_age_seconds < 0:
-        raise ValueError("max_age_seconds must be non-negative")
-
-    now = time.monotonic()
-
-    with _client_cache_lock:
-        stale_keys = [
-            key
-            for key, (_, last_used_at) in _client_cache.items()
-            if now - last_used_at > max_age_seconds
-        ]
-
-        for key in stale_keys:
-            _client_cache.pop(key)
-
-    # Don't close evicted clients here — they may still be serving in-flight
-    # requests. The atexit handler and GC will clean them up.
-
-    return len(stale_keys)
-
-
-def _cleanup_clients() -> None:
-    """
-    Cleanup function to close all cached clients on exit.
-    Called automatically via atexit.
-    """
-    for client in list(_all_clients):
-        if hasattr(client, "close") and callable(client.close):
-            try:
-                # Check if close is a coroutine function (async)
-                if inspect.iscoroutinefunction(client.close):
-                    # For async clients, we can't await in atexit
-                    # They will be cleaned up by the OS
-                    pass
-                else:
-                    # Sync clients can be closed directly
-                    client.close()
-            except Exception:
-                pass  # Ignore errors during cleanup
-
-
-# Register cleanup function to run on exit
-atexit.register(_cleanup_clients)
-
-
-# For testing purposes
-def _clear_cache() -> None:
-    """Clear the client cache. Only for testing."""
-    with _client_cache_lock:
-        _client_cache.clear()
-</file>
-
 <file path="langroid/parsing/document_parser.py">
 from __future__ import annotations
 
@@ -83507,6 +83065,448 @@ class Task:
         return seq_idx < 0
 </file>
 
+<file path="langroid/language_models/client_cache.py">
+"""
+Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
+"""
+
+import asyncio
+import atexit
+import hashlib
+import inspect
+import threading
+import time
+import weakref
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Union, cast
+
+from cerebras.cloud.sdk import AsyncCerebras, Cerebras
+from groq import AsyncGroq, Groq
+from httpx import Timeout
+from openai import AsyncOpenAI, OpenAI
+
+# Cache for client instances, keyed by hashed configuration parameters.
+# Value is a tuple of (client instance, last_used_monotonic_seconds).
+_client_cache: Dict[str, Tuple[Any, float]] = {}
+_client_cache_lock = threading.RLock()
+
+# Keep track of clients for cleanup
+_all_clients: weakref.WeakSet[Any] = weakref.WeakSet()
+
+
+def _get_cache_key(client_type: str, **kwargs: Any) -> str:
+    """
+    Generate a cache key from client type and configuration parameters.
+    Uses the same approach as OpenAIGPT._cache_lookup for consistency.
+
+    Args:
+        client_type: Type of client (e.g., "openai", "groq", "cerebras")
+        **kwargs: Configuration parameters (api_key, base_url, timeout, etc.)
+
+    Returns:
+        SHA256 hash of the configuration as a hex string
+    """
+    # Convert kwargs to sorted string representation
+    sorted_kwargs_str = str(sorted(kwargs.items()))
+
+    # Create raw key combining client type and sorted kwargs
+    raw_key = f"{client_type}:{sorted_kwargs_str}"
+
+    # Hash the key for consistent length and to handle complex objects
+    hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+
+    return hashed_key
+
+
+def wrap_api_key_provider_async(
+    provider: Callable[[], str],
+) -> Callable[[], Awaitable[str]]:
+    """
+    Wrap a sync API-key provider for use with ``AsyncOpenAI``.
+
+    ``AsyncOpenAI`` awaits its ``api_key`` callable, so a plain sync
+    provider must be wrapped in an async function. The sync provider is run
+    in a worker thread, so a blocking token refresh cannot stall the event
+    loop. Providers must therefore be thread-safe -- the sync client may
+    call them from arbitrary threads anyway.
+
+    Args:
+        provider: Callable returning a (possibly short-lived) API key.
+
+    Returns:
+        Async callable returning the same key.
+    """
+
+    async def _provider() -> str:
+        return await asyncio.to_thread(provider)
+
+    return _provider
+
+
+def _api_key_cache_component(api_key: Union[str, Callable[[], str]]) -> Any:
+    """
+    Cache-key component for an API key that may be a rotating-key provider.
+
+    A callable provider is keyed on its identity rather than any token value,
+    so rotating tokens never create new cache entries and tokens are never
+    retained in cache keys. The id() cannot be recycled while the entry
+    lives, because the cached client holds a strong reference to the
+    provider (directly for sync clients, via the async wrapper's closure
+    for async clients).
+    """
+    if callable(api_key):
+        return ("api_key_provider", id(api_key))
+    return api_key
+
+
+def _get_cached_client(cache_key: str) -> Optional[Any]:
+    """Get cached client and refresh its last-used timestamp.
+
+    Must be called while holding ``_client_cache_lock``.
+    """
+    entry = _client_cache.get(cache_key)
+    if entry is None:
+        return None
+
+    client, _ = entry
+    _client_cache[cache_key] = (client, time.monotonic())
+    return client
+
+
+def _store_client(cache_key: str, client: Any) -> None:
+    """Store a client in the cache with the current timestamp.
+
+    Must be called while holding ``_client_cache_lock``.
+    """
+    _client_cache[cache_key] = (client, time.monotonic())
+    _all_clients.add(client)
+
+
+def get_openai_client(
+    api_key: Union[str, Callable[[], str]],
+    base_url: Optional[str] = None,
+    organization: Optional[str] = None,
+    timeout: Union[float, Timeout] = 120.0,
+    default_headers: Optional[Dict[str, str]] = None,
+    http_client: Optional[Any] = None,
+    http_client_config: Optional[Dict[str, Any]] = None,
+) -> OpenAI:
+    """
+    Get or create a singleton OpenAI client with the given configuration.
+
+    Args:
+        api_key: OpenAI API key, or a callable returning a fresh key
+            (for short-lived rotating credentials); a callable is resolved
+            per-request by the OpenAI client and is excluded from the
+            cache key (the cache is keyed on the provider's identity)
+        base_url: Optional base URL for API
+        organization: Optional organization ID
+        timeout: Request timeout
+        default_headers: Optional default headers
+        http_client: Optional httpx.Client instance
+        http_client_config: Optional config dict for creating httpx.Client
+
+    Returns:
+        OpenAI client instance
+    """
+    if isinstance(timeout, (int, float)):
+        timeout = Timeout(timeout)
+
+    # If http_client is provided directly, don't cache (complex object)
+    if http_client is not None:
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=http_client,
+        )
+        _all_clients.add(client)
+        return client
+
+    cache_key = _get_cache_key(
+        "openai",
+        api_key=_api_key_cache_component(api_key),
+        base_url=base_url,
+        organization=organization,
+        timeout=timeout,
+        default_headers=default_headers,
+        http_client_config=http_client_config,  # Include config in cache key
+    )
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(OpenAI, cached_client)
+
+        created_http_client = None
+        if http_client_config is not None:
+            try:
+                from httpx import Client
+            except ImportError:
+                raise ValueError(
+                    "httpx is required to use http_client_config. "
+                    "Install it with: pip install httpx"
+                )
+            created_http_client = Client(**http_client_config)
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=created_http_client,  # Use the client created from config
+        )
+
+        _store_client(cache_key, client)
+    return client
+
+
+def get_async_openai_client(
+    api_key: Union[str, Callable[[], str]],
+    base_url: Optional[str] = None,
+    organization: Optional[str] = None,
+    timeout: Union[float, Timeout] = 120.0,
+    default_headers: Optional[Dict[str, str]] = None,
+    http_client: Optional[Any] = None,
+    http_client_config: Optional[Dict[str, Any]] = None,
+) -> AsyncOpenAI:
+    """
+    Get or create a singleton AsyncOpenAI client with the given configuration.
+
+    Args:
+        api_key: OpenAI API key, or a callable returning a fresh key
+            (for short-lived rotating credentials); a callable is resolved
+            per-request by the OpenAI client and is excluded from the
+            cache key (the cache is keyed on the provider's identity)
+        base_url: Optional base URL for API
+        organization: Optional organization ID
+        timeout: Request timeout
+        default_headers: Optional default headers
+        http_client: Optional httpx.AsyncClient instance
+        http_client_config: Optional config dict for creating httpx.AsyncClient
+
+    Returns:
+        AsyncOpenAI client instance
+    """
+    if isinstance(timeout, (int, float)):
+        timeout = Timeout(timeout)
+
+    api_key_arg: Union[str, Callable[[], Awaitable[str]]]
+    if callable(api_key):
+        # AsyncOpenAI awaits its api_key callable, so wrap the sync provider
+        api_key_arg = wrap_api_key_provider_async(api_key)
+    else:
+        api_key_arg = api_key
+
+    # If http_client is provided directly, don't cache (complex object)
+    if http_client is not None:
+        client = AsyncOpenAI(
+            api_key=api_key_arg,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=http_client,
+        )
+        _all_clients.add(client)
+        return client
+
+    cache_key = _get_cache_key(
+        "async_openai",
+        api_key=_api_key_cache_component(api_key),
+        base_url=base_url,
+        organization=organization,
+        timeout=timeout,
+        default_headers=default_headers,
+        http_client_config=http_client_config,  # Include config in cache key
+    )
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(AsyncOpenAI, cached_client)
+
+        created_http_client = None
+        if http_client_config is not None:
+            try:
+                from httpx import AsyncClient
+            except ImportError:
+                raise ValueError(
+                    "httpx is required to use http_client_config. "
+                    "Install it with: pip install httpx"
+                )
+            created_http_client = AsyncClient(**http_client_config)
+
+        client = AsyncOpenAI(
+            api_key=api_key_arg,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=created_http_client,  # Use the client created from config
+        )
+
+        _store_client(cache_key, client)
+    return client
+
+
+def get_groq_client(api_key: str) -> Groq:
+    """
+    Get or create a singleton Groq client with the given configuration.
+
+    Args:
+        api_key: Groq API key
+
+    Returns:
+        Groq client instance
+    """
+    cache_key = _get_cache_key("groq", api_key=api_key)
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(Groq, cached_client)
+
+        client = Groq(api_key=api_key)
+        _store_client(cache_key, client)
+    return client
+
+
+def get_async_groq_client(api_key: str) -> AsyncGroq:
+    """
+    Get or create a singleton AsyncGroq client with the given configuration.
+
+    Args:
+        api_key: Groq API key
+
+    Returns:
+        AsyncGroq client instance
+    """
+    cache_key = _get_cache_key("async_groq", api_key=api_key)
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(AsyncGroq, cached_client)
+
+        client = AsyncGroq(api_key=api_key)
+        _store_client(cache_key, client)
+    return client
+
+
+def get_cerebras_client(api_key: str) -> Cerebras:
+    """
+    Get or create a singleton Cerebras client with the given configuration.
+
+    Args:
+        api_key: Cerebras API key
+
+    Returns:
+        Cerebras client instance
+    """
+    cache_key = _get_cache_key("cerebras", api_key=api_key)
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(Cerebras, cached_client)
+
+        client = Cerebras(api_key=api_key)
+        _store_client(cache_key, client)
+    return client
+
+
+def get_async_cerebras_client(api_key: str) -> AsyncCerebras:
+    """
+    Get or create a singleton AsyncCerebras client with the given configuration.
+
+    Args:
+        api_key: Cerebras API key
+
+    Returns:
+        AsyncCerebras client instance
+    """
+    cache_key = _get_cache_key("async_cerebras", api_key=api_key)
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(AsyncCerebras, cached_client)
+
+        client = AsyncCerebras(api_key=api_key)
+        _store_client(cache_key, client)
+    return client
+
+
+def prune_cache(max_age_seconds: float) -> int:
+    """
+    Remove cache entries whose last-used time exceeds *max_age_seconds*.
+
+    Evicted clients are **not** closed here because they may still be serving
+    in-flight requests.  Cleanup is handled by the ``atexit`` handler and the
+    garbage collector.
+
+    Args:
+        max_age_seconds: Maximum age (in seconds) for cache entries to keep.
+            Entries older than this value are removed.
+
+    Returns:
+        Number of cache entries removed.
+    """
+    if max_age_seconds < 0:
+        raise ValueError("max_age_seconds must be non-negative")
+
+    now = time.monotonic()
+
+    with _client_cache_lock:
+        stale_keys = [
+            key
+            for key, (_, last_used_at) in _client_cache.items()
+            if now - last_used_at > max_age_seconds
+        ]
+
+        for key in stale_keys:
+            _client_cache.pop(key)
+
+    # Don't close evicted clients here — they may still be serving in-flight
+    # requests. The atexit handler and GC will clean them up.
+
+    return len(stale_keys)
+
+
+def _cleanup_clients() -> None:
+    """
+    Cleanup function to close all cached clients on exit.
+    Called automatically via atexit.
+    """
+    for client in list(_all_clients):
+        if hasattr(client, "close") and callable(client.close):
+            try:
+                # Check if close is a coroutine function (async)
+                if inspect.iscoroutinefunction(client.close):
+                    # For async clients, we can't await in atexit
+                    # They will be cleaned up by the OS
+                    pass
+                else:
+                    # Sync clients can be closed directly
+                    client.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+
+
+# Register cleanup function to run on exit
+atexit.register(_cleanup_clients)
+
+
+# For testing purposes
+def _clear_cache() -> None:
+    """Clear the client cache. Only for testing."""
+    with _client_cache_lock:
+        _client_cache.clear()
+</file>
+
 <file path="SECURITY.md">
 # Security Policy
 
@@ -84515,200 +84515,6 @@ class StreamingIfAllowed:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.llm.set_stream(self.old_stream)
-</file>
-
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - None Content in LLM Messages: notes/llm-none-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Rotating API Keys: notes/rotating-api-keys.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-      - Batch Processing: notes/batch-processing.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
@@ -91429,6 +91235,209 @@ def _model_name(model: str | ModelName) -> str:
     return model.value
 </file>
 
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - None Content in LLM Messages: notes/llm-none-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Rotating API Keys: notes/rotating-api-keys.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Batch Processing: notes/batch-processing.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.16.0
+  hooks:
+    - id: ruff
+</file>
+
 <file path="langroid/language_models/openai_gpt.py">
 import hashlib
 import json
@@ -94000,15 +94009,6 @@ class OpenAIGPT(LanguageModel):
         return self._process_chat_completion_response(cached, response_dict)
 </file>
 
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.16.0
-  hooks:
-    - id: ruff
-</file>
-
 <file path="pyproject.toml">
 [project]
 name = "langroid"
@@ -94047,7 +94047,7 @@ dependencies = [
     "nest-asyncio<2.0.0,>=1.6.0",
     "nltk<4.0.0,>=3.8.2",
     "onnxruntime<2.0.0,>=1.16.1",
-    "openai>=1.61.1,<3.0.0",
+    "openai>=1.106.0,<3.0.0",
     "pandas<3.0.0,>=2.0.3",
     "prettytable<4.0.0,>=3.8.0",
     "pydantic<3.0.0,>=2.0.0",
