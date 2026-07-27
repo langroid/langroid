@@ -88,6 +88,7 @@ vecdbs = [
     "chromadb<=0.4.23,>=0.4.21",
     "weaviate-client>=4.9.6",
     "pinecone-client>=5.0.1",
+    "pymilvus[milvus-lite]>=3.0.0",
 ]
 
 db = [
@@ -129,6 +130,7 @@ all = [
     "psycopg2-binary>=2.9.10",
     "marker-pdf",
     "seltz>=0.2.0",
+    "pymilvus[milvus-lite]>=3.0.0",
 ]
 
 # More granular groupings
@@ -287,6 +289,9 @@ firecrawl = [
 ]
 crawl4ai = [
     "crawl4ai>=0.6.3",
+]
+milvus = [
+    "pymilvus[milvus-lite]>=3.0.0",
 ]
 
 
