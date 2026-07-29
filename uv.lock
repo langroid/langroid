@@ -3402,11 +3402,11 @@ wheels = [
 
 [[package]]
 name = "json-repair"
-version = "0.60.1"
+version = "0.61.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5e/a6/d69888cb4ffde30e80db1e6c32caaadd2f984a80067d5ea72c2cb3f61c3f/json_repair-0.60.1.tar.gz", hash = "sha256:841661cdd2df507c9a4e189097f38ca6bc372e06d4b4e36d72e590f68176c290", size = 49451 }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/7c/6d7c931fb6348f957154f9af926a77777a03ef0f6108c51cc2d7c9876a22/json_repair-0.61.2.tar.gz", hash = "sha256:b63ae5ad44c8720158e24bdd7e33506f7036174c287831b187a51619a6f58a34", size = 50539 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/32/1f/2a2b5eea8ef5762a86ad3f8fddddaaba2c0d76dd44e644b9158900868bec/json_repair-0.60.1-py3-none-any.whl", hash = "sha256:ba6ff974f2a8bef2f7768144a7f03f870a816443f03da27a49cdd0ec31a78049", size = 48045 },
+    { url = "https://files.pythonhosted.org/packages/ac/ba/c90076ab3fb22d43a31e2e53f56ffbaea25d524d8db3b38082779a562789/json_repair-0.61.2-py3-none-any.whl", hash = "sha256:779a0cdb48f609d6eb669273023cf4c92b5ac6d80a496eb919ee93c84c351ec8", size = 48977 },
 ]
 
 [[package]]
@@ -3732,7 +3732,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.65.14"
+version = "0.65.15"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -4069,7 +4069,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'hf-transformers'", specifier = ">=0.21.2,<1.0.0" },
     { name = "huggingface-hub", marker = "extra == 'transformers'", specifier = ">=0.21.2,<1.0.0" },
     { name = "jinja2", specifier = ">=3.1.2,<4.0.0" },
-    { name = "json-repair", specifier = ">=0.29.9,<0.61" },
+    { name = "json-repair", specifier = ">=0.29.9,<0.61.3" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.9.0" },
     { name = "lancedb", marker = "extra == 'vecdbs'", specifier = ">=0.9.0" },
     { name = "litellm", marker = "extra == 'all'", specifier = ">=1.30.1,<2.0.0" },

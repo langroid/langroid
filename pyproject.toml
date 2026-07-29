@@ -29,7 +29,15 @@ dependencies = [
     "grpcio<2.0.0,>=1.62.1",
     "halo<1.0.0,>=0.0.31",
     "jinja2<4.0.0,>=3.1.2",
-    "json-repair>=0.29.9,<0.61",
+    # Capped below 0.61.3: that release changed how unquoted values are
+    # repaired, and an unquoted value followed by another key and a nested
+    # object silently swallows the next key/value pair, e.g.
+    #   {request: foo, args: bar baz, opts: {"a": b}}
+    # yields {'request': 'foo,\n args: bar baz', 'opts': {...}} -- the `args`
+    # field is LOST. langroid parses exactly this shape out of sloppy LLM tool
+    # calls, so the field loss is silent and material. 0.61.0-0.61.2 are fine;
+    # see tests/main/test_json.py::test_repair_keeps_unquoted_value_fields.
+    "json-repair>=0.29.9,<0.61.3",
     "lxml<7.0.0,>=6.1.0",
     "markdownify>=0.13.1",
     "nest-asyncio<2.0.0,>=1.6.0",
