@@ -294,9 +294,11 @@ class DocChatAgentConfig(ChatAgentConfig):
 
 
 def _append_metadata_source(orig_source: str, source: str) -> str:
-    if orig_source != source and source != "" and orig_source != "":
-        return f"{orig_source.strip()}; {source.strip()}"
-    return orig_source.strip() + source.strip()
+    orig = orig_source.strip()
+    src = source.strip()
+    if orig and src:
+        return orig if orig == src else f"{orig}; {src}"
+    return orig or src
 
 
 class DocChatAgent(ChatAgent):
