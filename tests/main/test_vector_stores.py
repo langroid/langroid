@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from types import SimpleNamespace
 from typing import List
@@ -10,14 +11,16 @@ from sqlalchemy.exc import OperationalError
 from langroid.agent.batch import run_batch_tasks
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
+from langroid.embedding_models.base import EmbeddingModel
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Embeddings
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
+from langroid.vector_store.milvusdb import MilvusDB, MilvusDBConfig
 from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
 from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
@@ -53,6 +56,31 @@ stored_docs = [
     MyDoc(content=d, metadata=MyDocMetaData(id=str(i)))
     for i, d in enumerate(vars(phrases).values())
 ]
+
+
+class DeterministicEmbeddingModel(EmbeddingModel):
+    @property
+    def embedding_dims(self) -> int:
+        return 4
+
+    def embedding_fn(self):
+        def embed(texts: List[str]) -> Embeddings:
+            return [self._embed(text) for text in texts]
+
+        return embed
+
+    @staticmethod
+    def _embed(text: str) -> List[float]:
+        text = text.lower()
+        if "alpha beta" in text:
+            return [0.6, 0.8, 0.0, 0.0]
+        if "alpha" in text:
+            return [1.0, 0.0, 0.0, 0.0]
+        if "beta" in text:
+            return [0.0, 1.0, 0.0, 0.0]
+        if "gamma" in text:
+            return [0.0, 0.0, 1.0, 0.0]
+        return [0.0, 0.0, 0.0, 1.0]
 
 
 @pytest.fixture(scope="function")
@@ -211,6 +239,164 @@ def vecdb(request) -> VectorStore:
         yield pinecone_serverless
         pinecone_serverless.delete_collection(collection_name=cfg.collection_name)
         return
+
+
+@pytest.fixture(scope="function")
+def milvus_vecdb(tmp_path) -> MilvusDB:
+    cfg = MilvusDBConfig(
+        collection_name="test_milvus",
+        uri=str(tmp_path / "milvus.db"),
+        replace_collection=True,
+        embedding_model=DeterministicEmbeddingModel(),
+        batch_size=2,
+    )
+    try:
+        vecdb = VectorStore.create(cfg)
+    except LangroidImportError as exc:
+        pytest.skip(f"Milvus not installed: {exc}")
+    assert isinstance(vecdb, MilvusDB)
+    yield vecdb
+    vecdb.clear_all_collections(really=True, prefix="test_")
+    vecdb.close()
+
+
+def test_milvus_vector_store_lite_add_search_list_delete_clear(
+    milvus_vecdb: MilvusDB,
+):
+    docs = [
+        Document(
+            content="alpha document",
+            metadata=DocMetaData(id="alpha", source="group_a"),
+        ),
+        Document(
+            content="beta document",
+            metadata=DocMetaData(id="beta", source="group_b"),
+        ),
+        Document(
+            content="gamma document",
+            metadata=DocMetaData(id="gamma", source="group_a"),
+        ),
+    ]
+    milvus_vecdb.add_documents(docs)
+
+    assert "test_milvus" in milvus_vecdb.list_collections(empty=True)
+    assert "test_milvus" in milvus_vecdb.list_collections()
+
+    all_docs = milvus_vecdb.get_all_documents()
+    assert {doc.id() for doc in all_docs} == {"alpha", "beta", "gamma"}
+
+    group_a_docs = milvus_vecdb.get_all_documents(json.dumps({"source": "group_a"}))
+    assert {doc.id() for doc in group_a_docs} == {"alpha", "gamma"}
+
+    ordered_docs = milvus_vecdb.get_documents_by_ids(["gamma", "alpha"])
+    assert [doc.id() for doc in ordered_docs] == ["gamma", "alpha"]
+
+    docs_and_scores = milvus_vecdb.similar_texts_with_scores("alpha", k=2)
+    assert docs_and_scores[0][0].content == "alpha document"
+    assert docs_and_scores[0][1] > docs_and_scores[1][1]
+
+    filtered_docs_and_scores = milvus_vecdb.similar_texts_with_scores(
+        "alpha",
+        k=3,
+        where=json.dumps({"source": {"$in": ["group_b"]}}),
+    )
+    assert [doc.id() for doc, _ in filtered_docs_and_scores] == ["beta"]
+
+    empty_collections = [f"test_empty_{i}" for i in range(2)]
+    for collection_name in empty_collections:
+        milvus_vecdb.create_collection(collection_name)
+    assert milvus_vecdb.clear_empty_collections() == len(empty_collections)
+
+    junk_collections = [f"test_junk_{i}" for i in range(3)]
+    for collection_name in junk_collections:
+        milvus_vecdb.create_collection(collection_name)
+    assert milvus_vecdb.clear_all_collections(
+        really=True,
+        prefix="test_junk_",
+    ) == len(junk_collections)
+
+    milvus_vecdb.delete_collection("test_milvus")
+    assert "test_milvus" not in milvus_vecdb.list_collections(empty=True)
+
+
+@pytest.mark.parametrize("metric_type", ["COSINE", "IP", "L2"])
+def test_milvus_vector_store_lite_score_semantics(tmp_path, metric_type: str):
+    cfg = MilvusDBConfig(
+        collection_name=f"test_milvus_scores_{metric_type.lower()}",
+        uri=str(tmp_path / f"milvus_{metric_type.lower()}.db"),
+        metric_type=metric_type,
+        replace_collection=True,
+        embedding_model=DeterministicEmbeddingModel(),
+    )
+    try:
+        vecdb = VectorStore.create(cfg)
+    except LangroidImportError as exc:
+        pytest.skip(f"Milvus not installed: {exc}")
+    assert isinstance(vecdb, MilvusDB)
+    try:
+        vecdb.add_documents(
+            [
+                Document(
+                    content="alpha document",
+                    metadata=DocMetaData(id="alpha"),
+                ),
+                Document(
+                    content="alpha beta document",
+                    metadata=DocMetaData(id="alpha_beta"),
+                ),
+                Document(
+                    content="beta document",
+                    metadata=DocMetaData(id="beta"),
+                ),
+            ]
+        )
+
+        docs_and_scores = vecdb.similar_texts_with_scores("alpha", k=3)
+        ids = [doc.id() for doc, _ in docs_and_scores]
+        scores = [score for _, score in docs_and_scores]
+
+        assert ids == ["alpha", "alpha_beta", "beta"]
+        assert scores == sorted(scores, reverse=True)
+        if metric_type in ["COSINE", "IP"]:
+            assert scores == pytest.approx([1.0, 0.6, 0.0], abs=1e-6)
+        else:
+            assert scores == pytest.approx(
+                [0.0, -math.sqrt(0.8), -math.sqrt(2.0)],
+                abs=1e-6,
+            )
+
+        if metric_type == "COSINE":
+            matches_above_threshold = [
+                doc.id() for doc, score in docs_and_scores if score > 0.7
+            ]
+            assert matches_above_threshold == ["alpha"]
+    finally:
+        vecdb.clear_all_collections(really=True, prefix="test_milvus_scores_")
+        vecdb.close()
+
+
+@pytest.mark.parametrize(
+    "metric_type,raw_score,lite_3_0,expected_score",
+    [
+        ("COSINE", 0.4, True, 0.6),
+        ("COSINE", 0.6, False, 0.6),
+        ("IP", 0.6, True, 0.6),
+        ("IP", 0.6, False, 0.6),
+        ("L2", math.sqrt(0.8), True, -math.sqrt(0.8)),
+        ("L2", 0.8, False, -math.sqrt(0.8)),
+    ],
+)
+def test_milvus_score_normalization(
+    metric_type: str,
+    raw_score: float,
+    lite_3_0: bool,
+    expected_score: float,
+):
+    vecdb = object.__new__(MilvusDB)
+    vecdb.config = MilvusDBConfig(metric_type=metric_type)
+    vecdb._milvus_lite_3_0 = lite_3_0
+
+    assert vecdb._score_from_distance(raw_score) == pytest.approx(expected_score)
 
 
 @pytest.mark.parametrize(

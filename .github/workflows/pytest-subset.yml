@@ -78,6 +78,7 @@ jobs:
             --extra hf-embeddings \
             --extra weaviate \
             --extra pinecone \
+            --extra milvus \
             --extra postgres \
             --extra pdf-parsers \
             --extra docx \
