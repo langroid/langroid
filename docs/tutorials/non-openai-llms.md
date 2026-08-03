@@ -147,6 +147,16 @@ To use OpenRouter with Langroid:
 
 For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
 
+### OrcaRouter
+
+[OrcaRouter](https://www.orcarouter.ai) is an OpenAI-compatible gateway that provides unified access to many LLM vendors (OpenAI, Anthropic, Google, DeepSeek, Moonshot, and more) through a single endpoint. It also runs gateway-level, zero-trust security for AI agents on the same endpoint — screening every prompt/response and governing every tool call on a default-deny basis, with no application code changes.
+
+To use OrcaRouter with Langroid:
+- Set up your `ORCAROUTER_API_KEY` environment variable (keys start with `sk-orca-`)
+- Set `chat_model="orcarouter/<model_name>"` in the `OpenAIGPTConfig`
+
+For example, `chat_model="orcarouter/anthropic/claude-sonnet-5"` or `chat_model="orcarouter/openai/gpt-5.6-sol"`.
+
 ## Working with the created `OpenAIGPTConfig` object
 
 From here you can proceed as usual, creating instances of `OpenAIGPT`,

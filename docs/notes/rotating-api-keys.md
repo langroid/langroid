@@ -116,7 +116,7 @@ It works with `use_cached_client=True` (the default) and with
 `api_key_provider` is only supported for models served via an
 OpenAI-compatible endpoint, i.e. those that go through the OpenAI client path.
 This includes plain OpenAI models as well as the `gemini/`, `litellm-proxy/`,
-`openrouter/`, `deepseek/`, `vllm/`, and `local/` prefixes.
+`openrouter/`, `orcarouter/`, `deepseek/`, `vllm/`, and `local/` prefixes.
 
 Constructing an `OpenAIGPT` with `api_key_provider` raises a `ValueError` for:
 

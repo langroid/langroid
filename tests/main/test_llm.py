@@ -313,6 +313,7 @@ def test_keys():
         "gemini",
         "glhf",
         "openrouter",
+        "orcarouter",
         "deepseek",
         "cerebras",
     ]
@@ -381,6 +382,30 @@ def test_llm_langdb(model: str):
     ],
 )
 def test_llm_openrouter(model: str):
+    # override any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "orcarouter/anthropic/claude-haiku-4.5",
+        "orcarouter/google/gemini-2.5-flash-lite",
+    ],
+)
+def test_llm_orcarouter(model: str):
+    if not os.getenv("ORCAROUTER_API_KEY"):
+        pytest.skip("ORCAROUTER_API_KEY not set")
     # override any chat model passed via --m arg to pytest cmd
     settings.chat_model = model
     llm_config = lm.OpenAIGPTConfig(
