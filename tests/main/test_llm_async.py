@@ -174,6 +174,31 @@ async def test_llm_openrouter(model: str):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [
+        "orcarouter/anthropic/claude-haiku-4.5",
+        "orcarouter/google/gemini-2.5-flash-lite",
+    ],
+)
+async def test_llm_orcarouter(model: str):
+    if not os.getenv("ORCAROUTER_API_KEY"):
+        pytest.skip("ORCAROUTER_API_KEY not set")
+    # override models set via pytest ... --m <model>
+    settings.chat_model = model
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    result = await llm.achat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+@pytest.mark.asyncio
 async def test_llm_pdf_attachment_async():
     """Test sending a PDF file attachment to the LLM asynchronously."""
     from pathlib import Path
