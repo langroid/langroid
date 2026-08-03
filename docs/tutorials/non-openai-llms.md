@@ -8,7 +8,7 @@ OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.i
 - There are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
   that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
 (e.g. Anthropic's Claude, Google's Gemini).
-- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), and [OpenRouter](https://openrouter.ai/) provide unified access to multiple LLM providers with additional features like cost control, observability, caching, and fallback strategies.
+- AI gateways like [LangDB](https://langdb.ai/), [Portkey](https://portkey.ai), [OpenRouter](https://openrouter.ai/), and [Tuning Engines](https://app.tuningengines.com/docs/inference-api) provide unified access to multiple LLM providers with additional features like cost control, observability, governance, caching, and fallback strategies.
   
 Below we show how you can use these various options with Langroid.
 
@@ -147,6 +147,36 @@ To use OpenRouter with Langroid:
 
 For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
 
+### Tuning Engines
+
+[Tuning Engines](https://app.tuningengines.com/docs/inference-api) provides an
+OpenAI-compatible API for teams that want Langroid agents to run through a
+governed control plane. Langroid continues to own the agent behavior, tools, and
+conversation flow, while Tuning Engines can centralize tenant model access,
+policy checks, audit logs, traces, usage, and cost reporting.
+
+To use Tuning Engines with Langroid:
+
+- Create a Tuning Engines inference key and enable the model alias you want to use.
+- Set the key in your environment:
+
+```bash
+export TUNING_ENGINES_API_KEY=sk-te-your-inference-key
+```
+
+- Configure Langroid with the OpenAI-compatible endpoint:
+
+```python
+import os
+import langroid.language_models as lm
+
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="gpt-4o",
+    api_base="https://api.tuningengines.com/v1",
+    api_key=os.environ["TUNING_ENGINES_API_KEY"],
+)
+```
+
 ## Working with the created `OpenAIGPTConfig` object
 
 From here you can proceed as usual, creating instances of `OpenAIGPT`,
@@ -214,5 +244,3 @@ When the `--m` option is omitted, the default OpenAI GPT4 model is used.
 
 
 
-
-    
