@@ -313,11 +313,13 @@ def test_keys():
         "gemini",
         "glhf",
         "openrouter",
+        "aimlapi",
         "deepseek",
         "cerebras",
     ]
     key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
     key_dict["llamacpp"] = "LLAMA_API_KEY"
+    key_dict["aimlapi"] = "AIML_API_KEY"
 
     for p, var in key_dict.items():
         os.environ[var] = p
@@ -382,6 +384,28 @@ def test_llm_langdb(model: str):
 )
 def test_llm_openrouter(model: str):
     # override any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "aimlapi/openai/gpt-4o-mini",
+        "aimlapi/google/gemini-2.5-flash",
+        "aimlapi/anthropic/claude-sonnet-4.5",
+    ],
+)
+def test_llm_aimlapi(model: str):
     settings.chat_model = model
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model,
