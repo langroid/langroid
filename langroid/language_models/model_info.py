@@ -106,13 +106,9 @@ class GeminiModel(ModelName):
 class MiniMaxModel(ModelName):
     """Enum for MiniMax models"""
 
+    MINIMAX_M3 = "MiniMax-M3"
     MINIMAX_M2_7 = "MiniMax-M2.7"
     MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
-    MINIMAX_M2_5 = "MiniMax-M2.5"
-    MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
-    MINIMAX_M2_1 = "MiniMax-M2.1"
-    MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
-    MINIMAX_M2 = "MiniMax-M2"
 
 
 class OpenAI_API_ParamInfo(BaseModel):
@@ -693,6 +689,17 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         description="Gemini 3 Flash",
     ),
     # MiniMax Models
+    MiniMaxModel.MINIMAX_M3.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M3.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=524_288,
+        max_output_tokens=131_072,
+        input_cost_per_million=0.60,
+        cached_cost_per_million=0.12,
+        output_cost_per_million=2.40,
+        has_structured_output=True,
+        description="MiniMax M3 (512K context)",
+    ),
     MiniMaxModel.MINIMAX_M2_7.value: ModelInfo(
         name=MiniMaxModel.MINIMAX_M2_7.value,
         provider=ModelProvider.MINIMAX,
@@ -712,56 +719,6 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=0.60,
         has_structured_output=True,
         description="MiniMax M2.7 Highspeed (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_5.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_5.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.30,
-        output_cost_per_million=1.20,
-        has_structured_output=True,
-        description="MiniMax M2.5 (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.15,
-        output_cost_per_million=0.60,
-        has_structured_output=True,
-        description="MiniMax M2.5 Highspeed (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_1.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_1.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.27,
-        output_cost_per_million=0.95,
-        has_structured_output=True,
-        description="MiniMax M2.1 (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.14,
-        output_cost_per_million=0.48,
-        has_structured_output=True,
-        description="MiniMax M2.1 Highspeed (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.27,
-        output_cost_per_million=0.95,
-        has_structured_output=True,
-        description="MiniMax M2 (204K context)",
     ),
 }
 

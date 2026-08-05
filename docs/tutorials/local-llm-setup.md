@@ -195,17 +195,17 @@ can use the DeepSeek R1 or its distilled variants by setting `chat_model` to
 ## MiniMax LLMs
 
 [MiniMax](https://www.minimax.io/) provides high-performance language models
-with up to 1M context length via their OpenAI-compatible API.
+with up to 512K context length via their OpenAI-compatible API.
 To use MiniMax models with Langroid:
 
 - set up your `MINIMAX_API_KEY` environment variable in the `.env` file or as
  an explicit export in your shell
 - set the `chat_model` in the `OpenAIGPTConfig` to `minimax/<model_name>`, e.g.
-  `minimax/MiniMax-M2.7` for their flagship model, or
-  `minimax/MiniMax-M2.7-highspeed` for the faster, lower-cost variant.
+  `minimax/MiniMax-M3` for their flagship 512K-context model, or
+  `minimax/MiniMax-M2.7-highspeed` for the previous-generation lower-cost variant.
 
-Available models include `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, and
-`MiniMax-M2`, each with a `-highspeed` variant offering reduced latency and cost.
+Available models include `MiniMax-M3` (current flagship), `MiniMax-M2.7`, and
+`MiniMax-M2.7-highspeed` (a faster, lower-cost variant of M2.7).
 
 See the [`chat-minimax.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-minimax.py) example for a ready-to-run interactive chat script using MiniMax.
 
