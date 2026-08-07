@@ -147,6 +147,16 @@ To use OpenRouter with Langroid:
 
 For more details, see the [Local LLM Setup guide](local-llm-setup.md#local-llms-available-on-openrouter).
 
+### Requesty
+
+[Requesty](https://requesty.ai/) is an OpenAI-compatible LLM router that provides unified access to multiple LLM providers through a single API, using `provider/model` naming.
+
+To use Requesty with Langroid:
+- Set up your `REQUESTY_API_KEY` environment variable
+- Set `chat_model="requesty/<provider>/<model_name>"` in the `OpenAIGPTConfig` (e.g., `"requesty/openai/gpt-4o-mini"`)
+
+For more details, see the [Requesty documentation](https://docs.requesty.ai/).
+
 ## Working with the created `OpenAIGPTConfig` object
 
 From here you can proceed as usual, creating instances of `OpenAIGPT`,
