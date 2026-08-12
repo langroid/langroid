@@ -29,16 +29,52 @@ LEGAL_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
 USDC_INPUT_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]{1,6})?$")
 TASK_DESCRIPTION_MAX_LENGTH = 10_000
 USDC_SCALE = Decimal("1000000")
+CLI_RECOVERY_STRING_FIELDS = (
+    "idempotencyKey",
+    "reason",
+    "intentId",
+    "intentStatus",
+    "operation",
+    "txHash",
+)
 
 TaskmarketRunner = Callable[[Sequence[str]], Any]
 AuthorizationCallback = Callable[[Mapping[str, Any], str], str]
 Clock = Callable[[], datetime]
 
 
+def _safe_cli_recovery_fields(value: Any) -> dict[str, Any]:
+    """Return only bounded, non-sensitive Taskmarket recovery metadata."""
+    if not isinstance(value, Mapping):
+        return {}
+    recovery: dict[str, Any] = {}
+    status = value.get("status")
+    if (
+        isinstance(status, int)
+        and not isinstance(status, bool)
+        and 100 <= status <= 599
+    ):
+        recovery["status"] = status
+    pending = value.get("pending")
+    if isinstance(pending, bool):
+        recovery["pending"] = pending
+    for field in CLI_RECOVERY_STRING_FIELDS:
+        item = value.get(field)
+        if isinstance(item, str) and 0 < len(item) <= 512 and item.isprintable():
+            recovery[field] = item
+    return recovery
+
+
 class TaskmarketRequesterError(RuntimeError):
     """Base error for safe, operator-facing Taskmarket failures."""
 
     retry_safe = True
+
+    def __init__(
+        self, message: str, *, recovery: Mapping[str, Any] | None = None
+    ) -> None:
+        super().__init__(message)
+        self.recovery = _safe_cli_recovery_fields(recovery)
 
 
 class TaskmarketCreationUncertain(TaskmarketRequesterError):
@@ -400,9 +436,13 @@ class TaskmarketRequester:
             try:
                 creation = _require_mapping(self._runner(command), "task create")
             except Exception as exc:
+                recovery = (
+                    exc.recovery if isinstance(exc, TaskmarketRequesterError) else None
+                )
                 raise TaskmarketCreationUncertain(
                     "Task creation may have settled. Do not retry; reconcile "
-                    "the wallet and Taskmarket task history first."
+                    "the wallet and Taskmarket task history first.",
+                    recovery=recovery,
                 ) from exc
             task_id = str(creation.get("taskId", ""))
             if not TASK_ID_PATTERN.fullmatch(task_id):
@@ -599,8 +639,17 @@ class TaskmarketRequester:
         if len(completed.stdout) + len(completed.stderr) > 1_000_000:
             raise TaskmarketCommandError("Taskmarket CLI output exceeded 1 MB")
         if completed.returncode != 0:
+            recovery: Mapping[str, Any] | None = None
+            if list(arguments[:2]) == ["task", "create"]:
+                try:
+                    error_payload = json.loads(completed.stderr)
+                except json.JSONDecodeError:
+                    error_payload = None
+                if isinstance(error_payload, Mapping):
+                    recovery = error_payload
             raise TaskmarketCommandError(
-                "Taskmarket CLI command failed; sensitive output was withheld"
+                "Taskmarket CLI command failed; sensitive output was withheld",
+                recovery=recovery,
             )
         try:
             payload = json.loads(completed.stdout)
@@ -642,6 +691,8 @@ class _BoundTaskmarketTool(ToolMessage):
                 "error": str(exc),
                 "retry_safe": exc.retry_safe,
             }
+            if exc.recovery:
+                result["recovery"] = exc.recovery
         return json.dumps(result, sort_keys=True)
 
 

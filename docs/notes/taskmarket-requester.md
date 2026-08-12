@@ -96,7 +96,10 @@ There is no automatic payment retry. Once an authorized create command starts,
 the preview is consumed. A timeout, command failure, or malformed success
 response latches that requester instance closed because settlement may have
 succeeded. Reconcile the Taskmarket task history and wallet before constructing
-a new requester; do not simply repeat the payment.
+a new requester; do not simply repeat the payment. When the CLI returns a JSON
+failure, the tool preserves only its bounded recovery metadata (such as the
+idempotency key, intent ID/status, and pending flag) while withholding the raw
+error text and all unrelated fields.
 
 ## Reproduce
 

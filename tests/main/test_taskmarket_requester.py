@@ -451,6 +451,50 @@ def test_ambiguous_creation_latches_closed_without_retry() -> None:
     assert len([call for call in runner.calls if call[:2] == ["task", "create"]]) == 1
 
 
+def test_create_tool_preserves_only_safe_recovery_fields() -> None:
+    runner = FakeTaskmarketRunner()
+    runner.create_error = TaskmarketCommandError(
+        "CLI failure",
+        recovery={
+            "status": 409,
+            "idempotencyKey": "018f-recovery-key",
+            "pending": True,
+            "reason": "intent_in_flight",
+            "intentId": "int_123",
+            "intentStatus": "broadcast",
+            "operation": "tasks.create",
+            "txHash": "0x" + "c" * 64,
+            "error": "internal failure detail",
+            "privateKey": "must-not-leak",
+        },
+    )
+    requester, _, _ = make_requester(runner)
+    preview_id = preview_task(requester)["preview"]["preview_id"]
+    CreateTool = requester.get_tools()[1]
+
+    result = json.loads(CreateTool(preview_id=preview_id).handle())
+
+    assert result == {
+        "ok": False,
+        "error": (
+            "Task creation may have settled. Do not retry; reconcile the wallet "
+            "and Taskmarket task history first."
+        ),
+        "retry_safe": False,
+        "recovery": {
+            "status": 409,
+            "idempotencyKey": "018f-recovery-key",
+            "pending": True,
+            "reason": "intent_in_flight",
+            "intentId": "int_123",
+            "intentStatus": "broadcast",
+            "operation": "tasks.create",
+            "txHash": "0x" + "c" * 64,
+        },
+    }
+    assert requester.creation_uncertain is True
+
+
 def test_invalid_success_response_is_treated_as_uncertain() -> None:
     runner = FakeTaskmarketRunner()
     runner.created_task_id = "not-a-task-id"
@@ -575,6 +619,51 @@ def test_default_runner_uses_argument_vector_and_no_shell(
     assert captured["stdin"] is subprocess.DEVNULL
     assert captured["timeout"] == 30.0
     assert captured["env"]["TASKMARKET_API_URL"] == ("https://taskmarket.example")
+
+
+def test_default_runner_parses_create_recovery_without_exposing_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error_payload = {
+        "ok": False,
+        "error": "upstream detail must stay hidden",
+        "status": 409,
+        "idempotencyKey": "018f-recovery-key",
+        "pending": True,
+        "reason": "intent_in_flight",
+        "intentId": "int_123",
+        "intentStatus": "broadcast",
+        "operation": "tasks.create",
+        "txHash": "0x" + "c" * 64,
+        "token": "must-not-leak",
+    }
+
+    def fake_run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr=json.dumps(error_payload),
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    requester = TaskmarketRequester(cli_executable="taskmarket-safe")
+
+    with pytest.raises(TaskmarketCommandError) as error:
+        requester._run_cli(["task", "create"])
+
+    assert error.value.recovery == {
+        "status": 409,
+        "idempotencyKey": "018f-recovery-key",
+        "pending": True,
+        "reason": "intent_in_flight",
+        "intentId": "int_123",
+        "intentStatus": "broadcast",
+        "operation": "tasks.create",
+        "txHash": "0x" + "c" * 64,
+    }
+    assert "upstream detail" not in str(error.value)
+    assert "must-not-leak" not in str(error.value)
 
 
 @pytest.mark.parametrize("task_id", ["abc", "0x1234", "0x" + "z" * 64])
