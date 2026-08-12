@@ -71,8 +71,10 @@ The agent receives four tools:
   official Base USDC contract, wallet balance, and legal status. It then asks
   the host callback for fresh authorization and runs one CLI create command.
 - `taskmarket_task_status` retrieves the created task's live status and link.
-- `taskmarket_task_submissions` retrieves work for human review. No acceptance
-  or rejection tool is exposed.
+- `taskmarket_task_submissions` retrieves a strict allowlist of submission and
+  artifact metadata plus a Taskmarket review link. Worker prose, filenames,
+  raw MIME strings, artifact bodies, previews, URLs, and unknown fields are
+  withheld from the agent. No acceptance or rejection tool is exposed.
 
 Taskmarket defines the deadline as `--duration` hours after the server accepts
 creation. The preview shows that exact duration rule and an estimated UTC time;
@@ -91,6 +93,20 @@ the network preflight, create call, status lookup, and returned API link cannot
 silently target different Taskmarket backends.
 Status and submission responses must identify the requested task before they are
 returned to the agent.
+
+Submission responses are an untrusted boundary. The integration validates and
+bounds each submission ID, worker address, timestamp, transaction hash, artifact
+role, media kind, MIME type, SHA-256 and Keccak-256 values, display order, and
+size before returning only non-prose facts. Submission IDs must have the
+platform's canonical UUID shape; MIME syntax is checked but the worker-defined
+raw string is not returned. The tool returns at most 100 submissions, reports
+the complete count and whether the list was truncated, and accepts no more than
+20 artifacts per submission. It deliberately omits worker-controlled prose,
+filenames, artifact content, download URLs, and unknown fields, then directs the
+operator to the fixed Taskmarket task URL for deliberate out-of-band inspection.
+This prevents a worker's artifact or metadata from silently becoming
+instructions to the Langroid agent. Human review remains mandatory, and the
+integration still provides no accept or reject operation.
 
 There is no automatic payment retry. Once an authorized create command starts,
 the preview is consumed. A timeout, command failure, or malformed success
@@ -135,5 +151,5 @@ pytest -q tests/main/test_taskmarket_requester.py
 
 The tests cover exact previews, spend caps, authorization denial, single-use
 previews, Base/USDC checks, balance and legal gates, unknown-settlement latching,
-read-only submission review, task ID validation, backend binding, and shell-free
-execution.
+read-only submission review, untrusted submission-field isolation and bounds,
+task ID validation, backend binding, and shell-free execution.

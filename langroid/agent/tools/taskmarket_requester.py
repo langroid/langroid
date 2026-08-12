@@ -26,9 +26,22 @@ TASKMARKET_WEB_URL = "https://taskmarket.dev"
 TASK_ID_PATTERN = re.compile(r"^0x[0-9a-fA-F]{64}$")
 WALLET_PATTERN = re.compile(r"^0x[0-9a-fA-F]{40}$")
 LEGAL_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
+TRANSACTION_HASH_PATTERN = re.compile(r"^0x[0-9a-fA-F]{64}$")
+SHA256_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
+UUID_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-" r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+MIME_TYPE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.+-]{0,63}/[a-z0-9][a-z0-9.+-]{0,63}$")
 USDC_INPUT_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]{1,6})?$")
 TASK_DESCRIPTION_MAX_LENGTH = 10_000
 USDC_SCALE = Decimal("1000000")
+MAX_SUBMISSIONS_PER_RESPONSE = 100
+MAX_ARTIFACTS_PER_SUBMISSION = 20
+MAX_ARTIFACT_SIZE_BYTES = 10 * 1024 * 1024 * 1024
+ARTIFACT_ROLES = frozenset({"preview", "source", "final", "attachment"})
+ARTIFACT_MEDIA_KINDS = frozenset(
+    {"image", "video", "audio", "pdf", "text", "archive", "unknown"}
+)
 CLI_RECOVERY_STRING_FIELDS = (
     "idempotencyKey",
     "reason",
@@ -138,6 +151,153 @@ def _utc_now() -> datetime:
 
 def _isoformat(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _safe_timestamp(
+    value: Any, field_name: str, *, nullable: bool = False
+) -> str | None:
+    """Validate and normalize a Taskmarket timestamp without retaining free text."""
+    if value is None and nullable:
+        return None
+    if not isinstance(value, str) or not value or len(value) > 64:
+        raise TaskmarketCommandError(
+            f"Taskmarket returned an invalid {field_name} timestamp"
+        )
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise TaskmarketCommandError(
+            f"Taskmarket returned an invalid {field_name} timestamp"
+        ) from exc
+    if parsed.tzinfo is None:
+        raise TaskmarketCommandError(
+            f"Taskmarket returned an invalid {field_name} timestamp"
+        )
+    return _isoformat(parsed)
+
+
+def _optional_transaction_hash(value: Any, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not TRANSACTION_HASH_PATTERN.fullmatch(value):
+        raise TaskmarketCommandError(f"Taskmarket returned an invalid {field_name}")
+    return value.lower()
+
+
+def _safe_artifact_metadata(value: Any) -> list[dict[str, Any]]:
+    """Return bounded non-text artifact facts safe to place in an agent context."""
+    if not isinstance(value, list) or len(value) > MAX_ARTIFACTS_PER_SUBMISSION:
+        raise TaskmarketCommandError(
+            "Taskmarket returned an invalid submission artifact list"
+        )
+    artifacts: list[dict[str, Any]] = []
+    for raw_artifact in value:
+        artifact = _require_mapping(raw_artifact, "task submissions")
+        role = artifact.get("role")
+        if not isinstance(role, str) or role not in ARTIFACT_ROLES:
+            raise TaskmarketCommandError(
+                "Taskmarket returned an invalid submission artifact role"
+            )
+        media_kind = artifact.get("mediaKind")
+        if not isinstance(media_kind, str) or media_kind not in ARTIFACT_MEDIA_KINDS:
+            raise TaskmarketCommandError(
+                "Taskmarket returned an invalid submission artifact media kind"
+            )
+
+        mime_type = artifact.get("mimeType")
+        if not isinstance(mime_type, str) or not MIME_TYPE_PATTERN.fullmatch(
+            mime_type.casefold()
+        ):
+            raise TaskmarketCommandError(
+                "Taskmarket returned an invalid submission artifact MIME type"
+            )
+
+        sha256_hash = artifact.get("sha256Hash")
+        if not isinstance(sha256_hash, str) or not SHA256_PATTERN.fullmatch(
+            sha256_hash
+        ):
+            raise TaskmarketCommandError(
+                "Taskmarket returned an invalid submission artifact SHA-256 hash"
+            )
+        keccak256_hash = artifact.get("keccak256Hash")
+        if not isinstance(
+            keccak256_hash, str
+        ) or not TRANSACTION_HASH_PATTERN.fullmatch(keccak256_hash):
+            raise TaskmarketCommandError(
+                "Taskmarket returned an invalid submission artifact Keccak-256 hash"
+            )
+
+        size_bytes = artifact.get("sizeBytes")
+        if (
+            not isinstance(size_bytes, int)
+            or isinstance(size_bytes, bool)
+            or not 0 <= size_bytes <= MAX_ARTIFACT_SIZE_BYTES
+        ):
+            raise TaskmarketCommandError(
+                "Taskmarket returned an invalid submission artifact size"
+            )
+        display_order = artifact.get("displayOrder")
+        if (
+            not isinstance(display_order, int)
+            or isinstance(display_order, bool)
+            or not 0 <= display_order < MAX_ARTIFACTS_PER_SUBMISSION
+        ):
+            raise TaskmarketCommandError(
+                "Taskmarket returned an invalid submission artifact display order"
+            )
+        artifacts.append(
+            {
+                "role": role,
+                "mediaKind": media_kind,
+                "sha256Hash": sha256_hash.lower(),
+                "keccak256Hash": keccak256_hash.lower(),
+                "sizeBytes": size_bytes,
+                "displayOrder": display_order,
+            }
+        )
+    return artifacts
+
+
+def _safe_submission_metadata(value: Any, task_id: str) -> dict[str, Any]:
+    """Allowlist one submission row and discard all worker-controlled prose."""
+    submission = _require_mapping(value, "task submissions")
+    returned_task_id = str(submission.get("taskId", ""))
+    if (
+        not TASK_ID_PATTERN.fullmatch(returned_task_id)
+        or returned_task_id.lower() != task_id.lower()
+    ):
+        raise TaskmarketCommandError(
+            "Taskmarket returned a mismatched submission response"
+        )
+
+    submission_id = submission.get("id")
+    if not isinstance(submission_id, str) or not UUID_PATTERN.fullmatch(submission_id):
+        raise TaskmarketCommandError("Taskmarket returned an invalid submission ID")
+    worker_address = submission.get("workerAddress")
+    if not isinstance(worker_address, str) or not WALLET_PATTERN.fullmatch(
+        worker_address
+    ):
+        raise TaskmarketCommandError(
+            "Taskmarket returned an invalid submission worker address"
+        )
+
+    safe: dict[str, Any] = {
+        "id": submission_id.lower(),
+        "taskId": returned_task_id.lower(),
+        "workerAddress": worker_address,
+        "submittedAt": _safe_timestamp(submission.get("submittedAt"), "submittedAt"),
+        "rejectedAt": _safe_timestamp(
+            submission.get("rejectedAt"), "rejectedAt", nullable=True
+        ),
+    }
+    for field_name in ("deliverableHash", "submitTxHash"):
+        field_value = _optional_transaction_hash(submission.get(field_name), field_name)
+        if field_value is not None:
+            safe[field_name] = field_value
+    artifacts = _safe_artifact_metadata(submission.get("artifacts"))
+    safe["artifactCount"] = len(artifacts)
+    safe["artifacts"] = artifacts
+    return safe
 
 
 def _parse_usdc(value: str, field_name: str) -> tuple[Decimal, str]:
@@ -498,33 +658,33 @@ class TaskmarketRequester:
         }
 
     def task_submissions(self, task_id: str) -> dict[str, Any]:
-        """Retrieve submissions for human review without making decisions."""
+        """Retrieve bounded submission metadata for out-of-band human review."""
         self._validate_task_id(task_id)
         submissions = self._runner(["task", "submissions", task_id])
         if not isinstance(submissions, list):
             raise TaskmarketCommandError(
                 "Taskmarket returned an invalid response for task submissions"
             )
-        checked_submissions: list[dict[str, Any]] = []
-        for submission in submissions:
-            item = _require_mapping(submission, "task submissions")
-            returned_task_id = str(item.get("taskId", ""))
-            if (
-                not TASK_ID_PATTERN.fullmatch(returned_task_id)
-                or returned_task_id.lower() != task_id.lower()
-            ):
-                raise TaskmarketCommandError(
-                    "Taskmarket returned a mismatched submission response"
-                )
-            checked_submissions.append(dict(item))
+        total_submission_count = len(submissions)
+        bounded_submissions = submissions[:MAX_SUBMISSIONS_PER_RESPONSE]
+        checked_submissions = [
+            _safe_submission_metadata(submission, task_id)
+            for submission in bounded_submissions
+        ]
         return {
             "ok": True,
             "task_id": task_id,
+            "review_url": f"{TASKMARKET_WEB_URL}/tasks/{task_id}",
+            "total_submission_count": total_submission_count,
+            "returned_submission_count": len(checked_submissions),
+            "truncated": total_submission_count > len(checked_submissions),
             "submissions": checked_submissions,
             "review_policy": {
                 "human_review_required": True,
                 "automatic_acceptance": False,
                 "automatic_rejection": False,
+                "untrusted_content_withheld": True,
+                "artifact_content_requires_out_of_band_review": True,
             },
         }
 
@@ -756,12 +916,13 @@ class TaskmarketTaskStatusTool(_BoundTaskmarketTool):
 
 
 class TaskmarketTaskSubmissionsTool(_BoundTaskmarketTool):
-    """Retrieve Taskmarket submissions for human review only."""
+    """Retrieve safe Taskmarket submission metadata for human review only."""
 
     request: str = "taskmarket_task_submissions"
     purpose: str = (
-        "Retrieve submissions for a Taskmarket task and present them for human "
-        "review. This tool cannot accept or reject work."
+        "Retrieve bounded submission metadata and a Taskmarket link for "
+        "out-of-band human review. Worker prose and artifact content are withheld. "
+        "This tool cannot accept or reject work."
     )
     task_id: str = Field(description="0x-prefixed Taskmarket task ID")
 
