@@ -53,7 +53,8 @@ class LanceDBConfig(VectorStoreConfig):
 
 
 class LanceDB(VectorStore):
-    def __init__(self, config: LanceDBConfig = LanceDBConfig()):
+    def __init__(self, config: LanceDBConfig | None = None):
+        config = config or LanceDBConfig()
         super().__init__(config)
         if not has_lancedb:
             raise LangroidImportError("lancedb", "lancedb")

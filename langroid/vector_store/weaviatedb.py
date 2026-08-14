@@ -39,7 +39,8 @@ class WeaviateDBConfig(VectorStoreConfig):
 
 
 class WeaviateDB(VectorStore):
-    def __init__(self, config: WeaviateDBConfig = WeaviateDBConfig()):
+    def __init__(self, config: WeaviateDBConfig | None = None):
+        config = config or WeaviateDBConfig()
         super().__init__(config)
         try:
             import weaviate

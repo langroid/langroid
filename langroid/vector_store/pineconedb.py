@@ -64,7 +64,8 @@ class PineconeDBConfig(VectorStoreConfig):
 
 
 class PineconeDB(VectorStore):
-    def __init__(self, config: PineconeDBConfig = PineconeDBConfig()):
+    def __init__(self, config: PineconeDBConfig | None = None):
+        config = config or PineconeDBConfig()
         super().__init__(config)
         if not has_pinecone:
             raise LangroidImportError("pinecone", "pinecone")
