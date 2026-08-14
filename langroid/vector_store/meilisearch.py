@@ -15,6 +15,7 @@ import os
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
+from pydantic_settings import SettingsConfigDict
 
 if TYPE_CHECKING:
     from meilisearch_python_sdk.index import AsyncIndex
@@ -30,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 class MeiliSearchConfig(VectorStoreConfig):
+    model_config = SettingsConfigDict(env_prefix="MEILISEARCH_", case_sensitive=False)
+
     cloud: bool = False
     collection_name: str | None = None
     primary_key: str = "id"

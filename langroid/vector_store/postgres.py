@@ -5,6 +5,8 @@ import os
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from pydantic_settings import SettingsConfigDict
+
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
@@ -47,6 +49,8 @@ def _quote_ident(name: str) -> str:
 
 
 class PostgresDBConfig(VectorStoreConfig):
+    model_config = SettingsConfigDict(env_prefix="POSTGRES_", case_sensitive=False)
+
     collection_name: str = "embeddings"
     cloud: bool = False
     docker: bool = True

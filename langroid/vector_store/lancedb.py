@@ -16,6 +16,7 @@ from typing import (
 import pandas as pd
 from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError, create_model
+from pydantic_settings import SettingsConfigDict
 
 if TYPE_CHECKING:
     from lancedb.query import LanceVectorQueryBuilder
@@ -45,6 +46,8 @@ logger = logging.getLogger(__name__)
 
 
 class LanceDBConfig(VectorStoreConfig):
+    model_config = SettingsConfigDict(env_prefix="LANCEDB_", case_sensitive=False)
+
     cloud: bool = False
     collection_name: str | None = "temp"
     storage_path: str = ".lancedb/data"

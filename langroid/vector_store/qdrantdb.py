@@ -7,6 +7,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from dotenv import load_dotenv
+from pydantic_settings import SettingsConfigDict
 
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
@@ -49,6 +50,8 @@ def is_valid_uuid(uuid_to_test: str) -> bool:
 
 
 class QdrantDBConfig(VectorStoreConfig):
+    model_config = SettingsConfigDict(env_prefix="QDRANT_", case_sensitive=False)
+
     cloud: bool = True
     docker: bool = False
     collection_name: str | None = "temp"

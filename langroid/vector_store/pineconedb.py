@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 
 # import dataclass
 from pydantic import BaseModel
+from pydantic_settings import SettingsConfigDict
 
 from langroid import LangroidImportError
 from langroid.mytypes import Document
@@ -55,6 +56,8 @@ class IndexMeta:
 
 
 class PineconeDBConfig(VectorStoreConfig):
+    model_config = SettingsConfigDict(env_prefix="PINECONE_", case_sensitive=False)
+
     cloud: bool = True
     collection_name: str | None = "temp"
     spec: ServerlessSpec = ServerlessSpec(cloud="aws", region="us-east-1")
