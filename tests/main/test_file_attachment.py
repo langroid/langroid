@@ -90,6 +90,54 @@ class TestFileAttachment:
         result = attachment.to_dict("gpt-4.1")
         assert result is not None
 
+    def test_to_dict_image(self):
+        """Images are sent as `image_url` content-parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(
+            content=content, filename="image.png", mime_type="image/png"
+        )
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "image_url"
+        assert result["image_url"]["url"] == attachment.to_data_uri()
+
+    def test_to_dict_video(self):
+        """Videos are sent as `video_url` content-parts, not generic file parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content, filename="clip.mp4")
+
+        assert attachment.mime_type == "video/mp4"
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == attachment.to_data_uri()
+        assert "file" not in result
+
+    def test_to_dict_video_url_passthrough(self):
+        """A remote video URL is passed through instead of being base64-encoded."""
+        url = "https://example.com/videos/clip.mp4"
+        attachment = FileAttachment.from_path(url)
+
+        assert attachment.mime_type == "video/mp4"
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == url
+
+    def test_to_dict_non_media_file(self):
+        """Non-image, non-video files keep using generic `file` content-parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content, filename="doc.pdf")
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "file"
+        assert result["file"]["filename"] == "doc.pdf"
+        assert result["file"]["file_data"] == attachment.to_data_uri()
+
     def test_mime_type_inference(self):
         """Test MIME type is correctly inferred from filename."""
         content = b"test content"
