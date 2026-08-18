@@ -1,3 +1,4 @@
+import base64
 import copy
 import inspect
 import json
@@ -52,6 +53,7 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.mytypes import Entity, NonToolAction
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
@@ -477,6 +479,89 @@ class ChatAgent(Agent):
                 LLMMessage(role=Role.ASSISTANT, content=response),
             ]
         )
+
+    def export_history(self) -> str:
+        """Export message history as a portable, versioned JSON snapshot.
+
+        Returns:
+            A JSON string containing the current message history.
+        """
+        messages: List[Dict[str, Any]] = []
+        for message in self.message_history:
+            data = message.model_dump(mode="json", exclude={"files"})
+            data["chat_document_id"] = ""
+            data["files"] = [
+                {
+                    "content_base64": base64.b64encode(file.content).decode("ascii"),
+                    "filename": file.filename,
+                    "mime_type": file.mime_type,
+                    "url": file.url,
+                    "detail": file.detail,
+                }
+                for file in message.files
+            ]
+            messages.append(data)
+        return json.dumps({"version": 1, "messages": messages}, ensure_ascii=False)
+
+    def import_history(self, snapshot: str) -> None:
+        """Restore message history from :meth:`export_history` output.
+
+        Args:
+            snapshot: Versioned JSON snapshot to restore.
+
+        Raises:
+            ValueError: If the snapshot is malformed or has an unknown version.
+        """
+        try:
+            payload = json.loads(snapshot)
+            if not isinstance(payload, dict) or payload.get("version") != 1:
+                raise ValueError("unsupported version")
+            raw_messages = payload.get("messages")
+            if not isinstance(raw_messages, list):
+                raise ValueError("messages must be a list")
+
+            messages: List[LLMMessage] = []
+            for raw_message in raw_messages:
+                if not isinstance(raw_message, dict):
+                    raise ValueError("message must be an object")
+                message_data = dict(raw_message)
+                raw_files = message_data.get("files", [])
+                if not isinstance(raw_files, list):
+                    raise ValueError("files must be a list")
+                files = []
+                for raw_file in raw_files:
+                    if not isinstance(raw_file, dict):
+                        raise ValueError("file must be an object")
+                    file_data = dict(raw_file)
+                    content = base64.b64decode(
+                        file_data.pop("content_base64"),
+                        validate=True,
+                    )
+                    files.append(FileAttachment(content=content, **file_data))
+                message_data["files"] = files
+                message_data["chat_document_id"] = ""
+                messages.append(LLMMessage.model_validate(message_data))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid history snapshot: {exc}") from exc
+
+        all_calls = {
+            call.id: call
+            for message in messages
+            for call in (message.tool_calls or [])
+            if call.id is not None
+        }
+        completed_call_ids = {
+            message.tool_call_id
+            for message in messages
+            if message.role == Role.TOOL and message.tool_call_id is not None
+        }
+        self.message_history = messages
+        self.oai_tool_id2call = all_calls
+        self.oai_tool_calls = [
+            call
+            for call_id, call in all_calls.items()
+            if call_id not in completed_call_ids
+        ]
 
     def tool_format_rules(self) -> str:
         """
