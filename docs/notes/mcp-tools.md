@@ -460,6 +460,30 @@ async with FastMCPClient(server) as client:
     models = [client.tool_model_from_mcp_tool(t) for t in wanted]
 ```
 
+## Namespacing tools from multiple servers
+
+Two MCP servers can expose the same tool name. Enabling both generated tools on
+one `ChatAgent` would otherwise make the later tool replace the earlier entry in
+the agent's tool map. Pass `tool_name_prefix` when loading each server to give
+the Langroid-facing names distinct namespaces:
+
+```python
+weather_tools = await get_tools_async(
+    weather_server,
+    tool_name_prefix="weather",
+)
+inventory_tools = await get_tools_async(
+    inventory_server,
+    tool_name_prefix="inventory",
+)
+
+agent.enable_message(weather_tools + inventory_tools)
+```
+
+If both servers expose `lookup`, the agent sees `weather__lookup` and
+`inventory__lookup`. Each generated tool still invokes `lookup` on the server
+that defined it. Omitting `tool_name_prefix` preserves the existing tool names.
+
 ## Tool parameter type mapping
 
 When an MCP tool is converted into a Langroid `ToolMessage`,
