@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from meilisearch_python_sdk.models.documents import DocumentsInfo
 
 
+from pydantic_settings import SettingsConfigDict
+
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.utils.configuration import settings
@@ -30,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 
 class MeiliSearchConfig(VectorStoreConfig):
+    model_config = SettingsConfigDict(env_prefix="MEILISEARCH_")
+
     cloud: bool = False
     collection_name: str | None = None
     primary_key: str = "id"

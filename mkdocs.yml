@@ -150,6 +150,7 @@ nav:
       - Context-Overflow Handling: notes/context-overflow.md
       - Batch Processing: notes/batch-processing.md
       - Attachment Token Preflight: notes/attachment-token-preflight.md
+      - Vector-Store Env Prefixes: notes/vecstore-env-prefix.md
 
   - Examples:
     - Guide: examples/guide.md

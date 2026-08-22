@@ -1,11 +1,12 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Sequence, Tuple, Type
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type
 
 import numpy as np
 import pandas as pd
-from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -21,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreConfig(BaseSettings):
+    # Without a prefix, every field name would itself be a
+    # case-insensitive env var (e.g. a bare HOST, PORT, or FULL_EVAL
+    # in the environment would silently override defaults); subclasses
+    # each set their own prefix (QDRANT_, LANCEDB_, ...).
+    model_config = SettingsConfigDict(env_prefix="VECDB_")
+
     type: str = ""  # deprecated, keeping it for backward compatibility
     collection_name: str | None = "temp"
     replace_collection: bool = False  # replace collection if it already exists
@@ -39,6 +46,28 @@ class VectorStoreConfig(BaseSettings):
     metadata_class: Type[DocMetaData] = DocMetaData
     # compose_file: str = "langroid/vector_store/docker-compose-qdrant.yml"
     full_eval: bool = False  # runs eval without sanitization. Use only on trusted input
+
+    @field_validator("port", mode="before")
+    @classmethod
+    def _ignore_service_link_port(cls, v: Any) -> Any:
+        """Ignore Kubernetes/Docker service-link `tcp://...` port values.
+
+        With `enableServiceLinks` (on by default in Kubernetes), a
+        service named e.g. `qdrant` injects `QDRANT_PORT=tcp://IP:PORT`
+        into every pod, which would otherwise fail integer validation
+        of the `port` field. Only this exact format is forgiven; any
+        other invalid value still fails validation as usual.
+        """
+        if isinstance(v, str) and v.startswith("tcp://"):
+            default = cls.model_fields["port"].default
+            logger.warning(
+                f"Ignoring port value {v!r}: it looks like a "
+                f"Kubernetes/Docker service-link artifact (an injected "
+                f"<SERVICE>_PORT env var); using default port "
+                f"{default} instead."
+            )
+            return default
+        return v
 
 
 class VectorStore(ABC):
