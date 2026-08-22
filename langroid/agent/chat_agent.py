@@ -65,6 +65,11 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
+def _reject_json_constant(constant: str) -> None:
+    """Reject JavaScript numeric constants that are not valid JSON."""
+    raise ValueError(f"non-JSON numeric constant: {constant}")
+
+
 def _is_identified_result(message: LLMMessage) -> bool:
     """Whether a TOOL/FUNCTION result has its identifier and no call payload.
 
@@ -488,6 +493,11 @@ class ChatAgent(Agent):
         """
         messages: List[Dict[str, Any]] = []
         for message in self.message_history:
+            json.dumps(
+                message.model_dump(mode="python", exclude={"files"}),
+                allow_nan=False,
+                default=str,
+            )
             data = message.model_dump(mode="json", exclude={"files"})
             data["chat_document_id"] = ""
             data["files"] = [
@@ -501,7 +511,7 @@ class ChatAgent(Agent):
                 for file in message.files
             ]
             messages.append(data)
-        return json.dumps({"version": 1, "messages": messages}, ensure_ascii=False)
+        return json.dumps({"version": 1, "messages": messages}, allow_nan=False)
 
     def import_history(
         self,
@@ -522,7 +532,7 @@ class ChatAgent(Agent):
         try:
             if max_size_bytes < 0:
                 raise ValueError("max_size_bytes must be non-negative")
-            payload = json.loads(snapshot)
+            payload = json.loads(snapshot, parse_constant=_reject_json_constant)
             if (
                 not isinstance(payload, dict)
                 or type(payload.get("version")) is not int
@@ -577,6 +587,20 @@ class ChatAgent(Agent):
             seen_call_ids: Set[str] = set()
             unresolved_call_ids: Set[str] = set()
             for message in messages:
+                if message.role in (Role.TOOL, Role.FUNCTION) and (
+                    message.function_call is not None or message.tool_calls
+                ):
+                    raise ValueError("result messages must not contain call payloads")
+                if message.function_call is not None and message.role != Role.ASSISTANT:
+                    raise ValueError("function calls must have role 'assistant'")
+                if message.tool_call_id is not None and message.role != Role.TOOL:
+                    raise ValueError("tool_call_id is only valid on tool results")
+                if message.role == Role.FUNCTION:
+                    name = message.name
+                    if name is None or not name or name != name.strip():
+                        raise ValueError(
+                            "function result name must be nonblank and normalized"
+                        )
                 if message.tool_calls:
                     if message.role != Role.ASSISTANT:
                         raise ValueError("tool calls must have role 'assistant'")
