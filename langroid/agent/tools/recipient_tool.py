@@ -17,7 +17,7 @@ especially with weaker LLMs.
 
 """
 
-from typing import ClassVar, List, Type
+from typing import ClassVar, List, Optional, Tuple, Type
 
 from rich import print
 
@@ -41,9 +41,25 @@ class AddRecipientTool(ToolMessage):
         "to clarify who the message is intended for."
     )
     intended_recipient: str
-    _saved_content: str = ""
+    # Content stashed by `RecipientTool` (its handler or its fallback) for this
+    # tool to re-emit once the LLM supplies a recipient, paired with the taint of
+    # the message it was read from. Kept as ONE value so a stash site cannot
+    # record the content while forgetting the taint, which would relabel
+    # untrusted content as trusted (GHSA-2j3c-5vm9-xppx, #1035).
+    #
+    # Declared ClassVar, not a bare underscore attribute: Pydantic turns the
+    # latter into a `ModelPrivateAttr` on the class, so reading it before any
+    # stash yields that wrapper rather than the default value.
+    #
+    # Known limitation, predating the taint fix: this stash is process-wide, so
+    # concurrent recipient flows in different agents share one slot.
+    _saved: ClassVar[Tuple[str, bool]] = ("", False)
 
-    def response(self, agent: ChatAgent) -> ChatDocument:
+    def response(
+        self,
+        agent: ChatAgent,
+        chat_doc: Optional[ChatDocument] = None,
+    ) -> ChatDocument:
         """
         Returns:
             (ChatDocument): with content set to self.content and
@@ -53,24 +69,34 @@ class AddRecipientTool(ToolMessage):
             "[red]RecipientTool: "
             f"Added recipient {self.intended_recipient} to message."
         )
-        if self.__class__._saved_content == "":
+        tainted = chat_doc is not None and chat_doc.metadata.tainted
+        # Read and clear the stash in one step, so content and taint cannot be
+        # separated by an interleaved call.
+        saved_content, saved_tainted = self.__class__._saved
+        self.__class__._saved = ("", False)
+        if saved_content == "":
             recipient_request_name = RecipientTool.default_value("request")
             content = f"""
                 Recipient specified but content is empty!
-                This could be because the `{self.request}` tool/function was used 
+                This could be because the `{self.request}` tool/function was used
                 before using `{recipient_request_name}` tool/function.
                 Resend the message using `{recipient_request_name}` tool/function.
                 """
         else:
-            content = self.__class__._saved_content  # use class-level attrib value
-            # erase content since we just used it.
-            self.__class__._saved_content = ""
+            content = saved_content
+            # The stashed content came from an earlier message, which may be
+            # untrusted even when the message carrying THIS tool is not, so
+            # honor both marks.
+            tainted = tainted or saved_tainted
         return ChatDocument(
             content=content,
             metadata=ChatDocMetaData(
                 recipient=self.intended_recipient,
                 # we are constructing this so it looks as it msg is from LLM
                 sender=Entity.LLM,
+                # ...but do not let that relabel launder untrusted content past
+                # _filter_user_origin_tools (GHSA-2j3c-5vm9-xppx, #1035).
+                tainted=tainted,
             ),
         )
 
@@ -139,7 +165,11 @@ class RecipientTool(ToolMessage):
             and setting the 'content' field to your message.
             """
 
-    def response(self, agent: ChatAgent) -> str | ChatDocument:
+    def response(
+        self,
+        agent: ChatAgent,
+        chat_doc: Optional[ChatDocument] = None,
+    ) -> str | ChatDocument:
         """
         When LLM has correctly used this tool,
         construct a ChatDocument with an explicit recipient,
@@ -156,7 +186,10 @@ class RecipientTool(ToolMessage):
             # save the content as a class-variable, so that
             # we can construct the ChatDocument once the LLM specifies a recipient.
             # This avoids having to re-generate the entire message, saving time + cost.
-            AddRecipientTool._saved_content = self.content
+            AddRecipientTool._saved = (
+                self.content,
+                chat_doc is not None and chat_doc.metadata.tainted,
+            )
             agent.enable_message(AddRecipientTool)
             return ChatDocument(
                 content="""
@@ -180,6 +213,11 @@ class RecipientTool(ToolMessage):
                 recipient=self.intended_recipient,
                 # we are constructing this so it looks as if msg is from LLM
                 sender=Entity.LLM,
+                # ...but `self.content` is attacker-influenceable, so carry the
+                # source message's taint rather than letting the LLM relabel
+                # launder it past _filter_user_origin_tools
+                # (GHSA-2j3c-5vm9-xppx, #1035).
+                tainted=chat_doc is not None and chat_doc.metadata.tainted,
             ),
         )
 
@@ -218,7 +256,11 @@ class RecipientTool(ToolMessage):
         # save the content as a class-variable, so that
         # we can construct the ChatDocument once the LLM specifies a recipient.
         # This avoids having to re-generate the entire message, saving time + cost.
-        AddRecipientTool._saved_content = content
+        # Carry the taint too: this path is reached for any LLM-labelled message,
+        # including one another tool re-emitted from untrusted USER content (e.g.
+        # RewindTool), so dropping the mark here would launder it via
+        # AddRecipientTool (GHSA-2j3c-5vm9-xppx, #1035).
+        AddRecipientTool._saved = (content, msg.metadata.tainted)
         agent.enable_message(AddRecipientTool)
         print("[red]RecipientTool: Recipient not specified, asking LLM to clarify.")
         return ChatDocument(
