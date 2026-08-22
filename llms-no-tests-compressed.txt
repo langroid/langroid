@@ -40371,6 +40371,97 @@ self.api_base = self.config.api_base or GEMINI_BASE_URL
 ```
 </file>
 
+<file path="PR_REVIEW_975.md">
+# PR #975 Review: Remove traceback from OpenAI API error logs
+
+**Author:** alexagr
+**Branch:** `api_error_log` → `main`
+**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
+
+## Summary
+
+This PR adds `except openai.APIError` handlers before the generic `except Exception`
+blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
+and `achat`. The intent is to log API errors cleanly (without a full traceback) since
+server-side errors don't benefit from a local stack trace.
+
+The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
+produces multi-line stack traces for every OpenAI API error. For authentication
+failures, bad requests, and similar server-side errors these tracebacks are noisy and
+provide no diagnostic value.
+
+## Issues
+
+### 1. `openai.APIError` is too broad — catches connection and timeout errors too
+
+`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
+
+```
+openai.APIError
+├── openai.APIConnectionError    ← network/local issues
+│   └── openai.APITimeoutError   ← timeout issues
+└── openai.APIStatusError        ← HTTP status errors from the API server
+    ├── openai.BadRequestError (400)
+    ├── openai.AuthenticationError (401)
+    ├── openai.PermissionDeniedError (403)
+    ├── openai.NotFoundError (404)
+    ├── openai.UnprocessableEntityError (422)
+    ├── openai.RateLimitError (429)
+    └── openai.InternalServerError (>=500)
+```
+
+The PR description correctly identifies that server-side errors (AuthenticationError,
+BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
+and `APITimeoutError` **are** related to the local environment (network configuration,
+DNS, proxy issues), where a traceback **could** help diagnose the problem.
+
+**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
+captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
+while letting connection/timeout errors fall through to the `except Exception` handler
+where `friendly_error()` provides the full traceback.
+
+### 2. `raise e` vs bare `raise`
+
+The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
+`raise` preserves the original traceback chain. This is consistent with the existing
+code (the `except Exception` blocks also use `raise e`), but `raise` is generally
+preferred — especially since callers higher up the stack may want the full traceback
+context even if the log message omits it.
+
+This is a minor style point and not a blocker — it could be a separate cleanup across
+the file.
+
+### 3. Log level consideration
+
+Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
+(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
+a transient condition. That said, by the time the error reaches this outer handler the
+retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
+
+Not a blocker.
+
+## Suggested Change
+
+Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
+
+```python
+except openai.APIStatusError as e:
+    logging.error(f"API error in OpenAIGPT.generate: {e}")
+    raise e
+```
+
+## Verdict
+
+The change addresses a real usability issue — excessively noisy tracebacks for
+server-side API errors. With the suggested narrowing from `APIError` to
+`APIStatusError`, this would be a clean, well-targeted improvement. The code is
+consistent with existing patterns and correctly placed before the generic exception
+handlers.
+
+**Recommendation: Request changes** — use `openai.APIStatusError` instead of
+`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
+</file>
+
 <file path="pytest.ini">
 [pytest]
 markers =
@@ -47609,97 +47700,6 @@ is an ongoing PR, just push to github again and the PR will be updated.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
 Read more [here](docs/development/github-cli.md).
-</file>
-
-<file path="PR_REVIEW_975.md">
-# PR #975 Review: Remove traceback from OpenAI API error logs
-
-**Author:** alexagr
-**Branch:** `api_error_log` → `main`
-**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
-
-## Summary
-
-This PR adds `except openai.APIError` handlers before the generic `except Exception`
-blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
-and `achat`. The intent is to log API errors cleanly (without a full traceback) since
-server-side errors don't benefit from a local stack trace.
-
-The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
-produces multi-line stack traces for every OpenAI API error. For authentication
-failures, bad requests, and similar server-side errors these tracebacks are noisy and
-provide no diagnostic value.
-
-## Issues
-
-### 1. `openai.APIError` is too broad — catches connection and timeout errors too
-
-`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
-
-```
-openai.APIError
-├── openai.APIConnectionError    ← network/local issues
-│   └── openai.APITimeoutError   ← timeout issues
-└── openai.APIStatusError        ← HTTP status errors from the API server
-    ├── openai.BadRequestError (400)
-    ├── openai.AuthenticationError (401)
-    ├── openai.PermissionDeniedError (403)
-    ├── openai.NotFoundError (404)
-    ├── openai.UnprocessableEntityError (422)
-    ├── openai.RateLimitError (429)
-    └── openai.InternalServerError (>=500)
-```
-
-The PR description correctly identifies that server-side errors (AuthenticationError,
-BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
-and `APITimeoutError` **are** related to the local environment (network configuration,
-DNS, proxy issues), where a traceback **could** help diagnose the problem.
-
-**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
-captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
-while letting connection/timeout errors fall through to the `except Exception` handler
-where `friendly_error()` provides the full traceback.
-
-### 2. `raise e` vs bare `raise`
-
-The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
-`raise` preserves the original traceback chain. This is consistent with the existing
-code (the `except Exception` blocks also use `raise e`), but `raise` is generally
-preferred — especially since callers higher up the stack may want the full traceback
-context even if the log message omits it.
-
-This is a minor style point and not a blocker — it could be a separate cleanup across
-the file.
-
-### 3. Log level consideration
-
-Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
-(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
-a transient condition. That said, by the time the error reaches this outer handler the
-retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
-
-Not a blocker.
-
-## Suggested Change
-
-Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
-
-```python
-except openai.APIStatusError as e:
-    logging.error(f"API error in OpenAIGPT.generate: {e}")
-    raise e
-```
-
-## Verdict
-
-The change addresses a real usability issue — excessively noisy tracebacks for
-server-side API errors. With the suggested narrowing from `APIError` to
-`APIStatusError`, this would be a clean, well-targeted improvement. The code is
-consistent with existing patterns and correctly placed before the generic exception
-handlers.
-
-**Recommendation: Request changes** — use `openai.APIStatusError` instead of
-`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
 </file>
 
 <file path="docs/notes/mcp-tools.md">
@@ -57695,199 +57695,6 @@ image_url_dict: Dict[str, str] = dict(url=self._content_url())
 # For non-image files and unexpected runtime MIME values
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - None Content in LLM Messages: notes/llm-none-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Rotating API Keys: notes/rotating-api-keys.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-      - Batch Processing: notes/batch-processing.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="langroid/language_models/openai_gpt.py">
 OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
 ⋮----
@@ -58977,6 +58784,199 @@ response_dict = response.model_dump()
         """
 ⋮----
 cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
+</file>
+
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - None Content in LLM Messages: notes/llm-none-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Rotating API Keys: notes/rotating-api-keys.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Batch Processing: notes/batch-processing.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path=".pre-commit-config.yaml">

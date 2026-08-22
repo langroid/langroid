@@ -48320,6 +48320,97 @@ self.api_base = self.config.api_base or GEMINI_BASE_URL
 ```
 </file>
 
+<file path="PR_REVIEW_975.md">
+# PR #975 Review: Remove traceback from OpenAI API error logs
+
+**Author:** alexagr
+**Branch:** `api_error_log` → `main`
+**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
+
+## Summary
+
+This PR adds `except openai.APIError` handlers before the generic `except Exception`
+blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
+and `achat`. The intent is to log API errors cleanly (without a full traceback) since
+server-side errors don't benefit from a local stack trace.
+
+The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
+produces multi-line stack traces for every OpenAI API error. For authentication
+failures, bad requests, and similar server-side errors these tracebacks are noisy and
+provide no diagnostic value.
+
+## Issues
+
+### 1. `openai.APIError` is too broad — catches connection and timeout errors too
+
+`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
+
+```
+openai.APIError
+├── openai.APIConnectionError    ← network/local issues
+│   └── openai.APITimeoutError   ← timeout issues
+└── openai.APIStatusError        ← HTTP status errors from the API server
+    ├── openai.BadRequestError (400)
+    ├── openai.AuthenticationError (401)
+    ├── openai.PermissionDeniedError (403)
+    ├── openai.NotFoundError (404)
+    ├── openai.UnprocessableEntityError (422)
+    ├── openai.RateLimitError (429)
+    └── openai.InternalServerError (>=500)
+```
+
+The PR description correctly identifies that server-side errors (AuthenticationError,
+BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
+and `APITimeoutError` **are** related to the local environment (network configuration,
+DNS, proxy issues), where a traceback **could** help diagnose the problem.
+
+**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
+captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
+while letting connection/timeout errors fall through to the `except Exception` handler
+where `friendly_error()` provides the full traceback.
+
+### 2. `raise e` vs bare `raise`
+
+The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
+`raise` preserves the original traceback chain. This is consistent with the existing
+code (the `except Exception` blocks also use `raise e`), but `raise` is generally
+preferred — especially since callers higher up the stack may want the full traceback
+context even if the log message omits it.
+
+This is a minor style point and not a blocker — it could be a separate cleanup across
+the file.
+
+### 3. Log level consideration
+
+Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
+(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
+a transient condition. That said, by the time the error reaches this outer handler the
+retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
+
+Not a blocker.
+
+## Suggested Change
+
+Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
+
+```python
+except openai.APIStatusError as e:
+    logging.error(f"API error in OpenAIGPT.generate: {e}")
+    raise e
+```
+
+## Verdict
+
+The change addresses a real usability issue — excessively noisy tracebacks for
+server-side API errors. With the suggested narrowing from `APIError` to
+`APIStatusError`, this would be a clean, well-targeted improvement. The code is
+consistent with existing patterns and correctly placed before the generic exception
+handlers.
+
+**Recommendation: Request changes** — use `openai.APIStatusError` instead of
+`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
+</file>
+
 <file path="pytest.ini">
 [pytest]
 markers =
@@ -59283,97 +59374,6 @@ It is strongly recommended to use the `gh` command-line utility when working wit
 Read more [here](docs/development/github-cli.md).
 </file>
 
-<file path="PR_REVIEW_975.md">
-# PR #975 Review: Remove traceback from OpenAI API error logs
-
-**Author:** alexagr
-**Branch:** `api_error_log` → `main`
-**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
-
-## Summary
-
-This PR adds `except openai.APIError` handlers before the generic `except Exception`
-blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
-and `achat`. The intent is to log API errors cleanly (without a full traceback) since
-server-side errors don't benefit from a local stack trace.
-
-The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
-produces multi-line stack traces for every OpenAI API error. For authentication
-failures, bad requests, and similar server-side errors these tracebacks are noisy and
-provide no diagnostic value.
-
-## Issues
-
-### 1. `openai.APIError` is too broad — catches connection and timeout errors too
-
-`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
-
-```
-openai.APIError
-├── openai.APIConnectionError    ← network/local issues
-│   └── openai.APITimeoutError   ← timeout issues
-└── openai.APIStatusError        ← HTTP status errors from the API server
-    ├── openai.BadRequestError (400)
-    ├── openai.AuthenticationError (401)
-    ├── openai.PermissionDeniedError (403)
-    ├── openai.NotFoundError (404)
-    ├── openai.UnprocessableEntityError (422)
-    ├── openai.RateLimitError (429)
-    └── openai.InternalServerError (>=500)
-```
-
-The PR description correctly identifies that server-side errors (AuthenticationError,
-BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
-and `APITimeoutError` **are** related to the local environment (network configuration,
-DNS, proxy issues), where a traceback **could** help diagnose the problem.
-
-**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
-captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
-while letting connection/timeout errors fall through to the `except Exception` handler
-where `friendly_error()` provides the full traceback.
-
-### 2. `raise e` vs bare `raise`
-
-The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
-`raise` preserves the original traceback chain. This is consistent with the existing
-code (the `except Exception` blocks also use `raise e`), but `raise` is generally
-preferred — especially since callers higher up the stack may want the full traceback
-context even if the log message omits it.
-
-This is a minor style point and not a blocker — it could be a separate cleanup across
-the file.
-
-### 3. Log level consideration
-
-Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
-(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
-a transient condition. That said, by the time the error reaches this outer handler the
-retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
-
-Not a blocker.
-
-## Suggested Change
-
-Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
-
-```python
-except openai.APIStatusError as e:
-    logging.error(f"API error in OpenAIGPT.generate: {e}")
-    raise e
-```
-
-## Verdict
-
-The change addresses a real usability issue — excessively noisy tracebacks for
-server-side API errors. With the suggested narrowing from `APIError` to
-`APIStatusError`, this would be a clean, well-targeted improvement. The code is
-consistent with existing patterns and correctly placed before the generic exception
-handlers.
-
-**Recommendation: Request changes** — use `openai.APIStatusError` instead of
-`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
-</file>
-
 <file path="docs/notes/mcp-tools.md">
 # Langroid MCP Integration
 
@@ -69899,6 +69899,360 @@ llm_config = CustomOpenAIGPTConfig(
 response = llm.chat("What is 3+4?")
 </file>
 
+<file path="tests/main/test_prep_llm_message.py">
+CHAT_CONTEXT_LENGTH = 16_000
+MAX_OUTPUT_TOKENS = 1000
+MIN_OUTPUT_TOKENS = 50
+⋮----
+@pytest.fixture
+def agent()
+⋮----
+"""Create a ChatAgent with a mock LLM for testing truncation."""
+config = ChatAgentConfig(
+⋮----
+# Small context for testing truncation
+⋮----
+agent = ChatAgent(config)
+⋮----
+# Create a mock parser that counts tokens as characters for simplicity
+class MockParser
+⋮----
+def num_tokens(self, text: str | LLMMessage)
+⋮----
+def truncate_tokens(self, text, tokens, warning="")
+⋮----
+# Create a mock LLM that returns a fixed context length
+class MockLLM
+⋮----
+def chat_context_length(self) -> int
+⋮----
+def get_stream(self) -> bool
+⋮----
+def supports_functions_or_tools(self) -> bool
+⋮----
+# Initialize message history with a system message
+# agent.message_history = [LLMMessage(role=Role.SYSTEM, content="System message")]
+⋮----
+def test_no_truncation_needed(agent)
+⋮----
+"""Test when no truncation is needed."""
+# Add a short user message (well within context limits)
+message = "Short user message"
+⋮----
+# Call the method
+⋮----
+# History should include system message and the new user message
+⋮----
+assert output_len == MAX_OUTPUT_TOKENS  # Original max output tokens
+⋮----
+def test_reduce_output_length(agent)
+⋮----
+"""Test when only output length reduction is needed."""
+# Fill most of the context with long messages
+long_message = "X" * 15_000  # 700 tokens
+⋮----
+# New user message
+message = "Another message"
+⋮----
+# Check that output length was reduced but no messages were truncated
+⋮----
+assert hist[1].content == long_message  # Not truncated
+assert output_len < MAX_OUTPUT_TOKENS  # Output length was reduced
+⋮----
+def test_truncate_messages(agent)
+⋮----
+"""Test when message truncation is needed."""
+⋮----
+# Fill the context with messages that will require truncation
+⋮----
+# Add several messages that will need truncation
+⋮----
+orig_msg_len = len(agent.message_history[1].content)
+⋮----
+# Check that early messages were truncated
+assert len(hist) == 8  # All messages still present
+⋮----
+# First user message truncated
+⋮----
+assert output_len >= MIN_OUTPUT_TOKENS  # At least min_output_tokens
+⋮----
+@pytest.fixture
+def agent_drop_turns()
+⋮----
+"""Create a ChatAgent with drop_turns strategy for testing."""
+⋮----
+def chat_context_length(self)
+⋮----
+def supports_functions_or_tools(self)
+⋮----
+def test_drop_turns_strategy(agent_drop_turns)
+⋮----
+"""Test when drop_turns strategy is used to handle context overflow."""
+agent = agent_drop_turns
+⋮----
+# Fill the context with messages that will require dropping turns
+⋮----
+# Add several complete turns that will need to be dropped
+⋮----
+orig_hist_len = len(agent.message_history)
+⋮----
+# Check that turns were dropped (fewer messages than original)
+⋮----
+# System message should still be present
+⋮----
+# The last user message should be present
+⋮----
+# Check alternating pattern is preserved
+⋮----
+def test_chat_num_tokens_counts_attachment_payload(agent)
+⋮----
+"""Test attachment payloads are included in chat token accounting."""
+model = "gemini/gemini-2.5-flash"
+⋮----
+attachment = FileAttachment.from_bytes(
+message = LLMMessage(
+⋮----
+expected_attachment_tokens = len(
+⋮----
+def test_attachment_payload_reduces_output_length()
+⋮----
+"""Test preflight shrinks output length when attachments consume context."""
+context_length = 1100
+max_output_tokens = 500
+min_output_tokens = 50
+⋮----
+user_input = ChatDocument(
+⋮----
+def test_drop_turns_preserves_last_turn(agent_drop_turns)
+⋮----
+"""Test that drop_turns preserves the system message and last turn."""
+⋮----
+# Set up history with multiple turns
+⋮----
+# Add turns with large content that will force dropping
+⋮----
+# Call the method with a final message
+⋮----
+# System message must be preserved
+⋮----
+# Last message must be the final user message
+⋮----
+# No message should contain "Contents truncated" (we drop, not truncate)
+⋮----
+def test_drop_turns_accounts_for_buffer()
+⋮----
+"""
+    Test that drop_turns loop accounts for CHAT_HISTORY_BUFFER.
+
+    This is a regression test for a P1 bug where the loop would exit when:
+        tokens <= context - min_output_tokens
+    But then output_len = context - tokens - CHAT_HISTORY_BUFFER could go
+    negative, causing spurious errors.
+
+    The fix ensures the loop continues until there's room for both
+    min_output_tokens AND CHAT_HISTORY_BUFFER.
+    """
+# CHAT_HISTORY_BUFFER is 300 in the code
+# We need to create a scenario where history is in the "danger zone":
+# between (context - min_output - buffer) and (context - min_output)
+#
+# With context=16000, min_output=50, buffer=300:
+# - Old buggy threshold: 16000 - 50 = 15950
+# - Fixed threshold: 16000 - 50 - 300 = 15650
+# - Danger zone: 15650 < tokens <= 15950
+⋮----
+system_message="S" * 100,  # 100 tokens
+⋮----
+# Create history that lands in the danger zone after some turns
+# System msg = 100 tokens
+# We want total around 15800-15900 tokens (in danger zone)
+# Add turns that will require the buffer-aware loop to drop them
+⋮----
+# Add turns: each turn is ~5000 tokens (USER 4980 + ASSISTANT 20)
+# 3 turns = ~15000 + system 100 = ~15100
+# Final message ~800 = ~15900 total (in danger zone)
+⋮----
+# This should NOT raise an error - the fix ensures we drop enough turns
+# to accommodate both min_output_tokens AND CHAT_HISTORY_BUFFER
+⋮----
+# output_len must be positive and at least min_output_tokens
+⋮----
+# History should have been compressed
+⋮----
+# ---------------------------------------------------------------------------
+# Regression tests for "missing" (None) vs "empty" ("") message content.
+⋮----
+# Gemini 3.x rejects (400 INVALID_ARGUMENT) an assistant turn that carries BOTH
+# a tool/function call AND non-empty text content. Langroid used to pad empty
+# content with a single space (" "), which tripped this on every tool-result
+# turn. Content is now carried faithfully: a response with no content becomes
+# LLMMessage.content=None (dropped from the wire), distinct from "".
+⋮----
+MODEL = "gpt-4o"
+⋮----
+def _tool_call()
+⋮----
+def test_api_dict_omits_content_for_tool_call_message()
+⋮----
+"""An assistant tool-call turn with no content omits `content` on the wire
+    (never emits " ", which Gemini 3.x rejects alongside a tool call)."""
+d = LLMMessage(
+⋮----
+def test_api_dict_omits_content_for_function_call_message()
+⋮----
+"""A legacy function-call-only turn also omits `content` on the wire."""
+function_call = LLMFunctionCall(
+⋮----
+def test_api_dict_pads_empty_message_without_tools()
+⋮----
+"""A message with empty content (None or "") and no tool/function call must
+    still send something, since some APIs (e.g. Gemini) reject an empty msg."""
+⋮----
+def test_api_dict_keeps_real_content()
+⋮----
+d = LLMMessage(role=Role.USER, content="hello").api_dict(MODEL)
+⋮----
+def test_missing_content_is_none_end_to_end()
+⋮----
+"""A tool-only LLM response (message=None) is carried faithfully as
+    content_is_none -> LLMMessage.content=None -> omitted from api_dict."""
+resp = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+doc = ChatDocument.from_LLMResponse(resp)
+assert doc.content == ""  # ChatDocument.content stays a mandatory str
+⋮----
+msg = ChatDocument.to_LLMMessage(doc)[0]
+⋮----
+def test_empty_content_stays_empty_not_none()
+⋮----
+"""A present-but-empty response (message="") is distinct from missing:
+    it must NOT be coerced to None."""
+resp = LLMResponse(message="", oai_tool_calls=[_tool_call()])
+⋮----
+def test_none_content_round_trips_through_chatdocument()
+⋮----
+"""LLMMessage.content=None survives an LLMMessage -> ChatDocument ->
+    LLMMessage round-trip (history is rebuilt this way)."""
+original = LLMMessage(role=Role.ASSISTANT, content=None, tool_calls=[_tool_call()])
+doc = ChatDocument.from_LLMMessage(original)
+⋮----
+rebuilt = ChatDocument.to_LLMMessage(doc)[0]
+⋮----
+def test_prep_retains_fresh_tool_only_message(agent: ChatAgent) -> None
+⋮----
+"""History preparation retains a fresh call-only assistant turn."""
+doc = ChatDocument.from_LLMResponse(
+⋮----
+"""Rendering safely separates absent text from displayed tool-call data."""
+displayed: dict[str, object] = {}
+⋮----
+response = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+⋮----
+def test_none_content_is_safe_for_token_counting(agent)
+⋮----
+"""Token counting treats missing content as zero text tokens."""
+⋮----
+def test_truncate_tool_only_message_preserves_none(agent)
+⋮----
+"""Truncation must not add warning text alongside a tool call."""
+⋮----
+truncated = agent.truncate_message(-1)
+⋮----
+"""Truncation must preserve a present-but-empty result."""
+message = LLMMessage(role=role, content="", **identifying_field)
+⋮----
+original_payload = message.api_dict(MODEL)
+⋮----
+"""Blank results already retained by call payloads remain truncatable."""
+⋮----
+"""Malformed blank results remain truncation candidates."""
+⋮----
+"""Whitespace-only conversation messages remain truncation candidates."""
+content = " " * 10_000
+⋮----
+def test_content_is_none_overrides_populated_content_any()
+⋮----
+"""A call-only turn stays content=None even when content_any was populated
+    (e.g. by _load_output_format parsing the tool args under a strict
+    output_format). Otherwise the serialized args would be sent as assistant
+    text alongside tool_calls, which is the Gemini 3.x rejection this avoids."""
+doc = ChatDocument(
+⋮----
+# parsed structured output (tool args), NOT message text:
+⋮----
+def test_content_is_none_overrides_stale_text_after_serialization()
+⋮----
+"""The explicit missing-content flag wins after a hostile round-trip."""
+⋮----
+reloaded = ChatDocument.model_validate(doc.model_dump())
+⋮----
+msg = ChatDocument.to_LLMMessage(reloaded)[0]
+⋮----
+"""A tool result with genuinely empty content (e.g. a tool that succeeds
+    with no output) must stay in history and clear the pending tool call from
+    agent.oai_tool_calls, not get silently dropped (issue #1063). Before the
+    fix, the history filter kept a message only if it had non-empty content, a
+    function_call, or tool_calls -- none of which a TOOL-role result carries,
+    so an empty-content result was dropped and its call_id never reached
+    `done_tools`, leaving the call marked pending forever."""
+pending_call = _tool_call()
+⋮----
+tool_msgs = [m for m in hist if m.role == Role.TOOL]
+⋮----
+"""An empty legacy function result must stay in message history."""
+function_name = "check_weather"
+⋮----
+parent = ChatDocument(
+⋮----
+result = ChatDocument(
+⋮----
+function_msgs = [m for m in hist if m.role == Role.FUNCTION]
+⋮----
+"""An identified empty result completes only its matching pending call."""
+first_call = _tool_call()
+second_call = _tool_call()
+⋮----
+tool_messages = [message for message in hist if message.role == Role.TOOL]
+⋮----
+class RecordingMockLM(MockLM)
+⋮----
+"""Mock LM that records the messages supplied to its chat method."""
+⋮----
+def __init__(self, config: MockLMConfig) -> None
+⋮----
+"""Record messages before returning the configured local response."""
+⋮----
+def test_llm_response_sends_empty_tool_result_to_lm() -> None
+⋮----
+"""llm_response sends an empty correlated result and returns a document."""
+llm_config = MockLMConfig(default_response="tool result received")
+agent = ChatAgent(
+recording_llm = RecordingMockLM(llm_config)
+⋮----
+response = agent.llm_response(result)
+⋮----
+tool_messages = [
+⋮----
+def test_prep_drops_empty_tool_result_without_id(agent: ChatAgent) -> None
+⋮----
+"""An empty tool result without a correlation ID is malformed."""
+⋮----
+"""An empty function result without its function name is malformed."""
+function_call = LLMFunctionCall.model_construct(
+⋮----
+"""Malformed empty results are not valid history entries."""
+field = "tool_call_id" if role == Role.TOOL else "name"
+message = LLMMessage.model_construct(role=role, content="")
+⋮----
+"""Whitespace identifiers cannot complete or remove pending calls."""
+valid_call = _tool_call()
+⋮----
+malformed_call = _tool_call()
+⋮----
+malformed_function = LLMFunctionCall(
+⋮----
+pending_calls = list(agent.oai_tool_calls)
+</file>
+
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
 """
 Agent that allows interaction with an SQL database using SQLAlchemy library.
@@ -72118,553 +72472,6 @@ png = FileAttachment.from_bytes(content=content, filename="image.png")
 unknown = FileAttachment.from_bytes(content=content, filename="file.unknown123")
 </file>
 
-<file path="tests/main/test_prep_llm_message.py">
-CHAT_CONTEXT_LENGTH = 16_000
-MAX_OUTPUT_TOKENS = 1000
-MIN_OUTPUT_TOKENS = 50
-⋮----
-@pytest.fixture
-def agent()
-⋮----
-"""Create a ChatAgent with a mock LLM for testing truncation."""
-config = ChatAgentConfig(
-⋮----
-# Small context for testing truncation
-⋮----
-agent = ChatAgent(config)
-⋮----
-# Create a mock parser that counts tokens as characters for simplicity
-class MockParser
-⋮----
-def num_tokens(self, text: str | LLMMessage)
-⋮----
-def truncate_tokens(self, text, tokens, warning="")
-⋮----
-# Create a mock LLM that returns a fixed context length
-class MockLLM
-⋮----
-def chat_context_length(self) -> int
-⋮----
-def get_stream(self) -> bool
-⋮----
-def supports_functions_or_tools(self) -> bool
-⋮----
-# Initialize message history with a system message
-# agent.message_history = [LLMMessage(role=Role.SYSTEM, content="System message")]
-⋮----
-def test_no_truncation_needed(agent)
-⋮----
-"""Test when no truncation is needed."""
-# Add a short user message (well within context limits)
-message = "Short user message"
-⋮----
-# Call the method
-⋮----
-# History should include system message and the new user message
-⋮----
-assert output_len == MAX_OUTPUT_TOKENS  # Original max output tokens
-⋮----
-def test_reduce_output_length(agent)
-⋮----
-"""Test when only output length reduction is needed."""
-# Fill most of the context with long messages
-long_message = "X" * 15_000  # 700 tokens
-⋮----
-# New user message
-message = "Another message"
-⋮----
-# Check that output length was reduced but no messages were truncated
-⋮----
-assert hist[1].content == long_message  # Not truncated
-assert output_len < MAX_OUTPUT_TOKENS  # Output length was reduced
-⋮----
-def test_truncate_messages(agent)
-⋮----
-"""Test when message truncation is needed."""
-⋮----
-# Fill the context with messages that will require truncation
-⋮----
-# Add several messages that will need truncation
-⋮----
-orig_msg_len = len(agent.message_history[1].content)
-⋮----
-# Check that early messages were truncated
-assert len(hist) == 8  # All messages still present
-⋮----
-# First user message truncated
-⋮----
-assert output_len >= MIN_OUTPUT_TOKENS  # At least min_output_tokens
-⋮----
-@pytest.fixture
-def agent_drop_turns()
-⋮----
-"""Create a ChatAgent with drop_turns strategy for testing."""
-⋮----
-def chat_context_length(self)
-⋮----
-def supports_functions_or_tools(self)
-⋮----
-def test_drop_turns_strategy(agent_drop_turns)
-⋮----
-"""Test when drop_turns strategy is used to handle context overflow."""
-agent = agent_drop_turns
-⋮----
-# Fill the context with messages that will require dropping turns
-⋮----
-# Add several complete turns that will need to be dropped
-⋮----
-orig_hist_len = len(agent.message_history)
-⋮----
-# Check that turns were dropped (fewer messages than original)
-⋮----
-# System message should still be present
-⋮----
-# The last user message should be present
-⋮----
-# Check alternating pattern is preserved
-⋮----
-def test_chat_num_tokens_counts_attachment_payload(agent)
-⋮----
-"""Test attachment payloads are included in chat token accounting."""
-model = "gemini/gemini-2.5-flash"
-⋮----
-attachment = FileAttachment.from_bytes(
-message = LLMMessage(
-⋮----
-expected_attachment_tokens = len(
-⋮----
-def test_attachment_payload_reduces_output_length()
-⋮----
-"""Test preflight shrinks output length when attachments consume context."""
-context_length = 1100
-max_output_tokens = 500
-min_output_tokens = 50
-⋮----
-user_input = ChatDocument(
-⋮----
-def test_drop_turns_preserves_last_turn(agent_drop_turns)
-⋮----
-"""Test that drop_turns preserves the system message and last turn."""
-⋮----
-# Set up history with multiple turns
-⋮----
-# Add turns with large content that will force dropping
-⋮----
-# Call the method with a final message
-⋮----
-# System message must be preserved
-⋮----
-# Last message must be the final user message
-⋮----
-# No message should contain "Contents truncated" (we drop, not truncate)
-⋮----
-def test_drop_turns_accounts_for_buffer()
-⋮----
-"""
-    Test that drop_turns loop accounts for CHAT_HISTORY_BUFFER.
-
-    This is a regression test for a P1 bug where the loop would exit when:
-        tokens <= context - min_output_tokens
-    But then output_len = context - tokens - CHAT_HISTORY_BUFFER could go
-    negative, causing spurious errors.
-
-    The fix ensures the loop continues until there's room for both
-    min_output_tokens AND CHAT_HISTORY_BUFFER.
-    """
-# CHAT_HISTORY_BUFFER is 300 in the code
-# We need to create a scenario where history is in the "danger zone":
-# between (context - min_output - buffer) and (context - min_output)
-#
-# With context=16000, min_output=50, buffer=300:
-# - Old buggy threshold: 16000 - 50 = 15950
-# - Fixed threshold: 16000 - 50 - 300 = 15650
-# - Danger zone: 15650 < tokens <= 15950
-⋮----
-system_message="S" * 100,  # 100 tokens
-⋮----
-# Create history that lands in the danger zone after some turns
-# System msg = 100 tokens
-# We want total around 15800-15900 tokens (in danger zone)
-# Add turns that will require the buffer-aware loop to drop them
-⋮----
-# Add turns: each turn is ~5000 tokens (USER 4980 + ASSISTANT 20)
-# 3 turns = ~15000 + system 100 = ~15100
-# Final message ~800 = ~15900 total (in danger zone)
-⋮----
-# This should NOT raise an error - the fix ensures we drop enough turns
-# to accommodate both min_output_tokens AND CHAT_HISTORY_BUFFER
-⋮----
-# output_len must be positive and at least min_output_tokens
-⋮----
-# History should have been compressed
-⋮----
-# ---------------------------------------------------------------------------
-# Regression tests for "missing" (None) vs "empty" ("") message content.
-⋮----
-# Gemini 3.x rejects (400 INVALID_ARGUMENT) an assistant turn that carries BOTH
-# a tool/function call AND non-empty text content. Langroid used to pad empty
-# content with a single space (" "), which tripped this on every tool-result
-# turn. Content is now carried faithfully: a response with no content becomes
-# LLMMessage.content=None (dropped from the wire), distinct from "".
-⋮----
-MODEL = "gpt-4o"
-⋮----
-def _tool_call()
-⋮----
-def test_api_dict_omits_content_for_tool_call_message()
-⋮----
-"""An assistant tool-call turn with no content omits `content` on the wire
-    (never emits " ", which Gemini 3.x rejects alongside a tool call)."""
-d = LLMMessage(
-⋮----
-def test_api_dict_omits_content_for_function_call_message()
-⋮----
-"""A legacy function-call-only turn also omits `content` on the wire."""
-function_call = LLMFunctionCall(
-⋮----
-def test_api_dict_pads_empty_message_without_tools()
-⋮----
-"""A message with empty content (None or "") and no tool/function call must
-    still send something, since some APIs (e.g. Gemini) reject an empty msg."""
-⋮----
-def test_api_dict_keeps_real_content()
-⋮----
-d = LLMMessage(role=Role.USER, content="hello").api_dict(MODEL)
-⋮----
-def test_missing_content_is_none_end_to_end()
-⋮----
-"""A tool-only LLM response (message=None) is carried faithfully as
-    content_is_none -> LLMMessage.content=None -> omitted from api_dict."""
-resp = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
-doc = ChatDocument.from_LLMResponse(resp)
-assert doc.content == ""  # ChatDocument.content stays a mandatory str
-⋮----
-msg = ChatDocument.to_LLMMessage(doc)[0]
-⋮----
-def test_empty_content_stays_empty_not_none()
-⋮----
-"""A present-but-empty response (message="") is distinct from missing:
-    it must NOT be coerced to None."""
-resp = LLMResponse(message="", oai_tool_calls=[_tool_call()])
-⋮----
-def test_none_content_round_trips_through_chatdocument()
-⋮----
-"""LLMMessage.content=None survives an LLMMessage -> ChatDocument ->
-    LLMMessage round-trip (history is rebuilt this way)."""
-original = LLMMessage(role=Role.ASSISTANT, content=None, tool_calls=[_tool_call()])
-doc = ChatDocument.from_LLMMessage(original)
-⋮----
-rebuilt = ChatDocument.to_LLMMessage(doc)[0]
-⋮----
-def test_prep_retains_fresh_tool_only_message(agent: ChatAgent) -> None
-⋮----
-"""History preparation retains a fresh call-only assistant turn."""
-doc = ChatDocument.from_LLMResponse(
-⋮----
-"""Rendering safely separates absent text from displayed tool-call data."""
-displayed: dict[str, object] = {}
-⋮----
-response = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
-⋮----
-def test_none_content_is_safe_for_token_counting(agent)
-⋮----
-"""Token counting treats missing content as zero text tokens."""
-⋮----
-def test_truncate_tool_only_message_preserves_none(agent)
-⋮----
-"""Truncation must not add warning text alongside a tool call."""
-⋮----
-truncated = agent.truncate_message(-1)
-⋮----
-"""Truncation must preserve a present-but-empty result."""
-message = LLMMessage(role=role, content="", **identifying_field)
-⋮----
-original_payload = message.api_dict(MODEL)
-⋮----
-"""Blank results already retained by call payloads remain truncatable."""
-⋮----
-"""Malformed blank results remain truncation candidates."""
-⋮----
-"""Whitespace-only conversation messages remain truncation candidates."""
-content = " " * 10_000
-⋮----
-def test_content_is_none_overrides_populated_content_any()
-⋮----
-"""A call-only turn stays content=None even when content_any was populated
-    (e.g. by _load_output_format parsing the tool args under a strict
-    output_format). Otherwise the serialized args would be sent as assistant
-    text alongside tool_calls, which is the Gemini 3.x rejection this avoids."""
-doc = ChatDocument(
-⋮----
-# parsed structured output (tool args), NOT message text:
-⋮----
-def test_content_is_none_overrides_stale_text_after_serialization()
-⋮----
-"""The explicit missing-content flag wins after a hostile round-trip."""
-⋮----
-reloaded = ChatDocument.model_validate(doc.model_dump())
-⋮----
-msg = ChatDocument.to_LLMMessage(reloaded)[0]
-⋮----
-"""A tool result with genuinely empty content (e.g. a tool that succeeds
-    with no output) must stay in history and clear the pending tool call from
-    agent.oai_tool_calls, not get silently dropped (issue #1063). Before the
-    fix, the history filter kept a message only if it had non-empty content, a
-    function_call, or tool_calls -- none of which a TOOL-role result carries,
-    so an empty-content result was dropped and its call_id never reached
-    `done_tools`, leaving the call marked pending forever."""
-pending_call = _tool_call()
-⋮----
-tool_msgs = [m for m in hist if m.role == Role.TOOL]
-⋮----
-"""An empty legacy function result must stay in message history."""
-function_name = "check_weather"
-⋮----
-parent = ChatDocument(
-⋮----
-result = ChatDocument(
-⋮----
-function_msgs = [m for m in hist if m.role == Role.FUNCTION]
-⋮----
-"""An identified empty result completes only its matching pending call."""
-first_call = _tool_call()
-second_call = _tool_call()
-⋮----
-tool_messages = [message for message in hist if message.role == Role.TOOL]
-⋮----
-class RecordingMockLM(MockLM)
-⋮----
-"""Mock LM that records the messages supplied to its chat method."""
-⋮----
-def __init__(self, config: MockLMConfig) -> None
-⋮----
-"""Record messages before returning the configured local response."""
-⋮----
-def test_llm_response_sends_empty_tool_result_to_lm() -> None
-⋮----
-"""llm_response sends an empty correlated result and returns a document."""
-llm_config = MockLMConfig(default_response="tool result received")
-agent = ChatAgent(
-recording_llm = RecordingMockLM(llm_config)
-⋮----
-response = agent.llm_response(result)
-⋮----
-tool_messages = [
-⋮----
-def test_prep_drops_empty_tool_result_without_id(agent: ChatAgent) -> None
-⋮----
-"""An empty tool result without a correlation ID is malformed."""
-⋮----
-"""An empty function result without its function name is malformed."""
-function_call = LLMFunctionCall.model_construct(
-⋮----
-"""Malformed empty results are not valid history entries."""
-field = "tool_call_id" if role == Role.TOOL else "name"
-message = LLMMessage.model_construct(role=role, content="")
-⋮----
-"""Whitespace identifiers cannot complete or remove pending calls."""
-valid_call = _tool_call()
-⋮----
-malformed_call = _tool_call()
-⋮----
-malformed_function = LLMFunctionCall(
-⋮----
-pending_calls = list(agent.oai_tool_calls)
-</file>
-
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - None Content in LLM Messages: notes/llm-none-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Rotating API Keys: notes/rotating-api-keys.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-      - Batch Processing: notes/batch-processing.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="langroid/language_models/openai_gpt.py">
 OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
 ⋮----
@@ -73754,6 +73561,199 @@ response_dict = response.model_dump()
         """
 ⋮----
 cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
+</file>
+
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - None Content in LLM Messages: notes/llm-none-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Rotating API Keys: notes/rotating-api-keys.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Batch Processing: notes/batch-processing.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path=".pre-commit-config.yaml">

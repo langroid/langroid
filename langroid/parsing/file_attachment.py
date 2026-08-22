@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Dict, Optional, Union
 from urllib.parse import urlparse
 
-from langroid.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 
 _HTTP_URL_SCHEMES = frozenset({"http", "https"})
 _FTP_URL_SCHEMES = frozenset({"ftp"})
