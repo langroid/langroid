@@ -1522,9 +1522,20 @@ def test_tool_model_from_mcp_tool_handles_malformed_enum() -> None:
 
 @pytest.mark.parametrize(
     "prefix",
-    ["", " ", "two words", "hyphen-name", "dot.name", "caf\u00e9", "\u5de5\u5177"],
+    [
+        "",
+        " ",
+        "two words",
+        "hyphen-name",
+        "dot.name",
+        "caf\u00e9",
+        "\u5de5\u5177",
+        1,
+        True,
+        ["prefix"],
+    ],
 )
-def test_fastmcp_client_rejects_invalid_tool_name_prefix(prefix: str) -> None:
+def test_fastmcp_client_rejects_invalid_tool_name_prefix(prefix: Any) -> None:
     """Prefixes must be non-empty ASCII identifier-safe strings."""
     with pytest.raises(ValueError) as exc_info:
         FastMCPClient(mcp_server(), tool_name_prefix=prefix)
@@ -1532,6 +1543,23 @@ def test_fastmcp_client_rejects_invalid_tool_name_prefix(prefix: str) -> None:
     message = str(exc_info.value)
     assert "tool_name_prefix" in message
     assert "[a-zA-Z0-9_]+" in message
+
+
+@pytest.mark.parametrize(
+    ("prefix", "expected_request"),
+    [("A", "A__lookup"), ("prefix_1", "prefix_1__lookup"), ("_", "___lookup")],
+)
+def test_fastmcp_client_accepts_valid_tool_name_prefix(
+    prefix: str,
+    expected_request: str,
+) -> None:
+    """Every allowed ASCII prefix character contributes to the request name."""
+    client = FastMCPClient(mcp_server(), tool_name_prefix=prefix)
+    tool = Tool(name="lookup", description="Lookup", inputSchema={})
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.default_value("request") == expected_request
 
 
 @pytest.mark.asyncio

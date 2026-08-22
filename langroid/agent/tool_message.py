@@ -162,7 +162,7 @@ class ToolMessage(ABC, BaseModel):
     def require_recipient(cls) -> Type["ToolMessage"]:
         class ToolMessageWithRecipient(cls):  # type: ignore
             recipient: str  # no default, so it is required
-            __tool_message_origin__ = getattr(cls, "__tool_message_origin__", cls)
+            __tool_message_origin__ = cls.__dict__.get("__tool_message_origin__", cls)
 
         return ToolMessageWithRecipient
 

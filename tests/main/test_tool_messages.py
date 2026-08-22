@@ -2159,6 +2159,33 @@ def test_enable_message_rejects_distinct_classes_with_same_request() -> None:
     assert recipient_agent.llm_tools_map["shared_request"] is recipient_wrapper
 
 
+def test_enable_message_rejects_recipient_wrapper_subclass_origin() -> None:
+    """Recipient wrapping must preserve a subclass as a distinct tool origin."""
+
+    class OriginalTool(ToolMessage):
+        request: str = "recipient_collision"
+        purpose: str = "Original tool"
+
+    recipient_wrapper = OriginalTool.require_recipient()
+
+    class RecipientWrapperSubclass(recipient_wrapper):  # type: ignore
+        purpose: str = "Distinct recipient-wrapper subclass"
+
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    agent.enable_message(recipient_wrapper)
+
+    with pytest.raises(
+        ValueError,
+        match="Tool request name 'recipient_collision' is already registered",
+    ):
+        agent.enable_message(
+            RecipientWrapperSubclass,
+            require_recipient=True,
+        )
+
+    assert agent.llm_tools_map["recipient_collision"] is recipient_wrapper
+
+
 def test_multi_agent_tool_caching(test_settings: Settings):
     """
     Test that tool message caching is agent-specific.
