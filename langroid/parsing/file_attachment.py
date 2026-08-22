@@ -12,12 +12,17 @@ _REMOTE_URL_SCHEMES = _HTTP_URL_SCHEMES | {"ftp"}
 
 
 def _is_full_url(value: str, schemes: frozenset[str]) -> bool:
-    """Whether a value is a URL with an allowed scheme and network location."""
+    """Whether a value is a URL with an allowed scheme and valid hostname."""
     try:
         parsed_url = urlparse(value)
+        hostname = parsed_url.hostname
     except ValueError:
         return False
-    return parsed_url.scheme.casefold() in schemes and bool(parsed_url.netloc)
+    return (
+        parsed_url.scheme.casefold() in schemes
+        and hostname is not None
+        and bool(hostname.strip())
+    )
 
 
 class FileAttachment(BaseModel):
@@ -245,37 +250,33 @@ class FileAttachment(BaseModel):
         Returns:
             Dictionary with file data
         """
-        if self.mime_type and self.mime_type.casefold().startswith("video/"):
-            # Videos are sent as `video_url` content-parts, mirroring the
-            # `image_url` parts used for images: a generic `file` part is not
-            # recognized as video input by the API.
-            return dict(
-                type="video_url",
-                video_url=dict(url=self._content_url()),
-            )
-        elif (
-            self.mime_type
-            and self.mime_type.startswith("image/")
-            or "gemini" in model.lower()
-        ):
-            # for gemini models, we use `image_url` for both pdf-files and images
+        if isinstance(self.mime_type, str):
+            if self.mime_type.casefold().startswith("video/"):
+                # Videos are sent as `video_url` content-parts, mirroring the
+                # `image_url` parts used for images: a generic `file` part is not
+                # recognized as video input by the API.
+                return dict(
+                    type="video_url",
+                    video_url=dict(url=self._content_url()),
+                )
+            if self.mime_type.startswith("image/") or "gemini" in model.lower():
+                # for gemini models, use `image_url` for PDFs and images
+                image_url_dict: Dict[str, str] = dict(url=self._content_url())
 
-            image_url_dict: Dict[str, str] = dict(url=self._content_url())
+                # Add detail parameter if specified
+                if self.detail:
+                    image_url_dict["detail"] = self.detail
 
-            # Add detail parameter if specified
-            if self.detail:
-                image_url_dict["detail"] = self.detail
+                return dict(
+                    type="image_url",
+                    image_url=image_url_dict,
+                )
 
-            return dict(
-                type="image_url",
-                image_url=image_url_dict,
-            )
-        else:
-            # For non-image files
-            return dict(
-                type="file",
-                file=dict(
-                    filename=self.filename,
-                    file_data=self.to_data_uri(),
-                ),
-            )
+        # For non-image files and unexpected runtime MIME values
+        return dict(
+            type="file",
+            file=dict(
+                filename=self.filename,
+                file_data=self.to_data_uri(),
+            ),
+        )

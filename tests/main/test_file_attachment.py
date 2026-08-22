@@ -1,5 +1,6 @@
 import base64
 import io
+import socket
 import tempfile
 from pathlib import Path
 
@@ -161,6 +162,39 @@ class TestFileAttachment:
         assert result["type"] == "video_url"
         assert result["video_url"]["url"] == url
 
+    def test_to_dict_video_url_passthrough_is_offline(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Serializing a remote video URL does not open a network socket."""
+
+        def fail_socket(*args: object, **kwargs: object) -> None:
+            raise AssertionError("serialization attempted network access")
+
+        monkeypatch.setattr(socket, "socket", fail_socket)
+        url = "https://example.com/videos/clip.mp4"
+        attachment = FileAttachment.from_path(url)
+
+        assert attachment.to_dict("test-model") == {
+            "type": "video_url",
+            "video_url": {"url": url},
+        }
+
+    def test_to_dict_ftp_video_url_uses_data_uri(self) -> None:
+        """FTP video URLs fall back to the available attachment data."""
+        content = b"known video bytes"
+        attachment = FileAttachment(
+            content=content,
+            filename="clip.mp4",
+            mime_type="video/mp4",
+            url="ftp://example.com/videos/clip.mp4",
+        )
+
+        assert attachment.to_dict("test-model") == {
+            "type": "video_url",
+            "video_url": {"url": "data:video/mp4;base64,a25vd24gdmlkZW8gYnl0ZXM="},
+        }
+
     def test_to_dict_video_url_mixed_case_scheme(self) -> None:
         """HTTP URL schemes are matched case-insensitively."""
         url = "HTTPS://example.com/videos/clip.mp4"
@@ -184,6 +218,28 @@ class TestFileAttachment:
         result = attachment.to_dict("test-model")
 
         assert result == {
+            "type": "video_url",
+            "video_url": {"url": attachment.to_data_uri()},
+        }
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://@/clip.mp4",
+            "https://:443/clip.mp4",
+            "https://user@/clip.mp4",
+            "https:// /clip.mp4",
+        ],
+    )
+    def test_to_dict_malformed_video_url_uses_data_uri(self, url: str) -> None:
+        """Malformed HTTP authorities fall back to attachment data."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.mp4",
+        )
+        attachment.url = url
+
+        assert attachment.to_dict("test-model") == {
             "type": "video_url",
             "video_url": {"url": attachment.to_data_uri()},
         }
@@ -295,6 +351,26 @@ class TestFileAttachment:
             "file": {
                 "filename": "file.unknown123",
                 "file_data": "data:None;base64,dGVzdCBjb250ZW50",
+            },
+        }
+
+    @pytest.mark.parametrize("mime_type", [123, {}, []])
+    def test_to_dict_non_string_mime_type_uses_generic_file(
+        self,
+        mime_type: object,
+    ) -> None:
+        """Odd runtime MIME values retain generic file serialization."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="file.bin",
+        )
+        attachment.__dict__["mime_type"] = mime_type
+
+        assert attachment.to_dict("gpt-4.1") == {
+            "type": "file",
+            "file": {
+                "filename": "file.bin",
+                "file_data": f"data:{mime_type};base64,dGVzdCBjb250ZW50",
             },
         }
 
