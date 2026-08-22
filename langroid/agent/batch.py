@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import inspect
 import warnings
 from enum import Enum
@@ -483,8 +482,11 @@ def run_batch_agent_method(
     if not inspect.iscoroutinefunction(method):
         raise ValueError(f"The method {method_name} is not async.")
 
+    from langroid.agent.tool_policy import deepcopy_config_sharing_policy
+
     inputs = [input_map(item) for item in items]
-    agent_cfg = copy.deepcopy(agent.config)
+    # tool_policy hook shared by reference so its state stays global
+    agent_cfg = deepcopy_config_sharing_policy(agent.config)
     assert agent_cfg.llm is not None, "agent must have llm config"
     agent_cfg.llm.stream = False
     agent_cfg.show_stats = False

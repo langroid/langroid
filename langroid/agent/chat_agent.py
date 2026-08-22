@@ -335,10 +335,14 @@ class ChatAgent(Agent):
         changed in possibly many ways. Below is an imperfect solution. Caution advised.
         Revisit later.
         """
+        from langroid.agent.tool_policy import deepcopy_config_sharing_policy
+
         agent_cls = type(self)
-        # Use model_copy to preserve Pydantic subclass types (like MockLMConfig)
-        # instead of deepcopy which loses subclass information
-        config_copy = self.config.model_copy(deep=True)
+        # Deep-copy the config WITHOUT mutating it, sharing the tool_policy
+        # hook by REFERENCE (memo-seeded deepcopy): copying the policy would
+        # fork any state it holds (budgets, approval lists) and can fail
+        # outright on unpicklable callables (e.g. objects holding locks).
+        config_copy = deepcopy_config_sharing_policy(self.config)
         config_copy.name = f"{config_copy.name}-{i}"
         new_agent = agent_cls(config_copy)
         new_agent.system_tool_instructions = self.system_tool_instructions
@@ -1266,27 +1270,10 @@ class ChatAgent(Agent):
             request: str = "tool_or_function"
             tool: maybe_optional_type  # type: ignore
 
-            def response(self, agent: ChatAgent) -> None | str | ChatDocument:
-                # One-time use
-                agent.set_output_format(None)
-
-                if self.tool is None:
-                    return None
-
-                # As the ToolMessage schema accepts invalid
-                # `tool.request` values, reparse with the
-                # corresponding tool
-                request = self.tool.request
-                if request not in agent.llm_tools_map:
-                    return None
-                tool = agent.llm_tools_map[request].model_validate_json(
-                    self.tool.to_json()
-                )
-
-                return agent.handle_tool_message(tool)
-
-            async def response_async(
-                self, agent: ChatAgent
+            def response(
+                self,
+                agent: ChatAgent,
+                chat_doc: Optional[ChatDocument] = None,
             ) -> None | str | ChatDocument:
                 # One-time use
                 agent.set_output_format(None)
@@ -1304,7 +1291,43 @@ class ChatAgent(Agent):
                     self.tool.to_json()
                 )
 
-                return await agent.handle_tool_message_async(tool)
+                # pass the chat_doc through, so the recovered tool's policy
+                # check sees the same message context a normal dispatch would
+                return agent._handle_tool_message_with_policy(tool, chat_doc=chat_doc)
+
+            async def response_async(
+                self,
+                agent: ChatAgent,
+                chat_doc: Optional[ChatDocument] = None,
+            ) -> None | str | ChatDocument:
+                # One-time use
+                agent.set_output_format(None)
+
+                if self.tool is None:
+                    return None
+
+                # As the ToolMessage schema accepts invalid
+                # `tool.request` values, reparse with the
+                # corresponding tool
+                request = self.tool.request
+                if request not in agent.llm_tools_map:
+                    return None
+                tool = agent.llm_tools_map[request].model_validate_json(
+                    self.tool.to_json()
+                )
+
+                # pass the chat_doc through, so the recovered tool's policy
+                # check sees the same message context a normal dispatch would
+                return await agent._handle_tool_message_with_policy_async(
+                    tool, chat_doc=chat_doc
+                )
+
+        # This wrapper is a parsing shim for strict recovery, NOT a tool
+        # execution, so it is exempt from the `tool_policy` hook -- which
+        # also guarantees `set_output_format(None)` above always runs. The
+        # re-parsed ACTUAL tool is dispatched through the policy-checked
+        # path, so the policy is consulted exactly once per logical call.
+        AnyTool._tool_policy_exempt = True  # type: ignore[attr-defined]
 
         return AnyTool
 

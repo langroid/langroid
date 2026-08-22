@@ -120,6 +120,7 @@ nav:
       - None Content in LLM Messages: notes/llm-none-content.md
       - Weaviate: notes/weaviate.md
       - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - Tool Policy Hook: notes/tool-policy-hook.md
       - PGVector: notes/pgvector.md
       - Pinecone: notes/pinecone.md
       - Tavily Search Tool: notes/tavily_search.md

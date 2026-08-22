@@ -322,7 +322,11 @@ class Task:
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
         try:
-            config_copy = copy.deepcopy(agent.config)
+            from langroid.agent.tool_policy import deepcopy_config_sharing_policy
+
+            # the tool_policy hook is shared by reference (never deep-copied),
+            # so its state (budgets, approvals) stays global across copies
+            config_copy = deepcopy_config_sharing_policy(agent.config)
             agent.config = config_copy
         except Exception:
             logger.warning(

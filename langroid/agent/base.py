@@ -99,6 +99,17 @@ class AgentConfig(BaseSettings):
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
     # allow multiple tool messages in a single response?
     allow_multiple_tools: bool = True
+    # Optional pre-execution tool policy hook, called with the final parsed
+    # ToolMessage just BEFORE its selected handler runs, as
+    # ``tool_policy(tool, agent)`` -- or ``tool_policy(tool, agent, chat_doc=...)``
+    # when the callable has a ``chat_doc`` parameter. May be sync or async.
+    # Return True or None to ALLOW (the handler runs exactly once); return
+    # False or a str reason to REJECT (the handler is NOT run, and the LLM
+    # sees a rejection naming the tool and the reason). The hook cannot modify
+    # the tool. If the hook itself raises, the tool is blocked (fail-closed)
+    # and the rejection deliberately excludes the exception message and tool
+    # arguments. See docs/notes/tool-policy-hook.md.
+    tool_policy: Optional[Callable[..., Any]] = None
     human_prompt: str = (
         "Human (respond or q, x to exit current level, " "or hit enter to continue)"
     )
@@ -1778,7 +1789,7 @@ class Agent(ABC):
         results = self._get_multiple_orch_tool_errs(tools)
         if not results:
             results = [
-                await self.handle_tool_message_async(t, chat_doc=chat_doc)
+                await self._handle_tool_message_with_policy_async(t, chat_doc=chat_doc)
                 for t in tools
             ]
             # if there's a solitary ChatDocument|str result, return it as is
@@ -1846,7 +1857,10 @@ class Agent(ABC):
             results = self._get_multiple_orch_tool_errs(tools)
         if not results:
             chat_doc = msg if isinstance(msg, ChatDocument) else None
-            results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
+            results = [
+                self._handle_tool_message_with_policy(t, chat_doc=chat_doc)
+                for t in tools
+            ]
             # if there's a solitary ChatDocument|str result, return it as is
             if len(results) == 1 and isinstance(results[0], (str, ChatDocument)):
                 return results[0]
@@ -2024,7 +2038,7 @@ class Agent(ABC):
                 #     msg in chat_doc.tool_messages):
                 #    chat_doc.tool_messages.remove(msg)
                 # if we can handle it, do so
-                result = self.handle_tool_message(msg, chat_doc=chat_doc)
+                result = self._handle_tool_message_with_policy(msg, chat_doc=chat_doc)
                 if result is not None and isinstance(result, ChatDocument):
                     return result
             else:
@@ -2129,6 +2143,88 @@ class Agent(ABC):
             ) + truncate_warning
             return result
 
+    def _handle_tool_message_with_policy(
+        self,
+        tool: ToolMessage,
+        chat_doc: Optional[ChatDocument] = None,
+    ) -> None | str | ChatDocument:
+        """Framework entry point for sync tool dispatch, enforcing `tool_policy`.
+
+        Consults the `tool_policy` hook (see `AgentConfig.tool_policy`) and,
+        if the tool is allowed, delegates to `handle_tool_message` -- which a
+        subclass may override -- exactly as before, so the policy gates tool
+        execution even through such overrides.
+
+        When dispatch is NOT overridden and the tool has no handler, the
+        policy is not consulted (nothing can execute). When dispatch IS
+        overridden, the base cannot know what the override will do, so the
+        policy is consulted regardless, even though the override may end up
+        returning None.
+
+        Args:
+            tool: ToolMessage object representing the tool request.
+            chat_doc: Optional ChatDocument object containing the tool request.
+
+        Returns:
+            The dispatch result, or the policy's LLM-visible rejection.
+        """
+        from langroid.agent.tool_policy import (
+            check_tool_policy,
+            dispatch_overridden,
+            handler_exists,
+            policy_exempt,
+        )
+
+        if self.config.tool_policy is not None and not policy_exempt(tool):
+            if not dispatch_overridden(self, use_async=False) and not handler_exists(
+                self, tool, use_async=False
+            ):
+                # base dispatch would execute nothing; don't consult the policy
+                return None
+            rejection = check_tool_policy(self.config.tool_policy, tool, self, chat_doc)
+            if rejection is not None:
+                return rejection
+        return self.handle_tool_message(tool, chat_doc=chat_doc)
+
+    async def _handle_tool_message_with_policy_async(
+        self,
+        tool: ToolMessage,
+        chat_doc: Optional[ChatDocument] = None,
+    ) -> None | str | ChatDocument:
+        """Async version of `_handle_tool_message_with_policy`.
+
+        The policy is awaited on the CALLER's event loop (so it can use
+        loop-bound resources), then dispatch proceeds via
+        `handle_tool_message_async` -- which a subclass may override --
+        exactly as before.
+
+        Args:
+            tool: ToolMessage object representing the tool request.
+            chat_doc: Optional ChatDocument object containing the tool request.
+
+        Returns:
+            The dispatch result, or the policy's LLM-visible rejection.
+        """
+        from langroid.agent.tool_policy import (
+            check_tool_policy_async,
+            dispatch_overridden,
+            handler_exists,
+            policy_exempt,
+        )
+
+        if self.config.tool_policy is not None and not policy_exempt(tool):
+            if not dispatch_overridden(self, use_async=True) and not handler_exists(
+                self, tool, use_async=True
+            ):
+                # base dispatch would execute nothing; don't consult the policy
+                return None
+            rejection = await check_tool_policy_async(
+                self.config.tool_policy, tool, self, chat_doc
+            )
+            if rejection is not None:
+                return rejection
+        return await self.handle_tool_message_async(tool, chat_doc=chat_doc)
+
     async def handle_tool_message_async(
         self,
         tool: ToolMessage,
@@ -2171,6 +2267,12 @@ class Agent(ABC):
     ) -> None | str | ChatDocument:
         """
         Respond to a tool request from the LLM, in the form of an ToolMessage object.
+
+        NOTE: framework dispatch reaches this method through
+        `_handle_tool_message_with_policy`, which enforces the optional
+        `tool_policy` hook BEFORE delegating here; direct calls to this
+        method by user code are the caller's own seam and are not gated.
+
         Args:
             tool: ToolMessage object representing the tool request.
             chat_doc: Optional ChatDocument object containing the tool request.
