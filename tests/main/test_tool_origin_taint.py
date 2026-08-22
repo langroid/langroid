@@ -51,33 +51,33 @@ def _make_agent() -> ChatAgent:
 # ---------------------------------------------------------------------------
 
 
-def test_from_str_is_tainted():
+def test_from_str_is_tainted() -> None:
     assert ChatDocument.from_str(JSON_PAYLOAD).metadata.tainted is True
 
 
-def test_to_chatdocument_user_string_is_tainted():
+def test_to_chatdocument_user_string_is_tainted() -> None:
     agent = _make_agent()
     doc = agent.to_ChatDocument(JSON_PAYLOAD, author_entity=Entity.USER)
     assert doc is not None and doc.metadata.tainted is True
 
 
-def test_agent_authored_string_not_tainted():
+def test_agent_authored_string_not_tainted() -> None:
     agent = _make_agent()
     doc = agent.to_ChatDocument("hello", author_entity=Entity.AGENT)
     assert doc is not None and doc.metadata.tainted is False
 
 
-def test_agent_response_not_tainted():
+def test_agent_response_not_tainted() -> None:
     agent = _make_agent()
     assert agent.create_agent_response("hi").metadata.tainted is False
 
 
-def test_create_user_response_is_tainted():
+def test_create_user_response_is_tainted() -> None:
     agent = _make_agent()
     assert agent.create_user_response("hi").metadata.tainted is True
 
 
-def test_interactive_user_response_is_tainted():
+def test_interactive_user_response_is_tainted() -> None:
     """The interactive reply path builds the ChatDocument directly via
     `_user_response_final`, bypassing from_str / to_ChatDocument."""
     agent = _make_agent()
@@ -85,7 +85,7 @@ def test_interactive_user_response_is_tainted():
     assert doc is not None and doc.metadata.tainted is True
 
 
-def test_system_user_response_not_tainted():
+def test_system_user_response_not_tainted() -> None:
     """SYSTEM (operator) input is trusted -- not tainted."""
     agent = _make_agent()
     doc = agent._user_response_final(None, "SYSTEM trusted instruction")
@@ -94,7 +94,7 @@ def test_system_user_response_not_tainted():
     assert doc.metadata.tainted is False
 
 
-def test_task_init_user_string_is_tainted():
+def test_task_init_user_string_is_tainted() -> None:
     """Task.init(str) -- the init()/step() entry -- builds the USER message
     directly (not via to_ChatDocument), so it must taint too."""
     agent = _make_agent()
@@ -103,7 +103,7 @@ def test_task_init_user_string_is_tainted():
     assert doc is not None and doc.metadata.tainted is True
 
 
-def test_root_task_user_chatdocument_input_is_tainted():
+def test_root_task_user_chatdocument_input_is_tainted() -> None:
     """A pre-built USER ChatDocument handed to a ROOT task bypasses the tainting
     constructors (to_ChatDocument returns it unchanged), so Task.init taints it.
     Sub-task handoffs (caller is not None) are left to their propagated taint."""
@@ -123,7 +123,7 @@ def test_root_task_user_chatdocument_input_is_tainted():
 # ---------------------------------------------------------------------------
 
 
-def test_deepcopy_propagates_taint():
+def test_deepcopy_propagates_taint() -> None:
     doc = ChatDocument(
         content=JSON_PAYLOAD,
         metadata=ChatDocMetaData(sender=Entity.USER, tainted=True),
@@ -131,7 +131,7 @@ def test_deepcopy_propagates_taint():
     assert ChatDocument.deepcopy(doc).metadata.tainted is True
 
 
-def test_donepass_repackage_propagates_taint():
+def test_donepass_repackage_propagates_taint() -> None:
     """DonePassTool parsing tools out of a TAINTED message must produce a tainted
     AgentDoneTool whose agent-response is also tainted."""
     agent = _make_agent()
@@ -145,7 +145,7 @@ def test_donepass_repackage_propagates_taint():
     assert done.response(agent).metadata.tainted is True
 
 
-def test_donepass_repackage_of_llm_message_not_tainted():
+def test_donepass_repackage_of_llm_message_not_tainted() -> None:
     """Control: a genuine LLM-origin message passed via DonePassTool stays
     untrusted-free, so legitimate handoffs are unaffected."""
     agent = _make_agent()
@@ -176,7 +176,7 @@ def _handoff_doc(tainted: bool) -> ChatDocument:
     )
 
 
-def test_filter_vetoes_tainted_handoff():
+def test_filter_vetoes_tainted_handoff() -> None:
     agent = _make_agent()
     secret = SecretTool(value="pwned")
     assert agent._filter_user_origin_tools(_handoff_doc(tainted=True), [secret]) == []
@@ -186,7 +186,7 @@ def test_filter_vetoes_tainted_handoff():
     ]
 
 
-def test_tainted_handoff_does_not_dispatch_handle_only_tool():
+def test_tainted_handoff_does_not_dispatch_handle_only_tool() -> None:
     """End-to-end at the agent: a tainted (laundered) handoff must NOT invoke the
     use=False handler, while the same handoff untainted still does."""
     agent = _make_agent()
@@ -777,3 +777,130 @@ def test_config_held_fallback_tool_does_not_go_sticky() -> None:
 
     # the config-held instance itself was never marked
     assert shared._tainted is False
+
+
+# ---------------------------------------------------------------------------
+# Handler-returned ChatDocuments: the handler is TRUSTED to label its own
+# document (docs ruling). A handler that crosses a trust boundary itself --
+# e.g. runs a fresh LLM generation and returns that (untainted) document --
+# must not have the label overridden, even when the triggering tool was
+# tainted. Mechanical str/object results still inherit the tool's taint, and
+# deepcopy-derived documents inherit taint automatically.
+# ---------------------------------------------------------------------------
+
+
+class DelegateTool(ToolMessage):
+    request: str = "delegate_tool"
+    purpose: str = "Delegate to a fresh LLM generation"
+
+    def handle(self) -> ChatDocument:
+        # emulates a handler that performs its own LLM generation and returns
+        # the from_LLMResponse-shaped document: deliberately labeled untainted
+        # (the trusted LLM-generation boundary)
+        return ChatDocument(
+            content=JSON_PAYLOAD,
+            metadata=ChatDocMetaData(sender=Entity.LLM),
+        )
+
+
+def test_handler_returned_doc_keeps_trusted_untainted_label() -> None:
+    """A tainted usable tool whose handler returns a deliberately-untainted
+    ChatDocument (fresh LLM output): the label is honored, so handle-only
+    tools legitimately emitted in that document dispatch downstream."""
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    agent.enable_message(DelegateTool)
+    downstream = _make_agent()
+
+    tool = DelegateTool()
+    tool._tainted = True
+    result = agent.handle_tool_message(tool)
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.tainted is False
+    out = downstream.agent_response(result)
+    assert out is not None and "SECRET:pwned" in out.content
+
+
+def test_handler_returned_deepcopy_doc_stays_tainted() -> None:
+    """A handler that derives its returned doc via ChatDocument.deepcopy of
+    tainted input keeps the taint automatically -- no force needed."""
+    from typing import Optional
+
+    class EchoDocTool(ToolMessage):
+        request: str = "echo_doc_tool"
+        purpose: str = "Pass along a copy of the incoming doc"
+
+        def handle(
+            self, agent: ChatAgent, chat_doc: Optional[ChatDocument] = None
+        ) -> Optional[ChatDocument]:
+            assert chat_doc is not None
+            return ChatDocument.deepcopy(chat_doc)
+
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    agent.enable_message(EchoDocTool)
+
+    tool = EchoDocTool()
+    doc = ChatDocument(
+        content="untrusted stuff",
+        tool_messages=[tool],
+        metadata=ChatDocMetaData(sender=Entity.AGENT, tainted=True),
+    )
+    result = agent.handle_tool_message(tool, chat_doc=doc)
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.tainted is True
+
+
+# ---------------------------------------------------------------------------
+# Strict-recovery AnyTool shim: the wrapper reconstructs the nested tool from
+# its serialized dict (a fresh object), so the wrapper's _tainted mark must be
+# propagated or the JSON round-trip silently drops the taint.
+# ---------------------------------------------------------------------------
+
+
+def test_any_tool_recovery_propagates_wrapper_taint() -> None:
+    agent = _echo_agent()
+    downstream = _make_agent()
+    any_tool_cls = agent._get_any_tool_message()
+    assert any_tool_cls is not None
+
+    # wrapper stamped as if parsed out of a tainted document
+    wrapper = any_tool_cls(tool=EchoTool(text=JSON_PAYLOAD))
+    wrapper._tainted = True
+    result = wrapper.response(agent)
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.tainted is True
+    out = downstream.agent_response(result)
+    content = out.content if out is not None else ""
+    assert "SECRET" not in content
+
+    # control: untainted wrapper -> untainted result, downstream dispatches
+    clean = any_tool_cls(tool=EchoTool(text=JSON_PAYLOAD))
+    result = clean.response(agent)
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.tainted is False
+    out = downstream.agent_response(result)
+    assert out is not None and "SECRET:pwned" in out.content
+
+
+@pytest.mark.asyncio
+async def test_any_tool_recovery_propagates_wrapper_taint_async() -> None:
+    """Same scenario through the shim's response_async path."""
+    agent = _echo_agent()
+    downstream = _make_agent()
+    any_tool_cls = agent._get_any_tool_message()
+    assert any_tool_cls is not None
+
+    wrapper = any_tool_cls(tool=EchoTool(text=JSON_PAYLOAD))
+    wrapper._tainted = True
+    result = await wrapper.response_async(agent)
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.tainted is True
+    out = downstream.agent_response(result)
+    content = out.content if out is not None else ""
+    assert "SECRET" not in content
+
+    clean = any_tool_cls(tool=EchoTool(text=JSON_PAYLOAD))
+    result = await clean.response_async(agent)
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.tainted is False
+    out = downstream.agent_response(result)
+    assert out is not None and "SECRET:pwned" in out.content

@@ -1512,6 +1512,11 @@ class ChatAgent(Agent):
                 tool = agent.llm_tools_map[request].model_validate_json(
                     self.tool.to_json()
                 )
+                # Propagate the wrapper's DISTRUST mark (#1035): the JSON
+                # round-trip builds a fresh object, silently dropping taint.
+                # Direct stamping is safe: `tool` is framework-fresh here.
+                if self._tainted:
+                    tool._tainted = True
 
                 return agent.handle_tool_message(tool)
 
@@ -1533,6 +1538,9 @@ class ChatAgent(Agent):
                 tool = agent.llm_tools_map[request].model_validate_json(
                     self.tool.to_json()
                 )
+                # Propagate the wrapper's DISTRUST mark (#1035): see above.
+                if self._tainted:
+                    tool._tainted = True
 
                 return await agent.handle_tool_message_async(tool)
 

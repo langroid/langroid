@@ -2244,9 +2244,14 @@ class Agent(ABC):
 
         The result may echo tool JSON from the untrusted content the tool was
         parsed out of, so the taint must survive the handler hop even when the
-        carrying doc was untainted. ToolMessage results are stamped (so
-        ``response_template``'s tool check taints the doc they land in);
-        ChatDocument results are marked directly.
+        carrying doc was untainted. Only ToolMessage results are stamped, via
+        a marked copy (so ``response_template``'s tool check taints the doc
+        they land in). A handler-returned ChatDocument keeps its own taint
+        label: the handler is trusted to label it (it may deliberately cross
+        a trust boundary, e.g. return a fresh untainted LLM generation), and
+        a doc derived via ``ChatDocument.deepcopy`` inherits taint anyway.
+        Plain str/object results are tainted at their mechanical conversion
+        site in ``handle_tool_message`` / ``handle_tool_message_async``.
 
         Args:
             tool: The tool that was dispatched to a handler.
@@ -2254,17 +2259,12 @@ class Agent(ABC):
                 arbitrary object, or None).
 
         Returns:
-            The same ``result``, with the taint mark applied when ``tool``
-            is tainted and the result type can carry it.
+            ``result`` itself, or a taint-marked copy when ``tool`` is
+            tainted and ``result`` is a ToolMessage.
         """
-        if getattr(tool, "_tainted", False):
-            if isinstance(result, ToolMessage):
-                # copy-on-stamp: the handler may return a shared instance
-                result = Agent._tainted_copy(result)
-            elif isinstance(result, ChatDocument):
-                # ChatDocuments are per-flow registry objects, not reusable
-                # config values; marking in place is safe and keeps ids.
-                result.metadata.tainted = True
+        if getattr(tool, "_tainted", False) and isinstance(result, ToolMessage):
+            # copy-on-stamp: the handler may return a shared instance
+            result = Agent._tainted_copy(result)
         return result
 
     async def handle_tool_message_async(
@@ -2294,7 +2294,16 @@ class Agent(ABC):
                 maybe_result = await handler_method(tool)
             maybe_result = self._taint_tool_result(tool, maybe_result)
             result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
-            result = self._taint_tool_result(tool, result)
+            if (
+                isinstance(result, ChatDocument)
+                and not isinstance(maybe_result, (ChatDocument, ToolMessage))
+                and getattr(tool, "_tainted", False)
+            ):
+                # Mechanical conversion of a plain str/object result from a
+                # tainted tool (#1035): taint the framework-built doc. A
+                # handler-RETURNED ChatDocument keeps its trusted label, and
+                # a returned ToolMessage already carries its stamped copy.
+                result.metadata.tainted = True
         except Exception as e:
             # raise the error here since we are sure it's
             # not a pydantic validation error,
@@ -2339,7 +2348,16 @@ class Agent(ABC):
                 maybe_result = handler_method(tool)
             maybe_result = self._taint_tool_result(tool, maybe_result)
             result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
-            result = self._taint_tool_result(tool, result)
+            if (
+                isinstance(result, ChatDocument)
+                and not isinstance(maybe_result, (ChatDocument, ToolMessage))
+                and getattr(tool, "_tainted", False)
+            ):
+                # Mechanical conversion of a plain str/object result from a
+                # tainted tool (#1035): taint the framework-built doc. A
+                # handler-RETURNED ChatDocument keeps its trusted label, and
+                # a returned ToolMessage already carries its stamped copy.
+                result.metadata.tainted = True
         except Exception as e:
             # raise the error here since we are sure it's
             # not a pydantic validation error,
