@@ -350,7 +350,9 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
                 lambda: SentenceTransformer.stop_multi_process_pool(self.pool)
             )
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
+            self.config.model_name
+        )
         self.config.context_length = self.tokenizer.model_max_length
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:

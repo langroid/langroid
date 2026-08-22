@@ -78,7 +78,7 @@ class QdrantDB(VectorStore):
                     """
                 )
 
-            self.sparse_tokenizer = AutoTokenizer.from_pretrained(
+            self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
                 self.config.sparse_embedding_model
             )
             self.sparse_model = AutoModelForMaskedLM.from_pretrained(
