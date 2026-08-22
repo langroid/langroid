@@ -335,8 +335,20 @@ class OpenAIGPTConfig(LLMConfig):
 
         super().__init__(**kwargs)
         env_prefix = self.model_config.get("env_prefix")
+        env_api_base_name = f"{env_prefix}API_BASE"
+        env_api_base = os.getenv(env_api_base_name)
+        if not self.model_config.get("case_sensitive"):
+            env_api_base = next(
+                (
+                    value
+                    for name, value in os.environ.items()
+                    if name.lower() == env_api_base_name.lower()
+                ),
+                None,
+            )
         api_base_was_supplied = api_base_was_supplied or (
-            env_prefix != "OPENAI_" and self.api_base is not None
+            self.api_base is not None
+            and (env_prefix != "OPENAI_" or self.api_base != env_api_base)
         )
         self._api_base_was_supplied = api_base_was_supplied
 
