@@ -147,6 +147,7 @@ def test_provider_config_identity_contract(
 ) -> None:
     """Verify real constructors create fresh configs and preserve supplied ones."""
     _clear_config_environment(config_cls, monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "offline-test-key")
     _isolate_provider_io(provider_cls, monkeypatch)
 
     provider_a = provider_cls()
