@@ -723,6 +723,15 @@ class Agent(ABC):
                 tool_ids=(
                     [] if msg is None or isinstance(msg, str) else msg.metadata.tool_ids
                 ),
+                # content echo (#1035): a string result derived from handling
+                # a tainted msg -- or produced by a tainted tool riding an
+                # untainted msg -- stays tainted, so tool JSON echoed into it
+                # cannot be laundered into a trusted AGENT doc.
+                tainted=isinstance(msg, ChatDocument)
+                and (
+                    msg.metadata.tainted
+                    or any(getattr(t, "_tainted", False) for t in msg.tool_messages)
+                ),
             ),
         )
 
@@ -1356,6 +1365,16 @@ class Agent(ABC):
         Non-``ChatDocument`` inputs and non-``USER`` senders are returned
         unchanged.
         """
+        # Tool-level veto (#1035 Step A): a tool object marked ``_tainted``
+        # was parsed out of external-USER-derived content somewhere upstream;
+        # never dispatch it to a handle-only handler, regardless of which
+        # document now carries it or that document's sender/taint labels.
+        tools = [
+            t
+            for t in tools
+            if t.default_value("request") in self.llm_tools_usable
+            or not getattr(t, "_tainted", False)
+        ]
         if not isinstance(msg, ChatDocument):
             return tools
         if msg.metadata.tainted:
@@ -1398,6 +1417,47 @@ class Agent(ABC):
             return []
 
     def get_tool_messages(
+        self,
+        msg: str | ChatDocument | None,
+        all_tools: bool = False,
+    ) -> List[ToolMessage]:
+        """
+        Get ToolMessages recognized in msg, handle-able by this agent,
+        stamping each with the source doc's taint mark (see #1035).
+
+        NOTE: as a side-effect, this will update msg.tool_messages
+        when msg is a ChatDocument and msg contains tool messages.
+
+        Args:
+            msg (str|ChatDocument): the message to extract tools from.
+            all_tools (bool):
+                - if True, return all tools,
+                    i.e. any recognized tool in self.llm_tools_known,
+                    whether it is handled by this agent or not;
+                - otherwise, return only the tools handled by this agent.
+
+        Returns:
+            List[ToolMessage]: list of ToolMessage objects
+        """
+        tools = self._get_tool_messages_inner(msg, all_tools)
+        if isinstance(msg, ChatDocument) and msg.metadata.tainted and tools:
+            # Taint rides the tool objects themselves (#1035): a tool parsed
+            # out of (or attached to) a tainted doc keeps the mark wherever
+            # it is later re-emitted or repackaged, so laundering it into a
+            # fresh "trusted-looking" ChatDocument cannot wash it clean.
+            # Copy-on-stamp: tools ATTACHED to the doc may be shared/reusable
+            # objects, so mark deep copies, and swap the copies into the
+            # doc's caches (doc-scoped state) so repeated calls agree.
+            marked = {id(t): self._tainted_copy(t) for t in tools}
+            tools = [marked[id(t)] for t in tools]
+            msg.tool_messages = [marked.get(id(t), t) for t in msg.tool_messages]
+            if msg.all_tool_messages is not None:
+                msg.all_tool_messages = [
+                    marked.get(id(t), t) for t in msg.all_tool_messages
+                ]
+        return tools
+
+    def _get_tool_messages_inner(
         self,
         msg: str | ChatDocument | None,
         all_tools: bool = False,
@@ -2007,17 +2067,41 @@ class Agent(ABC):
 
         is_agent_author = author_entity == Entity.AGENT
 
+        # Taint of the source doc rides mechanical derivations (#1035): a
+        # handler result (str or arbitrary obj) derived from a tainted msg
+        # yields a tainted doc. ToolMessage results instead carry their own
+        # per-tool ``_tainted`` mark, checked in ``response_template``.
+        src_tainted = chat_doc is not None and chat_doc.metadata.tainted
         if isinstance(msg, str):
             # USER-author strings (e.g. Task.run user input) are tainted by
             # response_template (#1035).
-            return self.response_template(author_entity, content=msg, content_any=msg)
+            return self.response_template(
+                author_entity, content=msg, content_any=msg, tainted=src_tainted
+            )
         elif isinstance(msg, ToolMessage):
+            # A tool returned by a fallback/handler while processing a tainted
+            # doc repackages untrusted fields (#1035); stamp it before it
+            # enters the dispatch below, so the recursion veto, the handler-hop
+            # threading, and response_template's tool check all see the mark.
+            # LLM-AUTHORED tool results (e.g. a custom llm_response returning a
+            # ToolMessage, converted by Task.response with author_entity=LLM)
+            # are the trusted LLM-generation boundary and are NOT stamped.
+            # Copy-on-stamp: msg may be a shared/config-held instance (e.g.
+            # a reusable handle_llm_no_tool ToolMessage) -- never mutate it.
+            if src_tainted and is_agent_author:
+                msg = self._tainted_copy(msg)
             # result is a ToolMessage, so...
             result_tool_name = msg.default_value("request")
             if (
                 is_agent_author
                 and result_tool_name in self.llm_tools_handled
                 and (orig_tool_name is None or orig_tool_name != result_tool_name)
+                # Recursive-hop veto (#1035): a handler-returned tool marked
+                # _tainted must get the same treatment as the filter's drop --
+                # if it is handle-only, do NOT execute it; fall through to the
+                # packaging branch below, which yields a tainted doc carrying
+                # the (unexecuted) tool.
+                and not (msg._tainted and result_tool_name not in self.llm_tools_usable)
             ):
                 # TODO: do we need to remove the tool message from the chat_doc?
                 # if (chat_doc is not None and
@@ -2037,7 +2121,9 @@ class Agent(ABC):
         return (
             None
             if result is None
-            else self.response_template(author_entity, content=result, content_any=msg)
+            else self.response_template(
+                author_entity, content=result, content_any=msg, tainted=src_tainted
+            )
         )
 
     def from_ChatDocument(self, msg: ChatDocument, output_type: Type[T]) -> Optional[T]:
@@ -2129,6 +2215,58 @@ class Agent(ABC):
             ) + truncate_warning
             return result
 
+    @staticmethod
+    def _tainted_copy(tool: ToolMessage) -> ToolMessage:
+        """Return a taint-marked version of ``tool`` without mutating it.
+
+        Copy-on-stamp (#1035): a tool object the framework did not just create
+        may be shared/reusable (e.g. a ToolMessage instance held in
+        ``handle_llm_no_tool`` config), so stamping ``_tainted`` in place
+        would permanently poison every later, clean use of it.
+
+        Args:
+            tool: The tool that must carry the taint mark.
+
+        Returns:
+            ``tool`` itself if already marked; otherwise a deep copy with
+            ``_tainted`` set (private attrs survive ``copy.deepcopy``).
+        """
+        if tool._tainted:
+            return tool
+        marked = copy.deepcopy(tool)
+        marked._tainted = True
+        return marked
+
+    @staticmethod
+    def _taint_tool_result(tool: ToolMessage, result: Any) -> Any:
+        """Carry the dispatched tool's ``_tainted`` mark into its handler
+        result (#1035).
+
+        The result may echo tool JSON from the untrusted content the tool was
+        parsed out of, so the taint must survive the handler hop even when the
+        carrying doc was untainted. ToolMessage results are stamped (so
+        ``response_template``'s tool check taints the doc they land in);
+        ChatDocument results are marked directly.
+
+        Args:
+            tool: The tool that was dispatched to a handler.
+            result: The handler's raw result (str, ToolMessage, ChatDocument,
+                arbitrary object, or None).
+
+        Returns:
+            The same ``result``, with the taint mark applied when ``tool``
+            is tainted and the result type can carry it.
+        """
+        if getattr(tool, "_tainted", False):
+            if isinstance(result, ToolMessage):
+                # copy-on-stamp: the handler may return a shared instance
+                result = Agent._tainted_copy(result)
+            elif isinstance(result, ChatDocument):
+                # ChatDocuments are per-flow registry objects, not reusable
+                # config values; marking in place is safe and keeps ids.
+                result.metadata.tainted = True
+        return result
+
     async def handle_tool_message_async(
         self,
         tool: ToolMessage,
@@ -2154,7 +2292,9 @@ class Agent(ABC):
                 maybe_result = await handler_method(tool, chat_doc=chat_doc)
             else:
                 maybe_result = await handler_method(tool)
+            maybe_result = self._taint_tool_result(tool, maybe_result)
             result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
+            result = self._taint_tool_result(tool, result)
         except Exception as e:
             # raise the error here since we are sure it's
             # not a pydantic validation error,
@@ -2197,7 +2337,9 @@ class Agent(ABC):
                 maybe_result = handler_method(tool, chat_doc=chat_doc)
             else:
                 maybe_result = handler_method(tool)
+            maybe_result = self._taint_tool_result(tool, maybe_result)
             result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
+            result = self._taint_tool_result(tool, result)
         except Exception as e:
             # raise the error here since we are sure it's
             # not a pydantic validation error,

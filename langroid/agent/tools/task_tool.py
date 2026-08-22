@@ -208,6 +208,9 @@ class TaskTool(ToolMessage):
                     parent_id=chat_doc.id(),
                     agent_id=agent.id,
                     sender=chat_doc.metadata.sender,
+                    # the sub-task seed derives from chat_doc AND from
+                    # this tool's own fields (#1035)
+                    tainted=chat_doc.metadata.tainted or self._tainted,
                 ),
             )
             # Set bidirectional parent-child relationship
@@ -241,6 +244,9 @@ class TaskTool(ToolMessage):
                     parent_id=chat_doc.id(),
                     agent_id=agent.id,
                     sender=chat_doc.metadata.sender,
+                    # the sub-task seed derives from chat_doc AND from
+                    # this tool's own fields (#1035)
+                    tainted=chat_doc.metadata.tainted or self._tainted,
                 ),
             )
             # Set bidirectional parent-child relationship
