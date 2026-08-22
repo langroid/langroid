@@ -371,6 +371,91 @@ def test_history_snapshot_rejects_role_field_violations_atomically(
 
 
 @pytest.mark.parametrize(
+    "role,error",
+    [
+        ("system", "tool calls must have role 'assistant'"),
+        ("user", "tool calls must have role 'assistant'"),
+        ("function", "result messages must not contain call payloads"),
+        ("tool", "result messages must not contain call payloads"),
+    ],
+)
+def test_history_snapshot_empty_tool_calls_still_enforce_role(
+    role: str,
+    error: str,
+) -> None:
+    """An empty tool-call field is still invalid on non-assistant roles."""
+    message: dict[str, Any] = {
+        "role": role,
+        "content": "invalid",
+        "tool_calls": [],
+    }
+    if role == "function":
+        message["name"] = "weather"
+    if role == "tool":
+        message["tool_call_id"] = "call-1"
+    messages = [message]
+    if role != "system":
+        messages.insert(0, {"role": "system", "content": "snapshot system"})
+    snapshot = json.dumps({"version": 1, "messages": messages})
+
+    with pytest.raises(ValueError, match=error):
+        ChatAgent(ChatAgentConfig(llm=None)).import_history(snapshot)
+
+
+def test_history_snapshot_normalizes_empty_tool_calls() -> None:
+    """Imported empty tool-call lists do not reach provider payloads."""
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    snapshot = json.dumps(
+        {
+            "version": 1,
+            "messages": [
+                {"role": "system", "content": "snapshot system"},
+                {"role": "assistant", "content": "done", "tool_calls": []},
+            ],
+        }
+    )
+
+    agent.import_history(snapshot)
+
+    restored = agent.message_history[1]
+    assert restored.tool_calls is None
+    assert "tool_calls" not in restored.api_dict("test-model")
+
+
+@pytest.mark.parametrize(
+    "call_payload",
+    [
+        {"function_call": {"name": " ", "arguments": {}}},
+        {
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "", "arguments": {}},
+                }
+            ]
+        },
+    ],
+)
+def test_history_snapshot_rejects_blank_call_names(
+    call_payload: dict[str, Any],
+) -> None:
+    """Assistant function names must contain non-whitespace characters."""
+    snapshot = json.dumps(
+        {
+            "version": 1,
+            "messages": [
+                {"role": "system", "content": "snapshot system"},
+                {"role": "assistant", **call_payload},
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="function call names must be nonblank"):
+        ChatAgent(ChatAgentConfig(llm=None)).import_history(snapshot)
+
+
+@pytest.mark.parametrize(
     "constant",
     ["NaN", "Infinity", "-Infinity", "1e100000"],
 )
@@ -456,6 +541,86 @@ def test_history_snapshot_rejects_invalid_tool_result_sequence(
 
     with pytest.raises(ValueError, match="tool result must reference"):
         agent.import_history(snapshot)
+
+
+@pytest.mark.parametrize(
+    "call_message,result_message",
+    [
+        (
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {"name": "weather", "arguments": {}},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call-1", "content": "result"},
+        ),
+        (
+            {
+                "role": "assistant",
+                "function_call": {"name": "weather", "arguments": {}},
+            },
+            {"role": "function", "name": "weather", "content": "result"},
+        ),
+    ],
+)
+def test_history_snapshot_rejects_non_adjacent_results(
+    call_message: dict[str, Any],
+    result_message: dict[str, Any],
+) -> None:
+    """Call results cannot be separated from their assistant call turn."""
+    snapshot = json.dumps(
+        {
+            "version": 1,
+            "messages": [
+                {"role": "system", "content": "snapshot system"},
+                call_message,
+                {"role": "assistant", "content": "intervening"},
+                result_message,
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="index 3"):
+        ChatAgent(ChatAgentConfig(llm=None)).import_history(snapshot)
+
+
+def test_history_snapshot_accepts_adjacent_multi_call_results_in_order() -> None:
+    """Ordered results may form one contiguous block after a multi-call turn."""
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    snapshot = json.dumps(
+        {
+            "version": 1,
+            "messages": [
+                {"role": "system", "content": "snapshot system"},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {"name": "weather", "arguments": {}},
+                        },
+                        {
+                            "id": "call-2",
+                            "type": "function",
+                            "function": {"name": "traffic", "arguments": {}},
+                        },
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call-1", "content": "sunny"},
+                {"role": "tool", "tool_call_id": "call-2", "content": "clear"},
+            ],
+        }
+    )
+
+    agent.import_history(snapshot)
+
+    assert agent.oai_tool_calls == []
 
 
 @pytest.mark.parametrize(

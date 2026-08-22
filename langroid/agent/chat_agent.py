@@ -598,17 +598,16 @@ class ChatAgent(Agent):
             if messages and messages[0].role != Role.SYSTEM:
                 raise ValueError("first message must have role 'system'")
             seen_call_ids: Set[str] = set()
-            unresolved_call_ids: Set[str] = set()
-            pending_function_names: List[str] = []
-            for message in messages:
+            for index, message in enumerate(messages):
                 if message.role in (Role.TOOL, Role.FUNCTION) and (
-                    message.function_call is not None or message.tool_calls
+                    message.function_call is not None or message.tool_calls is not None
                 ):
                     raise ValueError("result messages must not contain call payloads")
                 if message.function_call is not None and message.role != Role.ASSISTANT:
                     raise ValueError("function calls must have role 'assistant'")
                 if message.function_call is not None:
-                    pending_function_names.append(message.function_call.name)
+                    if not message.function_call.name.strip():
+                        raise ValueError("function call names must be nonblank")
                 if message.tool_call_id is not None and message.role != Role.TOOL:
                     raise ValueError("tool_call_id is only valid on tool results")
                 if message.role == Role.FUNCTION:
@@ -617,18 +616,25 @@ class ChatAgent(Agent):
                         raise ValueError(
                             "function result name must be nonblank and normalized"
                         )
-                    if name not in pending_function_names:
+                    previous = messages[index - 1] if index > 0 else None
+                    if (
+                        previous is None
+                        or previous.role != Role.ASSISTANT
+                        or previous.function_call is None
+                        or previous.function_call.name != name
+                    ):
                         raise ValueError(
                             "function result must match a preceding pending "
-                            "function call"
+                            f"function call directly; offending index {index}"
                         )
-                    pending_function_names.remove(name)
-                if message.tool_calls:
+                if message.tool_calls is not None:
                     if message.role != Role.ASSISTANT:
                         raise ValueError("tool calls must have role 'assistant'")
                     for call in message.tool_calls:
                         if call.function is None:
                             raise ValueError("tool calls must include a function")
+                        if not call.function.name.strip():
+                            raise ValueError("function call names must be nonblank")
                         call_id = call.id
                         if call_id is None or not call_id or call_id != call_id.strip():
                             raise ValueError(
@@ -637,19 +643,37 @@ class ChatAgent(Agent):
                         if call_id in seen_call_ids:
                             raise ValueError("tool call IDs must be unique")
                         seen_call_ids.add(call_id)
-                        unresolved_call_ids.add(call_id)
+                    if not message.tool_calls:
+                        message.tool_calls = None
                 if message.role == Role.TOOL:
                     call_id = message.tool_call_id
+                    if call_id is None or not call_id or call_id != call_id.strip():
+                        raise ValueError(
+                            "tool result must reference a preceding pending tool "
+                            f"call; offending index {index}"
+                        )
+                    call_turn_index = index - 1
+                    result_offset = 0
+                    while (
+                        call_turn_index >= 0
+                        and messages[call_turn_index].role == Role.TOOL
+                    ):
+                        call_turn_index -= 1
+                        result_offset += 1
+                    call_turn = (
+                        messages[call_turn_index] if call_turn_index >= 0 else None
+                    )
                     if (
-                        call_id is None
-                        or not call_id
-                        or call_id != call_id.strip()
-                        or call_id not in unresolved_call_ids
+                        call_turn is None
+                        or call_turn.role != Role.ASSISTANT
+                        or call_turn.tool_calls is None
+                        or result_offset >= len(call_turn.tool_calls)
+                        or call_turn.tool_calls[result_offset].id != call_id
                     ):
                         raise ValueError(
-                            "tool result must reference a preceding pending tool call"
+                            "tool result must reference a preceding pending tool "
+                            f"call directly; offending index {index}"
                         )
-                    unresolved_call_ids.remove(call_id)
         except (
             KeyError,
             RecursionError,
