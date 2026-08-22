@@ -1,7 +1,7 @@
 import asyncio
 import os
 import shutil
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional, Type
 
 import pytest
 from anyio import ClosedResourceError
@@ -27,7 +27,11 @@ from mcp.types import (
 )
 
 # note we use pydantic v2 to define MCP server
-from pydantic import BaseModel, Field  # keep - need pydantic v2 for MCP server
+from pydantic import (  # keep - need pydantic v2 for MCP server
+    BaseModel,
+    Field,
+    ValidationError,
+)
 
 import langroid as lr
 import langroid.language_models as lm
@@ -1299,3 +1303,754 @@ async def test_optional_fields_exclude_none_in_payload() -> None:
     assert captured_payload["pattern"] == "test"
     assert "path" not in captured_payload  # Should be excluded because it's None
     assert "case_insensitive" not in captured_payload  # Should be excluded
+
+
+def _make_list_tools_counter(monkeypatch: pytest.MonkeyPatch) -> Callable[[], int]:
+    """Patch fastmcp's Client.list_tools to count real tools/list round-trips.
+
+    fastmcp's ``Client.list_tools()`` is uncached: every call issues a live
+    ``tools/list`` request over the transport. Counting invocations therefore
+    measures the actual number of server round-trips.
+
+    Returns a zero-arg callable returning the current count.
+    """
+    from fastmcp.client import Client
+
+    original_list_tools = Client.list_tools
+    count = 0
+
+    async def counting_list_tools(self: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal count
+        count += 1
+        return await original_list_tools(self, *args, **kwargs)
+
+    monkeypatch.setattr(Client, "list_tools", counting_list_tools)
+    return lambda: count
+
+
+def _tool_model_signature(model: Type[lr.ToolMessage]) -> dict[str, Any]:
+    """Capture behaviorally relevant generated ToolMessage model details."""
+    fields = [
+        (
+            name,
+            repr(field.annotation),
+            repr(field.default),
+            field.is_required(),
+            field.description,
+        )
+        for name, field in model.model_fields.items()
+    ]
+    return {
+        "model_name": model.__name__,
+        "request": model.default_value("request"),
+        "fields": fields,
+        "renamed_fields": getattr(model, "_renamed_fields", {}),
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_tools_async_single_list_tools_roundtrip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Benchmark/regression: building ALL tools via get_tools_async must issue
+    exactly ONE ``tools/list`` round-trip, regardless of the number of tools.
+
+    Before the fix, get_tools_async did ``1 + N`` round-trips: one initial
+    ``list_tools()`` plus one re-list per tool inside
+    ``get_tool_async -> get_mcp_tool_async``. This test fails on that old
+    behavior (observed count == 1 + N) and passes on the de-duplicated path.
+    """
+    server = mcp_server()
+    get_count = _make_list_tools_counter(monkeypatch)
+
+    tools = await get_tools_async(server)
+
+    n = len(tools)
+    assert n > 1, "Test server should expose several tools"
+    assert get_count() == 1, (
+        f"Expected exactly 1 list_tools() round-trip to build {n} tools, "
+        f"but observed {get_count()} (pre-fix behavior would be {1 + n})."
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_model_from_mcp_tool_no_extra_roundtrips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The public sync builder ``tool_model_from_mcp_tool`` must add zero
+    round-trips: a filtered subset can be built from a single ``list_tools()``
+    snapshot. This is the O(1) path for allow-list / subset consumers.
+    """
+    server = mcp_server()
+    get_count = _make_list_tools_counter(monkeypatch)
+
+    allowed = {"greet", "nabroski"}
+    async with FastMCPClient(server) as client:
+        assert client.client is not None
+        server_tools = await client.client.list_tools()  # the ONLY round-trip
+        subset = [
+            client.tool_model_from_mcp_tool(t)
+            for t in server_tools
+            if t.name in allowed
+        ]
+
+    assert get_count() == 1, (
+        f"Building a {len(subset)}-tool subset should need 1 list_tools() "
+        f"call, but observed {get_count()}."
+    )
+    assert {t.default_value("request") for t in subset} == allowed
+    for t in subset:
+        assert issubclass(t, lr.ToolMessage)
+
+
+@pytest.mark.asyncio
+async def test_get_tools_async_matches_per_tool_model_generation() -> None:
+    """Bulk and per-tool MCP conversion must generate equivalent models."""
+    server = mcp_server()
+
+    bulk_tools = await get_tools_async(server)
+
+    async with FastMCPClient(server) as client:
+        assert client.client is not None
+        server_tools = await client.client.list_tools()
+        per_tools = [await client.get_tool_async(t.name) for t in server_tools]
+        per_tool_by_name = {tool.default_value("request"): tool for tool in per_tools}
+
+    assert [tool.default_value("request") for tool in bulk_tools] == [
+        t.name for t in server_tools
+    ]
+    assert len(per_tool_by_name) == len(server_tools)
+    for bulk_tool in bulk_tools:
+        request = bulk_tool.default_value("request")
+        assert _tool_model_signature(bulk_tool) == _tool_model_signature(
+            per_tool_by_name[request]
+        )
+
+
+def test_tool_model_from_mcp_tool_handles_missing_or_invalid_schema() -> None:
+    """Schema-less or malformed schemas should behave like empty schemas."""
+    client = FastMCPClient(mcp_server())
+
+    for input_schema in [None, [], "not-a-schema", {"properties": None}]:
+        tool = Tool.model_construct(
+            name="schema_less",
+            description="Schema-less tool",
+            inputSchema=input_schema,
+        )
+
+        tool_model = client.tool_model_from_mcp_tool(tool)
+
+        assert tool_model.default_value("request") == "schema_less"
+        assert tool_model.default_value("purpose") == "Schema-less tool"
+        assert list(tool_model.model_fields) == ["request", "purpose", "id"]
+
+    omitted_schema_tool = Tool.model_construct(
+        name="omitted_schema",
+        description="Omitted schema tool",
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(omitted_schema_tool)
+
+    assert tool_model.default_value("request") == "omitted_schema"
+    assert tool_model.default_value("purpose") == "Omitted schema tool"
+    assert list(tool_model.model_fields) == ["request", "purpose", "id"]
+
+
+def test_tool_model_from_mcp_tool_handles_omitted_description() -> None:
+    """Missing descriptions should use the default generated purpose."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="missing_description",
+        inputSchema={},
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.default_value("request") == "missing_description"
+    assert tool_model.default_value("purpose") == "Use the tool missing_description"
+    assert list(tool_model.model_fields) == ["request", "purpose", "id"]
+
+
+def test_tool_model_from_mcp_tool_rejects_invalid_names() -> None:
+    """Missing or empty MCP tool names should fail with a clear error."""
+    client = FastMCPClient(mcp_server())
+
+    for tool_name in [None, ""]:
+        tool = Tool.model_construct(
+            name=tool_name,
+            description="Bad name",
+            inputSchema={},
+        )
+
+        with pytest.raises(ValueError, match="Invalid MCP tool name"):
+            client.tool_model_from_mcp_tool(tool)
+
+    omitted_name_tool = Tool.model_construct(
+        description="Bad name",
+        inputSchema={},
+    )
+
+    with pytest.raises(ValueError, match="Invalid MCP tool name"):
+        client.tool_model_from_mcp_tool(omitted_name_tool)
+
+
+def test_tool_model_from_mcp_tool_handles_malformed_enum() -> None:
+    """A non-list ``enum`` (malformed metadata, since JSON Schema requires an
+    array) must degrade to type-based handling instead of raising when we
+    iterate it — consistent with the converter's other defensive fallbacks.
+    """
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="malformed_enum",
+        description="Malformed enum",
+        inputSchema={
+            "properties": {
+                # `enum` is a bare scalar, not a list: must not raise.
+                "bad_enum": {"type": "integer", "enum": 1},
+            },
+            "required": ["bad_enum"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.default_value("request") == "malformed_enum"
+    assert "bad_enum" in tool_model.model_fields
+    # Falls through to the "integer" type branch, so an int still validates.
+    assert tool_model(bad_enum=5).bad_enum == 5
+
+
+def test_tool_model_from_mcp_tool_maps_one_of_to_union() -> None:
+    """A oneOf schema should produce a union whose members both validate."""
+    from typing import Union, get_args, get_origin
+
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="one_of",
+        description="One-of tool",
+        inputSchema={
+            "properties": {
+                "value": {"oneOf": [{"type": "integer"}, {"type": "string"}]}
+            },
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+    annotation = tool_model.model_fields["value"].annotation
+
+    assert get_origin(annotation) is Union
+    assert set(get_args(annotation)) == {int, str}
+    assert tool_model(value=7).value == 7
+    assert tool_model(value="seven").value == "seven"
+
+
+def test_tool_model_from_mcp_tool_maps_const_to_literal() -> None:
+    """A const schema should produce a Literal that rejects other values."""
+    from typing import Literal, get_args, get_origin
+
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="const_value",
+        description="Const tool",
+        inputSchema={
+            "properties": {"value": {"const": "X"}},
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+    annotation = tool_model.model_fields["value"].annotation
+
+    assert get_origin(annotation) is Literal
+    assert get_args(annotation) == ("X",)
+    assert tool_model(value="X").value == "X"
+    with pytest.raises(ValidationError):
+        tool_model(value="Y")
+
+
+def test_tool_model_from_mcp_tool_inlines_single_all_of() -> None:
+    """A single-member allOf schema should inline its member type."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="single_all_of",
+        description="Single allOf tool",
+        inputSchema={
+            "properties": {"value": {"allOf": [{"type": "integer"}]}},
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.model_fields["value"].annotation is int
+    assert tool_model(value=7).value == 7
+
+
+def test_tool_model_from_mcp_tool_degrades_multi_all_of() -> None:
+    """A multi-member allOf schema should degrade to permissive Any."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="multi_all_of",
+        description="Multi allOf tool",
+        inputSchema={
+            "properties": {
+                "value": {"allOf": [{"type": "integer"}, {"type": "string"}]}
+            },
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.model_fields["value"].annotation is Any
+    assert tool_model(value={"anything": True}).value == {"anything": True}
+
+
+def test_tool_model_from_mcp_tool_maps_integer_enum_to_literal() -> None:
+    """An integer enum should produce a Literal that enforces its values."""
+    from typing import Literal, get_args, get_origin
+
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="integer_enum",
+        description="Integer enum tool",
+        inputSchema={
+            "properties": {"value": {"type": "integer", "enum": [1, 2, 3]}},
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+    annotation = tool_model.model_fields["value"].annotation
+
+    assert get_origin(annotation) is Literal
+    assert get_args(annotation) == (1, 2, 3)
+    assert tool_model(value=2).value == 2
+    with pytest.raises(ValidationError):
+        tool_model(value=4)
+
+
+@pytest.mark.parametrize(
+    "ref",
+    ["#/definitions/Node", "http://evil/x#/$defs/Node", 123],
+)
+def test_tool_model_from_mcp_tool_rejects_non_local_refs(ref: object) -> None:
+    """A non-local or non-string ref should degrade without resolving defs."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="bad_ref",
+        description="Bad ref tool",
+        inputSchema={
+            "$defs": {
+                "Node": {
+                    "type": "object",
+                    "properties": {"value": {"type": "integer"}},
+                }
+            },
+            "properties": {"node": {"$ref": ref}},
+            "required": ["node"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.model_fields["node"].annotation is Any
+    assert tool_model(node={"unrestricted": True}).node == {"unrestricted": True}
+
+
+def test_tool_model_from_mcp_tool_maps_all_null_any_of() -> None:
+    """An all-null anyOf schema should accept None as its only value."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="null_only",
+        description="Null-only tool",
+        inputSchema={
+            "properties": {"value": {"anyOf": [{"type": "null"}]}},
+            "required": ["value"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.model_fields["value"].annotation is type(None)
+    assert tool_model(value=None).value is None
+
+
+def test_tool_model_from_mcp_tool_handles_malformed_property_schemas() -> None:
+    """Malformed field schemas should degrade to permissive fields."""
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="malformed_properties",
+        description="Malformed properties",
+        inputSchema={
+            "properties": {
+                "null_field": None,
+                "list_field": [],
+                "object_field": {
+                    "type": "object",
+                    "properties": None,
+                    "required": None,
+                },
+                "array_field": {
+                    "type": "array",
+                    "items": None,
+                },
+                "nested_field": {
+                    "type": "object",
+                    "properties": {
+                        "child": None,
+                        "other": {
+                            "type": "string",
+                        },
+                    },
+                    "required": [{}, "child"],
+                },
+            },
+            "required": [{}, "null_field"],
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.default_value("request") == "malformed_properties"
+    assert list(tool_model.model_fields) == [
+        "request",
+        "purpose",
+        "id",
+        "null_field",
+        "list_field",
+        "object_field",
+        "array_field",
+        "nested_field",
+    ]
+    payload = tool_model(
+        null_field="anything",
+        list_field=123,
+        object_field={},
+        array_field=[object()],
+        nested_field={"child": object()},
+    )
+    assert payload.null_field == "anything"
+    assert payload.list_field == 123
+    assert payload.object_field.model_dump() == {}
+    assert payload.array_field
+    assert payload.nested_field.child is not None
+
+
+@pytest.mark.asyncio
+async def test_get_tools_async_rejects_invalid_tool_name() -> None:
+    """The optimized bulk path should report invalid tool names clearly."""
+    bad_tool = Tool.model_construct(
+        name=None,
+        description="Bad name",
+        inputSchema={},
+    )
+
+    async with FastMCPClient(mcp_server()) as client:
+        assert client.client is not None
+
+        async def list_tools() -> list[Tool]:
+            return [bad_tool]
+
+        client.client.list_tools = list_tools  # type: ignore[method-assign]
+
+        with pytest.raises(ValueError, match="Invalid MCP tool name"):
+            await client.get_tools_async()
+
+
+@pytest.mark.asyncio
+async def test_enum_field_becomes_literal() -> None:
+    """A JSON-Schema ``enum`` field maps to ``typing.Literal``: the generated
+    ToolMessage validates only the allowed values and echoes them back in its
+    schema. A ``Literal`` param on the server is emitted by fastmcp as an
+    ``enum`` in the tool's inputSchema, which the converter turns back into a
+    ``Literal``.
+    """
+    from typing import Literal, get_args, get_origin
+
+    from pydantic import ValidationError
+
+    server = FastMCP("EnumServer")
+
+    @server.tool()
+    def set_unit(
+        unit: Literal["celsius", "fahrenheit"],
+    ) -> str:
+        """Set the temperature unit."""
+        return unit
+
+    UnitTool = await get_tool_async(server, "set_unit")
+
+    # The generated field must be a Literal with exactly the allowed values.
+    annotation = UnitTool.model_fields["unit"].annotation
+    assert get_origin(annotation) is Literal
+    assert set(get_args(annotation)) == {"celsius", "fahrenheit"}
+
+    # Allowed value validates and round-trips.
+    msg = UnitTool(unit="celsius")
+    assert msg.unit == "celsius"
+
+    # Disallowed value is rejected by pydantic validation.
+    with pytest.raises(ValidationError):
+        UnitTool(unit="kelvin")
+
+    # The constraint is echoed into the LLM-facing JSON schema.
+    unit_schema = UnitTool.model_json_schema()["properties"]["unit"]
+    assert set(unit_schema.get("enum", [])) == {"celsius", "fahrenheit"}
+
+
+@pytest.mark.asyncio
+async def test_anyof_maps_to_union_and_optional() -> None:
+    """A JSON-Schema ``anyOf`` maps to ``typing.Union``; an ``anyOf`` that
+    includes ``{"type": "null"}`` (or an optional field) becomes ``Optional``.
+    fastmcp emits ``int | str`` and ``Optional[int]`` params as ``anyOf``.
+    """
+    from typing import Union, get_args, get_origin
+
+    server = FastMCP("UnionServer")
+
+    @server.tool()
+    def choose(value: int | str) -> str:
+        """Echo an int-or-str value."""
+        return str(value)
+
+    @server.tool()
+    def maybe(count: Optional[int] = None) -> str:
+        """Echo an optional count."""
+        return "none" if count is None else str(count)
+
+    # int | str  ->  Union[int, str]
+    ChooseTool = await get_tool_async(server, "choose")
+    choose_ann = ChooseTool.model_fields["value"].annotation
+    assert get_origin(choose_ann) is Union
+    assert set(get_args(choose_ann)) == {int, str}
+    assert ChooseTool(value=5).value == 5
+    assert ChooseTool(value="hi").value == "hi"
+
+    # Optional[int] (anyOf including null)  ->  Union[int, None]
+    MaybeTool = await get_tool_async(server, "maybe")
+    maybe_ann = MaybeTool.model_fields["count"].annotation
+    assert get_origin(maybe_ann) is Union
+    assert set(get_args(maybe_ann)) == {int, type(None)}
+    assert MaybeTool().count is None
+    assert MaybeTool(count=3).count == 3
+
+
+@pytest.mark.asyncio
+async def test_literal_union_convert_to_openai_tool_spec() -> None:
+    """End-to-end: a tool whose params map to ``Literal``/``Union`` must convert
+    cleanly into the OpenAI-facing tool definition.
+
+    The other schema tests stop at pydantic's raw ``model_json_schema()``; this
+    one exercises the layers that actually build the schema sent to the LLM:
+    langroid's ``ToolMessage.llm_function_schema()`` and the strict
+    structured-outputs transform ``format_schema_for_strict()``. Those rebuild
+    ``required``, strip ``title``/``additionalProperties``, and rewrite
+    ``oneOf``/``allOf`` -> ``anyOf``, so ``enum``/``anyOf`` must survive intact.
+    """
+    import copy
+    from typing import Literal
+
+    from langroid.agent.tool_message import format_schema_for_strict
+
+    server = FastMCP("ToolSpecServer")
+
+    @server.tool()
+    def configure(
+        color: Literal["red", "green", "blue"],
+        quantity: int | str,
+        size: Optional[Literal["S", "M", "L"]] = None,
+    ) -> str:
+        """Configure things."""
+        return "ok"
+
+    ConfigureTool = await get_tool_async(server, "configure")
+
+    # --- non-strict: the default OpenAI function/tool definition ---
+    params = ConfigureTool.llm_function_schema(request=True).parameters
+    props = params["properties"]
+
+    # Literal -> enum preserved
+    assert set(props["color"]["enum"]) == {"red", "green", "blue"}
+
+    # Union[int, str] -> anyOf preserved, with both branches
+    assert {b.get("type") for b in props["quantity"]["anyOf"]} == {
+        "integer",
+        "string",
+    }
+
+    # Optional[Literal] -> anyOf including a null branch, with the enum retained
+    size_branches = props["size"]["anyOf"]
+    assert {"type": "null"} in size_branches
+    assert any(set(b.get("enum", [])) == {"S", "M", "L"} for b in size_branches)
+
+    # required: mandatory params + request, but NOT the optional `size`
+    assert set(params["required"]) == {"color", "quantity", "request"}
+
+    # --- strict mode: must yield a valid structured-outputs schema ---
+    strict = copy.deepcopy(params)
+    format_schema_for_strict(strict)
+
+    # every object is closed (additionalProperties=False) and fully required,
+    # and OpenAI strict mode forbids oneOf/allOf (both rewritten to anyOf).
+    def assert_strict(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "object":
+                assert node.get("additionalProperties") is False
+                assert set(node.get("required", [])) == set(
+                    node.get("properties", {}).keys()
+                )
+            assert "oneOf" not in node
+            assert "allOf" not in node
+            for v in node.values():
+                assert_strict(v)
+        elif isinstance(node, list):
+            for v in node:
+                assert_strict(v)
+
+    assert_strict(strict)
+
+    # enum/anyOf survive the strict transform, and ALL props (incl. the
+    # now-required `size`) are marked required.
+    assert set(strict["properties"]["color"]["enum"]) == {"red", "green", "blue"}
+    assert {b.get("type") for b in strict["properties"]["quantity"]["anyOf"]} == {
+        "integer",
+        "string",
+    }
+    assert set(strict["required"]) == {"color", "quantity", "size", "request"}
+
+
+@pytest.mark.asyncio
+async def test_nested_model_param_resolves_ref() -> None:
+    """A pydantic-model tool param is emitted by fastmcp as a ``$ref`` into
+    ``$defs``. The converter resolves it into a nested model (instead of
+    degrading to ``Any``), so nested data validates and the constraint is
+    echoed into the LLM-facing schema as ``$defs``/``$ref``.
+    """
+    from pydantic import ValidationError
+
+    class Geo(BaseModel):
+        lat: float
+        lon: float
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+        geo: Optional[Geo] = None
+
+    server = FastMCP("NestedServer")
+
+    @server.tool()
+    def set_address(address: Address) -> str:
+        """Set an address."""
+        return address.street
+
+    AddrTool = await get_tool_async(server, "set_address")
+
+    # The `address` field is a real nested model, not Any.
+    addr_type = AddrTool.model_fields["address"].annotation
+    assert isinstance(addr_type, type) and issubclass(addr_type, BaseModel)
+
+    # Nested (incl. doubly-nested Geo) data validates and coerces into models.
+    msg = AddrTool(
+        address={"street": "Main", "zip_code": 12345, "geo": {"lat": 1.0, "lon": 2.0}}
+    )
+    assert msg.address.street == "Main"
+    assert msg.address.geo is not None and msg.address.geo.lat == 1.0
+
+    # A missing required nested field is rejected by validation.
+    with pytest.raises(ValidationError):
+        AddrTool(address={"street": "Main"})  # zip_code missing
+
+    # The LLM-facing tool schema resolves the model via $defs/$ref, not Any.
+    params = AddrTool.llm_function_schema(request=True).parameters
+    assert "$ref" in params["properties"]["address"]
+    ref_name = params["properties"]["address"]["$ref"].split("/")[-1]
+    assert ref_name in params["$defs"]
+
+
+@pytest.mark.asyncio
+async def test_union_and_list_of_model_params_resolve_refs() -> None:
+    """``$ref`` nodes inside ``anyOf`` (union of models) and ``items`` (list of
+    models) are resolved into nested models too.
+    """
+    from typing import Union, get_args, get_origin
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class POBox(BaseModel):
+        box: int
+
+    server = FastMCP("UnionModelServer")
+
+    @server.tool()
+    def deliver(loc: Union[Address, POBox]) -> str:
+        """Deliver to one of two location kinds."""
+        return "ok"
+
+    @server.tool()
+    def deliver_many(addrs: List[Address]) -> str:
+        """Deliver to many addresses."""
+        return "ok"
+
+    # Union[Address, POBox] -> Union of two nested models
+    DeliverTool = await get_tool_async(server, "deliver")
+    loc_ann = DeliverTool.model_fields["loc"].annotation
+    assert get_origin(loc_ann) is Union
+    members = get_args(loc_ann)
+    assert all(isinstance(m, type) and issubclass(m, BaseModel) for m in members)
+    assert DeliverTool(loc={"box": 7}).loc.box == 7
+    assert DeliverTool(loc={"street": "Main", "zip_code": 1}).loc.street == "Main"
+
+    # List[Address] -> List of a nested model
+    ManyTool = await get_tool_async(server, "deliver_many")
+    addrs_ann = ManyTool.model_fields["addrs"].annotation
+    assert get_origin(addrs_ann) is list
+    (item_type,) = get_args(addrs_ann)
+    assert isinstance(item_type, type) and issubclass(item_type, BaseModel)
+    msg = ManyTool(
+        addrs=[{"street": "A", "zip_code": 1}, {"street": "B", "zip_code": 2}]
+    )
+    assert [a.street for a in msg.addrs] == ["A", "B"]
+
+
+def test_self_referential_model_param_breaks_ref_cycle() -> None:
+    """A ``$defs`` entry that references itself must not recurse forever: the
+    cyclic edge degrades to ``Any`` while the rest of the model is built. Uses
+    a hand-built schema so the cycle is exercised deterministically.
+    """
+    client = FastMCPClient(mcp_server())
+    tool = Tool.model_construct(
+        name="walk",
+        description="Walk a tree.",
+        inputSchema={
+            "$defs": {
+                "Node": {
+                    "type": "object",
+                    "properties": {
+                        "val": {"type": "integer"},
+                        # self-reference: must not loop forever
+                        "child": {"$ref": "#/$defs/Node"},
+                    },
+                    "required": ["val"],
+                }
+            },
+            "properties": {"root": {"$ref": "#/$defs/Node"}},
+            "required": ["root"],
+            "type": "object",
+        },
+    )
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    root_type = tool_model.model_fields["root"].annotation
+    assert isinstance(root_type, type) and issubclass(root_type, BaseModel)
+    # Non-cyclic field is preserved with its real type.
+    assert root_type.model_fields["val"].annotation is int
+    # Nested data still validates; the cyclic `child` edge is permissive (Any).
+    inst = tool_model(root={"val": 1, "child": {"val": 2}})
+    assert inst.root.val == 1
+    assert inst.root.child == {"val": 2}

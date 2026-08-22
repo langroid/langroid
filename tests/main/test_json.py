@@ -155,6 +155,40 @@ def test_invalid_json_raises_error(invalid_input):
 
 
 @pytest.mark.parametrize(
+    "sloppy, expected",
+    [
+        # The shape langroid actually sees from weaker LLMs: a tool call with
+        # unquoted values, followed by a nested object.
+        (
+            '{\n  request: foo,\n  args: bar baz,\n  opts: {"a": b, "c": d e}\n}',
+            {"request": "foo", "args": "bar baz", "opts": {"a": "b", "c": "d e"}},
+        ),
+        (
+            "{\n  request: run_query,\n  query: SELECT * FROM t,\n"
+            '  filters: {"col": x, "op": eq}\n}',
+            {
+                "request": "run_query",
+                "query": "SELECT * FROM t",
+                "filters": {"col": "x", "op": "eq"},
+            },
+        ),
+    ],
+)
+def test_repair_keeps_unquoted_value_fields(sloppy, expected):
+    """Every key must survive repair, including after an unquoted value.
+
+    json-repair 0.61.3 changed this: an unquoted value followed by another key
+    and a nested object absorbs the next key/value pair into the value, so the
+    field is silently dropped rather than parsed. That is a data-loss bug for
+    us, since this is exactly the shape sloppy LLM tool calls take, and it is
+    why `pyproject.toml` caps json-repair below 0.61.3. If this test starts
+    failing after a dependency bump, the cap was lifted too far -- do not
+    "fix" it by relaxing the assertion.
+    """
+    assert parse_imperfect_json(sloppy) == expected
+
+
+@pytest.mark.parametrize(
     "s, field, expected",
     [
         # Scalar JSON should return "" (no crash)

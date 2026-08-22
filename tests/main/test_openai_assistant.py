@@ -1,7 +1,10 @@
 import tempfile
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.openai_assistant import (
     AssistantTool,
     OpenAIAssistant,
@@ -11,7 +14,7 @@ from langroid.agent.openai_assistant import (
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.language_models import OpenAIGPTConfig
+from langroid.language_models import LLMMessage, OpenAIGPTConfig, Role
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
@@ -24,6 +27,60 @@ class NabroskyTool(ToolMessage):
 
     def handle(self) -> str:
         return str(self.num**2)
+
+
+def test_openai_assistant_normalizes_none_tool_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Assistant tool outputs must be strings at the API boundary."""
+    agent = object.__new__(OpenAIAssistant)
+    agent.pending_tool_ids = ["tool-1"]
+    agent.cached_tool_ids = []
+    agent.thread = SimpleNamespace(id="thread-1")
+    agent.run = SimpleNamespace(id="run-1")
+    submissions: list[dict[str, Any]] = []
+    agent.runs = SimpleNamespace(
+        submit_tool_outputs=lambda **kwargs: submissions.append(kwargs)
+    )
+    hashed_messages: list[LLMMessage] = []
+    monkeypatch.setattr(
+        agent,
+        "_update_messages_hash",
+        lambda message: hashed_messages.append(message),
+    )
+    monkeypatch.setattr(agent, "_cache_messages_lookup", lambda: None)
+
+    message = ChatDocument.from_LLMMessage(
+        LLMMessage(role=Role.USER, content=None, tool_id="tool-1")
+    )
+    result = agent._llm_response_preprocess(message)
+
+    assert result is None
+    assert submissions[0]["tool_outputs"] == [{"tool_call_id": "tool-1", "output": ""}]
+    assert hashed_messages[0].content == "Result for Tool_id tool-1: "
+
+
+def test_openai_assistant_normalizes_none_thread_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Assistant thread messages must not stringify missing content as None."""
+    agent = object.__new__(OpenAIAssistant)
+    agent.pending_tool_ids = []
+    agent.cached_tool_ids = []
+    added_messages: list[tuple[str, Role]] = []
+    monkeypatch.setattr(
+        agent,
+        "_add_thread_message",
+        lambda message, role: added_messages.append((message, role)),
+    )
+    monkeypatch.setattr(agent, "_cache_messages_lookup", lambda: None)
+    monkeypatch.setattr(agent, "_start_run", lambda: None)
+
+    message = ChatDocument.from_LLMMessage(LLMMessage(role=Role.USER, content=None))
+    result = agent._llm_response_preprocess(message)
+
+    assert result is None
+    assert added_messages == [("", Role.USER)]
 
 
 def test_openai_assistant(test_settings: Settings):
