@@ -1,3 +1,4 @@
+import base64
 import copy
 import inspect
 import json
@@ -52,6 +53,7 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.mytypes import Entity, NonToolAction
+from langroid.parsing.file_attachment import FileAttachment
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
@@ -477,6 +479,165 @@ class ChatAgent(Agent):
                 LLMMessage(role=Role.ASSISTANT, content=response),
             ]
         )
+
+    def export_history(self) -> str:
+        """Export message history as a portable, versioned JSON snapshot.
+
+        Returns:
+            A JSON string containing the current message history.
+        """
+        messages: List[Dict[str, Any]] = []
+        for message in self.message_history:
+            data = message.model_dump(mode="json", exclude={"files"})
+            data["chat_document_id"] = ""
+            data["files"] = [
+                {
+                    "content_base64": base64.b64encode(file.content).decode("ascii"),
+                    "filename": file.filename,
+                    "mime_type": file.mime_type,
+                    "url": file.url,
+                    "detail": file.detail,
+                }
+                for file in message.files
+            ]
+            messages.append(data)
+        return json.dumps({"version": 1, "messages": messages}, ensure_ascii=False)
+
+    def import_history(
+        self,
+        snapshot: str,
+        max_size_bytes: int = 100 * 1024 * 1024,
+    ) -> None:
+        """Restore message history from :meth:`export_history` output.
+
+        Args:
+            snapshot: Versioned JSON snapshot to restore.
+            max_size_bytes: Maximum total decoded attachment size. Defaults to
+                100 MiB.
+
+        Raises:
+            ValueError: If the snapshot is malformed, has an unknown version,
+                starts with a non-system message, or exceeds ``max_size_bytes``.
+        """
+        try:
+            if max_size_bytes < 0:
+                raise ValueError("max_size_bytes must be non-negative")
+            payload = json.loads(snapshot)
+            if (
+                not isinstance(payload, dict)
+                or type(payload.get("version")) is not int
+                or payload["version"] != 1
+            ):
+                raise ValueError("unsupported version")
+            raw_messages = payload.get("messages")
+            if not isinstance(raw_messages, list):
+                raise ValueError("messages must be a list")
+
+            messages: List[LLMMessage] = []
+            total_attachment_bytes = 0
+            for raw_message in raw_messages:
+                if not isinstance(raw_message, dict):
+                    raise ValueError("message must be an object")
+                message_data = dict(raw_message)
+                raw_files = message_data.get("files", [])
+                if not isinstance(raw_files, list):
+                    raise ValueError("files must be a list")
+                files = []
+                for raw_file in raw_files:
+                    if not isinstance(raw_file, dict):
+                        raise ValueError("file must be an object")
+                    file_data = dict(raw_file)
+                    encoded_content = file_data.pop("content_base64")
+                    if not isinstance(encoded_content, str):
+                        raise ValueError("content_base64 must be a string")
+                    encoded_bytes = encoded_content.encode("ascii")
+                    padding = len(encoded_bytes) - len(encoded_bytes.rstrip(b"="))
+                    decoded_size = max(
+                        0,
+                        len(encoded_bytes) // 4 * 3 - min(padding, 2),
+                    )
+                    if total_attachment_bytes + decoded_size > max_size_bytes:
+                        raise ValueError(
+                            "decoded attachments exceed "
+                            f"max_size_bytes={max_size_bytes}"
+                        )
+                    content = base64.b64decode(encoded_bytes, validate=True)
+                    total_attachment_bytes += len(content)
+                    if total_attachment_bytes > max_size_bytes:
+                        raise ValueError(
+                            "decoded attachments exceed "
+                            f"max_size_bytes={max_size_bytes}"
+                        )
+                    files.append(FileAttachment(content=content, **file_data))
+                message_data["files"] = files
+                message_data["chat_document_id"] = ""
+                messages.append(LLMMessage.model_validate(message_data))
+            if messages and messages[0].role != Role.SYSTEM:
+                raise ValueError("first message must have role 'system'")
+            seen_call_ids: Set[str] = set()
+            unresolved_call_ids: Set[str] = set()
+            for message in messages:
+                if message.tool_calls:
+                    if message.role != Role.ASSISTANT:
+                        raise ValueError("tool calls must have role 'assistant'")
+                    for call in message.tool_calls:
+                        if call.function is None:
+                            raise ValueError("tool calls must include a function")
+                        call_id = call.id
+                        if call_id is None or not call_id or call_id != call_id.strip():
+                            raise ValueError(
+                                "tool call IDs must be nonblank and normalized"
+                            )
+                        if call_id in seen_call_ids:
+                            raise ValueError("tool call IDs must be unique")
+                        seen_call_ids.add(call_id)
+                        unresolved_call_ids.add(call_id)
+                if message.role == Role.TOOL:
+                    call_id = message.tool_call_id
+                    if (
+                        call_id is None
+                        or not call_id
+                        or call_id != call_id.strip()
+                        or call_id not in unresolved_call_ids
+                    ):
+                        raise ValueError(
+                            "tool result must reference a preceding pending tool call"
+                        )
+                    unresolved_call_ids.remove(call_id)
+        except (
+            KeyError,
+            RecursionError,
+            TypeError,
+            UnicodeEncodeError,
+            ValueError,
+        ) as exc:
+            raise ValueError(f"Invalid history snapshot: {exc}") from exc
+
+        all_calls = {
+            call.id: call
+            for message in messages
+            for call in (message.tool_calls or [])
+            if call.id is not None
+        }
+        completed_call_ids = {
+            message.tool_call_id
+            for message in messages
+            if message.role == Role.TOOL and message.tool_call_id is not None
+        }
+        old_chat_document_ids = {
+            message.chat_document_id
+            for message in self.message_history
+            if message.chat_document_id
+        }
+        for chat_document_id in old_chat_document_ids:
+            ChatDocument.delete_id(chat_document_id)
+        self.message_history = messages
+        self.oai_tool_id2call = all_calls
+        self.oai_tool_calls = [
+            call
+            for call_id, call in all_calls.items()
+            if call_id not in completed_call_ids
+        ]
 
     def tool_format_rules(self) -> str:
         """
