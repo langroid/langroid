@@ -53093,21 +53093,16 @@ headings = []  # list of (level, heading_line, start_line_idx)
 in_code_fence = False
 fence_marker = None  # track which triple-backtick or ~~~ opened
 ⋮----
-# Check if we're toggling in/out of a fenced code block
-# Typically triple backtick or triple tilde: ``` or ~~~
-# We do a *loose* check: a line that starts with at least 3 backticks or tildes
-# ignoring trailing text. You can refine as needed.
+# Opening fences may be followed by an info string.
 fence_match = re.match(r"^(```+|~~~+)", line.strip())
 ⋮----
-# If we are not in a fence, we enter one;
-# If we are in a fence, we exit if the marker matches
 marker = fence_match.group(1)  # e.g. "```" or "~~~~"
-⋮----
 in_code_fence = True
 fence_marker = marker
 ⋮----
-# only close if marker uses the same character and is at least
-# as long as the opening marker.
+# Closing fences contain only the opening character (plus optional
+# surrounding spaces or tabs) and are at least as long as the opener.
+closing_marker = line.rstrip("\r\n").strip(" \t")
 ⋮----
 fence_marker = None
 ⋮----
@@ -63634,6 +63629,12 @@ def test_fence_closed_by_longer_same_char_fence()
 ⋮----
 """A closing fence may be strictly longer than the opening fence."""
 ⋮----
+@pytest.mark.parametrize("fence", ["````", "~~~~"])
+def test_fence_run_followed_by_text_does_not_close(fence: str)
+⋮----
+"""A fence-length run with trailing text is content, not a closer."""
+md = f"""# Real Header
+⋮----
 def test_unclosed_fence_suppresses_headings_without_leaking_state()
 ⋮----
 """An unclosed fence suppresses all later headings through EOF.
@@ -70146,6 +70147,360 @@ llm_config = CustomOpenAIGPTConfig(
 response = llm.chat("What is 3+4?")
 </file>
 
+<file path="tests/main/test_prep_llm_message.py">
+CHAT_CONTEXT_LENGTH = 16_000
+MAX_OUTPUT_TOKENS = 1000
+MIN_OUTPUT_TOKENS = 50
+⋮----
+@pytest.fixture
+def agent()
+⋮----
+"""Create a ChatAgent with a mock LLM for testing truncation."""
+config = ChatAgentConfig(
+⋮----
+# Small context for testing truncation
+⋮----
+agent = ChatAgent(config)
+⋮----
+# Create a mock parser that counts tokens as characters for simplicity
+class MockParser
+⋮----
+def num_tokens(self, text: str | LLMMessage)
+⋮----
+def truncate_tokens(self, text, tokens, warning="")
+⋮----
+# Create a mock LLM that returns a fixed context length
+class MockLLM
+⋮----
+def chat_context_length(self) -> int
+⋮----
+def get_stream(self) -> bool
+⋮----
+def supports_functions_or_tools(self) -> bool
+⋮----
+# Initialize message history with a system message
+# agent.message_history = [LLMMessage(role=Role.SYSTEM, content="System message")]
+⋮----
+def test_no_truncation_needed(agent)
+⋮----
+"""Test when no truncation is needed."""
+# Add a short user message (well within context limits)
+message = "Short user message"
+⋮----
+# Call the method
+⋮----
+# History should include system message and the new user message
+⋮----
+assert output_len == MAX_OUTPUT_TOKENS  # Original max output tokens
+⋮----
+def test_reduce_output_length(agent)
+⋮----
+"""Test when only output length reduction is needed."""
+# Fill most of the context with long messages
+long_message = "X" * 15_000  # 700 tokens
+⋮----
+# New user message
+message = "Another message"
+⋮----
+# Check that output length was reduced but no messages were truncated
+⋮----
+assert hist[1].content == long_message  # Not truncated
+assert output_len < MAX_OUTPUT_TOKENS  # Output length was reduced
+⋮----
+def test_truncate_messages(agent)
+⋮----
+"""Test when message truncation is needed."""
+⋮----
+# Fill the context with messages that will require truncation
+⋮----
+# Add several messages that will need truncation
+⋮----
+orig_msg_len = len(agent.message_history[1].content)
+⋮----
+# Check that early messages were truncated
+assert len(hist) == 8  # All messages still present
+⋮----
+# First user message truncated
+⋮----
+assert output_len >= MIN_OUTPUT_TOKENS  # At least min_output_tokens
+⋮----
+@pytest.fixture
+def agent_drop_turns()
+⋮----
+"""Create a ChatAgent with drop_turns strategy for testing."""
+⋮----
+def chat_context_length(self)
+⋮----
+def supports_functions_or_tools(self)
+⋮----
+def test_drop_turns_strategy(agent_drop_turns)
+⋮----
+"""Test when drop_turns strategy is used to handle context overflow."""
+agent = agent_drop_turns
+⋮----
+# Fill the context with messages that will require dropping turns
+⋮----
+# Add several complete turns that will need to be dropped
+⋮----
+orig_hist_len = len(agent.message_history)
+⋮----
+# Check that turns were dropped (fewer messages than original)
+⋮----
+# System message should still be present
+⋮----
+# The last user message should be present
+⋮----
+# Check alternating pattern is preserved
+⋮----
+def test_chat_num_tokens_counts_attachment_payload(agent)
+⋮----
+"""Test attachment payloads are included in chat token accounting."""
+model = "gemini/gemini-2.5-flash"
+⋮----
+attachment = FileAttachment.from_bytes(
+message = LLMMessage(
+⋮----
+expected_attachment_tokens = len(
+⋮----
+def test_attachment_payload_reduces_output_length()
+⋮----
+"""Test preflight shrinks output length when attachments consume context."""
+context_length = 1000
+max_output_tokens = 500
+min_output_tokens = 50
+⋮----
+user_input = ChatDocument(
+⋮----
+def test_drop_turns_preserves_last_turn(agent_drop_turns)
+⋮----
+"""Test that drop_turns preserves the system message and last turn."""
+⋮----
+# Set up history with multiple turns
+⋮----
+# Add turns with large content that will force dropping
+⋮----
+# Call the method with a final message
+⋮----
+# System message must be preserved
+⋮----
+# Last message must be the final user message
+⋮----
+# No message should contain "Contents truncated" (we drop, not truncate)
+⋮----
+def test_drop_turns_accounts_for_buffer()
+⋮----
+"""
+    Test that drop_turns loop accounts for CHAT_HISTORY_BUFFER.
+
+    This is a regression test for a P1 bug where the loop would exit when:
+        tokens <= context - min_output_tokens
+    But then output_len = context - tokens - CHAT_HISTORY_BUFFER could go
+    negative, causing spurious errors.
+
+    The fix ensures the loop continues until there's room for both
+    min_output_tokens AND CHAT_HISTORY_BUFFER.
+    """
+# CHAT_HISTORY_BUFFER is 300 in the code
+# We need to create a scenario where history is in the "danger zone":
+# between (context - min_output - buffer) and (context - min_output)
+#
+# With context=16000, min_output=50, buffer=300:
+# - Old buggy threshold: 16000 - 50 = 15950
+# - Fixed threshold: 16000 - 50 - 300 = 15650
+# - Danger zone: 15650 < tokens <= 15950
+⋮----
+system_message="S" * 100,  # 100 tokens
+⋮----
+# Create history that lands in the danger zone after some turns
+# System msg = 100 tokens
+# We want total around 15800-15900 tokens (in danger zone)
+# Add turns that will require the buffer-aware loop to drop them
+⋮----
+# Add turns: each turn is ~5000 tokens (USER 4980 + ASSISTANT 20)
+# 3 turns = ~15000 + system 100 = ~15100
+# Final message ~800 = ~15900 total (in danger zone)
+⋮----
+# This should NOT raise an error - the fix ensures we drop enough turns
+# to accommodate both min_output_tokens AND CHAT_HISTORY_BUFFER
+⋮----
+# output_len must be positive and at least min_output_tokens
+⋮----
+# History should have been compressed
+⋮----
+# ---------------------------------------------------------------------------
+# Regression tests for "missing" (None) vs "empty" ("") message content.
+⋮----
+# Gemini 3.x rejects (400 INVALID_ARGUMENT) an assistant turn that carries BOTH
+# a tool/function call AND non-empty text content. Langroid used to pad empty
+# content with a single space (" "), which tripped this on every tool-result
+# turn. Content is now carried faithfully: a response with no content becomes
+# LLMMessage.content=None (dropped from the wire), distinct from "".
+⋮----
+MODEL = "gpt-4o"
+⋮----
+def _tool_call()
+⋮----
+def test_api_dict_omits_content_for_tool_call_message()
+⋮----
+"""An assistant tool-call turn with no content omits `content` on the wire
+    (never emits " ", which Gemini 3.x rejects alongside a tool call)."""
+d = LLMMessage(
+⋮----
+def test_api_dict_omits_content_for_function_call_message()
+⋮----
+"""A legacy function-call-only turn also omits `content` on the wire."""
+function_call = LLMFunctionCall(
+⋮----
+def test_api_dict_pads_empty_message_without_tools()
+⋮----
+"""A message with empty content (None or "") and no tool/function call must
+    still send something, since some APIs (e.g. Gemini) reject an empty msg."""
+⋮----
+def test_api_dict_keeps_real_content()
+⋮----
+d = LLMMessage(role=Role.USER, content="hello").api_dict(MODEL)
+⋮----
+def test_missing_content_is_none_end_to_end()
+⋮----
+"""A tool-only LLM response (message=None) is carried faithfully as
+    content_is_none -> LLMMessage.content=None -> omitted from api_dict."""
+resp = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+doc = ChatDocument.from_LLMResponse(resp)
+assert doc.content == ""  # ChatDocument.content stays a mandatory str
+⋮----
+msg = ChatDocument.to_LLMMessage(doc)[0]
+⋮----
+def test_empty_content_stays_empty_not_none()
+⋮----
+"""A present-but-empty response (message="") is distinct from missing:
+    it must NOT be coerced to None."""
+resp = LLMResponse(message="", oai_tool_calls=[_tool_call()])
+⋮----
+def test_none_content_round_trips_through_chatdocument()
+⋮----
+"""LLMMessage.content=None survives an LLMMessage -> ChatDocument ->
+    LLMMessage round-trip (history is rebuilt this way)."""
+original = LLMMessage(role=Role.ASSISTANT, content=None, tool_calls=[_tool_call()])
+doc = ChatDocument.from_LLMMessage(original)
+⋮----
+rebuilt = ChatDocument.to_LLMMessage(doc)[0]
+⋮----
+def test_prep_retains_fresh_tool_only_message(agent: ChatAgent) -> None
+⋮----
+"""History preparation retains a fresh call-only assistant turn."""
+doc = ChatDocument.from_LLMResponse(
+⋮----
+"""Rendering safely separates absent text from displayed tool-call data."""
+displayed: dict[str, object] = {}
+⋮----
+response = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+⋮----
+def test_none_content_is_safe_for_token_counting(agent)
+⋮----
+"""Token counting treats missing content as zero text tokens."""
+⋮----
+def test_truncate_tool_only_message_preserves_none(agent)
+⋮----
+"""Truncation must not add warning text alongside a tool call."""
+⋮----
+truncated = agent.truncate_message(-1)
+⋮----
+"""Truncation must preserve a present-but-empty result."""
+message = LLMMessage(role=role, content="", **identifying_field)
+⋮----
+original_payload = message.api_dict(MODEL)
+⋮----
+"""Blank results already retained by call payloads remain truncatable."""
+⋮----
+"""Malformed blank results remain truncation candidates."""
+⋮----
+"""Whitespace-only conversation messages remain truncation candidates."""
+content = " " * 10_000
+⋮----
+def test_content_is_none_overrides_populated_content_any()
+⋮----
+"""A call-only turn stays content=None even when content_any was populated
+    (e.g. by _load_output_format parsing the tool args under a strict
+    output_format). Otherwise the serialized args would be sent as assistant
+    text alongside tool_calls, which is the Gemini 3.x rejection this avoids."""
+doc = ChatDocument(
+⋮----
+# parsed structured output (tool args), NOT message text:
+⋮----
+def test_content_is_none_overrides_stale_text_after_serialization()
+⋮----
+"""The explicit missing-content flag wins after a hostile round-trip."""
+⋮----
+reloaded = ChatDocument.model_validate(doc.model_dump())
+⋮----
+msg = ChatDocument.to_LLMMessage(reloaded)[0]
+⋮----
+"""A tool result with genuinely empty content (e.g. a tool that succeeds
+    with no output) must stay in history and clear the pending tool call from
+    agent.oai_tool_calls, not get silently dropped (issue #1063). Before the
+    fix, the history filter kept a message only if it had non-empty content, a
+    function_call, or tool_calls -- none of which a TOOL-role result carries,
+    so an empty-content result was dropped and its call_id never reached
+    `done_tools`, leaving the call marked pending forever."""
+pending_call = _tool_call()
+⋮----
+tool_msgs = [m for m in hist if m.role == Role.TOOL]
+⋮----
+"""An empty legacy function result must stay in message history."""
+function_name = "check_weather"
+⋮----
+parent = ChatDocument(
+⋮----
+result = ChatDocument(
+⋮----
+function_msgs = [m for m in hist if m.role == Role.FUNCTION]
+⋮----
+"""An identified empty result completes only its matching pending call."""
+first_call = _tool_call()
+second_call = _tool_call()
+⋮----
+tool_messages = [message for message in hist if message.role == Role.TOOL]
+⋮----
+class RecordingMockLM(MockLM)
+⋮----
+"""Mock LM that records the messages supplied to its chat method."""
+⋮----
+def __init__(self, config: MockLMConfig) -> None
+⋮----
+"""Record messages before returning the configured local response."""
+⋮----
+def test_llm_response_sends_empty_tool_result_to_lm() -> None
+⋮----
+"""llm_response sends an empty correlated result and returns a document."""
+llm_config = MockLMConfig(default_response="tool result received")
+agent = ChatAgent(
+recording_llm = RecordingMockLM(llm_config)
+⋮----
+response = agent.llm_response(result)
+⋮----
+tool_messages = [
+⋮----
+def test_prep_drops_empty_tool_result_without_id(agent: ChatAgent) -> None
+⋮----
+"""An empty tool result without a correlation ID is malformed."""
+⋮----
+"""An empty function result without its function name is malformed."""
+function_call = LLMFunctionCall.model_construct(
+⋮----
+"""Malformed empty results are not valid history entries."""
+field = "tool_call_id" if role == Role.TOOL else "name"
+message = LLMMessage.model_construct(role=role, content="")
+⋮----
+"""Whitespace identifiers cannot complete or remove pending calls."""
+valid_call = _tool_call()
+⋮----
+malformed_call = _tool_call()
+⋮----
+malformed_function = LLMFunctionCall(
+⋮----
+pending_calls = list(agent.oai_tool_calls)
+</file>
+
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
 """
 Agent that allows interaction with an SQL database using SQLAlchemy library.
@@ -72026,360 +72381,6 @@ model_names = tuple(_model_name(model) for model in models)
 def _model_name(model: str | ModelName) -> str
 </file>
 
-<file path="tests/main/test_prep_llm_message.py">
-CHAT_CONTEXT_LENGTH = 16_000
-MAX_OUTPUT_TOKENS = 1000
-MIN_OUTPUT_TOKENS = 50
-⋮----
-@pytest.fixture
-def agent()
-⋮----
-"""Create a ChatAgent with a mock LLM for testing truncation."""
-config = ChatAgentConfig(
-⋮----
-# Small context for testing truncation
-⋮----
-agent = ChatAgent(config)
-⋮----
-# Create a mock parser that counts tokens as characters for simplicity
-class MockParser
-⋮----
-def num_tokens(self, text: str | LLMMessage)
-⋮----
-def truncate_tokens(self, text, tokens, warning="")
-⋮----
-# Create a mock LLM that returns a fixed context length
-class MockLLM
-⋮----
-def chat_context_length(self) -> int
-⋮----
-def get_stream(self) -> bool
-⋮----
-def supports_functions_or_tools(self) -> bool
-⋮----
-# Initialize message history with a system message
-# agent.message_history = [LLMMessage(role=Role.SYSTEM, content="System message")]
-⋮----
-def test_no_truncation_needed(agent)
-⋮----
-"""Test when no truncation is needed."""
-# Add a short user message (well within context limits)
-message = "Short user message"
-⋮----
-# Call the method
-⋮----
-# History should include system message and the new user message
-⋮----
-assert output_len == MAX_OUTPUT_TOKENS  # Original max output tokens
-⋮----
-def test_reduce_output_length(agent)
-⋮----
-"""Test when only output length reduction is needed."""
-# Fill most of the context with long messages
-long_message = "X" * 15_000  # 700 tokens
-⋮----
-# New user message
-message = "Another message"
-⋮----
-# Check that output length was reduced but no messages were truncated
-⋮----
-assert hist[1].content == long_message  # Not truncated
-assert output_len < MAX_OUTPUT_TOKENS  # Output length was reduced
-⋮----
-def test_truncate_messages(agent)
-⋮----
-"""Test when message truncation is needed."""
-⋮----
-# Fill the context with messages that will require truncation
-⋮----
-# Add several messages that will need truncation
-⋮----
-orig_msg_len = len(agent.message_history[1].content)
-⋮----
-# Check that early messages were truncated
-assert len(hist) == 8  # All messages still present
-⋮----
-# First user message truncated
-⋮----
-assert output_len >= MIN_OUTPUT_TOKENS  # At least min_output_tokens
-⋮----
-@pytest.fixture
-def agent_drop_turns()
-⋮----
-"""Create a ChatAgent with drop_turns strategy for testing."""
-⋮----
-def chat_context_length(self)
-⋮----
-def supports_functions_or_tools(self)
-⋮----
-def test_drop_turns_strategy(agent_drop_turns)
-⋮----
-"""Test when drop_turns strategy is used to handle context overflow."""
-agent = agent_drop_turns
-⋮----
-# Fill the context with messages that will require dropping turns
-⋮----
-# Add several complete turns that will need to be dropped
-⋮----
-orig_hist_len = len(agent.message_history)
-⋮----
-# Check that turns were dropped (fewer messages than original)
-⋮----
-# System message should still be present
-⋮----
-# The last user message should be present
-⋮----
-# Check alternating pattern is preserved
-⋮----
-def test_chat_num_tokens_counts_attachment_payload(agent)
-⋮----
-"""Test attachment payloads are included in chat token accounting."""
-model = "gemini/gemini-2.5-flash"
-⋮----
-attachment = FileAttachment.from_bytes(
-message = LLMMessage(
-⋮----
-expected_attachment_tokens = len(
-⋮----
-def test_attachment_payload_reduces_output_length()
-⋮----
-"""Test preflight shrinks output length when attachments consume context."""
-context_length = 1000
-max_output_tokens = 500
-min_output_tokens = 50
-⋮----
-user_input = ChatDocument(
-⋮----
-def test_drop_turns_preserves_last_turn(agent_drop_turns)
-⋮----
-"""Test that drop_turns preserves the system message and last turn."""
-⋮----
-# Set up history with multiple turns
-⋮----
-# Add turns with large content that will force dropping
-⋮----
-# Call the method with a final message
-⋮----
-# System message must be preserved
-⋮----
-# Last message must be the final user message
-⋮----
-# No message should contain "Contents truncated" (we drop, not truncate)
-⋮----
-def test_drop_turns_accounts_for_buffer()
-⋮----
-"""
-    Test that drop_turns loop accounts for CHAT_HISTORY_BUFFER.
-
-    This is a regression test for a P1 bug where the loop would exit when:
-        tokens <= context - min_output_tokens
-    But then output_len = context - tokens - CHAT_HISTORY_BUFFER could go
-    negative, causing spurious errors.
-
-    The fix ensures the loop continues until there's room for both
-    min_output_tokens AND CHAT_HISTORY_BUFFER.
-    """
-# CHAT_HISTORY_BUFFER is 300 in the code
-# We need to create a scenario where history is in the "danger zone":
-# between (context - min_output - buffer) and (context - min_output)
-#
-# With context=16000, min_output=50, buffer=300:
-# - Old buggy threshold: 16000 - 50 = 15950
-# - Fixed threshold: 16000 - 50 - 300 = 15650
-# - Danger zone: 15650 < tokens <= 15950
-⋮----
-system_message="S" * 100,  # 100 tokens
-⋮----
-# Create history that lands in the danger zone after some turns
-# System msg = 100 tokens
-# We want total around 15800-15900 tokens (in danger zone)
-# Add turns that will require the buffer-aware loop to drop them
-⋮----
-# Add turns: each turn is ~5000 tokens (USER 4980 + ASSISTANT 20)
-# 3 turns = ~15000 + system 100 = ~15100
-# Final message ~800 = ~15900 total (in danger zone)
-⋮----
-# This should NOT raise an error - the fix ensures we drop enough turns
-# to accommodate both min_output_tokens AND CHAT_HISTORY_BUFFER
-⋮----
-# output_len must be positive and at least min_output_tokens
-⋮----
-# History should have been compressed
-⋮----
-# ---------------------------------------------------------------------------
-# Regression tests for "missing" (None) vs "empty" ("") message content.
-⋮----
-# Gemini 3.x rejects (400 INVALID_ARGUMENT) an assistant turn that carries BOTH
-# a tool/function call AND non-empty text content. Langroid used to pad empty
-# content with a single space (" "), which tripped this on every tool-result
-# turn. Content is now carried faithfully: a response with no content becomes
-# LLMMessage.content=None (dropped from the wire), distinct from "".
-⋮----
-MODEL = "gpt-4o"
-⋮----
-def _tool_call()
-⋮----
-def test_api_dict_omits_content_for_tool_call_message()
-⋮----
-"""An assistant tool-call turn with no content omits `content` on the wire
-    (never emits " ", which Gemini 3.x rejects alongside a tool call)."""
-d = LLMMessage(
-⋮----
-def test_api_dict_omits_content_for_function_call_message()
-⋮----
-"""A legacy function-call-only turn also omits `content` on the wire."""
-function_call = LLMFunctionCall(
-⋮----
-def test_api_dict_pads_empty_message_without_tools()
-⋮----
-"""A message with empty content (None or "") and no tool/function call must
-    still send something, since some APIs (e.g. Gemini) reject an empty msg."""
-⋮----
-def test_api_dict_keeps_real_content()
-⋮----
-d = LLMMessage(role=Role.USER, content="hello").api_dict(MODEL)
-⋮----
-def test_missing_content_is_none_end_to_end()
-⋮----
-"""A tool-only LLM response (message=None) is carried faithfully as
-    content_is_none -> LLMMessage.content=None -> omitted from api_dict."""
-resp = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
-doc = ChatDocument.from_LLMResponse(resp)
-assert doc.content == ""  # ChatDocument.content stays a mandatory str
-⋮----
-msg = ChatDocument.to_LLMMessage(doc)[0]
-⋮----
-def test_empty_content_stays_empty_not_none()
-⋮----
-"""A present-but-empty response (message="") is distinct from missing:
-    it must NOT be coerced to None."""
-resp = LLMResponse(message="", oai_tool_calls=[_tool_call()])
-⋮----
-def test_none_content_round_trips_through_chatdocument()
-⋮----
-"""LLMMessage.content=None survives an LLMMessage -> ChatDocument ->
-    LLMMessage round-trip (history is rebuilt this way)."""
-original = LLMMessage(role=Role.ASSISTANT, content=None, tool_calls=[_tool_call()])
-doc = ChatDocument.from_LLMMessage(original)
-⋮----
-rebuilt = ChatDocument.to_LLMMessage(doc)[0]
-⋮----
-def test_prep_retains_fresh_tool_only_message(agent: ChatAgent) -> None
-⋮----
-"""History preparation retains a fresh call-only assistant turn."""
-doc = ChatDocument.from_LLMResponse(
-⋮----
-"""Rendering safely separates absent text from displayed tool-call data."""
-displayed: dict[str, object] = {}
-⋮----
-response = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
-⋮----
-def test_none_content_is_safe_for_token_counting(agent)
-⋮----
-"""Token counting treats missing content as zero text tokens."""
-⋮----
-def test_truncate_tool_only_message_preserves_none(agent)
-⋮----
-"""Truncation must not add warning text alongside a tool call."""
-⋮----
-truncated = agent.truncate_message(-1)
-⋮----
-"""Truncation must preserve a present-but-empty result."""
-message = LLMMessage(role=role, content="", **identifying_field)
-⋮----
-original_payload = message.api_dict(MODEL)
-⋮----
-"""Blank results already retained by call payloads remain truncatable."""
-⋮----
-"""Malformed blank results remain truncation candidates."""
-⋮----
-"""Whitespace-only conversation messages remain truncation candidates."""
-content = " " * 10_000
-⋮----
-def test_content_is_none_overrides_populated_content_any()
-⋮----
-"""A call-only turn stays content=None even when content_any was populated
-    (e.g. by _load_output_format parsing the tool args under a strict
-    output_format). Otherwise the serialized args would be sent as assistant
-    text alongside tool_calls, which is the Gemini 3.x rejection this avoids."""
-doc = ChatDocument(
-⋮----
-# parsed structured output (tool args), NOT message text:
-⋮----
-def test_content_is_none_overrides_stale_text_after_serialization()
-⋮----
-"""The explicit missing-content flag wins after a hostile round-trip."""
-⋮----
-reloaded = ChatDocument.model_validate(doc.model_dump())
-⋮----
-msg = ChatDocument.to_LLMMessage(reloaded)[0]
-⋮----
-"""A tool result with genuinely empty content (e.g. a tool that succeeds
-    with no output) must stay in history and clear the pending tool call from
-    agent.oai_tool_calls, not get silently dropped (issue #1063). Before the
-    fix, the history filter kept a message only if it had non-empty content, a
-    function_call, or tool_calls -- none of which a TOOL-role result carries,
-    so an empty-content result was dropped and its call_id never reached
-    `done_tools`, leaving the call marked pending forever."""
-pending_call = _tool_call()
-⋮----
-tool_msgs = [m for m in hist if m.role == Role.TOOL]
-⋮----
-"""An empty legacy function result must stay in message history."""
-function_name = "check_weather"
-⋮----
-parent = ChatDocument(
-⋮----
-result = ChatDocument(
-⋮----
-function_msgs = [m for m in hist if m.role == Role.FUNCTION]
-⋮----
-"""An identified empty result completes only its matching pending call."""
-first_call = _tool_call()
-second_call = _tool_call()
-⋮----
-tool_messages = [message for message in hist if message.role == Role.TOOL]
-⋮----
-class RecordingMockLM(MockLM)
-⋮----
-"""Mock LM that records the messages supplied to its chat method."""
-⋮----
-def __init__(self, config: MockLMConfig) -> None
-⋮----
-"""Record messages before returning the configured local response."""
-⋮----
-def test_llm_response_sends_empty_tool_result_to_lm() -> None
-⋮----
-"""llm_response sends an empty correlated result and returns a document."""
-llm_config = MockLMConfig(default_response="tool result received")
-agent = ChatAgent(
-recording_llm = RecordingMockLM(llm_config)
-⋮----
-response = agent.llm_response(result)
-⋮----
-tool_messages = [
-⋮----
-def test_prep_drops_empty_tool_result_without_id(agent: ChatAgent) -> None
-⋮----
-"""An empty tool result without a correlation ID is malformed."""
-⋮----
-"""An empty function result without its function name is malformed."""
-function_call = LLMFunctionCall.model_construct(
-⋮----
-"""Malformed empty results are not valid history entries."""
-field = "tool_call_id" if role == Role.TOOL else "name"
-message = LLMMessage.model_construct(role=role, content="")
-⋮----
-"""Whitespace identifiers cannot complete or remove pending calls."""
-valid_call = _tool_call()
-⋮----
-malformed_call = _tool_call()
-⋮----
-malformed_function = LLMFunctionCall(
-⋮----
-pending_calls = list(agent.oai_tool_calls)
-</file>
-
 <file path="mkdocs.yml">
 site_name: "langroid"
 repo_name: langroid/langroid
@@ -73668,7 +73669,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>

@@ -307,6 +307,28 @@ Real content.
     assert child_headings == ["## Real Subheader"]
 
 
+@pytest.mark.parametrize("fence", ["````", "~~~~"])
+def test_fence_run_followed_by_text_does_not_close(fence: str):
+    """A fence-length run with trailing text is content, not a closer."""
+    md = f"""# Real Header
+
+{fence}python
+{fence}not-a-close
+# Not a Header
+{fence}
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
 def test_unclosed_fence_suppresses_headings_without_leaking_state():
     """An unclosed fence suppresses all later headings through EOF.
 
