@@ -26488,925 +26488,6 @@ message = self._format_message()
 def _format_message(self) -> str
 </file>
 
-<file path="langroid/agent/special/doc_chat_agent.py">
-# # langroid/agent/special/doc_chat_agent.py
-"""
-Agent that supports asking queries about a set of documents, using
-retrieval-augmented generation (RAG).
-
-Functionality includes:
-- summarizing a document, with a custom instruction; see `summarize_docs`
-- asking a question about a document; see `answer_from_docs`
-
-Note: to use the sentence-transformer embeddings, you must install
-langroid with the [hf-embeddings] extra, e.g.:
-
-pip install "langroid[hf-embeddings]"
-
-"""
-⋮----
-@cache
-def apply_nest_asyncio() -> None
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-@dataclass
-class _CrossEncoderCacheEntry
-⋮----
-model: "CrossEncoder"
-lock: threading.RLock
-⋮----
-_CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
-_CROSS_ENCODER_CACHE_LOCK = threading.Lock()
-⋮----
-def _auto_cross_encoder_device() -> str
-⋮----
-mps = getattr(torch.backends, "mps", None)
-⋮----
-actual_device = device or _auto_cross_encoder_device()
-cache_key = f"{model_name}::{actual_device}"
-entry = _CROSS_ENCODER_CACHE.get(cache_key)
-⋮----
-model = CrossEncoder(model_name, device=actual_device)
-entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
-⋮----
-DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
-⋮----
-CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
-⋮----
-# Check if  module exists in sys.path
-spec = importlib.util.find_spec("sentence_transformers")
-has_sentence_transformers = spec is not None
-⋮----
-has_sentence_transformers = False
-⋮----
-hf_embed_config = SentenceTransformerEmbeddingsConfig(
-⋮----
-oai_embed_config = OpenAIEmbeddingsConfig(
-⋮----
-class ChunkEnrichmentAgentConfig(ChatAgentConfig)
-⋮----
-batch_size: int = 50
-delimiter: str = CHUNK_ENRICHMENT_DELIMITER
-enrichment_prompt_fn: Callable[[str], str] = lambda x: x
-⋮----
-class DocChatAgentConfig(ChatAgentConfig)
-⋮----
-system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
-summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
-# extra fields to include in content as key=value pairs
-# (helps retrieval for table-like data)
-add_fields_to_content: List[str] = []
-filter_fields: List[str] = []  # fields usable in filter
-retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
-extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
-filter: str | None = (
-⋮----
-None  # filter condition for various lexical/semantic search fns
-⋮----
-conversation_mode: bool = True  # accumulate message history?
-# retain retrieved context? Setting to True increases token consumption, but
-# helps LLM fix citation errors and improve accuracy of follow-up questions.
-retain_context: bool = False
-# In assistant mode, DocChatAgent receives questions from another Agent,
-# and those will already be in stand-alone form, so in this mode
-# there is no need to convert them to stand-alone form.
-assistant_mode: bool = False
-# Use LLM to generate hypothetical answer A to the query Q,
-# and use the embed(A) to find similar chunks in vecdb.
-# Referred to as HyDE in the paper:
-# https://arxiv.org/pdf/2212.10496.pdf
-# It is False by default; its benefits depends on the context.
-hypothetical_answer: bool = False
-# Optional config for chunk enrichment agent, e.g. to enrich
-# chunks with hypothetical questions, or keywords to increase
-# the "semantic surface area" of the chunks, which may help
-# improve retrieval.
-chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
-⋮----
-n_relevant_chunks: int = 3  # how many relevant chunks to retrieve finally
-n_similar_chunks: int = 3  # how many similar chunks to retrieve, by each method
-n_query_rephrases: int = 0
-n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
-n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
-use_fuzzy_match: bool = True
-use_bm25_search: bool = True
-use_reciprocal_rank_fusion: bool = False
-cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
-cross_encoder_device: Optional[str] = None  # default to CPU when None
-rerank_diversity: bool = True  # rerank to maximize diversity?
-rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
-rerank_after_adding_context: bool = True  # rerank after adding context window?
-# RRF (Reciprocal Rank Fusion) score = 1/(rank + reciprocal_rank_fusion_constant)
-# see https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works
-reciprocal_rank_fusion_constant: float = 60.0
-cache: bool = True  # cache results
-debug: bool = False
-stream: bool = True  # allow streaming where needed
-split: bool = True  # use chunking
-relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
-⋮----
-llm=None  # use the parent's llm unless explicitly set here
-⋮----
-doc_paths: List[str | bytes] = []
-default_paths: List[str] = [
-parsing: ParsingConfig = ParsingConfig(  # modify as needed
-⋮----
-chunk_size=1000,  # aim for this many tokens per chunk
-overlap=100,  # overlap between chunks
-⋮----
-# aim to have at least this many chars per chunk when
-# truncating due to punctuation
-⋮----
-discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-# set deprecated n_similar_docs to None; use n_similar_chunks above instead
-⋮----
-n_neighbor_ids=0,  # num chunk IDs to store on either side of each chunk
-⋮----
-# NOTE: PDF parsing is extremely challenging, and each library
-# has its own strengths and weaknesses.
-# Try one that works for your use case.
-# `pypdfium2` is the permissive default and is installed by default;
-# the others (e.g. "unstructured", "fitz", "pymupdf4llm", "docling",
-# "pypdf") require installing an extra such as `doc-chat`.
-⋮----
-crawler_config: Optional[BaseCrawlerConfig] = TrafilaturaConfig()
-⋮----
-# Allow vecdb to be None in case we want to explicitly set it later
-vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
-⋮----
-llm: LLMConfig = OpenAIGPTConfig(
-prompts: PromptsConfig = PromptsConfig(
-⋮----
-def _append_metadata_source(orig_source: str, source: str) -> str
-⋮----
-class DocChatAgent(ChatAgent)
-⋮----
-"""
-    Agent for chatting with a collection of documents.
-    """
-⋮----
-# Handle backward compatibility for deprecated n_similar_docs
-⋮----
-# Use the deprecated value for both parameters
-⋮----
-def _clone_extra_state(self, new_agent: "ChatAgent") -> None
-⋮----
-def clear(self) -> None
-⋮----
-"""Clear the document collection and the specific collection in vecdb"""
-⋮----
-collection_name = self.vecdb.config.collection_name
-⋮----
-# Note we may have used a vecdb with a config.collection_name
-# different from the agent's config.vecdb.collection_name!!
-⋮----
-# Close the old vecdb before creating a new one
-old_vecdb = self.vecdb
-⋮----
-def ingest(self) -> None
-⋮----
-"""
-        Chunk + embed + store docs specified by self.config.doc_paths
-        """
-⋮----
-# we must be using a previously defined collection
-# But let's get all the chunked docs so we can
-# do keyword and other non-vector searches
-⋮----
-self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
-⋮----
-"""Split, ingest docs from specified paths,
-        do not add these to config.doc_paths.
-
-        Args:
-            paths: document paths, urls or byte-content of docs.
-                The bytes option is intended to support cases where a document
-                has already been read in as bytes (e.g. from an API or a database),
-                and we want to avoid having to write it to a temporary file
-                just to read it back in.
-            metadata: List of metadata dicts, one for each path.
-                If a single dict is passed in, it is used for all paths.
-            doc_type: DocumentType to use for parsing, if known.
-                MUST apply to all docs if specified.
-                This is especially useful when the `paths` are of bytes type,
-                to help with document type detection.
-        Returns:
-            List of Document objects
-        """
-⋮----
-paths = [paths]
-all_paths = paths
-paths_meta: Dict[int, Any] = {}
-urls_meta: Dict[int, Any] = {}
-idxs = range(len(all_paths))
-⋮----
-urls = [all_paths[i] for i in url_idxs]
-paths = [all_paths[i] for i in path_idxs]
-bytes_list = [all_paths[i] for i in bytes_idxs]
-⋮----
-idx2meta = {
-⋮----
-)  # appease mypy
-⋮----
-idx2meta = {p: metadata for p in idxs}
-⋮----
-idx2meta = {p: metadata.model_dump() for p in idxs}
-urls_meta = {u: idx2meta[u] for u in url_idxs}
-paths_meta = {p: idx2meta[p] for p in path_idxs}
-docs: List[Document] = []
-parser: Parser = Parser(self.config.parsing)
-⋮----
-meta = urls_meta.get(ui, {})
-loader = URLLoader(
-⋮----
-)  # type: ignore
-url_docs = loader.load()
-# update metadata of each doc with meta
-⋮----
-orig_source = d.metadata.source
-⋮----
-if len(paths) > 0:  # paths OR bytes are handled similarly
-⋮----
-meta = paths_meta.get(pi, {})
-p = all_paths[pi]
-path_docs = RepoLoader.get_documents(
-⋮----
-n_docs = len(docs)
-n_splits = self.ingest_docs(docs, split=self.config.split)
-⋮----
-n_urls = len(urls)
-n_paths = len(paths)
-⋮----
-path_reps = [p if isinstance(p, str) else "bytes" for p in paths]
-print("\n".join([u for u in urls if isinstance(u, str)]))  # appease mypy
-⋮----
-"""
-        Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
-
-        Args:
-            docs: List of Document objects
-            split: Whether to split docs into chunks. Default is True.
-                If False, docs are treated as "chunks" and are not split.
-            metadata: List of metadata dicts, one for each doc, to augment
-                whatever metadata is already in the doc.
-                [ASSUME no conflicting keys between the two metadata dicts.]
-                If a single dict is passed in, it is used for all docs.
-        """
-⋮----
-m_dict = m if isinstance(m, dict) else m.model_dump()  # type: ignore
-d.metadata = d.metadata.model_copy(update=m_dict)  # type: ignore
-⋮----
-docs = self.parser.split(docs)
-⋮----
-# we're not splitting, so we mark each doc as a chunk
-⋮----
-docs = self.enrich_chunks(docs)
-⋮----
-# If any additional fields need to be added to content,
-# add them as key=value pairs for all docs, before batching.
-# This helps retrieval for table-like data.
-# Note we need to do this at stage so that the embeddings
-# are computed on the full content with these additional fields.
-⋮----
-fields = [
-⋮----
-key_vals = extract_fields(d, fields)
-⋮----
-docs = docs[: self.config.parsing.max_chunks]
-# vecdb should take care of adding docs in batches;
-# batching can be controlled via vecdb.config.batch_size
-⋮----
-return 0  # Return 0 since no documents were added
-⋮----
-def retrieval_tool(self, msg: RetrievalTool) -> str
-⋮----
-"""Handle the RetrievalTool message"""
-⋮----
-content_doc = self.answer_from_docs(msg.query)
-⋮----
-"""
-        Convert dataframe so it is compatible with Document class:
-        - has "content" column
-        - has an "id" column to be used as Document.metadata.id
-
-        Args:
-            df: dataframe to convert
-            content: name of content column
-            metadata: list of metadata column names
-
-        Returns:
-            Tuple[pd.DataFrame, List[str]]: dataframe, metadata
-                - dataframe: dataframe with "content" column and "id" column
-                - metadata: list of metadata column names, including "id"
-        """
-⋮----
-# rename content column to "content", leave existing column intact
-df = df.rename(columns={content: "content"}, inplace=False)
-⋮----
-actual_metadata = metadata.copy()
-⋮----
-docs = dataframe_to_documents(df, content="content", metadata=metadata)
-ids = [str(d.id()) for d in docs]
-⋮----
-"""
-        Ingest a dataframe into vecdb.
-        """
-⋮----
-# When ingesting a dataframe we will no longer do any chunking,
-# so we mark each doc as a chunk.
-# TODO - revisit this since we may still want to chunk large text columns
-⋮----
-def set_filter(self, filter: str) -> None
-⋮----
-"""
-        Setup `self.chunked_docs` and `self.chunked_docs_clean`
-        based on possible filter.
-        These will be used in various non-vector-based search functions,
-        e.g. self.get_similar_chunks_bm25(), self.get_fuzzy_matches(), etc.
-
-        Args:
-            docs: List of Document objects. This is empty when we are calling this
-                method after initial doc ingestion.
-            filter: Filter condition for various lexical/semantic search fns.
-        """
-⋮----
-# no filter, so just use the docs passed in
-⋮----
-def get_field_values(self, fields: list[str]) -> Dict[str, str]
-⋮----
-"""Get string-listing of possible values of each field,
-        e.g.
-        {
-            "genre": "crime, drama, mystery, ... (10 more)",
-            "certificate": "R, PG-13, PG, R",
-        }
-        The field names may have "metadata." prefix, e.g. "metadata.genre".
-        """
-field_values: Dict[str, Set[str]] = {}
-# make empty set for each field
-⋮----
-# get all documents and accumulate possible values of each field until 10
-docs = self.vecdb.get_all_documents()  # only works for vecdbs that support this
-⋮----
-# extract fields from d
-doc_field_vals = extract_fields(d, fields)
-# the `field` returned by extract_fields may contain only the last
-# part of the field name, e.g. "genre" instead of "metadata.genre",
-# so we use the orig_field name to fill in the values
-⋮----
-# For each field make a string showing list of possible values,
-# truncate to 20 values, and if there are more, indicate how many
-# more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
-field_values_list = {}
-⋮----
-vals = list(field_values[f])
-n = len(vals)
-remaining = n - 20
-vals = vals[:20]
-⋮----
-# make a string of the values, ensure they are strings
-⋮----
-def doc_length(self, docs: List[Document]) -> int
-⋮----
-"""
-        Calc token-length of a list of docs
-        Args:
-            docs: list of Document objects
-        Returns:
-            int: number of tokens
-        """
-⋮----
-def user_docs_ingest_dialog(self) -> None
-⋮----
-"""
-        Ask user to select doc-collection, enter filenames/urls, and ingest into vecdb.
-        """
-⋮----
-n_deletes = self.vecdb.clear_empty_collections()
-collections = self.vecdb.list_collections()
-collection_name = "NEW"
-is_new_collection = False
-replace_collection = False
-⋮----
-n = len(collections)
-delete_str = (
-⋮----
-choice = Prompt.ask(
-⋮----
-confirm = Prompt.ask(
-⋮----
-collection_name = collections[int(choice) - 1]
-⋮----
-replace_collection = choice == "y"
-⋮----
-is_new_collection = True
-collection_name = Prompt.ask(
-⋮----
-default_urls_str = (
-⋮----
-inputs = get_list_from_user()
-⋮----
-inputs = self.config.default_paths
-self.config.doc_paths = inputs  # type: ignore
-⋮----
-query_str: str | None
-⋮----
-query_str = message.content
-⋮----
-query_str = message
-⋮----
-# direct query to LLM
-query_str = query_str[1:] if query_str is not None else None
-⋮----
-response = super().llm_response(query_str)
-⋮----
-response = self.answer_from_docs(query_str)
-# Citation details (if any) are NOT generated by LLM
-# (We extract these from LLM's numerical citations),
-# so render them here
-⋮----
-response = await super().llm_response_async(query_str)
-⋮----
-# Offload blocking retrieval/LLM work to default thread pool so
-# asyncio batch runners can make progress concurrently.
-response = await asyncio.to_thread(self.answer_from_docs, query_str)
-⋮----
-@staticmethod
-    def doc_string(docs: List[Document]) -> str
-⋮----
-"""
-        Generate a string representation of a list of docs.
-        Args:
-            docs: list of Document objects
-        Returns:
-            str: string representation
-        """
-contents = [d.content for d in docs]
-sources = [d.metadata.source for d in docs]
-sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
-⋮----
-"""
-        Given a question and a list of (possibly) doc snippets,
-        generate an answer if possible
-        Args:
-            question: question to answer
-            passages: list of `Document` objects each containing a possibly relevant
-                snippet, and metadata
-        Returns:
-            a `Document` object containing the answer,
-            and metadata containing source citations
-
-        """
-⋮----
-passages_str = self.doc_string(passages)
-# Substitute Q and P into the templatized prompt
-⋮----
-final_prompt = self.config.summarize_prompt.format(
-⋮----
-# Generate the final verbatim extract based on the final prompt.
-# Note this will send entire message history, plus this final_prompt
-# to the LLM, and self.message_history will be updated to include
-# 2 new LLMMessage objects:
-# one for `final_prompt`, and one for the LLM response
-⋮----
-answer_doc = super().llm_response(final_prompt)
-⋮----
-# respond with temporary context
-answer_doc = super()._llm_response_temp_context(question, final_prompt)
-⋮----
-answer_doc = super().llm_response_forget(final_prompt)
-⋮----
-final_answer = answer_doc.content.strip()
-⋮----
-# extract references like [^2], [^3], etc. from the final answer
-citations = extract_markdown_references(final_answer)
-# format the cited references as a string suitable for markdown footnote
-⋮----
-content=final_answer,  # does not contain citations
-⋮----
-source=citations_str,  # only the reference headers
-source_content=full_citations_str,  # reference + content
-⋮----
-def llm_hypothetical_answer(self, query: str) -> str
-⋮----
-# TODO: provide an easy way to
-# Adjust this prompt depending on context.
-answer = self.llm_response_forget(
-⋮----
-def enrich_chunks(self, docs: List[Document]) -> List[Document]
-⋮----
-"""
-        Enrich chunks using Agent configured with self.config.chunk_enrichment_config.
-
-        We assume that the system message of the agent is set in such a way
-        that when we run
-        ```
-        prompt = self.config.chunk_enrichment_config.enrichment_prompt_fn(text)
-        result = await agent.llm_response_forget_async(prompt)
-        ```
-
-        then `result.content` will contain the augmentation to the text.
-
-        Args:
-            docs: List of document chunks to enrich
-
-        Returns:
-            List[Document]: Documents (chunks) enriched with additional text,
-                separated by a delimiter.
-        """
-⋮----
-enrichment_config = self.config.chunk_enrichment_config
-agent = ChatAgent(enrichment_config)
-⋮----
-# Process chunks in parallel using run_batch_agent_method
-questions_batch = run_batch_agent_method(
-⋮----
-# Combine original content with generated questions
-augmented_docs = []
-⋮----
-# Combine original content with questions in a structured way
-combined_content = (
-⋮----
-new_doc = doc.model_copy(
-⋮----
-def llm_rephrase_query(self, query: str) -> List[str]
-⋮----
-rephrases = self.llm_response_forget(
-⋮----
-# find similar docs using bm25 similarity:
-# these may sometimes be more likely to contain a relevant verbatim extract
-⋮----
-docs_scores = find_closest_matches_with_bm25(
-⋮----
-self.chunked_docs_clean,  # already pre-processed!
-⋮----
-# find similar docs using fuzzy matching:
-⋮----
-fuzzy_match_docs = find_fuzzy_matches_in_docs(
-⋮----
-device = self.config.cross_encoder_device
-entry = _get_cross_encoder_entry(
-pair_inputs = [(query, p.content) for p in passages]
-⋮----
-scores = entry.model.predict(pair_inputs, show_progress_bar=False)
-# Convert to [0,1] so we might could use a cutoff later.
-scores = 1.0 / (1 + np.exp(-np.array(scores)))
-# get top k scoring passages
-sorted_pairs = sorted(
-passages = [d for _, d in sorted_pairs]
-⋮----
-def rerank_with_diversity(self, passages: List[Document]) -> List[Document]
-⋮----
-"""
-        Rerank a list of items in such a way that each successive item is least similar
-        (on average) to the earlier items.
-
-        Args:
-        query (str): The query for which the passages are relevant.
-        passages (List[Document]): A list of Documents to be reranked.
-
-        Returns:
-        List[Documents]: A reranked list of Documents.
-        """
-⋮----
-emb_model = self.vecdb.embedding_model
-emb_fn = emb_model.embedding_fn()
-embs = emb_fn([p.content for p in passages])
-embs_arr = [np.array(e) for e in embs]
-indices = list(range(len(passages)))
-⋮----
-# Helper function to compute average similarity to
-# items in the current result list.
-def avg_similarity_to_result(i: int, result: List[int]) -> float
-⋮----
-return sum(  # type: ignore
-⋮----
-# copy passages to items
-result = [indices.pop(0)]  # Start with the first item.
-⋮----
-# Find the item that has the least average similarity
-# to items in the result list.
-least_similar_item = min(
-⋮----
-# return passages in order of result list
-⋮----
-def rerank_to_periphery(self, passages: List[Document]) -> List[Document]
-⋮----
-"""
-        Rerank to avoid Lost In the Middle (LIM) problem,
-        where LLMs pay more attention to items at the ends of a list,
-        rather than the middle. So we re-rank to make the best passages
-        appear at the periphery of the list.
-        https://arxiv.org/abs/2307.03172
-
-        Example reranking:
-        1 2 3 4 5 6 7 8 9 ==> 1 3 5 7 9 8 6 4 2
-
-        Args:
-            passages (List[Document]): A list of Documents to be reranked.
-
-        Returns:
-            List[Documents]: A reranked list of Documents.
-
-        """
-# Splitting items into odds and evens based on index, not value
-odds = passages[::2]
-evens = passages[1::2][::-1]
-⋮----
-# Merging them back together
-⋮----
-"""
-        In each doc's metadata, there may be a window_ids field indicating
-        the ids of the chunks around the current chunk. We use these stored
-        window_ids to retrieve the desired number
-        (self.config.n_neighbor_chunks) of neighbors
-        on either side of the current chunk.
-
-        Args:
-            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
-                to add context windows to together with their match scores.
-
-        Returns:
-            List[Tuple[Document, float]]: List of (Document, score) tuples.
-        """
-⋮----
-# Do not add context window when there are other fields besides just
-# content and metadata, since we do not know how to set those other fields
-# for newly created docs with combined content.
-⋮----
-"""
-        Get semantic search results from vecdb.
-        Args:
-            query (str): query to search for
-            k (int): number of results to return
-        Returns:
-            List[Tuple[Document, float]]: List of (Document, score) tuples.
-        """
-⋮----
-# Note: for dynamic filtering based on a query, users can
-# use the `temp_update` context-manager to pass in a `filter` to self.config,
-# e.g.:
-# with temp_update(self.config, {"filter": "metadata.source=='source1'"}):
-#     docs_scores = self.get_semantic_search_results(query, k=k)
-# This avoids having pass the `filter` argument to every function call
-# upstream of this one.
-# The `temp_update` context manager is defined in
-# `langroid/utils/pydantic_utils.py`
-⋮----
-"""
-        The retrieval stage in RAG: get doc-chunks that are most "relevant"
-        to the query (and possibly any proxy queries), from the document-store,
-        which currently is the vector store,
-        but in theory could be any document store, or even web-search.
-        This stage does NOT involve an LLM, and the retrieved chunks
-        could either be pre-chunked text (from the initial pre-processing stage
-        where chunks were stored in the vector store), or they could be
-        dynamically retrieved based on a window around a lexical match.
-
-        These are the steps (some optional based on config):
-        - semantic search based on vector-embedding distance, from vecdb
-        - lexical search using bm25-ranking (keyword similarity)
-        - fuzzy matching (keyword similarity)
-        - re-ranking of doc-chunks by relevance to query, using cross-encoder,
-           and pick top k
-
-        Args:
-            query: original query (assumed to be in stand-alone form)
-            query_proxies: possible rephrases, or hypothetical answer to query
-                    (e.g. for HyDE-type retrieval)
-
-        Returns:
-
-        """
-⋮----
-# if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
-# we can retrieve more docs during retrieval, and leave it to the cross-encoder
-# or RRF reranking to whittle down to self.config.n_similar_chunks
-retrieval_multiple = (
-⋮----
-docs_and_scores: List[Tuple[Document, float]] = []
-⋮----
-# sort by score descending
-docs_and_scores = sorted(
-⋮----
-# keep only docs with unique d.id()
-id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
-id2doc = {d.id(): d for d, _ in docs_and_scores}
-# make sure we get unique docs
-passages = [id2doc[id] for id in id2_rank_semantic.keys()]
-⋮----
-id2_rank_bm25 = {}
-⋮----
-# TODO: Add score threshold in config
-docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
-⋮----
-# if we're not re-ranking with a cross-encoder, and have RRF enabled,
-# instead of accumulating the bm25 results into passages,
-# we collect these ranks for Reciprocal Rank Fusion down below.
-docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
-id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
-⋮----
-# eliminate duplicate ids
-passages = [id2doc[id] for id in id2doc.keys()]
-⋮----
-id2_rank_fuzzy = {}
-⋮----
-fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
-⋮----
-# if we're not re-ranking with a cross-encoder,
-# instead of accumulating the fuzzy match results into passages,
-⋮----
-fuzzy_match_doc_scores = sorted(
-id2_rank_fuzzy = {
-⋮----
-# Since we're not using cross-enocder re-ranking,
-# we need to re-order the retrieved chunks from potentially three
-# different retrieval methods (semantic, bm25, fuzzy), where the
-# similarity scores are on different scales.
-# We order the retrieved chunks using Reciprocal Rank Fusion (RRF) score.
-# Combine the ranks from each id2doc_rank_* dict into a single dict,
-# where the reciprocal rank score is the sum of
-# 1/(rank + self.config.reciprocal_rank_fusion_constant).
-# See https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking
-#
-# Note: diversity/periphery-reranking below may modify the final ranking.
-id2_reciprocal_score = {}
-⋮----
-# Use max_rank instead of infinity to avoid bias against
-# single-method docs
-max_rank = self.config.n_similar_chunks * retrieval_multiple
-rank_semantic = id2_rank_semantic.get(id_, max_rank + 1)
-rank_bm25 = id2_rank_bm25.get(id_, max_rank + 1)
-rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank + 1)
-c = self.config.reciprocal_rank_fusion_constant
-reciprocal_fusion_score = (
-⋮----
-# sort the docs by the reciprocal score, in descending order
-id2_reciprocal_score = OrderedDict(
-# each method retrieved up to retrieval_multiple * n_similar_chunks,
-# so we need to take the top n_similar_chunks from the combined list
-passages = [
-# passages must have distinct ids
-⋮----
-passages_scores = [(p, 0.0) for p in passages]
-passages_scores = self.add_context_window(passages_scores)
-passages = [p for p, _ in passages_scores]
-# now passages can potentially have a lot of doc chunks,
-# so we re-rank them using a cross-encoder scoring model
-# (provided that `reciprocal_rank_fusion` is not enabled),
-# and pick top k where k = config..n_similar_chunks
-# https://www.sbert.net/examples/applications/retrieve_rerank
-⋮----
-passages = self.rerank_with_cross_encoder(query, passages)
-⋮----
-# reorder to increase diversity among top docs
-passages = self.rerank_with_diversity(passages)
-⋮----
-# reorder so most important docs are at periphery
-# (see Lost In the Middle issue).
-passages = self.rerank_to_periphery(passages)
-⋮----
-@no_type_check
-    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]
-⋮----
-"""
-        Get list of (verbatim) extracts from doc-chunks relevant to answering a query.
-
-        These are the stages (some optional based on config):
-        - use LLM to convert query to stand-alone query
-        - optionally use LLM to rephrase query to use below
-        - optionally use LLM to generate hypothetical answer (HyDE) to use below.
-        - get_relevant_chunks(): get doc-chunks relevant to query and proxies
-        - use LLM to get relevant extracts from doc-chunks
-
-        Args:
-            query (str): query to search for
-
-        Returns:
-            query (str): stand-alone version of input query
-            List[Document]: list of relevant extracts
-
-        """
-collection_name = (
-has_vecdb_collection = (
-⋮----
-# Regardless of whether we are in conversation mode or not,
-# for relevant doc/chunk extraction, we must convert the query
-# to a standalone query to get more relevant results.
-⋮----
-query = self.llm.followup_to_standalone(self.dialog, query)
-⋮----
-proxies = []
-⋮----
-answer = self.llm_hypothetical_answer(query)
-proxies = [answer]
-⋮----
-rephrases = self.llm_rephrase_query(query)
-⋮----
-passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
-⋮----
-passages = self.chunked_docs
-⋮----
-extracts = passages
-⋮----
-# these are async calls, one per passage; turn off streaming
-extracts = self.get_verbatim_extracts(query, passages)
-extracts = [e for e in extracts if e.content != NO_ANSWER]
-⋮----
-def remove_chunk_enrichments(self, passages: List[Document]) -> List[Document]
-⋮----
-"""Remove any enrichments (like hypothetical questions, or keywords)
-        from documents.
-        Only cleans if enrichment was enabled in config.
-
-        Args:
-            passages: List of documents to clean
-
-        Returns:
-            List of documents with only original content
-        """
-⋮----
-delimiter = self.config.chunk_enrichment_config.delimiter
-⋮----
-"""
-        Run RelevanceExtractorAgent in async/concurrent mode on passages,
-        to extract portions relevant to answering query, from each passage.
-        Args:
-            query (str): query to answer
-            passages (List[Documents]): list of passages to extract from
-
-        Returns:
-            List[Document]: list of Documents containing extracts and metadata.
-        """
-passages = self.remove_chunk_enrichments(passages)
-⋮----
-agent_cfg = self.config.relevance_extractor_config
-⋮----
-# no relevance extraction: simply return passages
-⋮----
-# Use main DocChatAgent's LLM if not provided explicitly:
-# this reduces setup burden on the user
-⋮----
-agent_cfg.llm.stream = False  # disable streaming for concurrent calls
-⋮----
-agent = RelevanceExtractorAgent(agent_cfg)
-task = Task(
-⋮----
-extracts: list[str] = run_batch_tasks(
-⋮----
-# Caution: Retain ALL other fields in the Documents (which could be
-# other than just `content` and `metadata`), while simply replacing
-# `content` with the extracted portions
-passage_extracts = []
-⋮----
-p_copy = p.model_copy()
-⋮----
-def answer_from_docs(self, query: str) -> ChatDocument
-⋮----
-"""
-        Answer query based on relevant docs from the VecDB
-
-        Args:
-            query (str): query to answer
-
-        Returns:
-            Document: answer
-        """
-response = ChatDocument(
-# query may be updated to a stand-alone version
-⋮----
-# only return extracts, skip LLM-based summary answer
-meta = dict(
-# copy metadata from first doc, unclear what to do here.
-⋮----
-metadata=ChatDocMetaData(**meta),  # type: ignore
-⋮----
-response = self.get_summary_answer(query, extracts)
-⋮----
-self.response = response  # save last response
-⋮----
-"""Summarize all docs"""
-⋮----
-full_text = "\n\n".join([d.content for d in self.original_docs])
-⋮----
-tot_tokens = self.parser.num_tokens(full_text)
-MAX_INPUT_TOKENS = (
-⋮----
-# truncate
-full_text = self.parser.tokenizer.decode(
-⋮----
-prompt = f"""
-⋮----
-summary = ChatAgent.llm_response(self, prompt)
-⋮----
-def justify_response(self) -> ChatDocument | None
-⋮----
-"""Show evidence for last response"""
-⋮----
-source = self.response.metadata.source
-</file>
-
 <file path="langroid/agent/special/lance_doc_chat_agent.py">
 """
 LanceDocChatAgent is a subclass of DocChatAgent that uses LanceDB as a vector store:
@@ -35183,6 +34264,944 @@ Your support will help build Langroid's momentum and community.
 - [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
 </file>
 
+<file path="langroid/agent/special/doc_chat_agent.py">
+# # langroid/agent/special/doc_chat_agent.py
+"""
+Agent that supports asking queries about a set of documents, using
+retrieval-augmented generation (RAG).
+
+Functionality includes:
+- summarizing a document, with a custom instruction; see `summarize_docs`
+- asking a question about a document; see `answer_from_docs`
+
+Note: to use the sentence-transformer embeddings, you must install
+langroid with the [hf-embeddings] extra, e.g.:
+
+pip install "langroid[hf-embeddings]"
+
+"""
+⋮----
+@cache
+def apply_nest_asyncio() -> None
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+@dataclass
+class _CrossEncoderCacheEntry
+⋮----
+model: "CrossEncoder"
+lock: threading.RLock
+⋮----
+_CROSS_ENCODER_CACHE: Dict[str, _CrossEncoderCacheEntry] = {}
+_CROSS_ENCODER_CACHE_LOCK = threading.Lock()
+⋮----
+def _auto_cross_encoder_device() -> str
+⋮----
+mps = getattr(torch.backends, "mps", None)
+⋮----
+actual_device = device or _auto_cross_encoder_device()
+cache_key = f"{model_name}::{actual_device}"
+entry = _CROSS_ENCODER_CACHE.get(cache_key)
+⋮----
+model = CrossEncoder(model_name, device=actual_device)
+entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
+⋮----
+DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
+⋮----
+CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
+⋮----
+# Check if  module exists in sys.path
+spec = importlib.util.find_spec("sentence_transformers")
+has_sentence_transformers = spec is not None
+⋮----
+has_sentence_transformers = False
+⋮----
+hf_embed_config = SentenceTransformerEmbeddingsConfig(
+⋮----
+oai_embed_config = OpenAIEmbeddingsConfig(
+⋮----
+class ChunkEnrichmentAgentConfig(ChatAgentConfig)
+⋮----
+batch_size: int = 50
+delimiter: str = CHUNK_ENRICHMENT_DELIMITER
+enrichment_prompt_fn: Callable[[str], str] = lambda x: x
+⋮----
+class DocChatAgentConfig(ChatAgentConfig)
+⋮----
+system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
+summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
+# extra fields to include in content as key=value pairs
+# (helps retrieval for table-like data)
+add_fields_to_content: List[str] = []
+filter_fields: List[str] = []  # fields usable in filter
+retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
+extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
+filter: str | None = (
+⋮----
+None  # filter condition for various lexical/semantic search fns
+⋮----
+conversation_mode: bool = True  # accumulate message history?
+# retain retrieved context? Setting to True increases token consumption, but
+# helps LLM fix citation errors and improve accuracy of follow-up questions.
+retain_context: bool = False
+# In assistant mode, DocChatAgent receives questions from another Agent,
+# and those will already be in stand-alone form, so in this mode
+# there is no need to convert them to stand-alone form.
+assistant_mode: bool = False
+# Use LLM to generate hypothetical answer A to the query Q,
+# and use the embed(A) to find similar chunks in vecdb.
+# Referred to as HyDE in the paper:
+# https://arxiv.org/pdf/2212.10496.pdf
+# It is False by default; its benefits depends on the context.
+hypothetical_answer: bool = False
+# Optional config for chunk enrichment agent, e.g. to enrich
+# chunks with hypothetical questions, or keywords to increase
+# the "semantic surface area" of the chunks, which may help
+# improve retrieval.
+chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
+⋮----
+n_relevant_chunks: int = 3  # how many relevant chunks to retrieve finally
+n_similar_chunks: int = 3  # how many similar chunks to retrieve, by each method
+n_query_rephrases: int = 0
+n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
+n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
+use_fuzzy_match: bool = True
+use_bm25_search: bool = True
+use_reciprocal_rank_fusion: bool = False
+cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
+cross_encoder_device: Optional[str] = None  # default to CPU when None
+rerank_diversity: bool = True  # rerank to maximize diversity?
+rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
+rerank_after_adding_context: bool = True  # rerank after adding context window?
+# RRF (Reciprocal Rank Fusion) score = 1/(rank + reciprocal_rank_fusion_constant)
+# see https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works
+reciprocal_rank_fusion_constant: float = 60.0
+cache: bool = True  # cache results
+debug: bool = False
+stream: bool = True  # allow streaming where needed
+split: bool = True  # use chunking
+relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
+⋮----
+llm=None  # use the parent's llm unless explicitly set here
+⋮----
+doc_paths: List[str | bytes] = []
+default_paths: List[str] = [
+parsing: ParsingConfig = ParsingConfig(  # modify as needed
+⋮----
+chunk_size=1000,  # aim for this many tokens per chunk
+overlap=100,  # overlap between chunks
+⋮----
+# aim to have at least this many chars per chunk when
+# truncating due to punctuation
+⋮----
+discard_chunk_chars=5,  # discard chunks with fewer than this many chars
+# set deprecated n_similar_docs to None; use n_similar_chunks above instead
+⋮----
+n_neighbor_ids=0,  # num chunk IDs to store on either side of each chunk
+⋮----
+# NOTE: PDF parsing is extremely challenging, and each library
+# has its own strengths and weaknesses.
+# Try one that works for your use case.
+# `pypdfium2` is the permissive default and is installed by default;
+# the others (e.g. "unstructured", "fitz", "pymupdf4llm", "docling",
+# "pypdf") require installing an extra such as `doc-chat`.
+⋮----
+crawler_config: Optional[BaseCrawlerConfig] = TrafilaturaConfig()
+⋮----
+# Allow vecdb to be None in case we want to explicitly set it later
+vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
+⋮----
+llm: LLMConfig = OpenAIGPTConfig(
+prompts: PromptsConfig = PromptsConfig(
+⋮----
+def _append_metadata_source(orig_source: object, source: object) -> str
+⋮----
+"""Append a source unless it is already in the ``; ``-delimited list.
+
+    Leading and trailing whitespace is ignored for both empty-value and
+    duplicate checks, including around entries in the existing source list.
+    The ``; `` sequence is structural and is interpreted as a list boundary;
+    plain semicolons remain part of a source value.
+
+    Args:
+        orig_source: Existing source or source list. Non-strings are empty.
+        source: Source to append. Non-string values are treated as empty.
+
+    Returns:
+        The trimmed existing sources, optionally followed by the new source.
+    """
+orig = orig_source.strip() if isinstance(orig_source, str) else ""
+src = source.strip() if isinstance(source, str) else ""
+⋮----
+sources = (item.strip() for item in orig.split("; "))
+⋮----
+class DocChatAgent(ChatAgent)
+⋮----
+"""
+    Agent for chatting with a collection of documents.
+    """
+⋮----
+# Handle backward compatibility for deprecated n_similar_docs
+⋮----
+# Use the deprecated value for both parameters
+⋮----
+def _clone_extra_state(self, new_agent: "ChatAgent") -> None
+⋮----
+def clear(self) -> None
+⋮----
+"""Clear the document collection and the specific collection in vecdb"""
+⋮----
+collection_name = self.vecdb.config.collection_name
+⋮----
+# Note we may have used a vecdb with a config.collection_name
+# different from the agent's config.vecdb.collection_name!!
+⋮----
+# Close the old vecdb before creating a new one
+old_vecdb = self.vecdb
+⋮----
+def ingest(self) -> None
+⋮----
+"""
+        Chunk + embed + store docs specified by self.config.doc_paths
+        """
+⋮----
+# we must be using a previously defined collection
+# But let's get all the chunked docs so we can
+# do keyword and other non-vector searches
+⋮----
+self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
+⋮----
+"""Split, ingest docs from specified paths,
+        do not add these to config.doc_paths.
+
+        Args:
+            paths: document paths, urls or byte-content of docs.
+                The bytes option is intended to support cases where a document
+                has already been read in as bytes (e.g. from an API or a database),
+                and we want to avoid having to write it to a temporary file
+                just to read it back in.
+            metadata: List of metadata dicts, one for each path.
+                If a single dict is passed in, it is used for all paths.
+            doc_type: DocumentType to use for parsing, if known.
+                MUST apply to all docs if specified.
+                This is especially useful when the `paths` are of bytes type,
+                to help with document type detection.
+        Returns:
+            List of Document objects
+        """
+⋮----
+paths = [paths]
+all_paths = paths
+paths_meta: Dict[int, Any] = {}
+urls_meta: Dict[int, Any] = {}
+idxs = range(len(all_paths))
+⋮----
+urls = [all_paths[i] for i in url_idxs]
+paths = [all_paths[i] for i in path_idxs]
+bytes_list = [all_paths[i] for i in bytes_idxs]
+⋮----
+idx2meta = {
+⋮----
+)  # appease mypy
+⋮----
+idx2meta = {p: metadata for p in idxs}
+⋮----
+idx2meta = {p: metadata.model_dump() for p in idxs}
+urls_meta = {u: idx2meta[u] for u in url_idxs}
+paths_meta = {p: idx2meta[p] for p in path_idxs}
+docs: List[Document] = []
+parser: Parser = Parser(self.config.parsing)
+⋮----
+meta = urls_meta.get(ui, {})
+loader = URLLoader(
+⋮----
+)  # type: ignore
+url_docs = loader.load()
+# update metadata of each doc with meta
+⋮----
+orig_source = d.metadata.source
+⋮----
+if len(paths) > 0:  # paths OR bytes are handled similarly
+⋮----
+meta = paths_meta.get(pi, {})
+p = all_paths[pi]
+path_docs = RepoLoader.get_documents(
+⋮----
+n_docs = len(docs)
+n_splits = self.ingest_docs(docs, split=self.config.split)
+⋮----
+n_urls = len(urls)
+n_paths = len(paths)
+⋮----
+path_reps = [p if isinstance(p, str) else "bytes" for p in paths]
+print("\n".join([u for u in urls if isinstance(u, str)]))  # appease mypy
+⋮----
+"""
+        Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
+
+        Args:
+            docs: List of Document objects
+            split: Whether to split docs into chunks. Default is True.
+                If False, docs are treated as "chunks" and are not split.
+            metadata: List of metadata dicts, one for each doc, to augment
+                whatever metadata is already in the doc.
+                [ASSUME no conflicting keys between the two metadata dicts.]
+                If a single dict is passed in, it is used for all docs.
+        """
+⋮----
+m_dict = m if isinstance(m, dict) else m.model_dump()  # type: ignore
+d.metadata = d.metadata.model_copy(update=m_dict)  # type: ignore
+⋮----
+docs = self.parser.split(docs)
+⋮----
+# we're not splitting, so we mark each doc as a chunk
+⋮----
+docs = self.enrich_chunks(docs)
+⋮----
+# If any additional fields need to be added to content,
+# add them as key=value pairs for all docs, before batching.
+# This helps retrieval for table-like data.
+# Note we need to do this at stage so that the embeddings
+# are computed on the full content with these additional fields.
+⋮----
+fields = [
+⋮----
+key_vals = extract_fields(d, fields)
+⋮----
+docs = docs[: self.config.parsing.max_chunks]
+# vecdb should take care of adding docs in batches;
+# batching can be controlled via vecdb.config.batch_size
+⋮----
+return 0  # Return 0 since no documents were added
+⋮----
+def retrieval_tool(self, msg: RetrievalTool) -> str
+⋮----
+"""Handle the RetrievalTool message"""
+⋮----
+content_doc = self.answer_from_docs(msg.query)
+⋮----
+"""
+        Convert dataframe so it is compatible with Document class:
+        - has "content" column
+        - has an "id" column to be used as Document.metadata.id
+
+        Args:
+            df: dataframe to convert
+            content: name of content column
+            metadata: list of metadata column names
+
+        Returns:
+            Tuple[pd.DataFrame, List[str]]: dataframe, metadata
+                - dataframe: dataframe with "content" column and "id" column
+                - metadata: list of metadata column names, including "id"
+        """
+⋮----
+# rename content column to "content", leave existing column intact
+df = df.rename(columns={content: "content"}, inplace=False)
+⋮----
+actual_metadata = metadata.copy()
+⋮----
+docs = dataframe_to_documents(df, content="content", metadata=metadata)
+ids = [str(d.id()) for d in docs]
+⋮----
+"""
+        Ingest a dataframe into vecdb.
+        """
+⋮----
+# When ingesting a dataframe we will no longer do any chunking,
+# so we mark each doc as a chunk.
+# TODO - revisit this since we may still want to chunk large text columns
+⋮----
+def set_filter(self, filter: str) -> None
+⋮----
+"""
+        Setup `self.chunked_docs` and `self.chunked_docs_clean`
+        based on possible filter.
+        These will be used in various non-vector-based search functions,
+        e.g. self.get_similar_chunks_bm25(), self.get_fuzzy_matches(), etc.
+
+        Args:
+            docs: List of Document objects. This is empty when we are calling this
+                method after initial doc ingestion.
+            filter: Filter condition for various lexical/semantic search fns.
+        """
+⋮----
+# no filter, so just use the docs passed in
+⋮----
+def get_field_values(self, fields: list[str]) -> Dict[str, str]
+⋮----
+"""Get string-listing of possible values of each field,
+        e.g.
+        {
+            "genre": "crime, drama, mystery, ... (10 more)",
+            "certificate": "R, PG-13, PG, R",
+        }
+        The field names may have "metadata." prefix, e.g. "metadata.genre".
+        """
+field_values: Dict[str, Set[str]] = {}
+# make empty set for each field
+⋮----
+# get all documents and accumulate possible values of each field until 10
+docs = self.vecdb.get_all_documents()  # only works for vecdbs that support this
+⋮----
+# extract fields from d
+doc_field_vals = extract_fields(d, fields)
+# the `field` returned by extract_fields may contain only the last
+# part of the field name, e.g. "genre" instead of "metadata.genre",
+# so we use the orig_field name to fill in the values
+⋮----
+# For each field make a string showing list of possible values,
+# truncate to 20 values, and if there are more, indicate how many
+# more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
+field_values_list = {}
+⋮----
+vals = list(field_values[f])
+n = len(vals)
+remaining = n - 20
+vals = vals[:20]
+⋮----
+# make a string of the values, ensure they are strings
+⋮----
+def doc_length(self, docs: List[Document]) -> int
+⋮----
+"""
+        Calc token-length of a list of docs
+        Args:
+            docs: list of Document objects
+        Returns:
+            int: number of tokens
+        """
+⋮----
+def user_docs_ingest_dialog(self) -> None
+⋮----
+"""
+        Ask user to select doc-collection, enter filenames/urls, and ingest into vecdb.
+        """
+⋮----
+n_deletes = self.vecdb.clear_empty_collections()
+collections = self.vecdb.list_collections()
+collection_name = "NEW"
+is_new_collection = False
+replace_collection = False
+⋮----
+n = len(collections)
+delete_str = (
+⋮----
+choice = Prompt.ask(
+⋮----
+confirm = Prompt.ask(
+⋮----
+collection_name = collections[int(choice) - 1]
+⋮----
+replace_collection = choice == "y"
+⋮----
+is_new_collection = True
+collection_name = Prompt.ask(
+⋮----
+default_urls_str = (
+⋮----
+inputs = get_list_from_user()
+⋮----
+inputs = self.config.default_paths
+self.config.doc_paths = inputs  # type: ignore
+⋮----
+query_str: str | None
+⋮----
+query_str = message.content
+⋮----
+query_str = message
+⋮----
+# direct query to LLM
+query_str = query_str[1:] if query_str is not None else None
+⋮----
+response = super().llm_response(query_str)
+⋮----
+response = self.answer_from_docs(query_str)
+# Citation details (if any) are NOT generated by LLM
+# (We extract these from LLM's numerical citations),
+# so render them here
+⋮----
+response = await super().llm_response_async(query_str)
+⋮----
+# Offload blocking retrieval/LLM work to default thread pool so
+# asyncio batch runners can make progress concurrently.
+response = await asyncio.to_thread(self.answer_from_docs, query_str)
+⋮----
+@staticmethod
+    def doc_string(docs: List[Document]) -> str
+⋮----
+"""
+        Generate a string representation of a list of docs.
+        Args:
+            docs: list of Document objects
+        Returns:
+            str: string representation
+        """
+contents = [d.content for d in docs]
+sources = [d.metadata.source for d in docs]
+sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
+⋮----
+"""
+        Given a question and a list of (possibly) doc snippets,
+        generate an answer if possible
+        Args:
+            question: question to answer
+            passages: list of `Document` objects each containing a possibly relevant
+                snippet, and metadata
+        Returns:
+            a `Document` object containing the answer,
+            and metadata containing source citations
+
+        """
+⋮----
+passages_str = self.doc_string(passages)
+# Substitute Q and P into the templatized prompt
+⋮----
+final_prompt = self.config.summarize_prompt.format(
+⋮----
+# Generate the final verbatim extract based on the final prompt.
+# Note this will send entire message history, plus this final_prompt
+# to the LLM, and self.message_history will be updated to include
+# 2 new LLMMessage objects:
+# one for `final_prompt`, and one for the LLM response
+⋮----
+answer_doc = super().llm_response(final_prompt)
+⋮----
+# respond with temporary context
+answer_doc = super()._llm_response_temp_context(question, final_prompt)
+⋮----
+answer_doc = super().llm_response_forget(final_prompt)
+⋮----
+final_answer = answer_doc.content.strip()
+⋮----
+# extract references like [^2], [^3], etc. from the final answer
+citations = extract_markdown_references(final_answer)
+# format the cited references as a string suitable for markdown footnote
+⋮----
+content=final_answer,  # does not contain citations
+⋮----
+source=citations_str,  # only the reference headers
+source_content=full_citations_str,  # reference + content
+⋮----
+def llm_hypothetical_answer(self, query: str) -> str
+⋮----
+# TODO: provide an easy way to
+# Adjust this prompt depending on context.
+answer = self.llm_response_forget(
+⋮----
+def enrich_chunks(self, docs: List[Document]) -> List[Document]
+⋮----
+"""
+        Enrich chunks using Agent configured with self.config.chunk_enrichment_config.
+
+        We assume that the system message of the agent is set in such a way
+        that when we run
+        ```
+        prompt = self.config.chunk_enrichment_config.enrichment_prompt_fn(text)
+        result = await agent.llm_response_forget_async(prompt)
+        ```
+
+        then `result.content` will contain the augmentation to the text.
+
+        Args:
+            docs: List of document chunks to enrich
+
+        Returns:
+            List[Document]: Documents (chunks) enriched with additional text,
+                separated by a delimiter.
+        """
+⋮----
+enrichment_config = self.config.chunk_enrichment_config
+agent = ChatAgent(enrichment_config)
+⋮----
+# Process chunks in parallel using run_batch_agent_method
+questions_batch = run_batch_agent_method(
+⋮----
+# Combine original content with generated questions
+augmented_docs = []
+⋮----
+# Combine original content with questions in a structured way
+combined_content = (
+⋮----
+new_doc = doc.model_copy(
+⋮----
+def llm_rephrase_query(self, query: str) -> List[str]
+⋮----
+rephrases = self.llm_response_forget(
+⋮----
+# find similar docs using bm25 similarity:
+# these may sometimes be more likely to contain a relevant verbatim extract
+⋮----
+docs_scores = find_closest_matches_with_bm25(
+⋮----
+self.chunked_docs_clean,  # already pre-processed!
+⋮----
+# find similar docs using fuzzy matching:
+⋮----
+fuzzy_match_docs = find_fuzzy_matches_in_docs(
+⋮----
+device = self.config.cross_encoder_device
+entry = _get_cross_encoder_entry(
+pair_inputs = [(query, p.content) for p in passages]
+⋮----
+scores = entry.model.predict(pair_inputs, show_progress_bar=False)
+# Convert to [0,1] so we might could use a cutoff later.
+scores = 1.0 / (1 + np.exp(-np.array(scores)))
+# get top k scoring passages
+sorted_pairs = sorted(
+passages = [d for _, d in sorted_pairs]
+⋮----
+def rerank_with_diversity(self, passages: List[Document]) -> List[Document]
+⋮----
+"""
+        Rerank a list of items in such a way that each successive item is least similar
+        (on average) to the earlier items.
+
+        Args:
+        query (str): The query for which the passages are relevant.
+        passages (List[Document]): A list of Documents to be reranked.
+
+        Returns:
+        List[Documents]: A reranked list of Documents.
+        """
+⋮----
+emb_model = self.vecdb.embedding_model
+emb_fn = emb_model.embedding_fn()
+embs = emb_fn([p.content for p in passages])
+embs_arr = [np.array(e) for e in embs]
+indices = list(range(len(passages)))
+⋮----
+# Helper function to compute average similarity to
+# items in the current result list.
+def avg_similarity_to_result(i: int, result: List[int]) -> float
+⋮----
+return sum(  # type: ignore
+⋮----
+# copy passages to items
+result = [indices.pop(0)]  # Start with the first item.
+⋮----
+# Find the item that has the least average similarity
+# to items in the result list.
+least_similar_item = min(
+⋮----
+# return passages in order of result list
+⋮----
+def rerank_to_periphery(self, passages: List[Document]) -> List[Document]
+⋮----
+"""
+        Rerank to avoid Lost In the Middle (LIM) problem,
+        where LLMs pay more attention to items at the ends of a list,
+        rather than the middle. So we re-rank to make the best passages
+        appear at the periphery of the list.
+        https://arxiv.org/abs/2307.03172
+
+        Example reranking:
+        1 2 3 4 5 6 7 8 9 ==> 1 3 5 7 9 8 6 4 2
+
+        Args:
+            passages (List[Document]): A list of Documents to be reranked.
+
+        Returns:
+            List[Documents]: A reranked list of Documents.
+
+        """
+# Splitting items into odds and evens based on index, not value
+odds = passages[::2]
+evens = passages[1::2][::-1]
+⋮----
+# Merging them back together
+⋮----
+"""
+        In each doc's metadata, there may be a window_ids field indicating
+        the ids of the chunks around the current chunk. We use these stored
+        window_ids to retrieve the desired number
+        (self.config.n_neighbor_chunks) of neighbors
+        on either side of the current chunk.
+
+        Args:
+            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
+                to add context windows to together with their match scores.
+
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+⋮----
+# Do not add context window when there are other fields besides just
+# content and metadata, since we do not know how to set those other fields
+# for newly created docs with combined content.
+⋮----
+"""
+        Get semantic search results from vecdb.
+        Args:
+            query (str): query to search for
+            k (int): number of results to return
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+⋮----
+# Note: for dynamic filtering based on a query, users can
+# use the `temp_update` context-manager to pass in a `filter` to self.config,
+# e.g.:
+# with temp_update(self.config, {"filter": "metadata.source=='source1'"}):
+#     docs_scores = self.get_semantic_search_results(query, k=k)
+# This avoids having pass the `filter` argument to every function call
+# upstream of this one.
+# The `temp_update` context manager is defined in
+# `langroid/utils/pydantic_utils.py`
+⋮----
+"""
+        The retrieval stage in RAG: get doc-chunks that are most "relevant"
+        to the query (and possibly any proxy queries), from the document-store,
+        which currently is the vector store,
+        but in theory could be any document store, or even web-search.
+        This stage does NOT involve an LLM, and the retrieved chunks
+        could either be pre-chunked text (from the initial pre-processing stage
+        where chunks were stored in the vector store), or they could be
+        dynamically retrieved based on a window around a lexical match.
+
+        These are the steps (some optional based on config):
+        - semantic search based on vector-embedding distance, from vecdb
+        - lexical search using bm25-ranking (keyword similarity)
+        - fuzzy matching (keyword similarity)
+        - re-ranking of doc-chunks by relevance to query, using cross-encoder,
+           and pick top k
+
+        Args:
+            query: original query (assumed to be in stand-alone form)
+            query_proxies: possible rephrases, or hypothetical answer to query
+                    (e.g. for HyDE-type retrieval)
+
+        Returns:
+
+        """
+⋮----
+# if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
+# we can retrieve more docs during retrieval, and leave it to the cross-encoder
+# or RRF reranking to whittle down to self.config.n_similar_chunks
+retrieval_multiple = (
+⋮----
+docs_and_scores: List[Tuple[Document, float]] = []
+⋮----
+# sort by score descending
+docs_and_scores = sorted(
+⋮----
+# keep only docs with unique d.id()
+id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
+id2doc = {d.id(): d for d, _ in docs_and_scores}
+# make sure we get unique docs
+passages = [id2doc[id] for id in id2_rank_semantic.keys()]
+⋮----
+id2_rank_bm25 = {}
+⋮----
+# TODO: Add score threshold in config
+docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+⋮----
+# if we're not re-ranking with a cross-encoder, and have RRF enabled,
+# instead of accumulating the bm25 results into passages,
+# we collect these ranks for Reciprocal Rank Fusion down below.
+docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
+id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
+⋮----
+# eliminate duplicate ids
+passages = [id2doc[id] for id in id2doc.keys()]
+⋮----
+id2_rank_fuzzy = {}
+⋮----
+fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
+⋮----
+# if we're not re-ranking with a cross-encoder,
+# instead of accumulating the fuzzy match results into passages,
+⋮----
+fuzzy_match_doc_scores = sorted(
+id2_rank_fuzzy = {
+⋮----
+# Since we're not using cross-enocder re-ranking,
+# we need to re-order the retrieved chunks from potentially three
+# different retrieval methods (semantic, bm25, fuzzy), where the
+# similarity scores are on different scales.
+# We order the retrieved chunks using Reciprocal Rank Fusion (RRF) score.
+# Combine the ranks from each id2doc_rank_* dict into a single dict,
+# where the reciprocal rank score is the sum of
+# 1/(rank + self.config.reciprocal_rank_fusion_constant).
+# See https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking
+#
+# Note: diversity/periphery-reranking below may modify the final ranking.
+id2_reciprocal_score = {}
+⋮----
+# Use max_rank instead of infinity to avoid bias against
+# single-method docs
+max_rank = self.config.n_similar_chunks * retrieval_multiple
+rank_semantic = id2_rank_semantic.get(id_, max_rank + 1)
+rank_bm25 = id2_rank_bm25.get(id_, max_rank + 1)
+rank_fuzzy = id2_rank_fuzzy.get(id_, max_rank + 1)
+c = self.config.reciprocal_rank_fusion_constant
+reciprocal_fusion_score = (
+⋮----
+# sort the docs by the reciprocal score, in descending order
+id2_reciprocal_score = OrderedDict(
+# each method retrieved up to retrieval_multiple * n_similar_chunks,
+# so we need to take the top n_similar_chunks from the combined list
+passages = [
+# passages must have distinct ids
+⋮----
+passages_scores = [(p, 0.0) for p in passages]
+passages_scores = self.add_context_window(passages_scores)
+passages = [p for p, _ in passages_scores]
+# now passages can potentially have a lot of doc chunks,
+# so we re-rank them using a cross-encoder scoring model
+# (provided that `reciprocal_rank_fusion` is not enabled),
+# and pick top k where k = config..n_similar_chunks
+# https://www.sbert.net/examples/applications/retrieve_rerank
+⋮----
+passages = self.rerank_with_cross_encoder(query, passages)
+⋮----
+# reorder to increase diversity among top docs
+passages = self.rerank_with_diversity(passages)
+⋮----
+# reorder so most important docs are at periphery
+# (see Lost In the Middle issue).
+passages = self.rerank_to_periphery(passages)
+⋮----
+@no_type_check
+    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]
+⋮----
+"""
+        Get list of (verbatim) extracts from doc-chunks relevant to answering a query.
+
+        These are the stages (some optional based on config):
+        - use LLM to convert query to stand-alone query
+        - optionally use LLM to rephrase query to use below
+        - optionally use LLM to generate hypothetical answer (HyDE) to use below.
+        - get_relevant_chunks(): get doc-chunks relevant to query and proxies
+        - use LLM to get relevant extracts from doc-chunks
+
+        Args:
+            query (str): query to search for
+
+        Returns:
+            query (str): stand-alone version of input query
+            List[Document]: list of relevant extracts
+
+        """
+collection_name = (
+has_vecdb_collection = (
+⋮----
+# Regardless of whether we are in conversation mode or not,
+# for relevant doc/chunk extraction, we must convert the query
+# to a standalone query to get more relevant results.
+⋮----
+query = self.llm.followup_to_standalone(self.dialog, query)
+⋮----
+proxies = []
+⋮----
+answer = self.llm_hypothetical_answer(query)
+proxies = [answer]
+⋮----
+rephrases = self.llm_rephrase_query(query)
+⋮----
+passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+⋮----
+passages = self.chunked_docs
+⋮----
+extracts = passages
+⋮----
+# these are async calls, one per passage; turn off streaming
+extracts = self.get_verbatim_extracts(query, passages)
+extracts = [e for e in extracts if e.content != NO_ANSWER]
+⋮----
+def remove_chunk_enrichments(self, passages: List[Document]) -> List[Document]
+⋮----
+"""Remove any enrichments (like hypothetical questions, or keywords)
+        from documents.
+        Only cleans if enrichment was enabled in config.
+
+        Args:
+            passages: List of documents to clean
+
+        Returns:
+            List of documents with only original content
+        """
+⋮----
+delimiter = self.config.chunk_enrichment_config.delimiter
+⋮----
+"""
+        Run RelevanceExtractorAgent in async/concurrent mode on passages,
+        to extract portions relevant to answering query, from each passage.
+        Args:
+            query (str): query to answer
+            passages (List[Documents]): list of passages to extract from
+
+        Returns:
+            List[Document]: list of Documents containing extracts and metadata.
+        """
+passages = self.remove_chunk_enrichments(passages)
+⋮----
+agent_cfg = self.config.relevance_extractor_config
+⋮----
+# no relevance extraction: simply return passages
+⋮----
+# Use main DocChatAgent's LLM if not provided explicitly:
+# this reduces setup burden on the user
+⋮----
+agent_cfg.llm.stream = False  # disable streaming for concurrent calls
+⋮----
+agent = RelevanceExtractorAgent(agent_cfg)
+task = Task(
+⋮----
+extracts: list[str] = run_batch_tasks(
+⋮----
+# Caution: Retain ALL other fields in the Documents (which could be
+# other than just `content` and `metadata`), while simply replacing
+# `content` with the extracted portions
+passage_extracts = []
+⋮----
+p_copy = p.model_copy()
+⋮----
+def answer_from_docs(self, query: str) -> ChatDocument
+⋮----
+"""
+        Answer query based on relevant docs from the VecDB
+
+        Args:
+            query (str): query to answer
+
+        Returns:
+            Document: answer
+        """
+response = ChatDocument(
+# query may be updated to a stand-alone version
+⋮----
+# only return extracts, skip LLM-based summary answer
+meta = dict(
+# copy metadata from first doc, unclear what to do here.
+⋮----
+metadata=ChatDocMetaData(**meta),  # type: ignore
+⋮----
+response = self.get_summary_answer(query, extracts)
+⋮----
+self.response = response  # save last response
+⋮----
+"""Summarize all docs"""
+⋮----
+full_text = "\n\n".join([d.content for d in self.original_docs])
+⋮----
+tot_tokens = self.parser.num_tokens(full_text)
+MAX_INPUT_TOKENS = (
+⋮----
+# truncate
+full_text = self.parser.tokenizer.decode(
+⋮----
+prompt = f"""
+⋮----
+summary = ChatAgent.llm_response(self, prompt)
+⋮----
+def justify_response(self) -> ChatDocument | None
+⋮----
+"""Show evidence for last response"""
+⋮----
+source = self.response.metadata.source
+</file>
+
 <file path="langroid/agent/chat_document.py">
 class ChatDocAttachment(BaseModel)
 ⋮----
@@ -36838,6 +36857,580 @@ matched = False
 matched = True
 </file>
 
+<file path="langroid/language_models/base.py">
+logger = logging.getLogger(__name__)
+⋮----
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
+⋮----
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
+⋮----
+FunctionCallTypes = Literal["none", "auto"]
+ToolChoiceTypes = Literal["none", "auto", "required"]
+ToolTypes = Literal["function"]
+⋮----
+DEFAULT_CONTEXT_LENGTH = 16_000
+⋮----
+class StreamEventType(Enum)
+⋮----
+TEXT = 1
+FUNC_NAME = 2
+FUNC_ARGS = 3
+TOOL_NAME = 4
+TOOL_ARGS = 5
+REASONING = 6
+⋮----
+class RetryParams(BaseSettings)
+⋮----
+max_retries: int = 5
+initial_delay: float = 1.0
+exponential_base: float = 1.3
+jitter: bool = True
+⋮----
+class LLMConfig(BaseSettings)
+⋮----
+"""
+    Common configuration for all language models.
+    """
+⋮----
+type: str = "openai"
+streamer: Optional[Callable[[Any], None]] = noop_fn
+streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
+api_base: str | None = None
+formatter: None | str = None
+# specify None if you want to use the full max output tokens of the model
+max_output_tokens: int | None = 8192
+timeout: int = 20  # timeout for API requests
+chat_model: str = ""
+completion_model: str = ""
+temperature: float = 0.0
+chat_context_length: int | None = None
+async_stream_quiet: bool = False  # suppress streaming output in async mode?
+completion_context_length: int | None = None
+# if input length + max_output_tokens > context length of model,
+# we will try shortening requested output
+min_output_tokens: int = 64
+use_completion_for_chat: bool = False  # use completion model for chat?
+# use chat model for completion? For OpenAI models, this MUST be set to True!
+use_chat_for_completion: bool = True
+stream: bool = True  # stream output from API?
+# TODO: we could have a `stream_reasoning` flag here to control whether to show
+# reasoning output from reasoning models
+cache_config: None | CacheDBConfig = RedisCacheConfig()
+thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
+retry_params: RetryParams = RetryParams()
+⋮----
+@property
+    def model_max_output_tokens(self) -> int
+⋮----
+# Build fallback names by progressively stripping provider prefixes
+# (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
+# succeeds even before OpenAIGPT.__init__ strips the prefix.
+parts = self.chat_model.split("/")
+fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
+⋮----
+class LLMFunctionCall(BaseModel)
+⋮----
+"""
+    Structure of LLM response indicating it "wants" to call a function.
+    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
+    """
+⋮----
+name: str  # name of function to call
+arguments: Optional[Dict[str, Any]] = None
+⋮----
+@staticmethod
+    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall"
+⋮----
+"""
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+fun_call = LLMFunctionCall(name=message["name"])
+fun_args_str = message["arguments"]
+# sometimes may be malformed with invalid indents,
+# so we try to be safe by removing newlines.
+⋮----
+fun_args_str = fun_args_str.replace("\n", "").strip()
+dict_or_list = parse_imperfect_json(fun_args_str)
+⋮----
+fun_args = dict_or_list
+⋮----
+fun_args = None
+⋮----
+def __str__(self) -> str
+⋮----
+class LLMFunctionSpec(BaseModel)
+⋮----
+"""
+    Description of a function available for the LLM to use.
+    To be used when calling the LLM `chat()` method with the `functions` parameter.
+    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
+    """
+⋮----
+name: str
+description: str
+parameters: Dict[str, Any]
+⋮----
+class OpenAIToolCall(BaseModel)
+⋮----
+"""
+    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
+    See https://platform.openai.com/docs/api-reference/chat/create
+
+    Attributes:
+        id: The id of the tool call.
+        type: The type of the tool call;
+            only "function" is currently possible (7/26/24).
+        function: The function call.
+    """
+⋮----
+id: str | None = None
+type: ToolTypes = "function"
+function: LLMFunctionCall | None = None
+extra_content: Dict[str, Any] | None = None
+⋮----
+@staticmethod
+    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall"
+⋮----
+id = message["id"]
+type = message["type"]
+function = LLMFunctionCall.from_dict(message["function"])
+extra_content = message.get("extra_content")
+⋮----
+class OpenAIToolSpec(BaseModel)
+⋮----
+type: ToolTypes
+strict: Optional[bool] = None
+function: LLMFunctionSpec
+⋮----
+class OpenAIJsonSchemaSpec(BaseModel)
+⋮----
+def to_dict(self) -> Dict[str, Any]
+⋮----
+json_schema: Dict[str, Any] = {
+⋮----
+class LLMTokenUsage(BaseModel)
+⋮----
+"""
+    Usage of tokens by an LLM.
+    """
+⋮----
+prompt_tokens: int = 0
+cached_tokens: int = 0
+completion_tokens: int = 0
+cost: float = 0.0
+calls: int = 0  # how many API calls - not used as of 2025-04-04
+⋮----
+def reset(self) -> None
+⋮----
+@property
+    def total_tokens(self) -> int
+⋮----
+class Role(str, Enum)
+⋮----
+"""
+    Possible roles for a message in a chat.
+    """
+⋮----
+USER = "user"
+SYSTEM = "system"
+ASSISTANT = "assistant"
+FUNCTION = "function"
+TOOL = "tool"
+⋮----
+class LLMMessage(BaseModel)
+⋮----
+"""
+    Class representing an entry in the msg-history sent to the LLM API.
+    It could be one of these:
+    - a user message
+    - an LLM ("Assistant") response
+    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
+    - a result or results from executing a fn or tool-call(s)
+    """
+⋮----
+role: Role
+name: Optional[str] = None
+tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
+tool_id: str = ""  # used by OpenAIAssistant
+# None means "no content" (the model returned only a tool/function call).
+# This is distinct from "" and is dropped from the API payload by api_dict;
+# see api_dict for how a fully-empty message is handled per-API.
+content: Optional[str] = None
+files: List[FileAttachment] = []
+function_call: Optional[LLMFunctionCall] = None
+tool_calls: Optional[List[OpenAIToolCall]] = None
+timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# link to corresponding chat document, for provenance/rewind purposes
+chat_document_id: str = ""
+⋮----
+def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]
+⋮----
+"""
+        Convert to dictionary for API request, keeping ONLY
+        the fields that are expected in an API call!
+        E.g., DROP the tool_id, since it is only for use in the Assistant API,
+            not the completion API.
+
+        Args:
+            has_system_role: whether the message has a system role (if not,
+                set to "user" role)
+        Returns:
+            dict: dictionary representation of LLM message
+        """
+d = self.model_dump()
+files: List[FileAttachment] = d.pop("files")
+⋮----
+# In there are files, then content is an array of
+# different content-parts
+⋮----
+# if there is a key k = "role" with value "system", change to "user"
+# in case has_system_role is False
+⋮----
+# drop None values since API doesn't accept them (this omits `content`
+# entirely when it is None, i.e. "no content")
+dict_no_none = {k: v for k, v in d.items() if v is not None}
+⋮----
+# OpenAI API does not like empty name
+⋮----
+# arguments must be a string
+⋮----
+# convert tool calls to API format
+⋮----
+# An empty tool-call list is not a call and conveys no useful API
+# information. Omitting it also lets the empty-message fallback
+# below produce a valid message.
+⋮----
+# A message with empty content (None was dropped above, or "") AND no
+# tool/function call would be an entirely empty message, which some APIs
+# (e.g. Gemini) reject; fall back to a single space in that case only.
+# When there IS a tool/function call, empty content is fine (and Gemini
+# 3.x in fact REQUIRES it — it rejects an assistant turn that carries
+# both a call and non-empty text content).
+has_call = bool(dict_no_none.get("tool_calls")) or (
+⋮----
+# IMPORTANT! drop fields that are not expected in API call
+⋮----
+content = "FUNC: " + json.dumps(self.function_call)
+⋮----
+content = self.content or ""
+name_str = f" ({self.name})" if self.name else ""
+⋮----
+class LLMResponse(BaseModel)
+⋮----
+"""
+    Class representing response from LLM.
+    """
+⋮----
+# None means the model returned NO content (e.g. only a tool/function
+# call), which is distinct from an empty string "". Preserving this
+# distinction lets the message be faithfully reproduced downstream
+# (see ChatDocument.content_is_none and LLMMessage.content).
+message: Optional[str] = None
+reasoning: str = ""  # optional reasoning text from reasoning models
+# Original message text including inline thought signatures (e.g.
+# <thinking>...</thinking>). Only set when reasoning was extracted
+# from the message text via get_reasoning_final(); NOT set when
+# reasoning comes from a separate API field (e.g. reasoning_content),
+# since in that case the message text never contained thought tags.
+message_with_reasoning: Optional[str] = None
+# TODO tool_id needs to generalize to multi-tool calls
+⋮----
+oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+⋮----
+usage: Optional[LLMTokenUsage] = None
+cached: bool = False
+⋮----
+def tools_content(self) -> str
+⋮----
+def to_LLMMessage(self) -> LLMMessage
+⋮----
+"""Convert LLM response to an LLMMessage, to be included in the
+        message-list sent to the API.
+        This is currently NOT used in any significant way in the library, and is only
+        provided as a utility to construct a message list for the API when directly
+        working with an LLM object.
+
+        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
+        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
+        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
+        """
+⋮----
+"""
+        If `message` or `function_call` of an LLM response contains an explicit
+        recipient name, return this recipient name and `message` stripped
+        of the recipient name if specified.
+
+        Two cases:
+        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
+        (b) `message` is empty and function_call/tool_call with explicit `recipient`
+
+        Args:
+            recognize_recipient_in_content (bool): When True (default), parses
+                message text for ``TO[<recipient>]:<content>`` patterns and
+                top-level JSON ``{"recipient": "..."}`` fields. When False,
+                only function_call/tool_call ``recipient`` fields are checked.
+
+        Returns:
+            (str): name of recipient, which may be empty string if no recipient
+            (str): content of message
+
+        """
+⋮----
+# in this case we ignore message, since all information is in function_call
+msg = ""
+args = self.function_call.arguments
+recipient = ""
+⋮----
+recipient = args.get("recipient", "")
+⋮----
+msg = self.message or ""
+⋮----
+# get the first tool that has a recipient field, if any
+⋮----
+recipient = tc.function.arguments.get(
+⋮----
+)  # type: ignore
+⋮----
+# It's not a function or tool call, so continue looking to see
+# if a recipient is specified in the message.
+⋮----
+# First check if message contains "TO: <recipient> <content>"
+⋮----
+# check if there is a top level json that specifies 'recipient',
+# and retain the entire message as content.
+⋮----
+recipient_name = top_level_json_field(msg, "recipient") if msg else ""
+content = msg
+⋮----
+# Define an abstract base class for language models
+class LanguageModel(ABC)
+⋮----
+"""
+    Abstract base class for language models.
+    """
+⋮----
+# usage cost by model, accumulates here
+usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+⋮----
+def __init__(self, config: LLMConfig = LLMConfig())
+⋮----
+@staticmethod
+    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]
+⋮----
+"""
+        Create a language model.
+        Args:
+            config: configuration for language model
+        Returns: instance of language model
+        """
+⋮----
+openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+⋮----
+openai = AzureGPT
+⋮----
+openai = OpenAIGPT
+cls = dict(
+return cls(config)  # type: ignore
+⋮----
+@staticmethod
+    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]
+⋮----
+"""
+        Given an even-length sequence of strings, split into a sequence of pairs
+
+        Args:
+            lst (List[str]): sequence of strings
+
+        Returns:
+            List[Tuple[str,str]]: sequence of pairs of strings
+        """
+evens = lst[::2]
+odds = lst[1::2]
+⋮----
+"""
+        From the chat history, extract system prompt, user-assistant turns, and
+        final user msg.
+
+        Args:
+            messages (List[LLMMessage]): List of messages in the chat history
+
+        Returns:
+            Tuple[str, List[Tuple[str,str]], str]:
+                system prompt, user-assistant turns, final user msg
+
+        """
+# Handle various degenerate cases
+messages = [m for m in messages]  # copy
+DUMMY_SYS_PROMPT = "You are a helpful assistant."
+DUMMY_USER_PROMPT = "Follow the instructions above."
+⋮----
+system_prompt = messages[0].content or ""
+⋮----
+# now we have messages = [Sys,...]
+⋮----
+# now we have messages = [Sys, msg, ...]
+⋮----
+# now we have messages = [Sys, user, ...]
+⋮----
+# now we have messages = [Sys, user, ..., user]
+# so we omit the first and last elements and make pairs of user-asst messages
+conversation = [m.content or "" for m in messages[1:-1]]
+user_prompt = messages[-1].content or ""
+pairs = LanguageModel.user_assistant_pairs(conversation)
+⋮----
+@abstractmethod
+    def set_stream(self, stream: bool) -> bool
+⋮----
+"""Enable or disable streaming output from API.
+        Return previous value of stream."""
+⋮----
+@abstractmethod
+    def get_stream(self) -> bool
+⋮----
+"""Get streaming status"""
+⋮----
+@abstractmethod
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+@abstractmethod
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+"""
+        Get chat-completion response from LLM.
+
+        Args:
+            messages: message-history to send to the LLM
+            max_tokens: max tokens to generate
+            tools: tools available for the LLM to use in its response
+            tool_choice: tool call mode, one of "none", "auto", "required",
+                or a dict specifying a specific tool.
+            functions: functions available for LLM to call (deprecated)
+            function_call: function calling mode, "auto", "none", or a specific fn
+                    (deprecated)
+        """
+⋮----
+"""Async version of `chat`. See `chat` for details."""
+⋮----
+def __call__(self, prompt: str, max_tokens: int) -> LLMResponse
+⋮----
+@staticmethod
+    def _fallback_model_names(model: str) -> List[str]
+⋮----
+parts = model.split("/")
+fallbacks = []
+⋮----
+def info(self) -> ModelInfo
+⋮----
+"""Info of relevant chat model"""
+orig_model = (
+⋮----
+def completion_info(self) -> ModelInfo
+⋮----
+"""Info of relevant completion model"""
+⋮----
+def supports_functions_or_tools(self) -> bool
+⋮----
+"""
+        Does this Model's API support "native" tool-calling, i.e.
+        can we call the API with arguments that contain a list of available tools,
+        and their schemas?
+        Note that, given the plethora of LLM provider APIs this determination is
+        imperfect at best, and leans towards returning True.
+        When the API calls fails with an error indicating tools are not supported,
+        then users are encouraged to use the Langroid-based prompt-based
+        ToolMessage mechanism, which works with ANY LLM. To enable this,
+        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
+        """
+⋮----
+def chat_context_length(self) -> int
+⋮----
+def completion_context_length(self) -> int
+⋮----
+def chat_cost(self) -> Tuple[float, float, float]
+⋮----
+"""
+        Return the cost per 1000 tokens for chat completions.
+
+        Returns:
+            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
+                per 1000 tokens
+        """
+⋮----
+def reset_usage_cost(self) -> None
+⋮----
+counter = self.usage_cost_dict[mdl]
+⋮----
+"""
+        Update usage cost for this LLM.
+        Args:
+            chat (bool): whether to update for chat or completion model
+            prompts (int): number of tokens used for prompts
+            completions (int): number of tokens used for completions
+            cost (float): total token cost in USD
+        """
+mdl = self.config.chat_model if chat else self.config.completion_model
+⋮----
+@classmethod
+    def usage_cost_summary(cls) -> str
+⋮----
+s = ""
+⋮----
+@classmethod
+    def tot_tokens_cost(cls) -> Tuple[int, float]
+⋮----
+"""
+        Return total tokens used and total cost across all models.
+        """
+total_tokens = 0
+total_cost = 0.0
+⋮----
+def get_reasoning_final(self, message: str) -> Tuple[str, str]
+⋮----
+"""Extract "reasoning" and "final answer" from an LLM response, if the
+        reasoning is found within configured delimiters, like <think>, </think>.
+        E.g.,
+        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
+
+        Args:
+            message (str): message from LLM
+
+        Returns:
+            Tuple[str, str]: reasoning, final answer
+        """
+⋮----
+parts = message.split(start)
+⋮----
+"""
+        Given a chat history and a question, convert it to a standalone question.
+        Args:
+            chat_history: list of tuples of (question, answer)
+            query: follow-up question
+
+        Returns: standalone version of the question
+        """
+history = collate_chat_history(chat_history)
+⋮----
+prompt = f"""
+⋮----
+follow_up_question = f"""
+⋮----
+standalone = (
+standalone = standalone.strip()
+⋮----
+class StreamingIfAllowed
+⋮----
+"""Context to temporarily enable or disable streaming, if allowed globally via
+    `settings.stream`"""
+⋮----
+def __init__(self, llm: LanguageModel, stream: bool = True)
+⋮----
+def __enter__(self) -> None
+⋮----
+def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
+</file>
+
 <file path="langroid/language_models/client_cache.py">
 """
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
@@ -38356,580 +38949,6 @@ def __del__(self) -> None
 # Previously we closed clients here, but this caused issues when
 # multiple agents shared the same cached client instance.
 # Clients are now managed centrally in langroid.language_models.client_cache
-</file>
-
-<file path="langroid/language_models/base.py">
-logger = logging.getLogger(__name__)
-⋮----
-def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
-⋮----
-async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
-⋮----
-FunctionCallTypes = Literal["none", "auto"]
-ToolChoiceTypes = Literal["none", "auto", "required"]
-ToolTypes = Literal["function"]
-⋮----
-DEFAULT_CONTEXT_LENGTH = 16_000
-⋮----
-class StreamEventType(Enum)
-⋮----
-TEXT = 1
-FUNC_NAME = 2
-FUNC_ARGS = 3
-TOOL_NAME = 4
-TOOL_ARGS = 5
-REASONING = 6
-⋮----
-class RetryParams(BaseSettings)
-⋮----
-max_retries: int = 5
-initial_delay: float = 1.0
-exponential_base: float = 1.3
-jitter: bool = True
-⋮----
-class LLMConfig(BaseSettings)
-⋮----
-"""
-    Common configuration for all language models.
-    """
-⋮----
-type: str = "openai"
-streamer: Optional[Callable[[Any], None]] = noop_fn
-streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
-api_base: str | None = None
-formatter: None | str = None
-# specify None if you want to use the full max output tokens of the model
-max_output_tokens: int | None = 8192
-timeout: int = 20  # timeout for API requests
-chat_model: str = ""
-completion_model: str = ""
-temperature: float = 0.0
-chat_context_length: int | None = None
-async_stream_quiet: bool = False  # suppress streaming output in async mode?
-completion_context_length: int | None = None
-# if input length + max_output_tokens > context length of model,
-# we will try shortening requested output
-min_output_tokens: int = 64
-use_completion_for_chat: bool = False  # use completion model for chat?
-# use chat model for completion? For OpenAI models, this MUST be set to True!
-use_chat_for_completion: bool = True
-stream: bool = True  # stream output from API?
-# TODO: we could have a `stream_reasoning` flag here to control whether to show
-# reasoning output from reasoning models
-cache_config: None | CacheDBConfig = RedisCacheConfig()
-thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
-retry_params: RetryParams = RetryParams()
-⋮----
-@property
-    def model_max_output_tokens(self) -> int
-⋮----
-# Build fallback names by progressively stripping provider prefixes
-# (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
-# succeeds even before OpenAIGPT.__init__ strips the prefix.
-parts = self.chat_model.split("/")
-fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
-⋮----
-class LLMFunctionCall(BaseModel)
-⋮----
-"""
-    Structure of LLM response indicating it "wants" to call a function.
-    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
-    """
-⋮----
-name: str  # name of function to call
-arguments: Optional[Dict[str, Any]] = None
-⋮----
-@staticmethod
-    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall"
-⋮----
-"""
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-fun_call = LLMFunctionCall(name=message["name"])
-fun_args_str = message["arguments"]
-# sometimes may be malformed with invalid indents,
-# so we try to be safe by removing newlines.
-⋮----
-fun_args_str = fun_args_str.replace("\n", "").strip()
-dict_or_list = parse_imperfect_json(fun_args_str)
-⋮----
-fun_args = dict_or_list
-⋮----
-fun_args = None
-⋮----
-def __str__(self) -> str
-⋮----
-class LLMFunctionSpec(BaseModel)
-⋮----
-"""
-    Description of a function available for the LLM to use.
-    To be used when calling the LLM `chat()` method with the `functions` parameter.
-    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
-    """
-⋮----
-name: str
-description: str
-parameters: Dict[str, Any]
-⋮----
-class OpenAIToolCall(BaseModel)
-⋮----
-"""
-    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
-    See https://platform.openai.com/docs/api-reference/chat/create
-
-    Attributes:
-        id: The id of the tool call.
-        type: The type of the tool call;
-            only "function" is currently possible (7/26/24).
-        function: The function call.
-    """
-⋮----
-id: str | None = None
-type: ToolTypes = "function"
-function: LLMFunctionCall | None = None
-extra_content: Dict[str, Any] | None = None
-⋮----
-@staticmethod
-    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall"
-⋮----
-id = message["id"]
-type = message["type"]
-function = LLMFunctionCall.from_dict(message["function"])
-extra_content = message.get("extra_content")
-⋮----
-class OpenAIToolSpec(BaseModel)
-⋮----
-type: ToolTypes
-strict: Optional[bool] = None
-function: LLMFunctionSpec
-⋮----
-class OpenAIJsonSchemaSpec(BaseModel)
-⋮----
-def to_dict(self) -> Dict[str, Any]
-⋮----
-json_schema: Dict[str, Any] = {
-⋮----
-class LLMTokenUsage(BaseModel)
-⋮----
-"""
-    Usage of tokens by an LLM.
-    """
-⋮----
-prompt_tokens: int = 0
-cached_tokens: int = 0
-completion_tokens: int = 0
-cost: float = 0.0
-calls: int = 0  # how many API calls - not used as of 2025-04-04
-⋮----
-def reset(self) -> None
-⋮----
-@property
-    def total_tokens(self) -> int
-⋮----
-class Role(str, Enum)
-⋮----
-"""
-    Possible roles for a message in a chat.
-    """
-⋮----
-USER = "user"
-SYSTEM = "system"
-ASSISTANT = "assistant"
-FUNCTION = "function"
-TOOL = "tool"
-⋮----
-class LLMMessage(BaseModel)
-⋮----
-"""
-    Class representing an entry in the msg-history sent to the LLM API.
-    It could be one of these:
-    - a user message
-    - an LLM ("Assistant") response
-    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
-    - a result or results from executing a fn or tool-call(s)
-    """
-⋮----
-role: Role
-name: Optional[str] = None
-tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
-tool_id: str = ""  # used by OpenAIAssistant
-# None means "no content" (the model returned only a tool/function call).
-# This is distinct from "" and is dropped from the API payload by api_dict;
-# see api_dict for how a fully-empty message is handled per-API.
-content: Optional[str] = None
-files: List[FileAttachment] = []
-function_call: Optional[LLMFunctionCall] = None
-tool_calls: Optional[List[OpenAIToolCall]] = None
-timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-# link to corresponding chat document, for provenance/rewind purposes
-chat_document_id: str = ""
-⋮----
-def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]
-⋮----
-"""
-        Convert to dictionary for API request, keeping ONLY
-        the fields that are expected in an API call!
-        E.g., DROP the tool_id, since it is only for use in the Assistant API,
-            not the completion API.
-
-        Args:
-            has_system_role: whether the message has a system role (if not,
-                set to "user" role)
-        Returns:
-            dict: dictionary representation of LLM message
-        """
-d = self.model_dump()
-files: List[FileAttachment] = d.pop("files")
-⋮----
-# In there are files, then content is an array of
-# different content-parts
-⋮----
-# if there is a key k = "role" with value "system", change to "user"
-# in case has_system_role is False
-⋮----
-# drop None values since API doesn't accept them (this omits `content`
-# entirely when it is None, i.e. "no content")
-dict_no_none = {k: v for k, v in d.items() if v is not None}
-⋮----
-# OpenAI API does not like empty name
-⋮----
-# arguments must be a string
-⋮----
-# convert tool calls to API format
-⋮----
-# An empty tool-call list is not a call and conveys no useful API
-# information. Omitting it also lets the empty-message fallback
-# below produce a valid message.
-⋮----
-# A message with empty content (None was dropped above, or "") AND no
-# tool/function call would be an entirely empty message, which some APIs
-# (e.g. Gemini) reject; fall back to a single space in that case only.
-# When there IS a tool/function call, empty content is fine (and Gemini
-# 3.x in fact REQUIRES it — it rejects an assistant turn that carries
-# both a call and non-empty text content).
-has_call = bool(dict_no_none.get("tool_calls")) or (
-⋮----
-# IMPORTANT! drop fields that are not expected in API call
-⋮----
-content = "FUNC: " + json.dumps(self.function_call)
-⋮----
-content = self.content or ""
-name_str = f" ({self.name})" if self.name else ""
-⋮----
-class LLMResponse(BaseModel)
-⋮----
-"""
-    Class representing response from LLM.
-    """
-⋮----
-# None means the model returned NO content (e.g. only a tool/function
-# call), which is distinct from an empty string "". Preserving this
-# distinction lets the message be faithfully reproduced downstream
-# (see ChatDocument.content_is_none and LLMMessage.content).
-message: Optional[str] = None
-reasoning: str = ""  # optional reasoning text from reasoning models
-# Original message text including inline thought signatures (e.g.
-# <thinking>...</thinking>). Only set when reasoning was extracted
-# from the message text via get_reasoning_final(); NOT set when
-# reasoning comes from a separate API field (e.g. reasoning_content),
-# since in that case the message text never contained thought tags.
-message_with_reasoning: Optional[str] = None
-# TODO tool_id needs to generalize to multi-tool calls
-⋮----
-oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-⋮----
-usage: Optional[LLMTokenUsage] = None
-cached: bool = False
-⋮----
-def tools_content(self) -> str
-⋮----
-def to_LLMMessage(self) -> LLMMessage
-⋮----
-"""Convert LLM response to an LLMMessage, to be included in the
-        message-list sent to the API.
-        This is currently NOT used in any significant way in the library, and is only
-        provided as a utility to construct a message list for the API when directly
-        working with an LLM object.
-
-        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
-        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
-        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
-        """
-⋮----
-"""
-        If `message` or `function_call` of an LLM response contains an explicit
-        recipient name, return this recipient name and `message` stripped
-        of the recipient name if specified.
-
-        Two cases:
-        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
-        (b) `message` is empty and function_call/tool_call with explicit `recipient`
-
-        Args:
-            recognize_recipient_in_content (bool): When True (default), parses
-                message text for ``TO[<recipient>]:<content>`` patterns and
-                top-level JSON ``{"recipient": "..."}`` fields. When False,
-                only function_call/tool_call ``recipient`` fields are checked.
-
-        Returns:
-            (str): name of recipient, which may be empty string if no recipient
-            (str): content of message
-
-        """
-⋮----
-# in this case we ignore message, since all information is in function_call
-msg = ""
-args = self.function_call.arguments
-recipient = ""
-⋮----
-recipient = args.get("recipient", "")
-⋮----
-msg = self.message or ""
-⋮----
-# get the first tool that has a recipient field, if any
-⋮----
-recipient = tc.function.arguments.get(
-⋮----
-)  # type: ignore
-⋮----
-# It's not a function or tool call, so continue looking to see
-# if a recipient is specified in the message.
-⋮----
-# First check if message contains "TO: <recipient> <content>"
-⋮----
-# check if there is a top level json that specifies 'recipient',
-# and retain the entire message as content.
-⋮----
-recipient_name = top_level_json_field(msg, "recipient") if msg else ""
-content = msg
-⋮----
-# Define an abstract base class for language models
-class LanguageModel(ABC)
-⋮----
-"""
-    Abstract base class for language models.
-    """
-⋮----
-# usage cost by model, accumulates here
-usage_cost_dict: Dict[str, LLMTokenUsage] = {}
-⋮----
-def __init__(self, config: LLMConfig = LLMConfig())
-⋮----
-@staticmethod
-    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]
-⋮----
-"""
-        Create a language model.
-        Args:
-            config: configuration for language model
-        Returns: instance of language model
-        """
-⋮----
-openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
-⋮----
-openai = AzureGPT
-⋮----
-openai = OpenAIGPT
-cls = dict(
-return cls(config)  # type: ignore
-⋮----
-@staticmethod
-    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]
-⋮----
-"""
-        Given an even-length sequence of strings, split into a sequence of pairs
-
-        Args:
-            lst (List[str]): sequence of strings
-
-        Returns:
-            List[Tuple[str,str]]: sequence of pairs of strings
-        """
-evens = lst[::2]
-odds = lst[1::2]
-⋮----
-"""
-        From the chat history, extract system prompt, user-assistant turns, and
-        final user msg.
-
-        Args:
-            messages (List[LLMMessage]): List of messages in the chat history
-
-        Returns:
-            Tuple[str, List[Tuple[str,str]], str]:
-                system prompt, user-assistant turns, final user msg
-
-        """
-# Handle various degenerate cases
-messages = [m for m in messages]  # copy
-DUMMY_SYS_PROMPT = "You are a helpful assistant."
-DUMMY_USER_PROMPT = "Follow the instructions above."
-⋮----
-system_prompt = messages[0].content or ""
-⋮----
-# now we have messages = [Sys,...]
-⋮----
-# now we have messages = [Sys, msg, ...]
-⋮----
-# now we have messages = [Sys, user, ...]
-⋮----
-# now we have messages = [Sys, user, ..., user]
-# so we omit the first and last elements and make pairs of user-asst messages
-conversation = [m.content or "" for m in messages[1:-1]]
-user_prompt = messages[-1].content or ""
-pairs = LanguageModel.user_assistant_pairs(conversation)
-⋮----
-@abstractmethod
-    def set_stream(self, stream: bool) -> bool
-⋮----
-"""Enable or disable streaming output from API.
-        Return previous value of stream."""
-⋮----
-@abstractmethod
-    def get_stream(self) -> bool
-⋮----
-"""Get streaming status"""
-⋮----
-@abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-@abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-"""
-        Get chat-completion response from LLM.
-
-        Args:
-            messages: message-history to send to the LLM
-            max_tokens: max tokens to generate
-            tools: tools available for the LLM to use in its response
-            tool_choice: tool call mode, one of "none", "auto", "required",
-                or a dict specifying a specific tool.
-            functions: functions available for LLM to call (deprecated)
-            function_call: function calling mode, "auto", "none", or a specific fn
-                    (deprecated)
-        """
-⋮----
-"""Async version of `chat`. See `chat` for details."""
-⋮----
-def __call__(self, prompt: str, max_tokens: int) -> LLMResponse
-⋮----
-@staticmethod
-    def _fallback_model_names(model: str) -> List[str]
-⋮----
-parts = model.split("/")
-fallbacks = []
-⋮----
-def info(self) -> ModelInfo
-⋮----
-"""Info of relevant chat model"""
-orig_model = (
-⋮----
-def completion_info(self) -> ModelInfo
-⋮----
-"""Info of relevant completion model"""
-⋮----
-def supports_functions_or_tools(self) -> bool
-⋮----
-"""
-        Does this Model's API support "native" tool-calling, i.e.
-        can we call the API with arguments that contain a list of available tools,
-        and their schemas?
-        Note that, given the plethora of LLM provider APIs this determination is
-        imperfect at best, and leans towards returning True.
-        When the API calls fails with an error indicating tools are not supported,
-        then users are encouraged to use the Langroid-based prompt-based
-        ToolMessage mechanism, which works with ANY LLM. To enable this,
-        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
-        """
-⋮----
-def chat_context_length(self) -> int
-⋮----
-def completion_context_length(self) -> int
-⋮----
-def chat_cost(self) -> Tuple[float, float, float]
-⋮----
-"""
-        Return the cost per 1000 tokens for chat completions.
-
-        Returns:
-            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
-                per 1000 tokens
-        """
-⋮----
-def reset_usage_cost(self) -> None
-⋮----
-counter = self.usage_cost_dict[mdl]
-⋮----
-"""
-        Update usage cost for this LLM.
-        Args:
-            chat (bool): whether to update for chat or completion model
-            prompts (int): number of tokens used for prompts
-            completions (int): number of tokens used for completions
-            cost (float): total token cost in USD
-        """
-mdl = self.config.chat_model if chat else self.config.completion_model
-⋮----
-@classmethod
-    def usage_cost_summary(cls) -> str
-⋮----
-s = ""
-⋮----
-@classmethod
-    def tot_tokens_cost(cls) -> Tuple[int, float]
-⋮----
-"""
-        Return total tokens used and total cost across all models.
-        """
-total_tokens = 0
-total_cost = 0.0
-⋮----
-def get_reasoning_final(self, message: str) -> Tuple[str, str]
-⋮----
-"""Extract "reasoning" and "final answer" from an LLM response, if the
-        reasoning is found within configured delimiters, like <think>, </think>.
-        E.g.,
-        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
-
-        Args:
-            message (str): message from LLM
-
-        Returns:
-            Tuple[str, str]: reasoning, final answer
-        """
-⋮----
-parts = message.split(start)
-⋮----
-"""
-        Given a chat history and a question, convert it to a standalone question.
-        Args:
-            chat_history: list of tuples of (question, answer)
-            query: follow-up question
-
-        Returns: standalone version of the question
-        """
-history = collate_chat_history(chat_history)
-⋮----
-prompt = f"""
-⋮----
-follow_up_question = f"""
-⋮----
-standalone = (
-standalone = standalone.strip()
-⋮----
-class StreamingIfAllowed
-⋮----
-"""Context to temporarily enable or disable streaming, if allowed globally via
-    `settings.stream`"""
-⋮----
-def __init__(self, llm: LanguageModel, stream: bool = True)
-⋮----
-def __enter__(self) -> None
-⋮----
-def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
 </file>
 
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
@@ -42218,7 +42237,7 @@ all = [
     "pdf2image<2.0.0,>=1.17.0",
     "pymupdf<2.0.0,>=1.23.3",
     "pymupdf4llm<0.1.0,>=0.0.17",
-    "docling<3.0.0,>=2.16.0",
+    "docling<3.0.0,>=2.20.0",
     "pypdf>=5.1.0",
     "pytesseract<0.4.0,>=0.3.10",
     "python-docx<2.0.0,>=1.1.0",
