@@ -13,12 +13,22 @@ default, and that two no-arg instances get distinct config objects.
 """
 
 import inspect
+import os
+import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import CollectionStatus, Distance, PointStruct, VectorParams
 
+import langroid.vector_store.lancedb as lancedb_module
+import langroid.vector_store.meilisearch as meilisearch_module
+import langroid.vector_store.pineconedb as pineconedb_module
+import langroid.vector_store.postgres as postgres_module
+import langroid.vector_store.qdrantdb as qdrantdb_module
+import langroid.vector_store.weaviatedb as weaviatedb_module
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
@@ -55,11 +65,110 @@ def test_no_shared_mutable_default_config(
     )
 
 
+def _isolate_provider_io(
+    provider_cls: type[VectorStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Replace provider I/O boundaries with in-memory test doubles."""
+    if provider_cls is ChromaDB:
+        chromadb = ModuleType("chromadb")
+        chromadb.Client = (  # type: ignore[attr-defined]
+            lambda *_args, **_kwargs: MagicMock()
+        )
+        chromadb.config = SimpleNamespace(Settings=MagicMock)  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "chromadb", chromadb)
+    elif provider_cls is LanceDB:
+        monkeypatch.setattr(lancedb_module, "load_dotenv", lambda: None)
+        monkeypatch.setattr(lancedb_module, "has_lancedb", True)
+        monkeypatch.setattr(
+            lancedb_module,
+            "lancedb",
+            SimpleNamespace(connect=MagicMock()),
+            raising=False,
+        )
+    elif provider_cls is MeiliSearch:
+        monkeypatch.setattr(meilisearch_module, "load_dotenv", lambda: None)
+        meilisearch = ModuleType("meilisearch_python_sdk")
+        meilisearch.AsyncClient = MagicMock  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "meilisearch_python_sdk", meilisearch)
+    elif provider_cls is PineconeDB:
+        monkeypatch.setattr(pineconedb_module, "load_dotenv", lambda: None)
+        monkeypatch.setattr(pineconedb_module, "has_pinecone", True)
+        monkeypatch.setenv("PINECONE_API_KEY", "offline-test-key")
+        client = MagicMock()
+        client.list_indexes.return_value.names.return_value = []
+        monkeypatch.setattr(pineconedb_module, "Pinecone", lambda **_: client)
+        monkeypatch.setattr(PineconeDB, "embedding_dim", 1)
+    elif provider_cls is PostgresDB:
+        monkeypatch.setattr(postgres_module, "has_postgres", True)
+        monkeypatch.setattr(postgres_module, "MetaData", MagicMock, raising=False)
+        sqlalchemy = ModuleType("sqlalchemy")
+        sqlalchemy_orm = ModuleType("sqlalchemy.orm")
+        sqlalchemy_orm.sessionmaker = MagicMock  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "sqlalchemy", sqlalchemy)
+        monkeypatch.setitem(sys.modules, "sqlalchemy.orm", sqlalchemy_orm)
+        monkeypatch.setattr(PostgresDB, "_create_engine", MagicMock())
+        monkeypatch.setattr(PostgresDB, "_create_vector_extension", MagicMock())
+        monkeypatch.setattr(PostgresDB, "_setup_table", MagicMock())
+    elif provider_cls is QdrantDB:
+        monkeypatch.setattr(qdrantdb_module, "load_dotenv", lambda: None)
+        client = MagicMock()
+        client.collection_exists.return_value = False
+        client.get_collection.return_value.status = CollectionStatus.GREEN
+        client.get_collection.return_value.vectors_count = 0
+        monkeypatch.setattr("qdrant_client.QdrantClient", lambda **_kwargs: client)
+        monkeypatch.setattr(QdrantDB, "embedding_dim", 1)
+    elif provider_cls is WeaviateDB:
+        monkeypatch.setattr(weaviatedb_module, "load_dotenv", lambda: None)
+        weaviate = ModuleType("weaviate")
+        weaviate.connect_to_embedded = MagicMock()  # type: ignore[attr-defined]
+        classes = ModuleType("weaviate.classes")
+        init = ModuleType("weaviate.classes.init")
+        init.Auth = MagicMock  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "weaviate", weaviate)
+        monkeypatch.setitem(sys.modules, "weaviate.classes", classes)
+        monkeypatch.setitem(sys.modules, "weaviate.classes.init", init)
+
+
+def _clear_config_environment(
+    config_cls: type[VectorStoreConfig], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prevent ambient settings variables from changing constructor branches."""
+    config_fields = {name.casefold() for name in config_cls.model_fields}
+    for name in tuple(os.environ):
+        if name.casefold() in config_fields:
+            monkeypatch.delenv(name)
+
+
+@pytest.mark.parametrize("provider_cls,config_cls", PROVIDERS)
+def test_provider_config_identity_contract(
+    provider_cls: type[VectorStore],
+    config_cls: type[VectorStoreConfig],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify real constructors create fresh configs and preserve supplied ones."""
+    _clear_config_environment(config_cls, monkeypatch)
+    _isolate_provider_io(provider_cls, monkeypatch)
+
+    provider_a = provider_cls()
+    provider_b = provider_cls()
+    assert provider_a.config is not provider_b.config
+
+    monkeypatch.setattr(config_cls, "__bool__", lambda _: False, raising=False)
+    config = config_cls()
+    assert not config
+
+    provider = provider_cls(config)
+    assert provider.config is config
+
+
 def _seed_default_qdrant_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Prepare Qdrant's default path without making an embedding request."""
+    _clear_config_environment(QdrantDBConfig, monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENAI_API_KEY", "offline-test-key")
-    monkeypatch.setenv("CLOUD", "false")
+    monkeypatch.delenv("QDRANT_API_KEY", raising=False)
+    monkeypatch.delenv("QDRANT_API_URL", raising=False)
+    monkeypatch.setattr(qdrantdb_module, "load_dotenv", lambda: None)
 
     client = QdrantClient(path=".qdrant/data")
     try:
@@ -90,31 +199,3 @@ def test_no_arg_instances_get_fresh_config(
         assert provider_a.config is not provider_b.config
     finally:
         provider_b.close()
-
-
-class FalsyQdrantDBConfig(QdrantDBConfig):
-    """Valid Qdrant configuration that behaves as a falsy value."""
-
-    def __bool__(self) -> bool:
-        """Return ``False`` to exercise identity-safe constructor handling."""
-        return False
-
-
-def test_falsy_config_is_preserved_by_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Verify a supplied falsy configuration is not silently replaced."""
-    _seed_default_qdrant_store(tmp_path, monkeypatch)
-    config = FalsyQdrantDBConfig(
-        cloud=False,
-        collection_name=None,
-        storage_path=":memory:",
-    )
-
-    provider = QdrantDB(config)
-
-    try:
-        assert provider.config is config
-    finally:
-        provider.close()
