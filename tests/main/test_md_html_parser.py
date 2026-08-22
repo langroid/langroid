@@ -32,6 +32,7 @@ import types
 from typing import Any, Iterator
 
 import pytest
+import requests
 
 from langroid.parsing.document_parser import (
     DocumentParser,
@@ -656,6 +657,52 @@ class _QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         pass
 
+    def do_GET(self) -> None:
+        """Serve special transport and encoding cases used by URL tests."""
+        if self.path in {"/stalled", "/stalled.html"}:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            time.sleep(0.5)
+            return
+        if self.path == "/oversized.html":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            for _ in range(4):
+                self.wfile.write(b"0123456789")
+                self.wfile.flush()
+            return
+        if self.path == "/latin1-header.html":
+            body = "<p>café déjà vu</p>".encode("iso-8859-1")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=iso-8859-1")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/windows1252-meta.html":
+            html = (
+                '<html><head><meta charset="windows-1252"></head>'
+                "<body>Crème brûlée — déjà vu</body></html>"
+            )
+            body = html.encode("windows-1252")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/utf16-bom.html":
+            body = "<p>Snowman ☃</p>".encode("utf-16")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        super().do_GET()
+
 
 @pytest.fixture(scope="module")
 def doc_server_url(
@@ -724,3 +771,64 @@ def test_html_url_chunks(doc_server_url: str, filename: str) -> None:
     assert "<h1>" not in full_text
     # Adjacent elements are newline-separated on the URL path too.
     assert "Item A\nItem B" in full_text
+
+
+@pytest.mark.parametrize("scheme", ["HTTP", "HtTp"])
+def test_url_scheme_is_case_insensitive(doc_server_url: str, scheme: str) -> None:
+    """URI schemes are case-insensitive for detection and fetching."""
+    url = doc_server_url.replace("http", scheme, 1) + "/sample.html"
+    assert DocumentParser._document_type(url) == DocumentType.HTML
+
+    chunks = DocumentParser.chunks_from_path_or_bytes(url, Parser(ParsingConfig()))
+    assert "Heading One" in "\n".join(chunk.content for chunk in chunks)
+
+
+def test_url_read_timeout_stops_stalled_response(doc_server_url: str) -> None:
+    """A server that stalls after headers must not hang ingestion."""
+    parser = Parser(ParsingConfig(url_read_timeout=0.01))
+
+    with pytest.raises(requests.exceptions.RequestException):
+        DocumentParser.chunks_from_path_or_bytes(
+            f"{doc_server_url}/stalled.html", parser
+        )
+
+
+def test_configured_timeout_applies_during_url_type_detection(
+    doc_server_url: str,
+) -> None:
+    """Extensionless URL sampling must use the configured read timeout."""
+    parser = Parser(ParsingConfig(url_read_timeout=0.01))
+    start = time.monotonic()
+
+    with pytest.raises(requests.exceptions.RequestException):
+        DocumentParser.chunks_from_path_or_bytes(f"{doc_server_url}/stalled", parser)
+
+    assert time.monotonic() - start < 0.2
+
+
+def test_url_streaming_rejects_oversized_response(doc_server_url: str) -> None:
+    """The streaming size cap applies without a Content-Length header."""
+    parser = Parser(ParsingConfig(url_max_size=16))
+
+    with pytest.raises(ValueError, match="maximum.*16 bytes"):
+        DocumentParser.chunks_from_path_or_bytes(
+            f"{doc_server_url}/oversized.html", parser
+        )
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
+        ("latin1-header.html", "café déjà vu"),
+        ("windows1252-meta.html", "Crème brûlée — déjà vu"),
+        ("utf16-bom.html", "Snowman ☃"),
+    ],
+)
+def test_html_url_respects_declared_charset(
+    doc_server_url: str, filename: str, expected: str
+) -> None:
+    """HTTP and HTML charset declarations preserve exact Unicode text."""
+    chunks = DocumentParser.chunks_from_path_or_bytes(
+        f"{doc_server_url}/{filename}", Parser(ParsingConfig())
+    )
+    assert expected in "\n".join(chunk.content for chunk in chunks)

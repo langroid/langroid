@@ -11,7 +11,6 @@ from io import BytesIO
 from itertools import accumulate
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Tuple, Union
-from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -25,13 +24,19 @@ if TYPE_CHECKING:
     import pypdf
 
 
-import requests
 from bs4 import BeautifulSoup
 
 if TYPE_CHECKING:
     from PIL import Image
 
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.document_url import (
+    decode_url_text,
+    fetch_configured_url,
+    fetch_url_sample,
+    is_http_url,
+    url_extension_source,
+)
 from langroid.parsing.parser import LLMPdfParserConfig, Parser, ParsingConfig
 
 logger = logging.getLogger(__name__)
@@ -110,7 +115,9 @@ def _decode_utf8_text(content: bytes) -> str:
         raise
 
 
-def is_plain_text(path_or_bytes: str | bytes) -> bool:
+def is_plain_text(
+    path_or_bytes: str | bytes, config: ParsingConfig | None = None
+) -> bool:
     """
     Check if a file is plain text by attempting to decode it as UTF-8.
     Args:
@@ -119,10 +126,8 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
         bool: True if the file is plain text, False otherwise.
     """
     if isinstance(path_or_bytes, str):
-        if path_or_bytes.startswith(("http://", "https://")):
-            response = requests.get(path_or_bytes)
-            response.raise_for_status()
-            content = response.content[:1024]
+        if is_http_url(path_or_bytes):
+            content, _ = fetch_url_sample(path_or_bytes, config)
         else:
             with open(path_or_bytes, "rb") as f:
                 content = f.read(1024)
@@ -147,13 +152,6 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
         return False
 
     return _decodes_as_utf8_text(content)
-
-
-def _extension_source(source: str) -> str:
-    """Return the path component used for extension-based type detection."""
-    if source.startswith(("http://", "https://")):
-        return urlparse(source).path.lower()
-    return source.lower()
 
 
 # Matches a leading --- ... --- block (candidate front-matter). The
@@ -215,7 +213,7 @@ class DocumentParser(Parser):
         Returns:
             DocumentParser: An instance of a DocumentParser subclass.
         """
-        inferred_doc_type = DocumentParser._document_type(source, doc_type)
+        inferred_doc_type = DocumentParser._document_type(source, doc_type, config)
         if inferred_doc_type == DocumentType.PDF:
             if config.pdf.library == "fitz":
                 return FitzPDFParser(source, config)
@@ -285,7 +283,9 @@ class DocumentParser(Parser):
 
     @staticmethod
     def _document_type(
-        source: str | bytes, doc_type: str | DocumentType | None = None
+        source: str | bytes,
+        doc_type: str | DocumentType | None = None,
+        config: ParsingConfig | None = None,
     ) -> DocumentType:
         """
         Determine the type of document based on the source.
@@ -294,6 +294,7 @@ class DocumentParser(Parser):
             source (str|bytes): The source, which could be a URL,
                 a file path, or a bytes object.
             doc_type (str|DocumentType|None): The type of document, if known.
+            config (ParsingConfig|None): URL retrieval settings, if available.
 
         Returns:
             str: The document type.
@@ -306,7 +307,7 @@ class DocumentParser(Parser):
             # Detect file type from path/URL extension first so that
             # format-specific types (md, html) are not mis-classified as TXT
             # by the is_plain_text heuristic below.
-            lower = _extension_source(source)
+            lower = url_extension_source(source)
             if lower.endswith(".pdf"):
                 return DocumentType.PDF
             elif lower.endswith(".docx"):
@@ -325,7 +326,7 @@ class DocumentParser(Parser):
                 return DocumentType.HTML
             # For strings with no recognised extension, fall back to the
             # plain-text heuristic (covers .txt and bare URLs).
-            if is_plain_text(source):
+            if is_plain_text(source, config):
                 return DocumentType.TXT
             raise ValueError(f"Unsupported document type: {source}")
         else:
@@ -381,10 +382,9 @@ class DocumentParser(Parser):
         Returns:
             BytesIO: A BytesIO object containing the doc data.
         """
-        if self.source.startswith(("http://", "https://")):
-            response = requests.get(self.source)
-            response.raise_for_status()
-            return BytesIO(response.content)
+        if is_http_url(self.source):
+            content, _ = fetch_configured_url(self.source, self.config)
+            return BytesIO(content)
         else:
             with open(self.source, "rb") as f:
                 return BytesIO(f.read())
@@ -408,7 +408,7 @@ class DocumentParser(Parser):
                 each containing a chunk of text, determined by the
                 chunking and splitting settings in the parser config.
         """
-        dtype: DocumentType = DocumentParser._document_type(source, doc_type)
+        dtype = DocumentParser._document_type(source, doc_type, parser.config)
         if dtype in [
             DocumentType.PDF,
             DocumentType.DOC,
@@ -435,14 +435,14 @@ class DocumentParser(Parser):
                 if lines is not None:
                     file_lines = content.splitlines()[:lines]
                     content = "\n".join(line.strip() for line in file_lines)
-            elif source.startswith(("http://", "https://")):
-                # URL (e.g. https://example.com/readme.md): extension
-                # detection above may classify it as MD/HTML/TXT, but it
-                # must be fetched over HTTP(S) — open() below only works
-                # for local paths.
-                response = requests.get(source)
-                response.raise_for_status()
-                content = response.content.decode("utf-8", errors="replace")
+            elif is_http_url(source):
+                # Fetch URL-based plain text rather than opening it as a path.
+                url_content, headers = fetch_configured_url(source, parser.config)
+                content = decode_url_text(
+                    url_content,
+                    headers,
+                    html=dtype == DocumentType.HTML,
+                )
                 if lines is not None:
                     file_lines = content.splitlines()[:lines]
                     content = "\n".join(line.strip() for line in file_lines)

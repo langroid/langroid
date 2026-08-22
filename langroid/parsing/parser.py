@@ -116,6 +116,9 @@ class ParsingConfig(BaseSettings):
     chunk_size_variation: float = 0.30  # max variation from chunk_size
     overlap: int = 50  # overlap between chunks
     max_chunks: int = 10_000
+    url_connect_timeout: float = 10.0
+    url_read_timeout: float = 30.0
+    url_max_size: int = 10 * 1024 * 1024
 
     @field_validator("chunk_size", mode="before")
     @classmethod
