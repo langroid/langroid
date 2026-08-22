@@ -49057,2069 +49057,6 @@ Your support will help build Langroid's momentum and community.
 - [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
 </file>
 
-<file path="langroid/agent/chat_document.py">
-from __future__ import annotations
-
-import copy
-import json
-from collections import OrderedDict
-from enum import Enum
-from typing import Any, Dict, List, Optional, Union, cast
-
-from pydantic import BaseModel, ConfigDict, model_validator
-
-from langroid.agent.tool_message import ToolMessage
-from langroid.agent.xml_tool_message import XMLToolMessage
-from langroid.language_models.base import (
-    LLMFunctionCall,
-    LLMMessage,
-    LLMResponse,
-    LLMTokenUsage,
-    OpenAIToolCall,
-    Role,
-    ToolChoiceTypes,
-)
-from langroid.mytypes import DocMetaData, Document, Entity
-from langroid.parsing.agent_chats import parse_message
-from langroid.parsing.file_attachment import FileAttachment
-from langroid.parsing.parse_json import extract_top_level_json, top_level_json_field
-from langroid.utils.object_registry import ObjectRegistry
-from langroid.utils.output.printing import shorten_text
-from langroid.utils.types import to_string
-
-
-class ChatDocAttachment(BaseModel):
-    # any additional data that should be attached to the document
-    model_config = ConfigDict(extra="allow")
-
-
-class StatusCode(str, Enum):
-    """Codes meant to be returned by task.run(). Some are not used yet."""
-
-    OK = "OK"
-    ERROR = "ERROR"
-    DONE = "DONE"
-    STALLED = "STALLED"
-    INF_LOOP = "INF_LOOP"
-    KILL = "KILL"
-    FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
-    MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
-    MAX_COST = "MAX_COST"
-    MAX_TOKENS = "MAX_TOKENS"
-    TIMEOUT = "TIMEOUT"
-    NO_ANSWER = "NO_ANSWER"
-    USER_QUIT = "USER_QUIT"
-
-
-class ChatDocMetaData(DocMetaData):
-    parent_id: str = ""  # msg (ChatDocument) to which this is a response
-    child_id: str = ""  # ChatDocument that has response to this message
-    agent_id: str = ""  # ChatAgent that generated this message
-    msg_idx: int = -1  # index of this message in the agent `message_history`
-    sender: Entity  # sender of the message
-    # True if this msg was relayed from another agent's LLM/handler output in a
-    # multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
-    # tools be dispatched for legitimate handoffs while still blocking raw
-    # USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
-    # GHSA-gjgq-w2m6-wr5q.
-    tools_from_agent: bool = False
-    # True if this msg's content/tools derive from external untrusted (USER)
-    # input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
-    # repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
-    # Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
-    # vetoes handle-only tool dispatch even across a USER relabel, closing the
-    # content-laundering hole. Propagated (deepcopy carries it), never cleared.
-    # See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
-    tainted: bool = False
-    # tool_id corresponding to single tool result in ChatDocument.content
-    oai_tool_id: str | None = None
-    tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
-    block: None | Entity = None
-    sender_name: str = ""
-    recipient: str = ""
-    usage: Optional[LLMTokenUsage] = None
-    cached: bool = False
-    displayed: bool = False
-    has_citation: bool = False
-    status: Optional[StatusCode] = None
-
-    @model_validator(mode="after")
-    def _mark_tools_from_agent(self) -> "ChatDocMetaData":
-        # Mark messages produced directly by an LLM: the tools in an LLM's
-        # output are the LLM's own decision (the trusted trigger for handle-only
-        # tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
-        # to another agent even after relabeling the sender to USER. The mark is
-        # only ever SET, never cleared, so it survives relabeling and deepcopies
-        # (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
-        # mark across the handoff). We deliberately do NOT mark generic AGENT
-        # messages: a pass-through/echoing agent could surface untrusted USER
-        # text (with embedded tool JSON) as AGENT content, and marking that
-        # would re-open the user-origin bypass. Raw USER input is never marked,
-        # so it stays filtered. See ChatAgent._filter_user_origin_tools.
-        if self.sender == Entity.LLM:
-            self.tools_from_agent = True
-        return self
-
-    @property
-    def parent(self) -> Optional["ChatDocument"]:
-        return ChatDocument.from_id(self.parent_id)
-
-    @property
-    def child(self) -> Optional["ChatDocument"]:
-        return ChatDocument.from_id(self.child_id)
-
-
-class ChatDocLoggerFields(BaseModel):
-    sender_entity: Entity = Entity.USER
-    sender_name: str = ""
-    recipient: str = ""
-    block: Entity | None = None
-    tool_type: str = ""
-    tool: str = ""
-    content: str = ""
-
-    @classmethod
-    def tsv_header(cls) -> str:
-        field_names = cls().model_dump().keys()
-        return "\t".join(field_names)
-
-
-class ChatDocument(Document):
-    """
-    Represents a message in a conversation among agents. All responders of an agent
-    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
-    and so does the Task.run() method.
-
-    Attributes:
-        oai_tool_calls (Optional[List[OpenAIToolCall]]):
-            Tool-calls from an OpenAI-compatible API
-        oai_tool_id2results (Optional[OrderedDict[str, str]]):
-            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
-        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
-            LLM should choose tool-use in its response
-            (auto, none, required, or a specific tool)
-        function_call (Optional[LLMFunctionCall]):
-            Function-call from an OpenAI-compatible API
-                (deprecated by OpenAI, in favor of tool-calls)
-        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
-            - `content` field (via JSON parsing),
-            - `oai_tool_calls`, or
-            - `function_call`
-        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
-        attachment (None | ChatDocAttachment): Any additional data attached.
-    """
-
-    reasoning: str = ""  # reasoning produced by a reasoning LLM
-    content_any: Any = None  # to hold arbitrary data returned by responders
-    # True when the underlying LLM response had NO content (only a tool/function
-    # call), as opposed to content == "" (present but empty). `content` itself
-    # stays a mandatory str (""), so this flag is what carries "missing" through
-    # to to_LLMMessage(), which reproduces it as LLMMessage.content = None.
-    # (content_any cannot serve this role — it defaults to None on every doc.)
-    content_is_none: bool = False
-    # Original LLM response text including inline thought signatures
-    # (e.g. <thinking>...</thinking>). Only populated when reasoning was
-    # extracted from inline tags in the message text. Used by to_LLMMessage()
-    # to preserve thought signatures in message history, which is critical
-    # for models like Gemini 3 Flash and Amazon Nova that rely on seeing
-    # their own thought tags in context to maintain reasoning ability.
-    content_with_reasoning: Optional[str] = None
-    files: List[FileAttachment] = []  # list of file attachments
-    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-    oai_tool_id2result: Optional[OrderedDict[str, str]] = None
-    oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
-    function_call: Optional[LLMFunctionCall] = None
-    # tools that are explicitly added by agent response/handler,
-    # or tools recognized in the ChatDocument as handle-able tools
-    tool_messages: List[ToolMessage] = []
-    # all known tools in the msg that are in an agent's llm_tools_known list,
-    # even if non-used/handled
-    # (the list is populated by Agent.has_tool_message_attempt())
-    all_tool_messages: Optional[List[ToolMessage]] = None
-    # ID of the agent that populated all_tool_messages (for cache validity)
-    all_tool_messages_agent_id: Optional[str] = None
-
-    metadata: ChatDocMetaData
-    attachment: None | ChatDocAttachment = None
-
-    def __init__(self, **data: Any):
-        super().__init__(**data)
-        ObjectRegistry.register_object(self)
-
-    @property
-    def parent(self) -> Optional["ChatDocument"]:
-        return ChatDocument.from_id(self.metadata.parent_id)
-
-    @property
-    def child(self) -> Optional["ChatDocument"]:
-        return ChatDocument.from_id(self.metadata.child_id)
-
-    @staticmethod
-    def deepcopy(doc: ChatDocument) -> ChatDocument:
-        new_doc = copy.deepcopy(doc)
-        new_doc.metadata.id = ObjectRegistry.new_id()
-        new_doc.metadata.child_id = ""
-        new_doc.metadata.parent_id = ""
-        ObjectRegistry.register_object(new_doc)
-        return new_doc
-
-    @staticmethod
-    def from_id(id: str) -> Optional["ChatDocument"]:
-        return cast(ChatDocument, ObjectRegistry.get(id))
-
-    @staticmethod
-    def delete_id(id: str) -> None:
-        """Remove ChatDocument with given id from ObjectRegistry,
-        and all its descendants.
-        """
-        chat_doc = ChatDocument.from_id(id)
-        # first delete all descendants
-        while chat_doc is not None:
-            next_chat_doc = chat_doc.child
-            ObjectRegistry.remove(chat_doc.id())
-            chat_doc = next_chat_doc
-
-    def __str__(self) -> str:
-        fields = self.log_fields()
-        tool_str = ""
-        if fields.tool_type != "":
-            tool_str = f"{fields.tool_type}[{fields.tool}]: "
-        recipient_str = ""
-        if fields.recipient != "":
-            recipient_str = f"=>{fields.recipient}: "
-        return (
-            f"{fields.sender_entity}[{fields.sender_name}] "
-            f"{recipient_str}{tool_str}{fields.content}"
-        )
-
-    def get_tool_names(self) -> List[str]:
-        """
-        Get names of attempted tool usages (JSON or non-JSON) in the content
-            of the message.
-        Returns:
-            List[str]: list of *attempted* tool names
-            (We say "attempted" since we ONLY look at the `request` component of the
-            tool-call representation, and we're not fully parsing it into the
-            corresponding tool message class)
-
-        """
-        tool_candidates = XMLToolMessage.find_candidates(self.content)
-        if len(tool_candidates) == 0:
-            tool_candidates = extract_top_level_json(self.content)
-            if len(tool_candidates) == 0:
-                return []
-            tools = [json.loads(tc).get("request") for tc in tool_candidates]
-        else:
-            tool_dicts = [
-                XMLToolMessage.extract_field_values(tc) for tc in tool_candidates
-            ]
-            tools = [td.get("request") for td in tool_dicts if td is not None]
-        return [str(tool) for tool in tools if tool is not None]
-
-    def log_fields(self) -> ChatDocLoggerFields:
-        """
-        Fields for logging in csv/tsv logger
-        Returns:
-            List[str]: list of fields
-        """
-        tool_type = ""  # FUNC or TOOL
-        tool = ""  # tool name or function name
-
-        # Skip tool detection for system messages - they contain tool instructions,
-        # not actual tool calls
-        if self.metadata.sender != Entity.SYSTEM:
-            oai_tools = (
-                []
-                if self.oai_tool_calls is None
-                else [t for t in self.oai_tool_calls if t.function is not None]
-            )
-            if self.function_call is not None:
-                tool_type = "FUNC"
-                tool = self.function_call.name
-            elif len(oai_tools) > 0:
-                tool_type = "OAI_TOOL"
-                tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
-            else:
-                try:
-                    json_tools = self.get_tool_names()
-                except Exception:
-                    json_tools = []
-                if json_tools != []:
-                    tool_type = "TOOL"
-                    tool = json_tools[0]
-        recipient = self.metadata.recipient
-        content = self.content
-        sender_entity = self.metadata.sender
-        sender_name = self.metadata.sender_name
-        if tool_type == "FUNC":
-            content += str(self.function_call)
-        return ChatDocLoggerFields(
-            sender_entity=sender_entity,
-            sender_name=sender_name,
-            recipient=recipient,
-            block=self.metadata.block,
-            tool_type=tool_type,
-            tool=tool,
-            content=content,
-        )
-
-    def tsv_str(self) -> str:
-        fields = self.log_fields()
-        fields.content = shorten_text(fields.content, 80)
-        field_values = fields.model_dump().values()
-        return "\t".join(str(v) for v in field_values)
-
-    def pop_tool_ids(self) -> None:
-        """
-        Pop the last tool_id from the stack of tool_ids.
-        """
-        if len(self.metadata.tool_ids) > 0:
-            self.metadata.tool_ids.pop()
-
-    @staticmethod
-    def _clean_fn_call(fc: LLMFunctionCall | None) -> None:
-        # Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
-        # with oddities:
-        # (a) the `name` is set, as well as `arguments.request` is set,
-        #  and in langroid we use the `request` value as the `name`.
-        #  In this case we override the `name` with the `request` value.
-        # (b) the `name` looks like "functions blah" or just "functions"
-        #   In this case we strip the "functions" part.
-        if fc is None:
-            return
-        fc.name = fc.name.replace("functions", "").strip()
-        if fc.arguments is not None:
-            request = fc.arguments.get("request")
-            if request is not None and request != "":
-                fc.name = request
-                fc.arguments.pop("request")
-
-    @staticmethod
-    def from_LLMResponse(
-        response: LLMResponse,
-        displayed: bool = False,
-        recognize_recipient_in_content: bool = True,
-    ) -> "ChatDocument":
-        """
-        Convert LLMResponse to ChatDocument.
-        Args:
-            response (LLMResponse): LLMResponse to convert.
-            displayed (bool): Whether this response was displayed to the user.
-            recognize_recipient_in_content (bool): Whether to parse message text
-                for recipient routing (``TO[<recipient>]:`` and JSON
-                ``{"recipient": ...}``). Default True.
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMResponse.
-        """
-        # Capture "no content" from the source response (None, not "") before
-        # recipient parsing can turn it into "".
-        content_is_none = response.message is None
-        recipient, message = response.get_recipient_and_message(
-            recognize_recipient_in_content
-        )
-        message = message.strip() if message is not None else ""
-        if message in ["''", '""']:
-            message = ""
-        if response.function_call is not None:
-            ChatDocument._clean_fn_call(response.function_call)
-        if response.oai_tool_calls is not None:
-            # there must be at least one if it's not None
-            for oai_tc in response.oai_tool_calls:
-                ChatDocument._clean_fn_call(oai_tc.function)
-        return ChatDocument(
-            content=message,
-            content_is_none=content_is_none,
-            reasoning=response.reasoning,
-            content_with_reasoning=response.message_with_reasoning,
-            content_any=message,
-            oai_tool_calls=response.oai_tool_calls,
-            function_call=response.function_call,
-            metadata=ChatDocMetaData(
-                source=Entity.LLM,
-                sender=Entity.LLM,
-                usage=response.usage,
-                displayed=displayed,
-                cached=response.cached,
-                recipient=recipient,
-            ),
-        )
-
-    @staticmethod
-    def from_str(msg: str) -> "ChatDocument":
-        # first check whether msg is structured as TO <recipient>: <message>
-        recipient, message = parse_message(msg)
-        if recipient == "":
-            # check if any top level json specifies a 'recipient'
-            recipient = top_level_json_field(msg, "recipient")
-            message = msg  # retain the whole msg in this case
-        return ChatDocument(
-            content=message,
-            content_any=message,
-            metadata=ChatDocMetaData(
-                source=Entity.USER,
-                sender=Entity.USER,
-                recipient=recipient,
-                tainted=True,  # external user input is untrusted (#1035)
-            ),
-        )
-
-    @staticmethod
-    def from_LLMMessage(
-        message: LLMMessage,
-        sender_name: str = "",
-        recipient: str = "",
-    ) -> "ChatDocument":
-        """
-        Convert LLMMessage to ChatDocument.
-
-        Args:
-            message (LLMMessage): LLMMessage to convert.
-            sender_name (str): Name of the sender. Defaults to "".
-            recipient (str): Name of the recipient. Defaults to "".
-
-        Returns:
-            ChatDocument: ChatDocument representation of this LLMMessage.
-        """
-        # Map LLMMessage Role to ChatDocument Entity
-        role_to_entity = {
-            Role.USER: Entity.USER,
-            Role.SYSTEM: Entity.SYSTEM,
-            Role.ASSISTANT: Entity.LLM,
-            Role.FUNCTION: Entity.LLM,
-            Role.TOOL: Entity.LLM,
-        }
-
-        sender_entity = role_to_entity.get(message.role, Entity.USER)
-
-        return ChatDocument(
-            content=message.content or "",
-            content_is_none=message.content is None,
-            content_any=message.content,
-            files=message.files,
-            function_call=message.function_call,
-            oai_tool_calls=message.tool_calls,
-            metadata=ChatDocMetaData(
-                source=sender_entity,
-                sender=sender_entity,
-                sender_name=sender_name,
-                recipient=recipient,
-                oai_tool_id=message.tool_call_id,
-                tool_ids=[message.tool_id] if message.tool_id else [],
-            ),
-        )
-
-    @staticmethod
-    def to_LLMMessage(
-        message: Union[str, "ChatDocument"],
-        oai_tools: Optional[List[OpenAIToolCall]] = None,
-    ) -> List[LLMMessage]:
-        """
-        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
-        Usually there will be just a single LLMMessage, but when the ChatDocument
-        contains results from multiple OpenAI tool-calls, we would have a sequence
-        LLMMessages, one per tool-call result.
-
-        Args:
-            message (str|ChatDocument): Message to convert.
-            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
-                response, from the ChatAgent's latest message.
-        Returns:
-            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
-        """
-
-        sender_role = Role.USER
-        if isinstance(message, str):
-            message = ChatDocument.from_str(message)
-        # Prefer content_with_reasoning when available — this preserves
-        # inline thought signatures (e.g. <thinking>...</thinking>) in
-        # message history, which certain models (Gemini 3 Flash, Amazon
-        # Nova) need to maintain reasoning across turns.
-        # content_with_reasoning is only set when inline tags were
-        # actually extracted, so this won't interfere with models that
-        # provide reasoning via a separate API field.
-        # content_is_none is the authoritative serialized representation of an
-        # absent LLM response body. It must win over stale text fields when a
-        # ChatDocument is persisted and reconstructed.
-        content: Optional[str] = None
-        if not message.content_is_none:
-            content = (
-                message.content_with_reasoning
-                or message.content
-                # content_any may hold parsed structured output (e.g. tool-call
-                # args loaded under a strict output_format), which is NOT message
-                # text — never let it stand in for content on a call-only turn.
-                or to_string(message.content_any)
-                or ""
-            )
-        fun_call = message.function_call
-        oai_tool_calls = message.oai_tool_calls
-        if message.metadata.sender == Entity.USER and fun_call is not None:
-            # This may happen when a (parent agent's) LLM generates a
-            # a Function-call, and it ends up being sent to the current task's
-            # LLM (possibly because the function-call is mis-named or has other
-            # issues and couldn't be handled by handler methods).
-            # But a function-call can only be generated by an entity with
-            # Role.ASSISTANT, so we instead put the content of the function-call
-            # in the content of the message.
-            content = (content or "") + " " + str(fun_call)
-            fun_call = None
-        if message.metadata.sender == Entity.USER and oai_tool_calls is not None:
-            # same reasoning as for function-call above
-            content = (
-                (content or "") + " " + "\n\n".join(str(tc) for tc in oai_tool_calls)
-            )
-            oai_tool_calls = None
-        # Faithfully carry the response shape: if the underlying LLM response
-        # had NO content (content_is_none), reproduce that as None ("missing"),
-        # distinct from a present-but-empty "". content_is_none is the signal
-        # (content_any can't be — it defaults to None on every ChatDocument,
-        # and may carry parsed structured output rather than text; see above).
-        # `not content` still lets a USER-sender fold a function/tool call into
-        # content above. How a missing content is rendered on the wire is left
-        # to LLMMessage.api_dict (it drops None, and pads a lone space only when
-        # a message would otherwise be completely empty). This is what lets an
-        # assistant tool-call turn omit `content`: Gemini 3.x rejects an
-        # assistant turn that has BOTH a tool/function call and (even
-        # whitespace) text content.
-        if message.content_is_none and not content:
-            content = None
-        sender_name = message.metadata.sender_name
-        tool_ids = message.metadata.tool_ids
-        tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
-        chat_document_id = message.id()
-        if message.metadata.sender == Entity.SYSTEM:
-            sender_role = Role.SYSTEM
-        if (
-            message.metadata.parent is not None
-            and message.metadata.parent.function_call is not None
-        ):
-            # This is a response to a function call, so set the role to FUNCTION.
-            sender_role = Role.FUNCTION
-            sender_name = message.metadata.parent.function_call.name
-        elif oai_tools is not None and len(oai_tools) > 0:
-            pending_tool_ids = [tc.id for tc in oai_tools]
-            # The ChatAgent has pending OpenAI tool-call(s),
-            # so the current ChatDocument contains
-            # results for some/all/none of them.
-
-            if len(oai_tools) == 1:
-                # Case 1:
-                # There was exactly 1 pending tool-call, and in this case
-                # the result would be a plain string in `content`
-                return [
-                    LLMMessage(
-                        role=Role.TOOL,
-                        tool_call_id=oai_tools[0].id,
-                        content=content,
-                        files=message.files,
-                        chat_document_id=chat_document_id,
-                    )
-                ]
-
-            elif (
-                message.metadata.oai_tool_id is not None
-                and message.metadata.oai_tool_id in pending_tool_ids
-            ):
-                # Case 2:
-                # ChatDocument.content has result of a single tool-call
-                return [
-                    LLMMessage(
-                        role=Role.TOOL,
-                        tool_call_id=message.metadata.oai_tool_id,
-                        content=content,
-                        files=message.files,
-                        chat_document_id=chat_document_id,
-                    )
-                ]
-            elif message.oai_tool_id2result is not None:
-                # Case 2:
-                # There were > 1 tool-calls awaiting response,
-                assert (
-                    len(message.oai_tool_id2result) > 1
-                ), "oai_tool_id2result must have more than 1 item."
-                return [
-                    LLMMessage(
-                        role=Role.TOOL,
-                        tool_call_id=tool_id,
-                        content=result or " ",
-                        files=message.files,
-                        chat_document_id=chat_document_id,
-                    )
-                    for tool_id, result in message.oai_tool_id2result.items()
-                ]
-        elif message.metadata.sender == Entity.LLM:
-            sender_role = Role.ASSISTANT
-
-        return [
-            LLMMessage(
-                role=sender_role,
-                tool_id=tool_id,  # for OpenAI Assistant
-                content=content,
-                files=message.files,
-                function_call=fun_call,
-                tool_calls=oai_tool_calls,
-                name=sender_name,
-                chat_document_id=chat_document_id,
-            )
-        ]
-
-
-LLMMessage.model_rebuild()
-ChatDocMetaData.model_rebuild()
-</file>
-
-<file path="langroid/language_models/base.py">
-import json
-import logging
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone
-from enum import Enum
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    Type,
-    Union,
-    cast,
-)
-
-from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
-
-from langroid.cachedb.base import CacheDBConfig
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.model_info import ModelInfo, get_model_info
-from langroid.parsing.agent_chats import parse_message
-from langroid.parsing.file_attachment import FileAttachment
-from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
-from langroid.prompts.dialog import collate_chat_history
-from langroid.utils.configuration import settings
-from langroid.utils.output.printing import show_if_debug
-
-logger = logging.getLogger(__name__)
-
-
-def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
-    pass
-
-
-async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
-    pass
-
-
-FunctionCallTypes = Literal["none", "auto"]
-ToolChoiceTypes = Literal["none", "auto", "required"]
-ToolTypes = Literal["function"]
-
-DEFAULT_CONTEXT_LENGTH = 16_000
-
-
-class StreamEventType(Enum):
-    TEXT = 1
-    FUNC_NAME = 2
-    FUNC_ARGS = 3
-    TOOL_NAME = 4
-    TOOL_ARGS = 5
-    REASONING = 6
-
-
-class RetryParams(BaseSettings):
-    max_retries: int = 5
-    initial_delay: float = 1.0
-    exponential_base: float = 1.3
-    jitter: bool = True
-
-
-class LLMConfig(BaseSettings):
-    """
-    Common configuration for all language models.
-    """
-
-    type: str = "openai"
-    streamer: Optional[Callable[[Any], None]] = noop_fn
-    streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
-    api_base: str | None = None
-    formatter: None | str = None
-    # specify None if you want to use the full max output tokens of the model
-    max_output_tokens: int | None = 8192
-    timeout: int = 20  # timeout for API requests
-    chat_model: str = ""
-    completion_model: str = ""
-    temperature: float = 0.0
-    chat_context_length: int | None = None
-    async_stream_quiet: bool = False  # suppress streaming output in async mode?
-    completion_context_length: int | None = None
-    # if input length + max_output_tokens > context length of model,
-    # we will try shortening requested output
-    min_output_tokens: int = 64
-    use_completion_for_chat: bool = False  # use completion model for chat?
-    # use chat model for completion? For OpenAI models, this MUST be set to True!
-    use_chat_for_completion: bool = True
-    stream: bool = True  # stream output from API?
-    # TODO: we could have a `stream_reasoning` flag here to control whether to show
-    # reasoning output from reasoning models
-    cache_config: None | CacheDBConfig = RedisCacheConfig()
-    thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
-    retry_params: RetryParams = RetryParams()
-
-    @property
-    def model_max_output_tokens(self) -> int:
-        if self.max_output_tokens:
-            return self.max_output_tokens
-        # Build fallback names by progressively stripping provider prefixes
-        # (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
-        # succeeds even before OpenAIGPT.__init__ strips the prefix.
-        parts = self.chat_model.split("/")
-        fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
-        return get_model_info(self.chat_model, fallbacks).max_output_tokens
-
-
-class LLMFunctionCall(BaseModel):
-    """
-    Structure of LLM response indicating it "wants" to call a function.
-    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
-    """
-
-    name: str  # name of function to call
-    arguments: Optional[Dict[str, Any]] = None
-
-    @staticmethod
-    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall":
-        """
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-        fun_call = LLMFunctionCall(name=message["name"])
-        fun_args_str = message["arguments"]
-        # sometimes may be malformed with invalid indents,
-        # so we try to be safe by removing newlines.
-        if fun_args_str is not None:
-            fun_args_str = fun_args_str.replace("\n", "").strip()
-            dict_or_list = parse_imperfect_json(fun_args_str)
-
-            if not isinstance(dict_or_list, dict):
-                raise ValueError(
-                    f"""
-                        Invalid function args: {fun_args_str}
-                        parsed as {dict_or_list},
-                        which is not a valid dict.
-                        """
-                )
-            fun_args = dict_or_list
-        else:
-            fun_args = None
-        fun_call.arguments = fun_args
-
-        return fun_call
-
-    def __str__(self) -> str:
-        return "FUNC: " + json.dumps(self.model_dump(), indent=2)
-
-
-class LLMFunctionSpec(BaseModel):
-    """
-    Description of a function available for the LLM to use.
-    To be used when calling the LLM `chat()` method with the `functions` parameter.
-    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
-    """
-
-    name: str
-    description: str
-    parameters: Dict[str, Any]
-
-
-class OpenAIToolCall(BaseModel):
-    """
-    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
-    See https://platform.openai.com/docs/api-reference/chat/create
-
-    Attributes:
-        id: The id of the tool call.
-        type: The type of the tool call;
-            only "function" is currently possible (7/26/24).
-        function: The function call.
-    """
-
-    id: str | None = None
-    type: ToolTypes = "function"
-    function: LLMFunctionCall | None = None
-    extra_content: Dict[str, Any] | None = None
-
-    @staticmethod
-    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall":
-        """
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-        id = message["id"]
-        type = message["type"]
-        function = LLMFunctionCall.from_dict(message["function"])
-        extra_content = message.get("extra_content")
-        return OpenAIToolCall(
-            id=id, type=type, function=function, extra_content=extra_content
-        )
-
-    def __str__(self) -> str:
-        if self.function is None:
-            return ""
-        return "OAI-TOOL: " + json.dumps(self.function.model_dump(), indent=2)
-
-
-class OpenAIToolSpec(BaseModel):
-    type: ToolTypes
-    strict: Optional[bool] = None
-    function: LLMFunctionSpec
-
-
-class OpenAIJsonSchemaSpec(BaseModel):
-    strict: Optional[bool] = None
-    function: LLMFunctionSpec
-
-    def to_dict(self) -> Dict[str, Any]:
-        json_schema: Dict[str, Any] = {
-            "name": self.function.name,
-            "description": self.function.description,
-            "schema": self.function.parameters,
-        }
-        if self.strict is not None:
-            json_schema["strict"] = self.strict
-
-        return {
-            "type": "json_schema",
-            "json_schema": json_schema,
-        }
-
-
-class LLMTokenUsage(BaseModel):
-    """
-    Usage of tokens by an LLM.
-    """
-
-    prompt_tokens: int = 0
-    cached_tokens: int = 0
-    completion_tokens: int = 0
-    cost: float = 0.0
-    calls: int = 0  # how many API calls - not used as of 2025-04-04
-
-    def reset(self) -> None:
-        self.prompt_tokens = 0
-        self.cached_tokens = 0
-        self.completion_tokens = 0
-        self.cost = 0.0
-        self.calls = 0
-
-    def __str__(self) -> str:
-        return (
-            f"Tokens = "
-            f"(prompt {self.prompt_tokens}, cached {self.cached_tokens}, "
-            f"completion {self.completion_tokens}), "
-            f"Cost={self.cost}, Calls={self.calls}"
-        )
-
-    @property
-    def total_tokens(self) -> int:
-        return self.prompt_tokens + self.completion_tokens
-
-
-class Role(str, Enum):
-    """
-    Possible roles for a message in a chat.
-    """
-
-    USER = "user"
-    SYSTEM = "system"
-    ASSISTANT = "assistant"
-    FUNCTION = "function"
-    TOOL = "tool"
-
-
-class LLMMessage(BaseModel):
-    """
-    Class representing an entry in the msg-history sent to the LLM API.
-    It could be one of these:
-    - a user message
-    - an LLM ("Assistant") response
-    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
-    - a result or results from executing a fn or tool-call(s)
-    """
-
-    role: Role
-    name: Optional[str] = None
-    tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
-    tool_id: str = ""  # used by OpenAIAssistant
-    # None means "no content" (the model returned only a tool/function call).
-    # This is distinct from "" and is dropped from the API payload by api_dict;
-    # see api_dict for how a fully-empty message is handled per-API.
-    content: Optional[str] = None
-    files: List[FileAttachment] = []
-    function_call: Optional[LLMFunctionCall] = None
-    tool_calls: Optional[List[OpenAIToolCall]] = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    # link to corresponding chat document, for provenance/rewind purposes
-    chat_document_id: str = ""
-
-    def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]:
-        """
-        Convert to dictionary for API request, keeping ONLY
-        the fields that are expected in an API call!
-        E.g., DROP the tool_id, since it is only for use in the Assistant API,
-            not the completion API.
-
-        Args:
-            has_system_role: whether the message has a system role (if not,
-                set to "user" role)
-        Returns:
-            dict: dictionary representation of LLM message
-        """
-        d = self.model_dump()
-        files: List[FileAttachment] = d.pop("files")
-        if len(files) > 0 and self.role == Role.USER:
-            # In there are files, then content is an array of
-            # different content-parts
-            d["content"] = [
-                dict(
-                    type="text",
-                    text=self.content or "",
-                )
-            ] + [f.to_dict(model) for f in self.files]
-
-        # if there is a key k = "role" with value "system", change to "user"
-        # in case has_system_role is False
-        if not has_system_role and "role" in d and d["role"] == "system":
-            d["role"] = "user"
-            if d.get("content"):
-                d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
-        # drop None values since API doesn't accept them (this omits `content`
-        # entirely when it is None, i.e. "no content")
-        dict_no_none = {k: v for k, v in d.items() if v is not None}
-        if "name" in dict_no_none and dict_no_none["name"] == "":
-            # OpenAI API does not like empty name
-            del dict_no_none["name"]
-        if "function_call" in dict_no_none:
-            # arguments must be a string
-            if "arguments" in dict_no_none["function_call"]:
-                dict_no_none["function_call"]["arguments"] = json.dumps(
-                    dict_no_none["function_call"]["arguments"]
-                )
-        if dict_no_none.get("tool_calls"):
-            # convert tool calls to API format
-            for tc in dict_no_none["tool_calls"]:
-                if "arguments" in tc["function"]:
-                    # arguments must be a string
-                    if tc["function"]["arguments"] is None:
-                        tc["function"]["arguments"] = "{}"
-                    else:
-                        tc["function"]["arguments"] = json.dumps(
-                            tc["function"]["arguments"]
-                        )
-                if "extra_content" in tc and tc["extra_content"] is None:
-                    del tc["extra_content"]
-        else:
-            # An empty tool-call list is not a call and conveys no useful API
-            # information. Omitting it also lets the empty-message fallback
-            # below produce a valid message.
-            dict_no_none.pop("tool_calls", None)
-        # A message with empty content (None was dropped above, or "") AND no
-        # tool/function call would be an entirely empty message, which some APIs
-        # (e.g. Gemini) reject; fall back to a single space in that case only.
-        # When there IS a tool/function call, empty content is fine (and Gemini
-        # 3.x in fact REQUIRES it — it rejects an assistant turn that carries
-        # both a call and non-empty text content).
-        has_call = bool(dict_no_none.get("tool_calls")) or (
-            dict_no_none.get("function_call") is not None
-        )
-        if not has_call and not dict_no_none.get("content"):
-            dict_no_none["content"] = " "
-        # IMPORTANT! drop fields that are not expected in API call
-        dict_no_none.pop("tool_id", None)
-        dict_no_none.pop("timestamp", None)
-        dict_no_none.pop("chat_document_id", None)
-        return dict_no_none
-
-    def __str__(self) -> str:
-        if self.function_call is not None:
-            content = "FUNC: " + json.dumps(self.function_call)
-        else:
-            content = self.content or ""
-        name_str = f" ({self.name})" if self.name else ""
-        return f"{self.role} {name_str}: {content}"
-
-
-class LLMResponse(BaseModel):
-    """
-    Class representing response from LLM.
-    """
-
-    # None means the model returned NO content (e.g. only a tool/function
-    # call), which is distinct from an empty string "". Preserving this
-    # distinction lets the message be faithfully reproduced downstream
-    # (see ChatDocument.content_is_none and LLMMessage.content).
-    message: Optional[str] = None
-    reasoning: str = ""  # optional reasoning text from reasoning models
-    # Original message text including inline thought signatures (e.g.
-    # <thinking>...</thinking>). Only set when reasoning was extracted
-    # from the message text via get_reasoning_final(); NOT set when
-    # reasoning comes from a separate API field (e.g. reasoning_content),
-    # since in that case the message text never contained thought tags.
-    message_with_reasoning: Optional[str] = None
-    # TODO tool_id needs to generalize to multi-tool calls
-    tool_id: str = ""  # used by OpenAIAssistant
-    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-    function_call: Optional[LLMFunctionCall] = None
-    usage: Optional[LLMTokenUsage] = None
-    cached: bool = False
-
-    def __str__(self) -> str:
-        if self.function_call is not None:
-            return str(self.function_call)
-        elif self.oai_tool_calls:
-            return "\n".join(str(tc) for tc in self.oai_tool_calls)
-        else:
-            return self.message or ""
-
-    def tools_content(self) -> str:
-        if self.function_call is not None:
-            return str(self.function_call)
-        elif self.oai_tool_calls:
-            return "\n".join(str(tc) for tc in self.oai_tool_calls)
-        else:
-            return ""
-
-    def to_LLMMessage(self) -> LLMMessage:
-        """Convert LLM response to an LLMMessage, to be included in the
-        message-list sent to the API.
-        This is currently NOT used in any significant way in the library, and is only
-        provided as a utility to construct a message list for the API when directly
-        working with an LLM object.
-
-        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
-        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
-        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
-        """
-        return LLMMessage(
-            role=Role.ASSISTANT,
-            content=self.message,
-            name=None if self.function_call is None else self.function_call.name,
-            function_call=self.function_call,
-            tool_calls=self.oai_tool_calls,
-        )
-
-    def get_recipient_and_message(
-        self,
-        recognize_recipient_in_content: bool = True,
-    ) -> Tuple[str, str]:
-        """
-        If `message` or `function_call` of an LLM response contains an explicit
-        recipient name, return this recipient name and `message` stripped
-        of the recipient name if specified.
-
-        Two cases:
-        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
-        (b) `message` is empty and function_call/tool_call with explicit `recipient`
-
-        Args:
-            recognize_recipient_in_content (bool): When True (default), parses
-                message text for ``TO[<recipient>]:<content>`` patterns and
-                top-level JSON ``{"recipient": "..."}`` fields. When False,
-                only function_call/tool_call ``recipient`` fields are checked.
-
-        Returns:
-            (str): name of recipient, which may be empty string if no recipient
-            (str): content of message
-
-        """
-
-        if self.function_call is not None:
-            # in this case we ignore message, since all information is in function_call
-            msg = ""
-            args = self.function_call.arguments
-            recipient = ""
-            if isinstance(args, dict):
-                recipient = args.get("recipient", "")
-            return recipient, msg
-        else:
-            msg = self.message or ""
-            if self.oai_tool_calls is not None:
-                # get the first tool that has a recipient field, if any
-                for tc in self.oai_tool_calls:
-                    if tc.function is not None and tc.function.arguments is not None:
-                        recipient = tc.function.arguments.get(
-                            "recipient"
-                        )  # type: ignore
-                        if recipient is not None and recipient != "":
-                            return recipient, ""
-
-        if not recognize_recipient_in_content:
-            return "", msg
-
-        # It's not a function or tool call, so continue looking to see
-        # if a recipient is specified in the message.
-
-        # First check if message contains "TO: <recipient> <content>"
-        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
-        # check if there is a top level json that specifies 'recipient',
-        # and retain the entire message as content.
-        if recipient_name == "":
-            recipient_name = top_level_json_field(msg, "recipient") if msg else ""
-            content = msg
-        return recipient_name, content
-
-
-# Define an abstract base class for language models
-class LanguageModel(ABC):
-    """
-    Abstract base class for language models.
-    """
-
-    # usage cost by model, accumulates here
-    usage_cost_dict: Dict[str, LLMTokenUsage] = {}
-
-    def __init__(self, config: LLMConfig = LLMConfig()):
-        self.config = config
-        self.chat_model_orig = config.chat_model
-
-    @staticmethod
-    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
-        """
-        Create a language model.
-        Args:
-            config: configuration for language model
-        Returns: instance of language model
-        """
-        if type(config) is LLMConfig:
-            raise ValueError(
-                """
-                Cannot create a Language Model object from LLMConfig.
-                Please specify a specific subclass of LLMConfig e.g.,
-                OpenAIGPTConfig. If you are creating a ChatAgent from
-                a ChatAgentConfig, please specify the `llm` field of this config
-                as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
-                """
-            )
-        from langroid.language_models.azure_openai import AzureGPT
-        from langroid.language_models.mock_lm import MockLM, MockLMConfig
-        from langroid.language_models.openai_gpt import OpenAIGPT
-
-        if config is None or config.type is None:
-            return None
-
-        if config.type == "mock":
-            return MockLM(cast(MockLMConfig, config))
-
-        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
-
-        if config.type == "azure":
-            openai = AzureGPT
-        else:
-            openai = OpenAIGPT
-        cls = dict(
-            openai=openai,
-        ).get(config.type, openai)
-        return cls(config)  # type: ignore
-
-    @staticmethod
-    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]:
-        """
-        Given an even-length sequence of strings, split into a sequence of pairs
-
-        Args:
-            lst (List[str]): sequence of strings
-
-        Returns:
-            List[Tuple[str,str]]: sequence of pairs of strings
-        """
-        evens = lst[::2]
-        odds = lst[1::2]
-        return list(zip(evens, odds))
-
-    @staticmethod
-    def get_chat_history_components(
-        messages: List[LLMMessage],
-    ) -> Tuple[str, List[Tuple[str, str]], str]:
-        """
-        From the chat history, extract system prompt, user-assistant turns, and
-        final user msg.
-
-        Args:
-            messages (List[LLMMessage]): List of messages in the chat history
-
-        Returns:
-            Tuple[str, List[Tuple[str,str]], str]:
-                system prompt, user-assistant turns, final user msg
-
-        """
-        # Handle various degenerate cases
-        messages = [m for m in messages]  # copy
-        DUMMY_SYS_PROMPT = "You are a helpful assistant."
-        DUMMY_USER_PROMPT = "Follow the instructions above."
-        if len(messages) == 0 or messages[0].role != Role.SYSTEM:
-            logger.warning("No system msg, creating dummy system prompt")
-            messages.insert(0, LLMMessage(content=DUMMY_SYS_PROMPT, role=Role.SYSTEM))
-        system_prompt = messages[0].content or ""
-
-        # now we have messages = [Sys,...]
-        if len(messages) == 1:
-            logger.warning(
-                "Got only system message in chat history, creating dummy user prompt"
-            )
-            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, msg, ...]
-
-        if messages[1].role != Role.USER:
-            messages.insert(1, LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, user, ...]
-        if messages[-1].role != Role.USER:
-            logger.warning(
-                "Last message in chat history is not a user message,"
-                " creating dummy user prompt"
-            )
-            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, user, ..., user]
-        # so we omit the first and last elements and make pairs of user-asst messages
-        conversation = [m.content or "" for m in messages[1:-1]]
-        user_prompt = messages[-1].content or ""
-        pairs = LanguageModel.user_assistant_pairs(conversation)
-        return system_prompt, pairs, user_prompt
-
-    @abstractmethod
-    def set_stream(self, stream: bool) -> bool:
-        """Enable or disable streaming output from API.
-        Return previous value of stream."""
-        pass
-
-    @abstractmethod
-    def get_stream(self) -> bool:
-        """Get streaming status"""
-        pass
-
-    @abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        pass
-
-    @abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        pass
-
-    @abstractmethod
-    def chat(
-        self,
-        messages: Union[str, List[LLMMessage]],
-        max_tokens: int = 200,
-        tools: Optional[List[OpenAIToolSpec]] = None,
-        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
-        response_format: Optional[OpenAIJsonSchemaSpec] = None,
-    ) -> LLMResponse:
-        """
-        Get chat-completion response from LLM.
-
-        Args:
-            messages: message-history to send to the LLM
-            max_tokens: max tokens to generate
-            tools: tools available for the LLM to use in its response
-            tool_choice: tool call mode, one of "none", "auto", "required",
-                or a dict specifying a specific tool.
-            functions: functions available for LLM to call (deprecated)
-            function_call: function calling mode, "auto", "none", or a specific fn
-                    (deprecated)
-        """
-
-        pass
-
-    @abstractmethod
-    async def achat(
-        self,
-        messages: Union[str, List[LLMMessage]],
-        max_tokens: int = 200,
-        tools: Optional[List[OpenAIToolSpec]] = None,
-        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
-        response_format: Optional[OpenAIJsonSchemaSpec] = None,
-    ) -> LLMResponse:
-        """Async version of `chat`. See `chat` for details."""
-        pass
-
-    def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
-        return self.generate(prompt, max_tokens)
-
-    @staticmethod
-    def _fallback_model_names(model: str) -> List[str]:
-        parts = model.split("/")
-        fallbacks = []
-        for i in range(1, len(parts)):
-            fallbacks.append("/".join(parts[i:]))
-        return fallbacks
-
-    def info(self) -> ModelInfo:
-        """Info of relevant chat model"""
-        orig_model = (
-            self.config.completion_model
-            if self.config.use_completion_for_chat
-            else self.chat_model_orig
-        )
-        return get_model_info(orig_model, self._fallback_model_names(orig_model))
-
-    def completion_info(self) -> ModelInfo:
-        """Info of relevant completion model"""
-        orig_model = (
-            self.chat_model_orig
-            if self.config.use_chat_for_completion
-            else self.config.completion_model
-        )
-        return get_model_info(orig_model, self._fallback_model_names(orig_model))
-
-    def supports_functions_or_tools(self) -> bool:
-        """
-        Does this Model's API support "native" tool-calling, i.e.
-        can we call the API with arguments that contain a list of available tools,
-        and their schemas?
-        Note that, given the plethora of LLM provider APIs this determination is
-        imperfect at best, and leans towards returning True.
-        When the API calls fails with an error indicating tools are not supported,
-        then users are encouraged to use the Langroid-based prompt-based
-        ToolMessage mechanism, which works with ANY LLM. To enable this,
-        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
-        """
-        return self.info().has_tools
-
-    def chat_context_length(self) -> int:
-        return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
-
-    def completion_context_length(self) -> int:
-        return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
-
-    def chat_cost(self) -> Tuple[float, float, float]:
-        """
-        Return the cost per 1000 tokens for chat completions.
-
-        Returns:
-            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
-                per 1000 tokens
-        """
-        return (0.0, 0.0, 0.0)
-
-    def reset_usage_cost(self) -> None:
-        for mdl in [self.config.chat_model, self.config.completion_model]:
-            if mdl is None:
-                return
-            if mdl not in self.usage_cost_dict:
-                self.usage_cost_dict[mdl] = LLMTokenUsage()
-            counter = self.usage_cost_dict[mdl]
-            counter.reset()
-
-    def update_usage_cost(
-        self, chat: bool, prompts: int, completions: int, cost: float
-    ) -> None:
-        """
-        Update usage cost for this LLM.
-        Args:
-            chat (bool): whether to update for chat or completion model
-            prompts (int): number of tokens used for prompts
-            completions (int): number of tokens used for completions
-            cost (float): total token cost in USD
-        """
-        mdl = self.config.chat_model if chat else self.config.completion_model
-        if mdl is None:
-            return
-        if mdl not in self.usage_cost_dict:
-            self.usage_cost_dict[mdl] = LLMTokenUsage()
-        counter = self.usage_cost_dict[mdl]
-        counter.prompt_tokens += prompts
-        counter.completion_tokens += completions
-        counter.cost += cost
-        counter.calls += 1
-
-    @classmethod
-    def usage_cost_summary(cls) -> str:
-        s = ""
-        for model, counter in cls.usage_cost_dict.items():
-            s += f"{model}: {counter}\n"
-        return s
-
-    @classmethod
-    def tot_tokens_cost(cls) -> Tuple[int, float]:
-        """
-        Return total tokens used and total cost across all models.
-        """
-        total_tokens = 0
-        total_cost = 0.0
-        for counter in cls.usage_cost_dict.values():
-            total_tokens += counter.total_tokens
-            total_cost += counter.cost
-        return total_tokens, total_cost
-
-    def get_reasoning_final(self, message: str) -> Tuple[str, str]:
-        """Extract "reasoning" and "final answer" from an LLM response, if the
-        reasoning is found within configured delimiters, like <think>, </think>.
-        E.g.,
-        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
-
-        Args:
-            message (str): message from LLM
-
-        Returns:
-            Tuple[str, str]: reasoning, final answer
-        """
-        start, end = self.config.thought_delimiters
-        if start in message and end in message:
-            parts = message.split(start)
-            if len(parts) > 1:
-                reasoning, final = parts[1].split(end)
-                return reasoning, final
-        return "", message
-
-    def followup_to_standalone(
-        self, chat_history: List[Tuple[str, str]], question: str
-    ) -> str:
-        """
-        Given a chat history and a question, convert it to a standalone question.
-        Args:
-            chat_history: list of tuples of (question, answer)
-            query: follow-up question
-
-        Returns: standalone version of the question
-        """
-        history = collate_chat_history(chat_history)
-
-        prompt = f"""
-        You are an expert at understanding a CHAT HISTORY between an AI Assistant
-        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP
-        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood
-        WITHOUT the context of the chat history.
-
-        Below is the CHAT HISTORY. When the User asks you to rephrase a
-        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the
-        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional
-        text or context.
-
-        <CHAT_HISTORY>
-        {history}
-        </CHAT_HISTORY>
-        """.strip()
-
-        follow_up_question = f"""
-        Please rephrase this as a stand-alone question or request:
-        <FOLLOW-UP-QUESTION-OR-REQUEST>
-        {question}
-        </FOLLOW-UP-QUESTION-OR-REQUEST>
-        """.strip()
-
-        show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
-        standalone = (
-            self.chat(
-                messages=[
-                    LLMMessage(role=Role.SYSTEM, content=prompt),
-                    LLMMessage(role=Role.USER, content=follow_up_question),
-                ],
-                max_tokens=1024,
-            ).message
-            or ""
-        )
-        standalone = standalone.strip()
-
-        show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
-        return standalone
-
-
-class StreamingIfAllowed:
-    """Context to temporarily enable or disable streaming, if allowed globally via
-    `settings.stream`"""
-
-    def __init__(self, llm: LanguageModel, stream: bool = True):
-        self.llm = llm
-        self.stream = stream
-
-    def __enter__(self) -> None:
-        self.old_stream = self.llm.set_stream(settings.stream and self.stream)
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self.llm.set_stream(self.old_stream)
-</file>
-
-<file path="langroid/language_models/client_cache.py">
-"""
-Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
-"""
-
-import asyncio
-import atexit
-import hashlib
-import inspect
-import threading
-import time
-import weakref
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Union, cast
-
-from cerebras.cloud.sdk import AsyncCerebras, Cerebras
-from groq import AsyncGroq, Groq
-from httpx import Timeout
-from openai import AsyncOpenAI, OpenAI
-
-# Cache for client instances, keyed by hashed configuration parameters.
-# Value is a tuple of (client instance, last_used_monotonic_seconds).
-_client_cache: Dict[str, Tuple[Any, float]] = {}
-_client_cache_lock = threading.RLock()
-
-# Keep track of clients for cleanup
-_all_clients: weakref.WeakSet[Any] = weakref.WeakSet()
-
-
-def _get_cache_key(client_type: str, **kwargs: Any) -> str:
-    """
-    Generate a cache key from client type and configuration parameters.
-    Uses the same approach as OpenAIGPT._cache_lookup for consistency.
-
-    Args:
-        client_type: Type of client (e.g., "openai", "groq", "cerebras")
-        **kwargs: Configuration parameters (api_key, base_url, timeout, etc.)
-
-    Returns:
-        SHA256 hash of the configuration as a hex string
-    """
-    # Convert kwargs to sorted string representation
-    sorted_kwargs_str = str(sorted(kwargs.items()))
-
-    # Create raw key combining client type and sorted kwargs
-    raw_key = f"{client_type}:{sorted_kwargs_str}"
-
-    # Hash the key for consistent length and to handle complex objects
-    hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
-
-    return hashed_key
-
-
-def wrap_api_key_provider_async(
-    provider: Callable[[], str],
-) -> Callable[[], Awaitable[str]]:
-    """
-    Wrap a sync API-key provider for use with ``AsyncOpenAI``.
-
-    ``AsyncOpenAI`` awaits its ``api_key`` callable, so a plain sync
-    provider must be wrapped in an async function. The sync provider is run
-    in a worker thread, so a blocking token refresh cannot stall the event
-    loop. Providers must therefore be thread-safe -- the sync client may
-    call them from arbitrary threads anyway.
-
-    Args:
-        provider: Callable returning a (possibly short-lived) API key.
-
-    Returns:
-        Async callable returning the same key.
-    """
-
-    async def _provider() -> str:
-        return await asyncio.to_thread(provider)
-
-    return _provider
-
-
-def _api_key_cache_component(api_key: Union[str, Callable[[], str]]) -> Any:
-    """
-    Cache-key component for an API key that may be a rotating-key provider.
-
-    A callable provider is keyed on its identity rather than any token value,
-    so rotating tokens never create new cache entries and tokens are never
-    retained in cache keys. The id() cannot be recycled while the entry
-    lives, because the cached client holds a strong reference to the
-    provider (directly for sync clients, via the async wrapper's closure
-    for async clients).
-    """
-    if callable(api_key):
-        return ("api_key_provider", id(api_key))
-    return api_key
-
-
-def _get_cached_client(cache_key: str) -> Optional[Any]:
-    """Get cached client and refresh its last-used timestamp.
-
-    Must be called while holding ``_client_cache_lock``.
-    """
-    entry = _client_cache.get(cache_key)
-    if entry is None:
-        return None
-
-    client, _ = entry
-    _client_cache[cache_key] = (client, time.monotonic())
-    return client
-
-
-def _store_client(cache_key: str, client: Any) -> None:
-    """Store a client in the cache with the current timestamp.
-
-    Must be called while holding ``_client_cache_lock``.
-    """
-    _client_cache[cache_key] = (client, time.monotonic())
-    _all_clients.add(client)
-
-
-def get_openai_client(
-    api_key: Union[str, Callable[[], str]],
-    base_url: Optional[str] = None,
-    organization: Optional[str] = None,
-    timeout: Union[float, Timeout] = 120.0,
-    default_headers: Optional[Dict[str, str]] = None,
-    http_client: Optional[Any] = None,
-    http_client_config: Optional[Dict[str, Any]] = None,
-) -> OpenAI:
-    """
-    Get or create a singleton OpenAI client with the given configuration.
-
-    Args:
-        api_key: OpenAI API key, or a callable returning a fresh key
-            (for short-lived rotating credentials); a callable is resolved
-            per-request by the OpenAI client and is excluded from the
-            cache key (the cache is keyed on the provider's identity)
-        base_url: Optional base URL for API
-        organization: Optional organization ID
-        timeout: Request timeout
-        default_headers: Optional default headers
-        http_client: Optional httpx.Client instance
-        http_client_config: Optional config dict for creating httpx.Client
-
-    Returns:
-        OpenAI client instance
-    """
-    if isinstance(timeout, (int, float)):
-        timeout = Timeout(timeout)
-
-    # If http_client is provided directly, don't cache (complex object)
-    if http_client is not None:
-        client = OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            organization=organization,
-            timeout=timeout,
-            default_headers=default_headers,
-            http_client=http_client,
-        )
-        _all_clients.add(client)
-        return client
-
-    cache_key = _get_cache_key(
-        "openai",
-        api_key=_api_key_cache_component(api_key),
-        base_url=base_url,
-        organization=organization,
-        timeout=timeout,
-        default_headers=default_headers,
-        http_client_config=http_client_config,  # Include config in cache key
-    )
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(OpenAI, cached_client)
-
-        created_http_client = None
-        if http_client_config is not None:
-            try:
-                from httpx import Client
-            except ImportError:
-                raise ValueError(
-                    "httpx is required to use http_client_config. "
-                    "Install it with: pip install httpx"
-                )
-            created_http_client = Client(**http_client_config)
-
-        client = OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            organization=organization,
-            timeout=timeout,
-            default_headers=default_headers,
-            http_client=created_http_client,  # Use the client created from config
-        )
-
-        _store_client(cache_key, client)
-    return client
-
-
-def get_async_openai_client(
-    api_key: Union[str, Callable[[], str]],
-    base_url: Optional[str] = None,
-    organization: Optional[str] = None,
-    timeout: Union[float, Timeout] = 120.0,
-    default_headers: Optional[Dict[str, str]] = None,
-    http_client: Optional[Any] = None,
-    http_client_config: Optional[Dict[str, Any]] = None,
-) -> AsyncOpenAI:
-    """
-    Get or create a singleton AsyncOpenAI client with the given configuration.
-
-    Args:
-        api_key: OpenAI API key, or a callable returning a fresh key
-            (for short-lived rotating credentials); a callable is resolved
-            per-request by the OpenAI client and is excluded from the
-            cache key (the cache is keyed on the provider's identity)
-        base_url: Optional base URL for API
-        organization: Optional organization ID
-        timeout: Request timeout
-        default_headers: Optional default headers
-        http_client: Optional httpx.AsyncClient instance
-        http_client_config: Optional config dict for creating httpx.AsyncClient
-
-    Returns:
-        AsyncOpenAI client instance
-    """
-    if isinstance(timeout, (int, float)):
-        timeout = Timeout(timeout)
-
-    api_key_arg: Union[str, Callable[[], Awaitable[str]]]
-    if callable(api_key):
-        # AsyncOpenAI awaits its api_key callable, so wrap the sync provider
-        api_key_arg = wrap_api_key_provider_async(api_key)
-    else:
-        api_key_arg = api_key
-
-    # If http_client is provided directly, don't cache (complex object)
-    if http_client is not None:
-        client = AsyncOpenAI(
-            api_key=api_key_arg,
-            base_url=base_url,
-            organization=organization,
-            timeout=timeout,
-            default_headers=default_headers,
-            http_client=http_client,
-        )
-        _all_clients.add(client)
-        return client
-
-    cache_key = _get_cache_key(
-        "async_openai",
-        api_key=_api_key_cache_component(api_key),
-        base_url=base_url,
-        organization=organization,
-        timeout=timeout,
-        default_headers=default_headers,
-        http_client_config=http_client_config,  # Include config in cache key
-    )
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(AsyncOpenAI, cached_client)
-
-        created_http_client = None
-        if http_client_config is not None:
-            try:
-                from httpx import AsyncClient
-            except ImportError:
-                raise ValueError(
-                    "httpx is required to use http_client_config. "
-                    "Install it with: pip install httpx"
-                )
-            created_http_client = AsyncClient(**http_client_config)
-
-        client = AsyncOpenAI(
-            api_key=api_key_arg,
-            base_url=base_url,
-            organization=organization,
-            timeout=timeout,
-            default_headers=default_headers,
-            http_client=created_http_client,  # Use the client created from config
-        )
-
-        _store_client(cache_key, client)
-    return client
-
-
-def get_groq_client(api_key: str) -> Groq:
-    """
-    Get or create a singleton Groq client with the given configuration.
-
-    Args:
-        api_key: Groq API key
-
-    Returns:
-        Groq client instance
-    """
-    cache_key = _get_cache_key("groq", api_key=api_key)
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(Groq, cached_client)
-
-        client = Groq(api_key=api_key)
-        _store_client(cache_key, client)
-    return client
-
-
-def get_async_groq_client(api_key: str) -> AsyncGroq:
-    """
-    Get or create a singleton AsyncGroq client with the given configuration.
-
-    Args:
-        api_key: Groq API key
-
-    Returns:
-        AsyncGroq client instance
-    """
-    cache_key = _get_cache_key("async_groq", api_key=api_key)
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(AsyncGroq, cached_client)
-
-        client = AsyncGroq(api_key=api_key)
-        _store_client(cache_key, client)
-    return client
-
-
-def get_cerebras_client(api_key: str) -> Cerebras:
-    """
-    Get or create a singleton Cerebras client with the given configuration.
-
-    Args:
-        api_key: Cerebras API key
-
-    Returns:
-        Cerebras client instance
-    """
-    cache_key = _get_cache_key("cerebras", api_key=api_key)
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(Cerebras, cached_client)
-
-        client = Cerebras(api_key=api_key)
-        _store_client(cache_key, client)
-    return client
-
-
-def get_async_cerebras_client(api_key: str) -> AsyncCerebras:
-    """
-    Get or create a singleton AsyncCerebras client with the given configuration.
-
-    Args:
-        api_key: Cerebras API key
-
-    Returns:
-        AsyncCerebras client instance
-    """
-    cache_key = _get_cache_key("async_cerebras", api_key=api_key)
-
-    with _client_cache_lock:
-        cached_client = _get_cached_client(cache_key)
-        if cached_client is not None:
-            return cast(AsyncCerebras, cached_client)
-
-        client = AsyncCerebras(api_key=api_key)
-        _store_client(cache_key, client)
-    return client
-
-
-def prune_cache(max_age_seconds: float) -> int:
-    """
-    Remove cache entries whose last-used time exceeds *max_age_seconds*.
-
-    Evicted clients are **not** closed here because they may still be serving
-    in-flight requests.  Cleanup is handled by the ``atexit`` handler and the
-    garbage collector.
-
-    Args:
-        max_age_seconds: Maximum age (in seconds) for cache entries to keep.
-            Entries older than this value are removed.
-
-    Returns:
-        Number of cache entries removed.
-    """
-    if max_age_seconds < 0:
-        raise ValueError("max_age_seconds must be non-negative")
-
-    now = time.monotonic()
-
-    with _client_cache_lock:
-        stale_keys = [
-            key
-            for key, (_, last_used_at) in _client_cache.items()
-            if now - last_used_at > max_age_seconds
-        ]
-
-        for key in stale_keys:
-            _client_cache.pop(key)
-
-    # Don't close evicted clients here — they may still be serving in-flight
-    # requests. The atexit handler and GC will clean them up.
-
-    return len(stale_keys)
-
-
-def _cleanup_clients() -> None:
-    """
-    Cleanup function to close all cached clients on exit.
-    Called automatically via atexit.
-    """
-    for client in list(_all_clients):
-        if hasattr(client, "close") and callable(client.close):
-            try:
-                # Check if close is a coroutine function (async)
-                if inspect.iscoroutinefunction(client.close):
-                    # For async clients, we can't await in atexit
-                    # They will be cleaned up by the OS
-                    pass
-                else:
-                    # Sync clients can be closed directly
-                    client.close()
-            except Exception:
-                pass  # Ignore errors during cleanup
-
-
-# Register cleanup function to run on exit
-atexit.register(_cleanup_clients)
-
-
-# For testing purposes
-def _clear_cache() -> None:
-    """Clear the client cache. Only for testing."""
-    with _client_cache_lock:
-        _client_cache.clear()
-</file>
-
-<file path="SECURITY.md">
-# Security Policy
-
-## Threat model — please read this before reporting
-
-Langroid is a framework for building applications in which an LLM generates
-code and queries that are then executed. Several **optional** agents exist for
-exactly that purpose:
-
-- `TableChatAgent`, `LanceDocChatAgent`, and `VectorStore.compute_from_docs`
-  evaluate LLM-generated **pandas expressions** with `eval()`.
-- `SQLChatAgent` executes LLM-generated **SQL** against a database you supply.
-- `Neo4jChatAgent`, `ArangoChatAgent`, and `CSVGraphAgent` execute
-  LLM-generated **Cypher / AQL** against a graph database you supply.
-
-Executing model-generated code against your own data *is the feature*. An LLM
-is not a trust boundary: if any untrusted text reaches the model's context, you
-must assume the model can be induced to emit any query or expression the
-grammar allows. Langroid cannot prevent this, and does not claim to.
-
-### What is, and is not, a security boundary
-
-The following are **best-effort hardening, not security boundaries**:
-
-- `sanitize_command()` / `CommandValidator` / `safe_eval_globals()` in
-  `langroid/utils/pandas_utils.py`
-- `_DANGEROUS_SQL_PATTERNS` and the `sqlglot` AST checks in `SQLChatAgent`
-- `validate_cypher_query()` / `validate_aql_query()` in the graph agents
-
-They exist to stop an *unlucky* LLM, not a *determined attacker*. The pandas
-path uses explicit allowlists for AST nodes, methods, operators, variables, and
-builtins. The SQL, Cypher, and AQL paths use denylists over full query grammars
-that span multiple dialects, quoting and escaping forms, and function families.
-Such denylists cannot be made complete. We patch clear gaps opportunistically,
-but we do not treat a newly found way around them as a vulnerability in
-Langroid.
-
-The **actual** security boundaries for a Langroid deployment are:
-
-- the privileges of the database credential you hand the agent;
-- the OS user, container, or VM the process runs in;
-- filesystem permissions and network egress rules.
-
-### Deploying these agents safely
-
-If you expose any of the code- or query-executing agents to untrusted input:
-
-- **Give the agent a least-privilege database role.** For `SQLChatAgent`, a
-  read-only, non-superuser role with `GRANT SELECT` on only the intended
-  tables. In PostgreSQL, server-side file reads and writes normally require a
-  superuser, membership in `pg_read_server_files` or
-  `pg_write_server_files`, or a direct grant on a privileged function.
-  `COPY ... PROGRAM` instead requires superuser access or membership in the
-  distinct `pg_execute_server_program` role. Server-side `lo_import` and
-  `lo_export` default to superuser-only use, but an administrator can grant
-  access to those functions directly. Ordinary password-authenticated
-  `dblink` connections do not require any of those roles. Do not install
-  unneeded extensions, and revoke access to dangerous extensions and
-  functions, including `dblink`, in addition to granting only the intended
-  table privileges. Review any site-specific functions and grants as well.
-- **Run the process in a container or VM** with no credentials, secrets, or
-  data you are unwilling to expose to the LLM.
-- **Treat `allow_dangerous_operations=True` and `full_eval=True` as
-  "I am providing my own sandbox."** The first permits dangerous database
-  operations. The second disables pandas AST validation while retaining the
-  restricted globals from `safe_eval_globals()`. Both are documented as
-  trusted-environment-only.
-
-## Reporting a vulnerability
-
-Report privately — **not** via GitHub Issues, Discussions, or any other public
-forum:
-
-1. Go to
-   **[Security Advisories](https://github.com/langroid/langroid/security/advisories)**.
-2. Click **"Report a vulnerability"**.
-3. Include a proof of concept that works against a **default configuration**.
-
-We aim to acknowledge in-scope reports within 7 days.
-
-### In scope
-
-- Vulnerabilities in core framework code: tool dispatch and the agent/tool
-  trust boundary, message routing, sender verification.
-- Parsing and deserialization flaws (XXE, unsafe deserialization, decompression
-  bombs) in the document and message parsers.
-- Path traversal in the file tools (`ReadFileTool`, `WriteFileTool`,
-  `ListDirTool`) and in repository / folder ingestion.
-- Credential or secret leakage in a default configuration that does not depend
-  on any of the specific exclusions below. The out-of-scope rules take
-  precedence over this category.
-- **A code path that skips a documented safety gate entirely** — that is, a
-  *missing call* to a validator, not a *bypass* of one.
-- **A statement the `allowed_statement_types` allowlist misclassifies.** The
-  allowlist is a different kind of control from the denylists above: it decides
-  what a statement *does* over a closed set of statement kinds, so a query that
-  performs a write the allowlist did not authorize — for example by nesting it
-  where the classifier does not look — is a bounded, fixable defect and is in
-  scope.
-- Vulnerable dependencies with a demonstrated impact on Langroid.
-
-### Out of scope
-
-The following will be closed without a fix, an advisory, or a CVE request:
-
-- New bypasses of the SQL, Cypher, or AQL denylists: previously unlisted
-  functions, alternate quoting or escaping forms (backticks, Unicode escapes,
-  schema qualification), or dialect-specific syntax. See "What is, and is not,
-  a security boundary" above.
-- Sandbox escapes from the pandas `eval()` path when `full_eval=True`,
-  including object-graph traversal via dunder attributes. `full_eval=True`
-  disables the AST validator by design.
-- Anything requiring `allow_dangerous_operations=True`.
-- "The LLM can be prompt-injected into generating a harmful query." This is the
-  documented threat model, not a defect.
-- Reports that assume the agent was given a superuser or otherwise
-  over-privileged database credential.
-- Theoretical reports with no working proof of concept against a default
-  configuration.
-
-Reports that chain off a previous advisory as an "incomplete fix" are judged
-against this same scope: if the original issue was a missing gate we will fix
-it, and if it was a denylist gap it is out of scope.
-
-## Supported versions
-
-Security fixes ship in the latest release. Please upgrade to the current
-version of `langroid` rather than requesting backports.
-</file>
-
 <file path="langroid/agent/chat_agent.py">
 import copy
 import inspect
@@ -53554,6 +51491,2069 @@ class ChatAgent(Agent):
         # multiple agents shared the same cached client instance.
         # Clients are now managed centrally in langroid.language_models.client_cache
         pass
+</file>
+
+<file path="langroid/agent/chat_document.py">
+from __future__ import annotations
+
+import copy
+import json
+from collections import OrderedDict
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union, cast
+
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from langroid.agent.tool_message import ToolMessage
+from langroid.agent.xml_tool_message import XMLToolMessage
+from langroid.language_models.base import (
+    LLMFunctionCall,
+    LLMMessage,
+    LLMResponse,
+    LLMTokenUsage,
+    OpenAIToolCall,
+    Role,
+    ToolChoiceTypes,
+)
+from langroid.mytypes import DocMetaData, Document, Entity
+from langroid.parsing.agent_chats import parse_message
+from langroid.parsing.file_attachment import FileAttachment
+from langroid.parsing.parse_json import extract_top_level_json, top_level_json_field
+from langroid.utils.object_registry import ObjectRegistry
+from langroid.utils.output.printing import shorten_text
+from langroid.utils.types import to_string
+
+
+class ChatDocAttachment(BaseModel):
+    # any additional data that should be attached to the document
+    model_config = ConfigDict(extra="allow")
+
+
+class StatusCode(str, Enum):
+    """Codes meant to be returned by task.run(). Some are not used yet."""
+
+    OK = "OK"
+    ERROR = "ERROR"
+    DONE = "DONE"
+    STALLED = "STALLED"
+    INF_LOOP = "INF_LOOP"
+    KILL = "KILL"
+    FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
+    MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
+    MAX_COST = "MAX_COST"
+    MAX_TOKENS = "MAX_TOKENS"
+    TIMEOUT = "TIMEOUT"
+    NO_ANSWER = "NO_ANSWER"
+    USER_QUIT = "USER_QUIT"
+
+
+class ChatDocMetaData(DocMetaData):
+    parent_id: str = ""  # msg (ChatDocument) to which this is a response
+    child_id: str = ""  # ChatDocument that has response to this message
+    agent_id: str = ""  # ChatAgent that generated this message
+    msg_idx: int = -1  # index of this message in the agent `message_history`
+    sender: Entity  # sender of the message
+    # True if this msg was relayed from another agent's LLM/handler output in a
+    # multi-agent handoff (a Task then relabels sender -> USER). Lets handle-only
+    # tools be dispatched for legitimate handoffs while still blocking raw
+    # USER-injected tool JSON. See ChatAgent._filter_user_origin_tools and
+    # GHSA-gjgq-w2m6-wr5q.
+    tools_from_agent: bool = False
+    # True if this msg's content/tools derive from external untrusted (USER)
+    # input via a MECHANICAL path: a deepcopy of a tainted msg, or tools
+    # repackaged from a USER msg's content (e.g. DonePassTool/AgentDoneTool).
+    # Unlike `tools_from_agent` (a trust signal), this is a DISTRUST signal that
+    # vetoes handle-only tool dispatch even across a USER relabel, closing the
+    # content-laundering hole. Propagated (deepcopy carries it), never cleared.
+    # See ChatAgent._filter_user_origin_tools and issue #1035 (taint propagation).
+    tainted: bool = False
+    # tool_id corresponding to single tool result in ChatDocument.content
+    oai_tool_id: str | None = None
+    tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
+    block: None | Entity = None
+    sender_name: str = ""
+    recipient: str = ""
+    usage: Optional[LLMTokenUsage] = None
+    cached: bool = False
+    displayed: bool = False
+    has_citation: bool = False
+    status: Optional[StatusCode] = None
+
+    @model_validator(mode="after")
+    def _mark_tools_from_agent(self) -> "ChatDocMetaData":
+        # Mark messages produced directly by an LLM: the tools in an LLM's
+        # output are the LLM's own decision (the trusted trigger for handle-only
+        # tools -- see GHSA-gjgq-w2m6-wr5q), so the mark lets a Task relay them
+        # to another agent even after relabeling the sender to USER. The mark is
+        # only ever SET, never cleared, so it survives relabeling and deepcopies
+        # (e.g. ForwardTool/PassTool deepcopy the LLM-born message, carrying the
+        # mark across the handoff). We deliberately do NOT mark generic AGENT
+        # messages: a pass-through/echoing agent could surface untrusted USER
+        # text (with embedded tool JSON) as AGENT content, and marking that
+        # would re-open the user-origin bypass. Raw USER input is never marked,
+        # so it stays filtered. See ChatAgent._filter_user_origin_tools.
+        if self.sender == Entity.LLM:
+            self.tools_from_agent = True
+        return self
+
+    @property
+    def parent(self) -> Optional["ChatDocument"]:
+        return ChatDocument.from_id(self.parent_id)
+
+    @property
+    def child(self) -> Optional["ChatDocument"]:
+        return ChatDocument.from_id(self.child_id)
+
+
+class ChatDocLoggerFields(BaseModel):
+    sender_entity: Entity = Entity.USER
+    sender_name: str = ""
+    recipient: str = ""
+    block: Entity | None = None
+    tool_type: str = ""
+    tool: str = ""
+    content: str = ""
+
+    @classmethod
+    def tsv_header(cls) -> str:
+        field_names = cls().model_dump().keys()
+        return "\t".join(field_names)
+
+
+class ChatDocument(Document):
+    """
+    Represents a message in a conversation among agents. All responders of an agent
+    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
+    and so does the Task.run() method.
+
+    Attributes:
+        oai_tool_calls (Optional[List[OpenAIToolCall]]):
+            Tool-calls from an OpenAI-compatible API
+        oai_tool_id2results (Optional[OrderedDict[str, str]]):
+            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
+        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
+            LLM should choose tool-use in its response
+            (auto, none, required, or a specific tool)
+        function_call (Optional[LLMFunctionCall]):
+            Function-call from an OpenAI-compatible API
+                (deprecated by OpenAI, in favor of tool-calls)
+        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
+            - `content` field (via JSON parsing),
+            - `oai_tool_calls`, or
+            - `function_call`
+        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
+        attachment (None | ChatDocAttachment): Any additional data attached.
+    """
+
+    reasoning: str = ""  # reasoning produced by a reasoning LLM
+    content_any: Any = None  # to hold arbitrary data returned by responders
+    # True when the underlying LLM response had NO content (only a tool/function
+    # call), as opposed to content == "" (present but empty). `content` itself
+    # stays a mandatory str (""), so this flag is what carries "missing" through
+    # to to_LLMMessage(), which reproduces it as LLMMessage.content = None.
+    # (content_any cannot serve this role — it defaults to None on every doc.)
+    content_is_none: bool = False
+    # Original LLM response text including inline thought signatures
+    # (e.g. <thinking>...</thinking>). Only populated when reasoning was
+    # extracted from inline tags in the message text. Used by to_LLMMessage()
+    # to preserve thought signatures in message history, which is critical
+    # for models like Gemini 3 Flash and Amazon Nova that rely on seeing
+    # their own thought tags in context to maintain reasoning ability.
+    content_with_reasoning: Optional[str] = None
+    files: List[FileAttachment] = []  # list of file attachments
+    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+    oai_tool_id2result: Optional[OrderedDict[str, str]] = None
+    oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
+    function_call: Optional[LLMFunctionCall] = None
+    # tools that are explicitly added by agent response/handler,
+    # or tools recognized in the ChatDocument as handle-able tools
+    tool_messages: List[ToolMessage] = []
+    # all known tools in the msg that are in an agent's llm_tools_known list,
+    # even if non-used/handled
+    # (the list is populated by Agent.has_tool_message_attempt())
+    all_tool_messages: Optional[List[ToolMessage]] = None
+    # ID of the agent that populated all_tool_messages (for cache validity)
+    all_tool_messages_agent_id: Optional[str] = None
+
+    metadata: ChatDocMetaData
+    attachment: None | ChatDocAttachment = None
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        ObjectRegistry.register_object(self)
+
+    @property
+    def parent(self) -> Optional["ChatDocument"]:
+        return ChatDocument.from_id(self.metadata.parent_id)
+
+    @property
+    def child(self) -> Optional["ChatDocument"]:
+        return ChatDocument.from_id(self.metadata.child_id)
+
+    @staticmethod
+    def deepcopy(doc: ChatDocument) -> ChatDocument:
+        new_doc = copy.deepcopy(doc)
+        new_doc.metadata.id = ObjectRegistry.new_id()
+        new_doc.metadata.child_id = ""
+        new_doc.metadata.parent_id = ""
+        ObjectRegistry.register_object(new_doc)
+        return new_doc
+
+    @staticmethod
+    def from_id(id: str) -> Optional["ChatDocument"]:
+        return cast(ChatDocument, ObjectRegistry.get(id))
+
+    @staticmethod
+    def delete_id(id: str) -> None:
+        """Remove ChatDocument with given id from ObjectRegistry,
+        and all its descendants.
+        """
+        chat_doc = ChatDocument.from_id(id)
+        # first delete all descendants
+        while chat_doc is not None:
+            next_chat_doc = chat_doc.child
+            ObjectRegistry.remove(chat_doc.id())
+            chat_doc = next_chat_doc
+
+    def __str__(self) -> str:
+        fields = self.log_fields()
+        tool_str = ""
+        if fields.tool_type != "":
+            tool_str = f"{fields.tool_type}[{fields.tool}]: "
+        recipient_str = ""
+        if fields.recipient != "":
+            recipient_str = f"=>{fields.recipient}: "
+        return (
+            f"{fields.sender_entity}[{fields.sender_name}] "
+            f"{recipient_str}{tool_str}{fields.content}"
+        )
+
+    def get_tool_names(self) -> List[str]:
+        """
+        Get names of attempted tool usages (JSON or non-JSON) in the content
+            of the message.
+        Returns:
+            List[str]: list of *attempted* tool names
+            (We say "attempted" since we ONLY look at the `request` component of the
+            tool-call representation, and we're not fully parsing it into the
+            corresponding tool message class)
+
+        """
+        tool_candidates = XMLToolMessage.find_candidates(self.content)
+        if len(tool_candidates) == 0:
+            tool_candidates = extract_top_level_json(self.content)
+            if len(tool_candidates) == 0:
+                return []
+            tools = [json.loads(tc).get("request") for tc in tool_candidates]
+        else:
+            tool_dicts = [
+                XMLToolMessage.extract_field_values(tc) for tc in tool_candidates
+            ]
+            tools = [td.get("request") for td in tool_dicts if td is not None]
+        return [str(tool) for tool in tools if tool is not None]
+
+    def log_fields(self) -> ChatDocLoggerFields:
+        """
+        Fields for logging in csv/tsv logger
+        Returns:
+            List[str]: list of fields
+        """
+        tool_type = ""  # FUNC or TOOL
+        tool = ""  # tool name or function name
+
+        # Skip tool detection for system messages - they contain tool instructions,
+        # not actual tool calls
+        if self.metadata.sender != Entity.SYSTEM:
+            oai_tools = (
+                []
+                if self.oai_tool_calls is None
+                else [t for t in self.oai_tool_calls if t.function is not None]
+            )
+            if self.function_call is not None:
+                tool_type = "FUNC"
+                tool = self.function_call.name
+            elif len(oai_tools) > 0:
+                tool_type = "OAI_TOOL"
+                tool = ",".join(t.function.name for t in oai_tools)  # type: ignore
+            else:
+                try:
+                    json_tools = self.get_tool_names()
+                except Exception:
+                    json_tools = []
+                if json_tools != []:
+                    tool_type = "TOOL"
+                    tool = json_tools[0]
+        recipient = self.metadata.recipient
+        content = self.content
+        sender_entity = self.metadata.sender
+        sender_name = self.metadata.sender_name
+        if tool_type == "FUNC":
+            content += str(self.function_call)
+        return ChatDocLoggerFields(
+            sender_entity=sender_entity,
+            sender_name=sender_name,
+            recipient=recipient,
+            block=self.metadata.block,
+            tool_type=tool_type,
+            tool=tool,
+            content=content,
+        )
+
+    def tsv_str(self) -> str:
+        fields = self.log_fields()
+        fields.content = shorten_text(fields.content, 80)
+        field_values = fields.model_dump().values()
+        return "\t".join(str(v) for v in field_values)
+
+    def pop_tool_ids(self) -> None:
+        """
+        Pop the last tool_id from the stack of tool_ids.
+        """
+        if len(self.metadata.tool_ids) > 0:
+            self.metadata.tool_ids.pop()
+
+    @staticmethod
+    def _clean_fn_call(fc: LLMFunctionCall | None) -> None:
+        # Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
+        # with oddities:
+        # (a) the `name` is set, as well as `arguments.request` is set,
+        #  and in langroid we use the `request` value as the `name`.
+        #  In this case we override the `name` with the `request` value.
+        # (b) the `name` looks like "functions blah" or just "functions"
+        #   In this case we strip the "functions" part.
+        if fc is None:
+            return
+        fc.name = fc.name.replace("functions", "").strip()
+        if fc.arguments is not None:
+            request = fc.arguments.get("request")
+            if request is not None and request != "":
+                fc.name = request
+                fc.arguments.pop("request")
+
+    @staticmethod
+    def from_LLMResponse(
+        response: LLMResponse,
+        displayed: bool = False,
+        recognize_recipient_in_content: bool = True,
+    ) -> "ChatDocument":
+        """
+        Convert LLMResponse to ChatDocument.
+        Args:
+            response (LLMResponse): LLMResponse to convert.
+            displayed (bool): Whether this response was displayed to the user.
+            recognize_recipient_in_content (bool): Whether to parse message text
+                for recipient routing (``TO[<recipient>]:`` and JSON
+                ``{"recipient": ...}``). Default True.
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMResponse.
+        """
+        # Capture "no content" from the source response (None, not "") before
+        # recipient parsing can turn it into "".
+        content_is_none = response.message is None
+        recipient, message = response.get_recipient_and_message(
+            recognize_recipient_in_content
+        )
+        message = message.strip() if message is not None else ""
+        if message in ["''", '""']:
+            message = ""
+        if response.function_call is not None:
+            ChatDocument._clean_fn_call(response.function_call)
+        if response.oai_tool_calls is not None:
+            # there must be at least one if it's not None
+            for oai_tc in response.oai_tool_calls:
+                ChatDocument._clean_fn_call(oai_tc.function)
+        return ChatDocument(
+            content=message,
+            content_is_none=content_is_none,
+            reasoning=response.reasoning,
+            content_with_reasoning=response.message_with_reasoning,
+            content_any=message,
+            oai_tool_calls=response.oai_tool_calls,
+            function_call=response.function_call,
+            metadata=ChatDocMetaData(
+                source=Entity.LLM,
+                sender=Entity.LLM,
+                usage=response.usage,
+                displayed=displayed,
+                cached=response.cached,
+                recipient=recipient,
+            ),
+        )
+
+    @staticmethod
+    def from_str(msg: str) -> "ChatDocument":
+        # first check whether msg is structured as TO <recipient>: <message>
+        recipient, message = parse_message(msg)
+        if recipient == "":
+            # check if any top level json specifies a 'recipient'
+            recipient = top_level_json_field(msg, "recipient")
+            message = msg  # retain the whole msg in this case
+        return ChatDocument(
+            content=message,
+            content_any=message,
+            metadata=ChatDocMetaData(
+                source=Entity.USER,
+                sender=Entity.USER,
+                recipient=recipient,
+                tainted=True,  # external user input is untrusted (#1035)
+            ),
+        )
+
+    @staticmethod
+    def from_LLMMessage(
+        message: LLMMessage,
+        sender_name: str = "",
+        recipient: str = "",
+    ) -> "ChatDocument":
+        """
+        Convert LLMMessage to ChatDocument.
+
+        Args:
+            message (LLMMessage): LLMMessage to convert.
+            sender_name (str): Name of the sender. Defaults to "".
+            recipient (str): Name of the recipient. Defaults to "".
+
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMMessage.
+        """
+        # Map LLMMessage Role to ChatDocument Entity
+        role_to_entity = {
+            Role.USER: Entity.USER,
+            Role.SYSTEM: Entity.SYSTEM,
+            Role.ASSISTANT: Entity.LLM,
+            Role.FUNCTION: Entity.LLM,
+            Role.TOOL: Entity.LLM,
+        }
+
+        sender_entity = role_to_entity.get(message.role, Entity.USER)
+
+        return ChatDocument(
+            content=message.content or "",
+            content_is_none=message.content is None,
+            content_any=message.content,
+            files=message.files,
+            function_call=message.function_call,
+            oai_tool_calls=message.tool_calls,
+            metadata=ChatDocMetaData(
+                source=sender_entity,
+                sender=sender_entity,
+                sender_name=sender_name,
+                recipient=recipient,
+                oai_tool_id=message.tool_call_id,
+                tool_ids=[message.tool_id] if message.tool_id else [],
+            ),
+        )
+
+    @staticmethod
+    def to_LLMMessage(
+        message: Union[str, "ChatDocument"],
+        oai_tools: Optional[List[OpenAIToolCall]] = None,
+    ) -> List[LLMMessage]:
+        """
+        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
+        Usually there will be just a single LLMMessage, but when the ChatDocument
+        contains results from multiple OpenAI tool-calls, we would have a sequence
+        LLMMessages, one per tool-call result.
+
+        Args:
+            message (str|ChatDocument): Message to convert.
+            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
+                response, from the ChatAgent's latest message.
+        Returns:
+            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
+        """
+
+        sender_role = Role.USER
+        if isinstance(message, str):
+            message = ChatDocument.from_str(message)
+        # Prefer content_with_reasoning when available — this preserves
+        # inline thought signatures (e.g. <thinking>...</thinking>) in
+        # message history, which certain models (Gemini 3 Flash, Amazon
+        # Nova) need to maintain reasoning across turns.
+        # content_with_reasoning is only set when inline tags were
+        # actually extracted, so this won't interfere with models that
+        # provide reasoning via a separate API field.
+        # content_is_none is the authoritative serialized representation of an
+        # absent LLM response body. It must win over stale text fields when a
+        # ChatDocument is persisted and reconstructed.
+        content: Optional[str] = None
+        if not message.content_is_none:
+            content = (
+                message.content_with_reasoning
+                or message.content
+                # content_any may hold parsed structured output (e.g. tool-call
+                # args loaded under a strict output_format), which is NOT message
+                # text — never let it stand in for content on a call-only turn.
+                or to_string(message.content_any)
+                or ""
+            )
+        fun_call = message.function_call
+        oai_tool_calls = message.oai_tool_calls
+        if message.metadata.sender == Entity.USER and fun_call is not None:
+            # This may happen when a (parent agent's) LLM generates a
+            # a Function-call, and it ends up being sent to the current task's
+            # LLM (possibly because the function-call is mis-named or has other
+            # issues and couldn't be handled by handler methods).
+            # But a function-call can only be generated by an entity with
+            # Role.ASSISTANT, so we instead put the content of the function-call
+            # in the content of the message.
+            content = (content or "") + " " + str(fun_call)
+            fun_call = None
+        if message.metadata.sender == Entity.USER and oai_tool_calls is not None:
+            # same reasoning as for function-call above
+            content = (
+                (content or "") + " " + "\n\n".join(str(tc) for tc in oai_tool_calls)
+            )
+            oai_tool_calls = None
+        # Faithfully carry the response shape: if the underlying LLM response
+        # had NO content (content_is_none), reproduce that as None ("missing"),
+        # distinct from a present-but-empty "". content_is_none is the signal
+        # (content_any can't be — it defaults to None on every ChatDocument,
+        # and may carry parsed structured output rather than text; see above).
+        # `not content` still lets a USER-sender fold a function/tool call into
+        # content above. How a missing content is rendered on the wire is left
+        # to LLMMessage.api_dict (it drops None, and pads a lone space only when
+        # a message would otherwise be completely empty). This is what lets an
+        # assistant tool-call turn omit `content`: Gemini 3.x rejects an
+        # assistant turn that has BOTH a tool/function call and (even
+        # whitespace) text content.
+        if message.content_is_none and not content:
+            content = None
+        sender_name = message.metadata.sender_name
+        tool_ids = message.metadata.tool_ids
+        tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
+        chat_document_id = message.id()
+        if message.metadata.sender == Entity.SYSTEM:
+            sender_role = Role.SYSTEM
+        if (
+            message.metadata.parent is not None
+            and message.metadata.parent.function_call is not None
+        ):
+            # This is a response to a function call, so set the role to FUNCTION.
+            sender_role = Role.FUNCTION
+            sender_name = message.metadata.parent.function_call.name
+        elif oai_tools is not None and len(oai_tools) > 0:
+            pending_tool_ids = [tc.id for tc in oai_tools]
+            # The ChatAgent has pending OpenAI tool-call(s),
+            # so the current ChatDocument contains
+            # results for some/all/none of them.
+
+            if len(oai_tools) == 1:
+                # Case 1:
+                # There was exactly 1 pending tool-call, and in this case
+                # the result would be a plain string in `content`
+                return [
+                    LLMMessage(
+                        role=Role.TOOL,
+                        tool_call_id=oai_tools[0].id,
+                        content=content,
+                        files=message.files,
+                        chat_document_id=chat_document_id,
+                    )
+                ]
+
+            elif (
+                message.metadata.oai_tool_id is not None
+                and message.metadata.oai_tool_id in pending_tool_ids
+            ):
+                # Case 2:
+                # ChatDocument.content has result of a single tool-call
+                return [
+                    LLMMessage(
+                        role=Role.TOOL,
+                        tool_call_id=message.metadata.oai_tool_id,
+                        content=content,
+                        files=message.files,
+                        chat_document_id=chat_document_id,
+                    )
+                ]
+            elif message.oai_tool_id2result is not None:
+                # Case 2:
+                # There were > 1 tool-calls awaiting response,
+                assert (
+                    len(message.oai_tool_id2result) > 1
+                ), "oai_tool_id2result must have more than 1 item."
+                return [
+                    LLMMessage(
+                        role=Role.TOOL,
+                        tool_call_id=tool_id,
+                        content=result or " ",
+                        files=message.files,
+                        chat_document_id=chat_document_id,
+                    )
+                    for tool_id, result in message.oai_tool_id2result.items()
+                ]
+        elif message.metadata.sender == Entity.LLM:
+            sender_role = Role.ASSISTANT
+
+        return [
+            LLMMessage(
+                role=sender_role,
+                tool_id=tool_id,  # for OpenAI Assistant
+                content=content,
+                files=message.files,
+                function_call=fun_call,
+                tool_calls=oai_tool_calls,
+                name=sender_name,
+                chat_document_id=chat_document_id,
+            )
+        ]
+
+
+LLMMessage.model_rebuild()
+ChatDocMetaData.model_rebuild()
+</file>
+
+<file path="langroid/language_models/base.py">
+import json
+import logging
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from enum import Enum
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
+
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
+
+from langroid.cachedb.base import CacheDBConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.model_info import ModelInfo, get_model_info
+from langroid.parsing.agent_chats import parse_message
+from langroid.parsing.file_attachment import FileAttachment
+from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
+from langroid.prompts.dialog import collate_chat_history
+from langroid.utils.configuration import settings
+from langroid.utils.output.printing import show_if_debug
+
+logger = logging.getLogger(__name__)
+
+
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
+FunctionCallTypes = Literal["none", "auto"]
+ToolChoiceTypes = Literal["none", "auto", "required"]
+ToolTypes = Literal["function"]
+
+DEFAULT_CONTEXT_LENGTH = 16_000
+
+
+class StreamEventType(Enum):
+    TEXT = 1
+    FUNC_NAME = 2
+    FUNC_ARGS = 3
+    TOOL_NAME = 4
+    TOOL_ARGS = 5
+    REASONING = 6
+
+
+class RetryParams(BaseSettings):
+    max_retries: int = 5
+    initial_delay: float = 1.0
+    exponential_base: float = 1.3
+    jitter: bool = True
+
+
+class LLMConfig(BaseSettings):
+    """
+    Common configuration for all language models.
+    """
+
+    type: str = "openai"
+    streamer: Optional[Callable[[Any], None]] = noop_fn
+    streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
+    api_base: str | None = None
+    formatter: None | str = None
+    # specify None if you want to use the full max output tokens of the model
+    max_output_tokens: int | None = 8192
+    timeout: int = 20  # timeout for API requests
+    chat_model: str = ""
+    completion_model: str = ""
+    temperature: float = 0.0
+    chat_context_length: int | None = None
+    async_stream_quiet: bool = False  # suppress streaming output in async mode?
+    completion_context_length: int | None = None
+    # if input length + max_output_tokens > context length of model,
+    # we will try shortening requested output
+    min_output_tokens: int = 64
+    use_completion_for_chat: bool = False  # use completion model for chat?
+    # use chat model for completion? For OpenAI models, this MUST be set to True!
+    use_chat_for_completion: bool = True
+    stream: bool = True  # stream output from API?
+    # TODO: we could have a `stream_reasoning` flag here to control whether to show
+    # reasoning output from reasoning models
+    cache_config: None | CacheDBConfig = RedisCacheConfig()
+    thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
+    retry_params: RetryParams = RetryParams()
+
+    @property
+    def model_max_output_tokens(self) -> int:
+        if self.max_output_tokens:
+            return self.max_output_tokens
+        # Build fallback names by progressively stripping provider prefixes
+        # (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
+        # succeeds even before OpenAIGPT.__init__ strips the prefix.
+        parts = self.chat_model.split("/")
+        fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
+        return get_model_info(self.chat_model, fallbacks).max_output_tokens
+
+
+class LLMFunctionCall(BaseModel):
+    """
+    Structure of LLM response indicating it "wants" to call a function.
+    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
+    """
+
+    name: str  # name of function to call
+    arguments: Optional[Dict[str, Any]] = None
+
+    @staticmethod
+    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall":
+        """
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+        fun_call = LLMFunctionCall(name=message["name"])
+        fun_args_str = message["arguments"]
+        # sometimes may be malformed with invalid indents,
+        # so we try to be safe by removing newlines.
+        if fun_args_str is not None:
+            fun_args_str = fun_args_str.replace("\n", "").strip()
+            dict_or_list = parse_imperfect_json(fun_args_str)
+
+            if not isinstance(dict_or_list, dict):
+                raise ValueError(
+                    f"""
+                        Invalid function args: {fun_args_str}
+                        parsed as {dict_or_list},
+                        which is not a valid dict.
+                        """
+                )
+            fun_args = dict_or_list
+        else:
+            fun_args = None
+        fun_call.arguments = fun_args
+
+        return fun_call
+
+    def __str__(self) -> str:
+        return "FUNC: " + json.dumps(self.model_dump(), indent=2)
+
+
+class LLMFunctionSpec(BaseModel):
+    """
+    Description of a function available for the LLM to use.
+    To be used when calling the LLM `chat()` method with the `functions` parameter.
+    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
+    """
+
+    name: str
+    description: str
+    parameters: Dict[str, Any]
+
+
+class OpenAIToolCall(BaseModel):
+    """
+    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
+    See https://platform.openai.com/docs/api-reference/chat/create
+
+    Attributes:
+        id: The id of the tool call.
+        type: The type of the tool call;
+            only "function" is currently possible (7/26/24).
+        function: The function call.
+    """
+
+    id: str | None = None
+    type: ToolTypes = "function"
+    function: LLMFunctionCall | None = None
+    extra_content: Dict[str, Any] | None = None
+
+    @staticmethod
+    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall":
+        """
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+        id = message["id"]
+        type = message["type"]
+        function = LLMFunctionCall.from_dict(message["function"])
+        extra_content = message.get("extra_content")
+        return OpenAIToolCall(
+            id=id, type=type, function=function, extra_content=extra_content
+        )
+
+    def __str__(self) -> str:
+        if self.function is None:
+            return ""
+        return "OAI-TOOL: " + json.dumps(self.function.model_dump(), indent=2)
+
+
+class OpenAIToolSpec(BaseModel):
+    type: ToolTypes
+    strict: Optional[bool] = None
+    function: LLMFunctionSpec
+
+
+class OpenAIJsonSchemaSpec(BaseModel):
+    strict: Optional[bool] = None
+    function: LLMFunctionSpec
+
+    def to_dict(self) -> Dict[str, Any]:
+        json_schema: Dict[str, Any] = {
+            "name": self.function.name,
+            "description": self.function.description,
+            "schema": self.function.parameters,
+        }
+        if self.strict is not None:
+            json_schema["strict"] = self.strict
+
+        return {
+            "type": "json_schema",
+            "json_schema": json_schema,
+        }
+
+
+class LLMTokenUsage(BaseModel):
+    """
+    Usage of tokens by an LLM.
+    """
+
+    prompt_tokens: int = 0
+    cached_tokens: int = 0
+    completion_tokens: int = 0
+    cost: float = 0.0
+    calls: int = 0  # how many API calls - not used as of 2025-04-04
+
+    def reset(self) -> None:
+        self.prompt_tokens = 0
+        self.cached_tokens = 0
+        self.completion_tokens = 0
+        self.cost = 0.0
+        self.calls = 0
+
+    def __str__(self) -> str:
+        return (
+            f"Tokens = "
+            f"(prompt {self.prompt_tokens}, cached {self.cached_tokens}, "
+            f"completion {self.completion_tokens}), "
+            f"Cost={self.cost}, Calls={self.calls}"
+        )
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
+class Role(str, Enum):
+    """
+    Possible roles for a message in a chat.
+    """
+
+    USER = "user"
+    SYSTEM = "system"
+    ASSISTANT = "assistant"
+    FUNCTION = "function"
+    TOOL = "tool"
+
+
+class LLMMessage(BaseModel):
+    """
+    Class representing an entry in the msg-history sent to the LLM API.
+    It could be one of these:
+    - a user message
+    - an LLM ("Assistant") response
+    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
+    - a result or results from executing a fn or tool-call(s)
+    """
+
+    role: Role
+    name: Optional[str] = None
+    tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
+    tool_id: str = ""  # used by OpenAIAssistant
+    # None means "no content" (the model returned only a tool/function call).
+    # This is distinct from "" and is dropped from the API payload by api_dict;
+    # see api_dict for how a fully-empty message is handled per-API.
+    content: Optional[str] = None
+    files: List[FileAttachment] = []
+    function_call: Optional[LLMFunctionCall] = None
+    tool_calls: Optional[List[OpenAIToolCall]] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # link to corresponding chat document, for provenance/rewind purposes
+    chat_document_id: str = ""
+
+    def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]:
+        """
+        Convert to dictionary for API request, keeping ONLY
+        the fields that are expected in an API call!
+        E.g., DROP the tool_id, since it is only for use in the Assistant API,
+            not the completion API.
+
+        Args:
+            has_system_role: whether the message has a system role (if not,
+                set to "user" role)
+        Returns:
+            dict: dictionary representation of LLM message
+        """
+        d = self.model_dump()
+        files: List[FileAttachment] = d.pop("files")
+        if len(files) > 0 and self.role == Role.USER:
+            # In there are files, then content is an array of
+            # different content-parts
+            d["content"] = [
+                dict(
+                    type="text",
+                    text=self.content or "",
+                )
+            ] + [f.to_dict(model) for f in self.files]
+
+        # if there is a key k = "role" with value "system", change to "user"
+        # in case has_system_role is False
+        if not has_system_role and "role" in d and d["role"] == "system":
+            d["role"] = "user"
+            if d.get("content"):
+                d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
+        # drop None values since API doesn't accept them (this omits `content`
+        # entirely when it is None, i.e. "no content")
+        dict_no_none = {k: v for k, v in d.items() if v is not None}
+        if "name" in dict_no_none and dict_no_none["name"] == "":
+            # OpenAI API does not like empty name
+            del dict_no_none["name"]
+        if "function_call" in dict_no_none:
+            # arguments must be a string
+            if "arguments" in dict_no_none["function_call"]:
+                dict_no_none["function_call"]["arguments"] = json.dumps(
+                    dict_no_none["function_call"]["arguments"]
+                )
+        if dict_no_none.get("tool_calls"):
+            # convert tool calls to API format
+            for tc in dict_no_none["tool_calls"]:
+                if "arguments" in tc["function"]:
+                    # arguments must be a string
+                    if tc["function"]["arguments"] is None:
+                        tc["function"]["arguments"] = "{}"
+                    else:
+                        tc["function"]["arguments"] = json.dumps(
+                            tc["function"]["arguments"]
+                        )
+                if "extra_content" in tc and tc["extra_content"] is None:
+                    del tc["extra_content"]
+        else:
+            # An empty tool-call list is not a call and conveys no useful API
+            # information. Omitting it also lets the empty-message fallback
+            # below produce a valid message.
+            dict_no_none.pop("tool_calls", None)
+        # A message with empty content (None was dropped above, or "") AND no
+        # tool/function call would be an entirely empty message, which some APIs
+        # (e.g. Gemini) reject; fall back to a single space in that case only.
+        # When there IS a tool/function call, empty content is fine (and Gemini
+        # 3.x in fact REQUIRES it — it rejects an assistant turn that carries
+        # both a call and non-empty text content).
+        has_call = bool(dict_no_none.get("tool_calls")) or (
+            dict_no_none.get("function_call") is not None
+        )
+        if not has_call and not dict_no_none.get("content"):
+            dict_no_none["content"] = " "
+        # IMPORTANT! drop fields that are not expected in API call
+        dict_no_none.pop("tool_id", None)
+        dict_no_none.pop("timestamp", None)
+        dict_no_none.pop("chat_document_id", None)
+        return dict_no_none
+
+    def __str__(self) -> str:
+        if self.function_call is not None:
+            content = "FUNC: " + json.dumps(self.function_call)
+        else:
+            content = self.content or ""
+        name_str = f" ({self.name})" if self.name else ""
+        return f"{self.role} {name_str}: {content}"
+
+
+class LLMResponse(BaseModel):
+    """
+    Class representing response from LLM.
+    """
+
+    # None means the model returned NO content (e.g. only a tool/function
+    # call), which is distinct from an empty string "". Preserving this
+    # distinction lets the message be faithfully reproduced downstream
+    # (see ChatDocument.content_is_none and LLMMessage.content).
+    message: Optional[str] = None
+    reasoning: str = ""  # optional reasoning text from reasoning models
+    # Original message text including inline thought signatures (e.g.
+    # <thinking>...</thinking>). Only set when reasoning was extracted
+    # from the message text via get_reasoning_final(); NOT set when
+    # reasoning comes from a separate API field (e.g. reasoning_content),
+    # since in that case the message text never contained thought tags.
+    message_with_reasoning: Optional[str] = None
+    # TODO tool_id needs to generalize to multi-tool calls
+    tool_id: str = ""  # used by OpenAIAssistant
+    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+    function_call: Optional[LLMFunctionCall] = None
+    usage: Optional[LLMTokenUsage] = None
+    cached: bool = False
+
+    def __str__(self) -> str:
+        if self.function_call is not None:
+            return str(self.function_call)
+        elif self.oai_tool_calls:
+            return "\n".join(str(tc) for tc in self.oai_tool_calls)
+        else:
+            return self.message or ""
+
+    def tools_content(self) -> str:
+        if self.function_call is not None:
+            return str(self.function_call)
+        elif self.oai_tool_calls:
+            return "\n".join(str(tc) for tc in self.oai_tool_calls)
+        else:
+            return ""
+
+    def to_LLMMessage(self) -> LLMMessage:
+        """Convert LLM response to an LLMMessage, to be included in the
+        message-list sent to the API.
+        This is currently NOT used in any significant way in the library, and is only
+        provided as a utility to construct a message list for the API when directly
+        working with an LLM object.
+
+        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
+        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
+        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
+        """
+        return LLMMessage(
+            role=Role.ASSISTANT,
+            content=self.message,
+            name=None if self.function_call is None else self.function_call.name,
+            function_call=self.function_call,
+            tool_calls=self.oai_tool_calls,
+        )
+
+    def get_recipient_and_message(
+        self,
+        recognize_recipient_in_content: bool = True,
+    ) -> Tuple[str, str]:
+        """
+        If `message` or `function_call` of an LLM response contains an explicit
+        recipient name, return this recipient name and `message` stripped
+        of the recipient name if specified.
+
+        Two cases:
+        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
+        (b) `message` is empty and function_call/tool_call with explicit `recipient`
+
+        Args:
+            recognize_recipient_in_content (bool): When True (default), parses
+                message text for ``TO[<recipient>]:<content>`` patterns and
+                top-level JSON ``{"recipient": "..."}`` fields. When False,
+                only function_call/tool_call ``recipient`` fields are checked.
+
+        Returns:
+            (str): name of recipient, which may be empty string if no recipient
+            (str): content of message
+
+        """
+
+        if self.function_call is not None:
+            # in this case we ignore message, since all information is in function_call
+            msg = ""
+            args = self.function_call.arguments
+            recipient = ""
+            if isinstance(args, dict):
+                recipient = args.get("recipient", "")
+            return recipient, msg
+        else:
+            msg = self.message or ""
+            if self.oai_tool_calls is not None:
+                # get the first tool that has a recipient field, if any
+                for tc in self.oai_tool_calls:
+                    if tc.function is not None and tc.function.arguments is not None:
+                        recipient = tc.function.arguments.get(
+                            "recipient"
+                        )  # type: ignore
+                        if recipient is not None and recipient != "":
+                            return recipient, ""
+
+        if not recognize_recipient_in_content:
+            return "", msg
+
+        # It's not a function or tool call, so continue looking to see
+        # if a recipient is specified in the message.
+
+        # First check if message contains "TO: <recipient> <content>"
+        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
+        # check if there is a top level json that specifies 'recipient',
+        # and retain the entire message as content.
+        if recipient_name == "":
+            recipient_name = top_level_json_field(msg, "recipient") if msg else ""
+            content = msg
+        return recipient_name, content
+
+
+# Define an abstract base class for language models
+class LanguageModel(ABC):
+    """
+    Abstract base class for language models.
+    """
+
+    # usage cost by model, accumulates here
+    usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+
+    def __init__(self, config: LLMConfig = LLMConfig()):
+        self.config = config
+        self.chat_model_orig = config.chat_model
+
+    @staticmethod
+    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
+        """
+        Create a language model.
+        Args:
+            config: configuration for language model
+        Returns: instance of language model
+        """
+        if type(config) is LLMConfig:
+            raise ValueError(
+                """
+                Cannot create a Language Model object from LLMConfig.
+                Please specify a specific subclass of LLMConfig e.g.,
+                OpenAIGPTConfig. If you are creating a ChatAgent from
+                a ChatAgentConfig, please specify the `llm` field of this config
+                as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
+                """
+            )
+        from langroid.language_models.azure_openai import AzureGPT
+        from langroid.language_models.mock_lm import MockLM, MockLMConfig
+        from langroid.language_models.openai_gpt import OpenAIGPT
+
+        if config is None or config.type is None:
+            return None
+
+        if config.type == "mock":
+            return MockLM(cast(MockLMConfig, config))
+
+        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+
+        if config.type == "azure":
+            openai = AzureGPT
+        else:
+            openai = OpenAIGPT
+        cls = dict(
+            openai=openai,
+        ).get(config.type, openai)
+        return cls(config)  # type: ignore
+
+    @staticmethod
+    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]:
+        """
+        Given an even-length sequence of strings, split into a sequence of pairs
+
+        Args:
+            lst (List[str]): sequence of strings
+
+        Returns:
+            List[Tuple[str,str]]: sequence of pairs of strings
+        """
+        evens = lst[::2]
+        odds = lst[1::2]
+        return list(zip(evens, odds))
+
+    @staticmethod
+    def get_chat_history_components(
+        messages: List[LLMMessage],
+    ) -> Tuple[str, List[Tuple[str, str]], str]:
+        """
+        From the chat history, extract system prompt, user-assistant turns, and
+        final user msg.
+
+        Args:
+            messages (List[LLMMessage]): List of messages in the chat history
+
+        Returns:
+            Tuple[str, List[Tuple[str,str]], str]:
+                system prompt, user-assistant turns, final user msg
+
+        """
+        # Handle various degenerate cases
+        messages = [m for m in messages]  # copy
+        DUMMY_SYS_PROMPT = "You are a helpful assistant."
+        DUMMY_USER_PROMPT = "Follow the instructions above."
+        if len(messages) == 0 or messages[0].role != Role.SYSTEM:
+            logger.warning("No system msg, creating dummy system prompt")
+            messages.insert(0, LLMMessage(content=DUMMY_SYS_PROMPT, role=Role.SYSTEM))
+        system_prompt = messages[0].content or ""
+
+        # now we have messages = [Sys,...]
+        if len(messages) == 1:
+            logger.warning(
+                "Got only system message in chat history, creating dummy user prompt"
+            )
+            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, msg, ...]
+
+        if messages[1].role != Role.USER:
+            messages.insert(1, LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, user, ...]
+        if messages[-1].role != Role.USER:
+            logger.warning(
+                "Last message in chat history is not a user message,"
+                " creating dummy user prompt"
+            )
+            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, user, ..., user]
+        # so we omit the first and last elements and make pairs of user-asst messages
+        conversation = [m.content or "" for m in messages[1:-1]]
+        user_prompt = messages[-1].content or ""
+        pairs = LanguageModel.user_assistant_pairs(conversation)
+        return system_prompt, pairs, user_prompt
+
+    @abstractmethod
+    def set_stream(self, stream: bool) -> bool:
+        """Enable or disable streaming output from API.
+        Return previous value of stream."""
+        pass
+
+    @abstractmethod
+    def get_stream(self) -> bool:
+        """Get streaming status"""
+        pass
+
+    @abstractmethod
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    def chat(
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
+    ) -> LLMResponse:
+        """
+        Get chat-completion response from LLM.
+
+        Args:
+            messages: message-history to send to the LLM
+            max_tokens: max tokens to generate
+            tools: tools available for the LLM to use in its response
+            tool_choice: tool call mode, one of "none", "auto", "required",
+                or a dict specifying a specific tool.
+            functions: functions available for LLM to call (deprecated)
+            function_call: function calling mode, "auto", "none", or a specific fn
+                    (deprecated)
+        """
+
+        pass
+
+    @abstractmethod
+    async def achat(
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
+    ) -> LLMResponse:
+        """Async version of `chat`. See `chat` for details."""
+        pass
+
+    def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
+        return self.generate(prompt, max_tokens)
+
+    @staticmethod
+    def _fallback_model_names(model: str) -> List[str]:
+        parts = model.split("/")
+        fallbacks = []
+        for i in range(1, len(parts)):
+            fallbacks.append("/".join(parts[i:]))
+        return fallbacks
+
+    def info(self) -> ModelInfo:
+        """Info of relevant chat model"""
+        orig_model = (
+            self.config.completion_model
+            if self.config.use_completion_for_chat
+            else self.chat_model_orig
+        )
+        return get_model_info(orig_model, self._fallback_model_names(orig_model))
+
+    def completion_info(self) -> ModelInfo:
+        """Info of relevant completion model"""
+        orig_model = (
+            self.chat_model_orig
+            if self.config.use_chat_for_completion
+            else self.config.completion_model
+        )
+        return get_model_info(orig_model, self._fallback_model_names(orig_model))
+
+    def supports_functions_or_tools(self) -> bool:
+        """
+        Does this Model's API support "native" tool-calling, i.e.
+        can we call the API with arguments that contain a list of available tools,
+        and their schemas?
+        Note that, given the plethora of LLM provider APIs this determination is
+        imperfect at best, and leans towards returning True.
+        When the API calls fails with an error indicating tools are not supported,
+        then users are encouraged to use the Langroid-based prompt-based
+        ToolMessage mechanism, which works with ANY LLM. To enable this,
+        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
+        """
+        return self.info().has_tools
+
+    def chat_context_length(self) -> int:
+        return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
+
+    def completion_context_length(self) -> int:
+        return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
+
+    def chat_cost(self) -> Tuple[float, float, float]:
+        """
+        Return the cost per 1000 tokens for chat completions.
+
+        Returns:
+            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
+                per 1000 tokens
+        """
+        return (0.0, 0.0, 0.0)
+
+    def reset_usage_cost(self) -> None:
+        for mdl in [self.config.chat_model, self.config.completion_model]:
+            if mdl is None:
+                return
+            if mdl not in self.usage_cost_dict:
+                self.usage_cost_dict[mdl] = LLMTokenUsage()
+            counter = self.usage_cost_dict[mdl]
+            counter.reset()
+
+    def update_usage_cost(
+        self, chat: bool, prompts: int, completions: int, cost: float
+    ) -> None:
+        """
+        Update usage cost for this LLM.
+        Args:
+            chat (bool): whether to update for chat or completion model
+            prompts (int): number of tokens used for prompts
+            completions (int): number of tokens used for completions
+            cost (float): total token cost in USD
+        """
+        mdl = self.config.chat_model if chat else self.config.completion_model
+        if mdl is None:
+            return
+        if mdl not in self.usage_cost_dict:
+            self.usage_cost_dict[mdl] = LLMTokenUsage()
+        counter = self.usage_cost_dict[mdl]
+        counter.prompt_tokens += prompts
+        counter.completion_tokens += completions
+        counter.cost += cost
+        counter.calls += 1
+
+    @classmethod
+    def usage_cost_summary(cls) -> str:
+        s = ""
+        for model, counter in cls.usage_cost_dict.items():
+            s += f"{model}: {counter}\n"
+        return s
+
+    @classmethod
+    def tot_tokens_cost(cls) -> Tuple[int, float]:
+        """
+        Return total tokens used and total cost across all models.
+        """
+        total_tokens = 0
+        total_cost = 0.0
+        for counter in cls.usage_cost_dict.values():
+            total_tokens += counter.total_tokens
+            total_cost += counter.cost
+        return total_tokens, total_cost
+
+    def get_reasoning_final(self, message: str) -> Tuple[str, str]:
+        """Extract "reasoning" and "final answer" from an LLM response, if the
+        reasoning is found within configured delimiters, like <think>, </think>.
+        E.g.,
+        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
+
+        Args:
+            message (str): message from LLM
+
+        Returns:
+            Tuple[str, str]: reasoning, final answer
+        """
+        start, end = self.config.thought_delimiters
+        if start in message and end in message:
+            parts = message.split(start)
+            if len(parts) > 1:
+                reasoning, final = parts[1].split(end)
+                return reasoning, final
+        return "", message
+
+    def followup_to_standalone(
+        self, chat_history: List[Tuple[str, str]], question: str
+    ) -> str:
+        """
+        Given a chat history and a question, convert it to a standalone question.
+        Args:
+            chat_history: list of tuples of (question, answer)
+            query: follow-up question
+
+        Returns: standalone version of the question
+        """
+        history = collate_chat_history(chat_history)
+
+        prompt = f"""
+        You are an expert at understanding a CHAT HISTORY between an AI Assistant
+        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP
+        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood
+        WITHOUT the context of the chat history.
+
+        Below is the CHAT HISTORY. When the User asks you to rephrase a
+        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the
+        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional
+        text or context.
+
+        <CHAT_HISTORY>
+        {history}
+        </CHAT_HISTORY>
+        """.strip()
+
+        follow_up_question = f"""
+        Please rephrase this as a stand-alone question or request:
+        <FOLLOW-UP-QUESTION-OR-REQUEST>
+        {question}
+        </FOLLOW-UP-QUESTION-OR-REQUEST>
+        """.strip()
+
+        show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
+        standalone = (
+            self.chat(
+                messages=[
+                    LLMMessage(role=Role.SYSTEM, content=prompt),
+                    LLMMessage(role=Role.USER, content=follow_up_question),
+                ],
+                max_tokens=1024,
+            ).message
+            or ""
+        )
+        standalone = standalone.strip()
+
+        show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
+        return standalone
+
+
+class StreamingIfAllowed:
+    """Context to temporarily enable or disable streaming, if allowed globally via
+    `settings.stream`"""
+
+    def __init__(self, llm: LanguageModel, stream: bool = True):
+        self.llm = llm
+        self.stream = stream
+
+    def __enter__(self) -> None:
+        self.old_stream = self.llm.set_stream(settings.stream and self.stream)
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.llm.set_stream(self.old_stream)
+</file>
+
+<file path="langroid/language_models/client_cache.py">
+"""
+Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
+"""
+
+import asyncio
+import atexit
+import hashlib
+import inspect
+import threading
+import time
+import weakref
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Union, cast
+
+from cerebras.cloud.sdk import AsyncCerebras, Cerebras
+from groq import AsyncGroq, Groq
+from httpx import Timeout
+from openai import AsyncOpenAI, OpenAI
+
+# Cache for client instances, keyed by hashed configuration parameters.
+# Value is a tuple of (client instance, last_used_monotonic_seconds).
+_client_cache: Dict[str, Tuple[Any, float]] = {}
+_client_cache_lock = threading.RLock()
+
+# Keep track of clients for cleanup
+_all_clients: weakref.WeakSet[Any] = weakref.WeakSet()
+
+
+def _get_cache_key(client_type: str, **kwargs: Any) -> str:
+    """
+    Generate a cache key from client type and configuration parameters.
+    Uses the same approach as OpenAIGPT._cache_lookup for consistency.
+
+    Args:
+        client_type: Type of client (e.g., "openai", "groq", "cerebras")
+        **kwargs: Configuration parameters (api_key, base_url, timeout, etc.)
+
+    Returns:
+        SHA256 hash of the configuration as a hex string
+    """
+    # Convert kwargs to sorted string representation
+    sorted_kwargs_str = str(sorted(kwargs.items()))
+
+    # Create raw key combining client type and sorted kwargs
+    raw_key = f"{client_type}:{sorted_kwargs_str}"
+
+    # Hash the key for consistent length and to handle complex objects
+    hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+
+    return hashed_key
+
+
+def wrap_api_key_provider_async(
+    provider: Callable[[], str],
+) -> Callable[[], Awaitable[str]]:
+    """
+    Wrap a sync API-key provider for use with ``AsyncOpenAI``.
+
+    ``AsyncOpenAI`` awaits its ``api_key`` callable, so a plain sync
+    provider must be wrapped in an async function. The sync provider is run
+    in a worker thread, so a blocking token refresh cannot stall the event
+    loop. Providers must therefore be thread-safe -- the sync client may
+    call them from arbitrary threads anyway.
+
+    Args:
+        provider: Callable returning a (possibly short-lived) API key.
+
+    Returns:
+        Async callable returning the same key.
+    """
+
+    async def _provider() -> str:
+        return await asyncio.to_thread(provider)
+
+    return _provider
+
+
+def _api_key_cache_component(api_key: Union[str, Callable[[], str]]) -> Any:
+    """
+    Cache-key component for an API key that may be a rotating-key provider.
+
+    A callable provider is keyed on its identity rather than any token value,
+    so rotating tokens never create new cache entries and tokens are never
+    retained in cache keys. The id() cannot be recycled while the entry
+    lives, because the cached client holds a strong reference to the
+    provider (directly for sync clients, via the async wrapper's closure
+    for async clients).
+    """
+    if callable(api_key):
+        return ("api_key_provider", id(api_key))
+    return api_key
+
+
+def _get_cached_client(cache_key: str) -> Optional[Any]:
+    """Get cached client and refresh its last-used timestamp.
+
+    Must be called while holding ``_client_cache_lock``.
+    """
+    entry = _client_cache.get(cache_key)
+    if entry is None:
+        return None
+
+    client, _ = entry
+    _client_cache[cache_key] = (client, time.monotonic())
+    return client
+
+
+def _store_client(cache_key: str, client: Any) -> None:
+    """Store a client in the cache with the current timestamp.
+
+    Must be called while holding ``_client_cache_lock``.
+    """
+    _client_cache[cache_key] = (client, time.monotonic())
+    _all_clients.add(client)
+
+
+def get_openai_client(
+    api_key: Union[str, Callable[[], str]],
+    base_url: Optional[str] = None,
+    organization: Optional[str] = None,
+    timeout: Union[float, Timeout] = 120.0,
+    default_headers: Optional[Dict[str, str]] = None,
+    http_client: Optional[Any] = None,
+    http_client_config: Optional[Dict[str, Any]] = None,
+) -> OpenAI:
+    """
+    Get or create a singleton OpenAI client with the given configuration.
+
+    Args:
+        api_key: OpenAI API key, or a callable returning a fresh key
+            (for short-lived rotating credentials); a callable is resolved
+            per-request by the OpenAI client and is excluded from the
+            cache key (the cache is keyed on the provider's identity)
+        base_url: Optional base URL for API
+        organization: Optional organization ID
+        timeout: Request timeout
+        default_headers: Optional default headers
+        http_client: Optional httpx.Client instance
+        http_client_config: Optional config dict for creating httpx.Client
+
+    Returns:
+        OpenAI client instance
+    """
+    if isinstance(timeout, (int, float)):
+        timeout = Timeout(timeout)
+
+    # If http_client is provided directly, don't cache (complex object)
+    if http_client is not None:
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=http_client,
+        )
+        _all_clients.add(client)
+        return client
+
+    cache_key = _get_cache_key(
+        "openai",
+        api_key=_api_key_cache_component(api_key),
+        base_url=base_url,
+        organization=organization,
+        timeout=timeout,
+        default_headers=default_headers,
+        http_client_config=http_client_config,  # Include config in cache key
+    )
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(OpenAI, cached_client)
+
+        created_http_client = None
+        if http_client_config is not None:
+            try:
+                from httpx import Client
+            except ImportError:
+                raise ValueError(
+                    "httpx is required to use http_client_config. "
+                    "Install it with: pip install httpx"
+                )
+            created_http_client = Client(**http_client_config)
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=created_http_client,  # Use the client created from config
+        )
+
+        _store_client(cache_key, client)
+    return client
+
+
+def get_async_openai_client(
+    api_key: Union[str, Callable[[], str]],
+    base_url: Optional[str] = None,
+    organization: Optional[str] = None,
+    timeout: Union[float, Timeout] = 120.0,
+    default_headers: Optional[Dict[str, str]] = None,
+    http_client: Optional[Any] = None,
+    http_client_config: Optional[Dict[str, Any]] = None,
+) -> AsyncOpenAI:
+    """
+    Get or create a singleton AsyncOpenAI client with the given configuration.
+
+    Args:
+        api_key: OpenAI API key, or a callable returning a fresh key
+            (for short-lived rotating credentials); a callable is resolved
+            per-request by the OpenAI client and is excluded from the
+            cache key (the cache is keyed on the provider's identity)
+        base_url: Optional base URL for API
+        organization: Optional organization ID
+        timeout: Request timeout
+        default_headers: Optional default headers
+        http_client: Optional httpx.AsyncClient instance
+        http_client_config: Optional config dict for creating httpx.AsyncClient
+
+    Returns:
+        AsyncOpenAI client instance
+    """
+    if isinstance(timeout, (int, float)):
+        timeout = Timeout(timeout)
+
+    api_key_arg: Union[str, Callable[[], Awaitable[str]]]
+    if callable(api_key):
+        # AsyncOpenAI awaits its api_key callable, so wrap the sync provider
+        api_key_arg = wrap_api_key_provider_async(api_key)
+    else:
+        api_key_arg = api_key
+
+    # If http_client is provided directly, don't cache (complex object)
+    if http_client is not None:
+        client = AsyncOpenAI(
+            api_key=api_key_arg,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=http_client,
+        )
+        _all_clients.add(client)
+        return client
+
+    cache_key = _get_cache_key(
+        "async_openai",
+        api_key=_api_key_cache_component(api_key),
+        base_url=base_url,
+        organization=organization,
+        timeout=timeout,
+        default_headers=default_headers,
+        http_client_config=http_client_config,  # Include config in cache key
+    )
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(AsyncOpenAI, cached_client)
+
+        created_http_client = None
+        if http_client_config is not None:
+            try:
+                from httpx import AsyncClient
+            except ImportError:
+                raise ValueError(
+                    "httpx is required to use http_client_config. "
+                    "Install it with: pip install httpx"
+                )
+            created_http_client = AsyncClient(**http_client_config)
+
+        client = AsyncOpenAI(
+            api_key=api_key_arg,
+            base_url=base_url,
+            organization=organization,
+            timeout=timeout,
+            default_headers=default_headers,
+            http_client=created_http_client,  # Use the client created from config
+        )
+
+        _store_client(cache_key, client)
+    return client
+
+
+def get_groq_client(api_key: str) -> Groq:
+    """
+    Get or create a singleton Groq client with the given configuration.
+
+    Args:
+        api_key: Groq API key
+
+    Returns:
+        Groq client instance
+    """
+    cache_key = _get_cache_key("groq", api_key=api_key)
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(Groq, cached_client)
+
+        client = Groq(api_key=api_key)
+        _store_client(cache_key, client)
+    return client
+
+
+def get_async_groq_client(api_key: str) -> AsyncGroq:
+    """
+    Get or create a singleton AsyncGroq client with the given configuration.
+
+    Args:
+        api_key: Groq API key
+
+    Returns:
+        AsyncGroq client instance
+    """
+    cache_key = _get_cache_key("async_groq", api_key=api_key)
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(AsyncGroq, cached_client)
+
+        client = AsyncGroq(api_key=api_key)
+        _store_client(cache_key, client)
+    return client
+
+
+def get_cerebras_client(api_key: str) -> Cerebras:
+    """
+    Get or create a singleton Cerebras client with the given configuration.
+
+    Args:
+        api_key: Cerebras API key
+
+    Returns:
+        Cerebras client instance
+    """
+    cache_key = _get_cache_key("cerebras", api_key=api_key)
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(Cerebras, cached_client)
+
+        client = Cerebras(api_key=api_key)
+        _store_client(cache_key, client)
+    return client
+
+
+def get_async_cerebras_client(api_key: str) -> AsyncCerebras:
+    """
+    Get or create a singleton AsyncCerebras client with the given configuration.
+
+    Args:
+        api_key: Cerebras API key
+
+    Returns:
+        AsyncCerebras client instance
+    """
+    cache_key = _get_cache_key("async_cerebras", api_key=api_key)
+
+    with _client_cache_lock:
+        cached_client = _get_cached_client(cache_key)
+        if cached_client is not None:
+            return cast(AsyncCerebras, cached_client)
+
+        client = AsyncCerebras(api_key=api_key)
+        _store_client(cache_key, client)
+    return client
+
+
+def prune_cache(max_age_seconds: float) -> int:
+    """
+    Remove cache entries whose last-used time exceeds *max_age_seconds*.
+
+    Evicted clients are **not** closed here because they may still be serving
+    in-flight requests.  Cleanup is handled by the ``atexit`` handler and the
+    garbage collector.
+
+    Args:
+        max_age_seconds: Maximum age (in seconds) for cache entries to keep.
+            Entries older than this value are removed.
+
+    Returns:
+        Number of cache entries removed.
+    """
+    if max_age_seconds < 0:
+        raise ValueError("max_age_seconds must be non-negative")
+
+    now = time.monotonic()
+
+    with _client_cache_lock:
+        stale_keys = [
+            key
+            for key, (_, last_used_at) in _client_cache.items()
+            if now - last_used_at > max_age_seconds
+        ]
+
+        for key in stale_keys:
+            _client_cache.pop(key)
+
+    # Don't close evicted clients here — they may still be serving in-flight
+    # requests. The atexit handler and GC will clean them up.
+
+    return len(stale_keys)
+
+
+def _cleanup_clients() -> None:
+    """
+    Cleanup function to close all cached clients on exit.
+    Called automatically via atexit.
+    """
+    for client in list(_all_clients):
+        if hasattr(client, "close") and callable(client.close):
+            try:
+                # Check if close is a coroutine function (async)
+                if inspect.iscoroutinefunction(client.close):
+                    # For async clients, we can't await in atexit
+                    # They will be cleaned up by the OS
+                    pass
+                else:
+                    # Sync clients can be closed directly
+                    client.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+
+
+# Register cleanup function to run on exit
+atexit.register(_cleanup_clients)
+
+
+# For testing purposes
+def _clear_cache() -> None:
+    """Clear the client cache. Only for testing."""
+    with _client_cache_lock:
+        _client_cache.clear()
+</file>
+
+<file path="SECURITY.md">
+# Security Policy
+
+## Threat model — please read this before reporting
+
+Langroid is a framework for building applications in which an LLM generates
+code and queries that are then executed. Several **optional** agents exist for
+exactly that purpose:
+
+- `TableChatAgent`, `LanceDocChatAgent`, and `VectorStore.compute_from_docs`
+  evaluate LLM-generated **pandas expressions** with `eval()`.
+- `SQLChatAgent` executes LLM-generated **SQL** against a database you supply.
+- `Neo4jChatAgent`, `ArangoChatAgent`, and `CSVGraphAgent` execute
+  LLM-generated **Cypher / AQL** against a graph database you supply.
+
+Executing model-generated code against your own data *is the feature*. An LLM
+is not a trust boundary: if any untrusted text reaches the model's context, you
+must assume the model can be induced to emit any query or expression the
+grammar allows. Langroid cannot prevent this, and does not claim to.
+
+### What is, and is not, a security boundary
+
+The following are **best-effort hardening, not security boundaries**:
+
+- `sanitize_command()` / `CommandValidator` / `safe_eval_globals()` in
+  `langroid/utils/pandas_utils.py`
+- `_DANGEROUS_SQL_PATTERNS` and the `sqlglot` AST checks in `SQLChatAgent`
+- `validate_cypher_query()` / `validate_aql_query()` in the graph agents
+
+They exist to stop an *unlucky* LLM, not a *determined attacker*. The pandas
+path uses explicit allowlists for AST nodes, methods, operators, variables, and
+builtins. The SQL, Cypher, and AQL paths use denylists over full query grammars
+that span multiple dialects, quoting and escaping forms, and function families.
+Such denylists cannot be made complete. We patch clear gaps opportunistically,
+but we do not treat a newly found way around them as a vulnerability in
+Langroid.
+
+The **actual** security boundaries for a Langroid deployment are:
+
+- the privileges of the database credential you hand the agent;
+- the OS user, container, or VM the process runs in;
+- filesystem permissions and network egress rules.
+
+### Deploying these agents safely
+
+If you expose any of the code- or query-executing agents to untrusted input:
+
+- **Give the agent a least-privilege database role.** For `SQLChatAgent`, a
+  read-only, non-superuser role with `GRANT SELECT` on only the intended
+  tables. In PostgreSQL, server-side file reads and writes normally require a
+  superuser, membership in `pg_read_server_files` or
+  `pg_write_server_files`, or a direct grant on a privileged function.
+  `COPY ... PROGRAM` instead requires superuser access or membership in the
+  distinct `pg_execute_server_program` role. Server-side `lo_import` and
+  `lo_export` default to superuser-only use, but an administrator can grant
+  access to those functions directly. Ordinary password-authenticated
+  `dblink` connections do not require any of those roles. Do not install
+  unneeded extensions, and revoke access to dangerous extensions and
+  functions, including `dblink`, in addition to granting only the intended
+  table privileges. Review any site-specific functions and grants as well.
+- **Run the process in a container or VM** with no credentials, secrets, or
+  data you are unwilling to expose to the LLM.
+- **Treat `allow_dangerous_operations=True` and `full_eval=True` as
+  "I am providing my own sandbox."** The first permits dangerous database
+  operations. The second disables pandas AST validation while retaining the
+  restricted globals from `safe_eval_globals()`. Both are documented as
+  trusted-environment-only.
+
+## Reporting a vulnerability
+
+Report privately — **not** via GitHub Issues, Discussions, or any other public
+forum:
+
+1. Go to
+   **[Security Advisories](https://github.com/langroid/langroid/security/advisories)**.
+2. Click **"Report a vulnerability"**.
+3. Include a proof of concept that works against a **default configuration**.
+
+We aim to acknowledge in-scope reports within 7 days.
+
+### In scope
+
+- Vulnerabilities in core framework code: tool dispatch and the agent/tool
+  trust boundary, message routing, sender verification.
+- Parsing and deserialization flaws (XXE, unsafe deserialization, decompression
+  bombs) in the document and message parsers.
+- Path traversal in the file tools (`ReadFileTool`, `WriteFileTool`,
+  `ListDirTool`) and in repository / folder ingestion.
+- Credential or secret leakage in a default configuration that does not depend
+  on any of the specific exclusions below. The out-of-scope rules take
+  precedence over this category.
+- **A code path that skips a documented safety gate entirely** — that is, a
+  *missing call* to a validator, not a *bypass* of one.
+- **A statement the `allowed_statement_types` allowlist misclassifies.** The
+  allowlist is a different kind of control from the denylists above: it decides
+  what a statement *does* over a closed set of statement kinds, so a query that
+  performs a write the allowlist did not authorize — for example by nesting it
+  where the classifier does not look — is a bounded, fixable defect and is in
+  scope.
+- Vulnerable dependencies with a demonstrated impact on Langroid.
+
+### Out of scope
+
+The following will be closed without a fix, an advisory, or a CVE request:
+
+- New bypasses of the SQL, Cypher, or AQL denylists: previously unlisted
+  functions, alternate quoting or escaping forms (backticks, Unicode escapes,
+  schema qualification), or dialect-specific syntax. See "What is, and is not,
+  a security boundary" above.
+- Sandbox escapes from the pandas `eval()` path when `full_eval=True`,
+  including object-graph traversal via dunder attributes. `full_eval=True`
+  disables the AST validator by design.
+- Anything requiring `allow_dangerous_operations=True`.
+- "The LLM can be prompt-injected into generating a harmful query." This is the
+  documented threat model, not a defect.
+- Reports that assume the agent was given a superuser or otherwise
+  over-privileged database credential.
+- Theoretical reports with no working proof of concept against a default
+  configuration.
+
+Reports that chain off a previous advisory as an "incomplete fix" are judged
+against this same scope: if the original issue was a missing gate we will fix
+it, and if it was a denylist gap it is out of scope.
+
+## Supported versions
+
+Security fixes ship in the latest release. Please upgrade to the current
+version of `langroid` rather than requesting backports.
 </file>
 
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
@@ -63153,7 +63153,7 @@ class OpenAIGPT(LanguageModel):
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>
