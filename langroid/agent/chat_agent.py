@@ -586,6 +586,7 @@ class ChatAgent(Agent):
                 raise ValueError("first message must have role 'system'")
             seen_call_ids: Set[str] = set()
             unresolved_call_ids: Set[str] = set()
+            pending_function_names: List[str] = []
             for message in messages:
                 if message.role in (Role.TOOL, Role.FUNCTION) and (
                     message.function_call is not None or message.tool_calls
@@ -593,6 +594,8 @@ class ChatAgent(Agent):
                     raise ValueError("result messages must not contain call payloads")
                 if message.function_call is not None and message.role != Role.ASSISTANT:
                     raise ValueError("function calls must have role 'assistant'")
+                if message.function_call is not None:
+                    pending_function_names.append(message.function_call.name)
                 if message.tool_call_id is not None and message.role != Role.TOOL:
                     raise ValueError("tool_call_id is only valid on tool results")
                 if message.role == Role.FUNCTION:
@@ -601,6 +604,12 @@ class ChatAgent(Agent):
                         raise ValueError(
                             "function result name must be nonblank and normalized"
                         )
+                    if name not in pending_function_names:
+                        raise ValueError(
+                            "function result must match a preceding pending "
+                            "function call"
+                        )
+                    pending_function_names.remove(name)
                 if message.tool_calls:
                     if message.role != Role.ASSISTANT:
                         raise ValueError("tool calls must have role 'assistant'")

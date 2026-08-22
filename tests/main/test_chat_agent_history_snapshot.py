@@ -213,6 +213,49 @@ def test_history_snapshot_rejects_non_system_first_message_atomically() -> None:
     assert agent.message_history == original
 
 
+def test_invalid_snapshot_preserves_registered_chat_documents() -> None:
+    """Failed import keeps existing history documents registered."""
+    agent = ChatAgent(ChatAgentConfig(llm=MockLMConfig(default_response="answer")))
+    response = agent.llm_response("question")
+    assert response is not None
+    original_history = list(agent.message_history)
+    original_calls = list(agent.oai_tool_calls)
+    original_call_map = dict(agent.oai_tool_id2call)
+    original_ids = {
+        message.chat_document_id
+        for message in original_history
+        if message.chat_document_id
+    }
+    assert original_ids
+    assert all(
+        ChatDocument.from_id(document_id) is not None for document_id in original_ids
+    )
+    snapshot = json.dumps(
+        {
+            "version": 1,
+            "messages": [
+                {"role": "system", "content": "replacement"},
+                {"role": "user", "content": "valid so far"},
+                {
+                    "role": "function",
+                    "name": "orphaned_function",
+                    "content": "invalid later result",
+                },
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="function result must match"):
+        agent.import_history(snapshot)
+
+    assert agent.message_history == original_history
+    assert agent.oai_tool_calls == original_calls
+    assert agent.oai_tool_id2call == original_call_map
+    assert all(
+        ChatDocument.from_id(document_id) is not None for document_id in original_ids
+    )
+
+
 def test_history_snapshot_limits_total_decoded_attachment_size() -> None:
     """Attachment bytes beyond the configured import limit are rejected."""
     source = ChatAgent(ChatAgentConfig(llm=None))
@@ -410,6 +453,50 @@ def test_history_snapshot_rejects_invalid_tool_result_sequence(
 
     with pytest.raises(ValueError, match="tool result must reference"):
         agent.import_history(snapshot)
+
+
+@pytest.mark.parametrize(
+    "messages",
+    [
+        [{"role": "function", "name": "weather", "content": "result"}],
+        [
+            {
+                "role": "assistant",
+                "function_call": {"name": "weather", "arguments": {}},
+            },
+            {"role": "function", "name": "traffic", "content": "result"},
+        ],
+        [
+            {
+                "role": "assistant",
+                "function_call": {"name": "weather", "arguments": {}},
+            },
+            {"role": "function", "name": "weather", "content": "first"},
+            {"role": "function", "name": "weather", "content": "duplicate"},
+        ],
+    ],
+)
+def test_history_snapshot_rejects_invalid_function_result_sequence_atomically(
+    messages: list[dict[str, Any]],
+) -> None:
+    """Legacy function results must consume a matching earlier call."""
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    original = LLMMessage(role=Role.SYSTEM, content="keep me")
+    original_call = _tool_call("existing-call", "Rome")
+    agent.message_history = [original]
+    agent.oai_tool_calls = [original_call]
+    agent.oai_tool_id2call = {"existing-call": original_call}
+    snapshot_messages = [
+        {"role": "system", "content": "snapshot system"},
+        *messages,
+    ]
+
+    with pytest.raises(ValueError, match="function result must match"):
+        agent.import_history(json.dumps({"version": 1, "messages": snapshot_messages}))
+
+    assert agent.message_history == [original]
+    assert agent.oai_tool_calls == [original_call]
+    assert agent.oai_tool_id2call == {"existing-call": original_call}
 
 
 @pytest.mark.parametrize("call_ids", [[None], [""], [" padded "], ["same", "same"]])
