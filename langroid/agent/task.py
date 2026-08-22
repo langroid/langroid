@@ -806,6 +806,7 @@ class Task:
         See `run_async()` for details."""
         if isnan(max_time):
             raise ValueError("max_time must not be NaN")
+        started_at = monotonic() if max_time > 0 else None
 
         if allow_restart and (
             (self.restart and caller is None)
@@ -822,7 +823,6 @@ class Task:
         self.n_no_answer_alternations = 0
         self.max_cost = max_cost
         self.max_tokens = max_tokens
-        started_at = monotonic() if max_time > 0 else None
         self.session_id = session_id
         self._set_alive()
         self._init_message_counter()
@@ -846,6 +846,7 @@ class Task:
         # self.turns overrides if it is > 0 and turns not set (i.e. = -1)
         turns = self.turns if turns < 0 else turns
         i = 0
+        budget_exhausted = False
         while True:
             self._step_idx = i  # used in step() below
             self.step()
@@ -856,12 +857,15 @@ class Task:
                     or self.pending_message.id() != self.response_sequence[-1].id()
                 ):
                     self.response_sequence.append(self.pending_message)
+            budget_exhausted = (
+                started_at is not None and monotonic() - started_at >= max_time
+            )
             done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
-            if started_at is not None and monotonic() - started_at >= max_time:
+            if budget_exhausted:
                 status = StatusCode.TIMEOUT
                 break
             i += 1
@@ -914,6 +918,7 @@ class Task:
             if (
                 parsed_result is None
                 and status != StatusCode.TIMEOUT
+                and not budget_exhausted
                 and isinstance(self.agent, ChatAgent)
                 and self.agent._json_schema_available()
             ):
@@ -1011,6 +1016,7 @@ class Task:
         """
         if isnan(max_time):
             raise ValueError("max_time must not be NaN")
+        started_at = monotonic() if max_time > 0 else None
 
         # Even if the initial "sender" is not literally the USER (since the task could
         # have come from another LLM), as far as this agent is concerned, the initial
@@ -1032,7 +1038,6 @@ class Task:
         self.n_no_answer_alternations = 0
         self.max_cost = max_cost
         self.max_tokens = max_tokens
-        started_at = monotonic() if max_time > 0 else None
         self.session_id = session_id
         self._set_alive()
         self._init_message_counter()
@@ -1056,6 +1061,7 @@ class Task:
         # self.turns overrides if it is > 0 and turns not set (i.e. = -1)
         turns = self.turns if turns < 0 else turns
         i = 0
+        budget_exhausted = False
         while True:
             self._step_idx = i  # used in step() below
             await self.step_async()
@@ -1068,12 +1074,15 @@ class Task:
                 ):
                     self.response_sequence.append(self.pending_message)
 
+            budget_exhausted = (
+                started_at is not None and monotonic() - started_at >= max_time
+            )
             done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
-            if started_at is not None and monotonic() - started_at >= max_time:
+            if budget_exhausted:
                 status = StatusCode.TIMEOUT
                 break
             i += 1
@@ -1126,6 +1135,7 @@ class Task:
             if (
                 parsed_result is None
                 and status != StatusCode.TIMEOUT
+                and not budget_exhausted
                 and isinstance(self.agent, ChatAgent)
                 and self.agent._json_schema_available()
             ):
