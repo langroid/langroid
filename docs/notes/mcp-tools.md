@@ -488,9 +488,10 @@ the original server tool name for fresh clients and persistent connections.
 Passing `tool_name_prefix=None`, or omitting the argument, applies no prefix and
 preserves the existing behavior.
 
-`ChatAgent.enable_message` raises `ValueError` if a different `ToolMessage`
-class is already registered with the same final request name. Re-enabling the
-same class remains valid.
+`ChatAgent.enable_message` identifies collisions by the underlying tool origin.
+It raises `ValueError` if a tool from a different origin is already registered
+with the same final request name. Re-enabling the same class remains valid, as
+does registering a regenerated recipient wrapper for the same underlying tool.
 
 ## Tool parameter type mapping
 

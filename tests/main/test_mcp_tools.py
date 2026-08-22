@@ -1630,9 +1630,16 @@ async def test_namespaced_dispatch_uses_original_name_on_persistent_client() -> 
 
 
 @pytest.mark.asyncio
-async def test_mcp_tool_names_remain_unchanged_without_prefix() -> None:
-    """Omitting a namespace preserves the existing public tool name."""
-    tools = await get_tools_async(mcp_server())
+@pytest.mark.parametrize(
+    "tool_kwargs",
+    [{}, {"tool_name_prefix": None}],
+    ids=["omitted", "explicit-none"],
+)
+async def test_mcp_tool_names_remain_unchanged_without_prefix(
+    tool_kwargs: dict[str, Any],
+) -> None:
+    """An omitted or ``None`` namespace preserves the public tool name."""
+    tools = await get_tools_async(mcp_server(), **tool_kwargs)
     requests = {tool.default_value("request") for tool in tools}
 
     assert "get_alerts" in requests
