@@ -152,6 +152,8 @@ def test_provider_config_identity_contract(
 
     provider_a = provider_cls()
     provider_b = provider_cls()
+    assert isinstance(provider_a.config, config_cls)
+    assert isinstance(provider_b.config, config_cls)
     assert provider_a.config is not provider_b.config
 
     monkeypatch.setattr(config_cls, "__bool__", lambda _: False, raising=False)
@@ -160,6 +162,22 @@ def test_provider_config_identity_contract(
 
     provider = provider_cls(config)
     assert provider.config is config
+
+
+@pytest.mark.parametrize("provider_cls,config_cls", PROVIDERS)
+def test_provider_accepts_explicit_none_config(
+    provider_cls: type[VectorStore],
+    config_cls: type[VectorStoreConfig],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify explicit ``config=None`` creates the provider's config type."""
+    _clear_config_environment(config_cls, monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "offline-test-key")
+    _isolate_provider_io(provider_cls, monkeypatch)
+
+    provider = provider_cls(config=None)
+
+    assert isinstance(provider.config, config_cls)
 
 
 def _seed_default_qdrant_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
