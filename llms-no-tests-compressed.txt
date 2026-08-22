@@ -4136,6 +4136,145 @@ see our
 [guide to using Langroid with local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/#local-llms-hosted-on-glhfchat).
 </file>
 
+<file path="docs/notes/handle-llm-no-tool.md">
+# Handling a non-tool LLM message
+
+A common scenario is to define a `ChatAgent`, enable it to use some tools
+(i.e. `ToolMessages`s), wrap it in a Task, and call `task.run()`, e.g. 
+
+```python
+class MyTool(lr.ToolMessage)
+    ...
+    
+import langroid as lr
+config = lr.ChatAgentConfig(...)
+agent = lr.ChatAgent(config)
+agent.enable_message(MyTool)
+task = lr.Task(agent, interactive=False)
+task.run("Hello")
+```
+
+Consider what happens when you invoke `task.run()`. When the agent's `llm_response` 
+returns a valid tool-call, the sequence of steps looks like this:
+
+- `llm_response` -> tool $T$
+- `aggent_response` handles $T$ -> returns results $R$
+- `llm_response` responds to $R$ -> returns msg $M$
+- and so on
+
+If the LLM's response M contains a valid tool, then this cycle continues
+with another tool-handling round. However, if the LLM's response M does _not_ contain
+a tool-call, it is unclear whether:
+
+- (1) the LLM "forgot" to generate a tool (or generated it wrongly, hence it was
+   not recognized by Langroid as a tool), or 
+- (2) the LLM's response M is an "answer" meant to be shown to the user 
+    to continue the conversation, or
+- (3) the LLM's response M is intended to be a "final" response, ending the task. 
+
+Internally, when the `ChatAgent`'s `agent_response` method sees a message that does not
+contain a tool, it invokes the `handle_message_fallback` method, which by default
+does nothing (returns `None`). However you can override this method by deriving
+from `ChatAgent`, as described in this [FAQ](https://langroid.github.io/langroid/FAQ/#how-can-i-handle-an-llm-forgetting-to-generate-a-toolmessage). As in that FAQ, 
+in this fallback method, you would
+typically have code that checks whether the message is a `ChatDocument`
+and whether it came from the LLM, and if so, you would have the method return 
+an appropriate message or tool (e.g. a reminder to the LLM, or an orchestration tool
+such as [`AgentDoneTool`][langroid.agent.tools.orchestration.AgentDoneTool]).
+
+To simplify the developer experience, as of version 0.39.2 Langroid also provides an
+easier way to specify what this fallback method should return, via the
+`ChatAgentConfig.handle_llm_no_tool` parameter, for example:
+```python
+config = lr.ChatAgentConfig(
+    # ... other params
+    handle_llm_no_tool="done", # terminate task if LLM sends non-tool msg
+)
+```
+The `handle_llm_no_tool` parameter can have the following possible values:
+
+- A special value from the [`NonToolAction`][langroid.mytypes.NonToolAction] Enum, e.g.:
+    - `"user"` or `NonToolAction.USER` - this is interpreted by langroid to return 
+     `ForwardTool(agent="user")`, meaning the message is passed to the user to await
+     their next input.
+    - `"done"` or `NonToolAction.DONE` - this is interpreted by langroid to return 
+     `AgentDoneTool(content=msg.content, tools=msg.tool_messages)`, 
+     meaning the task is ended, and any content and tools in the current message will
+     appear in the returned `ChatDocument`.
+- A callable, specifically a function that takes a `ChatDocument` and returns any value. 
+  This can be useful when you want the fallback action to return a value 
+  based on the current message, e.g. 
+  `lambda msg: AgentDoneTool(content=msg.content)`, or it could a more 
+  elaborate function, or a prompt that contains the content of the current message.
+- Any `ToolMessage` (typically an [Orchestration](https://github.com/langroid/langroid/blob/main/langroid/agent/tools/orchestration.py) tool like 
+  `AgentDoneTool` or `ResultTool`)
+- Any string, meant to be handled by the LLM. 
+  Typically this would be a reminder to the LLM, something like:
+```python
+"""Your intent is not clear -- 
+- if you forgot to use a Tool such as `ask_tool` or `search_tool`, try again.
+- or if you intended to return your final answer, use the Tool named `done_tool`,
+  with `content` set to your answer.
+"""
+```
+
+A simple example is in the [`chat-search.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search.py)
+script, and in the `test_handle_llm_no_tool` test in
+[`test_tool_messages.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py).
+
+## Important: Specialized agents and `handle_llm_no_tool`
+
+!!! warning "Specialized agents have their own fallback logic"
+
+    Several built-in Langroid agents — such as `TableChatAgent`,
+    `SQLChatAgent`, `Neo4jChatAgent`, `ArangoChatAgent`,
+    `QueryPlannerAgent`, and `CriticAgent` — override the
+    `handle_message_fallback` method with their own specialized,
+    **state-dependent** fallback logic. For example, `TableChatAgent`
+    checks whether it has already sent an expression and reminds
+    the LLM to use the `pandas_eval` tool, while `QueryPlannerAgent`
+    tracks how many reminders it has sent and stops after a limit.
+
+    **Setting `handle_llm_no_tool` on these specialized agents has
+    no effect** — the specialized `handle_message_fallback` override
+    takes precedence, and the config parameter is silently ignored.
+    These two mechanisms are intentionally separate:
+    `handle_llm_no_tool` is a simple declarative config knob for the
+    base `ChatAgent`, while specialized agents use
+    `handle_message_fallback` for context-aware fallback behavior
+    that cannot be captured by a single config value.
+
+If you are subclassing a specialized agent and want to customize
+the fallback behavior, **override `handle_message_fallback`** in
+your own subclass rather than setting `handle_llm_no_tool`.
+You can call `super()` selectively if you want the parent's
+specialized logic in some cases:
+
+```python
+from langroid.agent.special.table_chat_agent import (
+    TableChatAgent,
+    TableChatAgentConfig,
+)
+from langroid.agent.chat_document import ChatDocument
+from langroid.mytypes import Entity
+
+
+class MyTableAgent(TableChatAgent):
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        if (
+            isinstance(msg, ChatDocument)
+            and msg.metadata.sender == Entity.LLM
+        ):
+            # Your custom fallback logic here
+            return "Please use a tool to answer the question."
+        # Or delegate to the parent's specialized logic:
+        # return super().handle_message_fallback(msg)
+        return None
+```
+</file>
+
 <file path="docs/notes/html-logger.md">
 # HTML Logger
 
@@ -40759,145 +40898,6 @@ df.apply(lambda x: dangerous_function(x))
 When writing tests that use `TableChatAgent` or `VectorStore.compute_from_docs()` with pandas expressions that go beyond the whitelisted operations, you may need to set `full_eval=True` to ensure the tests pass.
 </file>
 
-<file path="docs/notes/handle-llm-no-tool.md">
-# Handling a non-tool LLM message
-
-A common scenario is to define a `ChatAgent`, enable it to use some tools
-(i.e. `ToolMessages`s), wrap it in a Task, and call `task.run()`, e.g. 
-
-```python
-class MyTool(lr.ToolMessage)
-    ...
-    
-import langroid as lr
-config = lr.ChatAgentConfig(...)
-agent = lr.ChatAgent(config)
-agent.enable_message(MyTool)
-task = lr.Task(agent, interactive=False)
-task.run("Hello")
-```
-
-Consider what happens when you invoke `task.run()`. When the agent's `llm_response` 
-returns a valid tool-call, the sequence of steps looks like this:
-
-- `llm_response` -> tool $T$
-- `aggent_response` handles $T$ -> returns results $R$
-- `llm_response` responds to $R$ -> returns msg $M$
-- and so on
-
-If the LLM's response M contains a valid tool, then this cycle continues
-with another tool-handling round. However, if the LLM's response M does _not_ contain
-a tool-call, it is unclear whether:
-
-- (1) the LLM "forgot" to generate a tool (or generated it wrongly, hence it was
-   not recognized by Langroid as a tool), or 
-- (2) the LLM's response M is an "answer" meant to be shown to the user 
-    to continue the conversation, or
-- (3) the LLM's response M is intended to be a "final" response, ending the task. 
-
-Internally, when the `ChatAgent`'s `agent_response` method sees a message that does not
-contain a tool, it invokes the `handle_message_fallback` method, which by default
-does nothing (returns `None`). However you can override this method by deriving
-from `ChatAgent`, as described in this [FAQ](https://langroid.github.io/langroid/FAQ/#how-can-i-handle-an-llm-forgetting-to-generate-a-toolmessage). As in that FAQ, 
-in this fallback method, you would
-typically have code that checks whether the message is a `ChatDocument`
-and whether it came from the LLM, and if so, you would have the method return 
-an appropriate message or tool (e.g. a reminder to the LLM, or an orchestration tool
-such as [`AgentDoneTool`][langroid.agent.tools.orchestration.AgentDoneTool]).
-
-To simplify the developer experience, as of version 0.39.2 Langroid also provides an
-easier way to specify what this fallback method should return, via the
-`ChatAgentConfig.handle_llm_no_tool` parameter, for example:
-```python
-config = lr.ChatAgentConfig(
-    # ... other params
-    handle_llm_no_tool="done", # terminate task if LLM sends non-tool msg
-)
-```
-The `handle_llm_no_tool` parameter can have the following possible values:
-
-- A special value from the [`NonToolAction`][langroid.mytypes.NonToolAction] Enum, e.g.:
-    - `"user"` or `NonToolAction.USER` - this is interpreted by langroid to return 
-     `ForwardTool(agent="user")`, meaning the message is passed to the user to await
-     their next input.
-    - `"done"` or `NonToolAction.DONE` - this is interpreted by langroid to return 
-     `AgentDoneTool(content=msg.content, tools=msg.tool_messages)`, 
-     meaning the task is ended, and any content and tools in the current message will
-     appear in the returned `ChatDocument`.
-- A callable, specifically a function that takes a `ChatDocument` and returns any value. 
-  This can be useful when you want the fallback action to return a value 
-  based on the current message, e.g. 
-  `lambda msg: AgentDoneTool(content=msg.content)`, or it could a more 
-  elaborate function, or a prompt that contains the content of the current message.
-- Any `ToolMessage` (typically an [Orchestration](https://github.com/langroid/langroid/blob/main/langroid/agent/tools/orchestration.py) tool like 
-  `AgentDoneTool` or `ResultTool`)
-- Any string, meant to be handled by the LLM. 
-  Typically this would be a reminder to the LLM, something like:
-```python
-"""Your intent is not clear -- 
-- if you forgot to use a Tool such as `ask_tool` or `search_tool`, try again.
-- or if you intended to return your final answer, use the Tool named `done_tool`,
-  with `content` set to your answer.
-"""
-```
-
-A simple example is in the [`chat-search.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search.py)
-script, and in the `test_handle_llm_no_tool` test in
-[`test_tool_messages.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py).
-
-## Important: Specialized agents and `handle_llm_no_tool`
-
-!!! warning "Specialized agents have their own fallback logic"
-
-    Several built-in Langroid agents — such as `TableChatAgent`,
-    `SQLChatAgent`, `Neo4jChatAgent`, `ArangoChatAgent`,
-    `QueryPlannerAgent`, and `CriticAgent` — override the
-    `handle_message_fallback` method with their own specialized,
-    **state-dependent** fallback logic. For example, `TableChatAgent`
-    checks whether it has already sent an expression and reminds
-    the LLM to use the `pandas_eval` tool, while `QueryPlannerAgent`
-    tracks how many reminders it has sent and stops after a limit.
-
-    **Setting `handle_llm_no_tool` on these specialized agents has
-    no effect** — the specialized `handle_message_fallback` override
-    takes precedence, and the config parameter is silently ignored.
-    These two mechanisms are intentionally separate:
-    `handle_llm_no_tool` is a simple declarative config knob for the
-    base `ChatAgent`, while specialized agents use
-    `handle_message_fallback` for context-aware fallback behavior
-    that cannot be captured by a single config value.
-
-If you are subclassing a specialized agent and want to customize
-the fallback behavior, **override `handle_message_fallback`** in
-your own subclass rather than setting `handle_llm_no_tool`.
-You can call `super()` selectively if you want the parent's
-specialized logic in some cases:
-
-```python
-from langroid.agent.special.table_chat_agent import (
-    TableChatAgent,
-    TableChatAgentConfig,
-)
-from langroid.agent.chat_document import ChatDocument
-from langroid.mytypes import Entity
-
-
-class MyTableAgent(TableChatAgent):
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        if (
-            isinstance(msg, ChatDocument)
-            and msg.metadata.sender == Entity.LLM
-        ):
-            # Your custom fallback logic here
-            return "Please use a tool to answer the question."
-        # Or delegate to the parent's specialized logic:
-        # return super().handle_message_fallback(msg)
-        return None
-```
-</file>
-
 <file path="docs/notes/llm-none-content.md">
 # Missing and empty LLM message content
 
@@ -47558,110 +47558,6 @@ accepted. Pydantic also re-emits `enum`, `anyOf`, and nullability in the schema
 sent to the LLM, improving grounding.
 </file>
 
-<file path="docs/notes/milvus.md">
-# Using Milvus as a Vector Store with Langroid
-
-Langroid supports Milvus through `MilvusDBConfig` and the PyMilvus `MilvusClient`.
-The default configuration uses Milvus Lite at `./milvus.db`, so no separate
-service is required for a local start.
-
-## Installation
-
-Install Langroid with the Milvus extra:
-
-```bash
-uv add "langroid[milvus]"
-```
-
-You can also install it with `pip`:
-
-```bash
-pip install "langroid[milvus]"
-```
-
-## Platform support
-
-Milvus Lite is not available on Windows. Windows users must set `MILVUS_URI` to
-a Milvus server or Zilliz Cloud endpoint.
-
-## Configuration
-
-By default, `MilvusDBConfig()` connects to Milvus Lite:
-
-```python
-import langroid as lr
-
-vecdb = lr.vector_store.MilvusDBConfig(
-    collection_name="quick_start_chat_agent_docs",
-    replace_collection=True,
-)
-```
-
-To use a local or remote Milvus service, pass `uri` explicitly or set
-`MILVUS_URI`:
-
-```bash
-export MILVUS_URI="http://localhost:19530"
-```
-
-For Zilliz Cloud, set the cloud endpoint and token:
-
-```bash
-export MILVUS_URI="https://your-project.api.region.zillizcloud.com"
-export MILVUS_TOKEN="your-token"
-```
-
-If you use a named Milvus database, set `MILVUS_DB_NAME` or pass `db_name` in
-the config.
-
-## Example
-
-```python
-import langroid as lr
-from langroid.agent.special import DocChatAgent, DocChatAgentConfig
-
-config = DocChatAgentConfig(
-    vecdb=lr.vector_store.MilvusDBConfig(
-        collection_name="quick_start_chat_agent_docs",
-        uri="./milvus.db",
-        replace_collection=True,
-    ),
-    parsing=lr.parsing.parser.ParsingConfig(
-        separators=["\n\n"],
-        splitter=lr.parsing.parser.Splitter.SIMPLE,
-    ),
-    n_similar_chunks=2,
-    n_relevant_chunks=2,
-)
-
-agent = DocChatAgent(config)
-
-documents = [
-    lr.Document(
-        content="Milvus Lite stores vectors in a local file.",
-        metadata=lr.DocMetaData(source="milvus-docs", id="milvus-lite"),
-    ),
-    lr.Document(
-        content="The same config can point to Milvus server or Zilliz Cloud.",
-        metadata=lr.DocMetaData(source="milvus-docs", id="milvus-service"),
-    ),
-]
-
-agent.ingest_docs(documents)
-```
-
-Milvus stores Langroid document metadata in a JSON field and also exposes scalar
-metadata fields for simple filters, for example:
-
-```python
-matches = agent.vecdb.similar_texts_with_scores(
-    "local vector storage",
-    k=2,
-    where='{"source": "milvus-docs"}',
-)
-```
-</file>
-
 <file path="docs/quick-start/setup.md">
 # Setup
 
@@ -51077,6 +50973,117 @@ is an ongoing PR, just push to github again and the PR will be updated.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
 Read more [here](docs/development/github-cli.md).
+</file>
+
+<file path="docs/notes/milvus.md">
+# Using Milvus as a Vector Store with Langroid
+
+Langroid supports Milvus through `MilvusDBConfig` and the PyMilvus `MilvusClient`.
+The default configuration uses Milvus Lite at `./milvus.db`, so no separate
+service is required for a local start.
+
+## Installation
+
+Install Langroid with the Milvus extra:
+
+```bash
+uv add "langroid[milvus]"
+```
+
+You can also install it with `pip`:
+
+```bash
+pip install "langroid[milvus]"
+```
+
+## Platform support
+
+Milvus Lite is not available on Windows. Windows users must set `MILVUS_URI` to
+a Milvus server or Zilliz Cloud endpoint.
+
+## Resource lifetime with Milvus Lite
+
+`MilvusDB.close()` releases the PyMilvus client handle, but Milvus Lite keeps
+its embedded per-path server (and the lock on the `.db` file) alive until the
+process exits — this is upstream PyMilvus behavior. If another process needs
+the same `.db` file, close the first process rather than relying on `close()`.
+
+## Configuration
+
+By default, `MilvusDBConfig()` connects to Milvus Lite:
+
+```python
+import langroid as lr
+
+vecdb = lr.vector_store.MilvusDBConfig(
+    collection_name="quick_start_chat_agent_docs",
+    replace_collection=True,
+)
+```
+
+To use a local or remote Milvus service, pass `uri` explicitly or set
+`MILVUS_URI`:
+
+```bash
+export MILVUS_URI="http://localhost:19530"
+```
+
+For Zilliz Cloud, set the cloud endpoint and token:
+
+```bash
+export MILVUS_URI="https://your-project.api.region.zillizcloud.com"
+export MILVUS_TOKEN="your-token"
+```
+
+If you use a named Milvus database, set `MILVUS_DB_NAME` or pass `db_name` in
+the config.
+
+## Example
+
+```python
+import langroid as lr
+from langroid.agent.special import DocChatAgent, DocChatAgentConfig
+
+config = DocChatAgentConfig(
+    vecdb=lr.vector_store.MilvusDBConfig(
+        collection_name="quick_start_chat_agent_docs",
+        uri="./milvus.db",
+        replace_collection=True,
+    ),
+    parsing=lr.parsing.parser.ParsingConfig(
+        separators=["\n\n"],
+        splitter=lr.parsing.parser.Splitter.SIMPLE,
+    ),
+    n_similar_chunks=2,
+    n_relevant_chunks=2,
+)
+
+agent = DocChatAgent(config)
+
+documents = [
+    lr.Document(
+        content="Milvus Lite stores vectors in a local file.",
+        metadata=lr.DocMetaData(source="milvus-docs", id="milvus-lite"),
+    ),
+    lr.Document(
+        content="The same config can point to Milvus server or Zilliz Cloud.",
+        metadata=lr.DocMetaData(source="milvus-docs", id="milvus-service"),
+    ),
+]
+
+agent.ingest_docs(documents)
+```
+
+Milvus stores Langroid document metadata in a JSON field and also exposes scalar
+metadata fields for simple filters, for example:
+
+```python
+matches = agent.vecdb.similar_texts_with_scores(
+    "local vector storage",
+    k=2,
+    where='{"source": "milvus-docs"}',
+)
+```
 </file>
 
 <file path="langroid/agent/chat_agent.py">
@@ -58882,7 +58889,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>
