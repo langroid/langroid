@@ -7,7 +7,9 @@ import re
 import threading
 from collections import Counter, OrderedDict, deque
 from enum import Enum
+from math import isnan
 from pathlib import Path
+from time import monotonic
 from types import SimpleNamespace
 from typing import (
     Any,
@@ -770,6 +772,7 @@ class Task:
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
+        max_time: float = 0,
     ) -> Optional[ChatDocument]: ...  # noqa
 
     @overload
@@ -783,6 +786,7 @@ class Task:
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
+        max_time: float = 0,
         return_type: Type[T],
     ) -> Optional[T]: ...  # noqa
 
@@ -796,9 +800,13 @@ class Task:
         session_id: str = "",
         allow_restart: bool = True,
         return_type: Optional[Type[T]] = None,
+        max_time: float = 0,
     ) -> Optional[ChatDocument | T]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
+        if isnan(max_time):
+            raise ValueError("max_time must not be NaN")
+
         if allow_restart and (
             (self.restart and caller is None)
             or (self.config_sub_task.restart_as_subtask and caller is not None)
@@ -814,6 +822,7 @@ class Task:
         self.n_no_answer_alternations = 0
         self.max_cost = max_cost
         self.max_tokens = max_tokens
+        started_at = monotonic() if max_time > 0 else None
         self.session_id = session_id
         self._set_alive()
         self._init_message_counter()
@@ -851,6 +860,9 @@ class Task:
             if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
+                break
+            if started_at is not None and monotonic() - started_at >= max_time:
+                status = StatusCode.TIMEOUT
                 break
             i += 1
             max_turns = (
@@ -901,6 +913,7 @@ class Task:
 
             if (
                 parsed_result is None
+                and status != StatusCode.TIMEOUT
                 and isinstance(self.agent, ChatAgent)
                 and self.agent._json_schema_available()
             ):
@@ -938,6 +951,7 @@ class Task:
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
+        max_time: float = 0,
     ) -> Optional[ChatDocument]: ...  # noqa
 
     @overload
@@ -951,6 +965,7 @@ class Task:
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
+        max_time: float = 0,
         return_type: Type[T],
     ) -> Optional[T]: ...  # noqa
 
@@ -964,6 +979,7 @@ class Task:
         session_id: str = "",
         allow_restart: bool = True,
         return_type: Optional[Type[T]] = None,
+        max_time: float = 0,
     ) -> Optional[ChatDocument | T]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
@@ -984,6 +1000,8 @@ class Task:
             caller (Task|None): the calling task, if any
             max_cost (float): max cost allowed for the task (default 0 -> no limit)
             max_tokens (int): max tokens allowed for the task (default 0 -> no limit)
+            max_time (float): max wall-clock seconds for the task. The limit is
+                checked after each completed step (default 0 -> no limit).
             session_id (str): session id for the task
             allow_restart (bool): whether to allow restarting the task
             return_type (Optional[Type[T]]): desired final result type
@@ -991,6 +1009,8 @@ class Task:
         Returns:
             Optional[ChatDocument]: valid result of the task.
         """
+        if isnan(max_time):
+            raise ValueError("max_time must not be NaN")
 
         # Even if the initial "sender" is not literally the USER (since the task could
         # have come from another LLM), as far as this agent is concerned, the initial
@@ -1012,6 +1032,7 @@ class Task:
         self.n_no_answer_alternations = 0
         self.max_cost = max_cost
         self.max_tokens = max_tokens
+        started_at = monotonic() if max_time > 0 else None
         self.session_id = session_id
         self._set_alive()
         self._init_message_counter()
@@ -1052,6 +1073,9 @@ class Task:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
+            if started_at is not None and monotonic() - started_at >= max_time:
+                status = StatusCode.TIMEOUT
+                break
             i += 1
             max_turns = (
                 min(turns, settings.max_turns)
@@ -1101,6 +1125,7 @@ class Task:
 
             if (
                 parsed_result is None
+                and status != StatusCode.TIMEOUT
                 and isinstance(self.agent, ChatAgent)
                 and self.agent._json_schema_available()
             ):

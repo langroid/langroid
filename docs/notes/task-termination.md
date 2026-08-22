@@ -40,6 +40,29 @@ In Langroid, a `Task` wraps an `Agent` and manages the conversation flow. Contro
 result = task.run("Start conversation", turns=5)
 ```
 
+### Wall-clock budget
+
+Long-running agent workflows can also stop after a wall-clock budget:
+
+```python
+result = task.run("Start research", max_time=30.0)
+```
+
+The synchronous and asynchronous run loops check this cooperative limit after
+each completed step. They do not interrupt an in-flight LLM, tool, or delegated
+task call, so the elapsed time can exceed `max_time` by the duration of that
+call. This avoids leaving agent or tool state half-updated. Each task run owns
+its budget; a delegated run does not implicitly inherit its parent's deadline.
+If a step both completes the task and exhausts the budget, completion wins.
+Otherwise, when the budget is exhausted, the returned `ChatDocument` has
+`metadata.status == StatusCode.TIMEOUT`.
+
+When a timed-out run requested a strict `return_type`, Langroid may decode the
+last response locally but does not make another LLM call to repair malformed
+structured output. In that case it returns the locally decoded value or `None`.
+A non-positive `max_time` keeps the existing unlimited behavior. NaN is rejected
+with `ValueError` because it is neither positive nor non-positive.
+
 ### 2. Single Round Mode
 ```python
 # Task completes after one exchange
