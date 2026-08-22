@@ -44180,6 +44180,17 @@ def handle(self) -> str | DoneTool
 ⋮----
 # test that DoneTool works just like saying DONE
 ⋮----
+def test_enable_message_repeatedly_requires_recipient() -> None
+⋮----
+"""The same tool can require a recipient more than once."""
+agent = ChatAgent(ChatAgentConfig(llm=None))
+⋮----
+registered_tool = agent.llm_tools_map[SquareTool.name()]
+⋮----
+def test_enable_message_normally_then_requires_recipient() -> None
+⋮----
+"""A recipient wrapper can replace its normally registered tool."""
+⋮----
 config = ChatAgentConfig(
 processor_agent = ChatAgent(config)
 ⋮----
@@ -53476,6 +53487,8 @@ class ToolMessageWithRecipient(cls):  # type: ignore
 ⋮----
 recipient: str  # no default, so it is required
 ⋮----
+__tool_message_origin__ = getattr(cls, "__tool_message_origin__", cls)
+⋮----
 @classmethod
     def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]
 ⋮----
@@ -58454,6 +58467,24 @@ agent.enable_message(Tool1, True, Tool3)  # type: ignore
 ⋮----
 # This should work correctly - passing tools as a list
 ⋮----
+def test_enable_message_rejects_distinct_classes_with_same_request() -> None
+⋮----
+"""Different tool classes cannot silently replace the same request name."""
+⋮----
+class FirstCollisionTool(ToolMessage)
+⋮----
+request: str = "shared_request"
+⋮----
+class SecondCollisionTool(ToolMessage)
+⋮----
+class DerivedCollisionTool(FirstCollisionTool)
+⋮----
+class DerivedRecipientCollisionTool(recipient_wrapper)
+⋮----
+agent = ChatAgent(ChatAgentConfig(llm=None))
+⋮----
+message = str(exc_info.value)
+⋮----
 def test_multi_agent_tool_caching(test_settings: Settings)
 ⋮----
 """
@@ -59951,6 +59982,38 @@ async with FastMCPClient(server) as client:
     models = [client.tool_model_from_mcp_tool(t) for t in wanted]
 ```
 
+## Namespacing tools from multiple servers
+
+Two MCP servers can expose the same tool name. Pass `tool_name_prefix` when
+loading each server to give the Langroid-facing names distinct namespaces:
+
+```python
+weather_tools = await get_tools_async(
+    weather_server,
+    tool_name_prefix="weather",
+)
+inventory_tools = await get_tools_async(
+    inventory_server,
+    tool_name_prefix="inventory",
+)
+
+agent.enable_message(weather_tools + inventory_tools)
+```
+
+The prefix must fully match the ASCII pattern `[a-zA-Z0-9_]+`; an empty string
+is invalid. Langroid joins the prefix and original MCP tool name with two
+underscores. If both servers expose `lookup`, the agent therefore sees
+`weather__lookup` and `inventory__lookup`.
+
+The namespace changes only the Langroid-facing request name. Protocol calls use
+the original server tool name for fresh clients and persistent connections.
+Passing `tool_name_prefix=None`, or omitting the argument, applies no prefix and
+preserves the existing behavior.
+
+`ChatAgent.enable_message` raises `ValueError` if a different `ToolMessage`
+class is already registered with the same final request name. Re-enabling the
+same class remains valid.
+
 ## Tool parameter type mapping
 
 When an MCP tool is converted into a Langroid `ToolMessage`,
@@ -60270,6 +60333,9 @@ roots: RootsList | RootsHandler | None = None,  # type: ignore
 
         Args:
             server: FastMCP server or path to such a server
+            tool_name_prefix: Optional namespace prepended to generated Langroid
+                tool names as ``<prefix>__<server-tool-name>``. Calls to the MCP
+                server continue to use its original tool name.
         """
 ⋮----
 # Default a slightly larger read timeout for stdio transports on first
@@ -60488,7 +60554,9 @@ def tool_model_from_mcp_tool(self, target: Tool) -> Type[ToolMessage]
         Returns:
             A dynamically created Langroid ToolMessage subclass for `target`.
         """
-tool_name = getattr(target, "name", None)
+mcp_tool_name = getattr(target, "name", None)
+⋮----
+tool_name = (
 ⋮----
 input_schema = getattr(target, "inputSchema", None)
 schema = input_schema if isinstance(input_schema, dict) else {}
@@ -60539,6 +60607,7 @@ client_config = {
 ⋮----
 tool_model._client_config = client_config  # type: ignore [attr-defined]
 tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
+tool_model._mcp_tool_name = mcp_tool_name  # type: ignore[attr-defined]
 ⋮----
 # 2) define an arg-free call_tool_async()
 async def call_tool_async(itself: ToolMessage) -> Any
@@ -60565,6 +60634,8 @@ client_cfg = getattr(  # type: ignore
 # Fallback or error - ideally _client_config should always exist
 ⋮----
 # Connect the client if not yet connected and keep the connection open
+⋮----
+itself.__class__._mcp_tool_name,  # type: ignore[attr-defined]
 ⋮----
 # open a fresh client, call the tool, then close
 async with FastMCPClient(**client_cfg) as client:  # type: ignore
@@ -63562,6 +63633,56 @@ def test_tool_model_from_mcp_tool_handles_malformed_enum() -> None
 # `enum` is a bare scalar, not a list: must not raise.
 ⋮----
 # Falls through to the "integer" type branch, so an int still validates.
+⋮----
+def test_fastmcp_client_rejects_invalid_tool_name_prefix(prefix: str) -> None
+⋮----
+"""Prefixes must be non-empty ASCII identifier-safe strings."""
+⋮----
+message = str(exc_info.value)
+⋮----
+@pytest.mark.asyncio
+async def test_namespaced_tools_avoid_cross_server_name_collisions() -> None
+⋮----
+"""Namespaced tools with the same server name remain independently usable."""
+weather_server = FastMCP("WeatherServer")
+inventory_server = FastMCP("InventoryServer")
+⋮----
+@weather_server.tool(name="lookup")
+    def weather_lookup(item: str) -> str
+⋮----
+@inventory_server.tool(name="lookup")
+    def inventory_lookup(item: str) -> str
+⋮----
+weather_tools = await get_tools_async(
+inventory_tools = await get_tools_async(
+weather_tool = weather_tools[0]
+inventory_tool = inventory_tools[0]
+⋮----
+agent = lr.ChatAgent(lr.ChatAgentConfig(llm=None))
+⋮----
+weather_result = await weather_tool(item="Paris").handle_async()
+inventory_result = await inventory_tool(item="sprocket").handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_namespaced_dispatch_uses_original_name_on_persistent_client() -> None
+⋮----
+"""A connected client dispatches the unprefixed name to its MCP server."""
+server = FastMCP("PersistentServer")
+received_values: list[str] = []
+⋮----
+@server.tool(name="record")
+    def record_value(value: str) -> str
+⋮----
+tool = await client.get_tool_async("record")
+⋮----
+result = await tool(value="payload").handle_async()
+⋮----
+@pytest.mark.asyncio
+async def test_mcp_tool_names_remain_unchanged_without_prefix() -> None
+⋮----
+"""Omitting a namespace preserves the existing public tool name."""
+tools = await get_tools_async(mcp_server())
+requests = {tool.default_value("request") for tool in tools}
 ⋮----
 def test_tool_model_from_mcp_tool_maps_one_of_to_union() -> None
 ⋮----
@@ -68354,14 +68475,18 @@ param = "use" if isclass(use) else "handle"
 ⋮----
 message_class = message_class.require_recipient()
 ⋮----
+request = message_class.default_value("request")
+existing_class = self.llm_tools_map.get(request)
+⋮----
+existing_origin = existing_class.__dict__.get("__tool_message_origin__", existing_class)
+message_origin = message_class.__dict__.get("__tool_message_origin__", message_class)
+⋮----
 # XMLToolMessage is not compatible with OpenAI's Tools/functions API,
 # so we disable use of functions API, enable langroid-native Tools,
 # which are prompt-based.
 ⋮----
 super().enable_message_handling(message_class)  # enables handling only
 tools = self._get_tool_list(message_class)
-⋮----
-request = message_class.default_value("request")
 ⋮----
 llm_function = message_class.llm_function_schema(defaults=include_defaults)
 ⋮----
@@ -71990,199 +72115,6 @@ model_names = tuple(_model_name(model) for model in models)
 def _model_name(model: str | ModelName) -> str
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - None Content in LLM Messages: notes/llm-none-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Rotating API Keys: notes/rotating-api-keys.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-      - Batch Processing: notes/batch-processing.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
 <file path="tests/main/test_prep_llm_message.py">
 CHAT_CONTEXT_LENGTH = 16_000
 MAX_OUTPUT_TOKENS = 1000
@@ -72535,6 +72467,199 @@ malformed_call = _tool_call()
 malformed_function = LLMFunctionCall(
 ⋮----
 pending_calls = list(agent.oai_tool_calls)
+</file>
+
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - None Content in LLM Messages: notes/llm-none-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Rotating API Keys: notes/rotating-api-keys.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Batch Processing: notes/batch-processing.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path=".pre-commit-config.yaml">

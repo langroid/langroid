@@ -45553,6 +45553,8 @@ class ToolMessageWithRecipient(cls):  # type: ignore
 ⋮----
 recipient: str  # no default, so it is required
 ⋮----
+__tool_message_origin__ = getattr(cls, "__tool_message_origin__", cls)
+⋮----
 @classmethod
     def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]
 ⋮----
@@ -48305,6 +48307,38 @@ async with FastMCPClient(server) as client:
     models = [client.tool_model_from_mcp_tool(t) for t in wanted]
 ```
 
+## Namespacing tools from multiple servers
+
+Two MCP servers can expose the same tool name. Pass `tool_name_prefix` when
+loading each server to give the Langroid-facing names distinct namespaces:
+
+```python
+weather_tools = await get_tools_async(
+    weather_server,
+    tool_name_prefix="weather",
+)
+inventory_tools = await get_tools_async(
+    inventory_server,
+    tool_name_prefix="inventory",
+)
+
+agent.enable_message(weather_tools + inventory_tools)
+```
+
+The prefix must fully match the ASCII pattern `[a-zA-Z0-9_]+`; an empty string
+is invalid. Langroid joins the prefix and original MCP tool name with two
+underscores. If both servers expose `lookup`, the agent therefore sees
+`weather__lookup` and `inventory__lookup`.
+
+The namespace changes only the Langroid-facing request name. Protocol calls use
+the original server tool name for fresh clients and persistent connections.
+Passing `tool_name_prefix=None`, or omitting the argument, applies no prefix and
+preserves the existing behavior.
+
+`ChatAgent.enable_message` raises `ValueError` if a different `ToolMessage`
+class is already registered with the same final request name. Re-enabling the
+same class remains valid.
+
 ## Tool parameter type mapping
 
 When an MCP tool is converted into a Langroid `ToolMessage`,
@@ -48624,6 +48658,9 @@ roots: RootsList | RootsHandler | None = None,  # type: ignore
 
         Args:
             server: FastMCP server or path to such a server
+            tool_name_prefix: Optional namespace prepended to generated Langroid
+                tool names as ``<prefix>__<server-tool-name>``. Calls to the MCP
+                server continue to use its original tool name.
         """
 ⋮----
 # Default a slightly larger read timeout for stdio transports on first
@@ -48842,7 +48879,9 @@ def tool_model_from_mcp_tool(self, target: Tool) -> Type[ToolMessage]
         Returns:
             A dynamically created Langroid ToolMessage subclass for `target`.
         """
-tool_name = getattr(target, "name", None)
+mcp_tool_name = getattr(target, "name", None)
+⋮----
+tool_name = (
 ⋮----
 input_schema = getattr(target, "inputSchema", None)
 schema = input_schema if isinstance(input_schema, dict) else {}
@@ -48893,6 +48932,7 @@ client_config = {
 ⋮----
 tool_model._client_config = client_config  # type: ignore [attr-defined]
 tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
+tool_model._mcp_tool_name = mcp_tool_name  # type: ignore[attr-defined]
 ⋮----
 # 2) define an arg-free call_tool_async()
 async def call_tool_async(itself: ToolMessage) -> Any
@@ -48919,6 +48959,8 @@ client_cfg = getattr(  # type: ignore
 # Fallback or error - ideally _client_config should always exist
 ⋮----
 # Connect the client if not yet connected and keep the connection open
+⋮----
+itself.__class__._mcp_tool_name,  # type: ignore[attr-defined]
 ⋮----
 # open a fresh client, call the tool, then close
 async with FastMCPClient(**client_cfg) as client:  # type: ignore
@@ -54566,14 +54608,18 @@ param = "use" if isclass(use) else "handle"
 ⋮----
 message_class = message_class.require_recipient()
 ⋮----
+request = message_class.default_value("request")
+existing_class = self.llm_tools_map.get(request)
+⋮----
+existing_origin = existing_class.__dict__.get("__tool_message_origin__", existing_class)
+message_origin = message_class.__dict__.get("__tool_message_origin__", message_class)
+⋮----
 # XMLToolMessage is not compatible with OpenAI's Tools/functions API,
 # so we disable use of functions API, enable langroid-native Tools,
 # which are prompt-based.
 ⋮----
 super().enable_message_handling(message_class)  # enables handling only
 tools = self._get_tool_list(message_class)
-⋮----
-request = message_class.default_value("request")
 ⋮----
 llm_function = message_class.llm_function_schema(defaults=include_defaults)
 ⋮----

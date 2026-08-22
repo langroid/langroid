@@ -55,6 +55,30 @@ class SquareTool(ToolMessage):
             return DoneTool(content="-1")
 
 
+def test_enable_message_repeatedly_requires_recipient() -> None:
+    """The same tool can require a recipient more than once."""
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+
+    agent.enable_message(SquareTool, require_recipient=True)
+    agent.enable_message(SquareTool, require_recipient=True)
+
+    registered_tool = agent.llm_tools_map[SquareTool.name()]
+    assert issubclass(registered_tool, SquareTool)
+    assert registered_tool.model_fields["recipient"].is_required()
+
+
+def test_enable_message_normally_then_requires_recipient() -> None:
+    """A recipient wrapper can replace its normally registered tool."""
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+
+    agent.enable_message(SquareTool)
+    agent.enable_message(SquareTool, require_recipient=True)
+
+    registered_tool = agent.llm_tools_map[SquareTool.name()]
+    assert issubclass(registered_tool, SquareTool)
+    assert registered_tool.model_fields["recipient"].is_required()
+
+
 @pytest.mark.fallback
 @pytest.mark.flaky(reruns=1)
 @pytest.mark.parametrize("fn_api", [True, False])

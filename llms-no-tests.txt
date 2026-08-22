@@ -69649,6 +69649,7 @@ class ToolMessage(ABC, BaseModel):
     def require_recipient(cls) -> Type["ToolMessage"]:
         class ToolMessageWithRecipient(cls):  # type: ignore
             recipient: str  # no default, so it is required
+            __tool_message_origin__ = getattr(cls, "__tool_message_origin__", cls)
 
         return ToolMessageWithRecipient
 
@@ -74115,6 +74116,38 @@ async with FastMCPClient(server) as client:
     models = [client.tool_model_from_mcp_tool(t) for t in wanted]
 ```
 
+## Namespacing tools from multiple servers
+
+Two MCP servers can expose the same tool name. Pass `tool_name_prefix` when
+loading each server to give the Langroid-facing names distinct namespaces:
+
+```python
+weather_tools = await get_tools_async(
+    weather_server,
+    tool_name_prefix="weather",
+)
+inventory_tools = await get_tools_async(
+    inventory_server,
+    tool_name_prefix="inventory",
+)
+
+agent.enable_message(weather_tools + inventory_tools)
+```
+
+The prefix must fully match the ASCII pattern `[a-zA-Z0-9_]+`; an empty string
+is invalid. Langroid joins the prefix and original MCP tool name with two
+underscores. If both servers expose `lookup`, the agent therefore sees
+`weather__lookup` and `inventory__lookup`.
+
+The namespace changes only the Langroid-facing request name. Protocol calls use
+the original server tool name for fresh clients and persistent connections.
+Passing `tool_name_prefix=None`, or omitting the argument, applies no prefix and
+preserves the existing behavior.
+
+`ChatAgent.enable_message` raises `ValueError` if a different `ToolMessage`
+class is already registered with the same final request name. Re-enabling the
+same class remains valid.
+
 ## Tool parameter type mapping
 
 When an MCP tool is converted into a Langroid `ToolMessage`,
@@ -74452,6 +74485,7 @@ import datetime
 import inspect
 import logging
 import os
+import re
 from base64 import b64decode
 from io import BytesIO
 from typing import (
@@ -74543,11 +74577,15 @@ class FastMCPClient:
         log_handler: LoggingFnT | None = None,
         message_handler: MessageHandlerFnT | None = None,
         read_timeout_seconds: datetime.timedelta | None = None,
+        tool_name_prefix: str | None = None,
     ) -> None:
         """Initialize the FastMCPClient.
 
         Args:
             server: FastMCP server or path to such a server
+            tool_name_prefix: Optional namespace prepended to generated Langroid
+                tool names as ``<prefix>__<server-tool-name>``. Calls to the MCP
+                server continue to use its original tool name.
         """
         self.server = server
         self.client = None
@@ -74566,10 +74604,18 @@ class FastMCPClient:
                 self.read_timeout_seconds = None
         else:
             self.read_timeout_seconds = read_timeout_seconds
+        if tool_name_prefix is not None and (
+            not isinstance(tool_name_prefix, str)
+            or re.fullmatch(r"[a-zA-Z0-9_]+", tool_name_prefix) is None
+        ):
+            raise ValueError(
+                "tool_name_prefix must fully match the ASCII pattern " "[a-zA-Z0-9_]+"
+            )
         self.persist_connection = persist_connection
         self.forward_text_resources = forward_text_resources
         self.forward_blob_resources = forward_blob_resources
         self.forward_images = forward_images
+        self.tool_name_prefix = tool_name_prefix
 
     async def __aenter__(self) -> "FastMCPClient":
         """Enter the async context manager and connect inner client.
@@ -74941,9 +74987,14 @@ class FastMCPClient:
         Returns:
             A dynamically created Langroid ToolMessage subclass for `target`.
         """
-        tool_name = getattr(target, "name", None)
-        if not isinstance(tool_name, str) or tool_name == "":
+        mcp_tool_name = getattr(target, "name", None)
+        if not isinstance(mcp_tool_name, str) or mcp_tool_name == "":
             raise ValueError(f"Invalid MCP tool name for tool {target!r}")
+        tool_name = (
+            f"{self.tool_name_prefix}__{mcp_tool_name}"
+            if self.tool_name_prefix is not None
+            else mcp_tool_name
+        )
 
         input_schema = getattr(target, "inputSchema", None)
         schema = input_schema if isinstance(input_schema, dict) else {}
@@ -75028,6 +75079,7 @@ class FastMCPClient:
 
         tool_model._client_config = client_config  # type: ignore [attr-defined]
         tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
+        tool_model._mcp_tool_name = mcp_tool_name  # type: ignore[attr-defined]
 
         # 2) define an arg-free call_tool_async()
         async def call_tool_async(itself: ToolMessage) -> Any:
@@ -75071,11 +75123,17 @@ class FastMCPClient:
                 if not self.client:
                     await self.connect()
 
-                return await self.call_mcp_tool(itself.request, payload)
+                return await self.call_mcp_tool(
+                    itself.__class__._mcp_tool_name,  # type: ignore[attr-defined]
+                    payload,
+                )
 
             # open a fresh client, call the tool, then close
             async with FastMCPClient(**client_cfg) as client:  # type: ignore
-                return await client.call_mcp_tool(itself.request, payload)
+                return await client.call_mcp_tool(
+                    itself.__class__._mcp_tool_name,  # type: ignore[attr-defined]
+                    payload,
+                )
 
         tool_model.call_tool_async = call_tool_async  # type: ignore
 
@@ -84433,6 +84491,25 @@ class ChatAgent(Agent):
 
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
+        if message_class is not None:
+            if not issubclass(message_class, ToolMessage):
+                raise ValueError("message_class must be a subclass of ToolMessage")
+            request = message_class.default_value("request")
+            existing_class = self.llm_tools_map.get(request)
+            existing_origin = (
+                existing_class.__dict__.get("__tool_message_origin__", existing_class)
+                if existing_class is not None
+                else None
+            )
+            message_origin = message_class.__dict__.get(
+                "__tool_message_origin__", message_class
+            )
+            if existing_class is not None and existing_origin is not message_origin:
+                raise ValueError(
+                    f"Tool request name {request!r} is already registered to "
+                    f"{existing_class.__name__}; cannot register "
+                    f"{message_class.__name__}"
+                )
         if isinstance(message_class, XMLToolMessage):
             # XMLToolMessage is not compatible with OpenAI's Tools/functions API,
             # so we disable use of functions API, enable langroid-native Tools,
@@ -84442,7 +84519,6 @@ class ChatAgent(Agent):
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
         if message_class is not None:
-            request = message_class.default_value("request")
             if request == "":
                 raise ValueError(
                     f"""
