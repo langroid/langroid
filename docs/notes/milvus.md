@@ -23,6 +23,13 @@ pip install "langroid[milvus]"
 Milvus Lite is not available on Windows. Windows users must set `MILVUS_URI` to
 a Milvus server or Zilliz Cloud endpoint.
 
+## Resource lifetime with Milvus Lite
+
+`MilvusDB.close()` releases the PyMilvus client handle, but Milvus Lite keeps
+its embedded per-path server (and the lock on the `.db` file) alive until the
+process exits — this is upstream PyMilvus behavior. If another process needs
+the same `.db` file, close the first process rather than relying on `close()`.
+
 ## Configuration
 
 By default, `MilvusDBConfig()` connects to Milvus Lite:
