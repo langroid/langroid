@@ -58968,7 +58968,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>
