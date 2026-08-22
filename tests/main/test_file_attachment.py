@@ -300,7 +300,7 @@ class TestFileAttachment:
         assert result["file"]["file_data"] == attachment.to_data_uri()
 
     def test_to_dict_non_video_file_for_gemini_model(self) -> None:
-        """Gemini PDF attachments retain generic file serialization."""
+        """Gemini PDF attachments retain image URL serialization."""
         attachment = FileAttachment.from_bytes(
             content=b"test content",
             filename="doc.pdf",
@@ -311,10 +311,10 @@ class TestFileAttachment:
         result = attachment.to_dict("gemini-2.5-flash")
 
         assert result == {
-            "type": "file",
-            "file": {
-                "filename": "doc.pdf",
-                "file_data": attachment.to_data_uri(),
+            "type": "image_url",
+            "image_url": {
+                "url": attachment.to_data_uri(),
+                "detail": "high",
             },
         }
 
@@ -330,7 +330,7 @@ class TestFileAttachment:
         filename: str,
         mime_type: str,
     ) -> None:
-        """Gemini does not reclassify non-image, non-video MIME types."""
+        """Gemini retains image URL serialization for other attachments."""
         attachment = FileAttachment.from_bytes(
             content=b"test content",
             filename=filename,
@@ -338,10 +338,9 @@ class TestFileAttachment:
         )
 
         assert attachment.to_dict("gemini-2.5-flash") == {
-            "type": "file",
-            "file": {
-                "filename": filename,
-                "file_data": attachment.to_data_uri(),
+            "type": "image_url",
+            "image_url": {
+                "url": attachment.to_data_uri(),
             },
         }
 

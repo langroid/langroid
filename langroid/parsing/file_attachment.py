@@ -265,7 +265,10 @@ class FileAttachment(BaseModel):
                     type="video_url",
                     video_url=dict(url=self._content_url()),
                 )
-            if self.mime_type.casefold().startswith("image/"):
+            if (
+                self.mime_type.casefold().startswith("image/")
+                or "gemini" in model.casefold()
+            ):
                 image_url_dict: Dict[str, str] = dict(url=self._content_url())
 
                 # Add detail parameter if specified
