@@ -25,7 +25,7 @@ from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.markup import escape
@@ -307,9 +307,11 @@ class OpenAIGPTConfig(LLMConfig):
     )
     http_verify_ssl: bool = True  # Simple flag for SSL verification
     http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
+    _explicit_api_base: str | None = PrivateAttr(default=None)
 
     def __init__(self, **kwargs) -> None:  # type: ignore
-        local_model = "api_base" in kwargs and kwargs["api_base"] is not None
+        explicit_api_base = kwargs.get("api_base") if "api_base" in kwargs else None
+        local_model = explicit_api_base is not None
 
         chat_model = kwargs.get("chat_model", "")
         local_prefixes = ["local/", "litellm/", "ollama/", "vllm/", "llamacpp/"]
@@ -332,6 +334,7 @@ class OpenAIGPTConfig(LLMConfig):
             kwargs["run_on_first_use"] = with_warning
 
         super().__init__(**kwargs)
+        self._explicit_api_base = explicit_api_base
 
     model_config = SettingsConfigDict(env_prefix="OPENAI_")
 
@@ -682,12 +685,15 @@ class OpenAIGPT(LanguageModel):
                 # Do not inherit OPENAI_API_BASE for a Mistral-prefixed model.
                 # An api_base passed explicitly still supports proxies and
                 # regional endpoints.
-                openai_api_base = os.getenv("OPENAI_API_BASE")
-                explicit_api_base = (
-                    self.config.api_base
-                    if self.config.api_base and self.config.api_base != openai_api_base
-                    else None
-                )
+                explicit_api_base = self.config._explicit_api_base
+                if explicit_api_base is None:
+                    openai_api_base = os.getenv("OPENAI_API_BASE")
+                    explicit_api_base = (
+                        self.config.api_base
+                        if self.config.api_base
+                        and self.config.api_base != openai_api_base
+                        else None
+                    )
                 self.api_base = explicit_api_base or MISTRAL_BASE_URL
                 if self.api_key == OPENAI_API_KEY:
                     mistral_key = os.getenv("MISTRAL_API_KEY", "")
@@ -945,7 +951,10 @@ class OpenAIGPT(LanguageModel):
         Currently main troublemaker is o1* series.
         """
         if self.is_mistral:
-            return {"max_completion_tokens": "max_tokens"}
+            return {
+                "max_completion_tokens": "max_tokens",
+                "seed": "random_seed",
+            }
         return self.info().rename_params
 
     def chat_context_length(self) -> int:
@@ -2393,6 +2402,13 @@ class OpenAIGPT(LanguageModel):
         for old_param, new_param in param_rename_map.items():
             if old_param in args:
                 args[new_param] = args.pop(old_param)
+
+        # The OpenAI SDK does not expose Mistral's ``random_seed`` keyword,
+        # so pass it through the supported provider-extension body.
+        if self.is_mistral and "random_seed" in args:
+            extra_body = dict(args.get("extra_body") or {})
+            extra_body["random_seed"] = args.pop("random_seed")
+            args["extra_body"] = extra_body
 
         # finally, get rid of extra_body params exclusive to certain models
         # Only apply allowlist restrictions for known models.

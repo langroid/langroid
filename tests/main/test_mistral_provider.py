@@ -16,6 +16,7 @@ from langroid.language_models.model_info import (
 )
 from langroid.language_models.openai_gpt import (
     MISTRAL_BASE_URL,
+    OpenAICallParams,
     OpenAIGPT,
     OpenAIGPTConfig,
 )
@@ -53,6 +54,7 @@ def _make_llm(requests: List[Tuple[str, Dict[str, Any]]]) -> OpenAIGPT:
         OpenAIGPTConfig(
             api_key="test-mistral-key",
             chat_model="mistral/mistral-small-latest",
+            params=OpenAICallParams(seed=7),
             stream=False,
             cache_config=None,
             use_cached_client=False,
@@ -150,11 +152,26 @@ def test_openai_api_base_does_not_leak_into_mistral() -> None:
     assert llm.api_base == MISTRAL_BASE_URL
 
 
+def test_explicit_base_matching_openai_environment_is_preserved() -> None:
+    proxy_url = "https://mistral-proxy.example/v1"
+    with patch.dict(os.environ, {"OPENAI_API_BASE": proxy_url}, clear=False):
+        llm = OpenAIGPT(
+            OpenAIGPTConfig(
+                api_key="proxy-key",
+                api_base=proxy_url,
+                chat_model="mistral/custom-model",
+            )
+        )
+
+    assert llm.api_base == proxy_url
+
+
 def test_mistral_stream_params_match_provider_api() -> None:
     llm = OpenAIGPT(
         OpenAIGPTConfig(
             api_key="test-key",
             chat_model="mistral/mistral-small-latest",
+            params=OpenAICallParams(seed=7),
             stream=True,
         )
     )
@@ -169,6 +186,8 @@ def test_mistral_stream_params_match_provider_api() -> None:
     assert args["stream"] is True
     assert args["max_tokens"] == 5
     assert "max_completion_tokens" not in args
+    assert args["extra_body"]["random_seed"] == 7
+    assert "seed" not in args
     assert "stream_options" not in args
 
 
@@ -181,6 +200,8 @@ def test_sync_chat_uses_mistral_endpoint_and_model() -> None:
     assert requests[0][1]["model"] == "mistral-small-latest"
     assert requests[0][1]["max_tokens"] == 5
     assert "max_completion_tokens" not in requests[0][1]
+    assert requests[0][1]["random_seed"] == 7
+    assert "seed" not in requests[0][1]
 
 
 @pytest.mark.asyncio
@@ -193,3 +214,5 @@ async def test_async_chat_uses_mistral_endpoint_and_model() -> None:
     assert requests[0][1]["model"] == "mistral-small-latest"
     assert requests[0][1]["max_tokens"] == 5
     assert "max_completion_tokens" not in requests[0][1]
+    assert requests[0][1]["random_seed"] == 7
+    assert "seed" not in requests[0][1]
