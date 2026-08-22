@@ -264,6 +264,25 @@ def test_truncation_with_tiny_interleaved_messages(test_settings: Settings) -> N
     )
 
 
+def test_truncation_skips_none_content(test_settings: Settings) -> None:
+    """Call-only turns with no content remain intact during truncation."""
+    set_global(test_settings)
+    context_length = 900
+    agent = _make_agent(context_length, max_output_tokens=context_length)
+    large = ("word " * 400).strip()
+    agent.message_history = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(role=Role.USER, content=large),
+        LLMMessage(role=Role.ASSISTANT, content=None),
+        LLMMessage(role=Role.USER, content=large),
+    ]
+
+    hist, _ = agent._prep_llm_messages(message="Final question", truncate=True)
+
+    assert agent.chat_num_tokens(hist) <= _budget(context_length)
+    assert hist[2].content is None
+
+
 def test_truncation_preserves_system_and_last_message(test_settings: Settings) -> None:
     """The system message and the last user message must never be modified."""
     set_global(test_settings)

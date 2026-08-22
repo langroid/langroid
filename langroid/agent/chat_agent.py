@@ -1744,7 +1744,7 @@ class ChatAgent(Agent):
                     _min_keep_tokens = 30
                     _truncation_warning = "... [Contents truncated!]"
 
-                    def _content_tokens(text: str) -> int:
+                    def _content_tokens(text: str | None) -> int:
                         """Token count of message *content* only.
 
                         `truncate_message` only trims `message.content`, so
@@ -1754,10 +1754,10 @@ class ChatAgent(Agent):
                         messages carrying file attachments.
                         """
                         return (
-                            self.parser.num_tokens(text)
+                            self.parser.num_tokens(text or "")
                             if self.parser is not None
                             # approx fallback, matches truncate_message
-                            else len(text) // 4
+                            else len(text or "") // 4
                         )
 
                     # Account for the warning that truncate_message appends
