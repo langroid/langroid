@@ -300,7 +300,7 @@ class TestFileAttachment:
         assert result["file"]["file_data"] == attachment.to_data_uri()
 
     def test_to_dict_non_video_file_for_gemini_model(self) -> None:
-        """Gemini non-video attachments retain image URL serialization."""
+        """Gemini PDF attachments retain generic file serialization."""
         attachment = FileAttachment.from_bytes(
             content=b"test content",
             filename="doc.pdf",
@@ -311,12 +311,44 @@ class TestFileAttachment:
         result = attachment.to_dict("gemini-2.5-flash")
 
         assert result == {
-            "type": "image_url",
-            "image_url": {
-                "url": attachment.to_data_uri(),
-                "detail": "high",
+            "type": "file",
+            "file": {
+                "filename": "doc.pdf",
+                "file_data": attachment.to_data_uri(),
             },
         }
+
+    @pytest.mark.parametrize(
+        ("filename", "mime_type"),
+        [
+            ("file.bin", "application/octet-stream"),
+            ("recording.mp3", "audio/mpeg"),
+        ],
+    )
+    def test_to_dict_other_mime_type_for_gemini_model(
+        self,
+        filename: str,
+        mime_type: str,
+    ) -> None:
+        """Gemini does not reclassify non-image, non-video MIME types."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename=filename,
+            mime_type=mime_type,
+        )
+
+        assert attachment.to_dict("gemini-2.5-flash") == {
+            "type": "file",
+            "file": {
+                "filename": filename,
+                "file_data": attachment.to_data_uri(),
+            },
+        }
+
+    def test_from_path_rejects_ftp_url(self) -> None:
+        """The public constructor rejects unsupported FTP URLs."""
+        with pytest.raises(ValueError, match="FTP URLs are not supported"):
+            FileAttachment.from_path("ftp://example.com/videos/clip.mp4")
 
     def test_to_dict_unknown_type(self):
         """Unknown MIME types keep using generic `file` content-parts."""

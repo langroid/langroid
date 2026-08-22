@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from langroid.pydantic_v1 import BaseModel
 
 _HTTP_URL_SCHEMES = frozenset({"http", "https"})
-_REMOTE_URL_SCHEMES = _HTTP_URL_SCHEMES | {"ftp"}
+_FTP_URL_SCHEMES = frozenset({"ftp"})
 
 
 def _is_full_url(value: str, schemes: frozenset[str]) -> bool:
@@ -126,12 +126,18 @@ class FileAttachment(BaseModel):
 
         Returns:
             FileAttachment instance
+
+        Raises:
+            ValueError: If path is an FTP URL, which is not supported.
         """
         # Convert to string if Path object
         path_str = str(path)
 
+        if _is_full_url(path_str, _FTP_URL_SCHEMES):
+            raise ValueError("FTP URLs are not supported; use an HTTP(S) URL")
+
         # Check if it's a URL
-        if _is_full_url(path_str, _REMOTE_URL_SCHEMES):
+        if _is_full_url(path_str, _HTTP_URL_SCHEMES):
             return cls._from_url(
                 url=path_str,
                 detail=detail,
@@ -259,8 +265,7 @@ class FileAttachment(BaseModel):
                     type="video_url",
                     video_url=dict(url=self._content_url()),
                 )
-            if self.mime_type.startswith("image/") or "gemini" in model.lower():
-                # for gemini models, use `image_url` for PDFs and images
+            if self.mime_type.casefold().startswith("image/"):
                 image_url_dict: Dict[str, str] = dict(url=self._content_url())
 
                 # Add detail parameter if specified

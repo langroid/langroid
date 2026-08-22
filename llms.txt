@@ -70577,6 +70577,171 @@ def test_write_after_peer_close(tmp_path: Path) -> None:
     logger2.close()
 </file>
 
+<file path="tests/main/test_split_inline_reasoning.py">
+"""
+Tests for OpenAIGPT._split_inline_reasoning, which separates inline
+thought-delimiter tags (e.g. <think>...</think>) from text content
+during streaming.
+"""
+
+from langroid.language_models.openai_gpt import OpenAIGPT
+
+split = OpenAIGPT._split_inline_reasoning
+DELIMS = ("<think>", "</think>")
+
+
+class TestSplitInlineReasoning:
+    """Unit tests for the streaming inline-reasoning splitter."""
+
+    # --- no-op cases: nothing to parse ---
+
+    def test_empty_text(self):
+        """Empty event_text should pass through unchanged."""
+        text, reasoning, in_r = split("", "", False, DELIMS)
+        assert text == ""
+        assert reasoning == ""
+        assert in_r is False
+
+    def test_plain_text_no_delimiters(self):
+        """Text without any delimiters should pass through as-is."""
+        text, reasoning, in_r = split("hello world", "", False, DELIMS)
+        assert text == "hello world"
+        assert reasoning == ""
+        assert in_r is False
+
+    def test_already_has_reasoning_field(self):
+        """When the API already provides separate reasoning, skip parsing."""
+        text, reasoning, in_r = split("some text", "api reasoning", False, DELIMS)
+        assert text == "some text"
+        assert reasoning == "api reasoning"
+        assert in_r is False
+
+    # --- single chunk contains full <think>...</think> ---
+
+    def test_full_think_block_in_one_chunk(self):
+        """Complete <think>reasoning</think> in a single chunk."""
+        text, reasoning, in_r = split("<think>step 1</think>", "", False, DELIMS)
+        assert text == ""
+        assert reasoning == "step 1"
+        assert in_r is False
+
+    def test_text_before_and_after_think(self):
+        """Text surrounding a complete think block."""
+        text, reasoning, in_r = split(
+            "before<think>middle</think>after", "", False, DELIMS
+        )
+        assert text == "beforeafter"
+        assert reasoning == "middle"
+        assert in_r is False
+
+    def test_text_before_think_only(self):
+        """Text before think block, nothing after."""
+        text, reasoning, in_r = split(
+            "prefix<think>reasoning</think>", "", False, DELIMS
+        )
+        assert text == "prefix"
+        assert reasoning == "reasoning"
+        assert in_r is False
+
+    def test_text_after_think_only(self):
+        """Think block followed by text, no prefix."""
+        text, reasoning, in_r = split(
+            "<think>reasoning</think>suffix", "", False, DELIMS
+        )
+        assert text == "suffix"
+        assert reasoning == "reasoning"
+        assert in_r is False
+
+    # --- multi-chunk: start delimiter in one chunk, end in another ---
+
+    def test_start_delimiter_only(self):
+        """Chunk has <think> but no </think> — enters reasoning state."""
+        text, reasoning, in_r = split(
+            "hello<think>partial reasoning", "", False, DELIMS
+        )
+        assert text == "hello"
+        assert reasoning == "partial reasoning"
+        assert in_r is True
+
+    def test_continuation_mid_reasoning(self):
+        """Chunk arrives while already in reasoning (no delimiters)."""
+        text, reasoning, in_r = split("more reasoning stuff", "", True, DELIMS)
+        assert text == ""
+        assert reasoning == "more reasoning stuff"
+        assert in_r is True
+
+    def test_end_delimiter_while_in_reasoning(self):
+        """Chunk has </think> while in reasoning state."""
+        text, reasoning, in_r = split("final bit</think>answer", "", True, DELIMS)
+        assert text == "answer"
+        assert reasoning == "final bit"
+        assert in_r is False
+
+    def test_end_delimiter_no_trailing_text(self):
+        """End delimiter with nothing after it."""
+        text, reasoning, in_r = split("last thought</think>", "", True, DELIMS)
+        assert text == ""
+        assert reasoning == "last thought"
+        assert in_r is False
+
+    # --- multi-chunk sequence simulating a real stream ---
+
+    def test_three_chunk_sequence(self):
+        """Simulate: chunk1 opens thinking, chunk2 continues, chunk3 closes."""
+        # chunk 1: start of thinking
+        text1, reason1, in_r = split("<think>step 1", "", False, DELIMS)
+        assert text1 == ""
+        assert reason1 == "step 1"
+        assert in_r is True
+
+        # chunk 2: still thinking
+        text2, reason2, in_r = split(" step 2", "", in_r, DELIMS)
+        assert text2 == ""
+        assert reason2 == " step 2"
+        assert in_r is True
+
+        # chunk 3: done thinking, answer follows
+        text3, reason3, in_r = split(" step 3</think>The answer", "", in_r, DELIMS)
+        assert text3 == "The answer"
+        assert reason3 == " step 3"
+        assert in_r is False
+
+    # --- custom delimiters ---
+
+    def test_custom_delimiters(self):
+        """Works with non-default delimiters like <thinking>...</thinking>."""
+        custom = ("<thinking>", "</thinking>")
+        text, reasoning, in_r = split(
+            "<thinking>hmm</thinking>result", "", False, custom
+        )
+        assert text == "result"
+        assert reasoning == "hmm"
+        assert in_r is False
+
+    # --- edge cases ---
+
+    def test_empty_think_block(self):
+        """<think></think> with nothing inside."""
+        text, reasoning, in_r = split("<think></think>answer", "", False, DELIMS)
+        assert text == "answer"
+        assert reasoning == ""
+        assert in_r is False
+
+    def test_only_start_delimiter(self):
+        """Chunk is exactly the start delimiter, nothing else."""
+        text, reasoning, in_r = split("<think>", "", False, DELIMS)
+        assert text == ""
+        assert reasoning == ""
+        assert in_r is True
+
+    def test_only_end_delimiter_while_reasoning(self):
+        """Chunk is exactly the end delimiter."""
+        text, reasoning, in_r = split("</think>", "", True, DELIMS)
+        assert text == ""
+        assert reasoning == ""
+        assert in_r is False
+</file>
+
 <file path="tests/main/test_stateful_tool.py">
 """
 Simple test of a stateful tool: enabling this tool on an agent
@@ -96608,171 +96773,6 @@ class TestSeltzSearchIntegration:
         assert len(result) > 100
 </file>
 
-<file path="tests/main/test_split_inline_reasoning.py">
-"""
-Tests for OpenAIGPT._split_inline_reasoning, which separates inline
-thought-delimiter tags (e.g. <think>...</think>) from text content
-during streaming.
-"""
-
-from langroid.language_models.openai_gpt import OpenAIGPT
-
-split = OpenAIGPT._split_inline_reasoning
-DELIMS = ("<think>", "</think>")
-
-
-class TestSplitInlineReasoning:
-    """Unit tests for the streaming inline-reasoning splitter."""
-
-    # --- no-op cases: nothing to parse ---
-
-    def test_empty_text(self):
-        """Empty event_text should pass through unchanged."""
-        text, reasoning, in_r = split("", "", False, DELIMS)
-        assert text == ""
-        assert reasoning == ""
-        assert in_r is False
-
-    def test_plain_text_no_delimiters(self):
-        """Text without any delimiters should pass through as-is."""
-        text, reasoning, in_r = split("hello world", "", False, DELIMS)
-        assert text == "hello world"
-        assert reasoning == ""
-        assert in_r is False
-
-    def test_already_has_reasoning_field(self):
-        """When the API already provides separate reasoning, skip parsing."""
-        text, reasoning, in_r = split("some text", "api reasoning", False, DELIMS)
-        assert text == "some text"
-        assert reasoning == "api reasoning"
-        assert in_r is False
-
-    # --- single chunk contains full <think>...</think> ---
-
-    def test_full_think_block_in_one_chunk(self):
-        """Complete <think>reasoning</think> in a single chunk."""
-        text, reasoning, in_r = split("<think>step 1</think>", "", False, DELIMS)
-        assert text == ""
-        assert reasoning == "step 1"
-        assert in_r is False
-
-    def test_text_before_and_after_think(self):
-        """Text surrounding a complete think block."""
-        text, reasoning, in_r = split(
-            "before<think>middle</think>after", "", False, DELIMS
-        )
-        assert text == "beforeafter"
-        assert reasoning == "middle"
-        assert in_r is False
-
-    def test_text_before_think_only(self):
-        """Text before think block, nothing after."""
-        text, reasoning, in_r = split(
-            "prefix<think>reasoning</think>", "", False, DELIMS
-        )
-        assert text == "prefix"
-        assert reasoning == "reasoning"
-        assert in_r is False
-
-    def test_text_after_think_only(self):
-        """Think block followed by text, no prefix."""
-        text, reasoning, in_r = split(
-            "<think>reasoning</think>suffix", "", False, DELIMS
-        )
-        assert text == "suffix"
-        assert reasoning == "reasoning"
-        assert in_r is False
-
-    # --- multi-chunk: start delimiter in one chunk, end in another ---
-
-    def test_start_delimiter_only(self):
-        """Chunk has <think> but no </think> — enters reasoning state."""
-        text, reasoning, in_r = split(
-            "hello<think>partial reasoning", "", False, DELIMS
-        )
-        assert text == "hello"
-        assert reasoning == "partial reasoning"
-        assert in_r is True
-
-    def test_continuation_mid_reasoning(self):
-        """Chunk arrives while already in reasoning (no delimiters)."""
-        text, reasoning, in_r = split("more reasoning stuff", "", True, DELIMS)
-        assert text == ""
-        assert reasoning == "more reasoning stuff"
-        assert in_r is True
-
-    def test_end_delimiter_while_in_reasoning(self):
-        """Chunk has </think> while in reasoning state."""
-        text, reasoning, in_r = split("final bit</think>answer", "", True, DELIMS)
-        assert text == "answer"
-        assert reasoning == "final bit"
-        assert in_r is False
-
-    def test_end_delimiter_no_trailing_text(self):
-        """End delimiter with nothing after it."""
-        text, reasoning, in_r = split("last thought</think>", "", True, DELIMS)
-        assert text == ""
-        assert reasoning == "last thought"
-        assert in_r is False
-
-    # --- multi-chunk sequence simulating a real stream ---
-
-    def test_three_chunk_sequence(self):
-        """Simulate: chunk1 opens thinking, chunk2 continues, chunk3 closes."""
-        # chunk 1: start of thinking
-        text1, reason1, in_r = split("<think>step 1", "", False, DELIMS)
-        assert text1 == ""
-        assert reason1 == "step 1"
-        assert in_r is True
-
-        # chunk 2: still thinking
-        text2, reason2, in_r = split(" step 2", "", in_r, DELIMS)
-        assert text2 == ""
-        assert reason2 == " step 2"
-        assert in_r is True
-
-        # chunk 3: done thinking, answer follows
-        text3, reason3, in_r = split(" step 3</think>The answer", "", in_r, DELIMS)
-        assert text3 == "The answer"
-        assert reason3 == " step 3"
-        assert in_r is False
-
-    # --- custom delimiters ---
-
-    def test_custom_delimiters(self):
-        """Works with non-default delimiters like <thinking>...</thinking>."""
-        custom = ("<thinking>", "</thinking>")
-        text, reasoning, in_r = split(
-            "<thinking>hmm</thinking>result", "", False, custom
-        )
-        assert text == "result"
-        assert reasoning == "hmm"
-        assert in_r is False
-
-    # --- edge cases ---
-
-    def test_empty_think_block(self):
-        """<think></think> with nothing inside."""
-        text, reasoning, in_r = split("<think></think>answer", "", False, DELIMS)
-        assert text == "answer"
-        assert reasoning == ""
-        assert in_r is False
-
-    def test_only_start_delimiter(self):
-        """Chunk is exactly the start delimiter, nothing else."""
-        text, reasoning, in_r = split("<think>", "", False, DELIMS)
-        assert text == ""
-        assert reasoning == ""
-        assert in_r is True
-
-    def test_only_end_delimiter_while_reasoning(self):
-        """Chunk is exactly the end delimiter."""
-        text, reasoning, in_r = split("</think>", "", True, DELIMS)
-        assert text == ""
-        assert reasoning == ""
-        assert in_r is False
-</file>
-
 <file path="tests/main/test_tool_messages.py">
 import itertools
 import json
@@ -104989,290 +104989,6 @@ class MarkerPdfParser(DocumentParser):
         )
 </file>
 
-<file path="langroid/parsing/file_attachment.py">
-import base64
-import mimetypes
-import uuid
-from pathlib import Path
-from typing import Any, BinaryIO, Dict, Optional, Union
-from urllib.parse import urlparse
-
-from langroid.pydantic_v1 import BaseModel
-
-_HTTP_URL_SCHEMES = frozenset({"http", "https"})
-_REMOTE_URL_SCHEMES = _HTTP_URL_SCHEMES | {"ftp"}
-
-
-def _is_full_url(value: str, schemes: frozenset[str]) -> bool:
-    """Whether a value is a URL with an allowed scheme and network location."""
-    try:
-        parsed_url = urlparse(value)
-    except ValueError:
-        return False
-    return parsed_url.scheme.casefold() in schemes and bool(parsed_url.netloc)
-
-
-class FileAttachment(BaseModel):
-    """Represents a file attachment to be sent to an LLM API."""
-
-    content: bytes
-    filename: Optional[str] = None
-    mime_type: str = "application/octet-stream"
-    url: str | None = None
-    detail: str | None = None
-
-    def __init__(self, **data: Any) -> None:
-        """Initialize with sensible defaults for filename if not provided."""
-        if "filename" not in data or data["filename"] is None:
-            # Generate a more readable unique filename
-            unique_id = str(uuid.uuid4())[:8]
-            data["filename"] = f"attachment_{unique_id}.bin"
-        super().__init__(**data)
-
-    @classmethod
-    def _from_path(
-        cls,
-        file_path: Union[str, Path],
-        detail: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a file path.
-
-        Args:
-            file_path: Path to the file to attach
-
-        Returns:
-            FileAttachment instance
-        """
-        path = Path(file_path)
-        with open(path, "rb") as f:
-            content = f.read()
-
-        mime_type, _ = mimetypes.guess_type(path)
-        if mime_type is None:
-            mime_type = "application/octet-stream"
-
-        return cls(
-            content=content,
-            filename=path.name,
-            mime_type=mime_type,
-            detail=detail,
-        )
-
-    @classmethod
-    def _from_url(
-        cls,
-        url: str,
-        content: Optional[bytes] = None,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-        detail: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a URL.
-
-        Args:
-            url: URL to the file
-            content: Optional raw bytes content (if already fetched)
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename or url
-
-        Returns:
-            FileAttachment instance
-        """
-        if filename is None and url:
-            # Extract filename from URL if possible
-
-            parsed_url = urlparse(url)
-            path = parsed_url.path
-            filename = path.split("/")[-1] if path else None
-
-        if mime_type is None and filename:
-            mime_type, _ = mimetypes.guess_type(filename)
-
-        return cls(
-            content=content or b"",  # Empty bytes if no content provided
-            filename=filename,
-            mime_type=mime_type or "application/octet-stream",
-            url=url,
-            detail=detail,
-        )
-
-    @classmethod
-    def from_path(
-        cls,
-        path: Union[str, Path],
-        detail: str | None = None,
-        mime_type: str | None = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from either a local file path or a URL.
-
-        Args:
-            path: Path to the file or URL to fetch.
-            detail: Optional image detail level.
-            mime_type: Optional MIME type for a URL. Local paths infer their
-                MIME type from the filename.
-
-        Returns:
-            FileAttachment instance
-        """
-        # Convert to string if Path object
-        path_str = str(path)
-
-        # Check if it's a URL
-        if _is_full_url(path_str, _REMOTE_URL_SCHEMES):
-            return cls._from_url(
-                url=path_str,
-                detail=detail,
-                mime_type=mime_type,
-            )
-        else:
-            # Assume it's a local file path
-            return cls._from_path(path_str, detail=detail)
-
-    @classmethod
-    def from_bytes(
-        cls,
-        content: bytes,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from bytes content.
-
-        Args:
-            content: Raw bytes content
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename if provided
-
-        Returns:
-            FileAttachment instance
-        """
-        if mime_type is None and filename is not None:
-            mime_type, _ = mimetypes.guess_type(filename)
-
-        return cls(
-            content=content,
-            filename=filename,
-            mime_type=mime_type or "application/octet-stream",
-        )
-
-    @classmethod
-    def from_io(
-        cls,
-        file_obj: BinaryIO,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a file-like object.
-
-        Args:
-            file_obj: File-like object with binary content
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename if provided
-
-        Returns:
-            FileAttachment instance
-        """
-        content = file_obj.read()
-        return cls.from_bytes(content, filename, mime_type)
-
-    @classmethod
-    def from_text(
-        cls,
-        text: str,
-        filename: Optional[str] = None,
-        mime_type: str = "text/plain",
-        encoding: str = "utf-8",
-    ) -> "FileAttachment":
-        """Create a FileAttachment from text content.
-
-        Args:
-            text: Text content to include
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content
-            encoding: Text encoding to use
-
-        Returns:
-            FileAttachment instance
-        """
-        content = text.encode(encoding)
-        return cls(content=content, filename=filename, mime_type=mime_type)
-
-    def to_base64(self) -> str:
-        """Convert content to base64 encoding.
-
-        Returns:
-            Base64 encoded string
-        """
-        return base64.b64encode(self.content).decode("utf-8")
-
-    def to_data_uri(self) -> str:
-        """Convert content to a data URI.
-
-        Returns:
-            A data URI string containing the base64-encoded content with MIME type
-        """
-        base64_content = self.to_base64()
-        return f"data:{self.mime_type};base64,{base64_content}"
-
-    def _content_url(self) -> str:
-        """URL to send to the API for this attachment.
-
-        Returns:
-            The original URL when it is a full http/https URL that the API can
-            fetch directly, else a base64-encoded data URI of the content.
-        """
-        # If we have a URL and it's a full http/https URL, use it directly
-        if isinstance(self.url, str) and _is_full_url(
-            self.url,
-            _HTTP_URL_SCHEMES,
-        ):
-            return self.url
-        # Otherwise use base64 data URI
-        return self.to_data_uri()
-
-    def to_dict(self, model: str) -> Dict[str, Any]:
-        """
-        Convert to a dictionary suitable for API requests.
-        Tested only for PDF files.
-
-        Returns:
-            Dictionary with file data
-        """
-        if self.mime_type and self.mime_type.casefold().startswith("video/"):
-            # Videos are sent as `video_url` content-parts, mirroring the
-            # `image_url` parts used for images: a generic `file` part is not
-            # recognized as video input by the API.
-            return dict(
-                type="video_url",
-                video_url=dict(url=self._content_url()),
-            )
-        elif (
-            self.mime_type
-            and self.mime_type.startswith("image/")
-            or "gemini" in model.lower()
-        ):
-            # for gemini models, we use `image_url` for both pdf-files and images
-
-            image_url_dict: Dict[str, str] = dict(url=self._content_url())
-
-            # Add detail parameter if specified
-            if self.detail:
-                image_url_dict["detail"] = self.detail
-
-            return dict(
-                type="image_url",
-                image_url=image_url_dict,
-            )
-        else:
-            # For non-image files
-            return dict(
-                type="file",
-                file=dict(
-                    filename=self.filename,
-                    file_data=self.to_data_uri(),
-                ),
-            )
-</file>
-
 <file path="langroid/parsing/repo_loader.py">
 import itertools
 import json
@@ -106751,322 +106467,6 @@ def test_allow_dangerous_operations_bypasses_the_gate() -> None:
 
     assert "REJECTED" not in result.upper()
     assert agent.executed == [(query, {"name": "Ada"})]
-</file>
-
-<file path="tests/main/test_file_attachment.py">
-import base64
-import io
-import tempfile
-from pathlib import Path
-
-import pytest
-
-from langroid.parsing.file_attachment import FileAttachment
-
-
-class TestFileAttachment:
-    def test_from_bytes(self):
-        """Test creating attachment from bytes."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(
-            content=content, filename="test.txt", mime_type="text/plain"
-        )
-
-        assert attachment.content == content
-        assert attachment.filename == "test.txt"
-        assert attachment.mime_type == "text/plain"
-
-    def test_from_io(self):
-        """Test creating attachment from BytesIO object."""
-        content = b"test content"
-        file_obj = io.BytesIO(content)
-
-        attachment = FileAttachment.from_io(
-            file_obj=file_obj, filename="test.txt", mime_type="text/plain"
-        )
-
-        assert attachment.content == content
-        assert attachment.filename == "test.txt"
-        assert attachment.mime_type == "text/plain"
-
-    def test_from_text(self):
-        """Test creating attachment from text."""
-        text = "Hello, world!"
-        attachment = FileAttachment.from_text(text=text)
-
-        assert attachment.content == text.encode("utf-8")
-        assert attachment.mime_type == "text/plain"
-        assert attachment.filename is not None  # Should have default filename
-
-    def test_from_path(self):
-        """Test creating attachment from file path."""
-        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
-            tmp.write(b"test content")
-            tmp.flush()
-
-            attachment = FileAttachment.from_path(tmp.name)
-
-            assert attachment.content == b"test content"
-            assert attachment.filename == Path(tmp.name).name
-            assert attachment.mime_type == "text/plain"
-
-    def test_default_filename(self):
-        """Test default filename generation when none provided."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content)
-
-        assert attachment.filename is not None
-        assert "attachment_" in attachment.filename
-        assert attachment.filename.endswith(".bin")
-
-    def test_to_base64(self):
-        """Test base64 encoding."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content)
-
-        expected = base64.b64encode(content).decode("utf-8")
-        assert attachment.to_base64() == expected
-
-    def test_to_data_uri(self):
-        """Test data URI generation."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content, mime_type="text/plain")
-
-        data_uri = attachment.to_data_uri()
-        expected_base64 = base64.b64encode(content).decode("utf-8")
-        expected_uri = f"data:text/plain;base64,{expected_base64}"
-
-        assert data_uri == expected_uri
-
-    def test_to_dict(self):
-        """Test conversion to dict for API requests."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(
-            content=content, filename="test.txt", mime_type="text/plain"
-        )
-
-        result = attachment.to_dict("gpt-4.1")
-        assert result is not None
-
-    def test_to_dict_image(self):
-        """Images are sent as `image_url` content-parts."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(
-            content=content, filename="image.png", mime_type="image/png"
-        )
-
-        result = attachment.to_dict("gpt-4.1")
-
-        assert result["type"] == "image_url"
-        assert result["image_url"]["url"] == attachment.to_data_uri()
-
-    def test_to_dict_video(self):
-        """Videos are sent as `video_url` content-parts, not generic file parts."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content, filename="clip.mp4")
-
-        assert attachment.mime_type == "video/mp4"
-
-        result = attachment.to_dict("test-model")
-
-        assert result["type"] == "video_url"
-        assert result["video_url"]["url"] == attachment.to_data_uri()
-        assert "file" not in result
-
-    def test_to_dict_video_mime_type_case_insensitive(self):
-        """Video MIME matching is case-insensitive."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.mp4",
-            mime_type="Video/MP4",
-        )
-
-        result = attachment.to_dict("gpt-4.1")
-
-        assert result["type"] == "video_url"
-        assert result["video_url"]["url"] == attachment.to_data_uri()
-
-    @pytest.mark.parametrize(
-        "model",
-        ["gemini-2.5-flash", "litellm/gemini/gemini-2.5-flash"],
-    )
-    def test_to_dict_video_for_gemini_model(self, model: str):
-        """Gemini model routing does not reclassify videos as images."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.webm",
-            mime_type="video/webm",
-        )
-
-        result = attachment.to_dict(model)
-
-        assert result["type"] == "video_url"
-        assert result["video_url"]["url"] == attachment.to_data_uri()
-        assert "image_url" not in result
-
-    @pytest.mark.parametrize("scheme", ["http", "https"])
-    def test_to_dict_video_url_passthrough(self, scheme: str) -> None:
-        """A remote video URL is passed through instead of being base64-encoded."""
-        url = f"{scheme}://example.com/videos/clip.mp4"
-        attachment = FileAttachment.from_path(url)
-
-        assert attachment.mime_type == "video/mp4"
-
-        result = attachment.to_dict("test-model")
-
-        assert result["type"] == "video_url"
-        assert result["video_url"]["url"] == url
-
-    def test_to_dict_video_url_mixed_case_scheme(self) -> None:
-        """HTTP URL schemes are matched case-insensitively."""
-        url = "HTTPS://example.com/videos/clip.mp4"
-        attachment = FileAttachment.from_path(url)
-
-        result = attachment.to_dict("test-model")
-
-        assert result == {
-            "type": "video_url",
-            "video_url": {"url": url},
-        }
-
-    def test_to_dict_scheme_only_video_url_uses_data_uri(self) -> None:
-        """An HTTP scheme without a host is not treated as a remote URL."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.mp4",
-        )
-        attachment.url = "https:clip.mp4"
-
-        result = attachment.to_dict("test-model")
-
-        assert result == {
-            "type": "video_url",
-            "video_url": {"url": attachment.to_data_uri()},
-        }
-
-    def test_from_path_colon_filename_is_local(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """A local filename resembling a scheme-only URI remains local."""
-        monkeypatch.chdir(tmp_path)
-        local_path = Path("https:clip.mp4")
-        local_path.write_bytes(b"video content")
-
-        attachment = FileAttachment.from_path(local_path.name)
-
-        assert attachment.content == b"video content"
-        assert attachment.filename == local_path.name
-        assert attachment.url is None
-
-    def test_to_dict_extensionless_video_url(self) -> None:
-        """An explicit MIME type supports video URLs without file extensions."""
-        url = "https://example.com/watch?id=123"
-        attachment = FileAttachment.from_path(url, mime_type="video/mp4")
-
-        result = attachment.to_dict("test-model")
-
-        assert result == {
-            "type": "video_url",
-            "video_url": {"url": url},
-        }
-
-    @pytest.mark.parametrize("url", [object(), 123, ["https://example.com"]])
-    def test_to_dict_odd_runtime_url_uses_data_uri(self, url: object) -> None:
-        """Non-string runtime URL values safely fall back to attachment data."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.mp4",
-        )
-        attachment.__dict__["url"] = url
-
-        result = attachment.to_dict("test-model")
-
-        assert result == {
-            "type": "video_url",
-            "video_url": {"url": attachment.to_data_uri()},
-        }
-
-    def test_to_dict_non_media_file(self):
-        """Non-image, non-video files keep using generic `file` content-parts."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content, filename="doc.pdf")
-
-        result = attachment.to_dict("test-model")
-
-        assert result["type"] == "file"
-        assert result["file"]["filename"] == "doc.pdf"
-        assert result["file"]["file_data"] == attachment.to_data_uri()
-
-    def test_to_dict_non_video_file_for_gemini_model(self) -> None:
-        """Gemini non-video attachments retain image URL serialization."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="doc.pdf",
-            mime_type="application/pdf",
-        )
-        attachment.detail = "high"
-
-        result = attachment.to_dict("gemini-2.5-flash")
-
-        assert result == {
-            "type": "image_url",
-            "image_url": {
-                "url": attachment.to_data_uri(),
-                "detail": "high",
-            },
-        }
-
-    def test_to_dict_unknown_type(self):
-        """Unknown MIME types keep using generic `file` content-parts."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="file.unknown123",
-        )
-
-        result = attachment.to_dict("gpt-4.1")
-
-        assert attachment.mime_type == "application/octet-stream"
-        assert result == {
-            "type": "file",
-            "file": {
-                "filename": "file.unknown123",
-                "file_data": attachment.to_data_uri(),
-            },
-        }
-
-    def test_to_dict_null_mime_type(self):
-        """A post-construction null MIME type keeps generic serialization."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="file.unknown123",
-        )
-        attachment.__dict__["mime_type"] = None
-
-        result = attachment.to_dict("gpt-4.1")
-
-        assert result == {
-            "type": "file",
-            "file": {
-                "filename": "file.unknown123",
-                "file_data": "data:None;base64,dGVzdCBjb250ZW50",
-            },
-        }
-
-    def test_mime_type_inference(self):
-        """Test MIME type is correctly inferred from filename."""
-        content = b"test content"
-
-        pdf = FileAttachment.from_bytes(content=content, filename="doc.pdf")
-        assert pdf.mime_type == "application/pdf"
-
-        png = FileAttachment.from_bytes(content=content, filename="image.png")
-        assert png.mime_type == "image/png"
-
-        # Change .xyz to .unknown123 which should definitely be unrecognized
-        unknown = FileAttachment.from_bytes(content=content, filename="file.unknown123")
-        assert unknown.mime_type == "application/octet-stream"
 </file>
 
 <file path="tests/main/test_mcp_tools.py">
@@ -116524,6 +115924,720 @@ def _clear_cache() -> None:
         _client_cache.clear()
 </file>
 
+<file path="langroid/parsing/file_attachment.py">
+import base64
+import mimetypes
+import uuid
+from pathlib import Path
+from typing import Any, BinaryIO, Dict, Optional, Union
+from urllib.parse import urlparse
+
+from langroid.pydantic_v1 import BaseModel
+
+_HTTP_URL_SCHEMES = frozenset({"http", "https"})
+_FTP_URL_SCHEMES = frozenset({"ftp"})
+
+
+def _is_full_url(value: str, schemes: frozenset[str]) -> bool:
+    """Whether a value is a URL with an allowed scheme and valid hostname."""
+    try:
+        parsed_url = urlparse(value)
+        hostname = parsed_url.hostname
+    except ValueError:
+        return False
+    return (
+        parsed_url.scheme.casefold() in schemes
+        and hostname is not None
+        and bool(hostname.strip())
+    )
+
+
+class FileAttachment(BaseModel):
+    """Represents a file attachment to be sent to an LLM API."""
+
+    content: bytes
+    filename: Optional[str] = None
+    mime_type: str = "application/octet-stream"
+    url: str | None = None
+    detail: str | None = None
+
+    def __init__(self, **data: Any) -> None:
+        """Initialize with sensible defaults for filename if not provided."""
+        if "filename" not in data or data["filename"] is None:
+            # Generate a more readable unique filename
+            unique_id = str(uuid.uuid4())[:8]
+            data["filename"] = f"attachment_{unique_id}.bin"
+        super().__init__(**data)
+
+    @classmethod
+    def _from_path(
+        cls,
+        file_path: Union[str, Path],
+        detail: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a file path.
+
+        Args:
+            file_path: Path to the file to attach
+
+        Returns:
+            FileAttachment instance
+        """
+        path = Path(file_path)
+        with open(path, "rb") as f:
+            content = f.read()
+
+        mime_type, _ = mimetypes.guess_type(path)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        return cls(
+            content=content,
+            filename=path.name,
+            mime_type=mime_type,
+            detail=detail,
+        )
+
+    @classmethod
+    def _from_url(
+        cls,
+        url: str,
+        content: Optional[bytes] = None,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        detail: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a URL.
+
+        Args:
+            url: URL to the file
+            content: Optional raw bytes content (if already fetched)
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename or url
+
+        Returns:
+            FileAttachment instance
+        """
+        if filename is None and url:
+            # Extract filename from URL if possible
+
+            parsed_url = urlparse(url)
+            path = parsed_url.path
+            filename = path.split("/")[-1] if path else None
+
+        if mime_type is None and filename:
+            mime_type, _ = mimetypes.guess_type(filename)
+
+        return cls(
+            content=content or b"",  # Empty bytes if no content provided
+            filename=filename,
+            mime_type=mime_type or "application/octet-stream",
+            url=url,
+            detail=detail,
+        )
+
+    @classmethod
+    def from_path(
+        cls,
+        path: Union[str, Path],
+        detail: str | None = None,
+        mime_type: str | None = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from either a local file path or a URL.
+
+        Args:
+            path: Path to the file or URL to fetch.
+            detail: Optional image detail level.
+            mime_type: Optional MIME type for a URL. Local paths infer their
+                MIME type from the filename.
+
+        Returns:
+            FileAttachment instance
+
+        Raises:
+            ValueError: If path is an FTP URL, which is not supported.
+        """
+        # Convert to string if Path object
+        path_str = str(path)
+
+        if _is_full_url(path_str, _FTP_URL_SCHEMES):
+            raise ValueError("FTP URLs are not supported; use an HTTP(S) URL")
+
+        # Check if it's a URL
+        if _is_full_url(path_str, _HTTP_URL_SCHEMES):
+            return cls._from_url(
+                url=path_str,
+                detail=detail,
+                mime_type=mime_type,
+            )
+        else:
+            # Assume it's a local file path
+            return cls._from_path(path_str, detail=detail)
+
+    @classmethod
+    def from_bytes(
+        cls,
+        content: bytes,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from bytes content.
+
+        Args:
+            content: Raw bytes content
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename if provided
+
+        Returns:
+            FileAttachment instance
+        """
+        if mime_type is None and filename is not None:
+            mime_type, _ = mimetypes.guess_type(filename)
+
+        return cls(
+            content=content,
+            filename=filename,
+            mime_type=mime_type or "application/octet-stream",
+        )
+
+    @classmethod
+    def from_io(
+        cls,
+        file_obj: BinaryIO,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a file-like object.
+
+        Args:
+            file_obj: File-like object with binary content
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename if provided
+
+        Returns:
+            FileAttachment instance
+        """
+        content = file_obj.read()
+        return cls.from_bytes(content, filename, mime_type)
+
+    @classmethod
+    def from_text(
+        cls,
+        text: str,
+        filename: Optional[str] = None,
+        mime_type: str = "text/plain",
+        encoding: str = "utf-8",
+    ) -> "FileAttachment":
+        """Create a FileAttachment from text content.
+
+        Args:
+            text: Text content to include
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content
+            encoding: Text encoding to use
+
+        Returns:
+            FileAttachment instance
+        """
+        content = text.encode(encoding)
+        return cls(content=content, filename=filename, mime_type=mime_type)
+
+    def to_base64(self) -> str:
+        """Convert content to base64 encoding.
+
+        Returns:
+            Base64 encoded string
+        """
+        return base64.b64encode(self.content).decode("utf-8")
+
+    def to_data_uri(self) -> str:
+        """Convert content to a data URI.
+
+        Returns:
+            A data URI string containing the base64-encoded content with MIME type
+        """
+        base64_content = self.to_base64()
+        return f"data:{self.mime_type};base64,{base64_content}"
+
+    def _content_url(self) -> str:
+        """URL to send to the API for this attachment.
+
+        Returns:
+            The original URL when it is a full http/https URL that the API can
+            fetch directly, else a base64-encoded data URI of the content.
+        """
+        # If we have a URL and it's a full http/https URL, use it directly
+        if isinstance(self.url, str) and _is_full_url(
+            self.url,
+            _HTTP_URL_SCHEMES,
+        ):
+            return self.url
+        # Otherwise use base64 data URI
+        return self.to_data_uri()
+
+    def to_dict(self, model: str) -> Dict[str, Any]:
+        """
+        Convert to a dictionary suitable for API requests.
+        Tested only for PDF files.
+
+        Returns:
+            Dictionary with file data
+        """
+        if isinstance(self.mime_type, str):
+            if self.mime_type.casefold().startswith("video/"):
+                # Videos are sent as `video_url` content-parts, mirroring the
+                # `image_url` parts used for images: a generic `file` part is not
+                # recognized as video input by the API.
+                return dict(
+                    type="video_url",
+                    video_url=dict(url=self._content_url()),
+                )
+            if self.mime_type.casefold().startswith("image/"):
+                image_url_dict: Dict[str, str] = dict(url=self._content_url())
+
+                # Add detail parameter if specified
+                if self.detail:
+                    image_url_dict["detail"] = self.detail
+
+                return dict(
+                    type="image_url",
+                    image_url=image_url_dict,
+                )
+
+        # For non-image files and unexpected runtime MIME values
+        return dict(
+            type="file",
+            file=dict(
+                filename=self.filename,
+                file_data=self.to_data_uri(),
+            ),
+        )
+</file>
+
+<file path="tests/main/test_file_attachment.py">
+import base64
+import io
+import socket
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from langroid.parsing.file_attachment import FileAttachment
+
+
+class TestFileAttachment:
+    def test_from_bytes(self):
+        """Test creating attachment from bytes."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(
+            content=content, filename="test.txt", mime_type="text/plain"
+        )
+
+        assert attachment.content == content
+        assert attachment.filename == "test.txt"
+        assert attachment.mime_type == "text/plain"
+
+    def test_from_io(self):
+        """Test creating attachment from BytesIO object."""
+        content = b"test content"
+        file_obj = io.BytesIO(content)
+
+        attachment = FileAttachment.from_io(
+            file_obj=file_obj, filename="test.txt", mime_type="text/plain"
+        )
+
+        assert attachment.content == content
+        assert attachment.filename == "test.txt"
+        assert attachment.mime_type == "text/plain"
+
+    def test_from_text(self):
+        """Test creating attachment from text."""
+        text = "Hello, world!"
+        attachment = FileAttachment.from_text(text=text)
+
+        assert attachment.content == text.encode("utf-8")
+        assert attachment.mime_type == "text/plain"
+        assert attachment.filename is not None  # Should have default filename
+
+    def test_from_path(self):
+        """Test creating attachment from file path."""
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
+            tmp.write(b"test content")
+            tmp.flush()
+
+            attachment = FileAttachment.from_path(tmp.name)
+
+            assert attachment.content == b"test content"
+            assert attachment.filename == Path(tmp.name).name
+            assert attachment.mime_type == "text/plain"
+
+    def test_default_filename(self):
+        """Test default filename generation when none provided."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content)
+
+        assert attachment.filename is not None
+        assert "attachment_" in attachment.filename
+        assert attachment.filename.endswith(".bin")
+
+    def test_to_base64(self):
+        """Test base64 encoding."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content)
+
+        expected = base64.b64encode(content).decode("utf-8")
+        assert attachment.to_base64() == expected
+
+    def test_to_data_uri(self):
+        """Test data URI generation."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content, mime_type="text/plain")
+
+        data_uri = attachment.to_data_uri()
+        expected_base64 = base64.b64encode(content).decode("utf-8")
+        expected_uri = f"data:text/plain;base64,{expected_base64}"
+
+        assert data_uri == expected_uri
+
+    def test_to_dict(self):
+        """Test conversion to dict for API requests."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(
+            content=content, filename="test.txt", mime_type="text/plain"
+        )
+
+        result = attachment.to_dict("gpt-4.1")
+        assert result is not None
+
+    def test_to_dict_image(self):
+        """Images are sent as `image_url` content-parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(
+            content=content, filename="image.png", mime_type="image/png"
+        )
+
+        result = attachment.to_dict("gpt-4.1")
+
+        assert result["type"] == "image_url"
+        assert result["image_url"]["url"] == attachment.to_data_uri()
+
+    def test_to_dict_video(self):
+        """Videos are sent as `video_url` content-parts, not generic file parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content, filename="clip.mp4")
+
+        assert attachment.mime_type == "video/mp4"
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == attachment.to_data_uri()
+        assert "file" not in result
+
+    def test_to_dict_video_mime_type_case_insensitive(self):
+        """Video MIME matching is case-insensitive."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.mp4",
+            mime_type="Video/MP4",
+        )
+
+        result = attachment.to_dict("gpt-4.1")
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == attachment.to_data_uri()
+
+    @pytest.mark.parametrize(
+        "model",
+        ["gemini-2.5-flash", "litellm/gemini/gemini-2.5-flash"],
+    )
+    def test_to_dict_video_for_gemini_model(self, model: str):
+        """Gemini model routing does not reclassify videos as images."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.webm",
+            mime_type="video/webm",
+        )
+
+        result = attachment.to_dict(model)
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == attachment.to_data_uri()
+        assert "image_url" not in result
+
+    @pytest.mark.parametrize("scheme", ["http", "https"])
+    def test_to_dict_video_url_passthrough(self, scheme: str) -> None:
+        """A remote video URL is passed through instead of being base64-encoded."""
+        url = f"{scheme}://example.com/videos/clip.mp4"
+        attachment = FileAttachment.from_path(url)
+
+        assert attachment.mime_type == "video/mp4"
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == url
+
+    def test_to_dict_video_url_passthrough_is_offline(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Serializing a remote video URL does not open a network socket."""
+
+        def fail_socket(*args: object, **kwargs: object) -> None:
+            raise AssertionError("serialization attempted network access")
+
+        monkeypatch.setattr(socket, "socket", fail_socket)
+        url = "https://example.com/videos/clip.mp4"
+        attachment = FileAttachment.from_path(url)
+
+        assert attachment.to_dict("test-model") == {
+            "type": "video_url",
+            "video_url": {"url": url},
+        }
+
+    def test_to_dict_ftp_video_url_uses_data_uri(self) -> None:
+        """FTP video URLs fall back to the available attachment data."""
+        content = b"known video bytes"
+        attachment = FileAttachment(
+            content=content,
+            filename="clip.mp4",
+            mime_type="video/mp4",
+            url="ftp://example.com/videos/clip.mp4",
+        )
+
+        assert attachment.to_dict("test-model") == {
+            "type": "video_url",
+            "video_url": {"url": "data:video/mp4;base64,a25vd24gdmlkZW8gYnl0ZXM="},
+        }
+
+    def test_to_dict_video_url_mixed_case_scheme(self) -> None:
+        """HTTP URL schemes are matched case-insensitively."""
+        url = "HTTPS://example.com/videos/clip.mp4"
+        attachment = FileAttachment.from_path(url)
+
+        result = attachment.to_dict("test-model")
+
+        assert result == {
+            "type": "video_url",
+            "video_url": {"url": url},
+        }
+
+    def test_to_dict_scheme_only_video_url_uses_data_uri(self) -> None:
+        """An HTTP scheme without a host is not treated as a remote URL."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.mp4",
+        )
+        attachment.url = "https:clip.mp4"
+
+        result = attachment.to_dict("test-model")
+
+        assert result == {
+            "type": "video_url",
+            "video_url": {"url": attachment.to_data_uri()},
+        }
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://@/clip.mp4",
+            "https://:443/clip.mp4",
+            "https://user@/clip.mp4",
+            "https:// /clip.mp4",
+        ],
+    )
+    def test_to_dict_malformed_video_url_uses_data_uri(self, url: str) -> None:
+        """Malformed HTTP authorities fall back to attachment data."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.mp4",
+        )
+        attachment.url = url
+
+        assert attachment.to_dict("test-model") == {
+            "type": "video_url",
+            "video_url": {"url": attachment.to_data_uri()},
+        }
+
+    def test_from_path_colon_filename_is_local(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A local filename resembling a scheme-only URI remains local."""
+        monkeypatch.chdir(tmp_path)
+        local_path = Path("https:clip.mp4")
+        local_path.write_bytes(b"video content")
+
+        attachment = FileAttachment.from_path(local_path.name)
+
+        assert attachment.content == b"video content"
+        assert attachment.filename == local_path.name
+        assert attachment.url is None
+
+    def test_to_dict_extensionless_video_url(self) -> None:
+        """An explicit MIME type supports video URLs without file extensions."""
+        url = "https://example.com/watch?id=123"
+        attachment = FileAttachment.from_path(url, mime_type="video/mp4")
+
+        result = attachment.to_dict("test-model")
+
+        assert result == {
+            "type": "video_url",
+            "video_url": {"url": url},
+        }
+
+    @pytest.mark.parametrize("url", [object(), 123, ["https://example.com"]])
+    def test_to_dict_odd_runtime_url_uses_data_uri(self, url: object) -> None:
+        """Non-string runtime URL values safely fall back to attachment data."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.mp4",
+        )
+        attachment.__dict__["url"] = url
+
+        result = attachment.to_dict("test-model")
+
+        assert result == {
+            "type": "video_url",
+            "video_url": {"url": attachment.to_data_uri()},
+        }
+
+    def test_to_dict_non_media_file(self):
+        """Non-image, non-video files keep using generic `file` content-parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content, filename="doc.pdf")
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "file"
+        assert result["file"]["filename"] == "doc.pdf"
+        assert result["file"]["file_data"] == attachment.to_data_uri()
+
+    def test_to_dict_non_video_file_for_gemini_model(self) -> None:
+        """Gemini PDF attachments retain generic file serialization."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="doc.pdf",
+            mime_type="application/pdf",
+        )
+        attachment.detail = "high"
+
+        result = attachment.to_dict("gemini-2.5-flash")
+
+        assert result == {
+            "type": "file",
+            "file": {
+                "filename": "doc.pdf",
+                "file_data": attachment.to_data_uri(),
+            },
+        }
+
+    @pytest.mark.parametrize(
+        ("filename", "mime_type"),
+        [
+            ("file.bin", "application/octet-stream"),
+            ("recording.mp3", "audio/mpeg"),
+        ],
+    )
+    def test_to_dict_other_mime_type_for_gemini_model(
+        self,
+        filename: str,
+        mime_type: str,
+    ) -> None:
+        """Gemini does not reclassify non-image, non-video MIME types."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename=filename,
+            mime_type=mime_type,
+        )
+
+        assert attachment.to_dict("gemini-2.5-flash") == {
+            "type": "file",
+            "file": {
+                "filename": filename,
+                "file_data": attachment.to_data_uri(),
+            },
+        }
+
+    def test_from_path_rejects_ftp_url(self) -> None:
+        """The public constructor rejects unsupported FTP URLs."""
+        with pytest.raises(ValueError, match="FTP URLs are not supported"):
+            FileAttachment.from_path("ftp://example.com/videos/clip.mp4")
+
+    def test_to_dict_unknown_type(self):
+        """Unknown MIME types keep using generic `file` content-parts."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="file.unknown123",
+        )
+
+        result = attachment.to_dict("gpt-4.1")
+
+        assert attachment.mime_type == "application/octet-stream"
+        assert result == {
+            "type": "file",
+            "file": {
+                "filename": "file.unknown123",
+                "file_data": attachment.to_data_uri(),
+            },
+        }
+
+    def test_to_dict_null_mime_type(self):
+        """A post-construction null MIME type keeps generic serialization."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="file.unknown123",
+        )
+        attachment.__dict__["mime_type"] = None
+
+        result = attachment.to_dict("gpt-4.1")
+
+        assert result == {
+            "type": "file",
+            "file": {
+                "filename": "file.unknown123",
+                "file_data": "data:None;base64,dGVzdCBjb250ZW50",
+            },
+        }
+
+    @pytest.mark.parametrize("mime_type", [123, {}, []])
+    def test_to_dict_non_string_mime_type_uses_generic_file(
+        self,
+        mime_type: object,
+    ) -> None:
+        """Odd runtime MIME values retain generic file serialization."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="file.bin",
+        )
+        attachment.__dict__["mime_type"] = mime_type
+
+        assert attachment.to_dict("gpt-4.1") == {
+            "type": "file",
+            "file": {
+                "filename": "file.bin",
+                "file_data": f"data:{mime_type};base64,dGVzdCBjb250ZW50",
+            },
+        }
+
+    def test_mime_type_inference(self):
+        """Test MIME type is correctly inferred from filename."""
+        content = b"test content"
+
+        pdf = FileAttachment.from_bytes(content=content, filename="doc.pdf")
+        assert pdf.mime_type == "application/pdf"
+
+        png = FileAttachment.from_bytes(content=content, filename="image.png")
+        assert png.mime_type == "image/png"
+
+        # Change .xyz to .unknown123 which should definitely be unrecognized
+        unknown = FileAttachment.from_bytes(content=content, filename="file.unknown123")
+        assert unknown.mime_type == "application/octet-stream"
+</file>
+
 <file path="SECURITY.md">
 # Security Policy
 
@@ -124960,7 +125074,7 @@ def test_chat_num_tokens_counts_attachment_payload(agent):
 
 def test_attachment_payload_reduces_output_length():
     """Test preflight shrinks output length when attachments consume context."""
-    context_length = 1000
+    context_length = 1100
     max_output_tokens = 500
     min_output_tokens = 50
     config = ChatAgentConfig(
@@ -125902,15 +126016,6 @@ markdown_extensions:
 extra_javascript:
   - javascripts/mathjax.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.16.0
-  hooks:
-    - id: ruff
 </file>
 
 <file path="langroid/language_models/openai_gpt.py">
@@ -128482,6 +128587,15 @@ class OpenAIGPT(LanguageModel):
         else:
             response_dict = response.model_dump()
         return self._process_chat_completion_response(cached, response_dict)
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.16.0
+  hooks:
+    - id: ruff
 </file>
 
 <file path="pyproject.toml">
