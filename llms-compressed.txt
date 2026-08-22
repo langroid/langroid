@@ -558,6 +558,7 @@ langroid/
     agent_chats.py
     code_parser.py
     document_parser.py
+    document_url.py
     file_attachment.py
     md_parser.py
     para_sentence_split.py
@@ -32666,339 +32667,6 @@ def similarity(self, text1: str, text2: str) -> float
 """Compute cosine similarity between two texts."""
 </file>
 
-<file path="langroid/embedding_models/models.py">
-AzureADTokenProvider = Callable[[], str]
-⋮----
-class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "openai"
-model_name: str = "text-embedding-3-small"
-api_key: str = ""
-api_base: Optional[str] = None
-organization: str = ""
-dims: int = 1536
-context_length: int = 8192
-langdb_params: LangDBParams = LangDBParams()
-⋮----
-model_config = SettingsConfigDict(env_prefix="OPENAI_")
-⋮----
-class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "azure-openai"
-⋮----
-api_base: str = ""
-deployment_name: Optional[str] = None
-# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
-# change this to required  supported version
-api_version: Optional[str] = "2024-06-01"
-# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
-azure_ad_token: Optional[str] = None
-azure_ad_token_provider: Optional[AzureADTokenProvider] = None
-⋮----
-model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
-⋮----
-class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "sentence-transformer"
-model_name: str = "BAAI/bge-large-en-v1.5"
-context_length: int = 512
-data_parallel: bool = False
-# Select device (e.g. "cuda", "cpu") when data parallel is disabled
-device: Optional[str] = None
-# Select devices when data parallel is enabled
-devices: Optional[list[str]] = None
-⋮----
-class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-"""Config for qdrant/fastembed embeddings,
-    see here: https://github.com/qdrant/fastembed
-    """
-⋮----
-model_type: str = "fastembed"
-model_name: str = "BAAI/bge-small-en-v1.5"
-batch_size: int = 256
-cache_dir: Optional[str] = None
-threads: Optional[int] = None
-parallel: Optional[int] = None
-additional_kwargs: Dict[str, Any] = {}
-⋮----
-class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-context_length: int = 2048
-batch_size: int = 2048
-⋮----
-class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "gemini"
-model_name: str = "models/text-embedding-004"
-⋮----
-dims: int = 768
-batch_size: int = 512
-⋮----
-class EmbeddingFunctionCallable
-⋮----
-"""
-    A callable class designed to generate embeddings for a list of texts using
-    the OpenAI or Azure OpenAI API, with automatic retries on failure.
-
-    Attributes:
-        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
-               configuration and utilities for generating embeddings.
-
-    Methods:
-        __call__(input: List[str]) -> Embeddings: Generate embeddings for
-                                a list of input texts.
-    """
-⋮----
-def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
-⋮----
-"""
-        Initialize the EmbeddingFunctionCallable with a specific model.
-
-        Args:
-            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
-                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
-                            generating embeddings.
-            batch_size (int): Batch size
-        """
-⋮----
-def __call__(self, input: List[str]) -> Embeddings
-⋮----
-"""
-        Generate embeddings for a given list of input texts using the OpenAI API,
-        with retries on failure.
-
-        This method:
-        - Truncates each text in the input list to the model's maximum context length.
-        - Processes the texts in batches to generate embeddings efficiently.
-        - Automatically retries the embedding generation process with exponential
-        backoff in case of failures.
-
-        Args:
-            input (List[str]): A list of input texts to generate embeddings for.
-
-        Returns:
-            Embeddings: A list of embedding vectors corresponding to the input texts.
-        """
-embeds = []
-⋮----
-# Truncate texts to context length while preserving text format
-truncated_texts = self.embed_model.truncate_texts(input)
-⋮----
-# Process in batches
-⋮----
-result = self.embed_model.client.embeddings.create(
-⋮----
-input=batch, model=self.embed_model.config.model_name  # type: ignore
-⋮----
-batch_embeds = [d.embedding for d in result.data]
-⋮----
-embeds = self.embed_model.model.encode_multi_process(
-⋮----
-batch_embeds = self.embed_model.model.encode(
-⋮----
-).tolist()  # type: ignore
-⋮----
-embeddings = self.embed_model.model.embed(
-⋮----
-embeds = [embedding.tolist() for embedding in embeddings]
-⋮----
-tokenized_text = self.embed_model.tokenize_string(input_string)
-⋮----
-gen_embedding = self.embed_model.generate_embedding(
-⋮----
-embeds = self.embed_model.generate_embeddings(input)
-⋮----
-class OpenAIEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
-⋮----
-# Check if using LangDB
-⋮----
-project_id = self.config.langdb_params.project_id
-⋮----
-model_for_tokenizer = self.config.model_name
-⋮----
-def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
-⋮----
-"""
-        Truncate texts to the embedding model's context length.
-        TODO: Maybe we should show warning, and consider doing T5 summarization?
-        """
-truncated_tokens = [
-⋮----
-# LangDB embedding endpt only works with strings, not tokens
-⋮----
-def embedding_fn(self) -> Callable[[List[str]], Embeddings]
-⋮----
-@property
-    def embedding_dims(self) -> int
-⋮----
-class AzureOpenAIEmbeddings(EmbeddingModel)
-⋮----
-"""
-    Azure OpenAI embeddings model implementation.
-    """
-⋮----
-"""
-        Initializes Azure OpenAI embeddings model.
-
-        Args:
-            config: Configuration for Azure OpenAI embeddings model.
-        Raises:
-            ValueError: If required Azure config values are not set.
-        """
-⋮----
-"""Get the embedding function for Azure OpenAI.
-
-        Returns:
-            Callable that generates embeddings for input texts.
-        """
-⋮----
-STEC = SentenceTransformerEmbeddingsConfig
-⋮----
-class SentenceTransformerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: STEC = STEC())
-⋮----
-# this is an "extra" optional dependency, so we import it here
-⋮----
-self.config.devices  # type: ignore
-⋮----
-self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
-⋮----
-dims = self.model.get_sentence_embedding_dimension()
-⋮----
-return dims  # type: ignore
-⋮----
-class FastEmbedEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
-⋮----
-@cached_property
-    def embedding_dims(self) -> int
-⋮----
-embed_func = self.embedding_fn()
-⋮----
-LCSEC = LlamaCppServerEmbeddingsConfig
-⋮----
-class LlamaCppServerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: LCSEC = LCSEC())
-⋮----
-def tokenize_string(self, text: str) -> List[int]
-⋮----
-data = {"content": text, "add_special": False, "with_pieces": False}
-response = requests.post(self.tokenize_url, json=data)
-⋮----
-tokens = response.json()["tokens"]
-⋮----
-# not all(isinstance(token, (int, float)) for token in tokens):
-⋮----
-def detokenize_string(self, tokens: List[int]) -> str
-⋮----
-data = {"tokens": tokens}
-response = requests.post(self.detokenize_url, json=data)
-⋮----
-text = response.json()["content"]
-⋮----
-def truncate_string_to_context_size(self, text: str) -> str
-⋮----
-tokens = self.tokenize_string(text)
-tokens = tokens[: self.config.context_length]
-⋮----
-def generate_embedding(self, text: str) -> List[int | float]
-⋮----
-data = {"content": text}
-response = requests.post(self.embedding_url, json=data)
-⋮----
-embeddings = self._extract_embedding(response.json())
-⋮----
-"""
-        Extract embedding vector from llama.cpp response.
-
-        Handles multiple response formats:
-        1. Native /embedding: {"embedding": [floats]}
-        2. Array format: [{"embedding": [floats]}]
-        3. Double-nested: [{"embedding": [[floats]]}]
-        4. OpenAI /v1/embeddings: {"data": [{"embedding": [floats]}]}
-        5. Nested in dict: {"embedding": [[floats]]}
-
-        Args:
-            response_json: The JSON response from llama.cpp server
-
-        Returns:
-            List of floats representing the embedding vector
-
-        Raises:
-            ValueError: If response format is not recognized
-        """
-⋮----
-# Try native format first: {"embedding": [floats]}
-⋮----
-embeddings = response_json["embedding"]
-# Check if it's [floats]
-⋮----
-# Might be nested: {"embedding": [[floats]]}
-⋮----
-# Try OpenAI format: {"data": [{"embedding": [floats]}]}
-⋮----
-data = response_json["data"]
-⋮----
-embeddings = data[0]["embedding"]
-⋮----
-# Try array format: [{"embedding": [floats]}] or [{"embedding": [[floats]]}]
-⋮----
-first_item = response_json[0]
-⋮----
-embeddings = first_item["embedding"]
-⋮----
-# Check if it's [[floats]]
-⋮----
-class GeminiEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
-⋮----
-def generate_embeddings(self, texts: List[str]) -> List[List[float]]
-⋮----
-"""Generates embeddings for a list of input texts."""
-all_embeddings: List[List[float]] = []
-⋮----
-result = self.client.models.embed_content(  # type: ignore[attr-defined]
-⋮----
-contents=batch,  # type: ignore
-⋮----
-# Extract .values from ContentEmbedding objects
-⋮----
-[emb.values for emb in result.embeddings]  # type: ignore
-⋮----
-def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
-⋮----
-"""
-    Args:
-        embedding_fn_type: Type of embedding model to use. Options are:
-         - "openai",
-         - "azure-openai",
-         - "sentencetransformer", or
-         - "fastembed".
-            (others may be added in the future)
-    Returns:
-        EmbeddingModel: The corresponding embedding model class.
-    """
-⋮----
-return OpenAIEmbeddings  # type: ignore
-⋮----
-return AzureOpenAIEmbeddings  # type: ignore
-⋮----
-return FastEmbedEmbeddings  # type: ignore
-⋮----
-return LlamaCppServerEmbeddings  # type: ignore
-⋮----
-return GeminiEmbeddings  # type: ignore
-else:  # default sentence transformer
-return SentenceTransformerEmbeddings  # type: ignore
-</file>
-
 <file path="langroid/embedding_models/remote_embeds.py">
 """
 If run as a script, starts an RPC server which handles remote
@@ -37165,234 +36833,6 @@ def transform_pinecone_vector(self, metadata_dict: Dict[str, Any]) -> Document
             metadata_dict: Dict - the metadata dictionary from the Pinecone
                 vector query match
         """
-</file>
-
-<file path="langroid/vector_store/qdrantdb.py">
-logger = logging.getLogger(__name__)
-⋮----
-T = TypeVar("T")
-⋮----
-def from_optional(x: Optional[T], default: T) -> T
-⋮----
-def is_valid_uuid(uuid_to_test: str) -> bool
-⋮----
-"""
-    Check if a given string is a valid UUID.
-    """
-⋮----
-uuid_obj = uuid.UUID(uuid_to_test)
-⋮----
-# Check for valid unsigned 64-bit integer
-⋮----
-int_value = int(uuid_to_test)
-⋮----
-class QdrantDBConfig(VectorStoreConfig)
-⋮----
-cloud: bool = True
-docker: bool = False
-collection_name: str | None = "temp"
-storage_path: str = ".qdrant/data"
-embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-use_sparse_embeddings: bool = False
-sparse_embedding_model: str = "naver/splade-v3-distilbert"
-sparse_limit: int = 3
-distance: str = "cosine"
-⋮----
-class QdrantDB(VectorStore)
-⋮----
-def __init__(self, config: QdrantDBConfig = QdrantDBConfig())
-⋮----
-self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
-⋮----
-key = os.getenv("QDRANT_API_KEY")
-url = os.getenv("QDRANT_API_URL")
-⋮----
-new_storage_path = config.storage_path + ".new"
-⋮----
-# Note: Only create collection if a non-null collection name is provided.
-# This is useful to delay creation of vecdb until we have a suitable
-# collection name (e.g. we could get it from the url or folder path).
-⋮----
-def clone(self) -> "QdrantDB"
-⋮----
-"""Create an independent Qdrant client when running against Qdrant Cloud."""
-⋮----
-cloned = super().clone()
-⋮----
-def close(self) -> None
-⋮----
-"""
-        Close the QdrantDB client and release any resources (e.g., file locks).
-        This is especially important for local storage to release the .lock file.
-        """
-⋮----
-# QdrantLocal has a close method that releases the lock
-⋮----
-def __enter__(self) -> "QdrantDB"
-⋮----
-"""Context manager entry."""
-⋮----
-def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
-⋮----
-"""Context manager exit - ensure cleanup even if an exception occurred."""
-⋮----
-def clear_empty_collections(self) -> int
-⋮----
-coll_names = self.list_collections()
-n_deletes = 0
-⋮----
-info = self.client.get_collection(collection_name=name)
-⋮----
-def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-"""Clear all collections with the given prefix."""
-⋮----
-coll_names = [
-⋮----
-n_empty_deletes = 0
-n_non_empty_deletes = 0
-⋮----
-points_count = from_optional(info.points_count, 0)
-⋮----
-def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-"""
-        Returns:
-            List of collection names that have at least one vector.
-
-        Args:
-            empty (bool, optional): Whether to include empty collections.
-        """
-⋮----
-colls = list(self.client.get_collections())[0][1]
-⋮----
-counts = []
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-"""
-        Create a collection with the given name, optionally replacing an existing
-            collection if `replace` is True.
-        Args:
-            collection_name (str): Name of the collection to create.
-            replace (bool): Whether to replace an existing collection
-                with the same name. Defaults to False.
-        """
-⋮----
-coll = self.client.get_collection(collection_name=collection_name)
-⋮----
-vectors_config = {
-sparse_vectors_config = None
-⋮----
-sparse_vectors_config = {
-⋮----
-collection_info = self.client.get_collection(collection_name=collection_name)
-⋮----
-level = logger.getEffectiveLevel()
-⋮----
-def get_sparse_embeddings(self, inputs: List[str]) -> List["SparseVector"]
-⋮----
-tokens = self.sparse_tokenizer(
-output = self.sparse_model(**tokens)
-vectors = torch.max(
-sparse_embeddings = []
-⋮----
-cols = vec.nonzero().squeeze().cpu().tolist()
-weights = vec[cols].cpu().tolist()
-⋮----
-def add_documents(self, documents: Sequence[Document]) -> None
-⋮----
-# Add id to metadata if not already present
-⋮----
-# Fix the ids due to qdrant finickiness
-⋮----
-colls = self.list_collections(empty=True)
-⋮----
-document_dicts = [doc.model_dump() for doc in documents]
-embedding_vecs = self.embedding_fn([doc.content for doc in documents])
-sparse_embedding_vecs = self.get_sparse_embeddings(
-⋮----
-ids = [self._to_int_or_uuid(d.id()) for d in documents]
-# don't insert all at once, batch in chunks of b,
-# else we get an API error
-b = self.config.batch_size
-⋮----
-vectors: Dict[str, Embeddings | List[SparseVector]] = {
-⋮----
-coll_found: bool = False
-⋮----
-# poll until collection is ready
-⋮----
-coll_found = True
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-def _to_int_or_uuid(self, id: str) -> int | str
-⋮----
-int_val = int(id)
-⋮----
-# If doc_id is already a valid UUID, return it as is
-⋮----
-# Otherwise, generate a UUID from the doc_id
-# Convert doc_id to string if it's not already
-id_str = str(id)
-⋮----
-# Hash the document ID using SHA-1
-hash_object = hashlib.sha1(id_str.encode())
-hash_digest = hash_object.hexdigest()
-⋮----
-# Truncate or manipulate the hash to fit into a UUID (128 bits)
-uuid_str = hash_digest[:32]
-⋮----
-# Format this string into a UUID format
-formatted_uuid = uuid.UUID(uuid_str)
-⋮----
-def get_all_documents(self, where: str = "") -> List[Document]
-⋮----
-docs = []
-offset = 0
-filter = Filter() if where == "" else Filter.model_validate(json.loads(where))
-⋮----
-limit=10_000,  # try getting all at once, if not we keep paging
-⋮----
-self.config.document_class(**record.payload)  # type: ignore
-⋮----
-# ignore
-⋮----
-offset = next_page_offset  # type: ignore
-⋮----
-def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-_ids = [self._to_int_or_uuid(id) for id in ids]
-records = self.client.retrieve(
-# Note the records may NOT be in the order of the ids,
-# so we re-order them here.
-id2payload = {record.id: record.payload for record in records}
-ordered_payloads = [id2payload[id] for id in _ids if id in id2payload]
-docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
-⋮----
-embedding = self.embedding_fn([text])[0]
-# TODO filter may not work yet
-⋮----
-filter = Filter()
-⋮----
-filter = Filter.model_validate(json.loads(where))
-requests = [
-⋮----
-sparse_embedding = self.get_sparse_embeddings([text])[0]
-⋮----
-search_result_lists: List[List[ScoredPoint]] = self.client.search_batch(
-⋮----
-search_result = [
-⋮----
-]  # 2D list -> 1D list
-scores = [match.score for match in search_result if match is not None]
-docs = [
-⋮----
-self.config.document_class(**(match.payload))  # type: ignore
-⋮----
-doc_score_pairs = list(zip(docs, scores))
-max_score = max(ds[1] for ds in doc_score_pairs)
 </file>
 
 <file path="langroid/vector_store/weaviatedb.py">
@@ -42551,6 +41991,157 @@ df = df[["year", "state", "text"]]
 ⋮----
 result = task.run(
 # check there is non-empty response content
+</file>
+
+<file path="tests/main/test_llm_async.py">
+# allow streaming globally, but can be turned off by individual models
+⋮----
+cfg = OpenAIGPTConfig(
+⋮----
+stream=streaming,  # use streaming output if enabled globally
+⋮----
+mdl = OpenAIGPT(config=cfg)
+question = "What is the capital of " + country + "?"
+⋮----
+# chat mode via `generate`,
+# i.e. use same call as for completion, but the setting below
+# actually calls `achat` under the hood
+⋮----
+# check that "agenerate" works
+response = await mdl.agenerate(prompt=question, max_tokens=50)
+⋮----
+# actual chat mode
+messages = [
+response = await mdl.achat(messages=messages, max_tokens=50)
+⋮----
+# should be from cache this time
+⋮----
+# pass intentional bad msg to test error handling
+⋮----
+@pytest.mark.asyncio
+async def test_llm_async_concurrent(test_settings: Settings)
+⋮----
+stream=False,  # use streaming output if enabled globally
+⋮----
+N = 5
+questions = ["1+" + str(i) for i in range(N)]
+expected_answers = [str(i + 1) for i in range(N)]
+answers = await asyncio.gather(
+⋮----
+async def test_llm_langdb(model: str)
+⋮----
+"""Test that LLM access via LangDB works."""
+⋮----
+llm_config_langdb = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_langdb)
+result = await llm.achat("what is 3+4?")
+⋮----
+async def test_llm_openrouter(model: str)
+⋮----
+# override models set via pytest ... --m <model>
+⋮----
+llm_config = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config)
+⋮----
+@pytest.mark.asyncio
+async def test_llm_pdf_attachment_async()
+⋮----
+"""Test sending a PDF file attachment to the LLM asynchronously."""
+⋮----
+# Path to the test PDF file
+pdf_path = Path("tests/main/data/dummy.pdf")
+⋮----
+# Create a FileAttachment from the PDF file
+attachment = FileAttachment.from_path(pdf_path)
+⋮----
+# Verify the attachment properties
+⋮----
+# Create messages with the attachment
+⋮----
+# Set up the LLM with a suitable model that supports PDFs
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+⋮----
+# Get response from the LLM asynchronously
+response = await llm.achat(messages=messages)
+⋮----
+# follow-up question
+⋮----
+@pytest.mark.asyncio
+async def test_llm_multi_pdf_attachment_async()
+⋮----
+# multiple attachments
+pdf_path2 = Path("tests/main/data/sample-test.pdf")
+⋮----
+attachment2 = FileAttachment.from_path(pdf_path2)
+⋮----
+@pytest.mark.asyncio
+async def test_litellm_model_key_async()
+⋮----
+"""
+    Test that passing in explicit api_key works with `litellm/*` models
+    """
+model = "litellm/anthropic/claude-3-5-haiku-latest"
+# disable any chat model passed via --m arg to pytest cmd
+⋮----
+# Create the LLM instance
+⋮----
+response = await llm.achat("What is 3+4?")
+⋮----
+async def test_llm_portkey_async(model: str)
+⋮----
+"""Test that LLM access via Portkey works asynchronously."""
+# override any chat model passed via --m arg to pytest cmd
+⋮----
+# Skip if PORTKEY_API_KEY is not set
+⋮----
+# Extract provider from model string
+provider = model.split("/")[1] if "/" in model else ""
+provider_key_var = f"{provider.upper()}_API_KEY"
+⋮----
+# Skip if provider API key is not set
+⋮----
+llm_config_portkey = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_portkey)
+result = await llm.achat("what is 3+4 equal to?")
+⋮----
+@pytest.mark.asyncio
+async def test_portkey_params_async()
+⋮----
+"""Test that PortkeyParams are correctly configured in async context."""
+⋮----
+# Test with explicit parameters
+params = PortkeyParams(
+⋮----
+headers = params.get_headers()
+⋮----
+# Test model string parsing
+⋮----
+# Test fallback parsing
+⋮----
+# Test provider API key retrieval
+⋮----
+key = params.get_provider_api_key("test_provider")
+⋮----
+@pytest.mark.asyncio
+async def test_portkey_integration_async()
+⋮----
+"""Test that Portkey integration is properly configured in OpenAIGPT with async."""
+⋮----
+# Save the current chat model setting
+original_chat_model = settings.chat_model
+⋮----
+# Clear any global chat model override
+⋮----
+# Test basic portkey model configuration
+config = lm.OpenAIGPTConfig(
+⋮----
+llm = lm.OpenAIGPT(config)
+⋮----
+# Check that model was parsed correctly
+⋮----
+# Check headers are set correctly
+⋮----
+# Restore original chat model setting
 </file>
 
 <file path="tests/main/test_llm_pdf_parser.py">
@@ -53814,6 +53405,339 @@ excludes = excludes.union({"request"})
 schema = generate_simple_schema(
 </file>
 
+<file path="langroid/embedding_models/models.py">
+AzureADTokenProvider = Callable[[], str]
+⋮----
+class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "openai"
+model_name: str = "text-embedding-3-small"
+api_key: str = ""
+api_base: Optional[str] = None
+organization: str = ""
+dims: int = 1536
+context_length: int = 8192
+langdb_params: LangDBParams = LangDBParams()
+⋮----
+model_config = SettingsConfigDict(env_prefix="OPENAI_")
+⋮----
+class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "azure-openai"
+⋮----
+api_base: str = ""
+deployment_name: Optional[str] = None
+# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
+# change this to required  supported version
+api_version: Optional[str] = "2024-06-01"
+# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
+azure_ad_token: Optional[str] = None
+azure_ad_token_provider: Optional[AzureADTokenProvider] = None
+⋮----
+model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
+⋮----
+class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "sentence-transformer"
+model_name: str = "BAAI/bge-large-en-v1.5"
+context_length: int = 512
+data_parallel: bool = False
+# Select device (e.g. "cuda", "cpu") when data parallel is disabled
+device: Optional[str] = None
+# Select devices when data parallel is enabled
+devices: Optional[list[str]] = None
+⋮----
+class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+"""Config for qdrant/fastembed embeddings,
+    see here: https://github.com/qdrant/fastembed
+    """
+⋮----
+model_type: str = "fastembed"
+model_name: str = "BAAI/bge-small-en-v1.5"
+batch_size: int = 256
+cache_dir: Optional[str] = None
+threads: Optional[int] = None
+parallel: Optional[int] = None
+additional_kwargs: Dict[str, Any] = {}
+⋮----
+class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+context_length: int = 2048
+batch_size: int = 2048
+⋮----
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "gemini"
+model_name: str = "models/text-embedding-004"
+⋮----
+dims: int = 768
+batch_size: int = 512
+⋮----
+class EmbeddingFunctionCallable
+⋮----
+"""
+    A callable class designed to generate embeddings for a list of texts using
+    the OpenAI or Azure OpenAI API, with automatic retries on failure.
+
+    Attributes:
+        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
+               configuration and utilities for generating embeddings.
+
+    Methods:
+        __call__(input: List[str]) -> Embeddings: Generate embeddings for
+                                a list of input texts.
+    """
+⋮----
+def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
+⋮----
+"""
+        Initialize the EmbeddingFunctionCallable with a specific model.
+
+        Args:
+            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
+                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
+                            generating embeddings.
+            batch_size (int): Batch size
+        """
+⋮----
+def __call__(self, input: List[str]) -> Embeddings
+⋮----
+"""
+        Generate embeddings for a given list of input texts using the OpenAI API,
+        with retries on failure.
+
+        This method:
+        - Truncates each text in the input list to the model's maximum context length.
+        - Processes the texts in batches to generate embeddings efficiently.
+        - Automatically retries the embedding generation process with exponential
+        backoff in case of failures.
+
+        Args:
+            input (List[str]): A list of input texts to generate embeddings for.
+
+        Returns:
+            Embeddings: A list of embedding vectors corresponding to the input texts.
+        """
+embeds = []
+⋮----
+# Truncate texts to context length while preserving text format
+truncated_texts = self.embed_model.truncate_texts(input)
+⋮----
+# Process in batches
+⋮----
+result = self.embed_model.client.embeddings.create(
+⋮----
+input=batch, model=self.embed_model.config.model_name  # type: ignore
+⋮----
+batch_embeds = [d.embedding for d in result.data]
+⋮----
+embeds = self.embed_model.model.encode_multi_process(
+⋮----
+batch_embeds = self.embed_model.model.encode(
+⋮----
+).tolist()  # type: ignore
+⋮----
+embeddings = self.embed_model.model.embed(
+⋮----
+embeds = [embedding.tolist() for embedding in embeddings]
+⋮----
+tokenized_text = self.embed_model.tokenize_string(input_string)
+⋮----
+gen_embedding = self.embed_model.generate_embedding(
+⋮----
+embeds = self.embed_model.generate_embeddings(input)
+⋮----
+class OpenAIEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
+⋮----
+# Check if using LangDB
+⋮----
+project_id = self.config.langdb_params.project_id
+⋮----
+model_for_tokenizer = self.config.model_name
+⋮----
+def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
+⋮----
+"""
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+truncated_tokens = [
+⋮----
+# LangDB embedding endpt only works with strings, not tokens
+⋮----
+def embedding_fn(self) -> Callable[[List[str]], Embeddings]
+⋮----
+@property
+    def embedding_dims(self) -> int
+⋮----
+class AzureOpenAIEmbeddings(EmbeddingModel)
+⋮----
+"""
+    Azure OpenAI embeddings model implementation.
+    """
+⋮----
+"""
+        Initializes Azure OpenAI embeddings model.
+
+        Args:
+            config: Configuration for Azure OpenAI embeddings model.
+        Raises:
+            ValueError: If required Azure config values are not set.
+        """
+⋮----
+"""Get the embedding function for Azure OpenAI.
+
+        Returns:
+            Callable that generates embeddings for input texts.
+        """
+⋮----
+STEC = SentenceTransformerEmbeddingsConfig
+⋮----
+class SentenceTransformerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: STEC = STEC())
+⋮----
+# this is an "extra" optional dependency, so we import it here
+⋮----
+self.config.devices  # type: ignore
+⋮----
+self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
+⋮----
+dims = self.model.get_sentence_embedding_dimension()
+⋮----
+return dims  # type: ignore
+⋮----
+class FastEmbedEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
+⋮----
+@cached_property
+    def embedding_dims(self) -> int
+⋮----
+embed_func = self.embedding_fn()
+⋮----
+LCSEC = LlamaCppServerEmbeddingsConfig
+⋮----
+class LlamaCppServerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: LCSEC = LCSEC())
+⋮----
+def tokenize_string(self, text: str) -> List[int]
+⋮----
+data = {"content": text, "add_special": False, "with_pieces": False}
+response = requests.post(self.tokenize_url, json=data)
+⋮----
+tokens = response.json()["tokens"]
+⋮----
+# not all(isinstance(token, (int, float)) for token in tokens):
+⋮----
+def detokenize_string(self, tokens: List[int]) -> str
+⋮----
+data = {"tokens": tokens}
+response = requests.post(self.detokenize_url, json=data)
+⋮----
+text = response.json()["content"]
+⋮----
+def truncate_string_to_context_size(self, text: str) -> str
+⋮----
+tokens = self.tokenize_string(text)
+tokens = tokens[: self.config.context_length]
+⋮----
+def generate_embedding(self, text: str) -> List[int | float]
+⋮----
+data = {"content": text}
+response = requests.post(self.embedding_url, json=data)
+⋮----
+embeddings = self._extract_embedding(response.json())
+⋮----
+"""
+        Extract embedding vector from llama.cpp response.
+
+        Handles multiple response formats:
+        1. Native /embedding: {"embedding": [floats]}
+        2. Array format: [{"embedding": [floats]}]
+        3. Double-nested: [{"embedding": [[floats]]}]
+        4. OpenAI /v1/embeddings: {"data": [{"embedding": [floats]}]}
+        5. Nested in dict: {"embedding": [[floats]]}
+
+        Args:
+            response_json: The JSON response from llama.cpp server
+
+        Returns:
+            List of floats representing the embedding vector
+
+        Raises:
+            ValueError: If response format is not recognized
+        """
+⋮----
+# Try native format first: {"embedding": [floats]}
+⋮----
+embeddings = response_json["embedding"]
+# Check if it's [floats]
+⋮----
+# Might be nested: {"embedding": [[floats]]}
+⋮----
+# Try OpenAI format: {"data": [{"embedding": [floats]}]}
+⋮----
+data = response_json["data"]
+⋮----
+embeddings = data[0]["embedding"]
+⋮----
+# Try array format: [{"embedding": [floats]}] or [{"embedding": [[floats]]}]
+⋮----
+first_item = response_json[0]
+⋮----
+embeddings = first_item["embedding"]
+⋮----
+# Check if it's [[floats]]
+⋮----
+class GeminiEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
+⋮----
+def generate_embeddings(self, texts: List[str]) -> List[List[float]]
+⋮----
+"""Generates embeddings for a list of input texts."""
+all_embeddings: List[List[float]] = []
+⋮----
+result = self.client.models.embed_content(  # type: ignore[attr-defined]
+⋮----
+contents=batch,  # type: ignore
+⋮----
+# Extract .values from ContentEmbedding objects
+⋮----
+[emb.values for emb in result.embeddings]  # type: ignore
+⋮----
+def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
+⋮----
+"""
+    Args:
+        embedding_fn_type: Type of embedding model to use. Options are:
+         - "openai",
+         - "azure-openai",
+         - "sentencetransformer", or
+         - "fastembed".
+            (others may be added in the future)
+    Returns:
+        EmbeddingModel: The corresponding embedding model class.
+    """
+⋮----
+return OpenAIEmbeddings  # type: ignore
+⋮----
+return AzureOpenAIEmbeddings  # type: ignore
+⋮----
+return FastEmbedEmbeddings  # type: ignore
+⋮----
+return LlamaCppServerEmbeddings  # type: ignore
+⋮----
+return GeminiEmbeddings  # type: ignore
+else:  # default sentence transformer
+return SentenceTransformerEmbeddings  # type: ignore
+</file>
+
 <file path="langroid/language_models/__init__.py">
 __all__ = [
 </file>
@@ -53932,270 +53856,84 @@ async def wrapper(*args: List[Any], **kwargs: Dict[Any, Any]) -> Any
 result = await func(*args, **kwargs)
 </file>
 
-<file path="langroid/parsing/parser.py">
-logger = logging.getLogger(__name__)
+<file path="langroid/parsing/document_url.py">
+"""Bounded HTTP document retrieval and text decoding."""
 ⋮----
-class Splitter(str, Enum)
+DEFAULT_CONNECT_TIMEOUT = 10.0
+DEFAULT_READ_TIMEOUT = 30.0
+DEFAULT_MAX_SIZE = 10 * 1024 * 1024
+_STREAM_CHUNK_SIZE = 64 * 1024
+_CHARSET_RE = re.compile(
 ⋮----
-TOKENS = "tokens"
-PARA_SENTENCE = "para_sentence"
-SIMPLE = "simple"
-# "structure-aware" splitting with chunks enriched by header info
-MARKDOWN = "markdown"
+def is_http_url(source: str) -> bool
 ⋮----
-class BaseParsingConfig(BaseSettings)
+"""Return whether source has an HTTP(S) scheme, ignoring case."""
+parsed = urlparse(source)
 ⋮----
-"""Base class for document parsing configurations."""
+def url_extension_source(source: str) -> str
 ⋮----
-library: str
+"""Return the URL path or local source used for extension detection."""
 ⋮----
-model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
-⋮----
-class LLMPdfParserConfig(BaseSettings)
-⋮----
-"""Configuration for LLM-based parsing."""
-⋮----
-model_name: str = "gemini/gemini-2.0-flash"  # Default model
-max_tokens: Optional[int] = None
-split_on_page: Optional[bool] = True
-requests_per_minute: Optional[int] = 5
-timeout: int = 60
-prompt: str = ""  # override with a domain-specific prompt
-system_prompt: str = ""  # override with a domain-specific system prompt
-⋮----
-class MarkerConfig(BaseSettings)
-⋮----
-"""Configuration for Markitdown-based parsing."""
-⋮----
-config_dict: Dict[str, Any] = {}
-⋮----
-class PdfParsingConfig(BaseParsingConfig)
-⋮----
-library: Literal[
-llm_parser_config: Optional[LLMPdfParserConfig] = None
-marker_config: Optional[MarkerConfig] = None
-⋮----
-@model_validator(mode="before")
-@classmethod
-    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]
-⋮----
-"""Ensure correct config is set based on library selection."""
-library = values.get("library")
-⋮----
-class DocxParsingConfig(BaseSettings)
-⋮----
-library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
-⋮----
-class DocParsingConfig(BaseSettings)
-⋮----
-library: Literal["unstructured"] = "unstructured"
-⋮----
-class MarkitdownPPTXParsingConfig(BaseSettings)
-⋮----
-library: Literal["markitdown"] = "markitdown"
-⋮----
-class MarkitdownXLSXParsingConfig(BaseSettings)
-⋮----
-class MarkitdownXLSParsingConfig(BaseSettings)
-⋮----
-class ParsingConfig(BaseSettings)
-⋮----
-splitter: str = Splitter.MARKDOWN
-chunk_by_page: bool = False  # split by page?
-chunk_size: int = 200  # aim for this many tokens per chunk
-chunk_size_variation: float = 0.30  # max variation from chunk_size
-overlap: int = 50  # overlap between chunks
-max_chunks: int = 10_000
-⋮----
-@field_validator("chunk_size", mode="before")
-@classmethod
-    def convert_chunk_size_to_int(cls, v: Any) -> int
-⋮----
-"""Convert chunk_size to int, maintaining backward compatibility
-        with Pydantic V1.
-        """
-⋮----
-# offset to subtract from page numbers:
-# e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
-page_number_offset: int = 0
-# aim to have at least this many chars per chunk when truncating due to punctuation
-min_chunk_chars: int = 350
-discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
-n_similar_docs: Optional[int] = None  # deprecated
-n_neighbor_ids: int = 5  # window size to store around each chunk
-separators: List[str] = ["\n\n", "\n", " ", ""]
-token_encoding_model: str = "text-embedding-3-small"
-pdf: PdfParsingConfig = PdfParsingConfig()
-docx: DocxParsingConfig = DocxParsingConfig()
-doc: DocParsingConfig = DocParsingConfig()
-pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
-xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
-xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
-⋮----
-class Parser
-⋮----
-def __init__(self, config: ParsingConfig)
-⋮----
-def num_tokens(self, text: str) -> int
-⋮----
-return count_words(text)  # simple count based on whitespace-split
-tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
-⋮----
-def truncate_tokens(self, text: str, max_tokens: int) -> str
-⋮----
-tokens = self.tokenizer.encode(text)
-⋮----
-def add_window_ids(self, chunks: List[Document]) -> None
-⋮----
-"""Chunks may belong to multiple docs, but for each doc,
-        they appear consecutively. Add window_ids in metadata"""
-⋮----
-# discard empty chunks
-chunks = [c for c in chunks if c.content.strip() != ""]
-⋮----
-# The original metadata.id (if any) is ignored since it will be same for all
-# chunks and is useless. We want a distinct id for each chunk.
-# ASSUMPTION: all chunks c of a doc have same c.metadata.id !
-orig_ids = [c.metadata.id for c in chunks]
-ids = [ObjectRegistry.new_id() for c in chunks]
-id2chunk = {id: c for id, c in zip(ids, chunks)}
-⋮----
-# group the ids by orig_id
-# (each distinct orig_id refers to a different document)
-orig_id_to_ids: Dict[str, List[str]] = {}
-⋮----
-# now each orig_id maps to a sequence of ids within a single doc
-⋮----
-k = self.config.n_neighbor_ids
-⋮----
-# ids are consecutive chunks in a single doc
-n = len(ids)
-window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
-⋮----
-c = id2chunk[ids[i]]
-⋮----
-def split_simple(self, docs: List[Document]) -> List[Document]
-⋮----
-final_docs = []
-⋮----
-chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
-# note we are ensuring we COPY the document metadata into each chunk,
-# which ensures all chunks of a given doc have same metadata
-# (and in particular same metadata.id, which is important later for
-# add_window_ids)
-chunk_docs = [
-⋮----
-def split_para_sentence(self, docs: List[Document]) -> List[Document]
-⋮----
-chunks = docs
-⋮----
-un_splittables = 0
-split_chunks = []
-⋮----
-# small chunk: no need to split
-⋮----
-splits = self._split_para_sentence_once([c])
-⋮----
-max_len = max([self.num_tokens(p.content) for p in chunks])
-⋮----
-break  # we won't be able to shorten them with current settings
-chunks = split_chunks.copy()
-⋮----
-def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]
-⋮----
-final_chunks = []
-⋮----
-chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
-⋮----
-def split_chunk_tokens(self, docs: List[Document]) -> List[Document]
-⋮----
-chunks = chunk_markdown(
-⋮----
-# apply rough adjustment factor to convert from tokens to words,
-# which is what the markdown chunker uses
-⋮----
-chunks = self.chunk_tokens(d.content)
-⋮----
-"""
-        Split a text into chunks of ~CHUNK_SIZE tokens,
-        based on punctuation and newline boundaries.
-        Adapted from
-        https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/chunks.py
+"""Fetch a URL with timeouts and bounded streamed consumption.
 
-        Args:
-            text: The text to split into chunks.
+    Args:
+        url: HTTP(S) document URL.
+        connect_timeout: Maximum seconds allowed to establish a connection.
+        read_timeout: Maximum seconds allowed between response bytes.
+        max_size: Maximum complete response size in bytes.
+        sample_size: Optional byte count after which sampling may stop early.
 
-        Returns:
-            A list of text chunks, each of which is a string of tokens
-            roughly self.config.chunk_size tokens long.
-        """
-# Return an empty list if the text is empty or whitespace
+    Returns:
+        The response bytes and headers.
+
+    Raises:
+        ValueError: If a complete response exceeds ``max_size``.
+        requests.exceptions.RequestException: If the request fails or times out.
+    """
 ⋮----
-# Tokenize the text
-tokens = self.tokenizer.encode(text, disallowed_special=())
+timeout = (connect_timeout, read_timeout)
 ⋮----
-# Initialize an empty list of chunks
-chunks = []
+content_length = response.headers.get("Content-Length")
 ⋮----
-# Initialize a counter for the number of chunks
-num_chunks = 0
+declared_size = int(content_length)
 ⋮----
-# Loop until all tokens are consumed
+declared_size = None
 ⋮----
-# Take the first chunk_size tokens as a chunk
-chunk = tokens[: self.config.chunk_size]
+limit = sample_size if sample_size is not None else max_size
+chunk_size = min(_STREAM_CHUNK_SIZE, limit + 1)
+body = bytearray()
 ⋮----
-# Decode the chunk into text
-chunk_text = self.tokenizer.decode(chunk)
+"""Fetch a complete URL using document parsing configuration."""
 ⋮----
-# Skip the chunk if it is empty or whitespace
+"""Fetch at most 1 KiB using optional parsing configuration."""
 ⋮----
-# Remove the tokens corresponding to the chunk text
-# from remaining tokens
-tokens = tokens[len(chunk) :]
-# Continue to the next iteration of the loop
+"""Decode document bytes using BOM, HTTP, and HTML declarations.
+
+    BOMs take precedence, followed by a valid charset in the HTTP
+    ``Content-Type`` header and, for HTML, encoding detected from its meta
+    declarations. If none applies, UTF-8 is used with replacement so malformed
+    or legacy undeclared documents remain ingestible.
+    """
+bom_encoding = _bom_encoding(content)
 ⋮----
-# Find the last period or punctuation mark in the chunk
-punctuation_matches = [
+http_encoding = _http_encoding(headers or {})
 ⋮----
-last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
+detected = BeautifulSoup(content, "html.parser").original_encoding
+html_encoding = _validated_encoding(detected)
 ⋮----
-# If there is a punctuation mark, and the last punctuation index is
-# after MIN_CHUNK_SIZE_CHARS
+def _validated_encoding(encoding: str | None) -> str | None
 ⋮----
-# Truncate the chunk text at the punctuation mark
-chunk_text = chunk_text[: last_punctuation + 1]
+"""Return a canonical codec name, or None for an invalid declaration."""
 ⋮----
-# Replace redundant (3 or more) newlines with 2 newlines to preser
-# paragraph separation!
-# But do NOT strip leading/trailing whitespace, to preserve formatting
-# (e.g. code blocks, or in case we want to stitch chunks back together)
-chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
+def _http_encoding(headers: Mapping[str, str]) -> str | None
 ⋮----
-# Append the chunk text to the list of chunks
+"""Extract and validate an explicitly declared HTTP charset."""
+content_type = headers.get("Content-Type", "")
+match = _CHARSET_RE.search(content_type)
 ⋮----
-# from the remaining tokens
-tokens = tokens[
+def _bom_encoding(content: bytes) -> str | None
 ⋮----
-# Increment the number of chunks
-⋮----
-# There may be remaining tokens, but we discard them
-# since we have already reached the maximum number of chunks
-⋮----
-def split(self, docs: List[Document]) -> List[Document]
-⋮----
-# create ids in metadata of docs if absent:
-# we need this to distinguish docs later in add_window_ids
-⋮----
-# some docs are already splits, so don't split them further!
-chunked_docs = [d for d in docs if d.metadata.is_chunk]
-big_docs = [d for d in docs if not d.metadata.is_chunk]
-⋮----
-big_doc_chunks = self.split_chunk_tokens(big_docs)
-⋮----
-big_doc_chunks = self.split_para_sentence(big_docs)
-⋮----
-big_doc_chunks = self.split_simple(big_docs)
+"""Return the codec selected by a Unicode byte-order mark."""
 </file>
 
 <file path="langroid/parsing/web_search.py">
@@ -55552,6 +55290,234 @@ score,  # Select the calculated score
 documents_with_scores = [
 ⋮----
 result.score,  # Use the score from the query result
+</file>
+
+<file path="langroid/vector_store/qdrantdb.py">
+logger = logging.getLogger(__name__)
+⋮----
+T = TypeVar("T")
+⋮----
+def from_optional(x: Optional[T], default: T) -> T
+⋮----
+def is_valid_uuid(uuid_to_test: str) -> bool
+⋮----
+"""
+    Check if a given string is a valid UUID.
+    """
+⋮----
+uuid_obj = uuid.UUID(uuid_to_test)
+⋮----
+# Check for valid unsigned 64-bit integer
+⋮----
+int_value = int(uuid_to_test)
+⋮----
+class QdrantDBConfig(VectorStoreConfig)
+⋮----
+cloud: bool = True
+docker: bool = False
+collection_name: str | None = "temp"
+storage_path: str = ".qdrant/data"
+embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
+use_sparse_embeddings: bool = False
+sparse_embedding_model: str = "naver/splade-v3-distilbert"
+sparse_limit: int = 3
+distance: str = "cosine"
+⋮----
+class QdrantDB(VectorStore)
+⋮----
+def __init__(self, config: QdrantDBConfig = QdrantDBConfig())
+⋮----
+self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
+⋮----
+key = os.getenv("QDRANT_API_KEY")
+url = os.getenv("QDRANT_API_URL")
+⋮----
+new_storage_path = config.storage_path + ".new"
+⋮----
+# Note: Only create collection if a non-null collection name is provided.
+# This is useful to delay creation of vecdb until we have a suitable
+# collection name (e.g. we could get it from the url or folder path).
+⋮----
+def clone(self) -> "QdrantDB"
+⋮----
+"""Create an independent Qdrant client when running against Qdrant Cloud."""
+⋮----
+cloned = super().clone()
+⋮----
+def close(self) -> None
+⋮----
+"""
+        Close the QdrantDB client and release any resources (e.g., file locks).
+        This is especially important for local storage to release the .lock file.
+        """
+⋮----
+# QdrantLocal has a close method that releases the lock
+⋮----
+def __enter__(self) -> "QdrantDB"
+⋮----
+"""Context manager entry."""
+⋮----
+def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
+⋮----
+"""Context manager exit - ensure cleanup even if an exception occurred."""
+⋮----
+def clear_empty_collections(self) -> int
+⋮----
+coll_names = self.list_collections()
+n_deletes = 0
+⋮----
+info = self.client.get_collection(collection_name=name)
+⋮----
+def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+"""Clear all collections with the given prefix."""
+⋮----
+coll_names = [
+⋮----
+n_empty_deletes = 0
+n_non_empty_deletes = 0
+⋮----
+points_count = from_optional(info.points_count, 0)
+⋮----
+def list_collections(self, empty: bool = False) -> List[str]
+⋮----
+"""
+        Returns:
+            List of collection names that have at least one vector.
+
+        Args:
+            empty (bool, optional): Whether to include empty collections.
+        """
+⋮----
+colls = list(self.client.get_collections())[0][1]
+⋮----
+counts = []
+⋮----
+def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+"""
+        Create a collection with the given name, optionally replacing an existing
+            collection if `replace` is True.
+        Args:
+            collection_name (str): Name of the collection to create.
+            replace (bool): Whether to replace an existing collection
+                with the same name. Defaults to False.
+        """
+⋮----
+coll = self.client.get_collection(collection_name=collection_name)
+⋮----
+vectors_config = {
+sparse_vectors_config = None
+⋮----
+sparse_vectors_config = {
+⋮----
+collection_info = self.client.get_collection(collection_name=collection_name)
+⋮----
+level = logger.getEffectiveLevel()
+⋮----
+def get_sparse_embeddings(self, inputs: List[str]) -> List["SparseVector"]
+⋮----
+tokens = self.sparse_tokenizer(
+output = self.sparse_model(**tokens)
+vectors = torch.max(
+sparse_embeddings = []
+⋮----
+cols = vec.nonzero().squeeze().cpu().tolist()
+weights = vec[cols].cpu().tolist()
+⋮----
+def add_documents(self, documents: Sequence[Document]) -> None
+⋮----
+# Add id to metadata if not already present
+⋮----
+# Fix the ids due to qdrant finickiness
+⋮----
+colls = self.list_collections(empty=True)
+⋮----
+document_dicts = [doc.model_dump() for doc in documents]
+embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+sparse_embedding_vecs = self.get_sparse_embeddings(
+⋮----
+ids = [self._to_int_or_uuid(d.id()) for d in documents]
+# don't insert all at once, batch in chunks of b,
+# else we get an API error
+b = self.config.batch_size
+⋮----
+vectors: Dict[str, Embeddings | List[SparseVector]] = {
+⋮----
+coll_found: bool = False
+⋮----
+# poll until collection is ready
+⋮----
+coll_found = True
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+def _to_int_or_uuid(self, id: str) -> int | str
+⋮----
+int_val = int(id)
+⋮----
+# If doc_id is already a valid UUID, return it as is
+⋮----
+# Otherwise, generate a UUID from the doc_id
+# Convert doc_id to string if it's not already
+id_str = str(id)
+⋮----
+# Hash the document ID using SHA-1
+hash_object = hashlib.sha1(id_str.encode())
+hash_digest = hash_object.hexdigest()
+⋮----
+# Truncate or manipulate the hash to fit into a UUID (128 bits)
+uuid_str = hash_digest[:32]
+⋮----
+# Format this string into a UUID format
+formatted_uuid = uuid.UUID(uuid_str)
+⋮----
+def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+docs = []
+offset = 0
+filter = Filter() if where == "" else Filter.model_validate(json.loads(where))
+⋮----
+limit=10_000,  # try getting all at once, if not we keep paging
+⋮----
+self.config.document_class(**record.payload)  # type: ignore
+⋮----
+# ignore
+⋮----
+offset = next_page_offset  # type: ignore
+⋮----
+def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+_ids = [self._to_int_or_uuid(id) for id in ids]
+records = self.client.retrieve(
+# Note the records may NOT be in the order of the ids,
+# so we re-order them here.
+id2payload = {record.id: record.payload for record in records}
+ordered_payloads = [id2payload[id] for id in _ids if id in id2payload]
+docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
+⋮----
+embedding = self.embedding_fn([text])[0]
+# TODO filter may not work yet
+⋮----
+filter = Filter()
+⋮----
+filter = Filter.model_validate(json.loads(where))
+requests = [
+⋮----
+sparse_embedding = self.get_sparse_embeddings([text])[0]
+⋮----
+search_result_lists: List[List[ScoredPoint]] = self.client.search_batch(
+⋮----
+search_result = [
+⋮----
+]  # 2D list -> 1D list
+scores = [match.score for match in search_result if match is not None]
+docs = [
+⋮----
+self.config.document_class(**(match.payload))  # type: ignore
+⋮----
+doc_score_pairs = list(zip(docs, scores))
+max_score = max(ds[1] for ds in doc_score_pairs)
 </file>
 
 <file path="tests/main/sql_chat/test_sql_chat_agent.py">
@@ -56923,157 +56889,6 @@ malformed_inputs = [
 ⋮----
 # Should never crash, just return empty string or found value
 result = top_level_json_field(malformed, "recipient")
-</file>
-
-<file path="tests/main/test_llm_async.py">
-# allow streaming globally, but can be turned off by individual models
-⋮----
-cfg = OpenAIGPTConfig(
-⋮----
-stream=streaming,  # use streaming output if enabled globally
-⋮----
-mdl = OpenAIGPT(config=cfg)
-question = "What is the capital of " + country + "?"
-⋮----
-# chat mode via `generate`,
-# i.e. use same call as for completion, but the setting below
-# actually calls `achat` under the hood
-⋮----
-# check that "agenerate" works
-response = await mdl.agenerate(prompt=question, max_tokens=50)
-⋮----
-# actual chat mode
-messages = [
-response = await mdl.achat(messages=messages, max_tokens=50)
-⋮----
-# should be from cache this time
-⋮----
-# pass intentional bad msg to test error handling
-⋮----
-@pytest.mark.asyncio
-async def test_llm_async_concurrent(test_settings: Settings)
-⋮----
-stream=False,  # use streaming output if enabled globally
-⋮----
-N = 5
-questions = ["1+" + str(i) for i in range(N)]
-expected_answers = [str(i + 1) for i in range(N)]
-answers = await asyncio.gather(
-⋮----
-async def test_llm_langdb(model: str)
-⋮----
-"""Test that LLM access via LangDB works."""
-⋮----
-llm_config_langdb = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_langdb)
-result = await llm.achat("what is 3+4?")
-⋮----
-async def test_llm_openrouter(model: str)
-⋮----
-# override models set via pytest ... --m <model>
-⋮----
-llm_config = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config)
-⋮----
-@pytest.mark.asyncio
-async def test_llm_pdf_attachment_async()
-⋮----
-"""Test sending a PDF file attachment to the LLM asynchronously."""
-⋮----
-# Path to the test PDF file
-pdf_path = Path("tests/main/data/dummy.pdf")
-⋮----
-# Create a FileAttachment from the PDF file
-attachment = FileAttachment.from_path(pdf_path)
-⋮----
-# Verify the attachment properties
-⋮----
-# Create messages with the attachment
-⋮----
-# Set up the LLM with a suitable model that supports PDFs
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
-⋮----
-# Get response from the LLM asynchronously
-response = await llm.achat(messages=messages)
-⋮----
-# follow-up question
-⋮----
-@pytest.mark.asyncio
-async def test_llm_multi_pdf_attachment_async()
-⋮----
-# multiple attachments
-pdf_path2 = Path("tests/main/data/sample-test.pdf")
-⋮----
-attachment2 = FileAttachment.from_path(pdf_path2)
-⋮----
-@pytest.mark.asyncio
-async def test_litellm_model_key_async()
-⋮----
-"""
-    Test that passing in explicit api_key works with `litellm/*` models
-    """
-model = "litellm/anthropic/claude-3-5-haiku-latest"
-# disable any chat model passed via --m arg to pytest cmd
-⋮----
-# Create the LLM instance
-⋮----
-response = await llm.achat("What is 3+4?")
-⋮----
-async def test_llm_portkey_async(model: str)
-⋮----
-"""Test that LLM access via Portkey works asynchronously."""
-# override any chat model passed via --m arg to pytest cmd
-⋮----
-# Skip if PORTKEY_API_KEY is not set
-⋮----
-# Extract provider from model string
-provider = model.split("/")[1] if "/" in model else ""
-provider_key_var = f"{provider.upper()}_API_KEY"
-⋮----
-# Skip if provider API key is not set
-⋮----
-llm_config_portkey = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_portkey)
-result = await llm.achat("what is 3+4 equal to?")
-⋮----
-@pytest.mark.asyncio
-async def test_portkey_params_async()
-⋮----
-"""Test that PortkeyParams are correctly configured in async context."""
-⋮----
-# Test with explicit parameters
-params = PortkeyParams(
-⋮----
-headers = params.get_headers()
-⋮----
-# Test model string parsing
-⋮----
-# Test fallback parsing
-⋮----
-# Test provider API key retrieval
-⋮----
-key = params.get_provider_api_key("test_provider")
-⋮----
-@pytest.mark.asyncio
-async def test_portkey_integration_async()
-⋮----
-"""Test that Portkey integration is properly configured in OpenAIGPT with async."""
-⋮----
-# Save the current chat model setting
-original_chat_model = settings.chat_model
-⋮----
-# Clear any global chat model override
-⋮----
-# Test basic portkey model configuration
-config = lm.OpenAIGPTConfig(
-⋮----
-llm = lm.OpenAIGPT(config)
-⋮----
-# Check that model was parsed correctly
-⋮----
-# Check headers are set correctly
-⋮----
-# Restore original chat model setting
 </file>
 
 <file path="tests/main/test_llm_response.py">
@@ -61496,6 +61311,275 @@ response = super().agent_response(msg)
 # we prefix it with "TOOL Result: " so that it is clear to the
 # LLM that this is the result of the last TOOL;
 # This ensures our caching trick works.
+</file>
+
+<file path="langroid/parsing/parser.py">
+logger = logging.getLogger(__name__)
+⋮----
+class Splitter(str, Enum)
+⋮----
+TOKENS = "tokens"
+PARA_SENTENCE = "para_sentence"
+SIMPLE = "simple"
+# "structure-aware" splitting with chunks enriched by header info
+MARKDOWN = "markdown"
+⋮----
+class BaseParsingConfig(BaseSettings)
+⋮----
+"""Base class for document parsing configurations."""
+⋮----
+library: str
+⋮----
+model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
+⋮----
+class LLMPdfParserConfig(BaseSettings)
+⋮----
+"""Configuration for LLM-based parsing."""
+⋮----
+model_name: str = "gemini/gemini-2.0-flash"  # Default model
+max_tokens: Optional[int] = None
+split_on_page: Optional[bool] = True
+requests_per_minute: Optional[int] = 5
+timeout: int = 60
+prompt: str = ""  # override with a domain-specific prompt
+system_prompt: str = ""  # override with a domain-specific system prompt
+⋮----
+class MarkerConfig(BaseSettings)
+⋮----
+"""Configuration for Markitdown-based parsing."""
+⋮----
+config_dict: Dict[str, Any] = {}
+⋮----
+class PdfParsingConfig(BaseParsingConfig)
+⋮----
+library: Literal[
+llm_parser_config: Optional[LLMPdfParserConfig] = None
+marker_config: Optional[MarkerConfig] = None
+⋮----
+@model_validator(mode="before")
+@classmethod
+    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]
+⋮----
+"""Ensure correct config is set based on library selection."""
+library = values.get("library")
+⋮----
+class DocxParsingConfig(BaseSettings)
+⋮----
+library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
+⋮----
+class DocParsingConfig(BaseSettings)
+⋮----
+library: Literal["unstructured"] = "unstructured"
+⋮----
+class MarkitdownPPTXParsingConfig(BaseSettings)
+⋮----
+library: Literal["markitdown"] = "markitdown"
+⋮----
+class MarkitdownXLSXParsingConfig(BaseSettings)
+⋮----
+class MarkitdownXLSParsingConfig(BaseSettings)
+⋮----
+class ParsingConfig(BaseSettings)
+⋮----
+splitter: str = Splitter.MARKDOWN
+chunk_by_page: bool = False  # split by page?
+chunk_size: int = 200  # aim for this many tokens per chunk
+chunk_size_variation: float = 0.30  # max variation from chunk_size
+overlap: int = 50  # overlap between chunks
+max_chunks: int = 10_000
+url_connect_timeout: float = 10.0
+url_read_timeout: float = 30.0
+url_max_size: int = 10 * 1024 * 1024
+⋮----
+@field_validator("chunk_size", mode="before")
+@classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int
+⋮----
+"""Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+⋮----
+# offset to subtract from page numbers:
+# e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
+page_number_offset: int = 0
+# aim to have at least this many chars per chunk when truncating due to punctuation
+min_chunk_chars: int = 350
+discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
+n_similar_docs: Optional[int] = None  # deprecated
+n_neighbor_ids: int = 5  # window size to store around each chunk
+separators: List[str] = ["\n\n", "\n", " ", ""]
+token_encoding_model: str = "text-embedding-3-small"
+pdf: PdfParsingConfig = PdfParsingConfig()
+docx: DocxParsingConfig = DocxParsingConfig()
+doc: DocParsingConfig = DocParsingConfig()
+pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
+xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
+xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
+⋮----
+class Parser
+⋮----
+def __init__(self, config: ParsingConfig)
+⋮----
+def num_tokens(self, text: str) -> int
+⋮----
+return count_words(text)  # simple count based on whitespace-split
+tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
+⋮----
+def truncate_tokens(self, text: str, max_tokens: int) -> str
+⋮----
+tokens = self.tokenizer.encode(text)
+⋮----
+def add_window_ids(self, chunks: List[Document]) -> None
+⋮----
+"""Chunks may belong to multiple docs, but for each doc,
+        they appear consecutively. Add window_ids in metadata"""
+⋮----
+# discard empty chunks
+chunks = [c for c in chunks if c.content.strip() != ""]
+⋮----
+# The original metadata.id (if any) is ignored since it will be same for all
+# chunks and is useless. We want a distinct id for each chunk.
+# ASSUMPTION: all chunks c of a doc have same c.metadata.id !
+orig_ids = [c.metadata.id for c in chunks]
+ids = [ObjectRegistry.new_id() for c in chunks]
+id2chunk = {id: c for id, c in zip(ids, chunks)}
+⋮----
+# group the ids by orig_id
+# (each distinct orig_id refers to a different document)
+orig_id_to_ids: Dict[str, List[str]] = {}
+⋮----
+# now each orig_id maps to a sequence of ids within a single doc
+⋮----
+k = self.config.n_neighbor_ids
+⋮----
+# ids are consecutive chunks in a single doc
+n = len(ids)
+window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
+⋮----
+c = id2chunk[ids[i]]
+⋮----
+def split_simple(self, docs: List[Document]) -> List[Document]
+⋮----
+final_docs = []
+⋮----
+chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
+# note we are ensuring we COPY the document metadata into each chunk,
+# which ensures all chunks of a given doc have same metadata
+# (and in particular same metadata.id, which is important later for
+# add_window_ids)
+chunk_docs = [
+⋮----
+def split_para_sentence(self, docs: List[Document]) -> List[Document]
+⋮----
+chunks = docs
+⋮----
+un_splittables = 0
+split_chunks = []
+⋮----
+# small chunk: no need to split
+⋮----
+splits = self._split_para_sentence_once([c])
+⋮----
+max_len = max([self.num_tokens(p.content) for p in chunks])
+⋮----
+break  # we won't be able to shorten them with current settings
+chunks = split_chunks.copy()
+⋮----
+def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]
+⋮----
+final_chunks = []
+⋮----
+chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
+⋮----
+def split_chunk_tokens(self, docs: List[Document]) -> List[Document]
+⋮----
+chunks = chunk_markdown(
+⋮----
+# apply rough adjustment factor to convert from tokens to words,
+# which is what the markdown chunker uses
+⋮----
+chunks = self.chunk_tokens(d.content)
+⋮----
+"""
+        Split a text into chunks of ~CHUNK_SIZE tokens,
+        based on punctuation and newline boundaries.
+        Adapted from
+        https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/chunks.py
+
+        Args:
+            text: The text to split into chunks.
+
+        Returns:
+            A list of text chunks, each of which is a string of tokens
+            roughly self.config.chunk_size tokens long.
+        """
+# Return an empty list if the text is empty or whitespace
+⋮----
+# Tokenize the text
+tokens = self.tokenizer.encode(text, disallowed_special=())
+⋮----
+# Initialize an empty list of chunks
+chunks = []
+⋮----
+# Initialize a counter for the number of chunks
+num_chunks = 0
+⋮----
+# Loop until all tokens are consumed
+⋮----
+# Take the first chunk_size tokens as a chunk
+chunk = tokens[: self.config.chunk_size]
+⋮----
+# Decode the chunk into text
+chunk_text = self.tokenizer.decode(chunk)
+⋮----
+# Skip the chunk if it is empty or whitespace
+⋮----
+# Remove the tokens corresponding to the chunk text
+# from remaining tokens
+tokens = tokens[len(chunk) :]
+# Continue to the next iteration of the loop
+⋮----
+# Find the last period or punctuation mark in the chunk
+punctuation_matches = [
+⋮----
+last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
+⋮----
+# If there is a punctuation mark, and the last punctuation index is
+# after MIN_CHUNK_SIZE_CHARS
+⋮----
+# Truncate the chunk text at the punctuation mark
+chunk_text = chunk_text[: last_punctuation + 1]
+⋮----
+# Replace redundant (3 or more) newlines with 2 newlines to preser
+# paragraph separation!
+# But do NOT strip leading/trailing whitespace, to preserve formatting
+# (e.g. code blocks, or in case we want to stitch chunks back together)
+chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
+⋮----
+# Append the chunk text to the list of chunks
+⋮----
+# from the remaining tokens
+tokens = tokens[
+⋮----
+# Increment the number of chunks
+⋮----
+# There may be remaining tokens, but we discard them
+# since we have already reached the maximum number of chunks
+⋮----
+def split(self, docs: List[Document]) -> List[Document]
+⋮----
+# create ids in metadata of docs if absent:
+# we need this to distinguish docs later in add_window_ids
+⋮----
+# some docs are already splits, so don't split them further!
+chunked_docs = [d for d in docs if d.metadata.is_chunk]
+big_docs = [d for d in docs if not d.metadata.is_chunk]
+⋮----
+big_doc_chunks = self.split_chunk_tokens(big_docs)
+⋮----
+big_doc_chunks = self.split_para_sentence(big_docs)
+⋮----
+big_doc_chunks = self.split_simple(big_docs)
 </file>
 
 <file path="langroid/parsing/repo_loader.py">
@@ -68676,6 +68760,317 @@ def _clear_cache() -> None
 """Clear the client cache. Only for testing."""
 </file>
 
+<file path="tests/main/test_llm.py">
+# allow streaming globally, but can be turned off by individual models
+⋮----
+@pytest.mark.parametrize("use_cache", [True, False])
+def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache)
+⋮----
+test_settings.cache = False  # cache response but don't retrieve from cache
+⋮----
+cfg = OpenAIGPTConfig(
+⋮----
+stream=streaming,  # use streaming output if enabled globally
+⋮----
+mdl = OpenAIGPT(config=cfg)
+question = "What is the capital of " + country + "?"
+# chat mode via `generate`,
+# i.e. use same call as for completion, but the setting below
+# actually calls `chat` under the hood
+⋮----
+# check that "generate" works when "use_chat_for_completion" is True
+response = mdl.generate(prompt=question, max_tokens=800)
+⋮----
+# actual chat mode
+messages = [
+response = mdl.chat(messages=messages, max_tokens=500)
+⋮----
+# should be from cache this time, Provided config.cache_config is not None
+⋮----
+# pass intentional bad msg to test error handling
+⋮----
+_ = mdl.chat(messages=messages, max_tokens=500)
+⋮----
+def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int)
+⋮----
+"""
+    Test disabled, see TODO below.
+    Also it takes too long since we are trying to test
+    that it raises the expected error when the context length is exceeded.
+    Args:
+        test_settings: from conftest.py
+        mode: "completion" or "chat"
+        max_tokens: number of tokens to generate
+    """
+⋮----
+parser = Parser(config=ParsingConfig())
+llm = OpenAIGPT(config=cfg)
+context_length = (
+⋮----
+toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
+max_sentences = int(context_length * 1.5 / toks_per_sentence)
+big_message = generate_random_sentences(max_sentences + 1)
+big_message_tokens = parser.num_tokens(big_message)
+⋮----
+response = None
+# TODO need to figure out what error type to expect here
+⋮----
+response = llm.chat(big_message, max_tokens=max_tokens)
+⋮----
+response = llm.generate(prompt=big_message, max_tokens=max_tokens)
+⋮----
+@pytest.mark.parametrize("ctx", [16_000, None])
+def test_llm_config_context_length(mdl: str, ctx: int | None)
+⋮----
+llm_config = lm.OpenAIGPTConfig(
+⋮----
+chat_context_length=ctx,  # even if wrong, use if explicitly set
+⋮----
+mdl = lm.OpenAIGPT(config=llm_config)
+⋮----
+alias_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=alias_model))
+canonical_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=canonical_model))
+⋮----
+def test_get_model_info_warns_on_unknown_models() -> None
+⋮----
+model_name = "gemini/gemini-999-unknown-preview"
+# Ensure this model hasn't been warned about in a prior test so the
+# warning actually fires.  The cache key is a tuple of the full model
+# strings passed to _warn_unknown_model (i.e. with the provider prefix).
+⋮----
+handler = logging.handlers.MemoryHandler(capacity=100)
+logger = logging.getLogger("langroid.language_models.model_info")
+⋮----
+info = get_model_info(model_name)
+⋮----
+messages = [record.getMessage() for record in handler.buffer]
+⋮----
+def test_model_selection(test_settings: Settings)
+⋮----
+defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
+⋮----
+def get_response(llm)
+⋮----
+def simulate_response(llm)
+⋮----
+# Default is GPT4o; we should not generate the warning in this case
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig())
+⋮----
+# Default is GPT3.5 (simulate GPT 4 inaccessible)
+⋮----
+# No warnings generated if we specify the model explicitly
+⋮----
+# No warnings generated if we are using a local model
+llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
+⋮----
+# We should warn on the first usage of a model with auto-selected GPT-3.5
+⋮----
+# We should not warn on subsequent uses and models with auto-selected GPT-3.5
+⋮----
+def test_keys()
+⋮----
+# Do not override the explicit settings below
+⋮----
+providers = [
+key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
+⋮----
+config = lm.OpenAIGPTConfig(
+⋮----
+llm = lm.OpenAIGPT(config)
+⋮----
+rand_key = str(random.randint(0, 10**9))
+⋮----
+def test_llm_langdb(model: str)
+⋮----
+"""Test that LLM access via LangDB works."""
+# override any chat model passed via --m arg to pytest cmd
+⋮----
+llm_config_langdb = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_langdb)
+result = llm.chat("what is 3+4?")
+⋮----
+def test_llm_openrouter(model: str)
+⋮----
+llm = lm.OpenAIGPT(config=llm_config)
+⋮----
+def test_llm_portkey(model: str)
+⋮----
+"""Test that LLM access via Portkey works."""
+⋮----
+# Skip if PORTKEY_API_KEY is not set
+⋮----
+# Extract provider from model string
+provider = model.split("/")[1] if "/" in model else ""
+provider_key_var = f"{provider.upper()}_API_KEY"
+⋮----
+# Skip if provider API key is not set
+⋮----
+llm_config_portkey = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_portkey)
+result = llm.chat("what is 3+4 equal to?")
+⋮----
+def test_portkey_params()
+⋮----
+"""Test that PortkeyParams are correctly configured."""
+⋮----
+# Test with explicit parameters
+params = PortkeyParams(
+⋮----
+headers = params.get_headers()
+⋮----
+# Test model string parsing
+⋮----
+# Test fallback parsing
+⋮----
+# Test provider API key retrieval
+⋮----
+key = params.get_provider_api_key("test_provider")
+⋮----
+def test_portkey_integration()
+⋮----
+"""Test that Portkey integration is properly configured in OpenAIGPT."""
+⋮----
+# Save the current chat model setting
+original_chat_model = settings.chat_model
+⋮----
+# Clear any global chat model override
+⋮----
+# Test basic portkey model configuration
+⋮----
+# Check that model was parsed correctly
+⋮----
+# Check headers are set correctly
+⋮----
+# Restore original chat model setting
+⋮----
+def test_gemini_api_base()
+⋮----
+"""Test that Gemini api_base is configurable for Vertex AI support."""
+⋮----
+# Save and clear env vars that could interfere
+saved_openai_api_base = os.environ.pop("OPENAI_API_BASE", None)
+saved_gemini_api_base = os.environ.pop("GEMINI_API_BASE", None)
+⋮----
+# Default: api_base should be GEMINI_BASE_URL
+⋮----
+# Custom api_base: should override default (e.g. Vertex AI endpoint)
+vertex_url = "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-project/locations/us-central1/endpoints/openapi"
+⋮----
+# Empty string api_base: should fall back to default
+⋮----
+# None api_base: should fall back to default
+⋮----
+# OPENAI_API_BASE env var should NOT leak into Gemini api_base
+⋮----
+# GEMINI_API_BASE env var should be used (e.g. Vertex AI)
+⋮----
+# GEMINI_API_BASE should take priority over OPENAI_API_BASE
+⋮----
+# Restore original env vars
+⋮----
+def test_followup_standalone()
+⋮----
+"""Test that followup_to_standalone works."""
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig())
+dialog = [
+followup = "What about 11?"
+response = llm.followup_to_standalone(dialog, followup)
+⋮----
+def test_llm_pdf_attachment()
+⋮----
+"""Test sending a PDF file attachment to the LLM."""
+⋮----
+# Path to the test PDF file
+pdf_path = Path("tests/main/data/dummy.pdf")
+⋮----
+# Create a FileAttachment from the PDF file
+attachment = FileAttachment.from_path(pdf_path)
+⋮----
+# Verify the attachment properties
+⋮----
+# Create messages with the attachment
+⋮----
+# Set up the LLM with a suitable model that supports PDFs
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+⋮----
+# Get response from the LLM
+response = llm.chat(messages=messages)
+⋮----
+# follow-up question
+⋮----
+def test_llm_multi_pdf_attachments()
+⋮----
+# multiple attachments
+pdf_path2 = Path("tests/main/data/sample-test.pdf")
+⋮----
+attachment2 = FileAttachment.from_path(pdf_path2)
+⋮----
+def test_llm_pdf_bytes_and_split()
+⋮----
+"""Test sending PDF files to LLM as bytes and split into pages."""
+⋮----
+# Test creating attachment from bytes
+⋮----
+pdf_bytes = f.read()
+⋮----
+attachment_from_bytes = FileAttachment.from_bytes(
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
+⋮----
+# Test creating attachment from file-like object
+pdf_io = io.BytesIO(pdf_bytes)
+attachment_from_io = FileAttachment.from_io(
+⋮----
+# Test splitting PDF into pages and sending individual pages
+⋮----
+doc = fitz.open(pdf_path)
+page_attachments = []
+⋮----
+# Extract page as PDF
+page_pdf = io.BytesIO()
+page_doc = fitz.open()
+⋮----
+# Create attachment for this page
+page_attachment = FileAttachment.from_io(
+⋮----
+# Send just the first page
+⋮----
+# Test with multiple pages as separate attachments
+⋮----
+def test_llm_image_input(path: str)
+⋮----
+attachment = FileAttachment.from_path(path, detail="low")
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
+⋮----
+def test_litellm_model_key()
+⋮----
+"""
+    Test that passing in explicit api_key works with `litellm/*` models
+    """
+model = "litellm/anthropic/claude-3-5-haiku-latest"
+# disable any chat model passed via --m arg to pytest cmd
+⋮----
+class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig)
+⋮----
+"""OpenAI config that doesn't auto-load from environment variables."""
+⋮----
+# Disable environment prefix to prevent auto-loading
+model_config = SettingsConfigDict(env_prefix="")
+⋮----
+llm_config = CustomOpenAIGPTConfig(
+⋮----
+response = llm.chat("What is 3+4?")
+</file>
+
 <file path="tests/main/test_prep_llm_message.py">
 CHAT_CONTEXT_LENGTH = 16_000
 MAX_OUTPUT_TOKENS = 1000
@@ -69383,690 +69778,6 @@ def _kinds(query: str, dialect: str) -> set
 # A MERGE nested inside a CTE is still reported, as MERGE.
 ⋮----
 def test_nested_write_kinds_across_dialects(dialect, query, expected)
-</file>
-
-<file path="tests/main/test_llm.py">
-# allow streaming globally, but can be turned off by individual models
-⋮----
-@pytest.mark.parametrize("use_cache", [True, False])
-def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache)
-⋮----
-test_settings.cache = False  # cache response but don't retrieve from cache
-⋮----
-cfg = OpenAIGPTConfig(
-⋮----
-stream=streaming,  # use streaming output if enabled globally
-⋮----
-mdl = OpenAIGPT(config=cfg)
-question = "What is the capital of " + country + "?"
-# chat mode via `generate`,
-# i.e. use same call as for completion, but the setting below
-# actually calls `chat` under the hood
-⋮----
-# check that "generate" works when "use_chat_for_completion" is True
-response = mdl.generate(prompt=question, max_tokens=800)
-⋮----
-# actual chat mode
-messages = [
-response = mdl.chat(messages=messages, max_tokens=500)
-⋮----
-# should be from cache this time, Provided config.cache_config is not None
-⋮----
-# pass intentional bad msg to test error handling
-⋮----
-_ = mdl.chat(messages=messages, max_tokens=500)
-⋮----
-def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int)
-⋮----
-"""
-    Test disabled, see TODO below.
-    Also it takes too long since we are trying to test
-    that it raises the expected error when the context length is exceeded.
-    Args:
-        test_settings: from conftest.py
-        mode: "completion" or "chat"
-        max_tokens: number of tokens to generate
-    """
-⋮----
-parser = Parser(config=ParsingConfig())
-llm = OpenAIGPT(config=cfg)
-context_length = (
-⋮----
-toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
-max_sentences = int(context_length * 1.5 / toks_per_sentence)
-big_message = generate_random_sentences(max_sentences + 1)
-big_message_tokens = parser.num_tokens(big_message)
-⋮----
-response = None
-# TODO need to figure out what error type to expect here
-⋮----
-response = llm.chat(big_message, max_tokens=max_tokens)
-⋮----
-response = llm.generate(prompt=big_message, max_tokens=max_tokens)
-⋮----
-@pytest.mark.parametrize("ctx", [16_000, None])
-def test_llm_config_context_length(mdl: str, ctx: int | None)
-⋮----
-llm_config = lm.OpenAIGPTConfig(
-⋮----
-chat_context_length=ctx,  # even if wrong, use if explicitly set
-⋮----
-mdl = lm.OpenAIGPT(config=llm_config)
-⋮----
-alias_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=alias_model))
-canonical_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=canonical_model))
-⋮----
-def test_get_model_info_warns_on_unknown_models() -> None
-⋮----
-model_name = "gemini/gemini-999-unknown-preview"
-# Ensure this model hasn't been warned about in a prior test so the
-# warning actually fires.  The cache key is a tuple of the full model
-# strings passed to _warn_unknown_model (i.e. with the provider prefix).
-⋮----
-handler = logging.handlers.MemoryHandler(capacity=100)
-logger = logging.getLogger("langroid.language_models.model_info")
-⋮----
-info = get_model_info(model_name)
-⋮----
-messages = [record.getMessage() for record in handler.buffer]
-⋮----
-def test_model_selection(test_settings: Settings)
-⋮----
-defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
-⋮----
-def get_response(llm)
-⋮----
-def simulate_response(llm)
-⋮----
-# Default is GPT4o; we should not generate the warning in this case
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig())
-⋮----
-# Default is GPT3.5 (simulate GPT 4 inaccessible)
-⋮----
-# No warnings generated if we specify the model explicitly
-⋮----
-# No warnings generated if we are using a local model
-llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
-⋮----
-# We should warn on the first usage of a model with auto-selected GPT-3.5
-⋮----
-# We should not warn on subsequent uses and models with auto-selected GPT-3.5
-⋮----
-def test_keys()
-⋮----
-# Do not override the explicit settings below
-⋮----
-providers = [
-key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
-⋮----
-config = lm.OpenAIGPTConfig(
-⋮----
-llm = lm.OpenAIGPT(config)
-⋮----
-rand_key = str(random.randint(0, 10**9))
-⋮----
-def test_llm_langdb(model: str)
-⋮----
-"""Test that LLM access via LangDB works."""
-# override any chat model passed via --m arg to pytest cmd
-⋮----
-llm_config_langdb = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_langdb)
-result = llm.chat("what is 3+4?")
-⋮----
-def test_llm_openrouter(model: str)
-⋮----
-llm = lm.OpenAIGPT(config=llm_config)
-⋮----
-def test_llm_portkey(model: str)
-⋮----
-"""Test that LLM access via Portkey works."""
-⋮----
-# Skip if PORTKEY_API_KEY is not set
-⋮----
-# Extract provider from model string
-provider = model.split("/")[1] if "/" in model else ""
-provider_key_var = f"{provider.upper()}_API_KEY"
-⋮----
-# Skip if provider API key is not set
-⋮----
-llm_config_portkey = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_portkey)
-result = llm.chat("what is 3+4 equal to?")
-⋮----
-def test_portkey_params()
-⋮----
-"""Test that PortkeyParams are correctly configured."""
-⋮----
-# Test with explicit parameters
-params = PortkeyParams(
-⋮----
-headers = params.get_headers()
-⋮----
-# Test model string parsing
-⋮----
-# Test fallback parsing
-⋮----
-# Test provider API key retrieval
-⋮----
-key = params.get_provider_api_key("test_provider")
-⋮----
-def test_portkey_integration()
-⋮----
-"""Test that Portkey integration is properly configured in OpenAIGPT."""
-⋮----
-# Save the current chat model setting
-original_chat_model = settings.chat_model
-⋮----
-# Clear any global chat model override
-⋮----
-# Test basic portkey model configuration
-⋮----
-# Check that model was parsed correctly
-⋮----
-# Check headers are set correctly
-⋮----
-# Restore original chat model setting
-⋮----
-def test_gemini_api_base()
-⋮----
-"""Test that Gemini api_base is configurable for Vertex AI support."""
-⋮----
-# Save and clear env vars that could interfere
-saved_openai_api_base = os.environ.pop("OPENAI_API_BASE", None)
-saved_gemini_api_base = os.environ.pop("GEMINI_API_BASE", None)
-⋮----
-# Default: api_base should be GEMINI_BASE_URL
-⋮----
-# Custom api_base: should override default (e.g. Vertex AI endpoint)
-vertex_url = "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-project/locations/us-central1/endpoints/openapi"
-⋮----
-# Empty string api_base: should fall back to default
-⋮----
-# None api_base: should fall back to default
-⋮----
-# OPENAI_API_BASE env var should NOT leak into Gemini api_base
-⋮----
-# GEMINI_API_BASE env var should be used (e.g. Vertex AI)
-⋮----
-# GEMINI_API_BASE should take priority over OPENAI_API_BASE
-⋮----
-# Restore original env vars
-⋮----
-def test_followup_standalone()
-⋮----
-"""Test that followup_to_standalone works."""
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig())
-dialog = [
-followup = "What about 11?"
-response = llm.followup_to_standalone(dialog, followup)
-⋮----
-def test_llm_pdf_attachment()
-⋮----
-"""Test sending a PDF file attachment to the LLM."""
-⋮----
-# Path to the test PDF file
-pdf_path = Path("tests/main/data/dummy.pdf")
-⋮----
-# Create a FileAttachment from the PDF file
-attachment = FileAttachment.from_path(pdf_path)
-⋮----
-# Verify the attachment properties
-⋮----
-# Create messages with the attachment
-⋮----
-# Set up the LLM with a suitable model that supports PDFs
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
-⋮----
-# Get response from the LLM
-response = llm.chat(messages=messages)
-⋮----
-# follow-up question
-⋮----
-def test_llm_multi_pdf_attachments()
-⋮----
-# multiple attachments
-pdf_path2 = Path("tests/main/data/sample-test.pdf")
-⋮----
-attachment2 = FileAttachment.from_path(pdf_path2)
-⋮----
-def test_llm_pdf_bytes_and_split()
-⋮----
-"""Test sending PDF files to LLM as bytes and split into pages."""
-⋮----
-# Test creating attachment from bytes
-⋮----
-pdf_bytes = f.read()
-⋮----
-attachment_from_bytes = FileAttachment.from_bytes(
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
-⋮----
-# Test creating attachment from file-like object
-pdf_io = io.BytesIO(pdf_bytes)
-attachment_from_io = FileAttachment.from_io(
-⋮----
-# Test splitting PDF into pages and sending individual pages
-⋮----
-doc = fitz.open(pdf_path)
-page_attachments = []
-⋮----
-# Extract page as PDF
-page_pdf = io.BytesIO()
-page_doc = fitz.open()
-⋮----
-# Create attachment for this page
-page_attachment = FileAttachment.from_io(
-⋮----
-# Send just the first page
-⋮----
-# Test with multiple pages as separate attachments
-⋮----
-def test_llm_image_input(path: str)
-⋮----
-attachment = FileAttachment.from_path(path, detail="low")
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
-⋮----
-def test_litellm_model_key()
-⋮----
-"""
-    Test that passing in explicit api_key works with `litellm/*` models
-    """
-model = "litellm/anthropic/claude-3-5-haiku-latest"
-# disable any chat model passed via --m arg to pytest cmd
-⋮----
-class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig)
-⋮----
-"""OpenAI config that doesn't auto-load from environment variables."""
-⋮----
-# Disable environment prefix to prevent auto-loading
-model_config = SettingsConfigDict(env_prefix="")
-⋮----
-llm_config = CustomOpenAIGPTConfig(
-⋮----
-response = llm.chat("What is 3+4?")
-</file>
-
-<file path="tests/main/test_md_html_parser.py">
-"""
-Tests for Markdown and HTML support in DocumentParser / DocumentType.
-
-Covers:
-- DocumentType enum has MD and HTML values
-- _document_type() dispatches on extension (case-insensitive) for all
-  recognised extensions, and falls back to the plain-text heuristic (or
-  ValueError) for unrecognised ones
-- DocumentType.MD correctly precedes is_plain_text() heuristic
-- chunks_from_path_or_bytes() returns non-empty chunks for both formats
-- Markdown is returned as raw Markdown (syntax and embedded HTML-like
-  text preserved); YAML front-matter is stripped
-- HTML tags are stripped; adjacent elements are newline-separated
-- MIME-based bytes dispatch (text/html, text/markdown, text/x-markdown,
-  text/plain) is covered deterministically via a fake `magic` module
-- .md / .html / .htm URLs are fetched over HTTP(S) and parsed
-- DocumentParser.create() raises a clear ValueError for MD/HTML
-  (they are handled via chunks_from_path_or_bytes, not via a subclass)
-- Plain-text bytes ingestion falls back to the UTF-8 heuristic (and never
-  errors out) when python-magic / native libmagic is missing or broken
-"""
-⋮----
-_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-_MD_PATH = os.path.join(_DATA_DIR, "sample.md")
-_HTML_PATH = os.path.join(_DATA_DIR, "sample.html")
-⋮----
-# ---------------------------------------------------------------------------
-# Enum
-⋮----
-def test_document_type_enum_has_md_and_html() -> None
-⋮----
-# _document_type detection
-⋮----
-# Legacy extensions must dispatch case-insensitively, BEFORE the
-# plain-text heuristic (none of these files exist on disk).
-⋮----
-# Use _document_type directly; pass a fake path with the right extension.
-# The file doesn't need to exist — we only care about extension dispatch.
-result = DocumentParser._document_type(filename)
-⋮----
-result = DocumentParser._document_type(url)
-⋮----
-"""Unknown extension + valid UTF-8 content → plain-text heuristic → TXT."""
-path = tmp_path / "notes.customext"
-⋮----
-"""Unknown extension + non-text content → ValueError."""
-path = tmp_path / "blob.customext"
-⋮----
-def test_md_extension_not_classified_as_txt() -> None
-⋮----
-"""A .md file must not fall back to TXT via the is_plain_text heuristic."""
-result = DocumentParser._document_type(_MD_PATH)
-⋮----
-def test_html_extension_not_classified_as_txt() -> None
-⋮----
-result = DocumentParser._document_type(_HTML_PATH)
-⋮----
-# chunks_from_path_or_bytes — Markdown
-⋮----
-def _assert_raw_markdown_preserved(full_text: str) -> None
-⋮----
-"""Assert content is the RAW Markdown source, not rendered/tag-stripped.
-
-    These would all fail if the implementation rendered the Markdown or
-    passed it through BeautifulSoup's get_text() (which drops/alters
-    tag-like text such as ``<placeholder>``).
-    """
-⋮----
-def test_md_chunks_from_path() -> None
-⋮----
-parser = Parser(ParsingConfig())
-chunks = DocumentParser.chunks_from_path_or_bytes(_MD_PATH, parser)
-⋮----
-full_text = "\n".join(c.content for c in chunks)
-⋮----
-# Front-matter should be stripped
-⋮----
-# Body content must survive
-⋮----
-# Contract: MD returns the raw Markdown source (minus front-matter).
-⋮----
-def test_md_chunks_from_bytes() -> None
-⋮----
-raw = f.read()
-⋮----
-chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser, doc_type="md")
-⋮----
-def test_md_frontmatter_stripped() -> None
-⋮----
-full_text = " ".join(c.content for c in chunks)
-⋮----
-# YAML front-matter lines must not appear in output
-⋮----
-# chunks_from_path_or_bytes — HTML
-⋮----
-def test_html_chunks_from_path() -> None
-⋮----
-chunks = DocumentParser.chunks_from_path_or_bytes(_HTML_PATH, parser)
-⋮----
-# HTML tags must be stripped
-⋮----
-# Readable text must survive
-⋮----
-def test_html_chunks_from_bytes() -> None
-⋮----
-chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser, doc_type="html")
-⋮----
-def test_html_adjacent_elements_newline_separated_from_path() -> None
-⋮----
-"""Adjacent HTML elements must be newline-separated, not concatenated.
-
-    sample.html contains ``<li>Item A</li><li>Item B</li>`` with no
-    whitespace between the elements: a regression from
-    ``get_text(separator="\\n")`` back to ``get_text()`` would concatenate
-    them into ``Item AItem B``.
-    """
-⋮----
-def test_html_adjacent_elements_newline_separated_from_bytes() -> None
-⋮----
-"""Same newline-separation contract for the explicit HTML-bytes path."""
-html = b"<html><body><ul><li>A1</li><li>B2</li></ul><p>C3</p></body></html>"
-⋮----
-chunks = DocumentParser.chunks_from_path_or_bytes(html, parser, doc_type="html")
-⋮----
-def test_html_bytes_auto_detected_without_doc_type() -> None
-⋮----
-"""HTML bytes must be detected as HTML (not TXT) even without doc_type.
-
-    Previously is_plain_text() short-circuited to TXT for any valid UTF-8
-    bytes before MIME detection could run, so HTML bytes were routed through
-    the BeautifulSoup/TXT path accidentally (same result here, but with the
-    wrong DocumentType).  This test verifies the MIME path is reached.
-
-    Requires libmagic (python-magic); skipped if the native library is absent.
-    """
-magic = pytest.importorskip(
-# Verify that magic itself is functional (not just importable).
-⋮----
-detected = DocumentParser._document_type(raw)
-⋮----
-def _make_fake_magic(mime_type: str) -> types.ModuleType
-⋮----
-"""Build a fake ``magic`` module whose from_buffer returns `mime_type`."""
-fake = types.ModuleType("magic")
-⋮----
-def _from_buffer(*args: object, **kwargs: object) -> str
-⋮----
-fake.from_buffer = _from_buffer  # type: ignore[attr-defined]
-⋮----
-"""Bytes dispatch per detected MIME type, independent of libmagic.
-
-    Deterministic version of the auto-detection tests: a fake ``magic``
-    module pins the MIME type, so this runs on systems without libmagic.
-    """
-⋮----
-raw = b"---\ntitle: Front Matter\n---\n\n# Heading\n\nBody text."
-⋮----
-"""Markdown bytes MIME-detected as text/plain (no doc_type) become TXT.
-
-    Documented limitation: libmagic reports most Markdown content as
-    text/plain, so without ``doc_type="md"`` the bytes take the TXT path
-    and YAML front-matter is NOT stripped by the document parser.
-
-    Uses the TOKENS splitter: the default MARKDOWN splitter's chunker
-    strips front-matter downstream, which would mask what the TXT path
-    itself does.
-    """
-⋮----
-parser = Parser(ParsingConfig(splitter=Splitter.TOKENS))
-chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser)
-⋮----
-# Front-matter is retained on the TXT path (doc_type="md" not passed).
-⋮----
-def test_md_bytes_with_doc_type_strips_frontmatter() -> None
-⋮----
-"""Markdown bytes passed with doc_type='md' must strip YAML front-matter.
-
-    Uses the TOKENS splitter so the stripping is attributable to the MD
-    branch of chunks_from_path_or_bytes: the default MARKDOWN splitter's
-    chunker also strips front-matter, which would mask a regression.
-    """
-⋮----
-# Raw Markdown (including HTML-like tokens) survives on the MD path.
-⋮----
-# _strip_yaml_frontmatter — unit tests
-⋮----
-def test_strip_yaml_frontmatter_strips_valid_block() -> None
-⋮----
-doc = "---\ntitle: My Doc\nauthor: Alice\n---\n\n# Heading\n\nBody text."
-result = _strip_yaml_frontmatter(doc)
-⋮----
-def test_strip_yaml_frontmatter_strips_valid_block_at_eof() -> None
-⋮----
-"""A valid front-matter block may end at EOF."""
-result = _strip_yaml_frontmatter("---\ntitle: Secret\n---")
-⋮----
-def test_strip_yaml_frontmatter_preserves_thematic_break() -> None
-⋮----
-"""A leading --- thematic break (no key: value inside) must be kept."""
-doc = "---\n\nSome intro text.\n\n---\n\n# Section"
-⋮----
-def test_strip_yaml_frontmatter_preserves_content_between_dashes() -> None
-⋮----
-"""A leading --- block whose content has no YAML keys must be kept."""
-doc = "---\nThis is just a horizontal rule section.\n---\n\nReal content here."
-⋮----
-def test_strip_yaml_frontmatter_no_frontmatter() -> None
-⋮----
-"""A document with no --- block is returned unchanged (stripped)."""
-doc = "# Title\n\nJust a normal document."
-⋮----
-def test_strip_yaml_frontmatter_partial_yaml_keys() -> None
-⋮----
-"""Even a single key: value line qualifies the block as YAML front-matter."""
-doc = "---\ntitle: Single Key\n---\n\nContent."
-⋮----
-def test_strip_yaml_frontmatter_url_not_treated_as_yaml() -> None
-⋮----
-"""A block with only a URL (colon, but not a YAML key) must be kept."""
-doc = "---\nhttps://example.com\n---\n\nReal content."
-⋮----
-def test_strip_yaml_frontmatter_preserves_leading_indentation() -> None
-⋮----
-"""Leading spaces after front-matter (e.g. indented code) must survive."""
-doc = "---\ntitle: Doc\n---\n\n    indented code block\n\nNormal paragraph."
-⋮----
-# The indented code block's spaces must survive
-⋮----
-def test_strip_yaml_frontmatter_prose_with_colon() -> None
-⋮----
-"""Only bare-identifier `key:` lines qualify a block as front-matter.
-
-    Known limitation (inherent Markdown/YAML ambiguity): a leading divider
-    block like ``---\\nNote: important\\n---`` IS stripped, since ``Note:``
-    is indistinguishable from a single-key YAML front-matter line (which
-    must keep working for Jekyll/Hugo docs like ``title: My Post``).
-    Multi-word prose before the colon does not match, so such blocks are
-    preserved.
-    """
-# Known limitation: a bare identifier before the colon looks like YAML,
-# so this block is stripped even though it is prose.
-doc = "---\nNote: important\n---\n\nBody."
-⋮----
-# Multi-word prose before the colon is not a valid YAML key → preserved.
-doc2 = "---\nSome long prose: with a colon\n---\n\nBody."
-result2 = _strip_yaml_frontmatter(doc2)
-⋮----
-def test_strip_yaml_frontmatter_hostile_whitespace_is_fast() -> None
-⋮----
-"""A '---' opener followed by huge whitespace runs must not blow up.
-
-    The front-matter regexes use [ \\t]* (not \\s*) on delimiter lines:
-    with \\s* this input caused quadratic regex backtracking (minutes of
-    CPU for a few hundred KB of newlines).
-    """
-hostile = "---" + "\n" * 500_000  # opener, no closing delimiter
-start = time.monotonic()
-result = _strip_yaml_frontmatter(hostile)
-⋮----
-assert result == hostile  # nothing stripped
-⋮----
-# Whitespace-only block: matches the block shape but has no YAML keys.
-hostile2 = "---\n" + " \n" * 500_000 + "---\nbody"
-⋮----
-result2 = _strip_yaml_frontmatter(hostile2)
-⋮----
-def test_md_crlf_frontmatter_stripped() -> None
-⋮----
-"""CRLF line endings in Markdown must not prevent front-matter stripping.
-
-    TOKENS splitter for the same reason as
-    test_md_bytes_with_doc_type_strips_frontmatter: the MARKDOWN chunker
-    would strip the front-matter downstream, masking a regression here.
-    """
-⋮----
-crlf_md = (
-chunks = DocumentParser.chunks_from_path_or_bytes(
-⋮----
-# DocumentParser.create() raises for MD / HTML
-⋮----
-def test_create_raises_for_md() -> None
-⋮----
-def test_create_raises_for_html() -> None
-⋮----
-# Plain-text bytes ingestion must not regress when magic is unavailable
-⋮----
-"""Plain-text bytes must ingest as TXT even if `import magic` fails.
-
-    Simulates environments where python-magic is installed but the native
-    libmagic library is missing/broken (import raises), by poisoning
-    sys.modules so any `import magic` raises ImportError.
-    """
-⋮----
-raw = b"Just some plain text.\nAnother line of text."
-⋮----
-"""Plain-text bytes must ingest as TXT if magic raises when called."""
-fake_magic = types.ModuleType("magic")
-⋮----
-def _broken_from_buffer(*args: object, **kwargs: object) -> str
-⋮----
-fake_magic.from_buffer = _broken_from_buffer  # type: ignore[attr-defined]
-⋮----
-raw = b"Hello, this is ordinary text content."
-⋮----
-"""ANY Exception from magic at call time must trigger the fallback.
-
-    The contract requires surviving any Exception, not just OSError or
-    ImportError: a regression narrowing the except clause to specific
-    exception types would break this test.
-    """
-⋮----
-# Valid UTF-8 bytes must still ingest as TXT.
-raw = b"Generic-failure plain text content."
-⋮----
-# Non-text bytes must raise ValueError (not RuntimeError).
-binary = b"\x00\xff\xfe\x00\x01binary-garbage\xff"
-⋮----
-"""Non-text bytes with magic unavailable raise ValueError, not ImportError."""
-⋮----
-"""Invalid trailing UTF-8 bytes must not be truncated into TXT."""
-⋮----
-"""A read-boundary UTF-8 prefix is still accepted as plain text."""
-⋮----
-raw = b"hello \xe2\x82"
-⋮----
-"""Valid-UTF-8 binary signatures must not fall back to TXT."""
-⋮----
-pdf = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
-⋮----
-# URL sources: .md / .html / .htm URLs must be fetched over HTTP(S)
-⋮----
-class _QuietHandler(http.server.SimpleHTTPRequestHandler)
-⋮----
-"""SimpleHTTPRequestHandler without per-request stderr logging."""
-⋮----
-def log_message(self, format: str, *args: Any) -> None
-⋮----
-"""Serve copies of the sample docs over local HTTP; yield the base URL."""
-serve_dir = tmp_path_factory.mktemp("docserve")
-⋮----
-handler = functools.partial(_QuietHandler, directory=str(serve_dir))
-server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
-thread = threading.Thread(target=server.serve_forever, daemon=True)
-⋮----
-def test_md_url_chunks(doc_server_url: str) -> None
-⋮----
-"""A .md URL must be fetched over HTTP and parsed as Markdown.
-
-    Regression test: extension-first detection classifies the URL as MD,
-    and chunks_from_path_or_bytes must fetch it rather than attempt
-    open() on the URL string (which raised FileNotFoundError).
-    """
-⋮----
-url = f"{doc_server_url}/sample.md"
-chunks = DocumentParser.chunks_from_path_or_bytes(url, parser)
-⋮----
-assert "**Markdown**" in full_text  # raw Markdown preserved
-assert "title:" not in full_text  # front-matter stripped
-⋮----
-def test_md_url_chunks_with_query_and_fragment(doc_server_url: str) -> None
-⋮----
-url = f"{doc_server_url}/sample.md?version=1#intro"
-⋮----
-def test_html_url_chunks(doc_server_url: str, filename: str) -> None
-⋮----
-""".html / .htm URLs must be fetched over HTTP and tag-stripped."""
-⋮----
-url = f"{doc_server_url}/{filename}"
-⋮----
-# Adjacent elements are newline-separated on the URL path too.
 </file>
 
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
@@ -71949,6 +71660,418 @@ model_names = tuple(_model_name(model) for model in models)
 def _model_name(model: str | ModelName) -> str
 </file>
 
+<file path="tests/main/test_md_html_parser.py">
+"""
+Tests for Markdown and HTML support in DocumentParser / DocumentType.
+
+Covers:
+- DocumentType enum has MD and HTML values
+- _document_type() dispatches on extension (case-insensitive) for all
+  recognised extensions, and falls back to the plain-text heuristic (or
+  ValueError) for unrecognised ones
+- DocumentType.MD correctly precedes is_plain_text() heuristic
+- chunks_from_path_or_bytes() returns non-empty chunks for both formats
+- Markdown is returned as raw Markdown (syntax and embedded HTML-like
+  text preserved); YAML front-matter is stripped
+- HTML tags are stripped; adjacent elements are newline-separated
+- MIME-based bytes dispatch (text/html, text/markdown, text/x-markdown,
+  text/plain) is covered deterministically via a fake `magic` module
+- .md / .html / .htm URLs are fetched over HTTP(S) and parsed
+- DocumentParser.create() raises a clear ValueError for MD/HTML
+  (they are handled via chunks_from_path_or_bytes, not via a subclass)
+- Plain-text bytes ingestion falls back to the UTF-8 heuristic (and never
+  errors out) when python-magic / native libmagic is missing or broken
+"""
+⋮----
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+_MD_PATH = os.path.join(_DATA_DIR, "sample.md")
+_HTML_PATH = os.path.join(_DATA_DIR, "sample.html")
+⋮----
+# ---------------------------------------------------------------------------
+# Enum
+⋮----
+def test_document_type_enum_has_md_and_html() -> None
+⋮----
+# _document_type detection
+⋮----
+# Legacy extensions must dispatch case-insensitively, BEFORE the
+# plain-text heuristic (none of these files exist on disk).
+⋮----
+# Use _document_type directly; pass a fake path with the right extension.
+# The file doesn't need to exist — we only care about extension dispatch.
+result = DocumentParser._document_type(filename)
+⋮----
+result = DocumentParser._document_type(url)
+⋮----
+"""Unknown extension + valid UTF-8 content → plain-text heuristic → TXT."""
+path = tmp_path / "notes.customext"
+⋮----
+"""Unknown extension + non-text content → ValueError."""
+path = tmp_path / "blob.customext"
+⋮----
+def test_md_extension_not_classified_as_txt() -> None
+⋮----
+"""A .md file must not fall back to TXT via the is_plain_text heuristic."""
+result = DocumentParser._document_type(_MD_PATH)
+⋮----
+def test_html_extension_not_classified_as_txt() -> None
+⋮----
+result = DocumentParser._document_type(_HTML_PATH)
+⋮----
+# chunks_from_path_or_bytes — Markdown
+⋮----
+def _assert_raw_markdown_preserved(full_text: str) -> None
+⋮----
+"""Assert content is the RAW Markdown source, not rendered/tag-stripped.
+
+    These would all fail if the implementation rendered the Markdown or
+    passed it through BeautifulSoup's get_text() (which drops/alters
+    tag-like text such as ``<placeholder>``).
+    """
+⋮----
+def test_md_chunks_from_path() -> None
+⋮----
+parser = Parser(ParsingConfig())
+chunks = DocumentParser.chunks_from_path_or_bytes(_MD_PATH, parser)
+⋮----
+full_text = "\n".join(c.content for c in chunks)
+⋮----
+# Front-matter should be stripped
+⋮----
+# Body content must survive
+⋮----
+# Contract: MD returns the raw Markdown source (minus front-matter).
+⋮----
+def test_md_chunks_from_bytes() -> None
+⋮----
+raw = f.read()
+⋮----
+chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser, doc_type="md")
+⋮----
+def test_md_frontmatter_stripped() -> None
+⋮----
+full_text = " ".join(c.content for c in chunks)
+⋮----
+# YAML front-matter lines must not appear in output
+⋮----
+# chunks_from_path_or_bytes — HTML
+⋮----
+def test_html_chunks_from_path() -> None
+⋮----
+chunks = DocumentParser.chunks_from_path_or_bytes(_HTML_PATH, parser)
+⋮----
+# HTML tags must be stripped
+⋮----
+# Readable text must survive
+⋮----
+def test_html_chunks_from_bytes() -> None
+⋮----
+chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser, doc_type="html")
+⋮----
+def test_windows1252_html_chunks_from_bytes() -> None
+⋮----
+html = (
+⋮----
+chunks = DocumentParser.chunks_from_path_or_bytes(
+⋮----
+path = tmp_path / "windows1252.html"
+⋮----
+def test_html_adjacent_elements_newline_separated_from_path() -> None
+⋮----
+"""Adjacent HTML elements must be newline-separated, not concatenated.
+
+    sample.html contains ``<li>Item A</li><li>Item B</li>`` with no
+    whitespace between the elements: a regression from
+    ``get_text(separator="\\n")`` back to ``get_text()`` would concatenate
+    them into ``Item AItem B``.
+    """
+⋮----
+def test_html_adjacent_elements_newline_separated_from_bytes() -> None
+⋮----
+"""Same newline-separation contract for the explicit HTML-bytes path."""
+html = b"<html><body><ul><li>A1</li><li>B2</li></ul><p>C3</p></body></html>"
+⋮----
+chunks = DocumentParser.chunks_from_path_or_bytes(html, parser, doc_type="html")
+⋮----
+def test_html_bytes_auto_detected_without_doc_type() -> None
+⋮----
+"""HTML bytes must be detected as HTML (not TXT) even without doc_type.
+
+    Previously is_plain_text() short-circuited to TXT for any valid UTF-8
+    bytes before MIME detection could run, so HTML bytes were routed through
+    the BeautifulSoup/TXT path accidentally (same result here, but with the
+    wrong DocumentType).  This test verifies the MIME path is reached.
+
+    Requires libmagic (python-magic); skipped if the native library is absent.
+    """
+magic = pytest.importorskip(
+# Verify that magic itself is functional (not just importable).
+⋮----
+detected = DocumentParser._document_type(raw)
+⋮----
+def _make_fake_magic(mime_type: str) -> types.ModuleType
+⋮----
+"""Build a fake ``magic`` module whose from_buffer returns `mime_type`."""
+fake = types.ModuleType("magic")
+⋮----
+def _from_buffer(*args: object, **kwargs: object) -> str
+⋮----
+fake.from_buffer = _from_buffer  # type: ignore[attr-defined]
+⋮----
+"""Bytes dispatch per detected MIME type, independent of libmagic.
+
+    Deterministic version of the auto-detection tests: a fake ``magic``
+    module pins the MIME type, so this runs on systems without libmagic.
+    """
+⋮----
+raw = b"---\ntitle: Front Matter\n---\n\n# Heading\n\nBody text."
+⋮----
+"""Markdown bytes MIME-detected as text/plain (no doc_type) become TXT.
+
+    Documented limitation: libmagic reports most Markdown content as
+    text/plain, so without ``doc_type="md"`` the bytes take the TXT path
+    and YAML front-matter is NOT stripped by the document parser.
+
+    Uses the TOKENS splitter: the default MARKDOWN splitter's chunker
+    strips front-matter downstream, which would mask what the TXT path
+    itself does.
+    """
+⋮----
+parser = Parser(ParsingConfig(splitter=Splitter.TOKENS))
+chunks = DocumentParser.chunks_from_path_or_bytes(raw, parser)
+⋮----
+# Front-matter is retained on the TXT path (doc_type="md" not passed).
+⋮----
+def test_md_bytes_with_doc_type_strips_frontmatter() -> None
+⋮----
+"""Markdown bytes passed with doc_type='md' must strip YAML front-matter.
+
+    Uses the TOKENS splitter so the stripping is attributable to the MD
+    branch of chunks_from_path_or_bytes: the default MARKDOWN splitter's
+    chunker also strips front-matter, which would mask a regression.
+    """
+⋮----
+# Raw Markdown (including HTML-like tokens) survives on the MD path.
+⋮----
+# _strip_yaml_frontmatter — unit tests
+⋮----
+def test_strip_yaml_frontmatter_strips_valid_block() -> None
+⋮----
+doc = "---\ntitle: My Doc\nauthor: Alice\n---\n\n# Heading\n\nBody text."
+result = _strip_yaml_frontmatter(doc)
+⋮----
+def test_strip_yaml_frontmatter_strips_valid_block_at_eof() -> None
+⋮----
+"""A valid front-matter block may end at EOF."""
+result = _strip_yaml_frontmatter("---\ntitle: Secret\n---")
+⋮----
+def test_strip_yaml_frontmatter_preserves_thematic_break() -> None
+⋮----
+"""A leading --- thematic break (no key: value inside) must be kept."""
+doc = "---\n\nSome intro text.\n\n---\n\n# Section"
+⋮----
+def test_strip_yaml_frontmatter_preserves_content_between_dashes() -> None
+⋮----
+"""A leading --- block whose content has no YAML keys must be kept."""
+doc = "---\nThis is just a horizontal rule section.\n---\n\nReal content here."
+⋮----
+def test_strip_yaml_frontmatter_no_frontmatter() -> None
+⋮----
+"""A document with no --- block is returned unchanged (stripped)."""
+doc = "# Title\n\nJust a normal document."
+⋮----
+def test_strip_yaml_frontmatter_partial_yaml_keys() -> None
+⋮----
+"""Even a single key: value line qualifies the block as YAML front-matter."""
+doc = "---\ntitle: Single Key\n---\n\nContent."
+⋮----
+def test_strip_yaml_frontmatter_url_not_treated_as_yaml() -> None
+⋮----
+"""A block with only a URL (colon, but not a YAML key) must be kept."""
+doc = "---\nhttps://example.com\n---\n\nReal content."
+⋮----
+def test_strip_yaml_frontmatter_preserves_leading_indentation() -> None
+⋮----
+"""Leading spaces after front-matter (e.g. indented code) must survive."""
+doc = "---\ntitle: Doc\n---\n\n    indented code block\n\nNormal paragraph."
+⋮----
+# The indented code block's spaces must survive
+⋮----
+def test_strip_yaml_frontmatter_prose_with_colon() -> None
+⋮----
+"""Only bare-identifier `key:` lines qualify a block as front-matter.
+
+    Known limitation (inherent Markdown/YAML ambiguity): a leading divider
+    block like ``---\\nNote: important\\n---`` IS stripped, since ``Note:``
+    is indistinguishable from a single-key YAML front-matter line (which
+    must keep working for Jekyll/Hugo docs like ``title: My Post``).
+    Multi-word prose before the colon does not match, so such blocks are
+    preserved.
+    """
+# Known limitation: a bare identifier before the colon looks like YAML,
+# so this block is stripped even though it is prose.
+doc = "---\nNote: important\n---\n\nBody."
+⋮----
+# Multi-word prose before the colon is not a valid YAML key → preserved.
+doc2 = "---\nSome long prose: with a colon\n---\n\nBody."
+result2 = _strip_yaml_frontmatter(doc2)
+⋮----
+def test_strip_yaml_frontmatter_hostile_whitespace_is_fast() -> None
+⋮----
+"""A '---' opener followed by huge whitespace runs must not blow up.
+
+    The front-matter regexes use [ \\t]* (not \\s*) on delimiter lines:
+    with \\s* this input caused quadratic regex backtracking (minutes of
+    CPU for a few hundred KB of newlines).
+    """
+hostile = "---" + "\n" * 500_000  # opener, no closing delimiter
+start = time.monotonic()
+result = _strip_yaml_frontmatter(hostile)
+⋮----
+assert result == hostile  # nothing stripped
+⋮----
+# Whitespace-only block: matches the block shape but has no YAML keys.
+hostile2 = "---\n" + " \n" * 500_000 + "---\nbody"
+⋮----
+result2 = _strip_yaml_frontmatter(hostile2)
+⋮----
+def test_md_crlf_frontmatter_stripped() -> None
+⋮----
+"""CRLF line endings in Markdown must not prevent front-matter stripping.
+
+    TOKENS splitter for the same reason as
+    test_md_bytes_with_doc_type_strips_frontmatter: the MARKDOWN chunker
+    would strip the front-matter downstream, masking a regression here.
+    """
+⋮----
+crlf_md = (
+⋮----
+# DocumentParser.create() raises for MD / HTML
+⋮----
+def test_create_raises_for_md() -> None
+⋮----
+def test_create_raises_for_html() -> None
+⋮----
+# Plain-text bytes ingestion must not regress when magic is unavailable
+⋮----
+"""Plain-text bytes must ingest as TXT even if `import magic` fails.
+
+    Simulates environments where python-magic is installed but the native
+    libmagic library is missing/broken (import raises), by poisoning
+    sys.modules so any `import magic` raises ImportError.
+    """
+⋮----
+raw = b"Just some plain text.\nAnother line of text."
+⋮----
+"""Plain-text bytes must ingest as TXT if magic raises when called."""
+fake_magic = types.ModuleType("magic")
+⋮----
+def _broken_from_buffer(*args: object, **kwargs: object) -> str
+⋮----
+fake_magic.from_buffer = _broken_from_buffer  # type: ignore[attr-defined]
+⋮----
+raw = b"Hello, this is ordinary text content."
+⋮----
+"""ANY Exception from magic at call time must trigger the fallback.
+
+    The contract requires surviving any Exception, not just OSError or
+    ImportError: a regression narrowing the except clause to specific
+    exception types would break this test.
+    """
+⋮----
+# Valid UTF-8 bytes must still ingest as TXT.
+raw = b"Generic-failure plain text content."
+⋮----
+# Non-text bytes must raise ValueError (not RuntimeError).
+binary = b"\x00\xff\xfe\x00\x01binary-garbage\xff"
+⋮----
+"""Non-text bytes with magic unavailable raise ValueError, not ImportError."""
+⋮----
+"""Invalid trailing UTF-8 bytes must not be truncated into TXT."""
+⋮----
+"""A read-boundary UTF-8 prefix is still accepted as plain text."""
+⋮----
+raw = b"hello \xe2\x82"
+⋮----
+"""Valid-UTF-8 binary signatures must not fall back to TXT."""
+⋮----
+pdf = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
+⋮----
+# URL sources: .md / .html / .htm URLs must be fetched over HTTP(S)
+⋮----
+class _QuietHandler(http.server.SimpleHTTPRequestHandler)
+⋮----
+"""SimpleHTTPRequestHandler without per-request stderr logging."""
+⋮----
+def log_message(self, format: str, *args: Any) -> None
+⋮----
+def do_GET(self) -> None
+⋮----
+"""Serve special transport and encoding cases used by URL tests."""
+⋮----
+body = "<p>café déjà vu</p>".encode("iso-8859-1")
+⋮----
+body = html.encode("windows-1252")
+⋮----
+body = "<p>Snowman ☃</p>".encode("utf-16")
+⋮----
+"""Serve copies of the sample docs over local HTTP; yield the base URL."""
+serve_dir = tmp_path_factory.mktemp("docserve")
+⋮----
+handler = functools.partial(_QuietHandler, directory=str(serve_dir))
+server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+thread = threading.Thread(target=server.serve_forever, daemon=True)
+⋮----
+def test_md_url_chunks(doc_server_url: str) -> None
+⋮----
+"""A .md URL must be fetched over HTTP and parsed as Markdown.
+
+    Regression test: extension-first detection classifies the URL as MD,
+    and chunks_from_path_or_bytes must fetch it rather than attempt
+    open() on the URL string (which raised FileNotFoundError).
+    """
+⋮----
+url = f"{doc_server_url}/sample.md"
+chunks = DocumentParser.chunks_from_path_or_bytes(url, parser)
+⋮----
+assert "**Markdown**" in full_text  # raw Markdown preserved
+assert "title:" not in full_text  # front-matter stripped
+⋮----
+def test_md_url_chunks_with_query_and_fragment(doc_server_url: str) -> None
+⋮----
+url = f"{doc_server_url}/sample.md?version=1#intro"
+⋮----
+def test_html_url_chunks(doc_server_url: str, filename: str) -> None
+⋮----
+""".html / .htm URLs must be fetched over HTTP and tag-stripped."""
+⋮----
+url = f"{doc_server_url}/{filename}"
+⋮----
+# Adjacent elements are newline-separated on the URL path too.
+⋮----
+@pytest.mark.parametrize("scheme", ["HTTP", "HtTp"])
+def test_url_scheme_is_case_insensitive(doc_server_url: str, scheme: str) -> None
+⋮----
+"""URI schemes are case-insensitive for detection and fetching."""
+url = doc_server_url.replace("http", scheme, 1) + "/sample.html"
+⋮----
+chunks = DocumentParser.chunks_from_path_or_bytes(url, Parser(ParsingConfig()))
+⋮----
+def test_url_read_timeout_stops_stalled_response(doc_server_url: str) -> None
+⋮----
+"""A server that stalls after headers must not hang ingestion."""
+parser = Parser(ParsingConfig(url_read_timeout=0.01))
+⋮----
+"""Extensionless URL sampling must use the configured read timeout."""
+⋮----
+def test_url_streaming_rejects_oversized_response(doc_server_url: str) -> None
+⋮----
+"""The streaming size cap applies without a Content-Length header."""
+parser = Parser(ParsingConfig(url_max_size=16))
+⋮----
+"""HTTP and HTML charset declarations preserve exact Unicode text."""
+</file>
+
 <file path="langroid/language_models/openai_gpt.py">
 OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
 ⋮----
@@ -73086,8 +73209,6 @@ def _decode_utf8_text(content: bytes) -> str
 ⋮----
 """Decode UTF-8 bytes, trimming only an incomplete trailing character."""
 ⋮----
-def is_plain_text(path_or_bytes: str | bytes) -> bool
-⋮----
 """
     Check if a file is plain text by attempting to decode it as UTF-8.
     Args:
@@ -73095,10 +73216,6 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool
     Returns:
         bool: True if the file is plain text, False otherwise.
     """
-⋮----
-response = requests.get(path_or_bytes)
-⋮----
-content = response.content[:1024]
 ⋮----
 content = f.read(1024)
 ⋮----
@@ -73113,10 +73230,6 @@ mime_type = magic.from_buffer(content, mime=True)
 # python-magic not installed, or the native libmagic library is
 # missing/broken: skip MIME screening and rely on the UTF-8 decode
 # check below, so plain-text detection keeps working.
-⋮----
-def _extension_source(source: str) -> str
-⋮----
-"""Return the path component used for extension-based type detection."""
 ⋮----
 # Matches a leading --- ... --- block (candidate front-matter). The
 # delimiter lines allow only trailing spaces/tabs ([ \t]*, NOT \s*, which
@@ -73168,7 +73281,7 @@ class DocumentParser(Parser)
         Returns:
             DocumentParser: An instance of a DocumentParser subclass.
         """
-inferred_doc_type = DocumentParser._document_type(source, doc_type)
+inferred_doc_type = DocumentParser._document_type(source, doc_type, config)
 ⋮----
 source_name = source if isinstance(source, str) else "bytes"
 ⋮----
@@ -73187,6 +73300,7 @@ def __init__(self, source: str | bytes, config: ParsingConfig)
             source (str|bytes): The source, which could be a URL,
                 a file path, or a bytes object.
             doc_type (str|DocumentType|None): The type of document, if known.
+            config (ParsingConfig|None): URL retrieval settings, if available.
 
         Returns:
             str: The document type.
@@ -73195,7 +73309,7 @@ def __init__(self, source: str | bytes, config: ParsingConfig)
 # Detect file type from path/URL extension first so that
 # format-specific types (md, html) are not mis-classified as TXT
 # by the is_plain_text heuristic below.
-lower = _extension_source(source)
+lower = url_extension_source(source)
 ⋮----
 # For strings with no recognised extension, fall back to the
 # plain-text heuristic (covers .txt and bare URLs).
@@ -73225,8 +73339,6 @@ def _load_doc_as_bytesio(self) -> BytesIO
             BytesIO: A BytesIO object containing the doc data.
         """
 ⋮----
-response = requests.get(self.source)
-⋮----
 """
         Get document chunks from a file path or bytes object.
         Args:
@@ -73239,7 +73351,7 @@ response = requests.get(self.source)
                 each containing a chunk of text, determined by the
                 chunking and splitting settings in the parser config.
         """
-dtype: DocumentType = DocumentParser._document_type(source, doc_type)
+dtype = DocumentParser._document_type(source, doc_type, parser.config)
 ⋮----
 doc_parser = DocumentParser.create(
 chunks = doc_parser.get_doc_chunks()
@@ -73249,18 +73361,18 @@ doc_parser = ImagePdfParser(source, parser.config)
 # Plain-text formats (TXT, MD, HTML) and unknown types:
 # read content, extract text, and chunk.
 ⋮----
+content = decode_document_text(source, html=True)
+⋮----
 content = _decode_utf8_text(source)
 ⋮----
 file_lines = content.splitlines()[:lines]
 content = "\n".join(line.strip() for line in file_lines)
 ⋮----
-# URL (e.g. https://example.com/readme.md): extension
-# detection above may classify it as MD/HTML/TXT, but it
-# must be fetched over HTTP(S) — open() below only works
-# for local paths.
-response = requests.get(source)
+# Fetch URL-based plain text rather than opening it as a path.
 ⋮----
-content = response.content.decode("utf-8", errors="replace")
+content = decode_document_text(
+⋮----
+content = decode_document_text(f.read(), html=True)
 ⋮----
 file_lines = list(itertools.islice(f, lines))
 ⋮----
@@ -74006,7 +74118,7 @@ page_no = 0
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>

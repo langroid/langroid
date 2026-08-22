@@ -241,6 +241,38 @@ def test_html_chunks_from_bytes() -> None:
     assert "<h1>" not in full_text
 
 
+def test_windows1252_html_chunks_from_bytes() -> None:
+    html = (
+        '<html><head><meta charset="windows-1252"></head>'
+        "<body>Crème brûlée — déjà vu</body></html>"
+    ).encode("windows-1252")
+
+    chunks = DocumentParser.chunks_from_path_or_bytes(
+        html, Parser(ParsingConfig()), doc_type="html"
+    )
+
+    assert chunks
+    assert "Crème brûlée — déjà vu" in "\n".join(chunk.content for chunk in chunks)
+
+
+def test_windows1252_html_chunks_from_local_file(
+    tmp_path: pathlib.Path,
+) -> None:
+    html = (
+        '<html><head><meta charset="windows-1252"></head>'
+        "<body>Crème brûlée — déjà vu</body></html>"
+    ).encode("windows-1252")
+    path = tmp_path / "windows1252.html"
+    path.write_bytes(html)
+
+    chunks = DocumentParser.chunks_from_path_or_bytes(
+        str(path), Parser(ParsingConfig())
+    )
+
+    assert chunks
+    assert "Crème brûlée — déjà vu" in "\n".join(chunk.content for chunk in chunks)
+
+
 def test_html_adjacent_elements_newline_separated_from_path() -> None:
     """Adjacent HTML elements must be newline-separated, not concatenated.
 

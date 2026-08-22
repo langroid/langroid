@@ -123,13 +123,13 @@ def fetch_url_sample(
     )
 
 
-def decode_url_text(
+def decode_document_text(
     content: bytes,
-    headers: Mapping[str, str],
+    headers: Mapping[str, str] | None = None,
     *,
     html: bool,
 ) -> str:
-    """Decode URL bytes using BOM, HTTP, and HTML encoding declarations.
+    """Decode document bytes using BOM, HTTP, and HTML declarations.
 
     BOMs take precedence, followed by a valid charset in the HTTP
     ``Content-Type`` header and, for HTML, encoding detected from its meta
@@ -140,7 +140,7 @@ def decode_url_text(
     if bom_encoding is not None:
         return content.decode(bom_encoding)
 
-    http_encoding = _http_encoding(headers)
+    http_encoding = _http_encoding(headers or {})
     if http_encoding is not None:
         return content.decode(http_encoding, errors="replace")
 

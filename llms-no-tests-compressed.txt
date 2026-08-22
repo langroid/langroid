@@ -558,6 +558,7 @@ langroid/
     agent_chats.py
     code_parser.py
     document_parser.py
+    document_url.py
     file_attachment.py
     md_parser.py
     para_sentence_split.py
@@ -32533,339 +32534,6 @@ def similarity(self, text1: str, text2: str) -> float
 """Compute cosine similarity between two texts."""
 </file>
 
-<file path="langroid/embedding_models/models.py">
-AzureADTokenProvider = Callable[[], str]
-⋮----
-class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "openai"
-model_name: str = "text-embedding-3-small"
-api_key: str = ""
-api_base: Optional[str] = None
-organization: str = ""
-dims: int = 1536
-context_length: int = 8192
-langdb_params: LangDBParams = LangDBParams()
-⋮----
-model_config = SettingsConfigDict(env_prefix="OPENAI_")
-⋮----
-class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "azure-openai"
-⋮----
-api_base: str = ""
-deployment_name: Optional[str] = None
-# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
-# change this to required  supported version
-api_version: Optional[str] = "2024-06-01"
-# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
-azure_ad_token: Optional[str] = None
-azure_ad_token_provider: Optional[AzureADTokenProvider] = None
-⋮----
-model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
-⋮----
-class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "sentence-transformer"
-model_name: str = "BAAI/bge-large-en-v1.5"
-context_length: int = 512
-data_parallel: bool = False
-# Select device (e.g. "cuda", "cpu") when data parallel is disabled
-device: Optional[str] = None
-# Select devices when data parallel is enabled
-devices: Optional[list[str]] = None
-⋮----
-class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-"""Config for qdrant/fastembed embeddings,
-    see here: https://github.com/qdrant/fastembed
-    """
-⋮----
-model_type: str = "fastembed"
-model_name: str = "BAAI/bge-small-en-v1.5"
-batch_size: int = 256
-cache_dir: Optional[str] = None
-threads: Optional[int] = None
-parallel: Optional[int] = None
-additional_kwargs: Dict[str, Any] = {}
-⋮----
-class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-context_length: int = 2048
-batch_size: int = 2048
-⋮----
-class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
-⋮----
-model_type: str = "gemini"
-model_name: str = "models/text-embedding-004"
-⋮----
-dims: int = 768
-batch_size: int = 512
-⋮----
-class EmbeddingFunctionCallable
-⋮----
-"""
-    A callable class designed to generate embeddings for a list of texts using
-    the OpenAI or Azure OpenAI API, with automatic retries on failure.
-
-    Attributes:
-        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
-               configuration and utilities for generating embeddings.
-
-    Methods:
-        __call__(input: List[str]) -> Embeddings: Generate embeddings for
-                                a list of input texts.
-    """
-⋮----
-def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
-⋮----
-"""
-        Initialize the EmbeddingFunctionCallable with a specific model.
-
-        Args:
-            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
-                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
-                            generating embeddings.
-            batch_size (int): Batch size
-        """
-⋮----
-def __call__(self, input: List[str]) -> Embeddings
-⋮----
-"""
-        Generate embeddings for a given list of input texts using the OpenAI API,
-        with retries on failure.
-
-        This method:
-        - Truncates each text in the input list to the model's maximum context length.
-        - Processes the texts in batches to generate embeddings efficiently.
-        - Automatically retries the embedding generation process with exponential
-        backoff in case of failures.
-
-        Args:
-            input (List[str]): A list of input texts to generate embeddings for.
-
-        Returns:
-            Embeddings: A list of embedding vectors corresponding to the input texts.
-        """
-embeds = []
-⋮----
-# Truncate texts to context length while preserving text format
-truncated_texts = self.embed_model.truncate_texts(input)
-⋮----
-# Process in batches
-⋮----
-result = self.embed_model.client.embeddings.create(
-⋮----
-input=batch, model=self.embed_model.config.model_name  # type: ignore
-⋮----
-batch_embeds = [d.embedding for d in result.data]
-⋮----
-embeds = self.embed_model.model.encode_multi_process(
-⋮----
-batch_embeds = self.embed_model.model.encode(
-⋮----
-).tolist()  # type: ignore
-⋮----
-embeddings = self.embed_model.model.embed(
-⋮----
-embeds = [embedding.tolist() for embedding in embeddings]
-⋮----
-tokenized_text = self.embed_model.tokenize_string(input_string)
-⋮----
-gen_embedding = self.embed_model.generate_embedding(
-⋮----
-embeds = self.embed_model.generate_embeddings(input)
-⋮----
-class OpenAIEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
-⋮----
-# Check if using LangDB
-⋮----
-project_id = self.config.langdb_params.project_id
-⋮----
-model_for_tokenizer = self.config.model_name
-⋮----
-def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
-⋮----
-"""
-        Truncate texts to the embedding model's context length.
-        TODO: Maybe we should show warning, and consider doing T5 summarization?
-        """
-truncated_tokens = [
-⋮----
-# LangDB embedding endpt only works with strings, not tokens
-⋮----
-def embedding_fn(self) -> Callable[[List[str]], Embeddings]
-⋮----
-@property
-    def embedding_dims(self) -> int
-⋮----
-class AzureOpenAIEmbeddings(EmbeddingModel)
-⋮----
-"""
-    Azure OpenAI embeddings model implementation.
-    """
-⋮----
-"""
-        Initializes Azure OpenAI embeddings model.
-
-        Args:
-            config: Configuration for Azure OpenAI embeddings model.
-        Raises:
-            ValueError: If required Azure config values are not set.
-        """
-⋮----
-"""Get the embedding function for Azure OpenAI.
-
-        Returns:
-            Callable that generates embeddings for input texts.
-        """
-⋮----
-STEC = SentenceTransformerEmbeddingsConfig
-⋮----
-class SentenceTransformerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: STEC = STEC())
-⋮----
-# this is an "extra" optional dependency, so we import it here
-⋮----
-self.config.devices  # type: ignore
-⋮----
-self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
-⋮----
-dims = self.model.get_sentence_embedding_dimension()
-⋮----
-return dims  # type: ignore
-⋮----
-class FastEmbedEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
-⋮----
-@cached_property
-    def embedding_dims(self) -> int
-⋮----
-embed_func = self.embedding_fn()
-⋮----
-LCSEC = LlamaCppServerEmbeddingsConfig
-⋮----
-class LlamaCppServerEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: LCSEC = LCSEC())
-⋮----
-def tokenize_string(self, text: str) -> List[int]
-⋮----
-data = {"content": text, "add_special": False, "with_pieces": False}
-response = requests.post(self.tokenize_url, json=data)
-⋮----
-tokens = response.json()["tokens"]
-⋮----
-# not all(isinstance(token, (int, float)) for token in tokens):
-⋮----
-def detokenize_string(self, tokens: List[int]) -> str
-⋮----
-data = {"tokens": tokens}
-response = requests.post(self.detokenize_url, json=data)
-⋮----
-text = response.json()["content"]
-⋮----
-def truncate_string_to_context_size(self, text: str) -> str
-⋮----
-tokens = self.tokenize_string(text)
-tokens = tokens[: self.config.context_length]
-⋮----
-def generate_embedding(self, text: str) -> List[int | float]
-⋮----
-data = {"content": text}
-response = requests.post(self.embedding_url, json=data)
-⋮----
-embeddings = self._extract_embedding(response.json())
-⋮----
-"""
-        Extract embedding vector from llama.cpp response.
-
-        Handles multiple response formats:
-        1. Native /embedding: {"embedding": [floats]}
-        2. Array format: [{"embedding": [floats]}]
-        3. Double-nested: [{"embedding": [[floats]]}]
-        4. OpenAI /v1/embeddings: {"data": [{"embedding": [floats]}]}
-        5. Nested in dict: {"embedding": [[floats]]}
-
-        Args:
-            response_json: The JSON response from llama.cpp server
-
-        Returns:
-            List of floats representing the embedding vector
-
-        Raises:
-            ValueError: If response format is not recognized
-        """
-⋮----
-# Try native format first: {"embedding": [floats]}
-⋮----
-embeddings = response_json["embedding"]
-# Check if it's [floats]
-⋮----
-# Might be nested: {"embedding": [[floats]]}
-⋮----
-# Try OpenAI format: {"data": [{"embedding": [floats]}]}
-⋮----
-data = response_json["data"]
-⋮----
-embeddings = data[0]["embedding"]
-⋮----
-# Try array format: [{"embedding": [floats]}] or [{"embedding": [[floats]]}]
-⋮----
-first_item = response_json[0]
-⋮----
-embeddings = first_item["embedding"]
-⋮----
-# Check if it's [[floats]]
-⋮----
-class GeminiEmbeddings(EmbeddingModel)
-⋮----
-def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
-⋮----
-def generate_embeddings(self, texts: List[str]) -> List[List[float]]
-⋮----
-"""Generates embeddings for a list of input texts."""
-all_embeddings: List[List[float]] = []
-⋮----
-result = self.client.models.embed_content(  # type: ignore[attr-defined]
-⋮----
-contents=batch,  # type: ignore
-⋮----
-# Extract .values from ContentEmbedding objects
-⋮----
-[emb.values for emb in result.embeddings]  # type: ignore
-⋮----
-def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
-⋮----
-"""
-    Args:
-        embedding_fn_type: Type of embedding model to use. Options are:
-         - "openai",
-         - "azure-openai",
-         - "sentencetransformer", or
-         - "fastembed".
-            (others may be added in the future)
-    Returns:
-        EmbeddingModel: The corresponding embedding model class.
-    """
-⋮----
-return OpenAIEmbeddings  # type: ignore
-⋮----
-return AzureOpenAIEmbeddings  # type: ignore
-⋮----
-return FastEmbedEmbeddings  # type: ignore
-⋮----
-return LlamaCppServerEmbeddings  # type: ignore
-⋮----
-return GeminiEmbeddings  # type: ignore
-else:  # default sentence transformer
-return SentenceTransformerEmbeddings  # type: ignore
-</file>
-
 <file path="langroid/embedding_models/remote_embeds.py">
 """
 If run as a script, starts an RPC server which handles remote
@@ -37032,234 +36700,6 @@ def transform_pinecone_vector(self, metadata_dict: Dict[str, Any]) -> Document
             metadata_dict: Dict - the metadata dictionary from the Pinecone
                 vector query match
         """
-</file>
-
-<file path="langroid/vector_store/qdrantdb.py">
-logger = logging.getLogger(__name__)
-⋮----
-T = TypeVar("T")
-⋮----
-def from_optional(x: Optional[T], default: T) -> T
-⋮----
-def is_valid_uuid(uuid_to_test: str) -> bool
-⋮----
-"""
-    Check if a given string is a valid UUID.
-    """
-⋮----
-uuid_obj = uuid.UUID(uuid_to_test)
-⋮----
-# Check for valid unsigned 64-bit integer
-⋮----
-int_value = int(uuid_to_test)
-⋮----
-class QdrantDBConfig(VectorStoreConfig)
-⋮----
-cloud: bool = True
-docker: bool = False
-collection_name: str | None = "temp"
-storage_path: str = ".qdrant/data"
-embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-use_sparse_embeddings: bool = False
-sparse_embedding_model: str = "naver/splade-v3-distilbert"
-sparse_limit: int = 3
-distance: str = "cosine"
-⋮----
-class QdrantDB(VectorStore)
-⋮----
-def __init__(self, config: QdrantDBConfig = QdrantDBConfig())
-⋮----
-self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
-⋮----
-key = os.getenv("QDRANT_API_KEY")
-url = os.getenv("QDRANT_API_URL")
-⋮----
-new_storage_path = config.storage_path + ".new"
-⋮----
-# Note: Only create collection if a non-null collection name is provided.
-# This is useful to delay creation of vecdb until we have a suitable
-# collection name (e.g. we could get it from the url or folder path).
-⋮----
-def clone(self) -> "QdrantDB"
-⋮----
-"""Create an independent Qdrant client when running against Qdrant Cloud."""
-⋮----
-cloned = super().clone()
-⋮----
-def close(self) -> None
-⋮----
-"""
-        Close the QdrantDB client and release any resources (e.g., file locks).
-        This is especially important for local storage to release the .lock file.
-        """
-⋮----
-# QdrantLocal has a close method that releases the lock
-⋮----
-def __enter__(self) -> "QdrantDB"
-⋮----
-"""Context manager entry."""
-⋮----
-def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
-⋮----
-"""Context manager exit - ensure cleanup even if an exception occurred."""
-⋮----
-def clear_empty_collections(self) -> int
-⋮----
-coll_names = self.list_collections()
-n_deletes = 0
-⋮----
-info = self.client.get_collection(collection_name=name)
-⋮----
-def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-"""Clear all collections with the given prefix."""
-⋮----
-coll_names = [
-⋮----
-n_empty_deletes = 0
-n_non_empty_deletes = 0
-⋮----
-points_count = from_optional(info.points_count, 0)
-⋮----
-def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-"""
-        Returns:
-            List of collection names that have at least one vector.
-
-        Args:
-            empty (bool, optional): Whether to include empty collections.
-        """
-⋮----
-colls = list(self.client.get_collections())[0][1]
-⋮----
-counts = []
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-"""
-        Create a collection with the given name, optionally replacing an existing
-            collection if `replace` is True.
-        Args:
-            collection_name (str): Name of the collection to create.
-            replace (bool): Whether to replace an existing collection
-                with the same name. Defaults to False.
-        """
-⋮----
-coll = self.client.get_collection(collection_name=collection_name)
-⋮----
-vectors_config = {
-sparse_vectors_config = None
-⋮----
-sparse_vectors_config = {
-⋮----
-collection_info = self.client.get_collection(collection_name=collection_name)
-⋮----
-level = logger.getEffectiveLevel()
-⋮----
-def get_sparse_embeddings(self, inputs: List[str]) -> List["SparseVector"]
-⋮----
-tokens = self.sparse_tokenizer(
-output = self.sparse_model(**tokens)
-vectors = torch.max(
-sparse_embeddings = []
-⋮----
-cols = vec.nonzero().squeeze().cpu().tolist()
-weights = vec[cols].cpu().tolist()
-⋮----
-def add_documents(self, documents: Sequence[Document]) -> None
-⋮----
-# Add id to metadata if not already present
-⋮----
-# Fix the ids due to qdrant finickiness
-⋮----
-colls = self.list_collections(empty=True)
-⋮----
-document_dicts = [doc.model_dump() for doc in documents]
-embedding_vecs = self.embedding_fn([doc.content for doc in documents])
-sparse_embedding_vecs = self.get_sparse_embeddings(
-⋮----
-ids = [self._to_int_or_uuid(d.id()) for d in documents]
-# don't insert all at once, batch in chunks of b,
-# else we get an API error
-b = self.config.batch_size
-⋮----
-vectors: Dict[str, Embeddings | List[SparseVector]] = {
-⋮----
-coll_found: bool = False
-⋮----
-# poll until collection is ready
-⋮----
-coll_found = True
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-def _to_int_or_uuid(self, id: str) -> int | str
-⋮----
-int_val = int(id)
-⋮----
-# If doc_id is already a valid UUID, return it as is
-⋮----
-# Otherwise, generate a UUID from the doc_id
-# Convert doc_id to string if it's not already
-id_str = str(id)
-⋮----
-# Hash the document ID using SHA-1
-hash_object = hashlib.sha1(id_str.encode())
-hash_digest = hash_object.hexdigest()
-⋮----
-# Truncate or manipulate the hash to fit into a UUID (128 bits)
-uuid_str = hash_digest[:32]
-⋮----
-# Format this string into a UUID format
-formatted_uuid = uuid.UUID(uuid_str)
-⋮----
-def get_all_documents(self, where: str = "") -> List[Document]
-⋮----
-docs = []
-offset = 0
-filter = Filter() if where == "" else Filter.model_validate(json.loads(where))
-⋮----
-limit=10_000,  # try getting all at once, if not we keep paging
-⋮----
-self.config.document_class(**record.payload)  # type: ignore
-⋮----
-# ignore
-⋮----
-offset = next_page_offset  # type: ignore
-⋮----
-def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-_ids = [self._to_int_or_uuid(id) for id in ids]
-records = self.client.retrieve(
-# Note the records may NOT be in the order of the ids,
-# so we re-order them here.
-id2payload = {record.id: record.payload for record in records}
-ordered_payloads = [id2payload[id] for id in _ids if id in id2payload]
-docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
-⋮----
-embedding = self.embedding_fn([text])[0]
-# TODO filter may not work yet
-⋮----
-filter = Filter()
-⋮----
-filter = Filter.model_validate(json.loads(where))
-requests = [
-⋮----
-sparse_embedding = self.get_sparse_embeddings([text])[0]
-⋮----
-search_result_lists: List[List[ScoredPoint]] = self.client.search_batch(
-⋮----
-search_result = [
-⋮----
-]  # 2D list -> 1D list
-scores = [match.score for match in search_result if match is not None]
-docs = [
-⋮----
-self.config.document_class(**(match.payload))  # type: ignore
-⋮----
-doc_score_pairs = list(zip(docs, scores))
-max_score = max(ds[1] for ds in doc_score_pairs)
 </file>
 
 <file path="langroid/vector_store/weaviatedb.py">
@@ -45793,6 +45233,339 @@ excludes = excludes.union({"request"})
 schema = generate_simple_schema(
 </file>
 
+<file path="langroid/embedding_models/models.py">
+AzureADTokenProvider = Callable[[], str]
+⋮----
+class OpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "openai"
+model_name: str = "text-embedding-3-small"
+api_key: str = ""
+api_base: Optional[str] = None
+organization: str = ""
+dims: int = 1536
+context_length: int = 8192
+langdb_params: LangDBParams = LangDBParams()
+⋮----
+model_config = SettingsConfigDict(env_prefix="OPENAI_")
+⋮----
+class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "azure-openai"
+⋮----
+api_base: str = ""
+deployment_name: Optional[str] = None
+# api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
+# change this to required  supported version
+api_version: Optional[str] = "2024-06-01"
+# TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
+azure_ad_token: Optional[str] = None
+azure_ad_token_provider: Optional[AzureADTokenProvider] = None
+⋮----
+model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
+⋮----
+class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "sentence-transformer"
+model_name: str = "BAAI/bge-large-en-v1.5"
+context_length: int = 512
+data_parallel: bool = False
+# Select device (e.g. "cuda", "cpu") when data parallel is disabled
+device: Optional[str] = None
+# Select devices when data parallel is enabled
+devices: Optional[list[str]] = None
+⋮----
+class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+"""Config for qdrant/fastembed embeddings,
+    see here: https://github.com/qdrant/fastembed
+    """
+⋮----
+model_type: str = "fastembed"
+model_name: str = "BAAI/bge-small-en-v1.5"
+batch_size: int = 256
+cache_dir: Optional[str] = None
+threads: Optional[int] = None
+parallel: Optional[int] = None
+additional_kwargs: Dict[str, Any] = {}
+⋮----
+class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+context_length: int = 2048
+batch_size: int = 2048
+⋮----
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig)
+⋮----
+model_type: str = "gemini"
+model_name: str = "models/text-embedding-004"
+⋮----
+dims: int = 768
+batch_size: int = 512
+⋮----
+class EmbeddingFunctionCallable
+⋮----
+"""
+    A callable class designed to generate embeddings for a list of texts using
+    the OpenAI or Azure OpenAI API, with automatic retries on failure.
+
+    Attributes:
+        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
+               configuration and utilities for generating embeddings.
+
+    Methods:
+        __call__(input: List[str]) -> Embeddings: Generate embeddings for
+                                a list of input texts.
+    """
+⋮----
+def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512)
+⋮----
+"""
+        Initialize the EmbeddingFunctionCallable with a specific model.
+
+        Args:
+            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
+                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
+                            generating embeddings.
+            batch_size (int): Batch size
+        """
+⋮----
+def __call__(self, input: List[str]) -> Embeddings
+⋮----
+"""
+        Generate embeddings for a given list of input texts using the OpenAI API,
+        with retries on failure.
+
+        This method:
+        - Truncates each text in the input list to the model's maximum context length.
+        - Processes the texts in batches to generate embeddings efficiently.
+        - Automatically retries the embedding generation process with exponential
+        backoff in case of failures.
+
+        Args:
+            input (List[str]): A list of input texts to generate embeddings for.
+
+        Returns:
+            Embeddings: A list of embedding vectors corresponding to the input texts.
+        """
+embeds = []
+⋮----
+# Truncate texts to context length while preserving text format
+truncated_texts = self.embed_model.truncate_texts(input)
+⋮----
+# Process in batches
+⋮----
+result = self.embed_model.client.embeddings.create(
+⋮----
+input=batch, model=self.embed_model.config.model_name  # type: ignore
+⋮----
+batch_embeds = [d.embedding for d in result.data]
+⋮----
+embeds = self.embed_model.model.encode_multi_process(
+⋮----
+batch_embeds = self.embed_model.model.encode(
+⋮----
+).tolist()  # type: ignore
+⋮----
+embeddings = self.embed_model.model.embed(
+⋮----
+embeds = [embedding.tolist() for embedding in embeddings]
+⋮----
+tokenized_text = self.embed_model.tokenize_string(input_string)
+⋮----
+gen_embedding = self.embed_model.generate_embedding(
+⋮----
+embeds = self.embed_model.generate_embeddings(input)
+⋮----
+class OpenAIEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig())
+⋮----
+# Check if using LangDB
+⋮----
+project_id = self.config.langdb_params.project_id
+⋮----
+model_for_tokenizer = self.config.model_name
+⋮----
+def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]
+⋮----
+"""
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+truncated_tokens = [
+⋮----
+# LangDB embedding endpt only works with strings, not tokens
+⋮----
+def embedding_fn(self) -> Callable[[List[str]], Embeddings]
+⋮----
+@property
+    def embedding_dims(self) -> int
+⋮----
+class AzureOpenAIEmbeddings(EmbeddingModel)
+⋮----
+"""
+    Azure OpenAI embeddings model implementation.
+    """
+⋮----
+"""
+        Initializes Azure OpenAI embeddings model.
+
+        Args:
+            config: Configuration for Azure OpenAI embeddings model.
+        Raises:
+            ValueError: If required Azure config values are not set.
+        """
+⋮----
+"""Get the embedding function for Azure OpenAI.
+
+        Returns:
+            Callable that generates embeddings for input texts.
+        """
+⋮----
+STEC = SentenceTransformerEmbeddingsConfig
+⋮----
+class SentenceTransformerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: STEC = STEC())
+⋮----
+# this is an "extra" optional dependency, so we import it here
+⋮----
+self.config.devices  # type: ignore
+⋮----
+self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
+⋮----
+dims = self.model.get_sentence_embedding_dimension()
+⋮----
+return dims  # type: ignore
+⋮----
+class FastEmbedEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig())
+⋮----
+@cached_property
+    def embedding_dims(self) -> int
+⋮----
+embed_func = self.embedding_fn()
+⋮----
+LCSEC = LlamaCppServerEmbeddingsConfig
+⋮----
+class LlamaCppServerEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: LCSEC = LCSEC())
+⋮----
+def tokenize_string(self, text: str) -> List[int]
+⋮----
+data = {"content": text, "add_special": False, "with_pieces": False}
+response = requests.post(self.tokenize_url, json=data)
+⋮----
+tokens = response.json()["tokens"]
+⋮----
+# not all(isinstance(token, (int, float)) for token in tokens):
+⋮----
+def detokenize_string(self, tokens: List[int]) -> str
+⋮----
+data = {"tokens": tokens}
+response = requests.post(self.detokenize_url, json=data)
+⋮----
+text = response.json()["content"]
+⋮----
+def truncate_string_to_context_size(self, text: str) -> str
+⋮----
+tokens = self.tokenize_string(text)
+tokens = tokens[: self.config.context_length]
+⋮----
+def generate_embedding(self, text: str) -> List[int | float]
+⋮----
+data = {"content": text}
+response = requests.post(self.embedding_url, json=data)
+⋮----
+embeddings = self._extract_embedding(response.json())
+⋮----
+"""
+        Extract embedding vector from llama.cpp response.
+
+        Handles multiple response formats:
+        1. Native /embedding: {"embedding": [floats]}
+        2. Array format: [{"embedding": [floats]}]
+        3. Double-nested: [{"embedding": [[floats]]}]
+        4. OpenAI /v1/embeddings: {"data": [{"embedding": [floats]}]}
+        5. Nested in dict: {"embedding": [[floats]]}
+
+        Args:
+            response_json: The JSON response from llama.cpp server
+
+        Returns:
+            List of floats representing the embedding vector
+
+        Raises:
+            ValueError: If response format is not recognized
+        """
+⋮----
+# Try native format first: {"embedding": [floats]}
+⋮----
+embeddings = response_json["embedding"]
+# Check if it's [floats]
+⋮----
+# Might be nested: {"embedding": [[floats]]}
+⋮----
+# Try OpenAI format: {"data": [{"embedding": [floats]}]}
+⋮----
+data = response_json["data"]
+⋮----
+embeddings = data[0]["embedding"]
+⋮----
+# Try array format: [{"embedding": [floats]}] or [{"embedding": [[floats]]}]
+⋮----
+first_item = response_json[0]
+⋮----
+embeddings = first_item["embedding"]
+⋮----
+# Check if it's [[floats]]
+⋮----
+class GeminiEmbeddings(EmbeddingModel)
+⋮----
+def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig())
+⋮----
+def generate_embeddings(self, texts: List[str]) -> List[List[float]]
+⋮----
+"""Generates embeddings for a list of input texts."""
+all_embeddings: List[List[float]] = []
+⋮----
+result = self.client.models.embed_content(  # type: ignore[attr-defined]
+⋮----
+contents=batch,  # type: ignore
+⋮----
+# Extract .values from ContentEmbedding objects
+⋮----
+[emb.values for emb in result.embeddings]  # type: ignore
+⋮----
+def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel
+⋮----
+"""
+    Args:
+        embedding_fn_type: Type of embedding model to use. Options are:
+         - "openai",
+         - "azure-openai",
+         - "sentencetransformer", or
+         - "fastembed".
+            (others may be added in the future)
+    Returns:
+        EmbeddingModel: The corresponding embedding model class.
+    """
+⋮----
+return OpenAIEmbeddings  # type: ignore
+⋮----
+return AzureOpenAIEmbeddings  # type: ignore
+⋮----
+return FastEmbedEmbeddings  # type: ignore
+⋮----
+return LlamaCppServerEmbeddings  # type: ignore
+⋮----
+return GeminiEmbeddings  # type: ignore
+else:  # default sentence transformer
+return SentenceTransformerEmbeddings  # type: ignore
+</file>
+
 <file path="langroid/language_models/__init__.py">
 __all__ = [
 </file>
@@ -45911,270 +45684,84 @@ async def wrapper(*args: List[Any], **kwargs: Dict[Any, Any]) -> Any
 result = await func(*args, **kwargs)
 </file>
 
-<file path="langroid/parsing/parser.py">
-logger = logging.getLogger(__name__)
+<file path="langroid/parsing/document_url.py">
+"""Bounded HTTP document retrieval and text decoding."""
 ⋮----
-class Splitter(str, Enum)
+DEFAULT_CONNECT_TIMEOUT = 10.0
+DEFAULT_READ_TIMEOUT = 30.0
+DEFAULT_MAX_SIZE = 10 * 1024 * 1024
+_STREAM_CHUNK_SIZE = 64 * 1024
+_CHARSET_RE = re.compile(
 ⋮----
-TOKENS = "tokens"
-PARA_SENTENCE = "para_sentence"
-SIMPLE = "simple"
-# "structure-aware" splitting with chunks enriched by header info
-MARKDOWN = "markdown"
+def is_http_url(source: str) -> bool
 ⋮----
-class BaseParsingConfig(BaseSettings)
+"""Return whether source has an HTTP(S) scheme, ignoring case."""
+parsed = urlparse(source)
 ⋮----
-"""Base class for document parsing configurations."""
+def url_extension_source(source: str) -> str
 ⋮----
-library: str
+"""Return the URL path or local source used for extension detection."""
 ⋮----
-model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
-⋮----
-class LLMPdfParserConfig(BaseSettings)
-⋮----
-"""Configuration for LLM-based parsing."""
-⋮----
-model_name: str = "gemini/gemini-2.0-flash"  # Default model
-max_tokens: Optional[int] = None
-split_on_page: Optional[bool] = True
-requests_per_minute: Optional[int] = 5
-timeout: int = 60
-prompt: str = ""  # override with a domain-specific prompt
-system_prompt: str = ""  # override with a domain-specific system prompt
-⋮----
-class MarkerConfig(BaseSettings)
-⋮----
-"""Configuration for Markitdown-based parsing."""
-⋮----
-config_dict: Dict[str, Any] = {}
-⋮----
-class PdfParsingConfig(BaseParsingConfig)
-⋮----
-library: Literal[
-llm_parser_config: Optional[LLMPdfParserConfig] = None
-marker_config: Optional[MarkerConfig] = None
-⋮----
-@model_validator(mode="before")
-@classmethod
-    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]
-⋮----
-"""Ensure correct config is set based on library selection."""
-library = values.get("library")
-⋮----
-class DocxParsingConfig(BaseSettings)
-⋮----
-library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
-⋮----
-class DocParsingConfig(BaseSettings)
-⋮----
-library: Literal["unstructured"] = "unstructured"
-⋮----
-class MarkitdownPPTXParsingConfig(BaseSettings)
-⋮----
-library: Literal["markitdown"] = "markitdown"
-⋮----
-class MarkitdownXLSXParsingConfig(BaseSettings)
-⋮----
-class MarkitdownXLSParsingConfig(BaseSettings)
-⋮----
-class ParsingConfig(BaseSettings)
-⋮----
-splitter: str = Splitter.MARKDOWN
-chunk_by_page: bool = False  # split by page?
-chunk_size: int = 200  # aim for this many tokens per chunk
-chunk_size_variation: float = 0.30  # max variation from chunk_size
-overlap: int = 50  # overlap between chunks
-max_chunks: int = 10_000
-⋮----
-@field_validator("chunk_size", mode="before")
-@classmethod
-    def convert_chunk_size_to_int(cls, v: Any) -> int
-⋮----
-"""Convert chunk_size to int, maintaining backward compatibility
-        with Pydantic V1.
-        """
-⋮----
-# offset to subtract from page numbers:
-# e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
-page_number_offset: int = 0
-# aim to have at least this many chars per chunk when truncating due to punctuation
-min_chunk_chars: int = 350
-discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
-n_similar_docs: Optional[int] = None  # deprecated
-n_neighbor_ids: int = 5  # window size to store around each chunk
-separators: List[str] = ["\n\n", "\n", " ", ""]
-token_encoding_model: str = "text-embedding-3-small"
-pdf: PdfParsingConfig = PdfParsingConfig()
-docx: DocxParsingConfig = DocxParsingConfig()
-doc: DocParsingConfig = DocParsingConfig()
-pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
-xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
-xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
-⋮----
-class Parser
-⋮----
-def __init__(self, config: ParsingConfig)
-⋮----
-def num_tokens(self, text: str) -> int
-⋮----
-return count_words(text)  # simple count based on whitespace-split
-tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
-⋮----
-def truncate_tokens(self, text: str, max_tokens: int) -> str
-⋮----
-tokens = self.tokenizer.encode(text)
-⋮----
-def add_window_ids(self, chunks: List[Document]) -> None
-⋮----
-"""Chunks may belong to multiple docs, but for each doc,
-        they appear consecutively. Add window_ids in metadata"""
-⋮----
-# discard empty chunks
-chunks = [c for c in chunks if c.content.strip() != ""]
-⋮----
-# The original metadata.id (if any) is ignored since it will be same for all
-# chunks and is useless. We want a distinct id for each chunk.
-# ASSUMPTION: all chunks c of a doc have same c.metadata.id !
-orig_ids = [c.metadata.id for c in chunks]
-ids = [ObjectRegistry.new_id() for c in chunks]
-id2chunk = {id: c for id, c in zip(ids, chunks)}
-⋮----
-# group the ids by orig_id
-# (each distinct orig_id refers to a different document)
-orig_id_to_ids: Dict[str, List[str]] = {}
-⋮----
-# now each orig_id maps to a sequence of ids within a single doc
-⋮----
-k = self.config.n_neighbor_ids
-⋮----
-# ids are consecutive chunks in a single doc
-n = len(ids)
-window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
-⋮----
-c = id2chunk[ids[i]]
-⋮----
-def split_simple(self, docs: List[Document]) -> List[Document]
-⋮----
-final_docs = []
-⋮----
-chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
-# note we are ensuring we COPY the document metadata into each chunk,
-# which ensures all chunks of a given doc have same metadata
-# (and in particular same metadata.id, which is important later for
-# add_window_ids)
-chunk_docs = [
-⋮----
-def split_para_sentence(self, docs: List[Document]) -> List[Document]
-⋮----
-chunks = docs
-⋮----
-un_splittables = 0
-split_chunks = []
-⋮----
-# small chunk: no need to split
-⋮----
-splits = self._split_para_sentence_once([c])
-⋮----
-max_len = max([self.num_tokens(p.content) for p in chunks])
-⋮----
-break  # we won't be able to shorten them with current settings
-chunks = split_chunks.copy()
-⋮----
-def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]
-⋮----
-final_chunks = []
-⋮----
-chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
-⋮----
-def split_chunk_tokens(self, docs: List[Document]) -> List[Document]
-⋮----
-chunks = chunk_markdown(
-⋮----
-# apply rough adjustment factor to convert from tokens to words,
-# which is what the markdown chunker uses
-⋮----
-chunks = self.chunk_tokens(d.content)
-⋮----
-"""
-        Split a text into chunks of ~CHUNK_SIZE tokens,
-        based on punctuation and newline boundaries.
-        Adapted from
-        https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/chunks.py
+"""Fetch a URL with timeouts and bounded streamed consumption.
 
-        Args:
-            text: The text to split into chunks.
+    Args:
+        url: HTTP(S) document URL.
+        connect_timeout: Maximum seconds allowed to establish a connection.
+        read_timeout: Maximum seconds allowed between response bytes.
+        max_size: Maximum complete response size in bytes.
+        sample_size: Optional byte count after which sampling may stop early.
 
-        Returns:
-            A list of text chunks, each of which is a string of tokens
-            roughly self.config.chunk_size tokens long.
-        """
-# Return an empty list if the text is empty or whitespace
+    Returns:
+        The response bytes and headers.
+
+    Raises:
+        ValueError: If a complete response exceeds ``max_size``.
+        requests.exceptions.RequestException: If the request fails or times out.
+    """
 ⋮----
-# Tokenize the text
-tokens = self.tokenizer.encode(text, disallowed_special=())
+timeout = (connect_timeout, read_timeout)
 ⋮----
-# Initialize an empty list of chunks
-chunks = []
+content_length = response.headers.get("Content-Length")
 ⋮----
-# Initialize a counter for the number of chunks
-num_chunks = 0
+declared_size = int(content_length)
 ⋮----
-# Loop until all tokens are consumed
+declared_size = None
 ⋮----
-# Take the first chunk_size tokens as a chunk
-chunk = tokens[: self.config.chunk_size]
+limit = sample_size if sample_size is not None else max_size
+chunk_size = min(_STREAM_CHUNK_SIZE, limit + 1)
+body = bytearray()
 ⋮----
-# Decode the chunk into text
-chunk_text = self.tokenizer.decode(chunk)
+"""Fetch a complete URL using document parsing configuration."""
 ⋮----
-# Skip the chunk if it is empty or whitespace
+"""Fetch at most 1 KiB using optional parsing configuration."""
 ⋮----
-# Remove the tokens corresponding to the chunk text
-# from remaining tokens
-tokens = tokens[len(chunk) :]
-# Continue to the next iteration of the loop
+"""Decode document bytes using BOM, HTTP, and HTML declarations.
+
+    BOMs take precedence, followed by a valid charset in the HTTP
+    ``Content-Type`` header and, for HTML, encoding detected from its meta
+    declarations. If none applies, UTF-8 is used with replacement so malformed
+    or legacy undeclared documents remain ingestible.
+    """
+bom_encoding = _bom_encoding(content)
 ⋮----
-# Find the last period or punctuation mark in the chunk
-punctuation_matches = [
+http_encoding = _http_encoding(headers or {})
 ⋮----
-last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
+detected = BeautifulSoup(content, "html.parser").original_encoding
+html_encoding = _validated_encoding(detected)
 ⋮----
-# If there is a punctuation mark, and the last punctuation index is
-# after MIN_CHUNK_SIZE_CHARS
+def _validated_encoding(encoding: str | None) -> str | None
 ⋮----
-# Truncate the chunk text at the punctuation mark
-chunk_text = chunk_text[: last_punctuation + 1]
+"""Return a canonical codec name, or None for an invalid declaration."""
 ⋮----
-# Replace redundant (3 or more) newlines with 2 newlines to preser
-# paragraph separation!
-# But do NOT strip leading/trailing whitespace, to preserve formatting
-# (e.g. code blocks, or in case we want to stitch chunks back together)
-chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
+def _http_encoding(headers: Mapping[str, str]) -> str | None
 ⋮----
-# Append the chunk text to the list of chunks
+"""Extract and validate an explicitly declared HTTP charset."""
+content_type = headers.get("Content-Type", "")
+match = _CHARSET_RE.search(content_type)
 ⋮----
-# from the remaining tokens
-tokens = tokens[
+def _bom_encoding(content: bytes) -> str | None
 ⋮----
-# Increment the number of chunks
-⋮----
-# There may be remaining tokens, but we discard them
-# since we have already reached the maximum number of chunks
-⋮----
-def split(self, docs: List[Document]) -> List[Document]
-⋮----
-# create ids in metadata of docs if absent:
-# we need this to distinguish docs later in add_window_ids
-⋮----
-# some docs are already splits, so don't split them further!
-chunked_docs = [d for d in docs if d.metadata.is_chunk]
-big_docs = [d for d in docs if not d.metadata.is_chunk]
-⋮----
-big_doc_chunks = self.split_chunk_tokens(big_docs)
-⋮----
-big_doc_chunks = self.split_para_sentence(big_docs)
-⋮----
-big_doc_chunks = self.split_simple(big_docs)
+"""Return the codec selected by a Unicode byte-order mark."""
 </file>
 
 <file path="langroid/parsing/web_search.py">
@@ -47531,6 +47118,234 @@ score,  # Select the calculated score
 documents_with_scores = [
 ⋮----
 result.score,  # Use the score from the query result
+</file>
+
+<file path="langroid/vector_store/qdrantdb.py">
+logger = logging.getLogger(__name__)
+⋮----
+T = TypeVar("T")
+⋮----
+def from_optional(x: Optional[T], default: T) -> T
+⋮----
+def is_valid_uuid(uuid_to_test: str) -> bool
+⋮----
+"""
+    Check if a given string is a valid UUID.
+    """
+⋮----
+uuid_obj = uuid.UUID(uuid_to_test)
+⋮----
+# Check for valid unsigned 64-bit integer
+⋮----
+int_value = int(uuid_to_test)
+⋮----
+class QdrantDBConfig(VectorStoreConfig)
+⋮----
+cloud: bool = True
+docker: bool = False
+collection_name: str | None = "temp"
+storage_path: str = ".qdrant/data"
+embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
+use_sparse_embeddings: bool = False
+sparse_embedding_model: str = "naver/splade-v3-distilbert"
+sparse_limit: int = 3
+distance: str = "cosine"
+⋮----
+class QdrantDB(VectorStore)
+⋮----
+def __init__(self, config: QdrantDBConfig = QdrantDBConfig())
+⋮----
+self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
+⋮----
+key = os.getenv("QDRANT_API_KEY")
+url = os.getenv("QDRANT_API_URL")
+⋮----
+new_storage_path = config.storage_path + ".new"
+⋮----
+# Note: Only create collection if a non-null collection name is provided.
+# This is useful to delay creation of vecdb until we have a suitable
+# collection name (e.g. we could get it from the url or folder path).
+⋮----
+def clone(self) -> "QdrantDB"
+⋮----
+"""Create an independent Qdrant client when running against Qdrant Cloud."""
+⋮----
+cloned = super().clone()
+⋮----
+def close(self) -> None
+⋮----
+"""
+        Close the QdrantDB client and release any resources (e.g., file locks).
+        This is especially important for local storage to release the .lock file.
+        """
+⋮----
+# QdrantLocal has a close method that releases the lock
+⋮----
+def __enter__(self) -> "QdrantDB"
+⋮----
+"""Context manager entry."""
+⋮----
+def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
+⋮----
+"""Context manager exit - ensure cleanup even if an exception occurred."""
+⋮----
+def clear_empty_collections(self) -> int
+⋮----
+coll_names = self.list_collections()
+n_deletes = 0
+⋮----
+info = self.client.get_collection(collection_name=name)
+⋮----
+def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+"""Clear all collections with the given prefix."""
+⋮----
+coll_names = [
+⋮----
+n_empty_deletes = 0
+n_non_empty_deletes = 0
+⋮----
+points_count = from_optional(info.points_count, 0)
+⋮----
+def list_collections(self, empty: bool = False) -> List[str]
+⋮----
+"""
+        Returns:
+            List of collection names that have at least one vector.
+
+        Args:
+            empty (bool, optional): Whether to include empty collections.
+        """
+⋮----
+colls = list(self.client.get_collections())[0][1]
+⋮----
+counts = []
+⋮----
+def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+"""
+        Create a collection with the given name, optionally replacing an existing
+            collection if `replace` is True.
+        Args:
+            collection_name (str): Name of the collection to create.
+            replace (bool): Whether to replace an existing collection
+                with the same name. Defaults to False.
+        """
+⋮----
+coll = self.client.get_collection(collection_name=collection_name)
+⋮----
+vectors_config = {
+sparse_vectors_config = None
+⋮----
+sparse_vectors_config = {
+⋮----
+collection_info = self.client.get_collection(collection_name=collection_name)
+⋮----
+level = logger.getEffectiveLevel()
+⋮----
+def get_sparse_embeddings(self, inputs: List[str]) -> List["SparseVector"]
+⋮----
+tokens = self.sparse_tokenizer(
+output = self.sparse_model(**tokens)
+vectors = torch.max(
+sparse_embeddings = []
+⋮----
+cols = vec.nonzero().squeeze().cpu().tolist()
+weights = vec[cols].cpu().tolist()
+⋮----
+def add_documents(self, documents: Sequence[Document]) -> None
+⋮----
+# Add id to metadata if not already present
+⋮----
+# Fix the ids due to qdrant finickiness
+⋮----
+colls = self.list_collections(empty=True)
+⋮----
+document_dicts = [doc.model_dump() for doc in documents]
+embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+sparse_embedding_vecs = self.get_sparse_embeddings(
+⋮----
+ids = [self._to_int_or_uuid(d.id()) for d in documents]
+# don't insert all at once, batch in chunks of b,
+# else we get an API error
+b = self.config.batch_size
+⋮----
+vectors: Dict[str, Embeddings | List[SparseVector]] = {
+⋮----
+coll_found: bool = False
+⋮----
+# poll until collection is ready
+⋮----
+coll_found = True
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+def _to_int_or_uuid(self, id: str) -> int | str
+⋮----
+int_val = int(id)
+⋮----
+# If doc_id is already a valid UUID, return it as is
+⋮----
+# Otherwise, generate a UUID from the doc_id
+# Convert doc_id to string if it's not already
+id_str = str(id)
+⋮----
+# Hash the document ID using SHA-1
+hash_object = hashlib.sha1(id_str.encode())
+hash_digest = hash_object.hexdigest()
+⋮----
+# Truncate or manipulate the hash to fit into a UUID (128 bits)
+uuid_str = hash_digest[:32]
+⋮----
+# Format this string into a UUID format
+formatted_uuid = uuid.UUID(uuid_str)
+⋮----
+def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+docs = []
+offset = 0
+filter = Filter() if where == "" else Filter.model_validate(json.loads(where))
+⋮----
+limit=10_000,  # try getting all at once, if not we keep paging
+⋮----
+self.config.document_class(**record.payload)  # type: ignore
+⋮----
+# ignore
+⋮----
+offset = next_page_offset  # type: ignore
+⋮----
+def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+_ids = [self._to_int_or_uuid(id) for id in ids]
+records = self.client.retrieve(
+# Note the records may NOT be in the order of the ids,
+# so we re-order them here.
+id2payload = {record.id: record.payload for record in records}
+ordered_payloads = [id2payload[id] for id in _ids if id in id2payload]
+docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
+⋮----
+embedding = self.embedding_fn([text])[0]
+# TODO filter may not work yet
+⋮----
+filter = Filter()
+⋮----
+filter = Filter.model_validate(json.loads(where))
+requests = [
+⋮----
+sparse_embedding = self.get_sparse_embeddings([text])[0]
+⋮----
+search_result_lists: List[List[ScoredPoint]] = self.client.search_batch(
+⋮----
+search_result = [
+⋮----
+]  # 2D list -> 1D list
+scores = [match.score for match in search_result if match is not None]
+docs = [
+⋮----
+self.config.document_class(**(match.payload))  # type: ignore
+⋮----
+doc_score_pairs = list(zip(docs, scores))
+max_score = max(ds[1] for ds in doc_score_pairs)
 </file>
 
 <file path="CONTRIBUTING.md">
@@ -49752,6 +49567,275 @@ response = super().agent_response(msg)
 # we prefix it with "TOOL Result: " so that it is clear to the
 # LLM that this is the result of the last TOOL;
 # This ensures our caching trick works.
+</file>
+
+<file path="langroid/parsing/parser.py">
+logger = logging.getLogger(__name__)
+⋮----
+class Splitter(str, Enum)
+⋮----
+TOKENS = "tokens"
+PARA_SENTENCE = "para_sentence"
+SIMPLE = "simple"
+# "structure-aware" splitting with chunks enriched by header info
+MARKDOWN = "markdown"
+⋮----
+class BaseParsingConfig(BaseSettings)
+⋮----
+"""Base class for document parsing configurations."""
+⋮----
+library: str
+⋮----
+model_config = SettingsConfigDict(extra="ignore")  # Ignore unknown settings
+⋮----
+class LLMPdfParserConfig(BaseSettings)
+⋮----
+"""Configuration for LLM-based parsing."""
+⋮----
+model_name: str = "gemini/gemini-2.0-flash"  # Default model
+max_tokens: Optional[int] = None
+split_on_page: Optional[bool] = True
+requests_per_minute: Optional[int] = 5
+timeout: int = 60
+prompt: str = ""  # override with a domain-specific prompt
+system_prompt: str = ""  # override with a domain-specific system prompt
+⋮----
+class MarkerConfig(BaseSettings)
+⋮----
+"""Configuration for Markitdown-based parsing."""
+⋮----
+config_dict: Dict[str, Any] = {}
+⋮----
+class PdfParsingConfig(BaseParsingConfig)
+⋮----
+library: Literal[
+llm_parser_config: Optional[LLMPdfParserConfig] = None
+marker_config: Optional[MarkerConfig] = None
+⋮----
+@model_validator(mode="before")
+@classmethod
+    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]
+⋮----
+"""Ensure correct config is set based on library selection."""
+library = values.get("library")
+⋮----
+class DocxParsingConfig(BaseSettings)
+⋮----
+library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
+⋮----
+class DocParsingConfig(BaseSettings)
+⋮----
+library: Literal["unstructured"] = "unstructured"
+⋮----
+class MarkitdownPPTXParsingConfig(BaseSettings)
+⋮----
+library: Literal["markitdown"] = "markitdown"
+⋮----
+class MarkitdownXLSXParsingConfig(BaseSettings)
+⋮----
+class MarkitdownXLSParsingConfig(BaseSettings)
+⋮----
+class ParsingConfig(BaseSettings)
+⋮----
+splitter: str = Splitter.MARKDOWN
+chunk_by_page: bool = False  # split by page?
+chunk_size: int = 200  # aim for this many tokens per chunk
+chunk_size_variation: float = 0.30  # max variation from chunk_size
+overlap: int = 50  # overlap between chunks
+max_chunks: int = 10_000
+url_connect_timeout: float = 10.0
+url_read_timeout: float = 30.0
+url_max_size: int = 10 * 1024 * 1024
+⋮----
+@field_validator("chunk_size", mode="before")
+@classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int
+⋮----
+"""Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+⋮----
+# offset to subtract from page numbers:
+# e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
+page_number_offset: int = 0
+# aim to have at least this many chars per chunk when truncating due to punctuation
+min_chunk_chars: int = 350
+discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
+n_similar_docs: Optional[int] = None  # deprecated
+n_neighbor_ids: int = 5  # window size to store around each chunk
+separators: List[str] = ["\n\n", "\n", " ", ""]
+token_encoding_model: str = "text-embedding-3-small"
+pdf: PdfParsingConfig = PdfParsingConfig()
+docx: DocxParsingConfig = DocxParsingConfig()
+doc: DocParsingConfig = DocParsingConfig()
+pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
+xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
+xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
+⋮----
+class Parser
+⋮----
+def __init__(self, config: ParsingConfig)
+⋮----
+def num_tokens(self, text: str) -> int
+⋮----
+return count_words(text)  # simple count based on whitespace-split
+tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
+⋮----
+def truncate_tokens(self, text: str, max_tokens: int) -> str
+⋮----
+tokens = self.tokenizer.encode(text)
+⋮----
+def add_window_ids(self, chunks: List[Document]) -> None
+⋮----
+"""Chunks may belong to multiple docs, but for each doc,
+        they appear consecutively. Add window_ids in metadata"""
+⋮----
+# discard empty chunks
+chunks = [c for c in chunks if c.content.strip() != ""]
+⋮----
+# The original metadata.id (if any) is ignored since it will be same for all
+# chunks and is useless. We want a distinct id for each chunk.
+# ASSUMPTION: all chunks c of a doc have same c.metadata.id !
+orig_ids = [c.metadata.id for c in chunks]
+ids = [ObjectRegistry.new_id() for c in chunks]
+id2chunk = {id: c for id, c in zip(ids, chunks)}
+⋮----
+# group the ids by orig_id
+# (each distinct orig_id refers to a different document)
+orig_id_to_ids: Dict[str, List[str]] = {}
+⋮----
+# now each orig_id maps to a sequence of ids within a single doc
+⋮----
+k = self.config.n_neighbor_ids
+⋮----
+# ids are consecutive chunks in a single doc
+n = len(ids)
+window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
+⋮----
+c = id2chunk[ids[i]]
+⋮----
+def split_simple(self, docs: List[Document]) -> List[Document]
+⋮----
+final_docs = []
+⋮----
+chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
+# note we are ensuring we COPY the document metadata into each chunk,
+# which ensures all chunks of a given doc have same metadata
+# (and in particular same metadata.id, which is important later for
+# add_window_ids)
+chunk_docs = [
+⋮----
+def split_para_sentence(self, docs: List[Document]) -> List[Document]
+⋮----
+chunks = docs
+⋮----
+un_splittables = 0
+split_chunks = []
+⋮----
+# small chunk: no need to split
+⋮----
+splits = self._split_para_sentence_once([c])
+⋮----
+max_len = max([self.num_tokens(p.content) for p in chunks])
+⋮----
+break  # we won't be able to shorten them with current settings
+chunks = split_chunks.copy()
+⋮----
+def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]
+⋮----
+final_chunks = []
+⋮----
+chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
+⋮----
+def split_chunk_tokens(self, docs: List[Document]) -> List[Document]
+⋮----
+chunks = chunk_markdown(
+⋮----
+# apply rough adjustment factor to convert from tokens to words,
+# which is what the markdown chunker uses
+⋮----
+chunks = self.chunk_tokens(d.content)
+⋮----
+"""
+        Split a text into chunks of ~CHUNK_SIZE tokens,
+        based on punctuation and newline boundaries.
+        Adapted from
+        https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/chunks.py
+
+        Args:
+            text: The text to split into chunks.
+
+        Returns:
+            A list of text chunks, each of which is a string of tokens
+            roughly self.config.chunk_size tokens long.
+        """
+# Return an empty list if the text is empty or whitespace
+⋮----
+# Tokenize the text
+tokens = self.tokenizer.encode(text, disallowed_special=())
+⋮----
+# Initialize an empty list of chunks
+chunks = []
+⋮----
+# Initialize a counter for the number of chunks
+num_chunks = 0
+⋮----
+# Loop until all tokens are consumed
+⋮----
+# Take the first chunk_size tokens as a chunk
+chunk = tokens[: self.config.chunk_size]
+⋮----
+# Decode the chunk into text
+chunk_text = self.tokenizer.decode(chunk)
+⋮----
+# Skip the chunk if it is empty or whitespace
+⋮----
+# Remove the tokens corresponding to the chunk text
+# from remaining tokens
+tokens = tokens[len(chunk) :]
+# Continue to the next iteration of the loop
+⋮----
+# Find the last period or punctuation mark in the chunk
+punctuation_matches = [
+⋮----
+last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
+⋮----
+# If there is a punctuation mark, and the last punctuation index is
+# after MIN_CHUNK_SIZE_CHARS
+⋮----
+# Truncate the chunk text at the punctuation mark
+chunk_text = chunk_text[: last_punctuation + 1]
+⋮----
+# Replace redundant (3 or more) newlines with 2 newlines to preser
+# paragraph separation!
+# But do NOT strip leading/trailing whitespace, to preserve formatting
+# (e.g. code blocks, or in case we want to stitch chunks back together)
+chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
+⋮----
+# Append the chunk text to the list of chunks
+⋮----
+# from the remaining tokens
+tokens = tokens[
+⋮----
+# Increment the number of chunks
+⋮----
+# There may be remaining tokens, but we discard them
+# since we have already reached the maximum number of chunks
+⋮----
+def split(self, docs: List[Document]) -> List[Document]
+⋮----
+# create ids in metadata of docs if absent:
+# we need this to distinguish docs later in add_window_ids
+⋮----
+# some docs are already splits, so don't split them further!
+chunked_docs = [d for d in docs if d.metadata.is_chunk]
+big_docs = [d for d in docs if not d.metadata.is_chunk]
+⋮----
+big_doc_chunks = self.split_chunk_tokens(big_docs)
+⋮----
+big_doc_chunks = self.split_para_sentence(big_docs)
+⋮----
+big_doc_chunks = self.split_simple(big_docs)
 </file>
 
 <file path="langroid/parsing/repo_loader.py">
@@ -58034,8 +58118,6 @@ def _decode_utf8_text(content: bytes) -> str
 ⋮----
 """Decode UTF-8 bytes, trimming only an incomplete trailing character."""
 ⋮----
-def is_plain_text(path_or_bytes: str | bytes) -> bool
-⋮----
 """
     Check if a file is plain text by attempting to decode it as UTF-8.
     Args:
@@ -58043,10 +58125,6 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool
     Returns:
         bool: True if the file is plain text, False otherwise.
     """
-⋮----
-response = requests.get(path_or_bytes)
-⋮----
-content = response.content[:1024]
 ⋮----
 content = f.read(1024)
 ⋮----
@@ -58061,10 +58139,6 @@ mime_type = magic.from_buffer(content, mime=True)
 # python-magic not installed, or the native libmagic library is
 # missing/broken: skip MIME screening and rely on the UTF-8 decode
 # check below, so plain-text detection keeps working.
-⋮----
-def _extension_source(source: str) -> str
-⋮----
-"""Return the path component used for extension-based type detection."""
 ⋮----
 # Matches a leading --- ... --- block (candidate front-matter). The
 # delimiter lines allow only trailing spaces/tabs ([ \t]*, NOT \s*, which
@@ -58116,7 +58190,7 @@ class DocumentParser(Parser)
         Returns:
             DocumentParser: An instance of a DocumentParser subclass.
         """
-inferred_doc_type = DocumentParser._document_type(source, doc_type)
+inferred_doc_type = DocumentParser._document_type(source, doc_type, config)
 ⋮----
 source_name = source if isinstance(source, str) else "bytes"
 ⋮----
@@ -58135,6 +58209,7 @@ def __init__(self, source: str | bytes, config: ParsingConfig)
             source (str|bytes): The source, which could be a URL,
                 a file path, or a bytes object.
             doc_type (str|DocumentType|None): The type of document, if known.
+            config (ParsingConfig|None): URL retrieval settings, if available.
 
         Returns:
             str: The document type.
@@ -58143,7 +58218,7 @@ def __init__(self, source: str | bytes, config: ParsingConfig)
 # Detect file type from path/URL extension first so that
 # format-specific types (md, html) are not mis-classified as TXT
 # by the is_plain_text heuristic below.
-lower = _extension_source(source)
+lower = url_extension_source(source)
 ⋮----
 # For strings with no recognised extension, fall back to the
 # plain-text heuristic (covers .txt and bare URLs).
@@ -58173,8 +58248,6 @@ def _load_doc_as_bytesio(self) -> BytesIO
             BytesIO: A BytesIO object containing the doc data.
         """
 ⋮----
-response = requests.get(self.source)
-⋮----
 """
         Get document chunks from a file path or bytes object.
         Args:
@@ -58187,7 +58260,7 @@ response = requests.get(self.source)
                 each containing a chunk of text, determined by the
                 chunking and splitting settings in the parser config.
         """
-dtype: DocumentType = DocumentParser._document_type(source, doc_type)
+dtype = DocumentParser._document_type(source, doc_type, parser.config)
 ⋮----
 doc_parser = DocumentParser.create(
 chunks = doc_parser.get_doc_chunks()
@@ -58197,18 +58270,18 @@ doc_parser = ImagePdfParser(source, parser.config)
 # Plain-text formats (TXT, MD, HTML) and unknown types:
 # read content, extract text, and chunk.
 ⋮----
+content = decode_document_text(source, html=True)
+⋮----
 content = _decode_utf8_text(source)
 ⋮----
 file_lines = content.splitlines()[:lines]
 content = "\n".join(line.strip() for line in file_lines)
 ⋮----
-# URL (e.g. https://example.com/readme.md): extension
-# detection above may classify it as MD/HTML/TXT, but it
-# must be fetched over HTTP(S) — open() below only works
-# for local paths.
-response = requests.get(source)
+# Fetch URL-based plain text rather than opening it as a path.
 ⋮----
-content = response.content.decode("utf-8", errors="replace")
+content = decode_document_text(
+⋮----
+content = decode_document_text(f.read(), html=True)
 ⋮----
 file_lines = list(itertools.islice(f, lines))
 ⋮----
@@ -58954,7 +59027,7 @@ page_no = 0
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_url import (
-    decode_url_text,
+    decode_document_text,
     fetch_configured_url,
     fetch_url_sample,
     is_http_url,
@@ -431,14 +431,17 @@ class DocumentParser(Parser):
             # Plain-text formats (TXT, MD, HTML) and unknown types:
             # read content, extract text, and chunk.
             if isinstance(source, bytes):
-                content = _decode_utf8_text(source)
+                if dtype == DocumentType.HTML:
+                    content = decode_document_text(source, html=True)
+                else:
+                    content = _decode_utf8_text(source)
                 if lines is not None:
                     file_lines = content.splitlines()[:lines]
                     content = "\n".join(line.strip() for line in file_lines)
             elif is_http_url(source):
                 # Fetch URL-based plain text rather than opening it as a path.
                 url_content, headers = fetch_configured_url(source, parser.config)
-                content = decode_url_text(
+                content = decode_document_text(
                     url_content,
                     headers,
                     html=dtype == DocumentType.HTML,
@@ -447,12 +450,19 @@ class DocumentParser(Parser):
                     file_lines = content.splitlines()[:lines]
                     content = "\n".join(line.strip() for line in file_lines)
             else:
-                with open(source, "r") as f:
+                if dtype == DocumentType.HTML:
+                    with open(source, "rb") as f:
+                        content = decode_document_text(f.read(), html=True)
                     if lines is not None:
-                        file_lines = list(itertools.islice(f, lines))
+                        file_lines = content.splitlines()[:lines]
                         content = "\n".join(line.strip() for line in file_lines)
-                    else:
-                        content = f.read()
+                else:
+                    with open(source, "r") as f:
+                        if lines is not None:
+                            file_lines = list(itertools.islice(f, lines))
+                            content = "\n".join(line.strip() for line in file_lines)
+                        else:
+                            content = f.read()
 
             if dtype == DocumentType.HTML:
                 # Strip HTML tags; preserve readable text.
