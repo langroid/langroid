@@ -57609,6 +57609,103 @@ def test_seltz_search_tool_real_query(self)
 tool = SeltzSearchTool(query="Python programming language", num_results=3)
 </file>
 
+<file path="tests/main/test_split_inline_reasoning.py">
+"""
+Tests for OpenAIGPT._split_inline_reasoning, which separates inline
+thought-delimiter tags (e.g. <think>...</think>) from text content
+during streaming.
+"""
+⋮----
+split = OpenAIGPT._split_inline_reasoning
+DELIMS = ("<think>", "</think>")
+⋮----
+class TestSplitInlineReasoning
+⋮----
+"""Unit tests for the streaming inline-reasoning splitter."""
+⋮----
+# --- no-op cases: nothing to parse ---
+⋮----
+def test_empty_text(self)
+⋮----
+"""Empty event_text should pass through unchanged."""
+⋮----
+def test_plain_text_no_delimiters(self)
+⋮----
+"""Text without any delimiters should pass through as-is."""
+⋮----
+def test_already_has_reasoning_field(self)
+⋮----
+"""When the API already provides separate reasoning, skip parsing."""
+⋮----
+# --- single chunk contains full <think>...</think> ---
+⋮----
+def test_full_think_block_in_one_chunk(self)
+⋮----
+"""Complete <think>reasoning</think> in a single chunk."""
+⋮----
+def test_text_before_and_after_think(self)
+⋮----
+"""Text surrounding a complete think block."""
+⋮----
+def test_text_before_think_only(self)
+⋮----
+"""Text before think block, nothing after."""
+⋮----
+def test_text_after_think_only(self)
+⋮----
+"""Think block followed by text, no prefix."""
+⋮----
+# --- multi-chunk: start delimiter in one chunk, end in another ---
+⋮----
+def test_start_delimiter_only(self)
+⋮----
+"""Chunk has <think> but no </think> — enters reasoning state."""
+⋮----
+def test_continuation_mid_reasoning(self)
+⋮----
+"""Chunk arrives while already in reasoning (no delimiters)."""
+⋮----
+def test_end_delimiter_while_in_reasoning(self)
+⋮----
+"""Chunk has </think> while in reasoning state."""
+⋮----
+def test_end_delimiter_no_trailing_text(self)
+⋮----
+"""End delimiter with nothing after it."""
+⋮----
+# --- multi-chunk sequence simulating a real stream ---
+⋮----
+def test_three_chunk_sequence(self)
+⋮----
+"""Simulate: chunk1 opens thinking, chunk2 continues, chunk3 closes."""
+# chunk 1: start of thinking
+⋮----
+# chunk 2: still thinking
+⋮----
+# chunk 3: done thinking, answer follows
+⋮----
+# --- custom delimiters ---
+⋮----
+def test_custom_delimiters(self)
+⋮----
+"""Works with non-default delimiters like <thinking>...</thinking>."""
+custom = ("<thinking>", "</thinking>")
+⋮----
+# --- edge cases ---
+⋮----
+def test_empty_think_block(self)
+⋮----
+"""<think></think> with nothing inside."""
+⋮----
+def test_only_start_delimiter(self)
+⋮----
+"""Chunk is exactly the start delimiter, nothing else."""
+⋮----
+def test_only_end_delimiter_while_reasoning(self)
+⋮----
+"""Chunk is exactly the end delimiter."""
+</file>
+
 <file path="tests/main/test_tool_messages.py">
 class CountryCapitalMessage(ToolMessage)
 ⋮----
@@ -64626,103 +64723,6 @@ def _mutual_loop(base: Path) -> None
     """
 </file>
 
-<file path="tests/main/test_split_inline_reasoning.py">
-"""
-Tests for OpenAIGPT._split_inline_reasoning, which separates inline
-thought-delimiter tags (e.g. <think>...</think>) from text content
-during streaming.
-"""
-⋮----
-split = OpenAIGPT._split_inline_reasoning
-DELIMS = ("<think>", "</think>")
-⋮----
-class TestSplitInlineReasoning
-⋮----
-"""Unit tests for the streaming inline-reasoning splitter."""
-⋮----
-# --- no-op cases: nothing to parse ---
-⋮----
-def test_empty_text(self)
-⋮----
-"""Empty event_text should pass through unchanged."""
-⋮----
-def test_plain_text_no_delimiters(self)
-⋮----
-"""Text without any delimiters should pass through as-is."""
-⋮----
-def test_already_has_reasoning_field(self)
-⋮----
-"""When the API already provides separate reasoning, skip parsing."""
-⋮----
-# --- single chunk contains full <think>...</think> ---
-⋮----
-def test_full_think_block_in_one_chunk(self)
-⋮----
-"""Complete <think>reasoning</think> in a single chunk."""
-⋮----
-def test_text_before_and_after_think(self)
-⋮----
-"""Text surrounding a complete think block."""
-⋮----
-def test_text_before_think_only(self)
-⋮----
-"""Text before think block, nothing after."""
-⋮----
-def test_text_after_think_only(self)
-⋮----
-"""Think block followed by text, no prefix."""
-⋮----
-# --- multi-chunk: start delimiter in one chunk, end in another ---
-⋮----
-def test_start_delimiter_only(self)
-⋮----
-"""Chunk has <think> but no </think> — enters reasoning state."""
-⋮----
-def test_continuation_mid_reasoning(self)
-⋮----
-"""Chunk arrives while already in reasoning (no delimiters)."""
-⋮----
-def test_end_delimiter_while_in_reasoning(self)
-⋮----
-"""Chunk has </think> while in reasoning state."""
-⋮----
-def test_end_delimiter_no_trailing_text(self)
-⋮----
-"""End delimiter with nothing after it."""
-⋮----
-# --- multi-chunk sequence simulating a real stream ---
-⋮----
-def test_three_chunk_sequence(self)
-⋮----
-"""Simulate: chunk1 opens thinking, chunk2 continues, chunk3 closes."""
-# chunk 1: start of thinking
-⋮----
-# chunk 2: still thinking
-⋮----
-# chunk 3: done thinking, answer follows
-⋮----
-# --- custom delimiters ---
-⋮----
-def test_custom_delimiters(self)
-⋮----
-"""Works with non-default delimiters like <thinking>...</thinking>."""
-custom = ("<thinking>", "</thinking>")
-⋮----
-# --- edge cases ---
-⋮----
-def test_empty_think_block(self)
-⋮----
-"""<think></think> with nothing inside."""
-⋮----
-def test_only_start_delimiter(self)
-⋮----
-"""Chunk is exactly the start delimiter, nothing else."""
-⋮----
-def test_only_end_delimiter_while_reasoning(self)
-⋮----
-"""Chunk is exactly the end delimiter."""
-</file>
-
 <file path="tests/main/test_web_search_tools.py">
 """
 NOTE: running this test requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
@@ -67480,6 +67480,580 @@ matched = False
 matched = True
 </file>
 
+<file path="langroid/language_models/base.py">
+logger = logging.getLogger(__name__)
+⋮----
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
+⋮----
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
+⋮----
+FunctionCallTypes = Literal["none", "auto"]
+ToolChoiceTypes = Literal["none", "auto", "required"]
+ToolTypes = Literal["function"]
+⋮----
+DEFAULT_CONTEXT_LENGTH = 16_000
+⋮----
+class StreamEventType(Enum)
+⋮----
+TEXT = 1
+FUNC_NAME = 2
+FUNC_ARGS = 3
+TOOL_NAME = 4
+TOOL_ARGS = 5
+REASONING = 6
+⋮----
+class RetryParams(BaseSettings)
+⋮----
+max_retries: int = 5
+initial_delay: float = 1.0
+exponential_base: float = 1.3
+jitter: bool = True
+⋮----
+class LLMConfig(BaseSettings)
+⋮----
+"""
+    Common configuration for all language models.
+    """
+⋮----
+type: str = "openai"
+streamer: Optional[Callable[[Any], None]] = noop_fn
+streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
+api_base: str | None = None
+formatter: None | str = None
+# specify None if you want to use the full max output tokens of the model
+max_output_tokens: int | None = 8192
+timeout: int = 20  # timeout for API requests
+chat_model: str = ""
+completion_model: str = ""
+temperature: float = 0.0
+chat_context_length: int | None = None
+async_stream_quiet: bool = False  # suppress streaming output in async mode?
+completion_context_length: int | None = None
+# if input length + max_output_tokens > context length of model,
+# we will try shortening requested output
+min_output_tokens: int = 64
+use_completion_for_chat: bool = False  # use completion model for chat?
+# use chat model for completion? For OpenAI models, this MUST be set to True!
+use_chat_for_completion: bool = True
+stream: bool = True  # stream output from API?
+# TODO: we could have a `stream_reasoning` flag here to control whether to show
+# reasoning output from reasoning models
+cache_config: None | CacheDBConfig = RedisCacheConfig()
+thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
+retry_params: RetryParams = RetryParams()
+⋮----
+@property
+    def model_max_output_tokens(self) -> int
+⋮----
+# Build fallback names by progressively stripping provider prefixes
+# (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
+# succeeds even before OpenAIGPT.__init__ strips the prefix.
+parts = self.chat_model.split("/")
+fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
+⋮----
+class LLMFunctionCall(BaseModel)
+⋮----
+"""
+    Structure of LLM response indicating it "wants" to call a function.
+    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
+    """
+⋮----
+name: str  # name of function to call
+arguments: Optional[Dict[str, Any]] = None
+⋮----
+@staticmethod
+    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall"
+⋮----
+"""
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+fun_call = LLMFunctionCall(name=message["name"])
+fun_args_str = message["arguments"]
+# sometimes may be malformed with invalid indents,
+# so we try to be safe by removing newlines.
+⋮----
+fun_args_str = fun_args_str.replace("\n", "").strip()
+dict_or_list = parse_imperfect_json(fun_args_str)
+⋮----
+fun_args = dict_or_list
+⋮----
+fun_args = None
+⋮----
+def __str__(self) -> str
+⋮----
+class LLMFunctionSpec(BaseModel)
+⋮----
+"""
+    Description of a function available for the LLM to use.
+    To be used when calling the LLM `chat()` method with the `functions` parameter.
+    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
+    """
+⋮----
+name: str
+description: str
+parameters: Dict[str, Any]
+⋮----
+class OpenAIToolCall(BaseModel)
+⋮----
+"""
+    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
+    See https://platform.openai.com/docs/api-reference/chat/create
+
+    Attributes:
+        id: The id of the tool call.
+        type: The type of the tool call;
+            only "function" is currently possible (7/26/24).
+        function: The function call.
+    """
+⋮----
+id: str | None = None
+type: ToolTypes = "function"
+function: LLMFunctionCall | None = None
+extra_content: Dict[str, Any] | None = None
+⋮----
+@staticmethod
+    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall"
+⋮----
+id = message["id"]
+type = message["type"]
+function = LLMFunctionCall.from_dict(message["function"])
+extra_content = message.get("extra_content")
+⋮----
+class OpenAIToolSpec(BaseModel)
+⋮----
+type: ToolTypes
+strict: Optional[bool] = None
+function: LLMFunctionSpec
+⋮----
+class OpenAIJsonSchemaSpec(BaseModel)
+⋮----
+def to_dict(self) -> Dict[str, Any]
+⋮----
+json_schema: Dict[str, Any] = {
+⋮----
+class LLMTokenUsage(BaseModel)
+⋮----
+"""
+    Usage of tokens by an LLM.
+    """
+⋮----
+prompt_tokens: int = 0
+cached_tokens: int = 0
+completion_tokens: int = 0
+cost: float = 0.0
+calls: int = 0  # how many API calls - not used as of 2025-04-04
+⋮----
+def reset(self) -> None
+⋮----
+@property
+    def total_tokens(self) -> int
+⋮----
+class Role(str, Enum)
+⋮----
+"""
+    Possible roles for a message in a chat.
+    """
+⋮----
+USER = "user"
+SYSTEM = "system"
+ASSISTANT = "assistant"
+FUNCTION = "function"
+TOOL = "tool"
+⋮----
+class LLMMessage(BaseModel)
+⋮----
+"""
+    Class representing an entry in the msg-history sent to the LLM API.
+    It could be one of these:
+    - a user message
+    - an LLM ("Assistant") response
+    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
+    - a result or results from executing a fn or tool-call(s)
+    """
+⋮----
+role: Role
+name: Optional[str] = None
+tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
+tool_id: str = ""  # used by OpenAIAssistant
+# None means "no content" (the model returned only a tool/function call).
+# This is distinct from "" and is dropped from the API payload by api_dict;
+# see api_dict for how a fully-empty message is handled per-API.
+content: Optional[str] = None
+files: List[FileAttachment] = []
+function_call: Optional[LLMFunctionCall] = None
+tool_calls: Optional[List[OpenAIToolCall]] = None
+timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# link to corresponding chat document, for provenance/rewind purposes
+chat_document_id: str = ""
+⋮----
+def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]
+⋮----
+"""
+        Convert to dictionary for API request, keeping ONLY
+        the fields that are expected in an API call!
+        E.g., DROP the tool_id, since it is only for use in the Assistant API,
+            not the completion API.
+
+        Args:
+            has_system_role: whether the message has a system role (if not,
+                set to "user" role)
+        Returns:
+            dict: dictionary representation of LLM message
+        """
+d = self.model_dump()
+files: List[FileAttachment] = d.pop("files")
+⋮----
+# In there are files, then content is an array of
+# different content-parts
+⋮----
+# if there is a key k = "role" with value "system", change to "user"
+# in case has_system_role is False
+⋮----
+# drop None values since API doesn't accept them (this omits `content`
+# entirely when it is None, i.e. "no content")
+dict_no_none = {k: v for k, v in d.items() if v is not None}
+⋮----
+# OpenAI API does not like empty name
+⋮----
+# arguments must be a string
+⋮----
+# convert tool calls to API format
+⋮----
+# An empty tool-call list is not a call and conveys no useful API
+# information. Omitting it also lets the empty-message fallback
+# below produce a valid message.
+⋮----
+# A message with empty content (None was dropped above, or "") AND no
+# tool/function call would be an entirely empty message, which some APIs
+# (e.g. Gemini) reject; fall back to a single space in that case only.
+# When there IS a tool/function call, empty content is fine (and Gemini
+# 3.x in fact REQUIRES it — it rejects an assistant turn that carries
+# both a call and non-empty text content).
+has_call = bool(dict_no_none.get("tool_calls")) or (
+⋮----
+# IMPORTANT! drop fields that are not expected in API call
+⋮----
+content = "FUNC: " + json.dumps(self.function_call)
+⋮----
+content = self.content or ""
+name_str = f" ({self.name})" if self.name else ""
+⋮----
+class LLMResponse(BaseModel)
+⋮----
+"""
+    Class representing response from LLM.
+    """
+⋮----
+# None means the model returned NO content (e.g. only a tool/function
+# call), which is distinct from an empty string "". Preserving this
+# distinction lets the message be faithfully reproduced downstream
+# (see ChatDocument.content_is_none and LLMMessage.content).
+message: Optional[str] = None
+reasoning: str = ""  # optional reasoning text from reasoning models
+# Original message text including inline thought signatures (e.g.
+# <thinking>...</thinking>). Only set when reasoning was extracted
+# from the message text via get_reasoning_final(); NOT set when
+# reasoning comes from a separate API field (e.g. reasoning_content),
+# since in that case the message text never contained thought tags.
+message_with_reasoning: Optional[str] = None
+# TODO tool_id needs to generalize to multi-tool calls
+⋮----
+oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+⋮----
+usage: Optional[LLMTokenUsage] = None
+cached: bool = False
+⋮----
+def tools_content(self) -> str
+⋮----
+def to_LLMMessage(self) -> LLMMessage
+⋮----
+"""Convert LLM response to an LLMMessage, to be included in the
+        message-list sent to the API.
+        This is currently NOT used in any significant way in the library, and is only
+        provided as a utility to construct a message list for the API when directly
+        working with an LLM object.
+
+        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
+        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
+        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
+        """
+⋮----
+"""
+        If `message` or `function_call` of an LLM response contains an explicit
+        recipient name, return this recipient name and `message` stripped
+        of the recipient name if specified.
+
+        Two cases:
+        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
+        (b) `message` is empty and function_call/tool_call with explicit `recipient`
+
+        Args:
+            recognize_recipient_in_content (bool): When True (default), parses
+                message text for ``TO[<recipient>]:<content>`` patterns and
+                top-level JSON ``{"recipient": "..."}`` fields. When False,
+                only function_call/tool_call ``recipient`` fields are checked.
+
+        Returns:
+            (str): name of recipient, which may be empty string if no recipient
+            (str): content of message
+
+        """
+⋮----
+# in this case we ignore message, since all information is in function_call
+msg = ""
+args = self.function_call.arguments
+recipient = ""
+⋮----
+recipient = args.get("recipient", "")
+⋮----
+msg = self.message or ""
+⋮----
+# get the first tool that has a recipient field, if any
+⋮----
+recipient = tc.function.arguments.get(
+⋮----
+)  # type: ignore
+⋮----
+# It's not a function or tool call, so continue looking to see
+# if a recipient is specified in the message.
+⋮----
+# First check if message contains "TO: <recipient> <content>"
+⋮----
+# check if there is a top level json that specifies 'recipient',
+# and retain the entire message as content.
+⋮----
+recipient_name = top_level_json_field(msg, "recipient") if msg else ""
+content = msg
+⋮----
+# Define an abstract base class for language models
+class LanguageModel(ABC)
+⋮----
+"""
+    Abstract base class for language models.
+    """
+⋮----
+# usage cost by model, accumulates here
+usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+⋮----
+def __init__(self, config: LLMConfig = LLMConfig())
+⋮----
+@staticmethod
+    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]
+⋮----
+"""
+        Create a language model.
+        Args:
+            config: configuration for language model
+        Returns: instance of language model
+        """
+⋮----
+openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+⋮----
+openai = AzureGPT
+⋮----
+openai = OpenAIGPT
+cls = dict(
+return cls(config)  # type: ignore
+⋮----
+@staticmethod
+    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]
+⋮----
+"""
+        Given an even-length sequence of strings, split into a sequence of pairs
+
+        Args:
+            lst (List[str]): sequence of strings
+
+        Returns:
+            List[Tuple[str,str]]: sequence of pairs of strings
+        """
+evens = lst[::2]
+odds = lst[1::2]
+⋮----
+"""
+        From the chat history, extract system prompt, user-assistant turns, and
+        final user msg.
+
+        Args:
+            messages (List[LLMMessage]): List of messages in the chat history
+
+        Returns:
+            Tuple[str, List[Tuple[str,str]], str]:
+                system prompt, user-assistant turns, final user msg
+
+        """
+# Handle various degenerate cases
+messages = [m for m in messages]  # copy
+DUMMY_SYS_PROMPT = "You are a helpful assistant."
+DUMMY_USER_PROMPT = "Follow the instructions above."
+⋮----
+system_prompt = messages[0].content or ""
+⋮----
+# now we have messages = [Sys,...]
+⋮----
+# now we have messages = [Sys, msg, ...]
+⋮----
+# now we have messages = [Sys, user, ...]
+⋮----
+# now we have messages = [Sys, user, ..., user]
+# so we omit the first and last elements and make pairs of user-asst messages
+conversation = [m.content or "" for m in messages[1:-1]]
+user_prompt = messages[-1].content or ""
+pairs = LanguageModel.user_assistant_pairs(conversation)
+⋮----
+@abstractmethod
+    def set_stream(self, stream: bool) -> bool
+⋮----
+"""Enable or disable streaming output from API.
+        Return previous value of stream."""
+⋮----
+@abstractmethod
+    def get_stream(self) -> bool
+⋮----
+"""Get streaming status"""
+⋮----
+@abstractmethod
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+@abstractmethod
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
+⋮----
+"""
+        Get chat-completion response from LLM.
+
+        Args:
+            messages: message-history to send to the LLM
+            max_tokens: max tokens to generate
+            tools: tools available for the LLM to use in its response
+            tool_choice: tool call mode, one of "none", "auto", "required",
+                or a dict specifying a specific tool.
+            functions: functions available for LLM to call (deprecated)
+            function_call: function calling mode, "auto", "none", or a specific fn
+                    (deprecated)
+        """
+⋮----
+"""Async version of `chat`. See `chat` for details."""
+⋮----
+def __call__(self, prompt: str, max_tokens: int) -> LLMResponse
+⋮----
+@staticmethod
+    def _fallback_model_names(model: str) -> List[str]
+⋮----
+parts = model.split("/")
+fallbacks = []
+⋮----
+def info(self) -> ModelInfo
+⋮----
+"""Info of relevant chat model"""
+orig_model = (
+⋮----
+def completion_info(self) -> ModelInfo
+⋮----
+"""Info of relevant completion model"""
+⋮----
+def supports_functions_or_tools(self) -> bool
+⋮----
+"""
+        Does this Model's API support "native" tool-calling, i.e.
+        can we call the API with arguments that contain a list of available tools,
+        and their schemas?
+        Note that, given the plethora of LLM provider APIs this determination is
+        imperfect at best, and leans towards returning True.
+        When the API calls fails with an error indicating tools are not supported,
+        then users are encouraged to use the Langroid-based prompt-based
+        ToolMessage mechanism, which works with ANY LLM. To enable this,
+        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
+        """
+⋮----
+def chat_context_length(self) -> int
+⋮----
+def completion_context_length(self) -> int
+⋮----
+def chat_cost(self) -> Tuple[float, float, float]
+⋮----
+"""
+        Return the cost per 1000 tokens for chat completions.
+
+        Returns:
+            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
+                per 1000 tokens
+        """
+⋮----
+def reset_usage_cost(self) -> None
+⋮----
+counter = self.usage_cost_dict[mdl]
+⋮----
+"""
+        Update usage cost for this LLM.
+        Args:
+            chat (bool): whether to update for chat or completion model
+            prompts (int): number of tokens used for prompts
+            completions (int): number of tokens used for completions
+            cost (float): total token cost in USD
+        """
+mdl = self.config.chat_model if chat else self.config.completion_model
+⋮----
+@classmethod
+    def usage_cost_summary(cls) -> str
+⋮----
+s = ""
+⋮----
+@classmethod
+    def tot_tokens_cost(cls) -> Tuple[int, float]
+⋮----
+"""
+        Return total tokens used and total cost across all models.
+        """
+total_tokens = 0
+total_cost = 0.0
+⋮----
+def get_reasoning_final(self, message: str) -> Tuple[str, str]
+⋮----
+"""Extract "reasoning" and "final answer" from an LLM response, if the
+        reasoning is found within configured delimiters, like <think>, </think>.
+        E.g.,
+        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
+
+        Args:
+            message (str): message from LLM
+
+        Returns:
+            Tuple[str, str]: reasoning, final answer
+        """
+⋮----
+parts = message.split(start)
+⋮----
+"""
+        Given a chat history and a question, convert it to a standalone question.
+        Args:
+            chat_history: list of tuples of (question, answer)
+            query: follow-up question
+
+        Returns: standalone version of the question
+        """
+history = collate_chat_history(chat_history)
+⋮----
+prompt = f"""
+⋮----
+follow_up_question = f"""
+⋮----
+standalone = (
+standalone = standalone.strip()
+⋮----
+class StreamingIfAllowed
+⋮----
+"""Context to temporarily enable or disable streaming, if allowed globally via
+    `settings.stream`"""
+⋮----
+def __init__(self, llm: LanguageModel, stream: bool = True)
+⋮----
+def __enter__(self) -> None
+⋮----
+def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
+</file>
+
 <file path="langroid/language_models/client_cache.py">
 """
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
@@ -69000,580 +69574,6 @@ def __del__(self) -> None
 # Clients are now managed centrally in langroid.language_models.client_cache
 </file>
 
-<file path="langroid/language_models/base.py">
-logger = logging.getLogger(__name__)
-⋮----
-def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
-⋮----
-async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None
-⋮----
-FunctionCallTypes = Literal["none", "auto"]
-ToolChoiceTypes = Literal["none", "auto", "required"]
-ToolTypes = Literal["function"]
-⋮----
-DEFAULT_CONTEXT_LENGTH = 16_000
-⋮----
-class StreamEventType(Enum)
-⋮----
-TEXT = 1
-FUNC_NAME = 2
-FUNC_ARGS = 3
-TOOL_NAME = 4
-TOOL_ARGS = 5
-REASONING = 6
-⋮----
-class RetryParams(BaseSettings)
-⋮----
-max_retries: int = 5
-initial_delay: float = 1.0
-exponential_base: float = 1.3
-jitter: bool = True
-⋮----
-class LLMConfig(BaseSettings)
-⋮----
-"""
-    Common configuration for all language models.
-    """
-⋮----
-type: str = "openai"
-streamer: Optional[Callable[[Any], None]] = noop_fn
-streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
-api_base: str | None = None
-formatter: None | str = None
-# specify None if you want to use the full max output tokens of the model
-max_output_tokens: int | None = 8192
-timeout: int = 20  # timeout for API requests
-chat_model: str = ""
-completion_model: str = ""
-temperature: float = 0.0
-chat_context_length: int | None = None
-async_stream_quiet: bool = False  # suppress streaming output in async mode?
-completion_context_length: int | None = None
-# if input length + max_output_tokens > context length of model,
-# we will try shortening requested output
-min_output_tokens: int = 64
-use_completion_for_chat: bool = False  # use completion model for chat?
-# use chat model for completion? For OpenAI models, this MUST be set to True!
-use_chat_for_completion: bool = True
-stream: bool = True  # stream output from API?
-# TODO: we could have a `stream_reasoning` flag here to control whether to show
-# reasoning output from reasoning models
-cache_config: None | CacheDBConfig = RedisCacheConfig()
-thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
-retry_params: RetryParams = RetryParams()
-⋮----
-@property
-    def model_max_output_tokens(self) -> int
-⋮----
-# Build fallback names by progressively stripping provider prefixes
-# (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
-# succeeds even before OpenAIGPT.__init__ strips the prefix.
-parts = self.chat_model.split("/")
-fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
-⋮----
-class LLMFunctionCall(BaseModel)
-⋮----
-"""
-    Structure of LLM response indicating it "wants" to call a function.
-    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
-    """
-⋮----
-name: str  # name of function to call
-arguments: Optional[Dict[str, Any]] = None
-⋮----
-@staticmethod
-    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall"
-⋮----
-"""
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-fun_call = LLMFunctionCall(name=message["name"])
-fun_args_str = message["arguments"]
-# sometimes may be malformed with invalid indents,
-# so we try to be safe by removing newlines.
-⋮----
-fun_args_str = fun_args_str.replace("\n", "").strip()
-dict_or_list = parse_imperfect_json(fun_args_str)
-⋮----
-fun_args = dict_or_list
-⋮----
-fun_args = None
-⋮----
-def __str__(self) -> str
-⋮----
-class LLMFunctionSpec(BaseModel)
-⋮----
-"""
-    Description of a function available for the LLM to use.
-    To be used when calling the LLM `chat()` method with the `functions` parameter.
-    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
-    """
-⋮----
-name: str
-description: str
-parameters: Dict[str, Any]
-⋮----
-class OpenAIToolCall(BaseModel)
-⋮----
-"""
-    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
-    See https://platform.openai.com/docs/api-reference/chat/create
-
-    Attributes:
-        id: The id of the tool call.
-        type: The type of the tool call;
-            only "function" is currently possible (7/26/24).
-        function: The function call.
-    """
-⋮----
-id: str | None = None
-type: ToolTypes = "function"
-function: LLMFunctionCall | None = None
-extra_content: Dict[str, Any] | None = None
-⋮----
-@staticmethod
-    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall"
-⋮----
-id = message["id"]
-type = message["type"]
-function = LLMFunctionCall.from_dict(message["function"])
-extra_content = message.get("extra_content")
-⋮----
-class OpenAIToolSpec(BaseModel)
-⋮----
-type: ToolTypes
-strict: Optional[bool] = None
-function: LLMFunctionSpec
-⋮----
-class OpenAIJsonSchemaSpec(BaseModel)
-⋮----
-def to_dict(self) -> Dict[str, Any]
-⋮----
-json_schema: Dict[str, Any] = {
-⋮----
-class LLMTokenUsage(BaseModel)
-⋮----
-"""
-    Usage of tokens by an LLM.
-    """
-⋮----
-prompt_tokens: int = 0
-cached_tokens: int = 0
-completion_tokens: int = 0
-cost: float = 0.0
-calls: int = 0  # how many API calls - not used as of 2025-04-04
-⋮----
-def reset(self) -> None
-⋮----
-@property
-    def total_tokens(self) -> int
-⋮----
-class Role(str, Enum)
-⋮----
-"""
-    Possible roles for a message in a chat.
-    """
-⋮----
-USER = "user"
-SYSTEM = "system"
-ASSISTANT = "assistant"
-FUNCTION = "function"
-TOOL = "tool"
-⋮----
-class LLMMessage(BaseModel)
-⋮----
-"""
-    Class representing an entry in the msg-history sent to the LLM API.
-    It could be one of these:
-    - a user message
-    - an LLM ("Assistant") response
-    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
-    - a result or results from executing a fn or tool-call(s)
-    """
-⋮----
-role: Role
-name: Optional[str] = None
-tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
-tool_id: str = ""  # used by OpenAIAssistant
-# None means "no content" (the model returned only a tool/function call).
-# This is distinct from "" and is dropped from the API payload by api_dict;
-# see api_dict for how a fully-empty message is handled per-API.
-content: Optional[str] = None
-files: List[FileAttachment] = []
-function_call: Optional[LLMFunctionCall] = None
-tool_calls: Optional[List[OpenAIToolCall]] = None
-timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-# link to corresponding chat document, for provenance/rewind purposes
-chat_document_id: str = ""
-⋮----
-def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]
-⋮----
-"""
-        Convert to dictionary for API request, keeping ONLY
-        the fields that are expected in an API call!
-        E.g., DROP the tool_id, since it is only for use in the Assistant API,
-            not the completion API.
-
-        Args:
-            has_system_role: whether the message has a system role (if not,
-                set to "user" role)
-        Returns:
-            dict: dictionary representation of LLM message
-        """
-d = self.model_dump()
-files: List[FileAttachment] = d.pop("files")
-⋮----
-# In there are files, then content is an array of
-# different content-parts
-⋮----
-# if there is a key k = "role" with value "system", change to "user"
-# in case has_system_role is False
-⋮----
-# drop None values since API doesn't accept them (this omits `content`
-# entirely when it is None, i.e. "no content")
-dict_no_none = {k: v for k, v in d.items() if v is not None}
-⋮----
-# OpenAI API does not like empty name
-⋮----
-# arguments must be a string
-⋮----
-# convert tool calls to API format
-⋮----
-# An empty tool-call list is not a call and conveys no useful API
-# information. Omitting it also lets the empty-message fallback
-# below produce a valid message.
-⋮----
-# A message with empty content (None was dropped above, or "") AND no
-# tool/function call would be an entirely empty message, which some APIs
-# (e.g. Gemini) reject; fall back to a single space in that case only.
-# When there IS a tool/function call, empty content is fine (and Gemini
-# 3.x in fact REQUIRES it — it rejects an assistant turn that carries
-# both a call and non-empty text content).
-has_call = bool(dict_no_none.get("tool_calls")) or (
-⋮----
-# IMPORTANT! drop fields that are not expected in API call
-⋮----
-content = "FUNC: " + json.dumps(self.function_call)
-⋮----
-content = self.content or ""
-name_str = f" ({self.name})" if self.name else ""
-⋮----
-class LLMResponse(BaseModel)
-⋮----
-"""
-    Class representing response from LLM.
-    """
-⋮----
-# None means the model returned NO content (e.g. only a tool/function
-# call), which is distinct from an empty string "". Preserving this
-# distinction lets the message be faithfully reproduced downstream
-# (see ChatDocument.content_is_none and LLMMessage.content).
-message: Optional[str] = None
-reasoning: str = ""  # optional reasoning text from reasoning models
-# Original message text including inline thought signatures (e.g.
-# <thinking>...</thinking>). Only set when reasoning was extracted
-# from the message text via get_reasoning_final(); NOT set when
-# reasoning comes from a separate API field (e.g. reasoning_content),
-# since in that case the message text never contained thought tags.
-message_with_reasoning: Optional[str] = None
-# TODO tool_id needs to generalize to multi-tool calls
-⋮----
-oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-⋮----
-usage: Optional[LLMTokenUsage] = None
-cached: bool = False
-⋮----
-def tools_content(self) -> str
-⋮----
-def to_LLMMessage(self) -> LLMMessage
-⋮----
-"""Convert LLM response to an LLMMessage, to be included in the
-        message-list sent to the API.
-        This is currently NOT used in any significant way in the library, and is only
-        provided as a utility to construct a message list for the API when directly
-        working with an LLM object.
-
-        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
-        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
-        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
-        """
-⋮----
-"""
-        If `message` or `function_call` of an LLM response contains an explicit
-        recipient name, return this recipient name and `message` stripped
-        of the recipient name if specified.
-
-        Two cases:
-        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
-        (b) `message` is empty and function_call/tool_call with explicit `recipient`
-
-        Args:
-            recognize_recipient_in_content (bool): When True (default), parses
-                message text for ``TO[<recipient>]:<content>`` patterns and
-                top-level JSON ``{"recipient": "..."}`` fields. When False,
-                only function_call/tool_call ``recipient`` fields are checked.
-
-        Returns:
-            (str): name of recipient, which may be empty string if no recipient
-            (str): content of message
-
-        """
-⋮----
-# in this case we ignore message, since all information is in function_call
-msg = ""
-args = self.function_call.arguments
-recipient = ""
-⋮----
-recipient = args.get("recipient", "")
-⋮----
-msg = self.message or ""
-⋮----
-# get the first tool that has a recipient field, if any
-⋮----
-recipient = tc.function.arguments.get(
-⋮----
-)  # type: ignore
-⋮----
-# It's not a function or tool call, so continue looking to see
-# if a recipient is specified in the message.
-⋮----
-# First check if message contains "TO: <recipient> <content>"
-⋮----
-# check if there is a top level json that specifies 'recipient',
-# and retain the entire message as content.
-⋮----
-recipient_name = top_level_json_field(msg, "recipient") if msg else ""
-content = msg
-⋮----
-# Define an abstract base class for language models
-class LanguageModel(ABC)
-⋮----
-"""
-    Abstract base class for language models.
-    """
-⋮----
-# usage cost by model, accumulates here
-usage_cost_dict: Dict[str, LLMTokenUsage] = {}
-⋮----
-def __init__(self, config: LLMConfig = LLMConfig())
-⋮----
-@staticmethod
-    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]
-⋮----
-"""
-        Create a language model.
-        Args:
-            config: configuration for language model
-        Returns: instance of language model
-        """
-⋮----
-openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
-⋮----
-openai = AzureGPT
-⋮----
-openai = OpenAIGPT
-cls = dict(
-return cls(config)  # type: ignore
-⋮----
-@staticmethod
-    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]
-⋮----
-"""
-        Given an even-length sequence of strings, split into a sequence of pairs
-
-        Args:
-            lst (List[str]): sequence of strings
-
-        Returns:
-            List[Tuple[str,str]]: sequence of pairs of strings
-        """
-evens = lst[::2]
-odds = lst[1::2]
-⋮----
-"""
-        From the chat history, extract system prompt, user-assistant turns, and
-        final user msg.
-
-        Args:
-            messages (List[LLMMessage]): List of messages in the chat history
-
-        Returns:
-            Tuple[str, List[Tuple[str,str]], str]:
-                system prompt, user-assistant turns, final user msg
-
-        """
-# Handle various degenerate cases
-messages = [m for m in messages]  # copy
-DUMMY_SYS_PROMPT = "You are a helpful assistant."
-DUMMY_USER_PROMPT = "Follow the instructions above."
-⋮----
-system_prompt = messages[0].content or ""
-⋮----
-# now we have messages = [Sys,...]
-⋮----
-# now we have messages = [Sys, msg, ...]
-⋮----
-# now we have messages = [Sys, user, ...]
-⋮----
-# now we have messages = [Sys, user, ..., user]
-# so we omit the first and last elements and make pairs of user-asst messages
-conversation = [m.content or "" for m in messages[1:-1]]
-user_prompt = messages[-1].content or ""
-pairs = LanguageModel.user_assistant_pairs(conversation)
-⋮----
-@abstractmethod
-    def set_stream(self, stream: bool) -> bool
-⋮----
-"""Enable or disable streaming output from API.
-        Return previous value of stream."""
-⋮----
-@abstractmethod
-    def get_stream(self) -> bool
-⋮----
-"""Get streaming status"""
-⋮----
-@abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-@abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse
-⋮----
-"""
-        Get chat-completion response from LLM.
-
-        Args:
-            messages: message-history to send to the LLM
-            max_tokens: max tokens to generate
-            tools: tools available for the LLM to use in its response
-            tool_choice: tool call mode, one of "none", "auto", "required",
-                or a dict specifying a specific tool.
-            functions: functions available for LLM to call (deprecated)
-            function_call: function calling mode, "auto", "none", or a specific fn
-                    (deprecated)
-        """
-⋮----
-"""Async version of `chat`. See `chat` for details."""
-⋮----
-def __call__(self, prompt: str, max_tokens: int) -> LLMResponse
-⋮----
-@staticmethod
-    def _fallback_model_names(model: str) -> List[str]
-⋮----
-parts = model.split("/")
-fallbacks = []
-⋮----
-def info(self) -> ModelInfo
-⋮----
-"""Info of relevant chat model"""
-orig_model = (
-⋮----
-def completion_info(self) -> ModelInfo
-⋮----
-"""Info of relevant completion model"""
-⋮----
-def supports_functions_or_tools(self) -> bool
-⋮----
-"""
-        Does this Model's API support "native" tool-calling, i.e.
-        can we call the API with arguments that contain a list of available tools,
-        and their schemas?
-        Note that, given the plethora of LLM provider APIs this determination is
-        imperfect at best, and leans towards returning True.
-        When the API calls fails with an error indicating tools are not supported,
-        then users are encouraged to use the Langroid-based prompt-based
-        ToolMessage mechanism, which works with ANY LLM. To enable this,
-        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
-        """
-⋮----
-def chat_context_length(self) -> int
-⋮----
-def completion_context_length(self) -> int
-⋮----
-def chat_cost(self) -> Tuple[float, float, float]
-⋮----
-"""
-        Return the cost per 1000 tokens for chat completions.
-
-        Returns:
-            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
-                per 1000 tokens
-        """
-⋮----
-def reset_usage_cost(self) -> None
-⋮----
-counter = self.usage_cost_dict[mdl]
-⋮----
-"""
-        Update usage cost for this LLM.
-        Args:
-            chat (bool): whether to update for chat or completion model
-            prompts (int): number of tokens used for prompts
-            completions (int): number of tokens used for completions
-            cost (float): total token cost in USD
-        """
-mdl = self.config.chat_model if chat else self.config.completion_model
-⋮----
-@classmethod
-    def usage_cost_summary(cls) -> str
-⋮----
-s = ""
-⋮----
-@classmethod
-    def tot_tokens_cost(cls) -> Tuple[int, float]
-⋮----
-"""
-        Return total tokens used and total cost across all models.
-        """
-total_tokens = 0
-total_cost = 0.0
-⋮----
-def get_reasoning_final(self, message: str) -> Tuple[str, str]
-⋮----
-"""Extract "reasoning" and "final answer" from an LLM response, if the
-        reasoning is found within configured delimiters, like <think>, </think>.
-        E.g.,
-        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
-
-        Args:
-            message (str): message from LLM
-
-        Returns:
-            Tuple[str, str]: reasoning, final answer
-        """
-⋮----
-parts = message.split(start)
-⋮----
-"""
-        Given a chat history and a question, convert it to a standalone question.
-        Args:
-            chat_history: list of tuples of (question, answer)
-            query: follow-up question
-
-        Returns: standalone version of the question
-        """
-history = collate_chat_history(chat_history)
-⋮----
-prompt = f"""
-⋮----
-follow_up_question = f"""
-⋮----
-standalone = (
-standalone = standalone.strip()
-⋮----
-class StreamingIfAllowed
-⋮----
-"""Context to temporarily enable or disable streaming, if allowed globally via
-    `settings.stream`"""
-⋮----
-def __init__(self, llm: LanguageModel, stream: bool = True)
-⋮----
-def __enter__(self) -> None
-⋮----
-def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
-</file>
-
 <file path="tests/main/sql_chat/test_sql_chat_security.py">
 """
 Unit tests for SQLChatAgent's query validator (CVE-2026-25879 mitigation).
@@ -69797,317 +69797,6 @@ def _kinds(query: str, dialect: str) -> set
 # A MERGE nested inside a CTE is still reported, as MERGE.
 ⋮----
 def test_nested_write_kinds_across_dialects(dialect, query, expected)
-</file>
-
-<file path="tests/main/test_llm.py">
-# allow streaming globally, but can be turned off by individual models
-⋮----
-@pytest.mark.parametrize("use_cache", [True, False])
-def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache)
-⋮----
-test_settings.cache = False  # cache response but don't retrieve from cache
-⋮----
-cfg = OpenAIGPTConfig(
-⋮----
-stream=streaming,  # use streaming output if enabled globally
-⋮----
-mdl = OpenAIGPT(config=cfg)
-question = "What is the capital of " + country + "?"
-# chat mode via `generate`,
-# i.e. use same call as for completion, but the setting below
-# actually calls `chat` under the hood
-⋮----
-# check that "generate" works when "use_chat_for_completion" is True
-response = mdl.generate(prompt=question, max_tokens=800)
-⋮----
-# actual chat mode
-messages = [
-response = mdl.chat(messages=messages, max_tokens=500)
-⋮----
-# should be from cache this time, Provided config.cache_config is not None
-⋮----
-# pass intentional bad msg to test error handling
-⋮----
-_ = mdl.chat(messages=messages, max_tokens=500)
-⋮----
-def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int)
-⋮----
-"""
-    Test disabled, see TODO below.
-    Also it takes too long since we are trying to test
-    that it raises the expected error when the context length is exceeded.
-    Args:
-        test_settings: from conftest.py
-        mode: "completion" or "chat"
-        max_tokens: number of tokens to generate
-    """
-⋮----
-parser = Parser(config=ParsingConfig())
-llm = OpenAIGPT(config=cfg)
-context_length = (
-⋮----
-toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
-max_sentences = int(context_length * 1.5 / toks_per_sentence)
-big_message = generate_random_sentences(max_sentences + 1)
-big_message_tokens = parser.num_tokens(big_message)
-⋮----
-response = None
-# TODO need to figure out what error type to expect here
-⋮----
-response = llm.chat(big_message, max_tokens=max_tokens)
-⋮----
-response = llm.generate(prompt=big_message, max_tokens=max_tokens)
-⋮----
-@pytest.mark.parametrize("ctx", [16_000, None])
-def test_llm_config_context_length(mdl: str, ctx: int | None)
-⋮----
-llm_config = lm.OpenAIGPTConfig(
-⋮----
-chat_context_length=ctx,  # even if wrong, use if explicitly set
-⋮----
-mdl = lm.OpenAIGPT(config=llm_config)
-⋮----
-alias_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=alias_model))
-canonical_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=canonical_model))
-⋮----
-def test_get_model_info_warns_on_unknown_models() -> None
-⋮----
-model_name = "gemini/gemini-999-unknown-preview"
-# Ensure this model hasn't been warned about in a prior test so the
-# warning actually fires.  The cache key is a tuple of the full model
-# strings passed to _warn_unknown_model (i.e. with the provider prefix).
-⋮----
-handler = logging.handlers.MemoryHandler(capacity=100)
-logger = logging.getLogger("langroid.language_models.model_info")
-⋮----
-info = get_model_info(model_name)
-⋮----
-messages = [record.getMessage() for record in handler.buffer]
-⋮----
-def test_model_selection(test_settings: Settings)
-⋮----
-defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
-⋮----
-def get_response(llm)
-⋮----
-def simulate_response(llm)
-⋮----
-# Default is GPT4o; we should not generate the warning in this case
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig())
-⋮----
-# Default is GPT3.5 (simulate GPT 4 inaccessible)
-⋮----
-# No warnings generated if we specify the model explicitly
-⋮----
-# No warnings generated if we are using a local model
-llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
-⋮----
-llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
-⋮----
-# We should warn on the first usage of a model with auto-selected GPT-3.5
-⋮----
-# We should not warn on subsequent uses and models with auto-selected GPT-3.5
-⋮----
-def test_keys()
-⋮----
-# Do not override the explicit settings below
-⋮----
-providers = [
-key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
-⋮----
-config = lm.OpenAIGPTConfig(
-⋮----
-llm = lm.OpenAIGPT(config)
-⋮----
-rand_key = str(random.randint(0, 10**9))
-⋮----
-def test_llm_langdb(model: str)
-⋮----
-"""Test that LLM access via LangDB works."""
-# override any chat model passed via --m arg to pytest cmd
-⋮----
-llm_config_langdb = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_langdb)
-result = llm.chat("what is 3+4?")
-⋮----
-def test_llm_openrouter(model: str)
-⋮----
-llm = lm.OpenAIGPT(config=llm_config)
-⋮----
-def test_llm_portkey(model: str)
-⋮----
-"""Test that LLM access via Portkey works."""
-⋮----
-# Skip if PORTKEY_API_KEY is not set
-⋮----
-# Extract provider from model string
-provider = model.split("/")[1] if "/" in model else ""
-provider_key_var = f"{provider.upper()}_API_KEY"
-⋮----
-# Skip if provider API key is not set
-⋮----
-llm_config_portkey = lm.OpenAIGPTConfig(
-llm = lm.OpenAIGPT(config=llm_config_portkey)
-result = llm.chat("what is 3+4 equal to?")
-⋮----
-def test_portkey_params()
-⋮----
-"""Test that PortkeyParams are correctly configured."""
-⋮----
-# Test with explicit parameters
-params = PortkeyParams(
-⋮----
-headers = params.get_headers()
-⋮----
-# Test model string parsing
-⋮----
-# Test fallback parsing
-⋮----
-# Test provider API key retrieval
-⋮----
-key = params.get_provider_api_key("test_provider")
-⋮----
-def test_portkey_integration()
-⋮----
-"""Test that Portkey integration is properly configured in OpenAIGPT."""
-⋮----
-# Save the current chat model setting
-original_chat_model = settings.chat_model
-⋮----
-# Clear any global chat model override
-⋮----
-# Test basic portkey model configuration
-⋮----
-# Check that model was parsed correctly
-⋮----
-# Check headers are set correctly
-⋮----
-# Restore original chat model setting
-⋮----
-def test_gemini_api_base()
-⋮----
-"""Test that Gemini api_base is configurable for Vertex AI support."""
-⋮----
-# Save and clear env vars that could interfere
-saved_openai_api_base = os.environ.pop("OPENAI_API_BASE", None)
-saved_gemini_api_base = os.environ.pop("GEMINI_API_BASE", None)
-⋮----
-# Default: api_base should be GEMINI_BASE_URL
-⋮----
-# Custom api_base: should override default (e.g. Vertex AI endpoint)
-vertex_url = "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-project/locations/us-central1/endpoints/openapi"
-⋮----
-# Empty string api_base: should fall back to default
-⋮----
-# None api_base: should fall back to default
-⋮----
-# OPENAI_API_BASE env var should NOT leak into Gemini api_base
-⋮----
-# GEMINI_API_BASE env var should be used (e.g. Vertex AI)
-⋮----
-# GEMINI_API_BASE should take priority over OPENAI_API_BASE
-⋮----
-# Restore original env vars
-⋮----
-def test_followup_standalone()
-⋮----
-"""Test that followup_to_standalone works."""
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig())
-dialog = [
-followup = "What about 11?"
-response = llm.followup_to_standalone(dialog, followup)
-⋮----
-def test_llm_pdf_attachment()
-⋮----
-"""Test sending a PDF file attachment to the LLM."""
-⋮----
-# Path to the test PDF file
-pdf_path = Path("tests/main/data/dummy.pdf")
-⋮----
-# Create a FileAttachment from the PDF file
-attachment = FileAttachment.from_path(pdf_path)
-⋮----
-# Verify the attachment properties
-⋮----
-# Create messages with the attachment
-⋮----
-# Set up the LLM with a suitable model that supports PDFs
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
-⋮----
-# Get response from the LLM
-response = llm.chat(messages=messages)
-⋮----
-# follow-up question
-⋮----
-def test_llm_multi_pdf_attachments()
-⋮----
-# multiple attachments
-pdf_path2 = Path("tests/main/data/sample-test.pdf")
-⋮----
-attachment2 = FileAttachment.from_path(pdf_path2)
-⋮----
-def test_llm_pdf_bytes_and_split()
-⋮----
-"""Test sending PDF files to LLM as bytes and split into pages."""
-⋮----
-# Test creating attachment from bytes
-⋮----
-pdf_bytes = f.read()
-⋮----
-attachment_from_bytes = FileAttachment.from_bytes(
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
-⋮----
-# Test creating attachment from file-like object
-pdf_io = io.BytesIO(pdf_bytes)
-attachment_from_io = FileAttachment.from_io(
-⋮----
-# Test splitting PDF into pages and sending individual pages
-⋮----
-doc = fitz.open(pdf_path)
-page_attachments = []
-⋮----
-# Extract page as PDF
-page_pdf = io.BytesIO()
-page_doc = fitz.open()
-⋮----
-# Create attachment for this page
-page_attachment = FileAttachment.from_io(
-⋮----
-# Send just the first page
-⋮----
-# Test with multiple pages as separate attachments
-⋮----
-def test_llm_image_input(path: str)
-⋮----
-attachment = FileAttachment.from_path(path, detail="low")
-⋮----
-llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
-⋮----
-def test_litellm_model_key()
-⋮----
-"""
-    Test that passing in explicit api_key works with `litellm/*` models
-    """
-model = "litellm/anthropic/claude-3-5-haiku-latest"
-# disable any chat model passed via --m arg to pytest cmd
-⋮----
-class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig)
-⋮----
-"""OpenAI config that doesn't auto-load from environment variables."""
-⋮----
-# Disable environment prefix to prevent auto-loading
-model_config = SettingsConfigDict(env_prefix="")
-⋮----
-llm_config = CustomOpenAIGPTConfig(
-⋮----
-response = llm.chat("What is 3+4?")
 </file>
 
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
@@ -71990,197 +71679,352 @@ model_names = tuple(_model_name(model) for model in models)
 def _model_name(model: str | ModelName) -> str
 </file>
 
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - None Content in LLM Messages: notes/llm-none-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Rotating API Keys: notes/rotating-api-keys.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-      - Batch Processing: notes/batch-processing.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+<file path="tests/main/test_llm.py">
+# allow streaming globally, but can be turned off by individual models
+⋮----
+@pytest.mark.parametrize("use_cache", [True, False])
+def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache)
+⋮----
+test_settings.cache = False  # cache response but don't retrieve from cache
+⋮----
+cfg = OpenAIGPTConfig(
+⋮----
+stream=streaming,  # use streaming output if enabled globally
+⋮----
+mdl = OpenAIGPT(config=cfg)
+question = "What is the capital of " + country + "?"
+# chat mode via `generate`,
+# i.e. use same call as for completion, but the setting below
+# actually calls `chat` under the hood
+⋮----
+# check that "generate" works when "use_chat_for_completion" is True
+response = mdl.generate(prompt=question, max_tokens=800)
+⋮----
+# actual chat mode
+messages = [
+response = mdl.chat(messages=messages, max_tokens=500)
+⋮----
+# should be from cache this time, Provided config.cache_config is not None
+⋮----
+# pass intentional bad msg to test error handling
+⋮----
+_ = mdl.chat(messages=messages, max_tokens=500)
+⋮----
+def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int)
+⋮----
+"""
+    Test disabled, see TODO below.
+    Also it takes too long since we are trying to test
+    that it raises the expected error when the context length is exceeded.
+    Args:
+        test_settings: from conftest.py
+        mode: "completion" or "chat"
+        max_tokens: number of tokens to generate
+    """
+⋮----
+parser = Parser(config=ParsingConfig())
+llm = OpenAIGPT(config=cfg)
+context_length = (
+⋮----
+toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
+max_sentences = int(context_length * 1.5 / toks_per_sentence)
+big_message = generate_random_sentences(max_sentences + 1)
+big_message_tokens = parser.num_tokens(big_message)
+⋮----
+response = None
+# TODO need to figure out what error type to expect here
+⋮----
+response = llm.chat(big_message, max_tokens=max_tokens)
+⋮----
+response = llm.generate(prompt=big_message, max_tokens=max_tokens)
+⋮----
+@pytest.mark.parametrize("ctx", [16_000, None])
+def test_llm_config_context_length(mdl: str, ctx: int | None)
+⋮----
+llm_config = lm.OpenAIGPTConfig(
+⋮----
+chat_context_length=ctx,  # even if wrong, use if explicitly set
+⋮----
+mdl = lm.OpenAIGPT(config=llm_config)
+⋮----
+alias_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=alias_model))
+canonical_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=canonical_model))
+⋮----
+def test_get_model_info_warns_on_unknown_models() -> None
+⋮----
+model_name = "gemini/gemini-999-unknown-preview"
+# Ensure this model hasn't been warned about in a prior test so the
+# warning actually fires.  The cache key is a tuple of the full model
+# strings passed to _warn_unknown_model (i.e. with the provider prefix).
+⋮----
+handler = logging.handlers.MemoryHandler(capacity=100)
+logger = logging.getLogger("langroid.language_models.model_info")
+⋮----
+info = get_model_info(model_name)
+⋮----
+messages = [record.getMessage() for record in handler.buffer]
+⋮----
+def test_model_selection(test_settings: Settings)
+⋮----
+defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
+⋮----
+def get_response(llm)
+⋮----
+def simulate_response(llm)
+⋮----
+# Default is GPT4o; we should not generate the warning in this case
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig())
+⋮----
+# Default is GPT3.5 (simulate GPT 4 inaccessible)
+⋮----
+# No warnings generated if we specify the model explicitly
+⋮----
+# No warnings generated if we are using a local model
+llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
+⋮----
+llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
+⋮----
+# We should warn on the first usage of a model with auto-selected GPT-3.5
+⋮----
+# We should not warn on subsequent uses and models with auto-selected GPT-3.5
+⋮----
+def test_keys()
+⋮----
+# Do not override the explicit settings below
+⋮----
+providers = [
+key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
+⋮----
+config = lm.OpenAIGPTConfig(
+⋮----
+llm = lm.OpenAIGPT(config)
+⋮----
+rand_key = str(random.randint(0, 10**9))
+⋮----
+def test_llm_langdb(model: str)
+⋮----
+"""Test that LLM access via LangDB works."""
+# override any chat model passed via --m arg to pytest cmd
+⋮----
+llm_config_langdb = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_langdb)
+result = llm.chat("what is 3+4?")
+⋮----
+def test_llm_openrouter(model: str)
+⋮----
+llm = lm.OpenAIGPT(config=llm_config)
+⋮----
+def test_llm_portkey(model: str)
+⋮----
+"""Test that LLM access via Portkey works."""
+⋮----
+# Skip if PORTKEY_API_KEY is not set
+⋮----
+# Extract provider from model string
+provider = model.split("/")[1] if "/" in model else ""
+provider_key_var = f"{provider.upper()}_API_KEY"
+⋮----
+# Skip if provider API key is not set
+⋮----
+llm_config_portkey = lm.OpenAIGPTConfig(
+llm = lm.OpenAIGPT(config=llm_config_portkey)
+result = llm.chat("what is 3+4 equal to?")
+⋮----
+def test_portkey_params()
+⋮----
+"""Test that PortkeyParams are correctly configured."""
+⋮----
+# Test with explicit parameters
+params = PortkeyParams(
+⋮----
+headers = params.get_headers()
+⋮----
+# Test model string parsing
+⋮----
+# Test fallback parsing
+⋮----
+# Test provider API key retrieval
+⋮----
+key = params.get_provider_api_key("test_provider")
+⋮----
+def test_portkey_integration()
+⋮----
+"""Test that Portkey integration is properly configured in OpenAIGPT."""
+⋮----
+# Save the current chat model setting
+original_chat_model = settings.chat_model
+⋮----
+# Clear any global chat model override
+⋮----
+# Test basic portkey model configuration
+⋮----
+# Check that model was parsed correctly
+⋮----
+# Check headers are set correctly
+⋮----
+# Restore original chat model setting
+⋮----
+def test_gemini_api_base()
+⋮----
+"""Test that Gemini api_base is configurable for Vertex AI support."""
+⋮----
+# Save and clear env vars that could interfere
+saved_openai_api_base = os.environ.pop("OPENAI_API_BASE", None)
+saved_gemini_api_base = os.environ.pop("GEMINI_API_BASE", None)
+⋮----
+# Default: api_base should be GEMINI_BASE_URL
+⋮----
+# Custom api_base: should override default (e.g. Vertex AI endpoint)
+vertex_url = "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-project/locations/us-central1/endpoints/openapi"
+⋮----
+# Empty string api_base: should fall back to default
+⋮----
+# None api_base: should fall back to default
+⋮----
+# OPENAI_API_BASE env var should NOT leak into Gemini api_base
+⋮----
+# GEMINI_API_BASE env var should be used (e.g. Vertex AI)
+⋮----
+# GEMINI_API_BASE should take priority over OPENAI_API_BASE
+⋮----
+# Restore original env vars
+⋮----
+def test_gemini_google_prefix(monkeypatch)
+⋮----
+"""`google/`-prefixed Gemini models route to the Gemini API (issue #995)."""
+⋮----
+llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=chat_model))
+⋮----
+def test_non_gemini_google_model_is_not_rerouted(monkeypatch, chat_model)
+⋮----
+"""Non-Gemini Google models retain caller routing and credentials."""
+⋮----
+caller_api_key = "caller-api-key"
+⋮----
+llm = lm.OpenAIGPT(
+⋮----
+"""Gemini aliases retain an explicitly configured API base."""
+⋮----
+def test_gemini_model_copy_preserves_explicit_api_base(monkeypatch, chat_model)
+⋮----
+"""Gemini configs copied with an API base retain the caller endpoint."""
+⋮----
+custom_base = "https://caller.example/v1"
+config = lm.OpenAIGPTConfig(chat_model=chat_model).model_copy(
+⋮----
+def test_gemini_assignment_preserves_explicit_api_base(monkeypatch, chat_model)
+⋮----
+"""Gemini configs assigned an API base retain the caller endpoint."""
+⋮----
+config = lm.OpenAIGPTConfig(chat_model=chat_model)
+⋮----
+def test_gemini_dynamic_config_preserves_api_base(monkeypatch)
+⋮----
+"""Dynamically prefixed Gemini settings retain their API base."""
+⋮----
+vertex_config = lm.OpenAIGPTConfig.create("vertex")
+⋮----
+llm = lm.OpenAIGPT(vertex_config(chat_model="google/gemini-2.0-flash"))
+⋮----
+def test_followup_standalone()
+⋮----
+"""Test that followup_to_standalone works."""
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig())
+dialog = [
+followup = "What about 11?"
+response = llm.followup_to_standalone(dialog, followup)
+⋮----
+def test_llm_pdf_attachment()
+⋮----
+"""Test sending a PDF file attachment to the LLM."""
+⋮----
+# Path to the test PDF file
+pdf_path = Path("tests/main/data/dummy.pdf")
+⋮----
+# Create a FileAttachment from the PDF file
+attachment = FileAttachment.from_path(pdf_path)
+⋮----
+# Verify the attachment properties
+⋮----
+# Create messages with the attachment
+⋮----
+# Set up the LLM with a suitable model that supports PDFs
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+⋮----
+# Get response from the LLM
+response = llm.chat(messages=messages)
+⋮----
+# follow-up question
+⋮----
+def test_llm_multi_pdf_attachments()
+⋮----
+# multiple attachments
+pdf_path2 = Path("tests/main/data/sample-test.pdf")
+⋮----
+attachment2 = FileAttachment.from_path(pdf_path2)
+⋮----
+def test_llm_pdf_bytes_and_split()
+⋮----
+"""Test sending PDF files to LLM as bytes and split into pages."""
+⋮----
+# Test creating attachment from bytes
+⋮----
+pdf_bytes = f.read()
+⋮----
+attachment_from_bytes = FileAttachment.from_bytes(
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
+⋮----
+# Test creating attachment from file-like object
+pdf_io = io.BytesIO(pdf_bytes)
+attachment_from_io = FileAttachment.from_io(
+⋮----
+# Test splitting PDF into pages and sending individual pages
+⋮----
+doc = fitz.open(pdf_path)
+page_attachments = []
+⋮----
+# Extract page as PDF
+page_pdf = io.BytesIO()
+page_doc = fitz.open()
+⋮----
+# Create attachment for this page
+page_attachment = FileAttachment.from_io(
+⋮----
+# Send just the first page
+⋮----
+# Test with multiple pages as separate attachments
+⋮----
+def test_llm_image_input(path: str)
+⋮----
+attachment = FileAttachment.from_path(path, detail="low")
+⋮----
+llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
+⋮----
+def test_litellm_model_key()
+⋮----
+"""
+    Test that passing in explicit api_key works with `litellm/*` models
+    """
+model = "litellm/anthropic/claude-3-5-haiku-latest"
+# disable any chat model passed via --m arg to pytest cmd
+⋮----
+class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig)
+⋮----
+"""OpenAI config that doesn't auto-load from environment variables."""
+⋮----
+# Disable environment prefix to prevent auto-loading
+model_config = SettingsConfigDict(env_prefix="")
+⋮----
+llm_config = CustomOpenAIGPTConfig(
+⋮----
+response = llm.chat("What is 3+4?")
 </file>
 
 <file path="tests/main/test_prep_llm_message.py">
@@ -72537,11 +72381,204 @@ malformed_function = LLMFunctionCall(
 pending_calls = list(agent.oai_tool_calls)
 </file>
 
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - None Content in LLM Messages: notes/llm-none-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Rotating API Keys: notes/rotating-api-keys.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Batch Processing: notes/batch-processing.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+</file>
+
 <file path=".pre-commit-config.yaml">
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.0
+  rev: v0.16.4
   hooks:
     - id: ruff
 </file>
@@ -72554,6 +72591,8 @@ OLLAMA_BASE_URL = "http://localhost:11434/v1"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+# Provider prefixes that route to the Gemini OpenAI-compatible API.
+GEMINI_MODEL_PREFIXES = ("gemini/", "google/gemini-")
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 OLLAMA_API_KEY = "ollama"
@@ -72692,9 +72731,11 @@ None  # Factory: returns Client or (Client, AsyncClient)
 ⋮----
 http_verify_ssl: bool = True  # Simple flag for SSL verification
 http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
+_api_base_was_supplied: bool = False
 ⋮----
 def __init__(self, **kwargs) -> None:  # type: ignore
 ⋮----
+api_base_was_supplied = "api_base" in kwargs
 local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 ⋮----
 chat_model = kwargs.get("chat_model", "")
@@ -72708,7 +72749,14 @@ existing_hook = kwargs.get("run_on_first_use", noop)
 ⋮----
 def with_warning() -> None
 ⋮----
+env_prefix = self.model_config.get("env_prefix")
+api_base_was_supplied = api_base_was_supplied or (
+⋮----
 model_config = SettingsConfigDict(env_prefix="OPENAI_")
+⋮----
+def __setattr__(self, name: str, value: Any) -> None
+⋮----
+"""Track API bases assigned after config construction."""
 ⋮----
 """
         Copy config while preserving nested model instances and subclasses.
@@ -72717,9 +72765,14 @@ model_config = SettingsConfigDict(env_prefix="OPENAI_")
         models to their annotated base types (dropping subclass-only fields).
         Instead, defer to Pydantic's native `model_copy`, which keeps nested
         `BaseModel` instances (and their concrete subclasses) intact.
+
+        An `api_base` supplied through `update` is caller configuration, so the
+        copy must retain that provenance for provider-specific routing.
         """
 # Delegate to BaseSettings/BaseModel implementation to preserve types
-return super().model_copy(update=update, deep=deep)  # type: ignore[return-value]
+copied = super().model_copy(update=update, deep=deep)
+⋮----
+return copied  # type: ignore[return-value]
 ⋮----
 def _validate_litellm(self) -> None
 ⋮----
@@ -72855,16 +72908,13 @@ self.config.seed = None  # some models raise an error when seed is set
 ⋮----
 # in these cases, there's no specific client: OpenAI python client suffices
 ⋮----
-# Use GEMINI_API_BASE env var if set (e.g. for Vertex AI),
-# then config.api_base only if explicitly set by the user
-# (not inherited from OPENAI_API_BASE via env_prefix),
-# then fall back to the default Gemini endpoint.
+# Prefer caller config, then Gemini env, then the default.
 gemini_api_base = os.getenv("GEMINI_API_BASE", "")
-openai_api_base = os.getenv("OPENAI_API_BASE")
 explicit_api_base = (
 ⋮----
 # Honor caller-supplied base URL (e.g. regional endpoints,
 # proxies) instead of always forcing the default.
+openai_api_base = os.getenv("OPENAI_API_BASE")
 ⋮----
 # Only overwrite with MINIMAX_API_KEY when it is actually
 # set, so users who intentionally put their MiniMax key in
