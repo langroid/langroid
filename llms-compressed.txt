@@ -44422,6 +44422,103 @@ logger2 = RichFileLogger(str(log_path), append=True, color=False)
 # Clean up
 </file>
 
+<file path="tests/main/test_split_inline_reasoning.py">
+"""
+Tests for OpenAIGPT._split_inline_reasoning, which separates inline
+thought-delimiter tags (e.g. <think>...</think>) from text content
+during streaming.
+"""
+⋮----
+split = OpenAIGPT._split_inline_reasoning
+DELIMS = ("<think>", "</think>")
+⋮----
+class TestSplitInlineReasoning
+⋮----
+"""Unit tests for the streaming inline-reasoning splitter."""
+⋮----
+# --- no-op cases: nothing to parse ---
+⋮----
+def test_empty_text(self)
+⋮----
+"""Empty event_text should pass through unchanged."""
+⋮----
+def test_plain_text_no_delimiters(self)
+⋮----
+"""Text without any delimiters should pass through as-is."""
+⋮----
+def test_already_has_reasoning_field(self)
+⋮----
+"""When the API already provides separate reasoning, skip parsing."""
+⋮----
+# --- single chunk contains full <think>...</think> ---
+⋮----
+def test_full_think_block_in_one_chunk(self)
+⋮----
+"""Complete <think>reasoning</think> in a single chunk."""
+⋮----
+def test_text_before_and_after_think(self)
+⋮----
+"""Text surrounding a complete think block."""
+⋮----
+def test_text_before_think_only(self)
+⋮----
+"""Text before think block, nothing after."""
+⋮----
+def test_text_after_think_only(self)
+⋮----
+"""Think block followed by text, no prefix."""
+⋮----
+# --- multi-chunk: start delimiter in one chunk, end in another ---
+⋮----
+def test_start_delimiter_only(self)
+⋮----
+"""Chunk has <think> but no </think> — enters reasoning state."""
+⋮----
+def test_continuation_mid_reasoning(self)
+⋮----
+"""Chunk arrives while already in reasoning (no delimiters)."""
+⋮----
+def test_end_delimiter_while_in_reasoning(self)
+⋮----
+"""Chunk has </think> while in reasoning state."""
+⋮----
+def test_end_delimiter_no_trailing_text(self)
+⋮----
+"""End delimiter with nothing after it."""
+⋮----
+# --- multi-chunk sequence simulating a real stream ---
+⋮----
+def test_three_chunk_sequence(self)
+⋮----
+"""Simulate: chunk1 opens thinking, chunk2 continues, chunk3 closes."""
+# chunk 1: start of thinking
+⋮----
+# chunk 2: still thinking
+⋮----
+# chunk 3: done thinking, answer follows
+⋮----
+# --- custom delimiters ---
+⋮----
+def test_custom_delimiters(self)
+⋮----
+"""Works with non-default delimiters like <thinking>...</thinking>."""
+custom = ("<thinking>", "</thinking>")
+⋮----
+# --- edge cases ---
+⋮----
+def test_empty_think_block(self)
+⋮----
+"""<think></think> with nothing inside."""
+⋮----
+def test_only_start_delimiter(self)
+⋮----
+"""Chunk is exactly the start delimiter, nothing else."""
+⋮----
+def test_only_end_delimiter_while_reasoning(self)
+⋮----
+"""Chunk is exactly the end delimiter."""
+</file>
+
 <file path="tests/main/test_stateful_tool.py">
 """
 Simple test of a stateful tool: enabling this tool on an agent
@@ -57607,103 +57704,6 @@ def test_seltz_search_tool_real_query(self)
 ⋮----
 """Test SeltzSearchTool with a real query."""
 tool = SeltzSearchTool(query="Python programming language", num_results=3)
-</file>
-
-<file path="tests/main/test_split_inline_reasoning.py">
-"""
-Tests for OpenAIGPT._split_inline_reasoning, which separates inline
-thought-delimiter tags (e.g. <think>...</think>) from text content
-during streaming.
-"""
-⋮----
-split = OpenAIGPT._split_inline_reasoning
-DELIMS = ("<think>", "</think>")
-⋮----
-class TestSplitInlineReasoning
-⋮----
-"""Unit tests for the streaming inline-reasoning splitter."""
-⋮----
-# --- no-op cases: nothing to parse ---
-⋮----
-def test_empty_text(self)
-⋮----
-"""Empty event_text should pass through unchanged."""
-⋮----
-def test_plain_text_no_delimiters(self)
-⋮----
-"""Text without any delimiters should pass through as-is."""
-⋮----
-def test_already_has_reasoning_field(self)
-⋮----
-"""When the API already provides separate reasoning, skip parsing."""
-⋮----
-# --- single chunk contains full <think>...</think> ---
-⋮----
-def test_full_think_block_in_one_chunk(self)
-⋮----
-"""Complete <think>reasoning</think> in a single chunk."""
-⋮----
-def test_text_before_and_after_think(self)
-⋮----
-"""Text surrounding a complete think block."""
-⋮----
-def test_text_before_think_only(self)
-⋮----
-"""Text before think block, nothing after."""
-⋮----
-def test_text_after_think_only(self)
-⋮----
-"""Think block followed by text, no prefix."""
-⋮----
-# --- multi-chunk: start delimiter in one chunk, end in another ---
-⋮----
-def test_start_delimiter_only(self)
-⋮----
-"""Chunk has <think> but no </think> — enters reasoning state."""
-⋮----
-def test_continuation_mid_reasoning(self)
-⋮----
-"""Chunk arrives while already in reasoning (no delimiters)."""
-⋮----
-def test_end_delimiter_while_in_reasoning(self)
-⋮----
-"""Chunk has </think> while in reasoning state."""
-⋮----
-def test_end_delimiter_no_trailing_text(self)
-⋮----
-"""End delimiter with nothing after it."""
-⋮----
-# --- multi-chunk sequence simulating a real stream ---
-⋮----
-def test_three_chunk_sequence(self)
-⋮----
-"""Simulate: chunk1 opens thinking, chunk2 continues, chunk3 closes."""
-# chunk 1: start of thinking
-⋮----
-# chunk 2: still thinking
-⋮----
-# chunk 3: done thinking, answer follows
-⋮----
-# --- custom delimiters ---
-⋮----
-def test_custom_delimiters(self)
-⋮----
-"""Works with non-default delimiters like <thinking>...</thinking>."""
-custom = ("<thinking>", "</thinking>")
-⋮----
-# --- edge cases ---
-⋮----
-def test_empty_think_block(self)
-⋮----
-"""<think></think> with nothing inside."""
-⋮----
-def test_only_start_delimiter(self)
-⋮----
-"""Chunk is exactly the start delimiter, nothing else."""
-⋮----
-def test_only_end_delimiter_while_reasoning(self)
-⋮----
-"""Chunk is exactly the end delimiter."""
 </file>
 
 <file path="tests/main/test_tool_messages.py">
@@ -71909,6 +71909,8 @@ caller_api_key = "caller-api-key"
 llm = lm.OpenAIGPT(
 ⋮----
 """Gemini aliases retain an explicitly configured API base."""
+⋮----
+expected_model = (
 ⋮----
 def test_gemini_model_copy_preserves_explicit_api_base(monkeypatch, chat_model)
 ⋮----

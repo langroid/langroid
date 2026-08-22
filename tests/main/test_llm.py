@@ -676,6 +676,10 @@ def test_gemini_alias_preserves_explicit_api_base(
 
     assert llm.is_gemini
     assert llm.api_base == explicit_api_base
+    expected_model = (
+        chat_model if chat_model.startswith("google/") else "gemini-2.0-flash"
+    )
+    assert llm.config.chat_model == expected_model
 
 
 @pytest.mark.parametrize(
@@ -726,6 +730,7 @@ def test_gemini_dynamic_config_preserves_api_base(monkeypatch):
 
     assert llm.is_gemini
     assert llm.api_base == "https://vertex.example/v1"
+    assert llm.config.chat_model == "google/gemini-2.0-flash"
 
 
 def test_followup_standalone():
