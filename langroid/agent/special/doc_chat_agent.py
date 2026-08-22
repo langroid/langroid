@@ -293,7 +293,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     )
 
 
-def _append_metadata_source(orig_source: str, source: str) -> str:
+def _append_metadata_source(orig_source: object, source: object) -> str:
     """Append a source unless it is already in the ``; ``-delimited list.
 
     Leading and trailing whitespace is ignored for both empty-value and
@@ -302,14 +302,14 @@ def _append_metadata_source(orig_source: str, source: str) -> str:
     plain semicolons remain part of a source value.
 
     Args:
-        orig_source: Existing source or semicolon-delimited source list.
-        source: Source to append.
+        orig_source: Existing source or source list. Non-strings are empty.
+        source: Source to append. Non-string values are treated as empty.
 
     Returns:
         The trimmed existing sources, optionally followed by the new source.
     """
-    orig = orig_source.strip()
-    src = source.strip()
+    orig = orig_source.strip() if isinstance(orig_source, str) else ""
+    src = source.strip() if isinstance(source, str) else ""
     if orig and src:
         sources = (item.strip() for item in orig.split("; "))
         return orig if orig == src or src in sources else f"{orig}; {src}"
