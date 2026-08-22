@@ -61656,6 +61656,97 @@ self.api_base = self.config.api_base or GEMINI_BASE_URL
 ```
 </file>
 
+<file path="PR_REVIEW_975.md">
+# PR #975 Review: Remove traceback from OpenAI API error logs
+
+**Author:** alexagr
+**Branch:** `api_error_log` → `main`
+**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
+
+## Summary
+
+This PR adds `except openai.APIError` handlers before the generic `except Exception`
+blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
+and `achat`. The intent is to log API errors cleanly (without a full traceback) since
+server-side errors don't benefit from a local stack trace.
+
+The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
+produces multi-line stack traces for every OpenAI API error. For authentication
+failures, bad requests, and similar server-side errors these tracebacks are noisy and
+provide no diagnostic value.
+
+## Issues
+
+### 1. `openai.APIError` is too broad — catches connection and timeout errors too
+
+`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
+
+```
+openai.APIError
+├── openai.APIConnectionError    ← network/local issues
+│   └── openai.APITimeoutError   ← timeout issues
+└── openai.APIStatusError        ← HTTP status errors from the API server
+    ├── openai.BadRequestError (400)
+    ├── openai.AuthenticationError (401)
+    ├── openai.PermissionDeniedError (403)
+    ├── openai.NotFoundError (404)
+    ├── openai.UnprocessableEntityError (422)
+    ├── openai.RateLimitError (429)
+    └── openai.InternalServerError (>=500)
+```
+
+The PR description correctly identifies that server-side errors (AuthenticationError,
+BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
+and `APITimeoutError` **are** related to the local environment (network configuration,
+DNS, proxy issues), where a traceback **could** help diagnose the problem.
+
+**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
+captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
+while letting connection/timeout errors fall through to the `except Exception` handler
+where `friendly_error()` provides the full traceback.
+
+### 2. `raise e` vs bare `raise`
+
+The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
+`raise` preserves the original traceback chain. This is consistent with the existing
+code (the `except Exception` blocks also use `raise e`), but `raise` is generally
+preferred — especially since callers higher up the stack may want the full traceback
+context even if the log message omits it.
+
+This is a minor style point and not a blocker — it could be a separate cleanup across
+the file.
+
+### 3. Log level consideration
+
+Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
+(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
+a transient condition. That said, by the time the error reaches this outer handler the
+retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
+
+Not a blocker.
+
+## Suggested Change
+
+Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
+
+```python
+except openai.APIStatusError as e:
+    logging.error(f"API error in OpenAIGPT.generate: {e}")
+    raise e
+```
+
+## Verdict
+
+The change addresses a real usability issue — excessively noisy tracebacks for
+server-side API errors. With the suggested narrowing from `APIError` to
+`APIStatusError`, this would be a clean, well-targeted improvement. The code is
+consistent with existing patterns and correctly placed before the generic exception
+handlers.
+
+**Recommendation: Request changes** — use `openai.APIStatusError` instead of
+`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
+</file>
+
 <file path="pytest.ini">
 [pytest]
 markers =
@@ -73560,97 +73651,6 @@ is an ongoing PR, just push to github again and the PR will be updated.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
 Read more [here](docs/development/github-cli.md).
-</file>
-
-<file path="PR_REVIEW_975.md">
-# PR #975 Review: Remove traceback from OpenAI API error logs
-
-**Author:** alexagr
-**Branch:** `api_error_log` → `main`
-**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
-
-## Summary
-
-This PR adds `except openai.APIError` handlers before the generic `except Exception`
-blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
-and `achat`. The intent is to log API errors cleanly (without a full traceback) since
-server-side errors don't benefit from a local stack trace.
-
-The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
-produces multi-line stack traces for every OpenAI API error. For authentication
-failures, bad requests, and similar server-side errors these tracebacks are noisy and
-provide no diagnostic value.
-
-## Issues
-
-### 1. `openai.APIError` is too broad — catches connection and timeout errors too
-
-`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
-
-```
-openai.APIError
-├── openai.APIConnectionError    ← network/local issues
-│   └── openai.APITimeoutError   ← timeout issues
-└── openai.APIStatusError        ← HTTP status errors from the API server
-    ├── openai.BadRequestError (400)
-    ├── openai.AuthenticationError (401)
-    ├── openai.PermissionDeniedError (403)
-    ├── openai.NotFoundError (404)
-    ├── openai.UnprocessableEntityError (422)
-    ├── openai.RateLimitError (429)
-    └── openai.InternalServerError (>=500)
-```
-
-The PR description correctly identifies that server-side errors (AuthenticationError,
-BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
-and `APITimeoutError` **are** related to the local environment (network configuration,
-DNS, proxy issues), where a traceback **could** help diagnose the problem.
-
-**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
-captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
-while letting connection/timeout errors fall through to the `except Exception` handler
-where `friendly_error()` provides the full traceback.
-
-### 2. `raise e` vs bare `raise`
-
-The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
-`raise` preserves the original traceback chain. This is consistent with the existing
-code (the `except Exception` blocks also use `raise e`), but `raise` is generally
-preferred — especially since callers higher up the stack may want the full traceback
-context even if the log message omits it.
-
-This is a minor style point and not a blocker — it could be a separate cleanup across
-the file.
-
-### 3. Log level consideration
-
-Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
-(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
-a transient condition. That said, by the time the error reaches this outer handler the
-retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
-
-Not a blocker.
-
-## Suggested Change
-
-Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
-
-```python
-except openai.APIStatusError as e:
-    logging.error(f"API error in OpenAIGPT.generate: {e}")
-    raise e
-```
-
-## Verdict
-
-The change addresses a real usability issue — excessively noisy tracebacks for
-server-side API errors. With the suggested narrowing from `APIError` to
-`APIStatusError`, this would be a clean, well-targeted improvement. The code is
-consistent with existing patterns and correctly placed before the generic exception
-handlers.
-
-**Recommendation: Request changes** — use `openai.APIStatusError` instead of
-`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
 </file>
 
 <file path="docs/notes/context-overflow.md">
@@ -88033,6 +88033,867 @@ class Agent(ABC):
         return None
 </file>
 
+<file path="langroid/language_models/model_info.py">
+import logging
+from enum import Enum
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+
+class ModelProvider(str, Enum):
+    """Enum for model providers"""
+
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    DEEPSEEK = "deepseek"
+    GOOGLE = "google"
+    MINIMAX = "minimax"
+    UNKNOWN = "unknown"
+
+
+class ModelName(str, Enum):
+    """Parent class for all model name enums"""
+
+    pass
+
+
+class OpenAIChatModel(ModelName):
+    """Enum for OpenAI Chat models"""
+
+    GPT3_5_TURBO = "gpt-3.5-turbo"
+    GPT4 = "gpt-4o"  # avoid deprecated gpt-4
+    GPT4_TURBO = "gpt-4-turbo"
+    GPT4o = "gpt-4o"
+    GPT4o_MINI = "gpt-4o-mini"
+    O1 = "o1"
+    O1_MINI = "o1-mini"
+    O3_MINI = "o3-mini"
+    O3 = "o3"
+    O4_MINI = "o4-mini"
+    GPT4_1 = "gpt-4.1"
+    GPT4_1_MINI = "gpt-4.1-mini"
+    GPT4_1_NANO = "gpt-4.1-nano"
+    GPT5 = "gpt-5"
+    GPT5_MINI = "gpt-5-mini"
+    GPT5_NANO = "gpt-5-nano"
+    GPT5_PRO = "gpt-5-pro"
+    GPT5_1 = "gpt-5.1"
+    GPT5_1_CODEX = "gpt-5.1-codex"
+    GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
+    GPT5_1_CHAT = "gpt-5.1-chat"
+    GPT5_2 = "gpt-5.2"
+    GPT5_2_PRO = "gpt-5.2-pro"
+    GPT5_2_CHAT = "gpt-5.2-chat"
+    GPT_OSS_120b = "gpt-oss-120b"
+    GPT_OSS_20b = "gpt-oss-20b"
+
+
+class OpenAICompletionModel(str, Enum):
+    """Enum for OpenAI Completion models"""
+
+    DAVINCI = "davinci-002"
+    BABBAGE = "babbage-002"
+
+
+class AnthropicModel(ModelName):
+    """Enum for Anthropic models"""
+
+    CLAUDE_3_OPUS = "claude-3-opus-latest"
+    CLAUDE_3_SONNET = "claude-3-sonnet-latest"
+    CLAUDE_3_HAIKU = "claude-3-haiku-latest"
+    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
+    CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
+    CLAUDE_4_OPUS = "claude-opus-4"
+    CLAUDE_4_SONNET = "claude-sonnet-4"
+    CLAUDE_4_HAIKU = "claude-haiku-4"
+    CLAUDE_4_5_OPUS = "claude-opus-4-5"
+    CLAUDE_4_5_SONNET = "claude-sonnet-4-5"
+    CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
+
+
+class DeepSeekModel(ModelName):
+    """Enum for DeepSeek models direct from DeepSeek API"""
+
+    DEEPSEEK = "deepseek/deepseek-chat"
+    DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
+    OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
+
+
+class GeminiModel(ModelName):
+    """Enum for Gemini models"""
+
+    GEMINI_1_5_FLASH = "gemini-1.5-flash"
+    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
+    GEMINI_1_5_PRO = "gemini-1.5-pro"
+    GEMINI_2_FLASH = "gemini-2.0-flash"
+    GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
+    GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
+    GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
+    GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+    GEMINI_2_5_PRO = "gemini-2.5-pro"
+    GEMINI_3_FLASH = "gemini-3-flash"
+    GEMINI_3_PRO = "gemini-3-pro"
+
+
+class MiniMaxModel(ModelName):
+    """Enum for MiniMax models"""
+
+    MINIMAX_M2_7 = "MiniMax-M2.7"
+    MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
+    MINIMAX_M2_5 = "MiniMax-M2.5"
+    MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
+    MINIMAX_M2_1 = "MiniMax-M2.1"
+    MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
+    MINIMAX_M2 = "MiniMax-M2"
+
+
+class OpenAI_API_ParamInfo(BaseModel):
+    """
+    Parameters exclusive to some models, when using OpenAI API
+    """
+
+    # model-specific params at top level
+    params: Dict[str, List[str]] = dict(
+        reasoning_effort=[
+            OpenAIChatModel.O3_MINI.value,
+            OpenAIChatModel.O3.value,
+            OpenAIChatModel.O4_MINI.value,
+            OpenAIChatModel.GPT5.value,
+            OpenAIChatModel.GPT5_MINI.value,
+            OpenAIChatModel.GPT5_NANO.value,
+            OpenAIChatModel.GPT5_PRO.value,
+            OpenAIChatModel.GPT5_1.value,
+            OpenAIChatModel.GPT5_1_CODEX.value,
+            OpenAIChatModel.GPT5_1_CODEX_MINI.value,
+            OpenAIChatModel.GPT5_2.value,
+            OpenAIChatModel.GPT5_2_PRO.value,
+            OpenAIChatModel.GPT_OSS_120b.value,
+            OpenAIChatModel.GPT_OSS_20b.value,
+            GeminiModel.GEMINI_2_5_PRO.value,
+            GeminiModel.GEMINI_2_5_FLASH.value,
+            GeminiModel.GEMINI_2_5_FLASH_LITE.value,
+        ],
+    )
+    # model-specific params in extra_body
+    extra_parameters: Dict[str, List[str]] = dict(
+        include_reasoning=[
+            DeepSeekModel.OPENROUTER_DEEPSEEK_R1.value,
+        ]
+    )
+
+
+class ModelInfo(BaseModel):
+    """
+    Consolidated information about LLM, related to capacity, cost and API
+    idiosyncrasies. Reasonable defaults for all params in case there's no
+    specific info available.
+    """
+
+    name: str = "unknown"
+    provider: ModelProvider = ModelProvider.UNKNOWN
+    context_length: int = 16_000
+    max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
+    max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
+    input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
+    cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
+    output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
+    allows_streaming: bool = True  # Whether model supports streaming output
+    allows_system_message: bool = True  # Whether model supports system messages
+    rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
+    unsupported_params: List[str] = []
+    has_structured_output: bool = False  # Does model API support structured output?
+    has_tools: bool = True  # Does model API support tools/function-calling?
+    needs_first_user_message: bool = False  # Does API need first msg to be from user?
+    description: Optional[str] = None
+
+
+GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
+DEFAULT_MODEL_INFO = ModelInfo()
+WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
+
+
+# Model information registry
+MODEL_INFO: Dict[str, ModelInfo] = {
+    # OpenAI Models
+    OpenAICompletionModel.DAVINCI.value: ModelInfo(
+        name=OpenAICompletionModel.DAVINCI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=4096,
+        max_output_tokens=4096,
+        input_cost_per_million=2.0,
+        output_cost_per_million=2.0,
+        description="Davinci-002",
+    ),
+    OpenAICompletionModel.BABBAGE.value: ModelInfo(
+        name=OpenAICompletionModel.BABBAGE.value,
+        provider=ModelProvider.OPENAI,
+        context_length=4096,
+        max_output_tokens=4096,
+        input_cost_per_million=0.40,
+        output_cost_per_million=0.40,
+        description="Babbage-002",
+    ),
+    OpenAIChatModel.GPT3_5_TURBO.value: ModelInfo(
+        name=OpenAIChatModel.GPT3_5_TURBO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=16_385,
+        max_output_tokens=4096,
+        input_cost_per_million=0.50,
+        output_cost_per_million=1.50,
+        description="GPT-3.5 Turbo",
+    ),
+    OpenAIChatModel.GPT4.value: ModelInfo(
+        name=OpenAIChatModel.GPT4.value,
+        provider=ModelProvider.OPENAI,
+        context_length=8192,
+        max_output_tokens=8192,
+        input_cost_per_million=30.0,
+        output_cost_per_million=60.0,
+        description="GPT-4 (8K context)",
+    ),
+    OpenAIChatModel.GPT4_TURBO.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_TURBO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=4096,
+        input_cost_per_million=10.0,
+        output_cost_per_million=30.0,
+        description="GPT-4 Turbo",
+    ),
+    OpenAIChatModel.GPT4_1_NANO.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1_NANO.value,
+        provider=ModelProvider.OPENAI,
+        has_structured_output=True,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=0.40,
+        description="GPT-4.1",
+    ),
+    OpenAIChatModel.GPT4_1_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1_MINI.value,
+        provider=ModelProvider.OPENAI,
+        has_structured_output=True,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=0.40,
+        cached_cost_per_million=0.10,
+        output_cost_per_million=1.60,
+        description="GPT-4.1 Mini",
+    ),
+    OpenAIChatModel.GPT4_1.value: ModelInfo(
+        name=OpenAIChatModel.GPT4_1.value,
+        provider=ModelProvider.OPENAI,
+        has_structured_output=True,
+        context_length=1_047_576,
+        max_output_tokens=32_768,
+        input_cost_per_million=2.00,
+        cached_cost_per_million=0.50,
+        output_cost_per_million=8.00,
+        description="GPT-4.1",
+    ),
+    OpenAIChatModel.GPT4o.value: ModelInfo(
+        name=OpenAIChatModel.GPT4o.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=2.5,
+        cached_cost_per_million=1.25,
+        output_cost_per_million=10.0,
+        has_structured_output=True,
+        description="GPT-4o (128K context)",
+    ),
+    OpenAIChatModel.GPT4o_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT4o_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=0.15,
+        cached_cost_per_million=0.075,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="GPT-4o Mini",
+    ),
+    OpenAIChatModel.O1.value: ModelInfo(
+        name=OpenAIChatModel.O1.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=15.0,
+        cached_cost_per_million=7.50,
+        output_cost_per_million=60.0,
+        allows_streaming=True,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        has_tools=False,
+        description="O1 Reasoning LM",
+    ),
+    OpenAIChatModel.O3.value: ModelInfo(
+        name=OpenAIChatModel.O3.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=2.0,
+        cached_cost_per_million=0.50,
+        output_cost_per_million=8.0,
+        allows_streaming=True,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        has_tools=False,
+        description="O1 Reasoning LM",
+    ),
+    OpenAIChatModel.O1_MINI.value: ModelInfo(
+        name=OpenAIChatModel.O1_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=65_536,
+        input_cost_per_million=1.1,
+        cached_cost_per_million=0.55,
+        output_cost_per_million=4.4,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        has_tools=False,
+        description="O1 Mini Reasoning LM",
+    ),
+    OpenAIChatModel.O3_MINI.value: ModelInfo(
+        name=OpenAIChatModel.O3_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=1.1,
+        cached_cost_per_million=0.55,
+        output_cost_per_million=4.4,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        has_tools=False,
+        description="O3 Mini Reasoning LM",
+    ),
+    OpenAIChatModel.O4_MINI.value: ModelInfo(
+        name=OpenAIChatModel.O4_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=200_000,
+        max_output_tokens=100_000,
+        input_cost_per_million=1.10,
+        cached_cost_per_million=0.275,
+        output_cost_per_million=4.40,
+        allows_streaming=False,
+        allows_system_message=False,
+        has_structured_output=True,
+        unsupported_params=["temperature", "stream"],
+        has_tools=False,
+        description="O3 Mini Reasoning LM",
+    ),
+    OpenAIChatModel.GPT5.value: ModelInfo(
+        name=OpenAIChatModel.GPT5.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.125,
+        output_cost_per_million=10.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5",
+    ),
+    OpenAIChatModel.GPT5_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.25,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=2.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5 Mini",
+    ),
+    OpenAIChatModel.GPT5_NANO.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_NANO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.05,
+        cached_cost_per_million=0.005,
+        output_cost_per_million=0.40,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5 Nano",
+    ),
+    OpenAIChatModel.GPT5_PRO.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_PRO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=272_000,
+        input_cost_per_million=15.00,
+        cached_cost_per_million=7.50,
+        output_cost_per_million=120.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5 Pro",
+    ),
+    OpenAIChatModel.GPT5_1.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_1.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.13,
+        output_cost_per_million=10.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5.1",
+    ),
+    OpenAIChatModel.GPT5_1_CODEX.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_1_CODEX.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.125,
+        output_cost_per_million=10.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5.1 Codex",
+    ),
+    OpenAIChatModel.GPT5_1_CODEX_MINI.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_1_CODEX_MINI.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=0.25,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=2.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5.1 Codex Mini",
+    ),
+    OpenAIChatModel.GPT5_1_CHAT.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_1_CHAT.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.125,
+        output_cost_per_million=10.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5.1 Chat",
+    ),
+    OpenAIChatModel.GPT5_2.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_2.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=128_000,
+        input_cost_per_million=1.75,
+        cached_cost_per_million=0.175,
+        output_cost_per_million=14.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5.2",
+    ),
+    OpenAIChatModel.GPT5_2_PRO.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_2_PRO.value,
+        provider=ModelProvider.OPENAI,
+        context_length=400_000,
+        max_output_tokens=272_000,
+        input_cost_per_million=15.00,
+        cached_cost_per_million=7.50,
+        output_cost_per_million=120.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5.2 Pro",
+    ),
+    OpenAIChatModel.GPT5_2_CHAT.value: ModelInfo(
+        name=OpenAIChatModel.GPT5_2_CHAT.value,
+        provider=ModelProvider.OPENAI,
+        context_length=128_000,
+        max_output_tokens=16_384,
+        input_cost_per_million=1.75,
+        cached_cost_per_million=0.175,
+        output_cost_per_million=14.00,
+        has_structured_output=True,
+        unsupported_params=["temperature"],
+        description="GPT-5.2 Chat",
+    ),
+    OpenAIChatModel.GPT_OSS_120b.value: ModelInfo(
+        name=OpenAIChatModel.GPT_OSS_120b.value,
+        provider=ModelProvider.OPENAI,
+        context_length=131_072,
+        max_output_tokens=65_535,
+        input_cost_per_million=0.15,
+        cached_cost_per_million=0.075,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="GPT OSS 120B",
+    ),
+    OpenAIChatModel.GPT_OSS_20b.value: ModelInfo(
+        name=OpenAIChatModel.GPT_OSS_20b.value,
+        provider=ModelProvider.OPENAI,
+        context_length=131_072,
+        max_output_tokens=65_535,
+        input_cost_per_million=0.075,
+        cached_cost_per_million=0.037,
+        output_cost_per_million=0.30,
+        has_structured_output=True,
+        description="GPT OSS 20B",
+    ),
+    # Anthropic Models
+    AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_5_SONNET.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=8192,
+        input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
+        output_cost_per_million=15.0,
+        description="Claude 3.5 Sonnet",
+    ),
+    AnthropicModel.CLAUDE_3_OPUS.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_OPUS.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=4096,
+        input_cost_per_million=15.0,
+        cached_cost_per_million=1.50,
+        output_cost_per_million=75.0,
+        description="Claude 3 Opus",
+    ),
+    AnthropicModel.CLAUDE_3_SONNET.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_SONNET.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=4096,
+        input_cost_per_million=3.0,
+        cached_cost_per_million=0.30,
+        output_cost_per_million=15.0,
+        description="Claude 3 Sonnet",
+    ),
+    AnthropicModel.CLAUDE_3_HAIKU.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_3_HAIKU.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=4096,
+        input_cost_per_million=0.25,
+        cached_cost_per_million=0.03,
+        output_cost_per_million=1.25,
+        description="Claude 3 Haiku",
+    ),
+    # DeepSeek Models
+    DeepSeekModel.DEEPSEEK.value: ModelInfo(
+        name=DeepSeekModel.DEEPSEEK.value,
+        provider=ModelProvider.DEEPSEEK,
+        context_length=64_000,
+        max_output_tokens=8_000,
+        input_cost_per_million=0.27,
+        cached_cost_per_million=0.07,
+        output_cost_per_million=1.10,
+        description="DeepSeek Chat",
+    ),
+    DeepSeekModel.DEEPSEEK_R1.value: ModelInfo(
+        name=DeepSeekModel.DEEPSEEK_R1.value,
+        provider=ModelProvider.DEEPSEEK,
+        context_length=64_000,
+        max_output_tokens=8_000,
+        input_cost_per_million=0.55,
+        cached_cost_per_million=0.14,
+        output_cost_per_million=2.19,
+        description="DeepSeek-R1 Reasoning LM",
+    ),
+    # Gemini Models
+    GeminiModel.GEMINI_2_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_056_768,
+        max_output_tokens=8192,
+        input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=0.40,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.0 Flash",
+    ),
+    GeminiModel.GEMINI_2_FLASH_LITE.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_FLASH_LITE.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_056_768,
+        max_output_tokens=8192,
+        input_cost_per_million=0.075,
+        output_cost_per_million=0.30,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.0 Flash Lite",
+    ),
+    GeminiModel.GEMINI_1_5_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_1_5_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_056_768,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 1.5 Flash",
+    ),
+    GeminiModel.GEMINI_1_5_FLASH_8B.value: ModelInfo(
+        name=GeminiModel.GEMINI_1_5_FLASH_8B.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_000_000,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 1.5 Flash 8B",
+    ),
+    GeminiModel.GEMINI_1_5_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_1_5_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=2_000_000,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 1.5 Pro",
+    ),
+    GeminiModel.GEMINI_2_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=2_000_000,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2 Pro Exp 02-05",
+    ),
+    GeminiModel.GEMINI_2_FLASH_THINKING.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_FLASH_THINKING.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_000_000,
+        max_output_tokens=64_000,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.0 Flash Thinking",
+    ),
+    # Gemini 2.5 Models
+    GeminiModel.GEMINI_2_5_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_536,
+        input_cost_per_million=1.25,
+        cached_cost_per_million=0.31,
+        output_cost_per_million=10.0,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Pro",
+    ),
+    GeminiModel.GEMINI_2_5_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.30,
+        cached_cost_per_million=0.075,
+        output_cost_per_million=2.50,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Flash",
+    ),
+    GeminiModel.GEMINI_2_5_FLASH_LITE.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_5_FLASH_LITE.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=65_536,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.10,
+        cached_cost_per_million=0.025,
+        output_cost_per_million=0.40,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.5 Flash Lite",
+    ),
+    # Gemini 3 Models
+    GeminiModel.GEMINI_3_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_3_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_000_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=2.00,
+        cached_cost_per_million=0.20,
+        output_cost_per_million=12.00,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 3 Pro",
+    ),
+    GeminiModel.GEMINI_3_FLASH.value: ModelInfo(
+        name=GeminiModel.GEMINI_3_FLASH.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_048_576,
+        max_output_tokens=65_535,
+        input_cost_per_million=0.50,
+        cached_cost_per_million=0.05,
+        output_cost_per_million=3.00,
+        description="Gemini 3 Flash",
+    ),
+    # MiniMax Models
+    MiniMaxModel.MINIMAX_M2_7.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_7.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=131_072,
+        input_cost_per_million=0.30,
+        output_cost_per_million=1.20,
+        has_structured_output=True,
+        description="MiniMax M2.7 (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=131_072,
+        input_cost_per_million=0.15,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="MiniMax M2.7 Highspeed (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_5.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_5.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.30,
+        output_cost_per_million=1.20,
+        has_structured_output=True,
+        description="MiniMax M2.5 (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.15,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="MiniMax M2.5 Highspeed (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_1.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_1.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.27,
+        output_cost_per_million=0.95,
+        has_structured_output=True,
+        description="MiniMax M2.1 (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.14,
+        output_cost_per_million=0.48,
+        has_structured_output=True,
+        description="MiniMax M2.1 Highspeed (204K context)",
+    ),
+    MiniMaxModel.MINIMAX_M2.value: ModelInfo(
+        name=MiniMaxModel.MINIMAX_M2.value,
+        provider=ModelProvider.MINIMAX,
+        context_length=204_800,
+        max_output_tokens=65_536,
+        input_cost_per_million=0.27,
+        output_cost_per_million=0.95,
+        has_structured_output=True,
+        description="MiniMax M2 (204K context)",
+    ),
+}
+
+
+def get_model_info(
+    model: str | ModelName,
+    fallback_models: List[str] = [],
+) -> ModelInfo:
+    """Get model information by name or enum value"""
+    # Sequence of models to try, starting with the primary model
+    models_to_try = [model] + fallback_models
+
+    # Find the first model in the sequence that has info defined using next()
+    # on a generator expression that filters out None results from _get_model_info
+    found_info = next(
+        (info for m in models_to_try if (info := _get_model_info(m)) is not None),
+        None,  # Default value if the iterator is exhausted (no valid info found)
+    )
+
+    if found_info is not None:
+        return found_info
+
+    normalized_models = _normalize_model_names(models_to_try)
+    found_info = next(
+        (
+            info
+            for normalized_model in normalized_models
+            if (info := _get_model_info(normalized_model)) is not None
+        ),
+        None,
+    )
+    if found_info is not None:
+        return found_info
+
+    _warn_unknown_model(models_to_try)
+    return ModelInfo()
+
+
+def _get_model_info(model: str | ModelName) -> ModelInfo | None:
+    if isinstance(model, str):
+        return MODEL_INFO.get(model)
+    return MODEL_INFO.get(model.value)
+
+
+def _normalize_model_names(models: List[str | ModelName]) -> List[str]:
+    normalized_models: List[str] = []
+    seen: set[str] = set()
+    for model in models:
+        normalized_model = _normalize_gemini_model_name(_model_name(model))
+        if normalized_model is None or normalized_model in seen:
+            continue
+        seen.add(normalized_model)
+        normalized_models.append(normalized_model)
+    return normalized_models
+
+
+def _normalize_gemini_model_name(model: str) -> str | None:
+    base_model = model.rsplit("/", 1)[-1]
+    if base_model in GEMINI_CANONICAL_MODEL_NAMES:
+        return base_model
+    if not base_model.startswith("gemini-"):
+        return None
+
+    # Try stripping known suffixes to find a canonical name.
+    # Use split (not endswith) for "-preview" so dated variants like
+    # "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
+    for suffix in ("-preview", "-exp", "-experimental", "-latest"):
+        stripped = base_model.split(suffix, maxsplit=1)[0]
+        if stripped != base_model and stripped in GEMINI_CANONICAL_MODEL_NAMES:
+            return stripped
+    return None
+
+
+def _warn_unknown_model(models: List[str | ModelName]) -> None:
+    model_names = tuple(_model_name(model) for model in models)
+    if model_names in WARNED_UNKNOWN_MODELS:
+        return
+
+    WARNED_UNKNOWN_MODELS.add(model_names)
+    logger.warning(
+        "Unknown model info for %s; using fallback defaults "
+        "(context_length=%s, max_output_tokens=%s). "
+        "Context-length checks may be inaccurate. "
+        "Set `chat_context_length` explicitly if needed.",
+        ", ".join(model_names),
+        DEFAULT_MODEL_INFO.context_length,
+        DEFAULT_MODEL_INFO.max_output_tokens,
+    )
+
+
+def _model_name(model: str | ModelName) -> str:
+    if isinstance(model, str):
+        return model
+    return model.value
+</file>
+
 <file path="langroid/agent/chat_agent.py">
 import copy
 import inspect
@@ -90550,867 +91411,6 @@ class ChatAgent(Agent):
         # multiple agents shared the same cached client instance.
         # Clients are now managed centrally in langroid.language_models.client_cache
         pass
-</file>
-
-<file path="langroid/language_models/model_info.py">
-import logging
-from enum import Enum
-from typing import Dict, List, Optional
-
-from pydantic import BaseModel
-
-logger = logging.getLogger(__name__)
-
-
-class ModelProvider(str, Enum):
-    """Enum for model providers"""
-
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
-    DEEPSEEK = "deepseek"
-    GOOGLE = "google"
-    MINIMAX = "minimax"
-    UNKNOWN = "unknown"
-
-
-class ModelName(str, Enum):
-    """Parent class for all model name enums"""
-
-    pass
-
-
-class OpenAIChatModel(ModelName):
-    """Enum for OpenAI Chat models"""
-
-    GPT3_5_TURBO = "gpt-3.5-turbo"
-    GPT4 = "gpt-4o"  # avoid deprecated gpt-4
-    GPT4_TURBO = "gpt-4-turbo"
-    GPT4o = "gpt-4o"
-    GPT4o_MINI = "gpt-4o-mini"
-    O1 = "o1"
-    O1_MINI = "o1-mini"
-    O3_MINI = "o3-mini"
-    O3 = "o3"
-    O4_MINI = "o4-mini"
-    GPT4_1 = "gpt-4.1"
-    GPT4_1_MINI = "gpt-4.1-mini"
-    GPT4_1_NANO = "gpt-4.1-nano"
-    GPT5 = "gpt-5"
-    GPT5_MINI = "gpt-5-mini"
-    GPT5_NANO = "gpt-5-nano"
-    GPT5_PRO = "gpt-5-pro"
-    GPT5_1 = "gpt-5.1"
-    GPT5_1_CODEX = "gpt-5.1-codex"
-    GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
-    GPT5_1_CHAT = "gpt-5.1-chat"
-    GPT5_2 = "gpt-5.2"
-    GPT5_2_PRO = "gpt-5.2-pro"
-    GPT5_2_CHAT = "gpt-5.2-chat"
-    GPT_OSS_120b = "gpt-oss-120b"
-    GPT_OSS_20b = "gpt-oss-20b"
-
-
-class OpenAICompletionModel(str, Enum):
-    """Enum for OpenAI Completion models"""
-
-    DAVINCI = "davinci-002"
-    BABBAGE = "babbage-002"
-
-
-class AnthropicModel(ModelName):
-    """Enum for Anthropic models"""
-
-    CLAUDE_3_OPUS = "claude-3-opus-latest"
-    CLAUDE_3_SONNET = "claude-3-sonnet-latest"
-    CLAUDE_3_HAIKU = "claude-3-haiku-latest"
-    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
-    CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
-    CLAUDE_4_OPUS = "claude-opus-4"
-    CLAUDE_4_SONNET = "claude-sonnet-4"
-    CLAUDE_4_HAIKU = "claude-haiku-4"
-    CLAUDE_4_5_OPUS = "claude-opus-4-5"
-    CLAUDE_4_5_SONNET = "claude-sonnet-4-5"
-    CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
-
-
-class DeepSeekModel(ModelName):
-    """Enum for DeepSeek models direct from DeepSeek API"""
-
-    DEEPSEEK = "deepseek/deepseek-chat"
-    DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
-    OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
-
-
-class GeminiModel(ModelName):
-    """Enum for Gemini models"""
-
-    GEMINI_1_5_FLASH = "gemini-1.5-flash"
-    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
-    GEMINI_1_5_PRO = "gemini-1.5-pro"
-    GEMINI_2_FLASH = "gemini-2.0-flash"
-    GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
-    GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
-    GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
-    GEMINI_2_5_FLASH = "gemini-2.5-flash"
-    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
-    GEMINI_2_5_PRO = "gemini-2.5-pro"
-    GEMINI_3_FLASH = "gemini-3-flash"
-    GEMINI_3_PRO = "gemini-3-pro"
-
-
-class MiniMaxModel(ModelName):
-    """Enum for MiniMax models"""
-
-    MINIMAX_M2_7 = "MiniMax-M2.7"
-    MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
-    MINIMAX_M2_5 = "MiniMax-M2.5"
-    MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
-    MINIMAX_M2_1 = "MiniMax-M2.1"
-    MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
-    MINIMAX_M2 = "MiniMax-M2"
-
-
-class OpenAI_API_ParamInfo(BaseModel):
-    """
-    Parameters exclusive to some models, when using OpenAI API
-    """
-
-    # model-specific params at top level
-    params: Dict[str, List[str]] = dict(
-        reasoning_effort=[
-            OpenAIChatModel.O3_MINI.value,
-            OpenAIChatModel.O3.value,
-            OpenAIChatModel.O4_MINI.value,
-            OpenAIChatModel.GPT5.value,
-            OpenAIChatModel.GPT5_MINI.value,
-            OpenAIChatModel.GPT5_NANO.value,
-            OpenAIChatModel.GPT5_PRO.value,
-            OpenAIChatModel.GPT5_1.value,
-            OpenAIChatModel.GPT5_1_CODEX.value,
-            OpenAIChatModel.GPT5_1_CODEX_MINI.value,
-            OpenAIChatModel.GPT5_2.value,
-            OpenAIChatModel.GPT5_2_PRO.value,
-            OpenAIChatModel.GPT_OSS_120b.value,
-            OpenAIChatModel.GPT_OSS_20b.value,
-            GeminiModel.GEMINI_2_5_PRO.value,
-            GeminiModel.GEMINI_2_5_FLASH.value,
-            GeminiModel.GEMINI_2_5_FLASH_LITE.value,
-        ],
-    )
-    # model-specific params in extra_body
-    extra_parameters: Dict[str, List[str]] = dict(
-        include_reasoning=[
-            DeepSeekModel.OPENROUTER_DEEPSEEK_R1.value,
-        ]
-    )
-
-
-class ModelInfo(BaseModel):
-    """
-    Consolidated information about LLM, related to capacity, cost and API
-    idiosyncrasies. Reasonable defaults for all params in case there's no
-    specific info available.
-    """
-
-    name: str = "unknown"
-    provider: ModelProvider = ModelProvider.UNKNOWN
-    context_length: int = 16_000
-    max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
-    max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
-    input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
-    cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
-    output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
-    allows_streaming: bool = True  # Whether model supports streaming output
-    allows_system_message: bool = True  # Whether model supports system messages
-    rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
-    unsupported_params: List[str] = []
-    has_structured_output: bool = False  # Does model API support structured output?
-    has_tools: bool = True  # Does model API support tools/function-calling?
-    needs_first_user_message: bool = False  # Does API need first msg to be from user?
-    description: Optional[str] = None
-
-
-GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
-DEFAULT_MODEL_INFO = ModelInfo()
-WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
-
-
-# Model information registry
-MODEL_INFO: Dict[str, ModelInfo] = {
-    # OpenAI Models
-    OpenAICompletionModel.DAVINCI.value: ModelInfo(
-        name=OpenAICompletionModel.DAVINCI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=4096,
-        max_output_tokens=4096,
-        input_cost_per_million=2.0,
-        output_cost_per_million=2.0,
-        description="Davinci-002",
-    ),
-    OpenAICompletionModel.BABBAGE.value: ModelInfo(
-        name=OpenAICompletionModel.BABBAGE.value,
-        provider=ModelProvider.OPENAI,
-        context_length=4096,
-        max_output_tokens=4096,
-        input_cost_per_million=0.40,
-        output_cost_per_million=0.40,
-        description="Babbage-002",
-    ),
-    OpenAIChatModel.GPT3_5_TURBO.value: ModelInfo(
-        name=OpenAIChatModel.GPT3_5_TURBO.value,
-        provider=ModelProvider.OPENAI,
-        context_length=16_385,
-        max_output_tokens=4096,
-        input_cost_per_million=0.50,
-        output_cost_per_million=1.50,
-        description="GPT-3.5 Turbo",
-    ),
-    OpenAIChatModel.GPT4.value: ModelInfo(
-        name=OpenAIChatModel.GPT4.value,
-        provider=ModelProvider.OPENAI,
-        context_length=8192,
-        max_output_tokens=8192,
-        input_cost_per_million=30.0,
-        output_cost_per_million=60.0,
-        description="GPT-4 (8K context)",
-    ),
-    OpenAIChatModel.GPT4_TURBO.value: ModelInfo(
-        name=OpenAIChatModel.GPT4_TURBO.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=4096,
-        input_cost_per_million=10.0,
-        output_cost_per_million=30.0,
-        description="GPT-4 Turbo",
-    ),
-    OpenAIChatModel.GPT4_1_NANO.value: ModelInfo(
-        name=OpenAIChatModel.GPT4_1_NANO.value,
-        provider=ModelProvider.OPENAI,
-        has_structured_output=True,
-        context_length=1_047_576,
-        max_output_tokens=32_768,
-        input_cost_per_million=0.10,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=0.40,
-        description="GPT-4.1",
-    ),
-    OpenAIChatModel.GPT4_1_MINI.value: ModelInfo(
-        name=OpenAIChatModel.GPT4_1_MINI.value,
-        provider=ModelProvider.OPENAI,
-        has_structured_output=True,
-        context_length=1_047_576,
-        max_output_tokens=32_768,
-        input_cost_per_million=0.40,
-        cached_cost_per_million=0.10,
-        output_cost_per_million=1.60,
-        description="GPT-4.1 Mini",
-    ),
-    OpenAIChatModel.GPT4_1.value: ModelInfo(
-        name=OpenAIChatModel.GPT4_1.value,
-        provider=ModelProvider.OPENAI,
-        has_structured_output=True,
-        context_length=1_047_576,
-        max_output_tokens=32_768,
-        input_cost_per_million=2.00,
-        cached_cost_per_million=0.50,
-        output_cost_per_million=8.00,
-        description="GPT-4.1",
-    ),
-    OpenAIChatModel.GPT4o.value: ModelInfo(
-        name=OpenAIChatModel.GPT4o.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=16_384,
-        input_cost_per_million=2.5,
-        cached_cost_per_million=1.25,
-        output_cost_per_million=10.0,
-        has_structured_output=True,
-        description="GPT-4o (128K context)",
-    ),
-    OpenAIChatModel.GPT4o_MINI.value: ModelInfo(
-        name=OpenAIChatModel.GPT4o_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=16_384,
-        input_cost_per_million=0.15,
-        cached_cost_per_million=0.075,
-        output_cost_per_million=0.60,
-        has_structured_output=True,
-        description="GPT-4o Mini",
-    ),
-    OpenAIChatModel.O1.value: ModelInfo(
-        name=OpenAIChatModel.O1.value,
-        provider=ModelProvider.OPENAI,
-        context_length=200_000,
-        max_output_tokens=100_000,
-        input_cost_per_million=15.0,
-        cached_cost_per_million=7.50,
-        output_cost_per_million=60.0,
-        allows_streaming=True,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        has_tools=False,
-        description="O1 Reasoning LM",
-    ),
-    OpenAIChatModel.O3.value: ModelInfo(
-        name=OpenAIChatModel.O3.value,
-        provider=ModelProvider.OPENAI,
-        context_length=200_000,
-        max_output_tokens=100_000,
-        input_cost_per_million=2.0,
-        cached_cost_per_million=0.50,
-        output_cost_per_million=8.0,
-        allows_streaming=True,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        has_tools=False,
-        description="O1 Reasoning LM",
-    ),
-    OpenAIChatModel.O1_MINI.value: ModelInfo(
-        name=OpenAIChatModel.O1_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=65_536,
-        input_cost_per_million=1.1,
-        cached_cost_per_million=0.55,
-        output_cost_per_million=4.4,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature", "stream"],
-        has_tools=False,
-        description="O1 Mini Reasoning LM",
-    ),
-    OpenAIChatModel.O3_MINI.value: ModelInfo(
-        name=OpenAIChatModel.O3_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=200_000,
-        max_output_tokens=100_000,
-        input_cost_per_million=1.1,
-        cached_cost_per_million=0.55,
-        output_cost_per_million=4.4,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature", "stream"],
-        has_tools=False,
-        description="O3 Mini Reasoning LM",
-    ),
-    OpenAIChatModel.O4_MINI.value: ModelInfo(
-        name=OpenAIChatModel.O4_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=200_000,
-        max_output_tokens=100_000,
-        input_cost_per_million=1.10,
-        cached_cost_per_million=0.275,
-        output_cost_per_million=4.40,
-        allows_streaming=False,
-        allows_system_message=False,
-        has_structured_output=True,
-        unsupported_params=["temperature", "stream"],
-        has_tools=False,
-        description="O3 Mini Reasoning LM",
-    ),
-    OpenAIChatModel.GPT5.value: ModelInfo(
-        name=OpenAIChatModel.GPT5.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=1.25,
-        cached_cost_per_million=0.125,
-        output_cost_per_million=10.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5",
-    ),
-    OpenAIChatModel.GPT5_MINI.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=0.25,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=2.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5 Mini",
-    ),
-    OpenAIChatModel.GPT5_NANO.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_NANO.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=0.05,
-        cached_cost_per_million=0.005,
-        output_cost_per_million=0.40,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5 Nano",
-    ),
-    OpenAIChatModel.GPT5_PRO.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_PRO.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=272_000,
-        input_cost_per_million=15.00,
-        cached_cost_per_million=7.50,
-        output_cost_per_million=120.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5 Pro",
-    ),
-    OpenAIChatModel.GPT5_1.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_1.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=1.25,
-        cached_cost_per_million=0.13,
-        output_cost_per_million=10.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5.1",
-    ),
-    OpenAIChatModel.GPT5_1_CODEX.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_1_CODEX.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=1.25,
-        cached_cost_per_million=0.125,
-        output_cost_per_million=10.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5.1 Codex",
-    ),
-    OpenAIChatModel.GPT5_1_CODEX_MINI.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_1_CODEX_MINI.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=0.25,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=2.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5.1 Codex Mini",
-    ),
-    OpenAIChatModel.GPT5_1_CHAT.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_1_CHAT.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=16_384,
-        input_cost_per_million=1.25,
-        cached_cost_per_million=0.125,
-        output_cost_per_million=10.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5.1 Chat",
-    ),
-    OpenAIChatModel.GPT5_2.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_2.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=128_000,
-        input_cost_per_million=1.75,
-        cached_cost_per_million=0.175,
-        output_cost_per_million=14.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5.2",
-    ),
-    OpenAIChatModel.GPT5_2_PRO.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_2_PRO.value,
-        provider=ModelProvider.OPENAI,
-        context_length=400_000,
-        max_output_tokens=272_000,
-        input_cost_per_million=15.00,
-        cached_cost_per_million=7.50,
-        output_cost_per_million=120.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5.2 Pro",
-    ),
-    OpenAIChatModel.GPT5_2_CHAT.value: ModelInfo(
-        name=OpenAIChatModel.GPT5_2_CHAT.value,
-        provider=ModelProvider.OPENAI,
-        context_length=128_000,
-        max_output_tokens=16_384,
-        input_cost_per_million=1.75,
-        cached_cost_per_million=0.175,
-        output_cost_per_million=14.00,
-        has_structured_output=True,
-        unsupported_params=["temperature"],
-        description="GPT-5.2 Chat",
-    ),
-    OpenAIChatModel.GPT_OSS_120b.value: ModelInfo(
-        name=OpenAIChatModel.GPT_OSS_120b.value,
-        provider=ModelProvider.OPENAI,
-        context_length=131_072,
-        max_output_tokens=65_535,
-        input_cost_per_million=0.15,
-        cached_cost_per_million=0.075,
-        output_cost_per_million=0.60,
-        has_structured_output=True,
-        description="GPT OSS 120B",
-    ),
-    OpenAIChatModel.GPT_OSS_20b.value: ModelInfo(
-        name=OpenAIChatModel.GPT_OSS_20b.value,
-        provider=ModelProvider.OPENAI,
-        context_length=131_072,
-        max_output_tokens=65_535,
-        input_cost_per_million=0.075,
-        cached_cost_per_million=0.037,
-        output_cost_per_million=0.30,
-        has_structured_output=True,
-        description="GPT OSS 20B",
-    ),
-    # Anthropic Models
-    AnthropicModel.CLAUDE_3_5_SONNET.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_5_SONNET.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=8192,
-        input_cost_per_million=3.0,
-        cached_cost_per_million=0.30,
-        output_cost_per_million=15.0,
-        description="Claude 3.5 Sonnet",
-    ),
-    AnthropicModel.CLAUDE_3_OPUS.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_OPUS.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=4096,
-        input_cost_per_million=15.0,
-        cached_cost_per_million=1.50,
-        output_cost_per_million=75.0,
-        description="Claude 3 Opus",
-    ),
-    AnthropicModel.CLAUDE_3_SONNET.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_SONNET.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=4096,
-        input_cost_per_million=3.0,
-        cached_cost_per_million=0.30,
-        output_cost_per_million=15.0,
-        description="Claude 3 Sonnet",
-    ),
-    AnthropicModel.CLAUDE_3_HAIKU.value: ModelInfo(
-        name=AnthropicModel.CLAUDE_3_HAIKU.value,
-        provider=ModelProvider.ANTHROPIC,
-        context_length=200_000,
-        max_output_tokens=4096,
-        input_cost_per_million=0.25,
-        cached_cost_per_million=0.03,
-        output_cost_per_million=1.25,
-        description="Claude 3 Haiku",
-    ),
-    # DeepSeek Models
-    DeepSeekModel.DEEPSEEK.value: ModelInfo(
-        name=DeepSeekModel.DEEPSEEK.value,
-        provider=ModelProvider.DEEPSEEK,
-        context_length=64_000,
-        max_output_tokens=8_000,
-        input_cost_per_million=0.27,
-        cached_cost_per_million=0.07,
-        output_cost_per_million=1.10,
-        description="DeepSeek Chat",
-    ),
-    DeepSeekModel.DEEPSEEK_R1.value: ModelInfo(
-        name=DeepSeekModel.DEEPSEEK_R1.value,
-        provider=ModelProvider.DEEPSEEK,
-        context_length=64_000,
-        max_output_tokens=8_000,
-        input_cost_per_million=0.55,
-        cached_cost_per_million=0.14,
-        output_cost_per_million=2.19,
-        description="DeepSeek-R1 Reasoning LM",
-    ),
-    # Gemini Models
-    GeminiModel.GEMINI_2_FLASH.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_FLASH.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_056_768,
-        max_output_tokens=8192,
-        input_cost_per_million=0.10,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=0.40,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.0 Flash",
-    ),
-    GeminiModel.GEMINI_2_FLASH_LITE.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_FLASH_LITE.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_056_768,
-        max_output_tokens=8192,
-        input_cost_per_million=0.075,
-        output_cost_per_million=0.30,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.0 Flash Lite",
-    ),
-    GeminiModel.GEMINI_1_5_FLASH.value: ModelInfo(
-        name=GeminiModel.GEMINI_1_5_FLASH.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_056_768,
-        max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 1.5 Flash",
-    ),
-    GeminiModel.GEMINI_1_5_FLASH_8B.value: ModelInfo(
-        name=GeminiModel.GEMINI_1_5_FLASH_8B.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_000_000,
-        max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 1.5 Flash 8B",
-    ),
-    GeminiModel.GEMINI_1_5_PRO.value: ModelInfo(
-        name=GeminiModel.GEMINI_1_5_PRO.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=2_000_000,
-        max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 1.5 Pro",
-    ),
-    GeminiModel.GEMINI_2_PRO.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_PRO.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=2_000_000,
-        max_output_tokens=8192,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2 Pro Exp 02-05",
-    ),
-    GeminiModel.GEMINI_2_FLASH_THINKING.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_FLASH_THINKING.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_000_000,
-        max_output_tokens=64_000,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.0 Flash Thinking",
-    ),
-    # Gemini 2.5 Models
-    GeminiModel.GEMINI_2_5_PRO.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_5_PRO.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_048_576,
-        max_output_tokens=65_536,
-        input_cost_per_million=1.25,
-        cached_cost_per_million=0.31,
-        output_cost_per_million=10.0,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.5 Pro",
-    ),
-    GeminiModel.GEMINI_2_5_FLASH.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_5_FLASH.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_048_576,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.30,
-        cached_cost_per_million=0.075,
-        output_cost_per_million=2.50,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.5 Flash",
-    ),
-    GeminiModel.GEMINI_2_5_FLASH_LITE.value: ModelInfo(
-        name=GeminiModel.GEMINI_2_5_FLASH_LITE.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=65_536,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.10,
-        cached_cost_per_million=0.025,
-        output_cost_per_million=0.40,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 2.5 Flash Lite",
-    ),
-    # Gemini 3 Models
-    GeminiModel.GEMINI_3_PRO.value: ModelInfo(
-        name=GeminiModel.GEMINI_3_PRO.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_000_000,
-        max_output_tokens=64_000,
-        input_cost_per_million=2.00,
-        cached_cost_per_million=0.20,
-        output_cost_per_million=12.00,
-        rename_params={"max_tokens": "max_completion_tokens"},
-        description="Gemini 3 Pro",
-    ),
-    GeminiModel.GEMINI_3_FLASH.value: ModelInfo(
-        name=GeminiModel.GEMINI_3_FLASH.value,
-        provider=ModelProvider.GOOGLE,
-        context_length=1_048_576,
-        max_output_tokens=65_535,
-        input_cost_per_million=0.50,
-        cached_cost_per_million=0.05,
-        output_cost_per_million=3.00,
-        description="Gemini 3 Flash",
-    ),
-    # MiniMax Models
-    MiniMaxModel.MINIMAX_M2_7.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_7.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=131_072,
-        input_cost_per_million=0.30,
-        output_cost_per_million=1.20,
-        has_structured_output=True,
-        description="MiniMax M2.7 (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_7_HIGHSPEED.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=131_072,
-        input_cost_per_million=0.15,
-        output_cost_per_million=0.60,
-        has_structured_output=True,
-        description="MiniMax M2.7 Highspeed (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_5.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_5.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.30,
-        output_cost_per_million=1.20,
-        has_structured_output=True,
-        description="MiniMax M2.5 (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_5_HIGHSPEED.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.15,
-        output_cost_per_million=0.60,
-        has_structured_output=True,
-        description="MiniMax M2.5 Highspeed (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_1.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_1.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.27,
-        output_cost_per_million=0.95,
-        has_structured_output=True,
-        description="MiniMax M2.1 (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2_1_HIGHSPEED.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.14,
-        output_cost_per_million=0.48,
-        has_structured_output=True,
-        description="MiniMax M2.1 Highspeed (204K context)",
-    ),
-    MiniMaxModel.MINIMAX_M2.value: ModelInfo(
-        name=MiniMaxModel.MINIMAX_M2.value,
-        provider=ModelProvider.MINIMAX,
-        context_length=204_800,
-        max_output_tokens=65_536,
-        input_cost_per_million=0.27,
-        output_cost_per_million=0.95,
-        has_structured_output=True,
-        description="MiniMax M2 (204K context)",
-    ),
-}
-
-
-def get_model_info(
-    model: str | ModelName,
-    fallback_models: List[str] = [],
-) -> ModelInfo:
-    """Get model information by name or enum value"""
-    # Sequence of models to try, starting with the primary model
-    models_to_try = [model] + fallback_models
-
-    # Find the first model in the sequence that has info defined using next()
-    # on a generator expression that filters out None results from _get_model_info
-    found_info = next(
-        (info for m in models_to_try if (info := _get_model_info(m)) is not None),
-        None,  # Default value if the iterator is exhausted (no valid info found)
-    )
-
-    if found_info is not None:
-        return found_info
-
-    normalized_models = _normalize_model_names(models_to_try)
-    found_info = next(
-        (
-            info
-            for normalized_model in normalized_models
-            if (info := _get_model_info(normalized_model)) is not None
-        ),
-        None,
-    )
-    if found_info is not None:
-        return found_info
-
-    _warn_unknown_model(models_to_try)
-    return ModelInfo()
-
-
-def _get_model_info(model: str | ModelName) -> ModelInfo | None:
-    if isinstance(model, str):
-        return MODEL_INFO.get(model)
-    return MODEL_INFO.get(model.value)
-
-
-def _normalize_model_names(models: List[str | ModelName]) -> List[str]:
-    normalized_models: List[str] = []
-    seen: set[str] = set()
-    for model in models:
-        normalized_model = _normalize_gemini_model_name(_model_name(model))
-        if normalized_model is None or normalized_model in seen:
-            continue
-        seen.add(normalized_model)
-        normalized_models.append(normalized_model)
-    return normalized_models
-
-
-def _normalize_gemini_model_name(model: str) -> str | None:
-    base_model = model.rsplit("/", 1)[-1]
-    if base_model in GEMINI_CANONICAL_MODEL_NAMES:
-        return base_model
-    if not base_model.startswith("gemini-"):
-        return None
-
-    # Try stripping known suffixes to find a canonical name.
-    # Use split (not endswith) for "-preview" so dated variants like
-    # "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
-    for suffix in ("-preview", "-exp", "-experimental", "-latest"):
-        stripped = base_model.split(suffix, maxsplit=1)[0]
-        if stripped != base_model and stripped in GEMINI_CANONICAL_MODEL_NAMES:
-            return stripped
-    return None
-
-
-def _warn_unknown_model(models: List[str | ModelName]) -> None:
-    model_names = tuple(_model_name(model) for model in models)
-    if model_names in WARNED_UNKNOWN_MODELS:
-        return
-
-    WARNED_UNKNOWN_MODELS.add(model_names)
-    logger.warning(
-        "Unknown model info for %s; using fallback defaults "
-        "(context_length=%s, max_output_tokens=%s). "
-        "Context-length checks may be inaccurate. "
-        "Set `chat_context_length` explicitly if needed.",
-        ", ".join(model_names),
-        DEFAULT_MODEL_INFO.context_length,
-        DEFAULT_MODEL_INFO.max_output_tokens,
-    )
-
-
-def _model_name(model: str | ModelName) -> str:
-    if isinstance(model, str):
-        return model
-    return model.value
 </file>
 
 <file path="langroid/language_models/openai_gpt.py">
@@ -93988,7 +93988,7 @@ class OpenAIGPT(LanguageModel):
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>

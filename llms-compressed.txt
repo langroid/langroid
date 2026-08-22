@@ -48719,6 +48719,97 @@ self.api_base = self.config.api_base or GEMINI_BASE_URL
 ```
 </file>
 
+<file path="PR_REVIEW_975.md">
+# PR #975 Review: Remove traceback from OpenAI API error logs
+
+**Author:** alexagr
+**Branch:** `api_error_log` → `main`
+**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
+
+## Summary
+
+This PR adds `except openai.APIError` handlers before the generic `except Exception`
+blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
+and `achat`. The intent is to log API errors cleanly (without a full traceback) since
+server-side errors don't benefit from a local stack trace.
+
+The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
+produces multi-line stack traces for every OpenAI API error. For authentication
+failures, bad requests, and similar server-side errors these tracebacks are noisy and
+provide no diagnostic value.
+
+## Issues
+
+### 1. `openai.APIError` is too broad — catches connection and timeout errors too
+
+`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
+
+```
+openai.APIError
+├── openai.APIConnectionError    ← network/local issues
+│   └── openai.APITimeoutError   ← timeout issues
+└── openai.APIStatusError        ← HTTP status errors from the API server
+    ├── openai.BadRequestError (400)
+    ├── openai.AuthenticationError (401)
+    ├── openai.PermissionDeniedError (403)
+    ├── openai.NotFoundError (404)
+    ├── openai.UnprocessableEntityError (422)
+    ├── openai.RateLimitError (429)
+    └── openai.InternalServerError (>=500)
+```
+
+The PR description correctly identifies that server-side errors (AuthenticationError,
+BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
+and `APITimeoutError` **are** related to the local environment (network configuration,
+DNS, proxy issues), where a traceback **could** help diagnose the problem.
+
+**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
+captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
+while letting connection/timeout errors fall through to the `except Exception` handler
+where `friendly_error()` provides the full traceback.
+
+### 2. `raise e` vs bare `raise`
+
+The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
+`raise` preserves the original traceback chain. This is consistent with the existing
+code (the `except Exception` blocks also use `raise e`), but `raise` is generally
+preferred — especially since callers higher up the stack may want the full traceback
+context even if the log message omits it.
+
+This is a minor style point and not a blocker — it could be a separate cleanup across
+the file.
+
+### 3. Log level consideration
+
+Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
+(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
+a transient condition. That said, by the time the error reaches this outer handler the
+retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
+
+Not a blocker.
+
+## Suggested Change
+
+Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
+
+```python
+except openai.APIStatusError as e:
+    logging.error(f"API error in OpenAIGPT.generate: {e}")
+    raise e
+```
+
+## Verdict
+
+The change addresses a real usability issue — excessively noisy tracebacks for
+server-side API errors. With the suggested narrowing from `APIError` to
+`APIStatusError`, this would be a clean, well-targeted improvement. The code is
+consistent with existing patterns and correctly placed before the generic exception
+handlers.
+
+**Recommendation: Request changes** — use `openai.APIStatusError` instead of
+`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
+</file>
+
 <file path="pytest.ini">
 [pytest]
 markers =
@@ -59496,97 +59587,6 @@ It is strongly recommended to use the `gh` command-line utility when working wit
 Read more [here](docs/development/github-cli.md).
 </file>
 
-<file path="PR_REVIEW_975.md">
-# PR #975 Review: Remove traceback from OpenAI API error logs
-
-**Author:** alexagr
-**Branch:** `api_error_log` → `main`
-**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
-
-## Summary
-
-This PR adds `except openai.APIError` handlers before the generic `except Exception`
-blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
-and `achat`. The intent is to log API errors cleanly (without a full traceback) since
-server-side errors don't benefit from a local stack trace.
-
-The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
-produces multi-line stack traces for every OpenAI API error. For authentication
-failures, bad requests, and similar server-side errors these tracebacks are noisy and
-provide no diagnostic value.
-
-## Issues
-
-### 1. `openai.APIError` is too broad — catches connection and timeout errors too
-
-`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
-
-```
-openai.APIError
-├── openai.APIConnectionError    ← network/local issues
-│   └── openai.APITimeoutError   ← timeout issues
-└── openai.APIStatusError        ← HTTP status errors from the API server
-    ├── openai.BadRequestError (400)
-    ├── openai.AuthenticationError (401)
-    ├── openai.PermissionDeniedError (403)
-    ├── openai.NotFoundError (404)
-    ├── openai.UnprocessableEntityError (422)
-    ├── openai.RateLimitError (429)
-    └── openai.InternalServerError (>=500)
-```
-
-The PR description correctly identifies that server-side errors (AuthenticationError,
-BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
-and `APITimeoutError` **are** related to the local environment (network configuration,
-DNS, proxy issues), where a traceback **could** help diagnose the problem.
-
-**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
-captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
-while letting connection/timeout errors fall through to the `except Exception` handler
-where `friendly_error()` provides the full traceback.
-
-### 2. `raise e` vs bare `raise`
-
-The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
-`raise` preserves the original traceback chain. This is consistent with the existing
-code (the `except Exception` blocks also use `raise e`), but `raise` is generally
-preferred — especially since callers higher up the stack may want the full traceback
-context even if the log message omits it.
-
-This is a minor style point and not a blocker — it could be a separate cleanup across
-the file.
-
-### 3. Log level consideration
-
-Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
-(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
-a transient condition. That said, by the time the error reaches this outer handler the
-retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
-
-Not a blocker.
-
-## Suggested Change
-
-Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
-
-```python
-except openai.APIStatusError as e:
-    logging.error(f"API error in OpenAIGPT.generate: {e}")
-    raise e
-```
-
-## Verdict
-
-The change addresses a real usability issue — excessively noisy tracebacks for
-server-side API errors. With the suggested narrowing from `APIError` to
-`APIStatusError`, this would be a clean, well-targeted improvement. The code is
-consistent with existing patterns and correctly placed before the generic exception
-handlers.
-
-**Recommendation: Request changes** — use `openai.APIStatusError` instead of
-`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
-</file>
-
 <file path="docs/notes/context-overflow.md">
 # Context-Overflow Handling
 
@@ -62976,243 +62976,6 @@ task = lr.Task(
 result = task.run(query)
 ⋮----
 exp_answers = [r.strip().lower() for r in expected.split(",")]
-</file>
-
-<file path="tests/main/test_context_truncation.py">
-"""
-Tests for the smart context-overflow truncation in ChatAgent._prep_llm_messages.
-
-Issue #838: Previously every overflowing message was blindly truncated to
-a fixed 30-token minimum.  The fix computes the actual number of tokens each
-message needs to be reduced by so that the history fits within the context
-window, preserving as much content as possible.
-
-The expected per-message retention is checked against an independent,
-test-side simulation of the documented contract
-(see `docs/notes/context-overflow.md`): walking forward from the oldest
-eligible message, the current excess is divided evenly over the remaining
-*compressible* messages (those whose content sits above the 30-token floor
-plus the warning-marker overhead), each message additionally absorbing
-whatever later messages cannot, with the excess recomputed at every step.
-"""
-⋮----
-# Tests must account for the history buffer:
-#   budget = context_length - min_output - CHAT_HISTORY_BUFFER
-_MIN_OUTPUT = 64  # explicitly passed to the mock LLM config below
-⋮----
-# Must match the values used in ChatAgent._prep_llm_messages
-_FLOOR = 30
-_WARNING = "\n... [Contents truncated!]"
-⋮----
-"""Return a ChatAgent backed by MockLM with a bounded context window."""
-cfg = ChatAgentConfig(
-agent = ChatAgent(cfg)
-⋮----
-def _fill_history(agent: ChatAgent, n_msgs: int, words_each: int) -> None
-⋮----
-"""Populate agent.message_history with alternating user/assistant messages."""
-⋮----
-role = Role.USER if i % 2 == 0 else Role.ASSISTANT
-content = ("word " * words_each).strip()
-⋮----
-def _budget(context_length: int, min_output: int = _MIN_OUTPUT) -> int
-⋮----
-def _hist_at_truncation(agent: ChatAgent, final_msg: str) -> list[LLMMessage]
-⋮----
-"""The message list `_prep_llm_messages(final_msg)` sees at truncation time.
-
-    `_prep_llm_messages` replaces the system message with a freshly built one
-    and appends the final user message before the truncation loop runs;
-    mirror that here so expected token counts can be computed up-front.
-    """
-⋮----
-"""Independent (test-side) simulation of the truncation contract.
-
-    Walks the compressible range (index 1 .. last-user-index - 1) as
-    documented in `docs/notes/context-overflow.md`: at each step the current
-    excess — computed over FULL message token counts, i.e. including any
-    attachment payloads — is divided evenly over the remaining messages whose
-    *content* can still shrink (content tokens above the 30-token floor plus
-    the appended-warning overhead), and the current message additionally
-    absorbs whatever later messages cannot.
-
-    Returns:
-        Mapping {msg_idx: expected content tokens after truncation} for every
-        message the contract says must be truncated.
-    """
-parser = agent.parser
-⋮----
-warning_tokens = parser.num_tokens(_WARNING)
-last_user_idx = max(i for i, m in enumerate(hist) if m.role == Role.USER)
-content_tokens = [parser.num_tokens(m.content) for m in hist]
-total = agent.chat_num_tokens(hist)
-expected: dict[int, int] = {}
-⋮----
-excess = total - budget
-⋮----
-continue  # cannot shrink; the implementation skips it too
-later_caps = [
-n_compressible = 1 + sum(1 for c in later_caps if c > 0)
-share = math.ceil(excess / n_compressible)
-later_capacity = sum(c for c in later_caps if c > 0)
-reduction = max(share, excess - later_capacity)
-keep = max(_FLOOR, content_tokens[idx] - reduction - warning_tokens)
-final = keep + warning_tokens
-⋮----
-# ---------------------------------------------------------------------------
-# Tests
-⋮----
-def test_truncation_fits_within_context(test_settings: Settings) -> None
-⋮----
-"""After truncation the history must fit within the context budget."""
-⋮----
-# Use a context window large enough for the buffer but small enough to need
-# truncation: budget = 1500 - 64 - 300 = 1136 tokens.
-context_length = 1500
-# 6 messages × 300 words ≈ 1800 tokens → well over budget
-agent = _make_agent(context_length, max_output_tokens=context_length)
-⋮----
-total_before = agent.chat_num_tokens()
-⋮----
-total_after = agent.chat_num_tokens(hist)
-budget = _budget(context_length)
-⋮----
-def test_smart_truncation_keeps_more_than_30_tokens(test_settings: Settings) -> None
-⋮----
-"""
-    When the total overflow is small, smart truncation should leave each
-    message with well more than 30 tokens rather than collapsing it.
-    """
-⋮----
-# budget = 2000 - 64 - 300 = 1636 tokens.
-# 4 messages × 200 words ≈ 800 tokens + system ≈ 810 total.
-# Forcing max_output_tokens = context so reduced output < min_output:
-#   reduced_output = 2000 - 810 - 300 = 890 > min_output → output-only reduction.
-# To reach the message-truncation path we need total + min_output > context.
-# With context=900: budget = 900 - 64 - 300 = 536.
-# 4 msgs × 200 words ≈ 800 → need to remove ~264 tokens across 3 compressible msgs
-# → reduction ≈ 88 per msg; keep ≈ 112 tokens each — well above 30.
-context_length = 900
-⋮----
-# Check that the first compressible message (index 1) retained > 30 tokens.
-msg_tokens = agent.parser.num_tokens(hist[1].content)
-⋮----
-def test_truncation_with_tiny_interleaved_messages(test_settings: Settings) -> None
-⋮----
-"""
-    Messages at/below the keep-floor cannot absorb any of the excess
-    (truncating them would only *grow* them by the appended warning), so they
-    must be skipped AND excluded from the even-share denominator: the two
-    large messages must shed approximately EQUAL amounts, rather than the
-    first shedding only excess/4 (denominator diluted by the two tiny
-    messages) and the second absorbing the rest. The compressible range also
-    *ends* on a tiny message, so this doubles as a regression test that the
-    loop skips past it without running out of messages and raising ValueError.
-    """
-⋮----
-large = ("word " * 400).strip()
-# After the final user message is appended by _prep_llm_messages below:
-# [SYSTEM, USER(large), ASSISTANT(tiny), USER(large), ASSISTANT(tiny),
-#  USER(final)]: compressible range is 1..4, and it *ends* on a tiny msg.
-⋮----
-large_tokens = agent.parser.num_tokens(large)
-⋮----
-# Tiny messages must be left intact (no truncation warning appended).
-⋮----
-# The final user message must be untouched.
-⋮----
-# Both large messages were truncated, ...
-shed_1 = large_tokens - agent.parser.num_tokens(hist[1].content)
-shed_3 = large_tokens - agent.parser.num_tokens(hist[3].content)
-⋮----
-# ... neither was collapsed toward the 30-token floor, ...
-⋮----
-# ... and they shed approximately EQUAL amounts: the tiny messages must
-# not dilute the even-share denominator. (With the diluted denominator
-# the first message sheds ~excess/4 and the second ~3x that, a gap far
-# beyond this tolerance.)
-⋮----
-def test_truncation_skips_none_content(test_settings: Settings) -> None
-⋮----
-"""Call-only turns with no content remain intact during truncation."""
-⋮----
-def test_truncation_preserves_system_and_last_message(test_settings: Settings) -> None
-⋮----
-"""The system message and the last user message must never be modified."""
-⋮----
-system_content = agent.message_history[0].content
-# Pass a distinct final user message (with message=None the last history
-# message would be dropped for re-generation, weakening this check).
-final_user_msg = "FINAL distinct user question"
-⋮----
-# In-between messages were actually truncated.
-⋮----
-def test_truncation_raises_when_impossible(test_settings: Settings) -> None
-⋮----
-"""ValueError must be raised when the context cannot be made to fit."""
-⋮----
-# budget = 500 - 490 - 300 = -290 (impossible).
-# The loop will exhaust all compressible messages and raise.
-agent = _make_agent(
-⋮----
-# Equal-size messages: the excess is split evenly between them.
-⋮----
-# Second message is small (but above the skip threshold): its
-# capacity caps what it can absorb, so the first message must absorb
-# the remainder beyond its even share (capacity check).
-⋮----
-"""
-    End-to-end check of the truncation distribution in `_prep_llm_messages`:
-    each compressible message must retain the number of content tokens
-    predicted by the independent simulation of the documented even-share +
-    capacity contract, within a small tokenizer tolerance.
-    """
-⋮----
-final_msg = "Final question"
-⋮----
-sim_hist = _hist_at_truncation(agent, final_msg)
-⋮----
-expected = _simulate_even_share_truncation(agent, sim_hist, budget)
-⋮----
-actual = agent.parser.num_tokens(hist[idx].content)
-⋮----
-"""
-    Attachment payloads must count toward the *overall* excess (which uses
-    `chat_num_tokens`), while each message's keep-target must be computed
-    from its content-only token count: `truncate_message` can only trim
-    content, so a keep-target inflated by attachment tokens would exceed the
-    message's content size and leave the attachment-bearing message
-    effectively untruncated (over-kept), silently shifting its share of the
-    reduction onto later messages.
-    """
-⋮----
-# Use the tiktoken-based splitter so the serialized attachment payload
-# (a base64 blob without whitespace) has a realistic token count; the
-# default MARKDOWN splitter counts whitespace-separated words, under
-# which the whole payload would count as a single token.
-⋮----
-attachment = FileAttachment.from_bytes(
-⋮----
-final_msg = "What does the attached report say?"
-⋮----
-content_only_total = sum(agent.parser.num_tokens(m.content) for m in sim_hist)
-attachment_tokens = agent.chat_num_tokens(sim_hist) - content_only_total
-⋮----
-# The overflow must be attributable to the attachment payload: the text
-# content alone fits the budget; content + attachment does not.
-⋮----
-orig_content_tokens = agent.parser.num_tokens(agent.message_history[1].content)
-⋮----
-# The request fits, counting attachment payload tokens.
-⋮----
-# The attachment itself is preserved (only content is trimmed).
-⋮----
-# The attachment-bearing message's *content* was truncated to its
-# content-only keep-target. Had the keep-target been computed from
-# content + attachment tokens (e.g. via `_message_num_tokens`), it would
-# exceed the content size and the content would be over-kept in full.
-⋮----
-actual = agent.parser.num_tokens(hist[1].content)
 </file>
 
 <file path="tests/main/test_csv_kg_validation.py">
@@ -68643,6 +68406,597 @@ def _clear_cache() -> None
 """Clear the client cache. Only for testing."""
 </file>
 
+<file path="tests/main/test_context_truncation.py">
+"""
+Tests for the smart context-overflow truncation in ChatAgent._prep_llm_messages.
+
+Issue #838: Previously every overflowing message was blindly truncated to
+a fixed 30-token minimum.  The fix computes the actual number of tokens each
+message needs to be reduced by so that the history fits within the context
+window, preserving as much content as possible.
+
+The expected per-message retention is checked against an independent,
+test-side simulation of the documented contract
+(see `docs/notes/context-overflow.md`): walking forward from the oldest
+eligible message, the current excess is divided evenly over the remaining
+*compressible* messages (those whose content sits above the 30-token floor
+plus the warning-marker overhead), each message additionally absorbing
+whatever later messages cannot, with the excess recomputed at every step.
+"""
+⋮----
+# Tests must account for the history buffer:
+#   budget = context_length - min_output - CHAT_HISTORY_BUFFER
+_MIN_OUTPUT = 64  # explicitly passed to the mock LLM config below
+⋮----
+# Must match the values used in ChatAgent._prep_llm_messages
+_FLOOR = 30
+_WARNING = "\n... [Contents truncated!]"
+⋮----
+"""Return a ChatAgent backed by MockLM with a bounded context window."""
+cfg = ChatAgentConfig(
+agent = ChatAgent(cfg)
+⋮----
+def _fill_history(agent: ChatAgent, n_msgs: int, words_each: int) -> None
+⋮----
+"""Populate agent.message_history with alternating user/assistant messages."""
+⋮----
+role = Role.USER if i % 2 == 0 else Role.ASSISTANT
+content = ("word " * words_each).strip()
+⋮----
+def _budget(context_length: int, min_output: int = _MIN_OUTPUT) -> int
+⋮----
+def _hist_at_truncation(agent: ChatAgent, final_msg: str) -> list[LLMMessage]
+⋮----
+"""The message list `_prep_llm_messages(final_msg)` sees at truncation time.
+
+    `_prep_llm_messages` replaces the system message with a freshly built one
+    and appends the final user message before the truncation loop runs;
+    mirror that here so expected token counts can be computed up-front.
+    """
+⋮----
+"""Independent (test-side) simulation of the truncation contract.
+
+    Walks the compressible range (index 1 .. last-user-index - 1) as
+    documented in `docs/notes/context-overflow.md`: at each step the current
+    excess — computed over FULL message token counts, i.e. including any
+    attachment payloads — is divided evenly over the remaining messages whose
+    *content* can still shrink (content tokens above the 30-token floor plus
+    the appended-warning overhead), and the current message additionally
+    absorbs whatever later messages cannot.
+
+    Returns:
+        Mapping {msg_idx: expected content tokens after truncation} for every
+        message the contract says must be truncated.
+    """
+parser = agent.parser
+⋮----
+warning_tokens = parser.num_tokens(_WARNING)
+last_user_idx = max(i for i, m in enumerate(hist) if m.role == Role.USER)
+content_tokens = [parser.num_tokens(m.content) for m in hist]
+total = agent.chat_num_tokens(hist)
+expected: dict[int, int] = {}
+⋮----
+excess = total - budget
+⋮----
+continue  # cannot shrink; the implementation skips it too
+later_caps = [
+n_compressible = 1 + sum(1 for c in later_caps if c > 0)
+share = math.ceil(excess / n_compressible)
+later_capacity = sum(c for c in later_caps if c > 0)
+reduction = max(share, excess - later_capacity)
+keep = max(_FLOOR, content_tokens[idx] - reduction - warning_tokens)
+final = keep + warning_tokens
+⋮----
+# ---------------------------------------------------------------------------
+# Tests
+⋮----
+def test_truncation_fits_within_context(test_settings: Settings) -> None
+⋮----
+"""After truncation the history must fit within the context budget."""
+⋮----
+# Use a context window large enough for the buffer but small enough to need
+# truncation: budget = 1500 - 64 - 300 = 1136 tokens.
+context_length = 1500
+# 6 messages × 300 words ≈ 1800 tokens → well over budget
+agent = _make_agent(context_length, max_output_tokens=context_length)
+⋮----
+total_before = agent.chat_num_tokens()
+⋮----
+total_after = agent.chat_num_tokens(hist)
+budget = _budget(context_length)
+⋮----
+def test_smart_truncation_keeps_more_than_30_tokens(test_settings: Settings) -> None
+⋮----
+"""
+    When the total overflow is small, smart truncation should leave each
+    message with well more than 30 tokens rather than collapsing it.
+    """
+⋮----
+# budget = 2000 - 64 - 300 = 1636 tokens.
+# 4 messages × 200 words ≈ 800 tokens + system ≈ 810 total.
+# Forcing max_output_tokens = context so reduced output < min_output:
+#   reduced_output = 2000 - 810 - 300 = 890 > min_output → output-only reduction.
+# To reach the message-truncation path we need total + min_output > context.
+# With context=900: budget = 900 - 64 - 300 = 536.
+# 4 msgs × 200 words ≈ 800 → need to remove ~264 tokens across 3 compressible msgs
+# → reduction ≈ 88 per msg; keep ≈ 112 tokens each — well above 30.
+context_length = 900
+⋮----
+# Check that the first compressible message (index 1) retained > 30 tokens.
+msg_tokens = agent.parser.num_tokens(hist[1].content)
+⋮----
+def test_truncation_with_tiny_interleaved_messages(test_settings: Settings) -> None
+⋮----
+"""
+    Messages at/below the keep-floor cannot absorb any of the excess
+    (truncating them would only *grow* them by the appended warning), so they
+    must be skipped AND excluded from the even-share denominator: the two
+    large messages must shed approximately EQUAL amounts, rather than the
+    first shedding only excess/4 (denominator diluted by the two tiny
+    messages) and the second absorbing the rest. The compressible range also
+    *ends* on a tiny message, so this doubles as a regression test that the
+    loop skips past it without running out of messages and raising ValueError.
+    """
+⋮----
+large = ("word " * 400).strip()
+# After the final user message is appended by _prep_llm_messages below:
+# [SYSTEM, USER(large), ASSISTANT(tiny), USER(large), ASSISTANT(tiny),
+#  USER(final)]: compressible range is 1..4, and it *ends* on a tiny msg.
+⋮----
+large_tokens = agent.parser.num_tokens(large)
+⋮----
+# Tiny messages must be left intact (no truncation warning appended).
+⋮----
+# The final user message must be untouched.
+⋮----
+# Both large messages were truncated, ...
+shed_1 = large_tokens - agent.parser.num_tokens(hist[1].content)
+shed_3 = large_tokens - agent.parser.num_tokens(hist[3].content)
+⋮----
+# ... neither was collapsed toward the 30-token floor, ...
+⋮----
+# ... and they shed approximately EQUAL amounts: the tiny messages must
+# not dilute the even-share denominator. (With the diluted denominator
+# the first message sheds ~excess/4 and the second ~3x that, a gap far
+# beyond this tolerance.)
+⋮----
+def test_truncation_skips_none_content(test_settings: Settings) -> None
+⋮----
+"""Call-only turns with no content remain intact during truncation."""
+⋮----
+def test_truncation_preserves_system_and_last_message(test_settings: Settings) -> None
+⋮----
+"""The system message and the last user message must never be modified."""
+⋮----
+system_content = agent.message_history[0].content
+# Pass a distinct final user message (with message=None the last history
+# message would be dropped for re-generation, weakening this check).
+final_user_msg = "FINAL distinct user question"
+⋮----
+# In-between messages were actually truncated.
+⋮----
+def test_truncation_raises_when_impossible(test_settings: Settings) -> None
+⋮----
+"""ValueError must be raised when the context cannot be made to fit."""
+⋮----
+# budget = 500 - 490 - 300 = -290 (impossible).
+# The loop will exhaust all compressible messages and raise.
+agent = _make_agent(
+⋮----
+# Equal-size messages: the excess is split evenly between them.
+⋮----
+# Second message is small (but above the skip threshold): its
+# capacity caps what it can absorb, so the first message must absorb
+# the remainder beyond its even share (capacity check).
+⋮----
+"""
+    End-to-end check of the truncation distribution in `_prep_llm_messages`:
+    each compressible message must retain the number of content tokens
+    predicted by the independent simulation of the documented even-share +
+    capacity contract, within a small tokenizer tolerance.
+    """
+⋮----
+final_msg = "Final question"
+⋮----
+sim_hist = _hist_at_truncation(agent, final_msg)
+⋮----
+expected = _simulate_even_share_truncation(agent, sim_hist, budget)
+⋮----
+actual = agent.parser.num_tokens(hist[idx].content)
+⋮----
+"""
+    Attachment payloads must count toward the *overall* excess (which uses
+    `chat_num_tokens`), while each message's keep-target must be computed
+    from its content-only token count: `truncate_message` can only trim
+    content, so a keep-target inflated by attachment tokens would exceed the
+    message's content size and leave the attachment-bearing message
+    effectively untruncated (over-kept), silently shifting its share of the
+    reduction onto later messages.
+    """
+⋮----
+# Use the tiktoken-based splitter so the serialized attachment payload
+# (a base64 blob without whitespace) has a realistic token count; the
+# default MARKDOWN splitter counts whitespace-separated words, under
+# which the whole payload would count as a single token.
+⋮----
+attachment = FileAttachment.from_bytes(
+⋮----
+final_msg = "What does the attached report say?"
+⋮----
+content_only_total = sum(agent.parser.num_tokens(m.content) for m in sim_hist)
+attachment_tokens = agent.chat_num_tokens(sim_hist) - content_only_total
+⋮----
+# The overflow must be attributable to the attachment payload: the text
+# content alone fits the budget; content + attachment does not.
+⋮----
+orig_content_tokens = agent.parser.num_tokens(agent.message_history[1].content)
+⋮----
+# The request fits, counting attachment payload tokens.
+⋮----
+# The attachment itself is preserved (only content is trimmed).
+⋮----
+# The attachment-bearing message's *content* was truncated to its
+# content-only keep-target. Had the keep-target been computed from
+# content + attachment tokens (e.g. via `_message_num_tokens`), it would
+# exceed the content size and the content would be over-kept in full.
+⋮----
+actual = agent.parser.num_tokens(hist[1].content)
+</file>
+
+<file path="tests/main/test_prep_llm_message.py">
+CHAT_CONTEXT_LENGTH = 16_000
+MAX_OUTPUT_TOKENS = 1000
+MIN_OUTPUT_TOKENS = 50
+⋮----
+@pytest.fixture
+def agent()
+⋮----
+"""Create a ChatAgent with a mock LLM for testing truncation."""
+config = ChatAgentConfig(
+⋮----
+# Small context for testing truncation
+⋮----
+agent = ChatAgent(config)
+⋮----
+# Create a mock parser that counts tokens as characters for simplicity
+class MockParser
+⋮----
+def num_tokens(self, text: str | LLMMessage)
+⋮----
+def truncate_tokens(self, text, tokens, warning="")
+⋮----
+# Create a mock LLM that returns a fixed context length
+class MockLLM
+⋮----
+def chat_context_length(self) -> int
+⋮----
+def get_stream(self) -> bool
+⋮----
+def supports_functions_or_tools(self) -> bool
+⋮----
+# Initialize message history with a system message
+# agent.message_history = [LLMMessage(role=Role.SYSTEM, content="System message")]
+⋮----
+def test_no_truncation_needed(agent)
+⋮----
+"""Test when no truncation is needed."""
+# Add a short user message (well within context limits)
+message = "Short user message"
+⋮----
+# Call the method
+⋮----
+# History should include system message and the new user message
+⋮----
+assert output_len == MAX_OUTPUT_TOKENS  # Original max output tokens
+⋮----
+def test_reduce_output_length(agent)
+⋮----
+"""Test when only output length reduction is needed."""
+# Fill most of the context with long messages
+long_message = "X" * 15_000  # 700 tokens
+⋮----
+# New user message
+message = "Another message"
+⋮----
+# Check that output length was reduced but no messages were truncated
+⋮----
+assert hist[1].content == long_message  # Not truncated
+assert output_len < MAX_OUTPUT_TOKENS  # Output length was reduced
+⋮----
+def test_truncate_messages(agent)
+⋮----
+"""Test when message truncation is needed."""
+⋮----
+# Fill the context with messages that will require truncation
+⋮----
+# Add several messages that will need truncation
+⋮----
+orig_msg_len = len(agent.message_history[1].content)
+⋮----
+# Check that early messages were truncated
+assert len(hist) == 8  # All messages still present
+⋮----
+# First user message truncated
+⋮----
+assert output_len >= MIN_OUTPUT_TOKENS  # At least min_output_tokens
+⋮----
+@pytest.fixture
+def agent_drop_turns()
+⋮----
+"""Create a ChatAgent with drop_turns strategy for testing."""
+⋮----
+def chat_context_length(self)
+⋮----
+def supports_functions_or_tools(self)
+⋮----
+def test_drop_turns_strategy(agent_drop_turns)
+⋮----
+"""Test when drop_turns strategy is used to handle context overflow."""
+agent = agent_drop_turns
+⋮----
+# Fill the context with messages that will require dropping turns
+⋮----
+# Add several complete turns that will need to be dropped
+⋮----
+orig_hist_len = len(agent.message_history)
+⋮----
+# Check that turns were dropped (fewer messages than original)
+⋮----
+# System message should still be present
+⋮----
+# The last user message should be present
+⋮----
+# Check alternating pattern is preserved
+⋮----
+def test_chat_num_tokens_counts_attachment_payload(agent)
+⋮----
+"""Test attachment payloads are included in chat token accounting."""
+model = "gemini/gemini-2.5-flash"
+⋮----
+attachment = FileAttachment.from_bytes(
+message = LLMMessage(
+⋮----
+expected_attachment_tokens = len(
+⋮----
+def test_attachment_payload_reduces_output_length()
+⋮----
+"""Test preflight shrinks output length when attachments consume context."""
+context_length = 1000
+max_output_tokens = 500
+min_output_tokens = 50
+⋮----
+user_input = ChatDocument(
+⋮----
+def test_drop_turns_preserves_last_turn(agent_drop_turns)
+⋮----
+"""Test that drop_turns preserves the system message and last turn."""
+⋮----
+# Set up history with multiple turns
+⋮----
+# Add turns with large content that will force dropping
+⋮----
+# Call the method with a final message
+⋮----
+# System message must be preserved
+⋮----
+# Last message must be the final user message
+⋮----
+# No message should contain "Contents truncated" (we drop, not truncate)
+⋮----
+def test_drop_turns_accounts_for_buffer()
+⋮----
+"""
+    Test that drop_turns loop accounts for CHAT_HISTORY_BUFFER.
+
+    This is a regression test for a P1 bug where the loop would exit when:
+        tokens <= context - min_output_tokens
+    But then output_len = context - tokens - CHAT_HISTORY_BUFFER could go
+    negative, causing spurious errors.
+
+    The fix ensures the loop continues until there's room for both
+    min_output_tokens AND CHAT_HISTORY_BUFFER.
+    """
+# CHAT_HISTORY_BUFFER is 300 in the code
+# We need to create a scenario where history is in the "danger zone":
+# between (context - min_output - buffer) and (context - min_output)
+#
+# With context=16000, min_output=50, buffer=300:
+# - Old buggy threshold: 16000 - 50 = 15950
+# - Fixed threshold: 16000 - 50 - 300 = 15650
+# - Danger zone: 15650 < tokens <= 15950
+⋮----
+system_message="S" * 100,  # 100 tokens
+⋮----
+# Create history that lands in the danger zone after some turns
+# System msg = 100 tokens
+# We want total around 15800-15900 tokens (in danger zone)
+# Add turns that will require the buffer-aware loop to drop them
+⋮----
+# Add turns: each turn is ~5000 tokens (USER 4980 + ASSISTANT 20)
+# 3 turns = ~15000 + system 100 = ~15100
+# Final message ~800 = ~15900 total (in danger zone)
+⋮----
+# This should NOT raise an error - the fix ensures we drop enough turns
+# to accommodate both min_output_tokens AND CHAT_HISTORY_BUFFER
+⋮----
+# output_len must be positive and at least min_output_tokens
+⋮----
+# History should have been compressed
+⋮----
+# ---------------------------------------------------------------------------
+# Regression tests for "missing" (None) vs "empty" ("") message content.
+⋮----
+# Gemini 3.x rejects (400 INVALID_ARGUMENT) an assistant turn that carries BOTH
+# a tool/function call AND non-empty text content. Langroid used to pad empty
+# content with a single space (" "), which tripped this on every tool-result
+# turn. Content is now carried faithfully: a response with no content becomes
+# LLMMessage.content=None (dropped from the wire), distinct from "".
+⋮----
+MODEL = "gpt-4o"
+⋮----
+def _tool_call()
+⋮----
+def test_api_dict_omits_content_for_tool_call_message()
+⋮----
+"""An assistant tool-call turn with no content omits `content` on the wire
+    (never emits " ", which Gemini 3.x rejects alongside a tool call)."""
+d = LLMMessage(
+⋮----
+def test_api_dict_omits_content_for_function_call_message()
+⋮----
+"""A legacy function-call-only turn also omits `content` on the wire."""
+function_call = LLMFunctionCall(
+⋮----
+def test_api_dict_pads_empty_message_without_tools()
+⋮----
+"""A message with empty content (None or "") and no tool/function call must
+    still send something, since some APIs (e.g. Gemini) reject an empty msg."""
+⋮----
+def test_api_dict_keeps_real_content()
+⋮----
+d = LLMMessage(role=Role.USER, content="hello").api_dict(MODEL)
+⋮----
+def test_missing_content_is_none_end_to_end()
+⋮----
+"""A tool-only LLM response (message=None) is carried faithfully as
+    content_is_none -> LLMMessage.content=None -> omitted from api_dict."""
+resp = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+doc = ChatDocument.from_LLMResponse(resp)
+assert doc.content == ""  # ChatDocument.content stays a mandatory str
+⋮----
+msg = ChatDocument.to_LLMMessage(doc)[0]
+⋮----
+def test_empty_content_stays_empty_not_none()
+⋮----
+"""A present-but-empty response (message="") is distinct from missing:
+    it must NOT be coerced to None."""
+resp = LLMResponse(message="", oai_tool_calls=[_tool_call()])
+⋮----
+def test_none_content_round_trips_through_chatdocument()
+⋮----
+"""LLMMessage.content=None survives an LLMMessage -> ChatDocument ->
+    LLMMessage round-trip (history is rebuilt this way)."""
+original = LLMMessage(role=Role.ASSISTANT, content=None, tool_calls=[_tool_call()])
+doc = ChatDocument.from_LLMMessage(original)
+⋮----
+rebuilt = ChatDocument.to_LLMMessage(doc)[0]
+⋮----
+def test_prep_retains_fresh_tool_only_message(agent: ChatAgent) -> None
+⋮----
+"""History preparation retains a fresh call-only assistant turn."""
+doc = ChatDocument.from_LLMResponse(
+⋮----
+"""Rendering safely separates absent text from displayed tool-call data."""
+displayed: dict[str, object] = {}
+⋮----
+response = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
+⋮----
+def test_none_content_is_safe_for_token_counting(agent)
+⋮----
+"""Token counting treats missing content as zero text tokens."""
+⋮----
+def test_truncate_tool_only_message_preserves_none(agent)
+⋮----
+"""Truncation must not add warning text alongside a tool call."""
+⋮----
+truncated = agent.truncate_message(-1)
+⋮----
+"""Truncation must preserve a present-but-empty result."""
+message = LLMMessage(role=role, content="", **identifying_field)
+⋮----
+original_payload = message.api_dict(MODEL)
+⋮----
+"""Blank results already retained by call payloads remain truncatable."""
+⋮----
+"""Malformed blank results remain truncation candidates."""
+⋮----
+"""Whitespace-only conversation messages remain truncation candidates."""
+content = " " * 10_000
+⋮----
+def test_content_is_none_overrides_populated_content_any()
+⋮----
+"""A call-only turn stays content=None even when content_any was populated
+    (e.g. by _load_output_format parsing the tool args under a strict
+    output_format). Otherwise the serialized args would be sent as assistant
+    text alongside tool_calls, which is the Gemini 3.x rejection this avoids."""
+doc = ChatDocument(
+⋮----
+# parsed structured output (tool args), NOT message text:
+⋮----
+def test_content_is_none_overrides_stale_text_after_serialization()
+⋮----
+"""The explicit missing-content flag wins after a hostile round-trip."""
+⋮----
+reloaded = ChatDocument.model_validate(doc.model_dump())
+⋮----
+msg = ChatDocument.to_LLMMessage(reloaded)[0]
+⋮----
+"""A tool result with genuinely empty content (e.g. a tool that succeeds
+    with no output) must stay in history and clear the pending tool call from
+    agent.oai_tool_calls, not get silently dropped (issue #1063). Before the
+    fix, the history filter kept a message only if it had non-empty content, a
+    function_call, or tool_calls -- none of which a TOOL-role result carries,
+    so an empty-content result was dropped and its call_id never reached
+    `done_tools`, leaving the call marked pending forever."""
+pending_call = _tool_call()
+⋮----
+tool_msgs = [m for m in hist if m.role == Role.TOOL]
+⋮----
+"""An empty legacy function result must stay in message history."""
+function_name = "check_weather"
+⋮----
+parent = ChatDocument(
+⋮----
+result = ChatDocument(
+⋮----
+function_msgs = [m for m in hist if m.role == Role.FUNCTION]
+⋮----
+"""An identified empty result completes only its matching pending call."""
+first_call = _tool_call()
+second_call = _tool_call()
+⋮----
+tool_messages = [message for message in hist if message.role == Role.TOOL]
+⋮----
+class RecordingMockLM(MockLM)
+⋮----
+"""Mock LM that records the messages supplied to its chat method."""
+⋮----
+def __init__(self, config: MockLMConfig) -> None
+⋮----
+"""Record messages before returning the configured local response."""
+⋮----
+def test_llm_response_sends_empty_tool_result_to_lm() -> None
+⋮----
+"""llm_response sends an empty correlated result and returns a document."""
+llm_config = MockLMConfig(default_response="tool result received")
+agent = ChatAgent(
+recording_llm = RecordingMockLM(llm_config)
+⋮----
+response = agent.llm_response(result)
+⋮----
+tool_messages = [
+⋮----
+def test_prep_drops_empty_tool_result_without_id(agent: ChatAgent) -> None
+⋮----
+"""An empty tool result without a correlation ID is malformed."""
+⋮----
+"""An empty function result without its function name is malformed."""
+function_call = LLMFunctionCall.model_construct(
+⋮----
+"""Malformed empty results are not valid history entries."""
+field = "tool_call_id" if role == Role.TOOL else "name"
+message = LLMMessage.model_construct(role=role, content="")
+⋮----
+"""Whitespace identifiers cannot complete or remove pending calls."""
+valid_call = _tool_call()
+⋮----
+malformed_call = _tool_call()
+⋮----
+malformed_function = LLMFunctionCall(
+⋮----
+pending_calls = list(agent.oai_tool_calls)
+</file>
+
 <file path="SECURITY.md">
 # Security Policy
 
@@ -69307,360 +69661,6 @@ model_config = SettingsConfigDict(env_prefix="")
 llm_config = CustomOpenAIGPTConfig(
 ⋮----
 response = llm.chat("What is 3+4?")
-</file>
-
-<file path="tests/main/test_prep_llm_message.py">
-CHAT_CONTEXT_LENGTH = 16_000
-MAX_OUTPUT_TOKENS = 1000
-MIN_OUTPUT_TOKENS = 50
-⋮----
-@pytest.fixture
-def agent()
-⋮----
-"""Create a ChatAgent with a mock LLM for testing truncation."""
-config = ChatAgentConfig(
-⋮----
-# Small context for testing truncation
-⋮----
-agent = ChatAgent(config)
-⋮----
-# Create a mock parser that counts tokens as characters for simplicity
-class MockParser
-⋮----
-def num_tokens(self, text: str | LLMMessage)
-⋮----
-def truncate_tokens(self, text, tokens, warning="")
-⋮----
-# Create a mock LLM that returns a fixed context length
-class MockLLM
-⋮----
-def chat_context_length(self) -> int
-⋮----
-def get_stream(self) -> bool
-⋮----
-def supports_functions_or_tools(self) -> bool
-⋮----
-# Initialize message history with a system message
-# agent.message_history = [LLMMessage(role=Role.SYSTEM, content="System message")]
-⋮----
-def test_no_truncation_needed(agent)
-⋮----
-"""Test when no truncation is needed."""
-# Add a short user message (well within context limits)
-message = "Short user message"
-⋮----
-# Call the method
-⋮----
-# History should include system message and the new user message
-⋮----
-assert output_len == MAX_OUTPUT_TOKENS  # Original max output tokens
-⋮----
-def test_reduce_output_length(agent)
-⋮----
-"""Test when only output length reduction is needed."""
-# Fill most of the context with long messages
-long_message = "X" * 15_000  # 700 tokens
-⋮----
-# New user message
-message = "Another message"
-⋮----
-# Check that output length was reduced but no messages were truncated
-⋮----
-assert hist[1].content == long_message  # Not truncated
-assert output_len < MAX_OUTPUT_TOKENS  # Output length was reduced
-⋮----
-def test_truncate_messages(agent)
-⋮----
-"""Test when message truncation is needed."""
-⋮----
-# Fill the context with messages that will require truncation
-⋮----
-# Add several messages that will need truncation
-⋮----
-orig_msg_len = len(agent.message_history[1].content)
-⋮----
-# Check that early messages were truncated
-assert len(hist) == 8  # All messages still present
-⋮----
-# First user message truncated
-⋮----
-assert output_len >= MIN_OUTPUT_TOKENS  # At least min_output_tokens
-⋮----
-@pytest.fixture
-def agent_drop_turns()
-⋮----
-"""Create a ChatAgent with drop_turns strategy for testing."""
-⋮----
-def chat_context_length(self)
-⋮----
-def supports_functions_or_tools(self)
-⋮----
-def test_drop_turns_strategy(agent_drop_turns)
-⋮----
-"""Test when drop_turns strategy is used to handle context overflow."""
-agent = agent_drop_turns
-⋮----
-# Fill the context with messages that will require dropping turns
-⋮----
-# Add several complete turns that will need to be dropped
-⋮----
-orig_hist_len = len(agent.message_history)
-⋮----
-# Check that turns were dropped (fewer messages than original)
-⋮----
-# System message should still be present
-⋮----
-# The last user message should be present
-⋮----
-# Check alternating pattern is preserved
-⋮----
-def test_chat_num_tokens_counts_attachment_payload(agent)
-⋮----
-"""Test attachment payloads are included in chat token accounting."""
-model = "gemini/gemini-2.5-flash"
-⋮----
-attachment = FileAttachment.from_bytes(
-message = LLMMessage(
-⋮----
-expected_attachment_tokens = len(
-⋮----
-def test_attachment_payload_reduces_output_length()
-⋮----
-"""Test preflight shrinks output length when attachments consume context."""
-context_length = 1000
-max_output_tokens = 500
-min_output_tokens = 50
-⋮----
-user_input = ChatDocument(
-⋮----
-def test_drop_turns_preserves_last_turn(agent_drop_turns)
-⋮----
-"""Test that drop_turns preserves the system message and last turn."""
-⋮----
-# Set up history with multiple turns
-⋮----
-# Add turns with large content that will force dropping
-⋮----
-# Call the method with a final message
-⋮----
-# System message must be preserved
-⋮----
-# Last message must be the final user message
-⋮----
-# No message should contain "Contents truncated" (we drop, not truncate)
-⋮----
-def test_drop_turns_accounts_for_buffer()
-⋮----
-"""
-    Test that drop_turns loop accounts for CHAT_HISTORY_BUFFER.
-
-    This is a regression test for a P1 bug where the loop would exit when:
-        tokens <= context - min_output_tokens
-    But then output_len = context - tokens - CHAT_HISTORY_BUFFER could go
-    negative, causing spurious errors.
-
-    The fix ensures the loop continues until there's room for both
-    min_output_tokens AND CHAT_HISTORY_BUFFER.
-    """
-# CHAT_HISTORY_BUFFER is 300 in the code
-# We need to create a scenario where history is in the "danger zone":
-# between (context - min_output - buffer) and (context - min_output)
-#
-# With context=16000, min_output=50, buffer=300:
-# - Old buggy threshold: 16000 - 50 = 15950
-# - Fixed threshold: 16000 - 50 - 300 = 15650
-# - Danger zone: 15650 < tokens <= 15950
-⋮----
-system_message="S" * 100,  # 100 tokens
-⋮----
-# Create history that lands in the danger zone after some turns
-# System msg = 100 tokens
-# We want total around 15800-15900 tokens (in danger zone)
-# Add turns that will require the buffer-aware loop to drop them
-⋮----
-# Add turns: each turn is ~5000 tokens (USER 4980 + ASSISTANT 20)
-# 3 turns = ~15000 + system 100 = ~15100
-# Final message ~800 = ~15900 total (in danger zone)
-⋮----
-# This should NOT raise an error - the fix ensures we drop enough turns
-# to accommodate both min_output_tokens AND CHAT_HISTORY_BUFFER
-⋮----
-# output_len must be positive and at least min_output_tokens
-⋮----
-# History should have been compressed
-⋮----
-# ---------------------------------------------------------------------------
-# Regression tests for "missing" (None) vs "empty" ("") message content.
-⋮----
-# Gemini 3.x rejects (400 INVALID_ARGUMENT) an assistant turn that carries BOTH
-# a tool/function call AND non-empty text content. Langroid used to pad empty
-# content with a single space (" "), which tripped this on every tool-result
-# turn. Content is now carried faithfully: a response with no content becomes
-# LLMMessage.content=None (dropped from the wire), distinct from "".
-⋮----
-MODEL = "gpt-4o"
-⋮----
-def _tool_call()
-⋮----
-def test_api_dict_omits_content_for_tool_call_message()
-⋮----
-"""An assistant tool-call turn with no content omits `content` on the wire
-    (never emits " ", which Gemini 3.x rejects alongside a tool call)."""
-d = LLMMessage(
-⋮----
-def test_api_dict_omits_content_for_function_call_message()
-⋮----
-"""A legacy function-call-only turn also omits `content` on the wire."""
-function_call = LLMFunctionCall(
-⋮----
-def test_api_dict_pads_empty_message_without_tools()
-⋮----
-"""A message with empty content (None or "") and no tool/function call must
-    still send something, since some APIs (e.g. Gemini) reject an empty msg."""
-⋮----
-def test_api_dict_keeps_real_content()
-⋮----
-d = LLMMessage(role=Role.USER, content="hello").api_dict(MODEL)
-⋮----
-def test_missing_content_is_none_end_to_end()
-⋮----
-"""A tool-only LLM response (message=None) is carried faithfully as
-    content_is_none -> LLMMessage.content=None -> omitted from api_dict."""
-resp = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
-doc = ChatDocument.from_LLMResponse(resp)
-assert doc.content == ""  # ChatDocument.content stays a mandatory str
-⋮----
-msg = ChatDocument.to_LLMMessage(doc)[0]
-⋮----
-def test_empty_content_stays_empty_not_none()
-⋮----
-"""A present-but-empty response (message="") is distinct from missing:
-    it must NOT be coerced to None."""
-resp = LLMResponse(message="", oai_tool_calls=[_tool_call()])
-⋮----
-def test_none_content_round_trips_through_chatdocument()
-⋮----
-"""LLMMessage.content=None survives an LLMMessage -> ChatDocument ->
-    LLMMessage round-trip (history is rebuilt this way)."""
-original = LLMMessage(role=Role.ASSISTANT, content=None, tool_calls=[_tool_call()])
-doc = ChatDocument.from_LLMMessage(original)
-⋮----
-rebuilt = ChatDocument.to_LLMMessage(doc)[0]
-⋮----
-def test_prep_retains_fresh_tool_only_message(agent: ChatAgent) -> None
-⋮----
-"""History preparation retains a fresh call-only assistant turn."""
-doc = ChatDocument.from_LLMResponse(
-⋮----
-"""Rendering safely separates absent text from displayed tool-call data."""
-displayed: dict[str, object] = {}
-⋮----
-response = LLMResponse(message=None, oai_tool_calls=[_tool_call()])
-⋮----
-def test_none_content_is_safe_for_token_counting(agent)
-⋮----
-"""Token counting treats missing content as zero text tokens."""
-⋮----
-def test_truncate_tool_only_message_preserves_none(agent)
-⋮----
-"""Truncation must not add warning text alongside a tool call."""
-⋮----
-truncated = agent.truncate_message(-1)
-⋮----
-"""Truncation must preserve a present-but-empty result."""
-message = LLMMessage(role=role, content="", **identifying_field)
-⋮----
-original_payload = message.api_dict(MODEL)
-⋮----
-"""Blank results already retained by call payloads remain truncatable."""
-⋮----
-"""Malformed blank results remain truncation candidates."""
-⋮----
-"""Whitespace-only conversation messages remain truncation candidates."""
-content = " " * 10_000
-⋮----
-def test_content_is_none_overrides_populated_content_any()
-⋮----
-"""A call-only turn stays content=None even when content_any was populated
-    (e.g. by _load_output_format parsing the tool args under a strict
-    output_format). Otherwise the serialized args would be sent as assistant
-    text alongside tool_calls, which is the Gemini 3.x rejection this avoids."""
-doc = ChatDocument(
-⋮----
-# parsed structured output (tool args), NOT message text:
-⋮----
-def test_content_is_none_overrides_stale_text_after_serialization()
-⋮----
-"""The explicit missing-content flag wins after a hostile round-trip."""
-⋮----
-reloaded = ChatDocument.model_validate(doc.model_dump())
-⋮----
-msg = ChatDocument.to_LLMMessage(reloaded)[0]
-⋮----
-"""A tool result with genuinely empty content (e.g. a tool that succeeds
-    with no output) must stay in history and clear the pending tool call from
-    agent.oai_tool_calls, not get silently dropped (issue #1063). Before the
-    fix, the history filter kept a message only if it had non-empty content, a
-    function_call, or tool_calls -- none of which a TOOL-role result carries,
-    so an empty-content result was dropped and its call_id never reached
-    `done_tools`, leaving the call marked pending forever."""
-pending_call = _tool_call()
-⋮----
-tool_msgs = [m for m in hist if m.role == Role.TOOL]
-⋮----
-"""An empty legacy function result must stay in message history."""
-function_name = "check_weather"
-⋮----
-parent = ChatDocument(
-⋮----
-result = ChatDocument(
-⋮----
-function_msgs = [m for m in hist if m.role == Role.FUNCTION]
-⋮----
-"""An identified empty result completes only its matching pending call."""
-first_call = _tool_call()
-second_call = _tool_call()
-⋮----
-tool_messages = [message for message in hist if message.role == Role.TOOL]
-⋮----
-class RecordingMockLM(MockLM)
-⋮----
-"""Mock LM that records the messages supplied to its chat method."""
-⋮----
-def __init__(self, config: MockLMConfig) -> None
-⋮----
-"""Record messages before returning the configured local response."""
-⋮----
-def test_llm_response_sends_empty_tool_result_to_lm() -> None
-⋮----
-"""llm_response sends an empty correlated result and returns a document."""
-llm_config = MockLMConfig(default_response="tool result received")
-agent = ChatAgent(
-recording_llm = RecordingMockLM(llm_config)
-⋮----
-response = agent.llm_response(result)
-⋮----
-tool_messages = [
-⋮----
-def test_prep_drops_empty_tool_result_without_id(agent: ChatAgent) -> None
-⋮----
-"""An empty tool result without a correlation ID is malformed."""
-⋮----
-"""An empty function result without its function name is malformed."""
-function_call = LLMFunctionCall.model_construct(
-⋮----
-"""Malformed empty results are not valid history entries."""
-field = "tool_call_id" if role == Role.TOOL else "name"
-message = LLMMessage.model_construct(role=role, content="")
-⋮----
-"""Whitespace identifiers cannot complete or remove pending calls."""
-valid_call = _tool_call()
-⋮----
-malformed_call = _tool_call()
-⋮----
-malformed_function = LLMFunctionCall(
-⋮----
-pending_calls = list(agent.oai_tool_calls)
 </file>
 
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
@@ -71339,6 +71339,210 @@ user_response = Prompt.ask(
 answer = agent.llm_response(request)
 </file>
 
+<file path="langroid/language_models/model_info.py">
+logger = logging.getLogger(__name__)
+⋮----
+class ModelProvider(str, Enum)
+⋮----
+"""Enum for model providers"""
+⋮----
+OPENAI = "openai"
+ANTHROPIC = "anthropic"
+DEEPSEEK = "deepseek"
+GOOGLE = "google"
+MINIMAX = "minimax"
+UNKNOWN = "unknown"
+⋮----
+class ModelName(str, Enum)
+⋮----
+"""Parent class for all model name enums"""
+⋮----
+class OpenAIChatModel(ModelName)
+⋮----
+"""Enum for OpenAI Chat models"""
+⋮----
+GPT3_5_TURBO = "gpt-3.5-turbo"
+GPT4 = "gpt-4o"  # avoid deprecated gpt-4
+GPT4_TURBO = "gpt-4-turbo"
+GPT4o = "gpt-4o"
+GPT4o_MINI = "gpt-4o-mini"
+O1 = "o1"
+O1_MINI = "o1-mini"
+O3_MINI = "o3-mini"
+O3 = "o3"
+O4_MINI = "o4-mini"
+GPT4_1 = "gpt-4.1"
+GPT4_1_MINI = "gpt-4.1-mini"
+GPT4_1_NANO = "gpt-4.1-nano"
+GPT5 = "gpt-5"
+GPT5_MINI = "gpt-5-mini"
+GPT5_NANO = "gpt-5-nano"
+GPT5_PRO = "gpt-5-pro"
+GPT5_1 = "gpt-5.1"
+GPT5_1_CODEX = "gpt-5.1-codex"
+GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
+GPT5_1_CHAT = "gpt-5.1-chat"
+GPT5_2 = "gpt-5.2"
+GPT5_2_PRO = "gpt-5.2-pro"
+GPT5_2_CHAT = "gpt-5.2-chat"
+GPT_OSS_120b = "gpt-oss-120b"
+GPT_OSS_20b = "gpt-oss-20b"
+⋮----
+class OpenAICompletionModel(str, Enum)
+⋮----
+"""Enum for OpenAI Completion models"""
+⋮----
+DAVINCI = "davinci-002"
+BABBAGE = "babbage-002"
+⋮----
+class AnthropicModel(ModelName)
+⋮----
+"""Enum for Anthropic models"""
+⋮----
+CLAUDE_3_OPUS = "claude-3-opus-latest"
+CLAUDE_3_SONNET = "claude-3-sonnet-latest"
+CLAUDE_3_HAIKU = "claude-3-haiku-latest"
+CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
+CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
+CLAUDE_4_OPUS = "claude-opus-4"
+CLAUDE_4_SONNET = "claude-sonnet-4"
+CLAUDE_4_HAIKU = "claude-haiku-4"
+CLAUDE_4_5_OPUS = "claude-opus-4-5"
+CLAUDE_4_5_SONNET = "claude-sonnet-4-5"
+CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
+⋮----
+class DeepSeekModel(ModelName)
+⋮----
+"""Enum for DeepSeek models direct from DeepSeek API"""
+⋮----
+DEEPSEEK = "deepseek/deepseek-chat"
+DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
+OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
+⋮----
+class GeminiModel(ModelName)
+⋮----
+"""Enum for Gemini models"""
+⋮----
+GEMINI_1_5_FLASH = "gemini-1.5-flash"
+GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
+GEMINI_1_5_PRO = "gemini-1.5-pro"
+GEMINI_2_FLASH = "gemini-2.0-flash"
+GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
+GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
+GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
+GEMINI_2_5_FLASH = "gemini-2.5-flash"
+GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+GEMINI_2_5_PRO = "gemini-2.5-pro"
+GEMINI_3_FLASH = "gemini-3-flash"
+GEMINI_3_PRO = "gemini-3-pro"
+⋮----
+class MiniMaxModel(ModelName)
+⋮----
+"""Enum for MiniMax models"""
+⋮----
+MINIMAX_M2_7 = "MiniMax-M2.7"
+MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
+MINIMAX_M2_5 = "MiniMax-M2.5"
+MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
+MINIMAX_M2_1 = "MiniMax-M2.1"
+MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
+MINIMAX_M2 = "MiniMax-M2"
+⋮----
+class OpenAI_API_ParamInfo(BaseModel)
+⋮----
+"""
+    Parameters exclusive to some models, when using OpenAI API
+    """
+⋮----
+# model-specific params at top level
+params: Dict[str, List[str]] = dict(
+# model-specific params in extra_body
+extra_parameters: Dict[str, List[str]] = dict(
+⋮----
+class ModelInfo(BaseModel)
+⋮----
+"""
+    Consolidated information about LLM, related to capacity, cost and API
+    idiosyncrasies. Reasonable defaults for all params in case there's no
+    specific info available.
+    """
+⋮----
+name: str = "unknown"
+provider: ModelProvider = ModelProvider.UNKNOWN
+context_length: int = 16_000
+max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
+max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
+input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
+cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
+output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
+allows_streaming: bool = True  # Whether model supports streaming output
+allows_system_message: bool = True  # Whether model supports system messages
+rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
+unsupported_params: List[str] = []
+has_structured_output: bool = False  # Does model API support structured output?
+has_tools: bool = True  # Does model API support tools/function-calling?
+needs_first_user_message: bool = False  # Does API need first msg to be from user?
+description: Optional[str] = None
+⋮----
+GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
+DEFAULT_MODEL_INFO = ModelInfo()
+WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
+⋮----
+# Model information registry
+MODEL_INFO: Dict[str, ModelInfo] = {
+⋮----
+# OpenAI Models
+⋮----
+# Anthropic Models
+⋮----
+# DeepSeek Models
+⋮----
+# Gemini Models
+⋮----
+# Gemini 2.5 Models
+⋮----
+# Gemini 3 Models
+⋮----
+# MiniMax Models
+⋮----
+"""Get model information by name or enum value"""
+# Sequence of models to try, starting with the primary model
+models_to_try = [model] + fallback_models
+⋮----
+# Find the first model in the sequence that has info defined using next()
+# on a generator expression that filters out None results from _get_model_info
+found_info = next(
+⋮----
+None,  # Default value if the iterator is exhausted (no valid info found)
+⋮----
+normalized_models = _normalize_model_names(models_to_try)
+⋮----
+def _get_model_info(model: str | ModelName) -> ModelInfo | None
+⋮----
+def _normalize_model_names(models: List[str | ModelName]) -> List[str]
+⋮----
+normalized_models: List[str] = []
+seen: set[str] = set()
+⋮----
+normalized_model = _normalize_gemini_model_name(_model_name(model))
+⋮----
+def _normalize_gemini_model_name(model: str) -> str | None
+⋮----
+base_model = model.rsplit("/", 1)[-1]
+⋮----
+# Try stripping known suffixes to find a canonical name.
+# Use split (not endswith) for "-preview" so dated variants like
+# "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
+⋮----
+stripped = base_model.split(suffix, maxsplit=1)[0]
+⋮----
+def _warn_unknown_model(models: List[str | ModelName]) -> None
+⋮----
+model_names = tuple(_model_name(model) for model in models)
+⋮----
+def _model_name(model: str | ModelName) -> str
+</file>
+
 <file path="langroid/agent/chat_agent.py">
 console = Console()
 ⋮----
@@ -72542,210 +72746,6 @@ def __del__(self) -> None
 # Clients are now managed centrally in langroid.language_models.client_cache
 </file>
 
-<file path="langroid/language_models/model_info.py">
-logger = logging.getLogger(__name__)
-⋮----
-class ModelProvider(str, Enum)
-⋮----
-"""Enum for model providers"""
-⋮----
-OPENAI = "openai"
-ANTHROPIC = "anthropic"
-DEEPSEEK = "deepseek"
-GOOGLE = "google"
-MINIMAX = "minimax"
-UNKNOWN = "unknown"
-⋮----
-class ModelName(str, Enum)
-⋮----
-"""Parent class for all model name enums"""
-⋮----
-class OpenAIChatModel(ModelName)
-⋮----
-"""Enum for OpenAI Chat models"""
-⋮----
-GPT3_5_TURBO = "gpt-3.5-turbo"
-GPT4 = "gpt-4o"  # avoid deprecated gpt-4
-GPT4_TURBO = "gpt-4-turbo"
-GPT4o = "gpt-4o"
-GPT4o_MINI = "gpt-4o-mini"
-O1 = "o1"
-O1_MINI = "o1-mini"
-O3_MINI = "o3-mini"
-O3 = "o3"
-O4_MINI = "o4-mini"
-GPT4_1 = "gpt-4.1"
-GPT4_1_MINI = "gpt-4.1-mini"
-GPT4_1_NANO = "gpt-4.1-nano"
-GPT5 = "gpt-5"
-GPT5_MINI = "gpt-5-mini"
-GPT5_NANO = "gpt-5-nano"
-GPT5_PRO = "gpt-5-pro"
-GPT5_1 = "gpt-5.1"
-GPT5_1_CODEX = "gpt-5.1-codex"
-GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
-GPT5_1_CHAT = "gpt-5.1-chat"
-GPT5_2 = "gpt-5.2"
-GPT5_2_PRO = "gpt-5.2-pro"
-GPT5_2_CHAT = "gpt-5.2-chat"
-GPT_OSS_120b = "gpt-oss-120b"
-GPT_OSS_20b = "gpt-oss-20b"
-⋮----
-class OpenAICompletionModel(str, Enum)
-⋮----
-"""Enum for OpenAI Completion models"""
-⋮----
-DAVINCI = "davinci-002"
-BABBAGE = "babbage-002"
-⋮----
-class AnthropicModel(ModelName)
-⋮----
-"""Enum for Anthropic models"""
-⋮----
-CLAUDE_3_OPUS = "claude-3-opus-latest"
-CLAUDE_3_SONNET = "claude-3-sonnet-latest"
-CLAUDE_3_HAIKU = "claude-3-haiku-latest"
-CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
-CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
-CLAUDE_4_OPUS = "claude-opus-4"
-CLAUDE_4_SONNET = "claude-sonnet-4"
-CLAUDE_4_HAIKU = "claude-haiku-4"
-CLAUDE_4_5_OPUS = "claude-opus-4-5"
-CLAUDE_4_5_SONNET = "claude-sonnet-4-5"
-CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
-⋮----
-class DeepSeekModel(ModelName)
-⋮----
-"""Enum for DeepSeek models direct from DeepSeek API"""
-⋮----
-DEEPSEEK = "deepseek/deepseek-chat"
-DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
-OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
-⋮----
-class GeminiModel(ModelName)
-⋮----
-"""Enum for Gemini models"""
-⋮----
-GEMINI_1_5_FLASH = "gemini-1.5-flash"
-GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
-GEMINI_1_5_PRO = "gemini-1.5-pro"
-GEMINI_2_FLASH = "gemini-2.0-flash"
-GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
-GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
-GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
-GEMINI_2_5_FLASH = "gemini-2.5-flash"
-GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
-GEMINI_2_5_PRO = "gemini-2.5-pro"
-GEMINI_3_FLASH = "gemini-3-flash"
-GEMINI_3_PRO = "gemini-3-pro"
-⋮----
-class MiniMaxModel(ModelName)
-⋮----
-"""Enum for MiniMax models"""
-⋮----
-MINIMAX_M2_7 = "MiniMax-M2.7"
-MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
-MINIMAX_M2_5 = "MiniMax-M2.5"
-MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
-MINIMAX_M2_1 = "MiniMax-M2.1"
-MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
-MINIMAX_M2 = "MiniMax-M2"
-⋮----
-class OpenAI_API_ParamInfo(BaseModel)
-⋮----
-"""
-    Parameters exclusive to some models, when using OpenAI API
-    """
-⋮----
-# model-specific params at top level
-params: Dict[str, List[str]] = dict(
-# model-specific params in extra_body
-extra_parameters: Dict[str, List[str]] = dict(
-⋮----
-class ModelInfo(BaseModel)
-⋮----
-"""
-    Consolidated information about LLM, related to capacity, cost and API
-    idiosyncrasies. Reasonable defaults for all params in case there's no
-    specific info available.
-    """
-⋮----
-name: str = "unknown"
-provider: ModelProvider = ModelProvider.UNKNOWN
-context_length: int = 16_000
-max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
-max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
-input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
-cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
-output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
-allows_streaming: bool = True  # Whether model supports streaming output
-allows_system_message: bool = True  # Whether model supports system messages
-rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
-unsupported_params: List[str] = []
-has_structured_output: bool = False  # Does model API support structured output?
-has_tools: bool = True  # Does model API support tools/function-calling?
-needs_first_user_message: bool = False  # Does API need first msg to be from user?
-description: Optional[str] = None
-⋮----
-GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
-DEFAULT_MODEL_INFO = ModelInfo()
-WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
-⋮----
-# Model information registry
-MODEL_INFO: Dict[str, ModelInfo] = {
-⋮----
-# OpenAI Models
-⋮----
-# Anthropic Models
-⋮----
-# DeepSeek Models
-⋮----
-# Gemini Models
-⋮----
-# Gemini 2.5 Models
-⋮----
-# Gemini 3 Models
-⋮----
-# MiniMax Models
-⋮----
-"""Get model information by name or enum value"""
-# Sequence of models to try, starting with the primary model
-models_to_try = [model] + fallback_models
-⋮----
-# Find the first model in the sequence that has info defined using next()
-# on a generator expression that filters out None results from _get_model_info
-found_info = next(
-⋮----
-None,  # Default value if the iterator is exhausted (no valid info found)
-⋮----
-normalized_models = _normalize_model_names(models_to_try)
-⋮----
-def _get_model_info(model: str | ModelName) -> ModelInfo | None
-⋮----
-def _normalize_model_names(models: List[str | ModelName]) -> List[str]
-⋮----
-normalized_models: List[str] = []
-seen: set[str] = set()
-⋮----
-normalized_model = _normalize_gemini_model_name(_model_name(model))
-⋮----
-def _normalize_gemini_model_name(model: str) -> str | None
-⋮----
-base_model = model.rsplit("/", 1)[-1]
-⋮----
-# Try stripping known suffixes to find a canonical name.
-# Use split (not endswith) for "-preview" so dated variants like
-# "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
-⋮----
-stripped = base_model.split(suffix, maxsplit=1)[0]
-⋮----
-def _warn_unknown_model(models: List[str | ModelName]) -> None
-⋮----
-model_names = tuple(_model_name(model) for model in models)
-⋮----
-def _model_name(model: str | ModelName) -> str
-</file>
-
 <file path="langroid/language_models/openai_gpt.py">
 OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
 ⋮----
@@ -73841,7 +73841,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>

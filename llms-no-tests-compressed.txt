@@ -40698,6 +40698,97 @@ self.api_base = self.config.api_base or GEMINI_BASE_URL
 ```
 </file>
 
+<file path="PR_REVIEW_975.md">
+# PR #975 Review: Remove traceback from OpenAI API error logs
+
+**Author:** alexagr
+**Branch:** `api_error_log` → `main`
+**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
+
+## Summary
+
+This PR adds `except openai.APIError` handlers before the generic `except Exception`
+blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
+and `achat`. The intent is to log API errors cleanly (without a full traceback) since
+server-side errors don't benefit from a local stack trace.
+
+The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
+produces multi-line stack traces for every OpenAI API error. For authentication
+failures, bad requests, and similar server-side errors these tracebacks are noisy and
+provide no diagnostic value.
+
+## Issues
+
+### 1. `openai.APIError` is too broad — catches connection and timeout errors too
+
+`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
+
+```
+openai.APIError
+├── openai.APIConnectionError    ← network/local issues
+│   └── openai.APITimeoutError   ← timeout issues
+└── openai.APIStatusError        ← HTTP status errors from the API server
+    ├── openai.BadRequestError (400)
+    ├── openai.AuthenticationError (401)
+    ├── openai.PermissionDeniedError (403)
+    ├── openai.NotFoundError (404)
+    ├── openai.UnprocessableEntityError (422)
+    ├── openai.RateLimitError (429)
+    └── openai.InternalServerError (>=500)
+```
+
+The PR description correctly identifies that server-side errors (AuthenticationError,
+BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
+and `APITimeoutError` **are** related to the local environment (network configuration,
+DNS, proxy issues), where a traceback **could** help diagnose the problem.
+
+**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
+captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
+while letting connection/timeout errors fall through to the `except Exception` handler
+where `friendly_error()` provides the full traceback.
+
+### 2. `raise e` vs bare `raise`
+
+The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
+`raise` preserves the original traceback chain. This is consistent with the existing
+code (the `except Exception` blocks also use `raise e`), but `raise` is generally
+preferred — especially since callers higher up the stack may want the full traceback
+context even if the log message omits it.
+
+This is a minor style point and not a blocker — it could be a separate cleanup across
+the file.
+
+### 3. Log level consideration
+
+Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
+(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
+a transient condition. That said, by the time the error reaches this outer handler the
+retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
+
+Not a blocker.
+
+## Suggested Change
+
+Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
+
+```python
+except openai.APIStatusError as e:
+    logging.error(f"API error in OpenAIGPT.generate: {e}")
+    raise e
+```
+
+## Verdict
+
+The change addresses a real usability issue — excessively noisy tracebacks for
+server-side API errors. With the suggested narrowing from `APIError` to
+`APIStatusError`, this would be a clean, well-targeted improvement. The code is
+consistent with existing patterns and correctly placed before the generic exception
+handlers.
+
+**Recommendation: Request changes** — use `openai.APIStatusError` instead of
+`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
+</file>
+
 <file path="pytest.ini">
 [pytest]
 markers =
@@ -47750,97 +47841,6 @@ is an ongoing PR, just push to github again and the PR will be updated.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
 Read more [here](docs/development/github-cli.md).
-</file>
-
-<file path="PR_REVIEW_975.md">
-# PR #975 Review: Remove traceback from OpenAI API error logs
-
-**Author:** alexagr
-**Branch:** `api_error_log` → `main`
-**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
-
-## Summary
-
-This PR adds `except openai.APIError` handlers before the generic `except Exception`
-blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
-and `achat`. The intent is to log API errors cleanly (without a full traceback) since
-server-side errors don't benefit from a local stack trace.
-
-The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
-produces multi-line stack traces for every OpenAI API error. For authentication
-failures, bad requests, and similar server-side errors these tracebacks are noisy and
-provide no diagnostic value.
-
-## Issues
-
-### 1. `openai.APIError` is too broad — catches connection and timeout errors too
-
-`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
-
-```
-openai.APIError
-├── openai.APIConnectionError    ← network/local issues
-│   └── openai.APITimeoutError   ← timeout issues
-└── openai.APIStatusError        ← HTTP status errors from the API server
-    ├── openai.BadRequestError (400)
-    ├── openai.AuthenticationError (401)
-    ├── openai.PermissionDeniedError (403)
-    ├── openai.NotFoundError (404)
-    ├── openai.UnprocessableEntityError (422)
-    ├── openai.RateLimitError (429)
-    └── openai.InternalServerError (>=500)
-```
-
-The PR description correctly identifies that server-side errors (AuthenticationError,
-BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
-and `APITimeoutError` **are** related to the local environment (network configuration,
-DNS, proxy issues), where a traceback **could** help diagnose the problem.
-
-**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
-captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
-while letting connection/timeout errors fall through to the `except Exception` handler
-where `friendly_error()` provides the full traceback.
-
-### 2. `raise e` vs bare `raise`
-
-The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
-`raise` preserves the original traceback chain. This is consistent with the existing
-code (the `except Exception` blocks also use `raise e`), but `raise` is generally
-preferred — especially since callers higher up the stack may want the full traceback
-context even if the log message omits it.
-
-This is a minor style point and not a blocker — it could be a separate cleanup across
-the file.
-
-### 3. Log level consideration
-
-Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
-(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
-a transient condition. That said, by the time the error reaches this outer handler the
-retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
-
-Not a blocker.
-
-## Suggested Change
-
-Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
-
-```python
-except openai.APIStatusError as e:
-    logging.error(f"API error in OpenAIGPT.generate: {e}")
-    raise e
-```
-
-## Verdict
-
-The change addresses a real usability issue — excessively noisy tracebacks for
-server-side API errors. With the suggested narrowing from `APIError` to
-`APIStatusError`, this would be a clean, well-targeted improvement. The code is
-consistent with existing patterns and correctly placed before the generic exception
-handlers.
-
-**Recommendation: Request changes** — use `openai.APIStatusError` instead of
-`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
 </file>
 
 <file path="docs/notes/context-overflow.md">
@@ -56423,6 +56423,210 @@ user_response = Prompt.ask(
 answer = agent.llm_response(request)
 </file>
 
+<file path="langroid/language_models/model_info.py">
+logger = logging.getLogger(__name__)
+⋮----
+class ModelProvider(str, Enum)
+⋮----
+"""Enum for model providers"""
+⋮----
+OPENAI = "openai"
+ANTHROPIC = "anthropic"
+DEEPSEEK = "deepseek"
+GOOGLE = "google"
+MINIMAX = "minimax"
+UNKNOWN = "unknown"
+⋮----
+class ModelName(str, Enum)
+⋮----
+"""Parent class for all model name enums"""
+⋮----
+class OpenAIChatModel(ModelName)
+⋮----
+"""Enum for OpenAI Chat models"""
+⋮----
+GPT3_5_TURBO = "gpt-3.5-turbo"
+GPT4 = "gpt-4o"  # avoid deprecated gpt-4
+GPT4_TURBO = "gpt-4-turbo"
+GPT4o = "gpt-4o"
+GPT4o_MINI = "gpt-4o-mini"
+O1 = "o1"
+O1_MINI = "o1-mini"
+O3_MINI = "o3-mini"
+O3 = "o3"
+O4_MINI = "o4-mini"
+GPT4_1 = "gpt-4.1"
+GPT4_1_MINI = "gpt-4.1-mini"
+GPT4_1_NANO = "gpt-4.1-nano"
+GPT5 = "gpt-5"
+GPT5_MINI = "gpt-5-mini"
+GPT5_NANO = "gpt-5-nano"
+GPT5_PRO = "gpt-5-pro"
+GPT5_1 = "gpt-5.1"
+GPT5_1_CODEX = "gpt-5.1-codex"
+GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
+GPT5_1_CHAT = "gpt-5.1-chat"
+GPT5_2 = "gpt-5.2"
+GPT5_2_PRO = "gpt-5.2-pro"
+GPT5_2_CHAT = "gpt-5.2-chat"
+GPT_OSS_120b = "gpt-oss-120b"
+GPT_OSS_20b = "gpt-oss-20b"
+⋮----
+class OpenAICompletionModel(str, Enum)
+⋮----
+"""Enum for OpenAI Completion models"""
+⋮----
+DAVINCI = "davinci-002"
+BABBAGE = "babbage-002"
+⋮----
+class AnthropicModel(ModelName)
+⋮----
+"""Enum for Anthropic models"""
+⋮----
+CLAUDE_3_OPUS = "claude-3-opus-latest"
+CLAUDE_3_SONNET = "claude-3-sonnet-latest"
+CLAUDE_3_HAIKU = "claude-3-haiku-latest"
+CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
+CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
+CLAUDE_4_OPUS = "claude-opus-4"
+CLAUDE_4_SONNET = "claude-sonnet-4"
+CLAUDE_4_HAIKU = "claude-haiku-4"
+CLAUDE_4_5_OPUS = "claude-opus-4-5"
+CLAUDE_4_5_SONNET = "claude-sonnet-4-5"
+CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
+⋮----
+class DeepSeekModel(ModelName)
+⋮----
+"""Enum for DeepSeek models direct from DeepSeek API"""
+⋮----
+DEEPSEEK = "deepseek/deepseek-chat"
+DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
+OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
+⋮----
+class GeminiModel(ModelName)
+⋮----
+"""Enum for Gemini models"""
+⋮----
+GEMINI_1_5_FLASH = "gemini-1.5-flash"
+GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
+GEMINI_1_5_PRO = "gemini-1.5-pro"
+GEMINI_2_FLASH = "gemini-2.0-flash"
+GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
+GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
+GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
+GEMINI_2_5_FLASH = "gemini-2.5-flash"
+GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+GEMINI_2_5_PRO = "gemini-2.5-pro"
+GEMINI_3_FLASH = "gemini-3-flash"
+GEMINI_3_PRO = "gemini-3-pro"
+⋮----
+class MiniMaxModel(ModelName)
+⋮----
+"""Enum for MiniMax models"""
+⋮----
+MINIMAX_M2_7 = "MiniMax-M2.7"
+MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
+MINIMAX_M2_5 = "MiniMax-M2.5"
+MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
+MINIMAX_M2_1 = "MiniMax-M2.1"
+MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
+MINIMAX_M2 = "MiniMax-M2"
+⋮----
+class OpenAI_API_ParamInfo(BaseModel)
+⋮----
+"""
+    Parameters exclusive to some models, when using OpenAI API
+    """
+⋮----
+# model-specific params at top level
+params: Dict[str, List[str]] = dict(
+# model-specific params in extra_body
+extra_parameters: Dict[str, List[str]] = dict(
+⋮----
+class ModelInfo(BaseModel)
+⋮----
+"""
+    Consolidated information about LLM, related to capacity, cost and API
+    idiosyncrasies. Reasonable defaults for all params in case there's no
+    specific info available.
+    """
+⋮----
+name: str = "unknown"
+provider: ModelProvider = ModelProvider.UNKNOWN
+context_length: int = 16_000
+max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
+max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
+input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
+cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
+output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
+allows_streaming: bool = True  # Whether model supports streaming output
+allows_system_message: bool = True  # Whether model supports system messages
+rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
+unsupported_params: List[str] = []
+has_structured_output: bool = False  # Does model API support structured output?
+has_tools: bool = True  # Does model API support tools/function-calling?
+needs_first_user_message: bool = False  # Does API need first msg to be from user?
+description: Optional[str] = None
+⋮----
+GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
+DEFAULT_MODEL_INFO = ModelInfo()
+WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
+⋮----
+# Model information registry
+MODEL_INFO: Dict[str, ModelInfo] = {
+⋮----
+# OpenAI Models
+⋮----
+# Anthropic Models
+⋮----
+# DeepSeek Models
+⋮----
+# Gemini Models
+⋮----
+# Gemini 2.5 Models
+⋮----
+# Gemini 3 Models
+⋮----
+# MiniMax Models
+⋮----
+"""Get model information by name or enum value"""
+# Sequence of models to try, starting with the primary model
+models_to_try = [model] + fallback_models
+⋮----
+# Find the first model in the sequence that has info defined using next()
+# on a generator expression that filters out None results from _get_model_info
+found_info = next(
+⋮----
+None,  # Default value if the iterator is exhausted (no valid info found)
+⋮----
+normalized_models = _normalize_model_names(models_to_try)
+⋮----
+def _get_model_info(model: str | ModelName) -> ModelInfo | None
+⋮----
+def _normalize_model_names(models: List[str | ModelName]) -> List[str]
+⋮----
+normalized_models: List[str] = []
+seen: set[str] = set()
+⋮----
+normalized_model = _normalize_gemini_model_name(_model_name(model))
+⋮----
+def _normalize_gemini_model_name(model: str) -> str | None
+⋮----
+base_model = model.rsplit("/", 1)[-1]
+⋮----
+# Try stripping known suffixes to find a canonical name.
+# Use split (not endswith) for "-preview" so dated variants like
+# "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
+⋮----
+stripped = base_model.split(suffix, maxsplit=1)[0]
+⋮----
+def _warn_unknown_model(models: List[str | ModelName]) -> None
+⋮----
+model_names = tuple(_model_name(model) for model in models)
+⋮----
+def _model_name(model: str | ModelName) -> str
+</file>
+
 <file path="langroid/agent/chat_agent.py">
 console = Console()
 ⋮----
@@ -57626,210 +57830,6 @@ def __del__(self) -> None
 # Clients are now managed centrally in langroid.language_models.client_cache
 </file>
 
-<file path="langroid/language_models/model_info.py">
-logger = logging.getLogger(__name__)
-⋮----
-class ModelProvider(str, Enum)
-⋮----
-"""Enum for model providers"""
-⋮----
-OPENAI = "openai"
-ANTHROPIC = "anthropic"
-DEEPSEEK = "deepseek"
-GOOGLE = "google"
-MINIMAX = "minimax"
-UNKNOWN = "unknown"
-⋮----
-class ModelName(str, Enum)
-⋮----
-"""Parent class for all model name enums"""
-⋮----
-class OpenAIChatModel(ModelName)
-⋮----
-"""Enum for OpenAI Chat models"""
-⋮----
-GPT3_5_TURBO = "gpt-3.5-turbo"
-GPT4 = "gpt-4o"  # avoid deprecated gpt-4
-GPT4_TURBO = "gpt-4-turbo"
-GPT4o = "gpt-4o"
-GPT4o_MINI = "gpt-4o-mini"
-O1 = "o1"
-O1_MINI = "o1-mini"
-O3_MINI = "o3-mini"
-O3 = "o3"
-O4_MINI = "o4-mini"
-GPT4_1 = "gpt-4.1"
-GPT4_1_MINI = "gpt-4.1-mini"
-GPT4_1_NANO = "gpt-4.1-nano"
-GPT5 = "gpt-5"
-GPT5_MINI = "gpt-5-mini"
-GPT5_NANO = "gpt-5-nano"
-GPT5_PRO = "gpt-5-pro"
-GPT5_1 = "gpt-5.1"
-GPT5_1_CODEX = "gpt-5.1-codex"
-GPT5_1_CODEX_MINI = "gpt-5.1-codex-mini"
-GPT5_1_CHAT = "gpt-5.1-chat"
-GPT5_2 = "gpt-5.2"
-GPT5_2_PRO = "gpt-5.2-pro"
-GPT5_2_CHAT = "gpt-5.2-chat"
-GPT_OSS_120b = "gpt-oss-120b"
-GPT_OSS_20b = "gpt-oss-20b"
-⋮----
-class OpenAICompletionModel(str, Enum)
-⋮----
-"""Enum for OpenAI Completion models"""
-⋮----
-DAVINCI = "davinci-002"
-BABBAGE = "babbage-002"
-⋮----
-class AnthropicModel(ModelName)
-⋮----
-"""Enum for Anthropic models"""
-⋮----
-CLAUDE_3_OPUS = "claude-3-opus-latest"
-CLAUDE_3_SONNET = "claude-3-sonnet-latest"
-CLAUDE_3_HAIKU = "claude-3-haiku-latest"
-CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
-CLAUDE_3_7_SONNET = "claude-3-7-sonnet-latest"
-CLAUDE_4_OPUS = "claude-opus-4"
-CLAUDE_4_SONNET = "claude-sonnet-4"
-CLAUDE_4_HAIKU = "claude-haiku-4"
-CLAUDE_4_5_OPUS = "claude-opus-4-5"
-CLAUDE_4_5_SONNET = "claude-sonnet-4-5"
-CLAUDE_4_5_HAIKU = "claude-haiku-4-5"
-⋮----
-class DeepSeekModel(ModelName)
-⋮----
-"""Enum for DeepSeek models direct from DeepSeek API"""
-⋮----
-DEEPSEEK = "deepseek/deepseek-chat"
-DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
-OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
-⋮----
-class GeminiModel(ModelName)
-⋮----
-"""Enum for Gemini models"""
-⋮----
-GEMINI_1_5_FLASH = "gemini-1.5-flash"
-GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
-GEMINI_1_5_PRO = "gemini-1.5-pro"
-GEMINI_2_FLASH = "gemini-2.0-flash"
-GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite"
-GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
-GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
-GEMINI_2_5_FLASH = "gemini-2.5-flash"
-GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
-GEMINI_2_5_PRO = "gemini-2.5-pro"
-GEMINI_3_FLASH = "gemini-3-flash"
-GEMINI_3_PRO = "gemini-3-pro"
-⋮----
-class MiniMaxModel(ModelName)
-⋮----
-"""Enum for MiniMax models"""
-⋮----
-MINIMAX_M2_7 = "MiniMax-M2.7"
-MINIMAX_M2_7_HIGHSPEED = "MiniMax-M2.7-highspeed"
-MINIMAX_M2_5 = "MiniMax-M2.5"
-MINIMAX_M2_5_HIGHSPEED = "MiniMax-M2.5-highspeed"
-MINIMAX_M2_1 = "MiniMax-M2.1"
-MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
-MINIMAX_M2 = "MiniMax-M2"
-⋮----
-class OpenAI_API_ParamInfo(BaseModel)
-⋮----
-"""
-    Parameters exclusive to some models, when using OpenAI API
-    """
-⋮----
-# model-specific params at top level
-params: Dict[str, List[str]] = dict(
-# model-specific params in extra_body
-extra_parameters: Dict[str, List[str]] = dict(
-⋮----
-class ModelInfo(BaseModel)
-⋮----
-"""
-    Consolidated information about LLM, related to capacity, cost and API
-    idiosyncrasies. Reasonable defaults for all params in case there's no
-    specific info available.
-    """
-⋮----
-name: str = "unknown"
-provider: ModelProvider = ModelProvider.UNKNOWN
-context_length: int = 16_000
-max_cot_tokens: int = 0  # max chain of thought (thinking) tokens where applicable
-max_output_tokens: int = 8192  # Maximum number of output tokens - model dependent
-input_cost_per_million: float = 0.0  # Cost in USD per million input tokens
-cached_cost_per_million: float = 0.0  # Cost in USD per million cached tokens
-output_cost_per_million: float = 0.0  # Cost in USD per million output tokens
-allows_streaming: bool = True  # Whether model supports streaming output
-allows_system_message: bool = True  # Whether model supports system messages
-rename_params: Dict[str, str] = {}  # Rename parameters for OpenAI API
-unsupported_params: List[str] = []
-has_structured_output: bool = False  # Does model API support structured output?
-has_tools: bool = True  # Does model API support tools/function-calling?
-needs_first_user_message: bool = False  # Does API need first msg to be from user?
-description: Optional[str] = None
-⋮----
-GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
-DEFAULT_MODEL_INFO = ModelInfo()
-WARNED_UNKNOWN_MODELS: set[tuple[str, ...]] = set()
-⋮----
-# Model information registry
-MODEL_INFO: Dict[str, ModelInfo] = {
-⋮----
-# OpenAI Models
-⋮----
-# Anthropic Models
-⋮----
-# DeepSeek Models
-⋮----
-# Gemini Models
-⋮----
-# Gemini 2.5 Models
-⋮----
-# Gemini 3 Models
-⋮----
-# MiniMax Models
-⋮----
-"""Get model information by name or enum value"""
-# Sequence of models to try, starting with the primary model
-models_to_try = [model] + fallback_models
-⋮----
-# Find the first model in the sequence that has info defined using next()
-# on a generator expression that filters out None results from _get_model_info
-found_info = next(
-⋮----
-None,  # Default value if the iterator is exhausted (no valid info found)
-⋮----
-normalized_models = _normalize_model_names(models_to_try)
-⋮----
-def _get_model_info(model: str | ModelName) -> ModelInfo | None
-⋮----
-def _normalize_model_names(models: List[str | ModelName]) -> List[str]
-⋮----
-normalized_models: List[str] = []
-seen: set[str] = set()
-⋮----
-normalized_model = _normalize_gemini_model_name(_model_name(model))
-⋮----
-def _normalize_gemini_model_name(model: str) -> str | None
-⋮----
-base_model = model.rsplit("/", 1)[-1]
-⋮----
-# Try stripping known suffixes to find a canonical name.
-# Use split (not endswith) for "-preview" so dated variants like
-# "gemini-2.5-flash-lite-preview-06-17" are handled correctly.
-⋮----
-stripped = base_model.split(suffix, maxsplit=1)[0]
-⋮----
-def _warn_unknown_model(models: List[str | ModelName]) -> None
-⋮----
-model_names = tuple(_model_name(model) for model in models)
-⋮----
-def _model_name(model: str | ModelName) -> str
-</file>
-
 <file path="langroid/language_models/openai_gpt.py">
 OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
 ⋮----
@@ -58925,7 +58925,7 @@ cached, hashed_key, response = await self._achat_completions_with_backoff(  # ty
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>
