@@ -608,6 +608,76 @@ def test_gemini_api_base():
             os.environ["GEMINI_API_BASE"] = saved_gemini_api_base
 
 
+def test_gemini_google_prefix(monkeypatch):
+    """`google/`-prefixed Gemini models route to the Gemini API (issue #995)."""
+    from langroid.language_models.openai_gpt import GEMINI_BASE_URL
+
+    monkeypatch.setattr(settings, "chat_model", "")
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("GEMINI_API_BASE", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
+
+    for chat_model in ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"):
+        llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=chat_model))
+        assert llm.is_gemini
+        assert llm.config.chat_model == "gemini-2.0-flash"
+        assert llm.api_base == GEMINI_BASE_URL
+        assert llm.api_key == "gemini-key"
+
+
+@pytest.mark.parametrize(
+    "chat_model",
+    ("google/gemma-3-27b-it", "google/text-bison-001"),
+)
+def test_non_gemini_google_model_is_not_rerouted(monkeypatch, chat_model):
+    """Non-Gemini Google models retain caller routing and credentials."""
+    monkeypatch.setattr(settings, "chat_model", "")
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("GEMINI_API_BASE", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "ambient-gemini-key")
+    caller_api_key = "caller-api-key"
+
+    llm = lm.OpenAIGPT(
+        lm.OpenAIGPTConfig(chat_model=chat_model, api_key=caller_api_key)
+    )
+
+    assert not llm.is_gemini
+    assert llm.config.chat_model == chat_model
+    assert llm.api_base is None
+    assert llm.api_key == caller_api_key
+
+
+@pytest.mark.parametrize(
+    "chat_model",
+    ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"),
+)
+@pytest.mark.parametrize(
+    "openai_api_base, explicit_api_base",
+    (
+        ("https://openai-env.example/v1", "https://caller.example/v1"),
+        ("https://shared.example/v1", "https://shared.example/v1"),
+    ),
+)
+def test_gemini_alias_preserves_explicit_api_base(
+    monkeypatch, chat_model, openai_api_base, explicit_api_base
+):
+    """Gemini aliases retain an explicitly configured API base."""
+    monkeypatch.setattr(settings, "chat_model", "")
+    monkeypatch.setenv("OPENAI_API_BASE", openai_api_base)
+    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
+
+    llm = lm.OpenAIGPT(
+        lm.OpenAIGPTConfig(
+            chat_model=chat_model,
+            api_base=explicit_api_base,
+        )
+    )
+
+    assert llm.is_gemini
+    assert llm.api_base == explicit_api_base
+
+
 def test_followup_standalone():
     """Test that followup_to_standalone works."""
 

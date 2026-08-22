@@ -97,6 +97,8 @@ else:
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+# Provider prefixes that route to the Gemini OpenAI-compatible API.
+GEMINI_MODEL_PREFIXES = ("gemini/", "google/gemini-")
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 OLLAMA_API_KEY = "ollama"
@@ -305,8 +307,10 @@ class OpenAIGPTConfig(LLMConfig):
     )
     http_verify_ssl: bool = True  # Simple flag for SSL verification
     http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
+    _api_base_was_supplied: bool = False
 
     def __init__(self, **kwargs) -> None:  # type: ignore
+        api_base_was_supplied = "api_base" in kwargs
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
         chat_model = kwargs.get("chat_model", "")
@@ -330,6 +334,7 @@ class OpenAIGPTConfig(LLMConfig):
             kwargs["run_on_first_use"] = with_warning
 
         super().__init__(**kwargs)
+        self._api_base_was_supplied = api_base_was_supplied
 
     model_config = SettingsConfigDict(env_prefix="OPENAI_")
 
@@ -620,21 +625,15 @@ class OpenAIGPT(LanguageModel):
                     self.api_key = self.config.litellm_proxy.api_key or self.api_key
                 self.api_base = self.config.litellm_proxy.api_base or self.api_base
             elif self.is_gemini:
-                self.config.chat_model = self.config.chat_model.replace("gemini/", "")
+                self.config.chat_model = self.config.chat_model.split("/", 1)[1]
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
-                # Use GEMINI_API_BASE env var if set (e.g. for Vertex AI),
-                # then config.api_base only if explicitly set by the user
-                # (not inherited from OPENAI_API_BASE via env_prefix),
-                # then fall back to the default Gemini endpoint.
+                # Prefer caller config, then Gemini env, then the default.
                 gemini_api_base = os.getenv("GEMINI_API_BASE", "")
-                openai_api_base = os.getenv("OPENAI_API_BASE")
                 explicit_api_base = (
-                    self.config.api_base
-                    if self.config.api_base and self.config.api_base != openai_api_base
-                    else None
+                    self.config.api_base if self.config._api_base_was_supplied else None
                 )
-                self.api_base = gemini_api_base or explicit_api_base or GEMINI_BASE_URL
+                self.api_base = explicit_api_base or gemini_api_base or GEMINI_BASE_URL
             elif self.is_glhf:
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
                 if self.api_key == OPENAI_API_KEY:
@@ -886,7 +885,7 @@ class OpenAIGPT(LanguageModel):
 
     def is_gemini_model(self) -> bool:
         """Are we using the gemini OpenAI-compatible API?"""
-        return self.chat_model_orig.startswith("gemini/")
+        return self.chat_model_orig.startswith(GEMINI_MODEL_PREFIXES)
 
     def is_deepseek_model(self) -> bool:
         deepseek_models = [e.value for e in DeepSeekModel]
