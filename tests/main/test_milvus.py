@@ -12,7 +12,16 @@ from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document, Embeddings
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.milvusdb import MilvusDB, MilvusDBConfig
-from tests.main.test_vector_stores import MyDoc, MyDocMetaData
+
+
+class MyDocMetaData(DocMetaData):
+    id: str
+
+
+class MyDoc(Document):
+    content: str
+    metadata: MyDocMetaData
+    category: str = ""
 
 
 class DeterministicEmbeddingModel(EmbeddingModel):
