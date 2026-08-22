@@ -132,8 +132,12 @@ def set_env(settings_instance: BaseSettings) -> None:
     """
     Set environment variables from a BaseSettings instance.
 
-    Each field in the settings is written to os.environ.
+    Each field in the settings is written to os.environ, under the name
+    the settings class itself reads: `<env_prefix><FIELD_NAME_UPPER>`,
+    or the field's explicit alias (which, per pydantic-settings
+    semantics, is the full env name and is not prefixed).
     """
+    env_prefix = settings_instance.model_config.get("env_prefix", "")
     for field_name, field in settings_instance.__class__.model_fields.items():
-        env_var_name = field.alias or field_name.upper()
+        env_var_name = field.alias or f"{env_prefix}{field_name.upper()}"
         os.environ[env_var_name] = str(settings_instance.model_dump()[field_name])

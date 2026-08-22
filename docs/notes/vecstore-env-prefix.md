@@ -51,11 +51,14 @@ However, pydantic inherits `model_config`, so a third-party subclass
 of `VectorStoreConfig` that does not set its own `env_prefix` will
 read `VECDB_*` vars.
 
-A `tcp://...` value in a `*_PORT` env var (the format Kubernetes
-service links inject, e.g. `QDRANT_PORT=tcp://10.0.0.8:6333` from a
-service named `qdrant` with `enableServiceLinks` on) is ignored with a
-warning and the default port is used; any other non-integer port value
-fails validation as usual.
+A `port` value coming from the *environment* that matches the exact
+Kubernetes service-link format `tcp://<host>:<digits>` (e.g.
+`QDRANT_PORT=tcp://10.0.0.8:6333`, injected into every pod by a
+service named `qdrant` when `enableServiceLinks` is on) is ignored
+with a warning and the default port is used. This exception applies
+only to the env settings source and only to that full format:
+malformed `tcp://` junk in the environment, and any `tcp://...` value
+passed explicitly to the constructor, fail validation as usual.
 
 Explicit constructor arguments always take priority over environment
 values (standard `pydantic-settings` precedence):

@@ -12,11 +12,14 @@ No live vector-store connections are needed: config construction only.
 """
 
 import logging
+import os
 from typing import Type
 
 import pytest
 from pydantic import ValidationError
+from pydantic_settings import BaseSettings
 
+from langroid.utils.configuration import set_env
 from langroid.vector_store.base import VectorStoreConfig
 from langroid.vector_store.chromadb import ChromaDBConfig
 from langroid.vector_store.lancedb import LanceDBConfig
@@ -190,7 +193,95 @@ def test_non_service_link_bad_port_still_fails(
         QdrantDBConfig()
 
 
+def test_malformed_tcp_env_port_still_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `tcp://` value NOT matching the full service-link shape fails.
+
+    Only `tcp://<host>:<digits>` (the exact k8s injection format) is
+    forgiven; malformed `tcp://` junk must fail validation loudly.
+    """
+    monkeypatch.setenv("QDRANT_PORT", "tcp://garbage")
+    with pytest.raises(ValidationError):
+        QdrantDBConfig()
+
+
+def test_constructor_tcp_port_still_fails() -> None:
+    """The service-link exception applies to the env source ONLY.
+
+    An explicit constructor value is a programming error, not a k8s
+    artifact, so it must fail validation rather than be silently
+    replaced with the default.
+    """
+    with pytest.raises(ValidationError):
+        QdrantDBConfig(port="tcp://10.0.0.8:6333")  # type: ignore[arg-type]
+
+
 def test_valid_env_port_still_works(monkeypatch: pytest.MonkeyPatch) -> None:
     """A normal numeric prefixed port env var is honored as before."""
     monkeypatch.setenv("QDRANT_PORT", "7777")
     assert QdrantDBConfig().port == 7777
+
+
+def test_valid_constructor_port_still_works() -> None:
+    """A normal explicit constructor port is honored as before."""
+    assert QdrantDBConfig(port=7777).port == 7777
+
+
+def test_trailing_newline_tcp_port_still_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A service-link-like value with a trailing newline fails validation.
+
+    The full-format check must anchor at the true end of the string
+    (`\\Z`), not `$` (which matches before a trailing newline), so this
+    value is NOT silently discarded.
+    """
+    monkeypatch.setenv("QDRANT_PORT", "tcp://10.0.0.8:6333\n")
+    with pytest.raises(ValidationError):
+        QdrantDBConfig()
+
+
+def test_set_env_writes_prefixed_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`set_env` writes names a fresh config actually reads back.
+
+    `set_env` used to write bare upper-cased field names (`HOST`),
+    which prefixed configs no longer read; it must write
+    `<PREFIX><FIELD>` (e.g. `QDRANT_HOST`).
+    """
+    config = QdrantDBConfig(host="example.internal")
+    # pre-register every var set_env will write, so monkeypatch teardown
+    # restores each to its original (absent) state after the test
+    for field_name, field in QdrantDBConfig.model_fields.items():
+        name = field.alias or f"QDRANT_{field_name.upper()}"
+        monkeypatch.setenv(name, "placeholder")
+    set_env(config)
+    assert os.environ["QDRANT_HOST"] == "example.internal"
+    # pre-existing set_env limitation, unrelated to prefixes: complex
+    # fields (nested configs, classes) are written as non-JSON python
+    # reprs the env source cannot parse back; clear them so the fresh
+    # construction below exercises the simple fields
+    for name in (
+        "QDRANT_EMBEDDING",
+        "QDRANT_EMBEDDING_MODEL",
+        "QDRANT_DOCUMENT_CLASS",
+        "QDRANT_METADATA_CLASS",
+    ):
+        monkeypatch.delenv(name)
+    assert QdrantDBConfig().host == "example.internal"
+
+
+def test_set_env_bare_names_for_prefixless_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A settings class without env_prefix still gets bare var names."""
+
+    class PlainSettings(BaseSettings):
+        some_field: str = "default"
+
+    monkeypatch.setenv("SOME_FIELD", "placeholder")
+    set_env(PlainSettings(some_field="written"))
+    assert os.environ["SOME_FIELD"] == "written"
+    assert PlainSettings().some_field == "written"
