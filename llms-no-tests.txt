@@ -91445,15 +91445,6 @@ extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.16.0
-  hooks:
-    - id: ruff
-</file>
-
 <file path="langroid/language_models/openai_gpt.py">
 import hashlib
 import json
@@ -94023,6 +94014,15 @@ class OpenAIGPT(LanguageModel):
         else:
             response_dict = response.model_dump()
         return self._process_chat_completion_response(cached, response_dict)
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.16.0
+  hooks:
+    - id: ruff
 </file>
 
 <file path="pyproject.toml">
