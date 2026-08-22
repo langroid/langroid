@@ -2,11 +2,94 @@
 Tests for LLMResponse class, particularly the tools_content() method.
 """
 
+import json
+
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.language_models.base import (
     LLMFunctionCall,
+    LLMMessage,
     LLMResponse,
     OpenAIToolCall,
+    Role,
 )
+from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
+
+MODEL = "gemini/gemini-3-pro-preview"
+
+
+def _tool_call() -> OpenAIToolCall:
+    """Create a tool call for message-shape regression tests."""
+    return OpenAIToolCall(
+        id="call_1",
+        type="function",
+        function=LLMFunctionCall(name="lookup", arguments={"query": "x"}),
+    )
+
+
+def test_api_dict_omits_empty_tool_calls_and_pads_content() -> None:
+    """An empty tool-call list must not make an otherwise empty message valid."""
+    message = LLMMessage(role=Role.ASSISTANT, content=None, tool_calls=[])
+
+    assert message.api_dict(MODEL) == {
+        "role": "assistant",
+        "content": " ",
+    }
+
+
+def test_truncate_tool_only_message_preserves_none_content() -> None:
+    """Truncation must preserve the call-only API payload shape."""
+    agent = ChatAgent(
+        ChatAgentConfig(
+            llm=OpenAIGPTConfig(
+                chat_context_length=16_000,
+                max_output_tokens=1_000,
+            )
+        )
+    )
+    message = LLMMessage(
+        role=Role.ASSISTANT,
+        content=None,
+        tool_calls=[_tool_call()],
+    )
+    agent.message_history = [message]
+
+    truncated = agent.truncate_message(0)
+
+    assert truncated.content is None
+    assert "content" not in truncated.api_dict(MODEL)
+    assert truncated.api_dict(MODEL)["tool_calls"]
+
+
+def test_malformed_tool_call_with_absent_content_becomes_message() -> None:
+    """Malformed call data is preserved as text when content is absent."""
+    model = OpenAIGPT(OpenAIGPTConfig(stream=False))
+    malformed_tool_call = {
+        "id": "call_bad",
+        "type": "function",
+        "function": {
+            "name": "lookup",
+            "arguments": "not valid json",
+        },
+    }
+    api_response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [malformed_tool_call],
+                }
+            }
+        ],
+        "usage": {},
+    }
+
+    response = model._process_chat_completion_response(
+        cached=False,
+        response=api_response,
+    )
+
+    assert response.message == json.dumps(malformed_tool_call)
+    assert response.oai_tool_calls is None
 
 
 class TestLLMResponseToolsContent:

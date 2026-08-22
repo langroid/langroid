@@ -20,6 +20,14 @@ The sanitization system uses AST (Abstract Syntax Tree) analysis to enforce a se
 
 When `full_eval=False` (the default), all expressions are run through this sanitization process before evaluation. When `full_eval=True`, the sanitization is bypassed, allowing full access to pandas functionality.
 
+Independently of `full_eval`, every expression is evaluated with a restricted
+`__builtins__` (`safe_eval_globals()` in `langroid/utils/pandas_utils.py`), so
+the direct `__import__('os').system(...)` primitive is unavailable even in
+`full_eval` mode. This is a second layer, not a substitute for the AST
+validator: with `full_eval=True` an expression can still reach the wider
+runtime by walking the object graph of the exposed DataFrame. Treat
+`full_eval=True` as "I am providing my own sandbox."
+
 ## Configuration Options
 
 ### In TableChatAgent
@@ -60,8 +68,18 @@ Set `full_eval=True` only when:
 
 - By default, `full_eval=False` provides a good balance of security and functionality
 - The whitelisted operations support most common pandas operations
-- Setting `full_eval=True` removes all protection and should be used with caution
+- Setting `full_eval=True` disables the AST validator and should be used with
+  caution; only the restricted `__builtins__` remain, and they are not
+  sufficient on their own to contain a hostile expression
 - Even with protection, always validate input when possible
+
+This page describes a hardening layer, not a security boundary. An LLM that
+reads untrusted text can be induced to emit any expression the grammar allows,
+so if you expose these agents to untrusted input, read
+[SECURITY.md](https://github.com/langroid/langroid/blob/main/SECURITY.md) for
+the project's threat model and for what actually bounds the blast radius
+(process isolation, least-privilege credentials, filesystem and network
+limits).
 
 ## Affected Classes
 

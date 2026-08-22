@@ -25,7 +25,7 @@ def retry_with_exponential_backoff(
         requests.exceptions.RequestException,
         openai.APITimeoutError,
         openai.RateLimitError,
-        openai.AuthenticationError,
+        openai.AuthenticationError,  # redundant: also fast-failed by the 4xx guard
         openai.APIError,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
@@ -43,17 +43,17 @@ def retry_with_exponential_backoff(
             try:
                 return func(*args, **kwargs)
 
-            except openai.BadRequestError as e:
-                # do not retry when the request itself is invalid,
-                # e.g. when context is too long
-                logger.error(f"OpenAI API request failed with error: {e}.")
-                raise e
-            except openai.AuthenticationError as e:
-                # do not retry when there's an auth error
-                logger.error(f"OpenAI API request failed with error: {e}.")
-                raise e
-
-            except openai.UnprocessableEntityError as e:
+            # Non-retryable client errors (4xx): retrying will never succeed.
+            # Match by exception type -- str(e) for a native OpenAI-SDK error is
+            # "Error code: 404 - ..." and does NOT contain "NotFoundError", so
+            # the string guard below misses direct-API (e.g. Gemini) errors.
+            except (
+                openai.BadRequestError,  # 400 (e.g. context too long)
+                openai.AuthenticationError,  # 401
+                openai.PermissionDeniedError,  # 403
+                openai.NotFoundError,  # 404 (e.g. retired/unknown model)
+                openai.UnprocessableEntityError,  # 422
+            ) as e:
                 logger.error(f"OpenAI API request failed with error: {e}.")
                 raise e
 
@@ -108,7 +108,7 @@ def async_retry_with_exponential_backoff(
     errors: tuple = (  # type: ignore
         openai.APITimeoutError,
         openai.RateLimitError,
-        openai.AuthenticationError,
+        openai.AuthenticationError,  # redundant: also fast-failed by the 4xx guard
         openai.APIError,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
@@ -127,13 +127,17 @@ def async_retry_with_exponential_backoff(
                 result = await func(*args, **kwargs)
                 return result
 
-            except openai.BadRequestError as e:
-                # do not retry when the request itself is invalid,
-                # e.g. when context is too long
-                logger.error(f"OpenAI API request failed with error: {e}.")
-                raise e
-            except openai.AuthenticationError as e:
-                # do not retry when there's an auth error
+            # Non-retryable client errors (4xx): retrying will never succeed.
+            # Match by exception type -- str(e) for a native OpenAI-SDK error is
+            # "Error code: 404 - ..." and does NOT contain "NotFoundError", so
+            # the string guard below misses direct-API (e.g. Gemini) errors.
+            except (
+                openai.BadRequestError,  # 400 (e.g. context too long)
+                openai.AuthenticationError,  # 401
+                openai.PermissionDeniedError,  # 403
+                openai.NotFoundError,  # 404 (e.g. retired/unknown model)
+                openai.UnprocessableEntityError,  # 422
+            ) as e:
                 logger.error(f"OpenAI API request failed with error: {e}.")
                 raise e
             # Retry on specified errors
