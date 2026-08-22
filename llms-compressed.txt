@@ -72469,6 +72469,12 @@ def test_gemini_google_prefix(monkeypatch)
 ⋮----
 llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=chat_model))
 ⋮----
+def test_gemini_ignores_last_case_variant_openai_api_base(monkeypatch)
+⋮----
+"""Gemini routing follows pydantic's last-wins env case normalization."""
+⋮----
+llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model="google/gemini-2.0-flash"))
+⋮----
 def test_non_gemini_google_model_is_not_rerouted(monkeypatch, chat_model)
 ⋮----
 """Non-Gemini Google models retain caller routing and credentials."""
@@ -72777,7 +72783,8 @@ env_prefix = self.model_config.get("env_prefix")
 env_api_base_name = f"{env_prefix}API_BASE"
 env_api_base = os.getenv(env_api_base_name)
 ⋮----
-env_api_base = next(
+case_insensitive_env = {
+env_api_base = case_insensitive_env.get(env_api_base_name.lower())
 api_base_was_supplied = api_base_was_supplied or (
 ⋮----
 model_config = SettingsConfigDict(env_prefix="OPENAI_")

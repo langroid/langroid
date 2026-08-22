@@ -626,6 +626,23 @@ def test_gemini_google_prefix(monkeypatch):
         assert llm.api_key == "gemini-key"
 
 
+def test_gemini_ignores_last_case_variant_openai_api_base(monkeypatch):
+    """Gemini routing follows pydantic's last-wins env case normalization."""
+    from langroid.language_models.openai_gpt import GEMINI_BASE_URL
+
+    monkeypatch.setattr(settings, "chat_model", "")
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("openai_api_base", raising=False)
+    monkeypatch.delenv("GEMINI_API_BASE", raising=False)
+    monkeypatch.setenv("OPENAI_API_BASE", "https://first.example/v1")
+    monkeypatch.setenv("openai_api_base", "https://last.example/v1")
+
+    llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model="google/gemini-2.0-flash"))
+
+    assert llm.is_gemini
+    assert llm.api_base == GEMINI_BASE_URL
+
+
 @pytest.mark.parametrize(
     "chat_model",
     ("google/gemma-3-27b-it", "google/text-bison-001"),

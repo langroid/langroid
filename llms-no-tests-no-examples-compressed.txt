@@ -41184,7 +41184,8 @@ env_prefix = self.model_config.get("env_prefix")
 env_api_base_name = f"{env_prefix}API_BASE"
 env_api_base = os.getenv(env_api_base_name)
 ⋮----
-env_api_base = next(
+case_insensitive_env = {
+env_api_base = case_insensitive_env.get(env_api_base_name.lower())
 api_base_was_supplied = api_base_was_supplied or (
 ⋮----
 model_config = SettingsConfigDict(env_prefix="OPENAI_")
