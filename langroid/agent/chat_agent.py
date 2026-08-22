@@ -3,6 +3,7 @@ import copy
 import inspect
 import json
 import logging
+import math
 import textwrap
 from contextlib import ExitStack
 from inspect import isclass
@@ -68,6 +69,14 @@ logger = logging.getLogger(__name__)
 def _reject_json_constant(constant: str) -> None:
     """Reject JavaScript numeric constants that are not valid JSON."""
     raise ValueError(f"non-JSON numeric constant: {constant}")
+
+
+def _parse_json_float(value: str) -> float:
+    """Parse a JSON float while rejecting exponent overflow."""
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"non-finite JSON number: {value}")
+    return parsed
 
 
 def _is_identified_result(message: LLMMessage) -> bool:
@@ -532,7 +541,11 @@ class ChatAgent(Agent):
         try:
             if max_size_bytes < 0:
                 raise ValueError("max_size_bytes must be non-negative")
-            payload = json.loads(snapshot, parse_constant=_reject_json_constant)
+            payload = json.loads(
+                snapshot,
+                parse_constant=_reject_json_constant,
+                parse_float=_parse_json_float,
+            )
             if (
                 not isinstance(payload, dict)
                 or type(payload.get("version")) is not int

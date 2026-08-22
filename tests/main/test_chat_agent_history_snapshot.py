@@ -370,7 +370,10 @@ def test_history_snapshot_rejects_role_field_violations_atomically(
     assert agent.oai_tool_id2call == {"existing-call": original_call}
 
 
-@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+@pytest.mark.parametrize(
+    "constant",
+    ["NaN", "Infinity", "-Infinity", "1e100000"],
+)
 def test_history_snapshot_rejects_non_finite_nested_values_atomically(
     constant: str,
 ) -> None:
