@@ -5,7 +5,19 @@ from pathlib import Path
 from typing import Any, BinaryIO, Dict, Optional, Union
 from urllib.parse import urlparse
 
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
+
+_HTTP_URL_SCHEMES = frozenset({"http", "https"})
+_REMOTE_URL_SCHEMES = _HTTP_URL_SCHEMES | {"ftp"}
+
+
+def _is_full_url(value: str, schemes: frozenset[str]) -> bool:
+    """Whether a value is a URL with an allowed scheme and network location."""
+    try:
+        parsed_url = urlparse(value)
+    except ValueError:
+        return False
+    return parsed_url.scheme.casefold() in schemes and bool(parsed_url.netloc)
 
 
 class FileAttachment(BaseModel):
@@ -97,11 +109,15 @@ class FileAttachment(BaseModel):
         cls,
         path: Union[str, Path],
         detail: str | None = None,
+        mime_type: str | None = None,
     ) -> "FileAttachment":
         """Create a FileAttachment from either a local file path or a URL.
 
         Args:
-            path_or_url: Path to the file or URL to fetch
+            path: Path to the file or URL to fetch.
+            detail: Optional image detail level.
+            mime_type: Optional MIME type for a URL. Local paths infer their
+                MIME type from the filename.
 
         Returns:
             FileAttachment instance
@@ -110,8 +126,12 @@ class FileAttachment(BaseModel):
         path_str = str(path)
 
         # Check if it's a URL
-        if path_str.startswith(("http://", "https://", "ftp://")):
-            return cls._from_url(url=path_str, detail=detail)
+        if _is_full_url(path_str, _REMOTE_URL_SCHEMES):
+            return cls._from_url(
+                url=path_str,
+                detail=detail,
+                mime_type=mime_type,
+            )
         else:
             # Assume it's a local file path
             return cls._from_path(path_str, detail=detail)
@@ -209,8 +229,9 @@ class FileAttachment(BaseModel):
             fetch directly, else a base64-encoded data URI of the content.
         """
         # If we have a URL and it's a full http/https URL, use it directly
-        if self.url and (
-            self.url.startswith("http://") or self.url.startswith("https://")
+        if isinstance(self.url, str) and _is_full_url(
+            self.url,
+            _HTTP_URL_SCHEMES,
         ):
             return self.url
         # Otherwise use base64 data URI

@@ -148,9 +148,10 @@ class TestFileAttachment:
         assert result["video_url"]["url"] == attachment.to_data_uri()
         assert "image_url" not in result
 
-    def test_to_dict_video_url_passthrough(self):
+    @pytest.mark.parametrize("scheme", ["http", "https"])
+    def test_to_dict_video_url_passthrough(self, scheme: str) -> None:
         """A remote video URL is passed through instead of being base64-encoded."""
-        url = "https://example.com/videos/clip.mp4"
+        url = f"{scheme}://example.com/videos/clip.mp4"
         attachment = FileAttachment.from_path(url)
 
         assert attachment.mime_type == "video/mp4"
@@ -159,6 +160,77 @@ class TestFileAttachment:
 
         assert result["type"] == "video_url"
         assert result["video_url"]["url"] == url
+
+    def test_to_dict_video_url_mixed_case_scheme(self) -> None:
+        """HTTP URL schemes are matched case-insensitively."""
+        url = "HTTPS://example.com/videos/clip.mp4"
+        attachment = FileAttachment.from_path(url)
+
+        result = attachment.to_dict("test-model")
+
+        assert result == {
+            "type": "video_url",
+            "video_url": {"url": url},
+        }
+
+    def test_to_dict_scheme_only_video_url_uses_data_uri(self) -> None:
+        """An HTTP scheme without a host is not treated as a remote URL."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.mp4",
+        )
+        attachment.url = "https:clip.mp4"
+
+        result = attachment.to_dict("test-model")
+
+        assert result == {
+            "type": "video_url",
+            "video_url": {"url": attachment.to_data_uri()},
+        }
+
+    def test_from_path_colon_filename_is_local(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A local filename resembling a scheme-only URI remains local."""
+        monkeypatch.chdir(tmp_path)
+        local_path = Path("https:clip.mp4")
+        local_path.write_bytes(b"video content")
+
+        attachment = FileAttachment.from_path(local_path.name)
+
+        assert attachment.content == b"video content"
+        assert attachment.filename == local_path.name
+        assert attachment.url is None
+
+    def test_to_dict_extensionless_video_url(self) -> None:
+        """An explicit MIME type supports video URLs without file extensions."""
+        url = "https://example.com/watch?id=123"
+        attachment = FileAttachment.from_path(url, mime_type="video/mp4")
+
+        result = attachment.to_dict("test-model")
+
+        assert result == {
+            "type": "video_url",
+            "video_url": {"url": url},
+        }
+
+    @pytest.mark.parametrize("url", [object(), 123, ["https://example.com"]])
+    def test_to_dict_odd_runtime_url_uses_data_uri(self, url: object) -> None:
+        """Non-string runtime URL values safely fall back to attachment data."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.mp4",
+        )
+        attachment.__dict__["url"] = url
+
+        result = attachment.to_dict("test-model")
+
+        assert result == {
+            "type": "video_url",
+            "video_url": {"url": attachment.to_data_uri()},
+        }
 
     def test_to_dict_non_media_file(self):
         """Non-image, non-video files keep using generic `file` content-parts."""
@@ -170,6 +242,25 @@ class TestFileAttachment:
         assert result["type"] == "file"
         assert result["file"]["filename"] == "doc.pdf"
         assert result["file"]["file_data"] == attachment.to_data_uri()
+
+    def test_to_dict_non_video_file_for_gemini_model(self) -> None:
+        """Gemini non-video attachments retain image URL serialization."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="doc.pdf",
+            mime_type="application/pdf",
+        )
+        attachment.detail = "high"
+
+        result = attachment.to_dict("gemini-2.5-flash")
+
+        assert result == {
+            "type": "image_url",
+            "image_url": {
+                "url": attachment.to_data_uri(),
+                "detail": "high",
+            },
+        }
 
     def test_to_dict_unknown_type(self):
         """Unknown MIME types keep using generic `file` content-parts."""
@@ -199,7 +290,13 @@ class TestFileAttachment:
 
         result = attachment.to_dict("gpt-4.1")
 
-        assert result["type"] == "file"
+        assert result == {
+            "type": "file",
+            "file": {
+                "filename": "file.unknown123",
+                "file_data": "data:None;base64,dGVzdCBjb250ZW50",
+            },
+        }
 
     def test_mime_type_inference(self):
         """Test MIME type is correctly inferred from filename."""

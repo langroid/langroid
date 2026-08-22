@@ -3814,189 +3814,6 @@ for a complete example. Also see the tests related to "enrichment" in
 [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py).
 </file>
 
-<file path="docs/notes/file-input.md">
-# PDF Files and Image inputs to LLMs
-
-Langroid supports sending PDF files and images (either URLs or local files)
-directly to Large Language Models with multi-modal 
-capabilities. This feature allows models to "see" files and other documents,
-and works with most multi-modal models served via an OpenAI-compatible API,
-e.g.:
-
-- OpenAI's GPT-4o series and GPT-4.1 series
-- Gemini models
-- Claude series models (via OpenAI-compatible providers like OpenRouter or LiteLLM )
-
-To see example usage, see:
-
-- tests: [test_llm.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm.py), 
-   [test_llm_async.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm_async.py),
-   [test_chat-agent.py](https://github.com/langroid/langroid/blob/main/tests/main/test_chat_agent.py).
-- example script: [pdf-json-no-parse.py](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py), which shows
-  how you can directly extract structured information from a document 
-  **without having to first parse it to markdown** (which is inherently lossy).
-
-## Basic Usage directly with LLM `chat` and `achat` methods
-
-First create a `FileAttachment` object using one of the `from_` methods.
-For image (`png`, `jpg/jpeg`) files you can use `FileAttachment.from_path(p)`
-where `p` is either a local file path, or a http/https URL.
-For PDF files, you can use `from_path` with a local file, or `from_bytes` or `from_io`
-(see below). In the examples below we show only `pdf` examples.
-
-```python
-from langroid.language_models.base import LLMMessage, Role
-from langroid.parsing.file_attachment import FileAttachment
-import langroid.language_models as lm
-
-# Create a file attachment
-attachment = FileAttachment.from_path("path/to/document.pdf")
-
-# Create messages with attachment
-messages = [
-    LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-    LLMMessage(
-        role=Role.USER, content="What's the title of this document?", 
-        files=[attachment]
-    )
-]
-
-# Set up LLM with model that supports attachments
-llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=lm.OpenAIChatModel.GPT4o))
-
-# Get response
-response = llm.chat(messages=messages)
-```
-
-## Supported File Formats
-
-Currently the OpenAI-API supports:
-
-- PDF files (including image-based PDFs)
-- image files and URLs
-
-
-## Creating Attachments
-
-There are multiple ways to create file attachments:
-
-```python
-# From a file path
-attachment = FileAttachment.from_path("path/to/file.pdf")
-
-# From bytes
-with open("path/to/file.pdf", "rb") as f:
-    attachment = FileAttachment.from_bytes(f.read(), filename="document.pdf")
-
-# From a file-like object
-from io import BytesIO
-file_obj = BytesIO(pdf_bytes)
-attachment = FileAttachment.from_io(file_obj, filename="document.pdf")
-```
-
-## Follow-up Questions
-
-You can continue the conversation with follow-up questions that reference the attached files:
-
-```python
-messages.append(LLMMessage(role=Role.ASSISTANT, content=response.message))
-messages.append(LLMMessage(role=Role.USER, content="What is the main topic?"))
-response = llm.chat(messages=messages)
-```
-
-## Multiple Attachments
-
-Langroid allows multiple files can be sent in a single message,
-but as of 16 Apr 2025, sending multiple PDF files does not appear to be properly supported in the 
-APIs (they seem to only use the last file attached), although sending multiple 
-images does work. 
-
-```python
-messages = [
-    LLMMessage(
-        role=Role.USER,
-        content="Compare these documents",
-        files=[attachment1, attachment2]
-    )
-]
-```
-
-## Using File Attachments with Agents
-
-Agents can process file attachments as well, in the `llm_response` method,
-which takes a `ChatDocument` object as input. 
-To pass in file attachments, include the `files` field in the `ChatDocument`,
-in addition to the content:
-
-```python
-import langroid as lr
-from langroid.agent.chat_document import ChatDocument, ChatDocMetaData
-from langroid.mytypes import Entity
-
-
-agent = lr.ChatAgent(lr.ChatAgentConfig())
-
-user_input = ChatDocument(
-    content="What is the title of this document?",
-    files=[attachment],
-    metadata=ChatDocMetaData(
-        sender=Entity.USER,
-    )
-)
-# or more simply, use the agent's `create_user_response` method:
-# user_input = agent.create_user_response(
-#     content="What is the title of this document?",
-#     files=[attachment],    
-# )
-response = agent.llm_response(user_input)
-```
-
-
-## Using File Attachments with Tasks
-
-In Langroid,  `Task.run()` can take a `ChatDocument` object as input,
-and as mentioned above, it can contain attached files in the `files` field.
-To ensure proper orchestration, you'd want to properly set various `metadata` fields
-as well, such as `sender`, etc. Langroid provides a convenient 
-`create_user_response` method to create a `ChatDocument` object with the necessary 
-metadata, so you only need to specify the `content` and `files` fields:
-
-
-```python
-from langroid.parsing.file_attachment import FileAttachment
-from langroid.agent.task import Task
-
-agent = ...
-# Create task
-task = Task(agent, interactive=True)
-
-# Create a file attachment
-attachment = FileAttachment.from_path("path/to/document.pdf")
-
-# Create input with attachment
-input_message = agent.create_user_response(
-    content="Extract data from this document",
-    files=[attachment]
-)
-
-# Run task with file attachment
-result = task.run(input_message)
-```
-
-See the script [`pdf-json-no-parse.py`](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py)
-for a complete example of using file attachments with tasks.
-
-## Practical Applications
-
-- PDF document analysis and data extraction
-- Report summarization
-- Structured information extraction from documents
-- Visual content analysis
-
-For more complex applications, consider using the Task and Agent infrastructure in 
-Langroid to orchestrate multi-step document processing workflows.
-</file>
-
 <file path="docs/notes/gemini.md">
 # Gemini LLMs & Embeddings via OpenAI client (without LiteLLM)
 
@@ -50407,255 +50224,6 @@ class CodeParser:
         return reduce(lambda x, y: x + y, chunked_docs)
 </file>
 
-<file path="langroid/parsing/file_attachment.py">
-import base64
-import mimetypes
-import uuid
-from pathlib import Path
-from typing import Any, BinaryIO, Dict, Optional, Union
-from urllib.parse import urlparse
-
-from pydantic import BaseModel
-
-
-class FileAttachment(BaseModel):
-    """Represents a file attachment to be sent to an LLM API."""
-
-    content: bytes
-    filename: Optional[str] = None
-    mime_type: str = "application/octet-stream"
-    url: str | None = None
-    detail: str | None = None
-
-    def __init__(self, **data: Any) -> None:
-        """Initialize with sensible defaults for filename if not provided."""
-        if "filename" not in data or data["filename"] is None:
-            # Generate a more readable unique filename
-            unique_id = str(uuid.uuid4())[:8]
-            data["filename"] = f"attachment_{unique_id}.bin"
-        super().__init__(**data)
-
-    @classmethod
-    def _from_path(
-        cls,
-        file_path: Union[str, Path],
-        detail: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a file path.
-
-        Args:
-            file_path: Path to the file to attach
-
-        Returns:
-            FileAttachment instance
-        """
-        path = Path(file_path)
-        with open(path, "rb") as f:
-            content = f.read()
-
-        mime_type, _ = mimetypes.guess_type(path)
-        if mime_type is None:
-            mime_type = "application/octet-stream"
-
-        return cls(
-            content=content,
-            filename=path.name,
-            mime_type=mime_type,
-            detail=detail,
-        )
-
-    @classmethod
-    def _from_url(
-        cls,
-        url: str,
-        content: Optional[bytes] = None,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-        detail: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a URL.
-
-        Args:
-            url: URL to the file
-            content: Optional raw bytes content (if already fetched)
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename or url
-
-        Returns:
-            FileAttachment instance
-        """
-        if filename is None and url:
-            # Extract filename from URL if possible
-
-            parsed_url = urlparse(url)
-            path = parsed_url.path
-            filename = path.split("/")[-1] if path else None
-
-        if mime_type is None and filename:
-            mime_type, _ = mimetypes.guess_type(filename)
-
-        return cls(
-            content=content or b"",  # Empty bytes if no content provided
-            filename=filename,
-            mime_type=mime_type or "application/octet-stream",
-            url=url,
-            detail=detail,
-        )
-
-    @classmethod
-    def from_path(
-        cls,
-        path: Union[str, Path],
-        detail: str | None = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from either a local file path or a URL.
-
-        Args:
-            path_or_url: Path to the file or URL to fetch
-
-        Returns:
-            FileAttachment instance
-        """
-        # Convert to string if Path object
-        path_str = str(path)
-
-        # Check if it's a URL
-        if path_str.startswith(("http://", "https://", "ftp://")):
-            return cls._from_url(url=path_str, detail=detail)
-        else:
-            # Assume it's a local file path
-            return cls._from_path(path_str, detail=detail)
-
-    @classmethod
-    def from_bytes(
-        cls,
-        content: bytes,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from bytes content.
-
-        Args:
-            content: Raw bytes content
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename if provided
-
-        Returns:
-            FileAttachment instance
-        """
-        if mime_type is None and filename is not None:
-            mime_type, _ = mimetypes.guess_type(filename)
-
-        return cls(
-            content=content,
-            filename=filename,
-            mime_type=mime_type or "application/octet-stream",
-        )
-
-    @classmethod
-    def from_io(
-        cls,
-        file_obj: BinaryIO,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a file-like object.
-
-        Args:
-            file_obj: File-like object with binary content
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename if provided
-
-        Returns:
-            FileAttachment instance
-        """
-        content = file_obj.read()
-        return cls.from_bytes(content, filename, mime_type)
-
-    @classmethod
-    def from_text(
-        cls,
-        text: str,
-        filename: Optional[str] = None,
-        mime_type: str = "text/plain",
-        encoding: str = "utf-8",
-    ) -> "FileAttachment":
-        """Create a FileAttachment from text content.
-
-        Args:
-            text: Text content to include
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content
-            encoding: Text encoding to use
-
-        Returns:
-            FileAttachment instance
-        """
-        content = text.encode(encoding)
-        return cls(content=content, filename=filename, mime_type=mime_type)
-
-    def to_base64(self) -> str:
-        """Convert content to base64 encoding.
-
-        Returns:
-            Base64 encoded string
-        """
-        return base64.b64encode(self.content).decode("utf-8")
-
-    def to_data_uri(self) -> str:
-        """Convert content to a data URI.
-
-        Returns:
-            A data URI string containing the base64-encoded content with MIME type
-        """
-        base64_content = self.to_base64()
-        return f"data:{self.mime_type};base64,{base64_content}"
-
-    def to_dict(self, model: str) -> Dict[str, Any]:
-        """
-        Convert to a dictionary suitable for API requests.
-        Tested only for PDF files.
-
-        Returns:
-            Dictionary with file data
-        """
-        if (
-            self.mime_type
-            and self.mime_type.startswith("image/")
-            or "gemini" in model.lower()
-        ):
-            # for gemini models, we use `image_url` for both pdf-files and images
-
-            image_url_dict = {}
-
-            # If we have a URL and it's a full http/https URL, use it directly
-            if self.url and (
-                self.url.startswith("http://") or self.url.startswith("https://")
-            ):
-                image_url_dict["url"] = self.url
-            # Otherwise use base64 data URI
-            else:
-                image_url_dict["url"] = self.to_data_uri()
-
-            # Add detail parameter if specified
-            if self.detail:
-                image_url_dict["detail"] = self.detail
-
-            return dict(
-                type="image_url",
-                image_url=image_url_dict,
-            )
-        else:
-            # For non-image files
-            return dict(
-                type="file",
-                file=dict(
-                    filename=self.filename,
-                    file_data=self.to_data_uri(),
-                ),
-            )
-</file>
-
 <file path="langroid/parsing/md_parser.py">
 import re
 from typing import Any, List
@@ -61969,6 +61537,192 @@ df.apply(lambda x: dangerous_function(x))
 ## Testing Considerations
 
 When writing tests that use `TableChatAgent` or `VectorStore.compute_from_docs()` with pandas expressions that go beyond the whitelisted operations, you may need to set `full_eval=True` to ensure the tests pass.
+</file>
+
+<file path="docs/notes/file-input.md">
+# PDF Files and Image inputs to LLMs
+
+Langroid supports sending PDF files and images (either URLs or local files)
+directly to Large Language Models with multi-modal 
+capabilities. This feature allows models to "see" files and other documents,
+and works with most multi-modal models served via an OpenAI-compatible API,
+e.g.:
+
+- OpenAI's GPT-4o series and GPT-4.1 series
+- Gemini models
+- Claude series models (via OpenAI-compatible providers like OpenRouter or LiteLLM )
+
+To see example usage, see:
+
+- tests: [test_llm.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm.py), 
+   [test_llm_async.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm_async.py),
+   [test_chat-agent.py](https://github.com/langroid/langroid/blob/main/tests/main/test_chat_agent.py).
+- example script: [pdf-json-no-parse.py](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py), which shows
+  how you can directly extract structured information from a document 
+  **without having to first parse it to markdown** (which is inherently lossy).
+
+## Basic Usage directly with LLM `chat` and `achat` methods
+
+First create a `FileAttachment` object using one of the `from_` methods.
+For image (`png`, `jpg/jpeg`) files you can use `FileAttachment.from_path(p)`
+where `p` is either a local file path, or a http/https URL.
+For PDF files, you can use `from_path` with a local file, or `from_bytes` or `from_io`
+(see below). In the examples below we show only `pdf` examples.
+
+```python
+from langroid.language_models.base import LLMMessage, Role
+from langroid.parsing.file_attachment import FileAttachment
+import langroid.language_models as lm
+
+# Create a file attachment
+attachment = FileAttachment.from_path("path/to/document.pdf")
+
+# Create messages with attachment
+messages = [
+    LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+    LLMMessage(
+        role=Role.USER, content="What's the title of this document?", 
+        files=[attachment]
+    )
+]
+
+# Set up LLM with model that supports attachments
+llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=lm.OpenAIChatModel.GPT4o))
+
+# Get response
+response = llm.chat(messages=messages)
+```
+
+## Supported File Formats
+
+Currently the OpenAI-API supports:
+
+- PDF files (including image-based PDFs)
+- image files and URLs
+
+Video files and URLs are serialized as `video_url` content-parts, and work with
+any chat-completions API that accepts video input.
+
+
+## Creating Attachments
+
+There are multiple ways to create file attachments:
+
+```python
+# From a file path
+attachment = FileAttachment.from_path("path/to/file.pdf")
+
+# From bytes
+with open("path/to/file.pdf", "rb") as f:
+    attachment = FileAttachment.from_bytes(f.read(), filename="document.pdf")
+
+# From a file-like object
+from io import BytesIO
+file_obj = BytesIO(pdf_bytes)
+attachment = FileAttachment.from_io(file_obj, filename="document.pdf")
+```
+
+## Follow-up Questions
+
+You can continue the conversation with follow-up questions that reference the attached files:
+
+```python
+messages.append(LLMMessage(role=Role.ASSISTANT, content=response.message))
+messages.append(LLMMessage(role=Role.USER, content="What is the main topic?"))
+response = llm.chat(messages=messages)
+```
+
+## Multiple Attachments
+
+Langroid allows multiple files can be sent in a single message,
+but as of 16 Apr 2025, sending multiple PDF files does not appear to be properly supported in the 
+APIs (they seem to only use the last file attached), although sending multiple 
+images does work. 
+
+```python
+messages = [
+    LLMMessage(
+        role=Role.USER,
+        content="Compare these documents",
+        files=[attachment1, attachment2]
+    )
+]
+```
+
+## Using File Attachments with Agents
+
+Agents can process file attachments as well, in the `llm_response` method,
+which takes a `ChatDocument` object as input. 
+To pass in file attachments, include the `files` field in the `ChatDocument`,
+in addition to the content:
+
+```python
+import langroid as lr
+from langroid.agent.chat_document import ChatDocument, ChatDocMetaData
+from langroid.mytypes import Entity
+
+
+agent = lr.ChatAgent(lr.ChatAgentConfig())
+
+user_input = ChatDocument(
+    content="What is the title of this document?",
+    files=[attachment],
+    metadata=ChatDocMetaData(
+        sender=Entity.USER,
+    )
+)
+# or more simply, use the agent's `create_user_response` method:
+# user_input = agent.create_user_response(
+#     content="What is the title of this document?",
+#     files=[attachment],    
+# )
+response = agent.llm_response(user_input)
+```
+
+
+## Using File Attachments with Tasks
+
+In Langroid,  `Task.run()` can take a `ChatDocument` object as input,
+and as mentioned above, it can contain attached files in the `files` field.
+To ensure proper orchestration, you'd want to properly set various `metadata` fields
+as well, such as `sender`, etc. Langroid provides a convenient 
+`create_user_response` method to create a `ChatDocument` object with the necessary 
+metadata, so you only need to specify the `content` and `files` fields:
+
+
+```python
+from langroid.parsing.file_attachment import FileAttachment
+from langroid.agent.task import Task
+
+agent = ...
+# Create task
+task = Task(agent, interactive=True)
+
+# Create a file attachment
+attachment = FileAttachment.from_path("path/to/document.pdf")
+
+# Create input with attachment
+input_message = agent.create_user_response(
+    content="Extract data from this document",
+    files=[attachment]
+)
+
+# Run task with file attachment
+result = task.run(input_message)
+```
+
+See the script [`pdf-json-no-parse.py`](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py)
+for a complete example of using file attachments with tasks.
+
+## Practical Applications
+
+- PDF document analysis and data extraction
+- Report summarization
+- Structured information extraction from documents
+- Visual content analysis
+
+For more complex applications, consider using the Task and Agent infrastructure in 
+Langroid to orchestrate multi-step document processing workflows.
 </file>
 
 <file path="docs/notes/handle-llm-no-tool.md">
@@ -78017,6 +77771,290 @@ class MarkerPdfParser(DocumentParser):
         )
 </file>
 
+<file path="langroid/parsing/file_attachment.py">
+import base64
+import mimetypes
+import uuid
+from pathlib import Path
+from typing import Any, BinaryIO, Dict, Optional, Union
+from urllib.parse import urlparse
+
+from langroid.pydantic_v1 import BaseModel
+
+_HTTP_URL_SCHEMES = frozenset({"http", "https"})
+_REMOTE_URL_SCHEMES = _HTTP_URL_SCHEMES | {"ftp"}
+
+
+def _is_full_url(value: str, schemes: frozenset[str]) -> bool:
+    """Whether a value is a URL with an allowed scheme and network location."""
+    try:
+        parsed_url = urlparse(value)
+    except ValueError:
+        return False
+    return parsed_url.scheme.casefold() in schemes and bool(parsed_url.netloc)
+
+
+class FileAttachment(BaseModel):
+    """Represents a file attachment to be sent to an LLM API."""
+
+    content: bytes
+    filename: Optional[str] = None
+    mime_type: str = "application/octet-stream"
+    url: str | None = None
+    detail: str | None = None
+
+    def __init__(self, **data: Any) -> None:
+        """Initialize with sensible defaults for filename if not provided."""
+        if "filename" not in data or data["filename"] is None:
+            # Generate a more readable unique filename
+            unique_id = str(uuid.uuid4())[:8]
+            data["filename"] = f"attachment_{unique_id}.bin"
+        super().__init__(**data)
+
+    @classmethod
+    def _from_path(
+        cls,
+        file_path: Union[str, Path],
+        detail: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a file path.
+
+        Args:
+            file_path: Path to the file to attach
+
+        Returns:
+            FileAttachment instance
+        """
+        path = Path(file_path)
+        with open(path, "rb") as f:
+            content = f.read()
+
+        mime_type, _ = mimetypes.guess_type(path)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        return cls(
+            content=content,
+            filename=path.name,
+            mime_type=mime_type,
+            detail=detail,
+        )
+
+    @classmethod
+    def _from_url(
+        cls,
+        url: str,
+        content: Optional[bytes] = None,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        detail: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a URL.
+
+        Args:
+            url: URL to the file
+            content: Optional raw bytes content (if already fetched)
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename or url
+
+        Returns:
+            FileAttachment instance
+        """
+        if filename is None and url:
+            # Extract filename from URL if possible
+
+            parsed_url = urlparse(url)
+            path = parsed_url.path
+            filename = path.split("/")[-1] if path else None
+
+        if mime_type is None and filename:
+            mime_type, _ = mimetypes.guess_type(filename)
+
+        return cls(
+            content=content or b"",  # Empty bytes if no content provided
+            filename=filename,
+            mime_type=mime_type or "application/octet-stream",
+            url=url,
+            detail=detail,
+        )
+
+    @classmethod
+    def from_path(
+        cls,
+        path: Union[str, Path],
+        detail: str | None = None,
+        mime_type: str | None = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from either a local file path or a URL.
+
+        Args:
+            path: Path to the file or URL to fetch.
+            detail: Optional image detail level.
+            mime_type: Optional MIME type for a URL. Local paths infer their
+                MIME type from the filename.
+
+        Returns:
+            FileAttachment instance
+        """
+        # Convert to string if Path object
+        path_str = str(path)
+
+        # Check if it's a URL
+        if _is_full_url(path_str, _REMOTE_URL_SCHEMES):
+            return cls._from_url(
+                url=path_str,
+                detail=detail,
+                mime_type=mime_type,
+            )
+        else:
+            # Assume it's a local file path
+            return cls._from_path(path_str, detail=detail)
+
+    @classmethod
+    def from_bytes(
+        cls,
+        content: bytes,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from bytes content.
+
+        Args:
+            content: Raw bytes content
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename if provided
+
+        Returns:
+            FileAttachment instance
+        """
+        if mime_type is None and filename is not None:
+            mime_type, _ = mimetypes.guess_type(filename)
+
+        return cls(
+            content=content,
+            filename=filename,
+            mime_type=mime_type or "application/octet-stream",
+        )
+
+    @classmethod
+    def from_io(
+        cls,
+        file_obj: BinaryIO,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a file-like object.
+
+        Args:
+            file_obj: File-like object with binary content
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename if provided
+
+        Returns:
+            FileAttachment instance
+        """
+        content = file_obj.read()
+        return cls.from_bytes(content, filename, mime_type)
+
+    @classmethod
+    def from_text(
+        cls,
+        text: str,
+        filename: Optional[str] = None,
+        mime_type: str = "text/plain",
+        encoding: str = "utf-8",
+    ) -> "FileAttachment":
+        """Create a FileAttachment from text content.
+
+        Args:
+            text: Text content to include
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content
+            encoding: Text encoding to use
+
+        Returns:
+            FileAttachment instance
+        """
+        content = text.encode(encoding)
+        return cls(content=content, filename=filename, mime_type=mime_type)
+
+    def to_base64(self) -> str:
+        """Convert content to base64 encoding.
+
+        Returns:
+            Base64 encoded string
+        """
+        return base64.b64encode(self.content).decode("utf-8")
+
+    def to_data_uri(self) -> str:
+        """Convert content to a data URI.
+
+        Returns:
+            A data URI string containing the base64-encoded content with MIME type
+        """
+        base64_content = self.to_base64()
+        return f"data:{self.mime_type};base64,{base64_content}"
+
+    def _content_url(self) -> str:
+        """URL to send to the API for this attachment.
+
+        Returns:
+            The original URL when it is a full http/https URL that the API can
+            fetch directly, else a base64-encoded data URI of the content.
+        """
+        # If we have a URL and it's a full http/https URL, use it directly
+        if isinstance(self.url, str) and _is_full_url(
+            self.url,
+            _HTTP_URL_SCHEMES,
+        ):
+            return self.url
+        # Otherwise use base64 data URI
+        return self.to_data_uri()
+
+    def to_dict(self, model: str) -> Dict[str, Any]:
+        """
+        Convert to a dictionary suitable for API requests.
+        Tested only for PDF files.
+
+        Returns:
+            Dictionary with file data
+        """
+        if self.mime_type and self.mime_type.casefold().startswith("video/"):
+            # Videos are sent as `video_url` content-parts, mirroring the
+            # `image_url` parts used for images: a generic `file` part is not
+            # recognized as video input by the API.
+            return dict(
+                type="video_url",
+                video_url=dict(url=self._content_url()),
+            )
+        elif (
+            self.mime_type
+            and self.mime_type.startswith("image/")
+            or "gemini" in model.lower()
+        ):
+            # for gemini models, we use `image_url` for both pdf-files and images
+
+            image_url_dict: Dict[str, str] = dict(url=self._content_url())
+
+            # Add detail parameter if specified
+            if self.detail:
+                image_url_dict["detail"] = self.detail
+
+            return dict(
+                type="image_url",
+                image_url=image_url_dict,
+            )
+        else:
+            # For non-image files
+            return dict(
+                type="file",
+                file=dict(
+                    filename=self.filename,
+                    file_data=self.to_data_uri(),
+                ),
+            )
+</file>
+
 <file path="langroid/parsing/repo_loader.py">
 import itertools
 import json
@@ -83065,6 +83103,886 @@ class Task:
         return seq_idx < 0
 </file>
 
+<file path="langroid/language_models/base.py">
+import json
+import logging
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from enum import Enum
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
+
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
+
+from langroid.cachedb.base import CacheDBConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.model_info import ModelInfo, get_model_info
+from langroid.parsing.agent_chats import parse_message
+from langroid.parsing.file_attachment import FileAttachment
+from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
+from langroid.prompts.dialog import collate_chat_history
+from langroid.utils.configuration import settings
+from langroid.utils.output.printing import show_if_debug
+
+logger = logging.getLogger(__name__)
+
+
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
+FunctionCallTypes = Literal["none", "auto"]
+ToolChoiceTypes = Literal["none", "auto", "required"]
+ToolTypes = Literal["function"]
+
+DEFAULT_CONTEXT_LENGTH = 16_000
+
+
+class StreamEventType(Enum):
+    TEXT = 1
+    FUNC_NAME = 2
+    FUNC_ARGS = 3
+    TOOL_NAME = 4
+    TOOL_ARGS = 5
+    REASONING = 6
+
+
+class RetryParams(BaseSettings):
+    max_retries: int = 5
+    initial_delay: float = 1.0
+    exponential_base: float = 1.3
+    jitter: bool = True
+
+
+class LLMConfig(BaseSettings):
+    """
+    Common configuration for all language models.
+    """
+
+    type: str = "openai"
+    streamer: Optional[Callable[[Any], None]] = noop_fn
+    streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
+    api_base: str | None = None
+    formatter: None | str = None
+    # specify None if you want to use the full max output tokens of the model
+    max_output_tokens: int | None = 8192
+    timeout: int = 20  # timeout for API requests
+    chat_model: str = ""
+    completion_model: str = ""
+    temperature: float = 0.0
+    chat_context_length: int | None = None
+    async_stream_quiet: bool = False  # suppress streaming output in async mode?
+    completion_context_length: int | None = None
+    # if input length + max_output_tokens > context length of model,
+    # we will try shortening requested output
+    min_output_tokens: int = 64
+    use_completion_for_chat: bool = False  # use completion model for chat?
+    # use chat model for completion? For OpenAI models, this MUST be set to True!
+    use_chat_for_completion: bool = True
+    stream: bool = True  # stream output from API?
+    # TODO: we could have a `stream_reasoning` flag here to control whether to show
+    # reasoning output from reasoning models
+    cache_config: None | CacheDBConfig = RedisCacheConfig()
+    thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
+    retry_params: RetryParams = RetryParams()
+
+    @property
+    def model_max_output_tokens(self) -> int:
+        if self.max_output_tokens:
+            return self.max_output_tokens
+        # Build fallback names by progressively stripping provider prefixes
+        # (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
+        # succeeds even before OpenAIGPT.__init__ strips the prefix.
+        parts = self.chat_model.split("/")
+        fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
+        return get_model_info(self.chat_model, fallbacks).max_output_tokens
+
+
+class LLMFunctionCall(BaseModel):
+    """
+    Structure of LLM response indicating it "wants" to call a function.
+    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
+    """
+
+    name: str  # name of function to call
+    arguments: Optional[Dict[str, Any]] = None
+
+    @staticmethod
+    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall":
+        """
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+        fun_call = LLMFunctionCall(name=message["name"])
+        fun_args_str = message["arguments"]
+        # sometimes may be malformed with invalid indents,
+        # so we try to be safe by removing newlines.
+        if fun_args_str is not None:
+            fun_args_str = fun_args_str.replace("\n", "").strip()
+            dict_or_list = parse_imperfect_json(fun_args_str)
+
+            if not isinstance(dict_or_list, dict):
+                raise ValueError(
+                    f"""
+                        Invalid function args: {fun_args_str}
+                        parsed as {dict_or_list},
+                        which is not a valid dict.
+                        """
+                )
+            fun_args = dict_or_list
+        else:
+            fun_args = None
+        fun_call.arguments = fun_args
+
+        return fun_call
+
+    def __str__(self) -> str:
+        return "FUNC: " + json.dumps(self.model_dump(), indent=2)
+
+
+class LLMFunctionSpec(BaseModel):
+    """
+    Description of a function available for the LLM to use.
+    To be used when calling the LLM `chat()` method with the `functions` parameter.
+    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
+    """
+
+    name: str
+    description: str
+    parameters: Dict[str, Any]
+
+
+class OpenAIToolCall(BaseModel):
+    """
+    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
+    See https://platform.openai.com/docs/api-reference/chat/create
+
+    Attributes:
+        id: The id of the tool call.
+        type: The type of the tool call;
+            only "function" is currently possible (7/26/24).
+        function: The function call.
+    """
+
+    id: str | None = None
+    type: ToolTypes = "function"
+    function: LLMFunctionCall | None = None
+    extra_content: Dict[str, Any] | None = None
+
+    @staticmethod
+    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall":
+        """
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+        id = message["id"]
+        type = message["type"]
+        function = LLMFunctionCall.from_dict(message["function"])
+        extra_content = message.get("extra_content")
+        return OpenAIToolCall(
+            id=id, type=type, function=function, extra_content=extra_content
+        )
+
+    def __str__(self) -> str:
+        if self.function is None:
+            return ""
+        return "OAI-TOOL: " + json.dumps(self.function.model_dump(), indent=2)
+
+
+class OpenAIToolSpec(BaseModel):
+    type: ToolTypes
+    strict: Optional[bool] = None
+    function: LLMFunctionSpec
+
+
+class OpenAIJsonSchemaSpec(BaseModel):
+    strict: Optional[bool] = None
+    function: LLMFunctionSpec
+
+    def to_dict(self) -> Dict[str, Any]:
+        json_schema: Dict[str, Any] = {
+            "name": self.function.name,
+            "description": self.function.description,
+            "schema": self.function.parameters,
+        }
+        if self.strict is not None:
+            json_schema["strict"] = self.strict
+
+        return {
+            "type": "json_schema",
+            "json_schema": json_schema,
+        }
+
+
+class LLMTokenUsage(BaseModel):
+    """
+    Usage of tokens by an LLM.
+    """
+
+    prompt_tokens: int = 0
+    cached_tokens: int = 0
+    completion_tokens: int = 0
+    cost: float = 0.0
+    calls: int = 0  # how many API calls - not used as of 2025-04-04
+
+    def reset(self) -> None:
+        self.prompt_tokens = 0
+        self.cached_tokens = 0
+        self.completion_tokens = 0
+        self.cost = 0.0
+        self.calls = 0
+
+    def __str__(self) -> str:
+        return (
+            f"Tokens = "
+            f"(prompt {self.prompt_tokens}, cached {self.cached_tokens}, "
+            f"completion {self.completion_tokens}), "
+            f"Cost={self.cost}, Calls={self.calls}"
+        )
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
+class Role(str, Enum):
+    """
+    Possible roles for a message in a chat.
+    """
+
+    USER = "user"
+    SYSTEM = "system"
+    ASSISTANT = "assistant"
+    FUNCTION = "function"
+    TOOL = "tool"
+
+
+class LLMMessage(BaseModel):
+    """
+    Class representing an entry in the msg-history sent to the LLM API.
+    It could be one of these:
+    - a user message
+    - an LLM ("Assistant") response
+    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
+    - a result or results from executing a fn or tool-call(s)
+    """
+
+    role: Role
+    name: Optional[str] = None
+    tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
+    tool_id: str = ""  # used by OpenAIAssistant
+    # None means "no content" (the model returned only a tool/function call).
+    # This is distinct from "" and is dropped from the API payload by api_dict;
+    # see api_dict for how a fully-empty message is handled per-API.
+    content: Optional[str] = None
+    files: List[FileAttachment] = []
+    function_call: Optional[LLMFunctionCall] = None
+    tool_calls: Optional[List[OpenAIToolCall]] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # link to corresponding chat document, for provenance/rewind purposes
+    chat_document_id: str = ""
+
+    def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]:
+        """
+        Convert to dictionary for API request, keeping ONLY
+        the fields that are expected in an API call!
+        E.g., DROP the tool_id, since it is only for use in the Assistant API,
+            not the completion API.
+
+        Args:
+            has_system_role: whether the message has a system role (if not,
+                set to "user" role)
+        Returns:
+            dict: dictionary representation of LLM message
+        """
+        d = self.model_dump()
+        files: List[FileAttachment] = d.pop("files")
+        if len(files) > 0 and self.role == Role.USER:
+            # In there are files, then content is an array of
+            # different content-parts
+            d["content"] = [
+                dict(
+                    type="text",
+                    text=self.content or "",
+                )
+            ] + [f.to_dict(model) for f in self.files]
+
+        # if there is a key k = "role" with value "system", change to "user"
+        # in case has_system_role is False
+        if not has_system_role and "role" in d and d["role"] == "system":
+            d["role"] = "user"
+            if d.get("content"):
+                d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
+        # drop None values since API doesn't accept them (this omits `content`
+        # entirely when it is None, i.e. "no content")
+        dict_no_none = {k: v for k, v in d.items() if v is not None}
+        if "name" in dict_no_none and dict_no_none["name"] == "":
+            # OpenAI API does not like empty name
+            del dict_no_none["name"]
+        if "function_call" in dict_no_none:
+            # arguments must be a string
+            if "arguments" in dict_no_none["function_call"]:
+                dict_no_none["function_call"]["arguments"] = json.dumps(
+                    dict_no_none["function_call"]["arguments"]
+                )
+        if dict_no_none.get("tool_calls"):
+            # convert tool calls to API format
+            for tc in dict_no_none["tool_calls"]:
+                if "arguments" in tc["function"]:
+                    # arguments must be a string
+                    if tc["function"]["arguments"] is None:
+                        tc["function"]["arguments"] = "{}"
+                    else:
+                        tc["function"]["arguments"] = json.dumps(
+                            tc["function"]["arguments"]
+                        )
+                if "extra_content" in tc and tc["extra_content"] is None:
+                    del tc["extra_content"]
+        else:
+            # An empty tool-call list is not a call and conveys no useful API
+            # information. Omitting it also lets the empty-message fallback
+            # below produce a valid message.
+            dict_no_none.pop("tool_calls", None)
+        # A message with empty content (None was dropped above, or "") AND no
+        # tool/function call would be an entirely empty message, which some APIs
+        # (e.g. Gemini) reject; fall back to a single space in that case only.
+        # When there IS a tool/function call, empty content is fine (and Gemini
+        # 3.x in fact REQUIRES it — it rejects an assistant turn that carries
+        # both a call and non-empty text content).
+        has_call = bool(dict_no_none.get("tool_calls")) or (
+            dict_no_none.get("function_call") is not None
+        )
+        if not has_call and not dict_no_none.get("content"):
+            dict_no_none["content"] = " "
+        # IMPORTANT! drop fields that are not expected in API call
+        dict_no_none.pop("tool_id", None)
+        dict_no_none.pop("timestamp", None)
+        dict_no_none.pop("chat_document_id", None)
+        return dict_no_none
+
+    def __str__(self) -> str:
+        if self.function_call is not None:
+            content = "FUNC: " + json.dumps(self.function_call)
+        else:
+            content = self.content or ""
+        name_str = f" ({self.name})" if self.name else ""
+        return f"{self.role} {name_str}: {content}"
+
+
+class LLMResponse(BaseModel):
+    """
+    Class representing response from LLM.
+    """
+
+    # None means the model returned NO content (e.g. only a tool/function
+    # call), which is distinct from an empty string "". Preserving this
+    # distinction lets the message be faithfully reproduced downstream
+    # (see ChatDocument.content_is_none and LLMMessage.content).
+    message: Optional[str] = None
+    reasoning: str = ""  # optional reasoning text from reasoning models
+    # Original message text including inline thought signatures (e.g.
+    # <thinking>...</thinking>). Only set when reasoning was extracted
+    # from the message text via get_reasoning_final(); NOT set when
+    # reasoning comes from a separate API field (e.g. reasoning_content),
+    # since in that case the message text never contained thought tags.
+    message_with_reasoning: Optional[str] = None
+    # TODO tool_id needs to generalize to multi-tool calls
+    tool_id: str = ""  # used by OpenAIAssistant
+    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+    function_call: Optional[LLMFunctionCall] = None
+    usage: Optional[LLMTokenUsage] = None
+    cached: bool = False
+
+    def __str__(self) -> str:
+        if self.function_call is not None:
+            return str(self.function_call)
+        elif self.oai_tool_calls:
+            return "\n".join(str(tc) for tc in self.oai_tool_calls)
+        else:
+            return self.message or ""
+
+    def tools_content(self) -> str:
+        if self.function_call is not None:
+            return str(self.function_call)
+        elif self.oai_tool_calls:
+            return "\n".join(str(tc) for tc in self.oai_tool_calls)
+        else:
+            return ""
+
+    def to_LLMMessage(self) -> LLMMessage:
+        """Convert LLM response to an LLMMessage, to be included in the
+        message-list sent to the API.
+        This is currently NOT used in any significant way in the library, and is only
+        provided as a utility to construct a message list for the API when directly
+        working with an LLM object.
+
+        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
+        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
+        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
+        """
+        return LLMMessage(
+            role=Role.ASSISTANT,
+            content=self.message,
+            name=None if self.function_call is None else self.function_call.name,
+            function_call=self.function_call,
+            tool_calls=self.oai_tool_calls,
+        )
+
+    def get_recipient_and_message(
+        self,
+        recognize_recipient_in_content: bool = True,
+    ) -> Tuple[str, str]:
+        """
+        If `message` or `function_call` of an LLM response contains an explicit
+        recipient name, return this recipient name and `message` stripped
+        of the recipient name if specified.
+
+        Two cases:
+        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
+        (b) `message` is empty and function_call/tool_call with explicit `recipient`
+
+        Args:
+            recognize_recipient_in_content (bool): When True (default), parses
+                message text for ``TO[<recipient>]:<content>`` patterns and
+                top-level JSON ``{"recipient": "..."}`` fields. When False,
+                only function_call/tool_call ``recipient`` fields are checked.
+
+        Returns:
+            (str): name of recipient, which may be empty string if no recipient
+            (str): content of message
+
+        """
+
+        if self.function_call is not None:
+            # in this case we ignore message, since all information is in function_call
+            msg = ""
+            args = self.function_call.arguments
+            recipient = ""
+            if isinstance(args, dict):
+                recipient = args.get("recipient", "")
+            return recipient, msg
+        else:
+            msg = self.message or ""
+            if self.oai_tool_calls is not None:
+                # get the first tool that has a recipient field, if any
+                for tc in self.oai_tool_calls:
+                    if tc.function is not None and tc.function.arguments is not None:
+                        recipient = tc.function.arguments.get(
+                            "recipient"
+                        )  # type: ignore
+                        if recipient is not None and recipient != "":
+                            return recipient, ""
+
+        if not recognize_recipient_in_content:
+            return "", msg
+
+        # It's not a function or tool call, so continue looking to see
+        # if a recipient is specified in the message.
+
+        # First check if message contains "TO: <recipient> <content>"
+        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
+        # check if there is a top level json that specifies 'recipient',
+        # and retain the entire message as content.
+        if recipient_name == "":
+            recipient_name = top_level_json_field(msg, "recipient") if msg else ""
+            content = msg
+        return recipient_name, content
+
+
+# Define an abstract base class for language models
+class LanguageModel(ABC):
+    """
+    Abstract base class for language models.
+    """
+
+    # usage cost by model, accumulates here
+    usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+
+    def __init__(self, config: LLMConfig = LLMConfig()):
+        self.config = config
+        self.chat_model_orig = config.chat_model
+
+    @staticmethod
+    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
+        """
+        Create a language model.
+        Args:
+            config: configuration for language model
+        Returns: instance of language model
+        """
+        if type(config) is LLMConfig:
+            raise ValueError(
+                """
+                Cannot create a Language Model object from LLMConfig.
+                Please specify a specific subclass of LLMConfig e.g.,
+                OpenAIGPTConfig. If you are creating a ChatAgent from
+                a ChatAgentConfig, please specify the `llm` field of this config
+                as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
+                """
+            )
+        from langroid.language_models.azure_openai import AzureGPT
+        from langroid.language_models.mock_lm import MockLM, MockLMConfig
+        from langroid.language_models.openai_gpt import OpenAIGPT
+
+        if config is None or config.type is None:
+            return None
+
+        if config.type == "mock":
+            return MockLM(cast(MockLMConfig, config))
+
+        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+
+        if config.type == "azure":
+            openai = AzureGPT
+        else:
+            openai = OpenAIGPT
+        cls = dict(
+            openai=openai,
+        ).get(config.type, openai)
+        return cls(config)  # type: ignore
+
+    @staticmethod
+    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]:
+        """
+        Given an even-length sequence of strings, split into a sequence of pairs
+
+        Args:
+            lst (List[str]): sequence of strings
+
+        Returns:
+            List[Tuple[str,str]]: sequence of pairs of strings
+        """
+        evens = lst[::2]
+        odds = lst[1::2]
+        return list(zip(evens, odds))
+
+    @staticmethod
+    def get_chat_history_components(
+        messages: List[LLMMessage],
+    ) -> Tuple[str, List[Tuple[str, str]], str]:
+        """
+        From the chat history, extract system prompt, user-assistant turns, and
+        final user msg.
+
+        Args:
+            messages (List[LLMMessage]): List of messages in the chat history
+
+        Returns:
+            Tuple[str, List[Tuple[str,str]], str]:
+                system prompt, user-assistant turns, final user msg
+
+        """
+        # Handle various degenerate cases
+        messages = [m for m in messages]  # copy
+        DUMMY_SYS_PROMPT = "You are a helpful assistant."
+        DUMMY_USER_PROMPT = "Follow the instructions above."
+        if len(messages) == 0 or messages[0].role != Role.SYSTEM:
+            logger.warning("No system msg, creating dummy system prompt")
+            messages.insert(0, LLMMessage(content=DUMMY_SYS_PROMPT, role=Role.SYSTEM))
+        system_prompt = messages[0].content or ""
+
+        # now we have messages = [Sys,...]
+        if len(messages) == 1:
+            logger.warning(
+                "Got only system message in chat history, creating dummy user prompt"
+            )
+            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, msg, ...]
+
+        if messages[1].role != Role.USER:
+            messages.insert(1, LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, user, ...]
+        if messages[-1].role != Role.USER:
+            logger.warning(
+                "Last message in chat history is not a user message,"
+                " creating dummy user prompt"
+            )
+            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
+
+        # now we have messages = [Sys, user, ..., user]
+        # so we omit the first and last elements and make pairs of user-asst messages
+        conversation = [m.content or "" for m in messages[1:-1]]
+        user_prompt = messages[-1].content or ""
+        pairs = LanguageModel.user_assistant_pairs(conversation)
+        return system_prompt, pairs, user_prompt
+
+    @abstractmethod
+    def set_stream(self, stream: bool) -> bool:
+        """Enable or disable streaming output from API.
+        Return previous value of stream."""
+        pass
+
+    @abstractmethod
+    def get_stream(self) -> bool:
+        """Get streaming status"""
+        pass
+
+    @abstractmethod
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    def chat(
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
+    ) -> LLMResponse:
+        """
+        Get chat-completion response from LLM.
+
+        Args:
+            messages: message-history to send to the LLM
+            max_tokens: max tokens to generate
+            tools: tools available for the LLM to use in its response
+            tool_choice: tool call mode, one of "none", "auto", "required",
+                or a dict specifying a specific tool.
+            functions: functions available for LLM to call (deprecated)
+            function_call: function calling mode, "auto", "none", or a specific fn
+                    (deprecated)
+        """
+
+        pass
+
+    @abstractmethod
+    async def achat(
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
+    ) -> LLMResponse:
+        """Async version of `chat`. See `chat` for details."""
+        pass
+
+    def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
+        return self.generate(prompt, max_tokens)
+
+    @staticmethod
+    def _fallback_model_names(model: str) -> List[str]:
+        parts = model.split("/")
+        fallbacks = []
+        for i in range(1, len(parts)):
+            fallbacks.append("/".join(parts[i:]))
+        return fallbacks
+
+    def info(self) -> ModelInfo:
+        """Info of relevant chat model"""
+        orig_model = (
+            self.config.completion_model
+            if self.config.use_completion_for_chat
+            else self.chat_model_orig
+        )
+        return get_model_info(orig_model, self._fallback_model_names(orig_model))
+
+    def completion_info(self) -> ModelInfo:
+        """Info of relevant completion model"""
+        orig_model = (
+            self.chat_model_orig
+            if self.config.use_chat_for_completion
+            else self.config.completion_model
+        )
+        return get_model_info(orig_model, self._fallback_model_names(orig_model))
+
+    def supports_functions_or_tools(self) -> bool:
+        """
+        Does this Model's API support "native" tool-calling, i.e.
+        can we call the API with arguments that contain a list of available tools,
+        and their schemas?
+        Note that, given the plethora of LLM provider APIs this determination is
+        imperfect at best, and leans towards returning True.
+        When the API calls fails with an error indicating tools are not supported,
+        then users are encouraged to use the Langroid-based prompt-based
+        ToolMessage mechanism, which works with ANY LLM. To enable this,
+        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
+        """
+        return self.info().has_tools
+
+    def chat_context_length(self) -> int:
+        return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
+
+    def completion_context_length(self) -> int:
+        return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
+
+    def chat_cost(self) -> Tuple[float, float, float]:
+        """
+        Return the cost per 1000 tokens for chat completions.
+
+        Returns:
+            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
+                per 1000 tokens
+        """
+        return (0.0, 0.0, 0.0)
+
+    def reset_usage_cost(self) -> None:
+        for mdl in [self.config.chat_model, self.config.completion_model]:
+            if mdl is None:
+                return
+            if mdl not in self.usage_cost_dict:
+                self.usage_cost_dict[mdl] = LLMTokenUsage()
+            counter = self.usage_cost_dict[mdl]
+            counter.reset()
+
+    def update_usage_cost(
+        self, chat: bool, prompts: int, completions: int, cost: float
+    ) -> None:
+        """
+        Update usage cost for this LLM.
+        Args:
+            chat (bool): whether to update for chat or completion model
+            prompts (int): number of tokens used for prompts
+            completions (int): number of tokens used for completions
+            cost (float): total token cost in USD
+        """
+        mdl = self.config.chat_model if chat else self.config.completion_model
+        if mdl is None:
+            return
+        if mdl not in self.usage_cost_dict:
+            self.usage_cost_dict[mdl] = LLMTokenUsage()
+        counter = self.usage_cost_dict[mdl]
+        counter.prompt_tokens += prompts
+        counter.completion_tokens += completions
+        counter.cost += cost
+        counter.calls += 1
+
+    @classmethod
+    def usage_cost_summary(cls) -> str:
+        s = ""
+        for model, counter in cls.usage_cost_dict.items():
+            s += f"{model}: {counter}\n"
+        return s
+
+    @classmethod
+    def tot_tokens_cost(cls) -> Tuple[int, float]:
+        """
+        Return total tokens used and total cost across all models.
+        """
+        total_tokens = 0
+        total_cost = 0.0
+        for counter in cls.usage_cost_dict.values():
+            total_tokens += counter.total_tokens
+            total_cost += counter.cost
+        return total_tokens, total_cost
+
+    def get_reasoning_final(self, message: str) -> Tuple[str, str]:
+        """Extract "reasoning" and "final answer" from an LLM response, if the
+        reasoning is found within configured delimiters, like <think>, </think>.
+        E.g.,
+        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
+
+        Args:
+            message (str): message from LLM
+
+        Returns:
+            Tuple[str, str]: reasoning, final answer
+        """
+        start, end = self.config.thought_delimiters
+        if start in message and end in message:
+            parts = message.split(start)
+            if len(parts) > 1:
+                reasoning, final = parts[1].split(end)
+                return reasoning, final
+        return "", message
+
+    def followup_to_standalone(
+        self, chat_history: List[Tuple[str, str]], question: str
+    ) -> str:
+        """
+        Given a chat history and a question, convert it to a standalone question.
+        Args:
+            chat_history: list of tuples of (question, answer)
+            query: follow-up question
+
+        Returns: standalone version of the question
+        """
+        history = collate_chat_history(chat_history)
+
+        prompt = f"""
+        You are an expert at understanding a CHAT HISTORY between an AI Assistant
+        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP
+        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood
+        WITHOUT the context of the chat history.
+
+        Below is the CHAT HISTORY. When the User asks you to rephrase a
+        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the
+        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional
+        text or context.
+
+        <CHAT_HISTORY>
+        {history}
+        </CHAT_HISTORY>
+        """.strip()
+
+        follow_up_question = f"""
+        Please rephrase this as a stand-alone question or request:
+        <FOLLOW-UP-QUESTION-OR-REQUEST>
+        {question}
+        </FOLLOW-UP-QUESTION-OR-REQUEST>
+        """.strip()
+
+        show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
+        standalone = (
+            self.chat(
+                messages=[
+                    LLMMessage(role=Role.SYSTEM, content=prompt),
+                    LLMMessage(role=Role.USER, content=follow_up_question),
+                ],
+                max_tokens=1024,
+            ).message
+            or ""
+        )
+        standalone = standalone.strip()
+
+        show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
+        return standalone
+
+
+class StreamingIfAllowed:
+    """Context to temporarily enable or disable streaming, if allowed globally via
+    `settings.stream`"""
+
+    def __init__(self, llm: LanguageModel, stream: bool = True):
+        self.llm = llm
+        self.stream = stream
+
+    def __enter__(self) -> None:
+        self.old_stream = self.llm.set_stream(settings.stream and self.stream)
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.llm.set_stream(self.old_stream)
+</file>
+
 <file path="langroid/language_models/client_cache.py">
 """
 Client caching/singleton pattern for LLM clients to prevent connection pool exhaustion.
@@ -86071,886 +86989,6 @@ class ChatAgent(Agent):
         # multiple agents shared the same cached client instance.
         # Clients are now managed centrally in langroid.language_models.client_cache
         pass
-</file>
-
-<file path="langroid/language_models/base.py">
-import json
-import logging
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone
-from enum import Enum
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    Type,
-    Union,
-    cast,
-)
-
-from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
-
-from langroid.cachedb.base import CacheDBConfig
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.model_info import ModelInfo, get_model_info
-from langroid.parsing.agent_chats import parse_message
-from langroid.parsing.file_attachment import FileAttachment
-from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
-from langroid.prompts.dialog import collate_chat_history
-from langroid.utils.configuration import settings
-from langroid.utils.output.printing import show_if_debug
-
-logger = logging.getLogger(__name__)
-
-
-def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
-    pass
-
-
-async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
-    pass
-
-
-FunctionCallTypes = Literal["none", "auto"]
-ToolChoiceTypes = Literal["none", "auto", "required"]
-ToolTypes = Literal["function"]
-
-DEFAULT_CONTEXT_LENGTH = 16_000
-
-
-class StreamEventType(Enum):
-    TEXT = 1
-    FUNC_NAME = 2
-    FUNC_ARGS = 3
-    TOOL_NAME = 4
-    TOOL_ARGS = 5
-    REASONING = 6
-
-
-class RetryParams(BaseSettings):
-    max_retries: int = 5
-    initial_delay: float = 1.0
-    exponential_base: float = 1.3
-    jitter: bool = True
-
-
-class LLMConfig(BaseSettings):
-    """
-    Common configuration for all language models.
-    """
-
-    type: str = "openai"
-    streamer: Optional[Callable[[Any], None]] = noop_fn
-    streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
-    api_base: str | None = None
-    formatter: None | str = None
-    # specify None if you want to use the full max output tokens of the model
-    max_output_tokens: int | None = 8192
-    timeout: int = 20  # timeout for API requests
-    chat_model: str = ""
-    completion_model: str = ""
-    temperature: float = 0.0
-    chat_context_length: int | None = None
-    async_stream_quiet: bool = False  # suppress streaming output in async mode?
-    completion_context_length: int | None = None
-    # if input length + max_output_tokens > context length of model,
-    # we will try shortening requested output
-    min_output_tokens: int = 64
-    use_completion_for_chat: bool = False  # use completion model for chat?
-    # use chat model for completion? For OpenAI models, this MUST be set to True!
-    use_chat_for_completion: bool = True
-    stream: bool = True  # stream output from API?
-    # TODO: we could have a `stream_reasoning` flag here to control whether to show
-    # reasoning output from reasoning models
-    cache_config: None | CacheDBConfig = RedisCacheConfig()
-    thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
-    retry_params: RetryParams = RetryParams()
-
-    @property
-    def model_max_output_tokens(self) -> int:
-        if self.max_output_tokens:
-            return self.max_output_tokens
-        # Build fallback names by progressively stripping provider prefixes
-        # (e.g. "minimax/MiniMax-M2.7" → ["MiniMax-M2.7"]) so that the lookup
-        # succeeds even before OpenAIGPT.__init__ strips the prefix.
-        parts = self.chat_model.split("/")
-        fallbacks = ["/".join(parts[i:]) for i in range(1, len(parts))]
-        return get_model_info(self.chat_model, fallbacks).max_output_tokens
-
-
-class LLMFunctionCall(BaseModel):
-    """
-    Structure of LLM response indicating it "wants" to call a function.
-    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
-    """
-
-    name: str  # name of function to call
-    arguments: Optional[Dict[str, Any]] = None
-
-    @staticmethod
-    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall":
-        """
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-        fun_call = LLMFunctionCall(name=message["name"])
-        fun_args_str = message["arguments"]
-        # sometimes may be malformed with invalid indents,
-        # so we try to be safe by removing newlines.
-        if fun_args_str is not None:
-            fun_args_str = fun_args_str.replace("\n", "").strip()
-            dict_or_list = parse_imperfect_json(fun_args_str)
-
-            if not isinstance(dict_or_list, dict):
-                raise ValueError(
-                    f"""
-                        Invalid function args: {fun_args_str}
-                        parsed as {dict_or_list},
-                        which is not a valid dict.
-                        """
-                )
-            fun_args = dict_or_list
-        else:
-            fun_args = None
-        fun_call.arguments = fun_args
-
-        return fun_call
-
-    def __str__(self) -> str:
-        return "FUNC: " + json.dumps(self.model_dump(), indent=2)
-
-
-class LLMFunctionSpec(BaseModel):
-    """
-    Description of a function available for the LLM to use.
-    To be used when calling the LLM `chat()` method with the `functions` parameter.
-    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
-    """
-
-    name: str
-    description: str
-    parameters: Dict[str, Any]
-
-
-class OpenAIToolCall(BaseModel):
-    """
-    Represents a single tool call in a list of tool calls generated by OpenAI LLM API.
-    See https://platform.openai.com/docs/api-reference/chat/create
-
-    Attributes:
-        id: The id of the tool call.
-        type: The type of the tool call;
-            only "function" is currently possible (7/26/24).
-        function: The function call.
-    """
-
-    id: str | None = None
-    type: ToolTypes = "function"
-    function: LLMFunctionCall | None = None
-    extra_content: Dict[str, Any] | None = None
-
-    @staticmethod
-    def from_dict(message: Dict[str, Any]) -> "OpenAIToolCall":
-        """
-        Initialize from dictionary.
-        Args:
-            d: dictionary containing fields to initialize
-        """
-        id = message["id"]
-        type = message["type"]
-        function = LLMFunctionCall.from_dict(message["function"])
-        extra_content = message.get("extra_content")
-        return OpenAIToolCall(
-            id=id, type=type, function=function, extra_content=extra_content
-        )
-
-    def __str__(self) -> str:
-        if self.function is None:
-            return ""
-        return "OAI-TOOL: " + json.dumps(self.function.model_dump(), indent=2)
-
-
-class OpenAIToolSpec(BaseModel):
-    type: ToolTypes
-    strict: Optional[bool] = None
-    function: LLMFunctionSpec
-
-
-class OpenAIJsonSchemaSpec(BaseModel):
-    strict: Optional[bool] = None
-    function: LLMFunctionSpec
-
-    def to_dict(self) -> Dict[str, Any]:
-        json_schema: Dict[str, Any] = {
-            "name": self.function.name,
-            "description": self.function.description,
-            "schema": self.function.parameters,
-        }
-        if self.strict is not None:
-            json_schema["strict"] = self.strict
-
-        return {
-            "type": "json_schema",
-            "json_schema": json_schema,
-        }
-
-
-class LLMTokenUsage(BaseModel):
-    """
-    Usage of tokens by an LLM.
-    """
-
-    prompt_tokens: int = 0
-    cached_tokens: int = 0
-    completion_tokens: int = 0
-    cost: float = 0.0
-    calls: int = 0  # how many API calls - not used as of 2025-04-04
-
-    def reset(self) -> None:
-        self.prompt_tokens = 0
-        self.cached_tokens = 0
-        self.completion_tokens = 0
-        self.cost = 0.0
-        self.calls = 0
-
-    def __str__(self) -> str:
-        return (
-            f"Tokens = "
-            f"(prompt {self.prompt_tokens}, cached {self.cached_tokens}, "
-            f"completion {self.completion_tokens}), "
-            f"Cost={self.cost}, Calls={self.calls}"
-        )
-
-    @property
-    def total_tokens(self) -> int:
-        return self.prompt_tokens + self.completion_tokens
-
-
-class Role(str, Enum):
-    """
-    Possible roles for a message in a chat.
-    """
-
-    USER = "user"
-    SYSTEM = "system"
-    ASSISTANT = "assistant"
-    FUNCTION = "function"
-    TOOL = "tool"
-
-
-class LLMMessage(BaseModel):
-    """
-    Class representing an entry in the msg-history sent to the LLM API.
-    It could be one of these:
-    - a user message
-    - an LLM ("Assistant") response
-    - a fn-call or tool-call-list from an OpenAI-compatible LLM API response
-    - a result or results from executing a fn or tool-call(s)
-    """
-
-    role: Role
-    name: Optional[str] = None
-    tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
-    tool_id: str = ""  # used by OpenAIAssistant
-    # None means "no content" (the model returned only a tool/function call).
-    # This is distinct from "" and is dropped from the API payload by api_dict;
-    # see api_dict for how a fully-empty message is handled per-API.
-    content: Optional[str] = None
-    files: List[FileAttachment] = []
-    function_call: Optional[LLMFunctionCall] = None
-    tool_calls: Optional[List[OpenAIToolCall]] = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    # link to corresponding chat document, for provenance/rewind purposes
-    chat_document_id: str = ""
-
-    def api_dict(self, model: str, has_system_role: bool = True) -> Dict[str, Any]:
-        """
-        Convert to dictionary for API request, keeping ONLY
-        the fields that are expected in an API call!
-        E.g., DROP the tool_id, since it is only for use in the Assistant API,
-            not the completion API.
-
-        Args:
-            has_system_role: whether the message has a system role (if not,
-                set to "user" role)
-        Returns:
-            dict: dictionary representation of LLM message
-        """
-        d = self.model_dump()
-        files: List[FileAttachment] = d.pop("files")
-        if len(files) > 0 and self.role == Role.USER:
-            # In there are files, then content is an array of
-            # different content-parts
-            d["content"] = [
-                dict(
-                    type="text",
-                    text=self.content or "",
-                )
-            ] + [f.to_dict(model) for f in self.files]
-
-        # if there is a key k = "role" with value "system", change to "user"
-        # in case has_system_role is False
-        if not has_system_role and "role" in d and d["role"] == "system":
-            d["role"] = "user"
-            if d.get("content"):
-                d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
-        # drop None values since API doesn't accept them (this omits `content`
-        # entirely when it is None, i.e. "no content")
-        dict_no_none = {k: v for k, v in d.items() if v is not None}
-        if "name" in dict_no_none and dict_no_none["name"] == "":
-            # OpenAI API does not like empty name
-            del dict_no_none["name"]
-        if "function_call" in dict_no_none:
-            # arguments must be a string
-            if "arguments" in dict_no_none["function_call"]:
-                dict_no_none["function_call"]["arguments"] = json.dumps(
-                    dict_no_none["function_call"]["arguments"]
-                )
-        if dict_no_none.get("tool_calls"):
-            # convert tool calls to API format
-            for tc in dict_no_none["tool_calls"]:
-                if "arguments" in tc["function"]:
-                    # arguments must be a string
-                    if tc["function"]["arguments"] is None:
-                        tc["function"]["arguments"] = "{}"
-                    else:
-                        tc["function"]["arguments"] = json.dumps(
-                            tc["function"]["arguments"]
-                        )
-                if "extra_content" in tc and tc["extra_content"] is None:
-                    del tc["extra_content"]
-        else:
-            # An empty tool-call list is not a call and conveys no useful API
-            # information. Omitting it also lets the empty-message fallback
-            # below produce a valid message.
-            dict_no_none.pop("tool_calls", None)
-        # A message with empty content (None was dropped above, or "") AND no
-        # tool/function call would be an entirely empty message, which some APIs
-        # (e.g. Gemini) reject; fall back to a single space in that case only.
-        # When there IS a tool/function call, empty content is fine (and Gemini
-        # 3.x in fact REQUIRES it — it rejects an assistant turn that carries
-        # both a call and non-empty text content).
-        has_call = bool(dict_no_none.get("tool_calls")) or (
-            dict_no_none.get("function_call") is not None
-        )
-        if not has_call and not dict_no_none.get("content"):
-            dict_no_none["content"] = " "
-        # IMPORTANT! drop fields that are not expected in API call
-        dict_no_none.pop("tool_id", None)
-        dict_no_none.pop("timestamp", None)
-        dict_no_none.pop("chat_document_id", None)
-        return dict_no_none
-
-    def __str__(self) -> str:
-        if self.function_call is not None:
-            content = "FUNC: " + json.dumps(self.function_call)
-        else:
-            content = self.content or ""
-        name_str = f" ({self.name})" if self.name else ""
-        return f"{self.role} {name_str}: {content}"
-
-
-class LLMResponse(BaseModel):
-    """
-    Class representing response from LLM.
-    """
-
-    # None means the model returned NO content (e.g. only a tool/function
-    # call), which is distinct from an empty string "". Preserving this
-    # distinction lets the message be faithfully reproduced downstream
-    # (see ChatDocument.content_is_none and LLMMessage.content).
-    message: Optional[str] = None
-    reasoning: str = ""  # optional reasoning text from reasoning models
-    # Original message text including inline thought signatures (e.g.
-    # <thinking>...</thinking>). Only set when reasoning was extracted
-    # from the message text via get_reasoning_final(); NOT set when
-    # reasoning comes from a separate API field (e.g. reasoning_content),
-    # since in that case the message text never contained thought tags.
-    message_with_reasoning: Optional[str] = None
-    # TODO tool_id needs to generalize to multi-tool calls
-    tool_id: str = ""  # used by OpenAIAssistant
-    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-    function_call: Optional[LLMFunctionCall] = None
-    usage: Optional[LLMTokenUsage] = None
-    cached: bool = False
-
-    def __str__(self) -> str:
-        if self.function_call is not None:
-            return str(self.function_call)
-        elif self.oai_tool_calls:
-            return "\n".join(str(tc) for tc in self.oai_tool_calls)
-        else:
-            return self.message or ""
-
-    def tools_content(self) -> str:
-        if self.function_call is not None:
-            return str(self.function_call)
-        elif self.oai_tool_calls:
-            return "\n".join(str(tc) for tc in self.oai_tool_calls)
-        else:
-            return ""
-
-    def to_LLMMessage(self) -> LLMMessage:
-        """Convert LLM response to an LLMMessage, to be included in the
-        message-list sent to the API.
-        This is currently NOT used in any significant way in the library, and is only
-        provided as a utility to construct a message list for the API when directly
-        working with an LLM object.
-
-        In a `ChatAgent`, an LLM response is first converted to a ChatDocument,
-        which is in turn converted to an LLMMessage via `ChatDocument.to_LLMMessage()`
-        See `ChatAgent._prep_llm_messages()` and `ChatAgent.llm_response_messages`
-        """
-        return LLMMessage(
-            role=Role.ASSISTANT,
-            content=self.message,
-            name=None if self.function_call is None else self.function_call.name,
-            function_call=self.function_call,
-            tool_calls=self.oai_tool_calls,
-        )
-
-    def get_recipient_and_message(
-        self,
-        recognize_recipient_in_content: bool = True,
-    ) -> Tuple[str, str]:
-        """
-        If `message` or `function_call` of an LLM response contains an explicit
-        recipient name, return this recipient name and `message` stripped
-        of the recipient name if specified.
-
-        Two cases:
-        (a) `message` contains addressing string ``TO[<name>]:<content>``, or
-        (b) `message` is empty and function_call/tool_call with explicit `recipient`
-
-        Args:
-            recognize_recipient_in_content (bool): When True (default), parses
-                message text for ``TO[<recipient>]:<content>`` patterns and
-                top-level JSON ``{"recipient": "..."}`` fields. When False,
-                only function_call/tool_call ``recipient`` fields are checked.
-
-        Returns:
-            (str): name of recipient, which may be empty string if no recipient
-            (str): content of message
-
-        """
-
-        if self.function_call is not None:
-            # in this case we ignore message, since all information is in function_call
-            msg = ""
-            args = self.function_call.arguments
-            recipient = ""
-            if isinstance(args, dict):
-                recipient = args.get("recipient", "")
-            return recipient, msg
-        else:
-            msg = self.message or ""
-            if self.oai_tool_calls is not None:
-                # get the first tool that has a recipient field, if any
-                for tc in self.oai_tool_calls:
-                    if tc.function is not None and tc.function.arguments is not None:
-                        recipient = tc.function.arguments.get(
-                            "recipient"
-                        )  # type: ignore
-                        if recipient is not None and recipient != "":
-                            return recipient, ""
-
-        if not recognize_recipient_in_content:
-            return "", msg
-
-        # It's not a function or tool call, so continue looking to see
-        # if a recipient is specified in the message.
-
-        # First check if message contains "TO: <recipient> <content>"
-        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
-        # check if there is a top level json that specifies 'recipient',
-        # and retain the entire message as content.
-        if recipient_name == "":
-            recipient_name = top_level_json_field(msg, "recipient") if msg else ""
-            content = msg
-        return recipient_name, content
-
-
-# Define an abstract base class for language models
-class LanguageModel(ABC):
-    """
-    Abstract base class for language models.
-    """
-
-    # usage cost by model, accumulates here
-    usage_cost_dict: Dict[str, LLMTokenUsage] = {}
-
-    def __init__(self, config: LLMConfig = LLMConfig()):
-        self.config = config
-        self.chat_model_orig = config.chat_model
-
-    @staticmethod
-    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
-        """
-        Create a language model.
-        Args:
-            config: configuration for language model
-        Returns: instance of language model
-        """
-        if type(config) is LLMConfig:
-            raise ValueError(
-                """
-                Cannot create a Language Model object from LLMConfig.
-                Please specify a specific subclass of LLMConfig e.g.,
-                OpenAIGPTConfig. If you are creating a ChatAgent from
-                a ChatAgentConfig, please specify the `llm` field of this config
-                as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
-                """
-            )
-        from langroid.language_models.azure_openai import AzureGPT
-        from langroid.language_models.mock_lm import MockLM, MockLMConfig
-        from langroid.language_models.openai_gpt import OpenAIGPT
-
-        if config is None or config.type is None:
-            return None
-
-        if config.type == "mock":
-            return MockLM(cast(MockLMConfig, config))
-
-        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
-
-        if config.type == "azure":
-            openai = AzureGPT
-        else:
-            openai = OpenAIGPT
-        cls = dict(
-            openai=openai,
-        ).get(config.type, openai)
-        return cls(config)  # type: ignore
-
-    @staticmethod
-    def user_assistant_pairs(lst: List[str]) -> List[Tuple[str, str]]:
-        """
-        Given an even-length sequence of strings, split into a sequence of pairs
-
-        Args:
-            lst (List[str]): sequence of strings
-
-        Returns:
-            List[Tuple[str,str]]: sequence of pairs of strings
-        """
-        evens = lst[::2]
-        odds = lst[1::2]
-        return list(zip(evens, odds))
-
-    @staticmethod
-    def get_chat_history_components(
-        messages: List[LLMMessage],
-    ) -> Tuple[str, List[Tuple[str, str]], str]:
-        """
-        From the chat history, extract system prompt, user-assistant turns, and
-        final user msg.
-
-        Args:
-            messages (List[LLMMessage]): List of messages in the chat history
-
-        Returns:
-            Tuple[str, List[Tuple[str,str]], str]:
-                system prompt, user-assistant turns, final user msg
-
-        """
-        # Handle various degenerate cases
-        messages = [m for m in messages]  # copy
-        DUMMY_SYS_PROMPT = "You are a helpful assistant."
-        DUMMY_USER_PROMPT = "Follow the instructions above."
-        if len(messages) == 0 or messages[0].role != Role.SYSTEM:
-            logger.warning("No system msg, creating dummy system prompt")
-            messages.insert(0, LLMMessage(content=DUMMY_SYS_PROMPT, role=Role.SYSTEM))
-        system_prompt = messages[0].content or ""
-
-        # now we have messages = [Sys,...]
-        if len(messages) == 1:
-            logger.warning(
-                "Got only system message in chat history, creating dummy user prompt"
-            )
-            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, msg, ...]
-
-        if messages[1].role != Role.USER:
-            messages.insert(1, LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, user, ...]
-        if messages[-1].role != Role.USER:
-            logger.warning(
-                "Last message in chat history is not a user message,"
-                " creating dummy user prompt"
-            )
-            messages.append(LLMMessage(content=DUMMY_USER_PROMPT, role=Role.USER))
-
-        # now we have messages = [Sys, user, ..., user]
-        # so we omit the first and last elements and make pairs of user-asst messages
-        conversation = [m.content or "" for m in messages[1:-1]]
-        user_prompt = messages[-1].content or ""
-        pairs = LanguageModel.user_assistant_pairs(conversation)
-        return system_prompt, pairs, user_prompt
-
-    @abstractmethod
-    def set_stream(self, stream: bool) -> bool:
-        """Enable or disable streaming output from API.
-        Return previous value of stream."""
-        pass
-
-    @abstractmethod
-    def get_stream(self) -> bool:
-        """Get streaming status"""
-        pass
-
-    @abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        pass
-
-    @abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        pass
-
-    @abstractmethod
-    def chat(
-        self,
-        messages: Union[str, List[LLMMessage]],
-        max_tokens: int = 200,
-        tools: Optional[List[OpenAIToolSpec]] = None,
-        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
-        response_format: Optional[OpenAIJsonSchemaSpec] = None,
-    ) -> LLMResponse:
-        """
-        Get chat-completion response from LLM.
-
-        Args:
-            messages: message-history to send to the LLM
-            max_tokens: max tokens to generate
-            tools: tools available for the LLM to use in its response
-            tool_choice: tool call mode, one of "none", "auto", "required",
-                or a dict specifying a specific tool.
-            functions: functions available for LLM to call (deprecated)
-            function_call: function calling mode, "auto", "none", or a specific fn
-                    (deprecated)
-        """
-
-        pass
-
-    @abstractmethod
-    async def achat(
-        self,
-        messages: Union[str, List[LLMMessage]],
-        max_tokens: int = 200,
-        tools: Optional[List[OpenAIToolSpec]] = None,
-        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
-        response_format: Optional[OpenAIJsonSchemaSpec] = None,
-    ) -> LLMResponse:
-        """Async version of `chat`. See `chat` for details."""
-        pass
-
-    def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
-        return self.generate(prompt, max_tokens)
-
-    @staticmethod
-    def _fallback_model_names(model: str) -> List[str]:
-        parts = model.split("/")
-        fallbacks = []
-        for i in range(1, len(parts)):
-            fallbacks.append("/".join(parts[i:]))
-        return fallbacks
-
-    def info(self) -> ModelInfo:
-        """Info of relevant chat model"""
-        orig_model = (
-            self.config.completion_model
-            if self.config.use_completion_for_chat
-            else self.chat_model_orig
-        )
-        return get_model_info(orig_model, self._fallback_model_names(orig_model))
-
-    def completion_info(self) -> ModelInfo:
-        """Info of relevant completion model"""
-        orig_model = (
-            self.chat_model_orig
-            if self.config.use_chat_for_completion
-            else self.config.completion_model
-        )
-        return get_model_info(orig_model, self._fallback_model_names(orig_model))
-
-    def supports_functions_or_tools(self) -> bool:
-        """
-        Does this Model's API support "native" tool-calling, i.e.
-        can we call the API with arguments that contain a list of available tools,
-        and their schemas?
-        Note that, given the plethora of LLM provider APIs this determination is
-        imperfect at best, and leans towards returning True.
-        When the API calls fails with an error indicating tools are not supported,
-        then users are encouraged to use the Langroid-based prompt-based
-        ToolMessage mechanism, which works with ANY LLM. To enable this,
-        in your ChatAgentConfig, set `use_functions_api=False`, and `use_tools=True`.
-        """
-        return self.info().has_tools
-
-    def chat_context_length(self) -> int:
-        return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
-
-    def completion_context_length(self) -> int:
-        return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
-
-    def chat_cost(self) -> Tuple[float, float, float]:
-        """
-        Return the cost per 1000 tokens for chat completions.
-
-        Returns:
-            Tuple[float, float, float]: (input_cost, cached_cost, output_cost)
-                per 1000 tokens
-        """
-        return (0.0, 0.0, 0.0)
-
-    def reset_usage_cost(self) -> None:
-        for mdl in [self.config.chat_model, self.config.completion_model]:
-            if mdl is None:
-                return
-            if mdl not in self.usage_cost_dict:
-                self.usage_cost_dict[mdl] = LLMTokenUsage()
-            counter = self.usage_cost_dict[mdl]
-            counter.reset()
-
-    def update_usage_cost(
-        self, chat: bool, prompts: int, completions: int, cost: float
-    ) -> None:
-        """
-        Update usage cost for this LLM.
-        Args:
-            chat (bool): whether to update for chat or completion model
-            prompts (int): number of tokens used for prompts
-            completions (int): number of tokens used for completions
-            cost (float): total token cost in USD
-        """
-        mdl = self.config.chat_model if chat else self.config.completion_model
-        if mdl is None:
-            return
-        if mdl not in self.usage_cost_dict:
-            self.usage_cost_dict[mdl] = LLMTokenUsage()
-        counter = self.usage_cost_dict[mdl]
-        counter.prompt_tokens += prompts
-        counter.completion_tokens += completions
-        counter.cost += cost
-        counter.calls += 1
-
-    @classmethod
-    def usage_cost_summary(cls) -> str:
-        s = ""
-        for model, counter in cls.usage_cost_dict.items():
-            s += f"{model}: {counter}\n"
-        return s
-
-    @classmethod
-    def tot_tokens_cost(cls) -> Tuple[int, float]:
-        """
-        Return total tokens used and total cost across all models.
-        """
-        total_tokens = 0
-        total_cost = 0.0
-        for counter in cls.usage_cost_dict.values():
-            total_tokens += counter.total_tokens
-            total_cost += counter.cost
-        return total_tokens, total_cost
-
-    def get_reasoning_final(self, message: str) -> Tuple[str, str]:
-        """Extract "reasoning" and "final answer" from an LLM response, if the
-        reasoning is found within configured delimiters, like <think>, </think>.
-        E.g.,
-        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
-
-        Args:
-            message (str): message from LLM
-
-        Returns:
-            Tuple[str, str]: reasoning, final answer
-        """
-        start, end = self.config.thought_delimiters
-        if start in message and end in message:
-            parts = message.split(start)
-            if len(parts) > 1:
-                reasoning, final = parts[1].split(end)
-                return reasoning, final
-        return "", message
-
-    def followup_to_standalone(
-        self, chat_history: List[Tuple[str, str]], question: str
-    ) -> str:
-        """
-        Given a chat history and a question, convert it to a standalone question.
-        Args:
-            chat_history: list of tuples of (question, answer)
-            query: follow-up question
-
-        Returns: standalone version of the question
-        """
-        history = collate_chat_history(chat_history)
-
-        prompt = f"""
-        You are an expert at understanding a CHAT HISTORY between an AI Assistant
-        and a User, and you are highly skilled in rephrasing the User's FOLLOW-UP
-        QUESTION/REQUEST as a STANDALONE QUESTION/REQUEST that can be understood
-        WITHOUT the context of the chat history.
-
-        Below is the CHAT HISTORY. When the User asks you to rephrase a
-        FOLLOW-UP QUESTION/REQUEST, your ONLY task is to simply return the
-        question REPHRASED as a STANDALONE QUESTION/REQUEST, without any additional
-        text or context.
-
-        <CHAT_HISTORY>
-        {history}
-        </CHAT_HISTORY>
-        """.strip()
-
-        follow_up_question = f"""
-        Please rephrase this as a stand-alone question or request:
-        <FOLLOW-UP-QUESTION-OR-REQUEST>
-        {question}
-        </FOLLOW-UP-QUESTION-OR-REQUEST>
-        """.strip()
-
-        show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
-        standalone = (
-            self.chat(
-                messages=[
-                    LLMMessage(role=Role.SYSTEM, content=prompt),
-                    LLMMessage(role=Role.USER, content=follow_up_question),
-                ],
-                max_tokens=1024,
-            ).message
-            or ""
-        )
-        standalone = standalone.strip()
-
-        show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
-        return standalone
-
-
-class StreamingIfAllowed:
-    """Context to temporarily enable or disable streaming, if allowed globally via
-    `settings.stream`"""
-
-    def __init__(self, llm: LanguageModel, stream: bool = True):
-        self.llm = llm
-        self.stream = stream
-
-    def __enter__(self) -> None:
-        self.old_stream = self.llm.set_stream(settings.stream and self.stream)
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self.llm.set_stream(self.old_stream)
 </file>
 
 <file path="langroid/agent/special/sql/sql_chat_agent.py">
