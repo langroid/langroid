@@ -15,6 +15,7 @@ class ModelProvider(str, Enum):
     DEEPSEEK = "deepseek"
     GOOGLE = "google"
     MINIMAX = "minimax"
+    MISTRAL = "mistral"
     UNKNOWN = "unknown"
 
 
@@ -113,6 +114,13 @@ class MiniMaxModel(ModelName):
     MINIMAX_M2_1 = "MiniMax-M2.1"
     MINIMAX_M2_1_HIGHSPEED = "MiniMax-M2.1-highspeed"
     MINIMAX_M2 = "MiniMax-M2"
+
+
+class MistralModel(ModelName):
+    """Stable aliases for Mistral chat models."""
+
+    MISTRAL_SMALL_LATEST = "mistral-small-latest"
+    MISTRAL_LARGE_LATEST = "mistral-large-latest"
 
 
 class OpenAI_API_ParamInfo(BaseModel):
@@ -762,6 +770,29 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=0.95,
         has_structured_output=True,
         description="MiniMax M2 (204K context)",
+    ),
+    # Mistral aliases
+    MistralModel.MISTRAL_SMALL_LATEST.value: ModelInfo(
+        name=MistralModel.MISTRAL_SMALL_LATEST.value,
+        provider=ModelProvider.MISTRAL,
+        context_length=256_000,
+        max_output_tokens=8192,
+        input_cost_per_million=0.15,
+        cached_cost_per_million=0.015,
+        output_cost_per_million=0.60,
+        has_structured_output=True,
+        description="Mistral Small (latest alias)",
+    ),
+    MistralModel.MISTRAL_LARGE_LATEST.value: ModelInfo(
+        name=MistralModel.MISTRAL_LARGE_LATEST.value,
+        provider=ModelProvider.MISTRAL,
+        context_length=256_000,
+        max_output_tokens=8192,
+        input_cost_per_million=0.50,
+        cached_cost_per_million=0.05,
+        output_cost_per_million=1.50,
+        has_structured_output=True,
+        description="Mistral Large (latest alias)",
     ),
 }
 

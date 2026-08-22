@@ -20,6 +20,7 @@ from .model_info import (
     AnthropicModel,
     GeminiModel,
     MiniMaxModel,
+    MistralModel,
     OpenAICompletionModel,
 )
 from .openai_gpt import OpenAIGPTConfig, OpenAIGPT, OpenAICallParams
@@ -47,6 +48,7 @@ __all__ = [
     "AnthropicModel",
     "GeminiModel",
     "MiniMaxModel",
+    "MistralModel",
     "OpenAICompletionModel",
     "OpenAIGPTConfig",
     "OpenAIGPT",

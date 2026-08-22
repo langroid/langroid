@@ -55,6 +55,7 @@ and which environment variable to set for the API key.
 | Gemini        | `gemini/gemini-2.0-flash`                                | `GEMINI_API_KEY` |
 | DeepSeek      | `deepseek/deepseek-reasoner`                             | `DEEPSEEK_API_KEY` |
 | MiniMax       | `minimax/MiniMax-M2.7`                                   | `MINIMAX_API_KEY` |
+| Mistral       | `mistral/mistral-small-latest`                           | `MISTRAL_API_KEY` |
 | GLHF          | `glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct`                | `GLHF_API_KEY` |
 | OpenRouter    | `openrouter/deepseek/deepseek-r1-distill-llama-70b:free` | `OPENROUTER_API_KEY` |
 | Ollama        | `ollama/qwen2.5`                                         | `OLLAMA_API_KEY` (usually `ollama`) |

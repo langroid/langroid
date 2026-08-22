@@ -113,6 +113,24 @@ Available models include `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, and
 
 See the [`chat-minimax.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-minimax.py) example for a ready-to-run interactive chat script.
 
+## Mistral LLMs
+
+Mistral exposes an OpenAI-compatible chat-completions endpoint, so Langroid can
+use it directly without LiteLLM or an additional client dependency.
+
+Set `MISTRAL_API_KEY` in your `.env` file or shell, then prefix the model name
+with `mistral/`:
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="mistral/mistral-small-latest",
+)
+```
+
+The prefix selects `https://api.mistral.ai/v1` and is removed before the model
+name is sent. You can set `api_base` explicitly when using a compatible proxy
+or regional endpoint.
+
 ## AI Gateways for Multiple LLM Providers
 
 In addition to LiteLLM, Langroid integrates with AI gateways that provide unified access to multiple LLM providers with additional enterprise features:
@@ -207,12 +225,3 @@ When the `--m` option is omitted, the default OpenAI GPT4 model is used.
       parameter in the `OpenAIGPTConfig` object. which you may need to adjust for different models.
       So this option is only meant for quickly testing against different models, and not meant as
       a way to switch between models in a production environment.
-
-
-
-
-
-
-
-
-    

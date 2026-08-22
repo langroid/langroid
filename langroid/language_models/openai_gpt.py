@@ -61,6 +61,7 @@ from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
     DeepSeekModel,
     MiniMaxModel,
+    MistralModel,
     OpenAI_API_ParamInfo,
 )
 from langroid.language_models.model_info import (
@@ -99,6 +100,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
+MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
 OLLAMA_API_KEY = "ollama"
 
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
@@ -570,6 +572,7 @@ class OpenAIGPT(LanguageModel):
         self.is_gemini = self.is_gemini_model()
         self.is_deepseek = self.is_deepseek_model()
         self.is_minimax = self.is_minimax_model()
+        self.is_mistral = self.is_mistral_model()
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
         self.is_langdb = self.config.chat_model.startswith("langdb/")
@@ -674,6 +677,24 @@ class OpenAIGPT(LanguageModel):
                 # and self.info() can find the model in MODEL_INFO.
                 self.supports_strict_tools = True
                 self.supports_json_schema = self.info().has_structured_output
+            elif self.is_mistral:
+                self.config.chat_model = self.config.chat_model.replace("mistral/", "")
+                # Do not inherit OPENAI_API_BASE for a Mistral-prefixed model.
+                # An api_base passed explicitly still supports proxies and
+                # regional endpoints.
+                openai_api_base = os.getenv("OPENAI_API_BASE")
+                explicit_api_base = (
+                    self.config.api_base
+                    if self.config.api_base and self.config.api_base != openai_api_base
+                    else None
+                )
+                self.api_base = explicit_api_base or MISTRAL_BASE_URL
+                if self.api_key == OPENAI_API_KEY:
+                    mistral_key = os.getenv("MISTRAL_API_KEY", "")
+                    if mistral_key:
+                        self.api_key = mistral_key
+                self.supports_strict_tools = False
+                self.supports_json_schema = True
             elif self.is_langdb:
                 self.config.chat_model = self.config.chat_model.replace("langdb/", "")
                 self.api_base = self.config.langdb_params.base_url
@@ -903,6 +924,14 @@ class OpenAIGPT(LanguageModel):
             or self.chat_model_orig.startswith("minimax/")
         )
 
+    def is_mistral_model(self) -> bool:
+        """Are we using Mistral's OpenAI-compatible API?"""
+        mistral_models = [model.value for model in MistralModel]
+        return (
+            self.chat_model_orig in mistral_models
+            or self.chat_model_orig.startswith("mistral/")
+        )
+
     def unsupported_params(self) -> List[str]:
         """
         List of params that are not supported by the current model
@@ -915,6 +944,8 @@ class OpenAIGPT(LanguageModel):
         Map of param name -> new name for specific models.
         Currently main troublemaker is o1* series.
         """
+        if self.is_mistral:
+            return {"max_completion_tokens": "max_tokens"}
         return self.info().rename_params
 
     def chat_context_length(self) -> int:
@@ -2305,7 +2336,11 @@ class OpenAIGPT(LanguageModel):
             max_completion_tokens=max_tokens,
             stream=self.get_stream(),
         )
-        if self.get_stream() and "groq" not in self.chat_model_orig:
+        if (
+            self.get_stream()
+            and "groq" not in self.chat_model_orig
+            and not self.is_mistral
+        ):
             # groq fails when we include stream_options in the request
             args.update(
                 dict(
