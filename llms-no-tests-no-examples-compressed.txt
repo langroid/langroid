@@ -40672,175 +40672,6 @@ model_names = tuple(_model_name(model) for model in models)
 def _model_name(model: str | ModelName) -> str
 </file>
 
-<file path="langroid/parsing/file_attachment.py">
-_HTTP_URL_SCHEMES = frozenset({"http", "https"})
-_FTP_URL_SCHEMES = frozenset({"ftp"})
-⋮----
-def _is_full_url(value: str, schemes: frozenset[str]) -> bool
-⋮----
-"""Whether a value is a URL with an allowed scheme and valid hostname."""
-⋮----
-parsed_url = urlparse(value)
-hostname = parsed_url.hostname
-⋮----
-class FileAttachment(BaseModel)
-⋮----
-"""Represents a file attachment to be sent to an LLM API."""
-⋮----
-content: bytes
-filename: Optional[str] = None
-mime_type: str = "application/octet-stream"
-url: str | None = None
-detail: str | None = None
-⋮----
-def __init__(self, **data: Any) -> None
-⋮----
-"""Initialize with sensible defaults for filename if not provided."""
-⋮----
-# Generate a more readable unique filename
-unique_id = str(uuid.uuid4())[:8]
-⋮----
-"""Create a FileAttachment from a file path.
-
-        Args:
-            file_path: Path to the file to attach
-
-        Returns:
-            FileAttachment instance
-        """
-path = Path(file_path)
-⋮----
-content = f.read()
-⋮----
-mime_type = "application/octet-stream"
-⋮----
-"""Create a FileAttachment from a URL.
-
-        Args:
-            url: URL to the file
-            content: Optional raw bytes content (if already fetched)
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename or url
-
-        Returns:
-            FileAttachment instance
-        """
-⋮----
-# Extract filename from URL if possible
-⋮----
-parsed_url = urlparse(url)
-path = parsed_url.path
-filename = path.split("/")[-1] if path else None
-⋮----
-content=content or b"",  # Empty bytes if no content provided
-⋮----
-"""Create a FileAttachment from either a local file path or a URL.
-
-        Args:
-            path: Path to the file or URL to fetch.
-            detail: Optional image detail level.
-            mime_type: Optional MIME type for a URL. Local paths infer their
-                MIME type from the filename.
-
-        Returns:
-            FileAttachment instance
-
-        Raises:
-            ValueError: If path is an FTP URL, which is not supported.
-        """
-# Convert to string if Path object
-path_str = str(path)
-⋮----
-# Check if it's a URL
-⋮----
-# Assume it's a local file path
-⋮----
-"""Create a FileAttachment from bytes content.
-
-        Args:
-            content: Raw bytes content
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename if provided
-
-        Returns:
-            FileAttachment instance
-        """
-⋮----
-"""Create a FileAttachment from a file-like object.
-
-        Args:
-            file_obj: File-like object with binary content
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename if provided
-
-        Returns:
-            FileAttachment instance
-        """
-content = file_obj.read()
-⋮----
-"""Create a FileAttachment from text content.
-
-        Args:
-            text: Text content to include
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content
-            encoding: Text encoding to use
-
-        Returns:
-            FileAttachment instance
-        """
-content = text.encode(encoding)
-⋮----
-def to_base64(self) -> str
-⋮----
-"""Convert content to base64 encoding.
-
-        Returns:
-            Base64 encoded string
-        """
-⋮----
-def to_data_uri(self) -> str
-⋮----
-"""Convert content to a data URI.
-
-        Returns:
-            A data URI string containing the base64-encoded content with MIME type
-        """
-base64_content = self.to_base64()
-⋮----
-def _content_url(self) -> str
-⋮----
-"""URL to send to the API for this attachment.
-
-        Returns:
-            The original URL when it is a full http/https URL that the API can
-            fetch directly, else a base64-encoded data URI of the content.
-        """
-# If we have a URL and it's a full http/https URL, use it directly
-⋮----
-# Otherwise use base64 data URI
-⋮----
-def to_dict(self, model: str) -> Dict[str, Any]
-⋮----
-"""
-        Convert to a dictionary suitable for API requests.
-        Tested only for PDF files.
-
-        Returns:
-            Dictionary with file data
-        """
-⋮----
-# Videos are sent as `video_url` content-parts, mirroring the
-# `image_url` parts used for images: a generic `file` part is not
-# recognized as video input by the API.
-⋮----
-image_url_dict: Dict[str, str] = dict(url=self._content_url())
-⋮----
-# Add detail parameter if specified
-⋮----
-# For non-image files and unexpected runtime MIME values
-</file>
-
 <file path="langroid/language_models/openai_gpt.py">
 OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
 ⋮----
@@ -41932,6 +41763,175 @@ response_dict = response.model_dump()
 cached, hashed_key, response = await self._achat_completions_with_backoff(  # type: ignore
 </file>
 
+<file path="langroid/parsing/file_attachment.py">
+_HTTP_URL_SCHEMES = frozenset({"http", "https"})
+_FTP_URL_SCHEMES = frozenset({"ftp"})
+⋮----
+def _is_full_url(value: str, schemes: frozenset[str]) -> bool
+⋮----
+"""Whether a value is a URL with an allowed scheme and valid hostname."""
+⋮----
+parsed_url = urlparse(value)
+hostname = parsed_url.hostname
+⋮----
+class FileAttachment(BaseModel)
+⋮----
+"""Represents a file attachment to be sent to an LLM API."""
+⋮----
+content: bytes
+filename: Optional[str] = None
+mime_type: str = "application/octet-stream"
+url: str | None = None
+detail: str | None = None
+⋮----
+def __init__(self, **data: Any) -> None
+⋮----
+"""Initialize with sensible defaults for filename if not provided."""
+⋮----
+# Generate a more readable unique filename
+unique_id = str(uuid.uuid4())[:8]
+⋮----
+"""Create a FileAttachment from a file path.
+
+        Args:
+            file_path: Path to the file to attach
+
+        Returns:
+            FileAttachment instance
+        """
+path = Path(file_path)
+⋮----
+content = f.read()
+⋮----
+mime_type = "application/octet-stream"
+⋮----
+"""Create a FileAttachment from a URL.
+
+        Args:
+            url: URL to the file
+            content: Optional raw bytes content (if already fetched)
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename or url
+
+        Returns:
+            FileAttachment instance
+        """
+⋮----
+# Extract filename from URL if possible
+⋮----
+parsed_url = urlparse(url)
+path = parsed_url.path
+filename = path.split("/")[-1] if path else None
+⋮----
+content=content or b"",  # Empty bytes if no content provided
+⋮----
+"""Create a FileAttachment from either a local file path or a URL.
+
+        Args:
+            path: Path to the file or URL to fetch.
+            detail: Optional image detail level.
+            mime_type: Optional MIME type for a URL. Local paths infer their
+                MIME type from the filename.
+
+        Returns:
+            FileAttachment instance
+
+        Raises:
+            ValueError: If path is an FTP URL, which is not supported.
+        """
+# Convert to string if Path object
+path_str = str(path)
+⋮----
+# Check if it's a URL
+⋮----
+# Assume it's a local file path
+⋮----
+"""Create a FileAttachment from bytes content.
+
+        Args:
+            content: Raw bytes content
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename if provided
+
+        Returns:
+            FileAttachment instance
+        """
+⋮----
+"""Create a FileAttachment from a file-like object.
+
+        Args:
+            file_obj: File-like object with binary content
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename if provided
+
+        Returns:
+            FileAttachment instance
+        """
+content = file_obj.read()
+⋮----
+"""Create a FileAttachment from text content.
+
+        Args:
+            text: Text content to include
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content
+            encoding: Text encoding to use
+
+        Returns:
+            FileAttachment instance
+        """
+content = text.encode(encoding)
+⋮----
+def to_base64(self) -> str
+⋮----
+"""Convert content to base64 encoding.
+
+        Returns:
+            Base64 encoded string
+        """
+⋮----
+def to_data_uri(self) -> str
+⋮----
+"""Convert content to a data URI.
+
+        Returns:
+            A data URI string containing the base64-encoded content with MIME type
+        """
+base64_content = self.to_base64()
+⋮----
+def _content_url(self) -> str
+⋮----
+"""URL to send to the API for this attachment.
+
+        Returns:
+            The original URL when it is a full http/https URL that the API can
+            fetch directly, else a base64-encoded data URI of the content.
+        """
+# If we have a URL and it's a full http/https URL, use it directly
+⋮----
+# Otherwise use base64 data URI
+⋮----
+def to_dict(self, model: str) -> Dict[str, Any]
+⋮----
+"""
+        Convert to a dictionary suitable for API requests.
+        Tested only for PDF files.
+
+        Returns:
+            Dictionary with file data
+        """
+⋮----
+# Videos are sent as `video_url` content-parts, mirroring the
+# `image_url` parts used for images: a generic `file` part is not
+# recognized as video input by the API.
+⋮----
+image_url_dict: Dict[str, str] = dict(url=self._content_url())
+⋮----
+# Add detail parameter if specified
+⋮----
+# For non-image files and unexpected runtime MIME values
+</file>
+
 <file path="mkdocs.yml">
 site_name: "langroid"
 repo_name: langroid/langroid
@@ -42129,7 +42129,7 @@ extra_javascript:
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.16.4
+  rev: v0.16.0
   hooks:
     - id: ruff
 </file>
