@@ -678,6 +678,56 @@ def test_gemini_alias_preserves_explicit_api_base(
     assert llm.api_base == explicit_api_base
 
 
+@pytest.mark.parametrize(
+    "chat_model",
+    ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"),
+)
+def test_gemini_model_copy_preserves_explicit_api_base(monkeypatch, chat_model):
+    """Gemini configs copied with an API base retain the caller endpoint."""
+    monkeypatch.setattr(settings, "chat_model", "")
+    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
+    custom_base = "https://caller.example/v1"
+    config = lm.OpenAIGPTConfig(chat_model=chat_model).model_copy(
+        update={"api_base": custom_base}
+    )
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.is_gemini
+    assert llm.api_base == custom_base
+
+
+@pytest.mark.parametrize(
+    "chat_model",
+    ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"),
+)
+def test_gemini_assignment_preserves_explicit_api_base(monkeypatch, chat_model):
+    """Gemini configs assigned an API base retain the caller endpoint."""
+    monkeypatch.setattr(settings, "chat_model", "")
+    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
+    custom_base = "https://caller.example/v1"
+    config = lm.OpenAIGPTConfig(chat_model=chat_model)
+    config.api_base = custom_base
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.is_gemini
+    assert llm.api_base == custom_base
+
+
+def test_gemini_dynamic_config_preserves_api_base(monkeypatch):
+    """Dynamically prefixed Gemini settings retain their API base."""
+    monkeypatch.setattr(settings, "chat_model", "")
+    monkeypatch.setenv("VERTEX_API_BASE", "https://vertex.example/v1")
+    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
+    vertex_config = lm.OpenAIGPTConfig.create("vertex")
+
+    llm = lm.OpenAIGPT(vertex_config(chat_model="google/gemini-2.0-flash"))
+
+    assert llm.is_gemini
+    assert llm.api_base == "https://vertex.example/v1"
+
+
 def test_followup_standalone():
     """Test that followup_to_standalone works."""
 

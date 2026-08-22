@@ -334,9 +334,19 @@ class OpenAIGPTConfig(LLMConfig):
             kwargs["run_on_first_use"] = with_warning
 
         super().__init__(**kwargs)
+        env_prefix = self.model_config.get("env_prefix")
+        api_base_was_supplied = api_base_was_supplied or (
+            env_prefix != "OPENAI_" and self.api_base is not None
+        )
         self._api_base_was_supplied = api_base_was_supplied
 
     model_config = SettingsConfigDict(env_prefix="OPENAI_")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Track API bases assigned after config construction."""
+        super().__setattr__(name, value)
+        if name == "api_base":
+            self._api_base_was_supplied = True
 
     def model_copy(
         self, *, update: Mapping[str, Any] | None = None, deep: bool = False
@@ -348,9 +358,15 @@ class OpenAIGPTConfig(LLMConfig):
         models to their annotated base types (dropping subclass-only fields).
         Instead, defer to Pydantic's native `model_copy`, which keeps nested
         `BaseModel` instances (and their concrete subclasses) intact.
+
+        An `api_base` supplied through `update` is caller configuration, so the
+        copy must retain that provenance for provider-specific routing.
         """
         # Delegate to BaseSettings/BaseModel implementation to preserve types
-        return super().model_copy(update=update, deep=deep)  # type: ignore[return-value]
+        copied = super().model_copy(update=update, deep=deep)
+        if update is not None and "api_base" in update:
+            copied._api_base_was_supplied = True
+        return copied  # type: ignore[return-value]
 
     def _validate_litellm(self) -> None:
         """
