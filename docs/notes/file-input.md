@@ -58,6 +58,9 @@ Currently the OpenAI-API supports:
 - PDF files (including image-based PDFs)
 - image files and URLs
 
+Video files and URLs are serialized as `video_url` content-parts, and work with
+any chat-completions API that accepts video input.
+
 
 ## Creating Attachments
 

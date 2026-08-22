@@ -201,6 +201,21 @@ class FileAttachment(BaseModel):
         base64_content = self.to_base64()
         return f"data:{self.mime_type};base64,{base64_content}"
 
+    def _content_url(self) -> str:
+        """URL to send to the API for this attachment.
+
+        Returns:
+            The original URL when it is a full http/https URL that the API can
+            fetch directly, else a base64-encoded data URI of the content.
+        """
+        # If we have a URL and it's a full http/https URL, use it directly
+        if self.url and (
+            self.url.startswith("http://") or self.url.startswith("https://")
+        ):
+            return self.url
+        # Otherwise use base64 data URI
+        return self.to_data_uri()
+
     def to_dict(self, model: str) -> Dict[str, Any]:
         """
         Convert to a dictionary suitable for API requests.
@@ -209,23 +224,22 @@ class FileAttachment(BaseModel):
         Returns:
             Dictionary with file data
         """
-        if (
+        if self.mime_type and self.mime_type.casefold().startswith("video/"):
+            # Videos are sent as `video_url` content-parts, mirroring the
+            # `image_url` parts used for images: a generic `file` part is not
+            # recognized as video input by the API.
+            return dict(
+                type="video_url",
+                video_url=dict(url=self._content_url()),
+            )
+        elif (
             self.mime_type
             and self.mime_type.startswith("image/")
             or "gemini" in model.lower()
         ):
             # for gemini models, we use `image_url` for both pdf-files and images
 
-            image_url_dict = {}
-
-            # If we have a URL and it's a full http/https URL, use it directly
-            if self.url and (
-                self.url.startswith("http://") or self.url.startswith("https://")
-            ):
-                image_url_dict["url"] = self.url
-            # Otherwise use base64 data URI
-            else:
-                image_url_dict["url"] = self.to_data_uri()
+            image_url_dict: Dict[str, str] = dict(url=self._content_url())
 
             # Add detail parameter if specified
             if self.detail:

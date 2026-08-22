@@ -3,6 +3,8 @@ import io
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from langroid.parsing.file_attachment import FileAttachment
 
 
@@ -89,6 +91,115 @@ class TestFileAttachment:
 
         result = attachment.to_dict("gpt-4.1")
         assert result is not None
+
+    def test_to_dict_image(self):
+        """Images are sent as `image_url` content-parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(
+            content=content, filename="image.png", mime_type="image/png"
+        )
+
+        result = attachment.to_dict("gpt-4.1")
+
+        assert result["type"] == "image_url"
+        assert result["image_url"]["url"] == attachment.to_data_uri()
+
+    def test_to_dict_video(self):
+        """Videos are sent as `video_url` content-parts, not generic file parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content, filename="clip.mp4")
+
+        assert attachment.mime_type == "video/mp4"
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == attachment.to_data_uri()
+        assert "file" not in result
+
+    def test_to_dict_video_mime_type_case_insensitive(self):
+        """Video MIME matching is case-insensitive."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.mp4",
+            mime_type="Video/MP4",
+        )
+
+        result = attachment.to_dict("gpt-4.1")
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == attachment.to_data_uri()
+
+    @pytest.mark.parametrize(
+        "model",
+        ["gemini-2.5-flash", "litellm/gemini/gemini-2.5-flash"],
+    )
+    def test_to_dict_video_for_gemini_model(self, model: str):
+        """Gemini model routing does not reclassify videos as images."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="clip.webm",
+            mime_type="video/webm",
+        )
+
+        result = attachment.to_dict(model)
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == attachment.to_data_uri()
+        assert "image_url" not in result
+
+    def test_to_dict_video_url_passthrough(self):
+        """A remote video URL is passed through instead of being base64-encoded."""
+        url = "https://example.com/videos/clip.mp4"
+        attachment = FileAttachment.from_path(url)
+
+        assert attachment.mime_type == "video/mp4"
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "video_url"
+        assert result["video_url"]["url"] == url
+
+    def test_to_dict_non_media_file(self):
+        """Non-image, non-video files keep using generic `file` content-parts."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content, filename="doc.pdf")
+
+        result = attachment.to_dict("test-model")
+
+        assert result["type"] == "file"
+        assert result["file"]["filename"] == "doc.pdf"
+        assert result["file"]["file_data"] == attachment.to_data_uri()
+
+    def test_to_dict_unknown_type(self):
+        """Unknown MIME types keep using generic `file` content-parts."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="file.unknown123",
+        )
+
+        result = attachment.to_dict("gpt-4.1")
+
+        assert attachment.mime_type == "application/octet-stream"
+        assert result == {
+            "type": "file",
+            "file": {
+                "filename": "file.unknown123",
+                "file_data": attachment.to_data_uri(),
+            },
+        }
+
+    def test_to_dict_null_mime_type(self):
+        """A post-construction null MIME type keeps generic serialization."""
+        attachment = FileAttachment.from_bytes(
+            content=b"test content",
+            filename="file.unknown123",
+        )
+        attachment.__dict__["mime_type"] = None
+
+        result = attachment.to_dict("gpt-4.1")
+
+        assert result["type"] == "file"
 
     def test_mime_type_inference(self):
         """Test MIME type is correctly inferred from filename."""
