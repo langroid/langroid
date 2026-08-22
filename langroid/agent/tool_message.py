@@ -364,9 +364,13 @@ class ToolMessage(ABC, BaseModel):
                     f"the required parameters with correct types"
                 )
 
-        # Handle nested ToolMessage fields
-        if "definitions" in parameters:
-            for v in parameters["definitions"].values():
+        # Handle nested ToolMessage fields.
+        # NOTE: Pydantic v1 emitted nested-model schemas under "definitions";
+        # v2's model_json_schema() emits them under "$defs". This must track the
+        # v2 key or the cleanup below silently no-ops (leaking purpose/id/exclude
+        # and an unconstrained request into the nested schema sent to the LLM).
+        if "$defs" in parameters:
+            for v in parameters["$defs"].values():
                 if "exclude" in v:
                     v.pop("exclude")
 

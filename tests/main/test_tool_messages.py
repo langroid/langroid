@@ -2184,3 +2184,42 @@ def test_multi_agent_tool_caching(test_settings: Settings):
     tools_from_b_cached = agent_b.get_tool_messages(chat_doc, all_tools=True)
     assert len(tools_from_b_cached) == 1
     assert tools_from_b_cached[0].request == "tool_b"
+
+
+def test_nested_tool_message_schema_is_cleaned() -> None:
+    """A ToolMessage nested inside another ToolMessage lands in the schema's
+    ``$defs``, and must get the same cleanup the top-level tool gets: internal
+    fields (``purpose``, ``id``) and the ``exclude`` marker removed, and
+    ``request`` pinned to its constant via an ``enum``.
+
+    Regression guard for the Pydantic v1->v2 migration: v1 emitted nested-model
+    schemas under ``definitions`` while v2 uses ``$defs``. If the cleanup keys
+    off the wrong name it silently no-ops, leaking those internal fields (and an
+    unconstrained ``request``) into the schema sent to the LLM.
+    """
+
+    class Inner(ToolMessage):
+        request: str = "inner_tool"
+        purpose: str = "the inner purpose"
+        x: int
+
+    class Outer(ToolMessage):
+        request: str = "outer_tool"
+        purpose: str = "the outer purpose"
+        inner: Inner
+
+    params = Outer.llm_function_schema(request=True).parameters
+    assert "$defs" in params
+    inner_schema = params["$defs"]["Inner"]
+
+    # internal markers/fields must not leak to the LLM
+    assert "exclude" not in inner_schema
+    assert "purpose" not in inner_schema["properties"]
+    assert "id" not in inner_schema["properties"]
+
+    # `request` is pinned to its constant and required
+    assert inner_schema["properties"]["request"] == {
+        "type": "string",
+        "enum": ["inner_tool"],
+    }
+    assert "request" in inner_schema["required"]

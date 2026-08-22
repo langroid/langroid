@@ -17,6 +17,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Union,
 )
@@ -211,6 +212,93 @@ def _called_function_names(stmt: Any) -> Iterator[str]:
         name = name.rsplit(".", 1)[-1].strip().lower()
         if name:
             yield name
+
+
+def _creates_table(into: Any) -> bool:
+    """Whether a Select's ``into`` arg names a table rather than a variable.
+
+    ``SELECT ... INTO tbl`` creates and populates a table, but MySQL's
+    ``SELECT ... INTO @var`` merely assigns a user variable and writes nothing.
+    sqlglot models the latter as a ``Table`` wrapping a ``Parameter``, so the
+    target's inner node distinguishes them.
+
+    Args:
+        into: The ``into`` arg of a sqlglot ``Select``, or None.
+
+    Returns:
+        True if the target names a table.
+    """
+    if into is None:
+        return False
+    target = into.this
+    if target is None:
+        return False
+    return not isinstance(getattr(target, "this", None), sqlglot_exp.Parameter)
+
+
+def _nested_write_kinds(stmt: Any, kind_map: Dict[Any, str]) -> Set[str]:
+    """Statement kinds that `stmt` performs *below* its top-level node.
+
+    A statement's top-level node does not determine what it writes. Both
+
+    - ``WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x`` (a
+      data-modifying CTE), and
+    - ``SELECT * INTO new_tbl FROM t`` (which creates and populates a table)
+
+    parse with a ``Select`` top node, so classifying on that node alone reports
+    "SELECT" while the engine still performs the write
+    (GHSA-3gpx-vwr3-xvwx / GHSA-wc83-4cvx-p8xc).
+
+    Args:
+        stmt: A parsed sqlglot statement.
+        kind_map: Mapping of sqlglot expression type to statement-kind name.
+
+    Only independently executable nested statements count. A ``MERGE``'s
+    ``WHEN ... THEN UPDATE/INSERT/DELETE`` actions parse as child write nodes
+    but are part of the merge itself, so an operator who allows ``MERGE`` must
+    not also be forced to allow standalone ``UPDATE``/``INSERT``/``DELETE``.
+
+    Returns:
+        The set of kind names written by nested nodes, plus ``"CREATE"`` for
+        the ``SELECT ... INTO`` form. Empty for an ordinary read-only query.
+    """
+    write_types = (
+        sqlglot_exp.Insert,
+        sqlglot_exp.Update,
+        sqlglot_exp.Delete,
+        sqlglot_exp.Merge,
+        sqlglot_exp.Create,
+        sqlglot_exp.Drop,
+        sqlglot_exp.Alter,
+        sqlglot_exp.TruncateTable,
+    )
+
+    # Exempt only the node that *is* a ``WHEN ... THEN`` action, by identity.
+    # Exempting everything beneath a ``When`` would also hide a write nested in
+    # the WHEN *condition* -- e.g.
+    # ``WHEN MATCHED AND EXISTS (WITH x AS (DELETE ...) SELECT * FROM x) THEN
+    # UPDATE ...`` -- or one buried inside the action's own subqueries.
+    merge_actions = {
+        id(when.args["then"])
+        for when in stmt.find_all(sqlglot_exp.When)
+        if when.args.get("then") is not None
+    }
+
+    kinds = {
+        kind_map[type(node)]
+        for node in stmt.find_all(*write_types)
+        if node is not stmt and type(node) in kind_map and id(node) not in merge_actions
+    }
+    # `SELECT ... INTO tbl` carries no nested Create node; it is flagged by the
+    # `into` arg on a Select. Check every Select, not just the top-level one:
+    # under a set operation (`SELECT ... INTO t UNION ALL SELECT ...`) the top
+    # node is a Union and the `into` sits on a branch.
+    selects = list(stmt.find_all(sqlglot_exp.Select))
+    if isinstance(stmt, sqlglot_exp.Select):
+        selects.append(stmt)
+    if any(_creates_table(sel.args.get("into")) for sel in selects):
+        kinds.add("CREATE")
+    return kinds
 
 
 # Default set of SQL statement types the agent is allowed to execute when
@@ -683,6 +771,29 @@ class SQLChatAgent(ChatAgent):
                     f"the operator to extend `allowed_statement_types` "
                     f"(or set `allow_dangerous_operations=True`) on the "
                     f"SQLChatAgent config."
+                )
+            # The top-level node alone does not determine what a statement
+            # writes. A data-modifying CTE
+            # (``WITH x AS (DELETE ... RETURNING *) SELECT ...``) and
+            # ``SELECT ... INTO tbl`` both parse with a ``Select`` top node, so
+            # the check above classifies them as SELECT while the engine still
+            # performs the write (GHSA-3gpx-vwr3-xvwx / GHSA-wc83-4cvx-p8xc).
+            nested = _nested_write_kinds(stmt, kind_map)
+            disallowed = sorted(nested - allowed)
+            if disallowed:
+                logger.warning(
+                    f"SQLChatAgent rejected {kind} statement embedding "
+                    f"{disallowed} (allowed: {sorted(allowed)}): {query!r}"
+                )
+                return (
+                    f"Query REJECTED for safety: although this parses as a "
+                    f"{kind} statement, it embeds {disallowed}, which is not "
+                    f"in the allowed list {sorted(allowed)} -- the database "
+                    f"would still perform that write. Rewrite the query "
+                    f"without the embedded statement, or ask the operator to "
+                    f"extend `allowed_statement_types` (or set "
+                    f"`allow_dangerous_operations=True`) on the SQLChatAgent "
+                    f"config."
                 )
             # AST-side dangerous-function check: catches calls that evaded
             # `_DANGEROUS_SQL_PATTERNS` via quoted identifiers, inline comments,

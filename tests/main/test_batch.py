@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import pytest
 
@@ -513,3 +513,92 @@ def test_process_batch_async_stop_on_first(stop_on_first_result):
     else:
         assert all(r is not None for r in results)
         assert all("Processed" in r for r in results)
+
+
+def test_process_batch_async_stop_on_first_skips_none_result() -> None:
+    """Keep waiting when the first completed task has no valid result."""
+
+    async def run_batch() -> list[Any]:
+        release_valid = asyncio.Event()
+
+        def output_map(result: Any) -> Any:
+            if result is None:
+                release_valid.set()
+            return result
+
+        async def mock_task(input: str, i: int) -> str | None:
+            if input == "invalid":
+                return None
+            if input == "valid":
+                await release_valid.wait()
+                return "Processed valid"
+            await asyncio.Event().wait()
+            raise AssertionError("Unreachable")
+
+        return await _process_batch_async(
+            ["invalid", "valid", "slow"],
+            mock_task,
+            stop_on_first_result=True,
+            handle_exceptions=ExceptionHandling.RAISE,
+            output_map=output_map,
+        )
+
+    results = asyncio.run(run_batch())
+
+    assert results == [None, "Processed valid", None]
+
+
+def test_process_batch_async_stop_on_first_all_none() -> None:
+    """Return after all tasks complete when every mapped result is None."""
+
+    async def mock_task(input: str, i: int) -> None:
+        return None
+
+    results = asyncio.run(
+        _process_batch_async(
+            ["invalid-1", "invalid-2"],
+            mock_task,
+            stop_on_first_result=True,
+            handle_exceptions=ExceptionHandling.RAISE,
+        )
+    )
+
+    assert results == [None, None]
+
+
+def test_process_batch_async_stop_on_first_skips_exception_result() -> None:
+    """Keep waiting when an exception is converted to no valid result."""
+
+    async def run_batch() -> list[Any]:
+        release_valid = asyncio.Event()
+        never_release = asyncio.Event()
+        invalid_result = object()
+
+        def output_map(result: Any) -> Any:
+            if result is invalid_result:
+                release_valid.set()
+                return None
+            return result
+
+        async def mock_task(input: str, i: int) -> Any:
+            if input == "error":
+                raise ValueError("test error")
+            if input == "invalid":
+                return invalid_result
+            if input == "valid":
+                await release_valid.wait()
+                return "Processed valid"
+            await never_release.wait()
+            raise AssertionError("Unreachable")
+
+        return await _process_batch_async(
+            ["error", "invalid", "valid", "slow"],
+            mock_task,
+            stop_on_first_result=True,
+            handle_exceptions=ExceptionHandling.RETURN_NONE,
+            output_map=output_map,
+        )
+
+    results = asyncio.run(run_batch())
+
+    assert results == [None, None, "Processed valid", None]

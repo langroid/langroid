@@ -28,6 +28,31 @@ from langroid.parsing.parser import Parser, ParsingConfig
 logger = logging.getLogger(__name__)
 
 
+def _is_within(path: str, root: Path) -> bool:
+    """
+    Whether `path`, with all symlinks resolved, stays inside `root`.
+
+    Used to prevent an ingested repo or folder from reaching host files via
+    symlinks that point outside the intended root (GHSA-99m6-3pvg-q66h).
+    Symlinks whose targets remain inside `root` are still followed.
+
+    Args:
+        path (str): The candidate file or directory path.
+        root (Path): The already-resolved root that ingestion is confined to.
+
+    Returns:
+        bool: True if the resolved `path` is `root` or lies under it.
+    """
+    try:
+        resolved = Path(path).resolve()
+    except (OSError, RuntimeError):
+        # Unreadable, permission error, or a symlink loop -- `Path.resolve()`
+        # raises RuntimeError (not OSError) for a loop, which would otherwise
+        # abort the whole ingestion rather than skipping the one bad entry.
+        return False
+    return resolved == root or root in resolved.parents
+
+
 def _get_decoded_content(content_file: "ContentFile") -> str:
     if content_file.encoding == "base64":
         return content_file.decoded_content.decode("utf-8") or ""
@@ -449,6 +474,9 @@ class RepoLoader:
             "files": [],
             "path": "",
         }
+        # Resolved once, not per entry: `Path.resolve()` costs syscalls, and a
+        # large repo walks many thousands of entries.
+        resolved_root = Path(path).resolve()
         # A queue of tuples (current_path, current_depth, parent_structure)
         queue = deque([(path, 0, folder_structure)])
         docs = []
@@ -458,6 +486,12 @@ class RepoLoader:
 
             for item in os.listdir(current_path):
                 item_path = os.path.join(current_path, item)
+                if not _is_within(item_path, resolved_root):
+                    logger.warning(
+                        f"Skipping {item_path!r}: resolves outside the ingested "
+                        f"root {path!r} (or is unreadable)"
+                    )
+                    continue
                 relative_path = os.path.relpath(item_path, path)
                 if (os.path.isdir(item_path) and item in exclude_dirs) or (
                     os.path.isfile(item_path)
@@ -563,6 +597,21 @@ class RepoLoader:
                     if depth == -1 or current_depth <= depth:
                         for file in files:
                             file_path = str(Path(root) / file)
+                            if not _is_within(file_path, path_obj):
+                                logger.warning(
+                                    f"Skipping {file_path!r}: resolves outside "
+                                    f"the ingested root {str(path_obj)!r} "
+                                    f"(or is unreadable)"
+                                )
+                                continue
+                            if not os.path.isfile(file_path):
+                                # `os.walk` lists dangling symlinks among
+                                # `files`; opening one later raises
+                                # FileNotFoundError and aborts the whole walk.
+                                logger.warning(
+                                    f"Skipping {file_path!r}: not a readable file"
+                                )
+                                continue
                             if (
                                 file_types is None
                                 or RepoLoader._file_type(file_path) in file_types

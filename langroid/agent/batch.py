@@ -118,21 +118,23 @@ async def _process_batch_async(
             task_indices = {task: i for i, task in enumerate(tasks)}
             results = [None] * len(tasks)
 
-            done, pending = await asyncio.wait(
-                tasks, return_when=asyncio.FIRST_COMPLETED
-            )
+            pending = set(tasks)
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending, return_when=asyncio.FIRST_COMPLETED
+                )
 
-            # Process completed tasks
-            for task in done:
-                index = task_indices[task]
-                try:
-                    result = await task
-                    results[index] = output_map(result)
-                except BaseException as e:
-                    results[index] = handle_error(e)
+                # Process completed tasks
+                for task in done:
+                    index = task_indices[task]
+                    try:
+                        result = await task
+                        results[index] = output_map(result)
+                    except BaseException as e:
+                        results[index] = handle_error(e)
 
-            if any(r is not None for r in results):
-                return results
+                if any(r is not None for r in results):
+                    return results
         finally:
             for task in pending:
                 task.cancel()
@@ -293,9 +295,12 @@ def run_batch_task_gen(
             map any invalid output to None. We continue until some non-None
             result is obtained.
         stop_on_first_result (bool): whether to stop after the first valid
-            (not-None) result. In this case all other tasks are
-            cancelled, and their corresponding result is None in the
-            returned list.
+            (non-None) result. Successful results are evaluated after
+            `output_map`; with `ExceptionHandling.RETURN_EXCEPTION` the returned
+            exception object is itself non-None and also stops the batch.
+            Processing continues past None results; once a non-None result
+            appears, pending tasks are cancelled and their entries in the
+            returned list are None.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -387,6 +392,12 @@ def run_batch_tasks(
             initial message to process
         output_map (Callable[[ChatDocument|str], U]): function to map result
             to final result
+        stop_on_first_result (bool): whether to stop after the first valid
+            (non-None, after `output_map`) result. Processing continues past
+            None-mapped results; exceptions propagate, since this function
+            always uses the default `RAISE` exception handling. Once a non-None
+            result appears, pending tasks are cancelled and their entries in the
+            returned list are None.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -451,6 +462,12 @@ def run_batch_agent_method(
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         stop_on_first_result (bool): whether to stop after the first valid
+            (non-None) result. Successful results are evaluated after
+            `output_map`; with `ExceptionHandling.RETURN_EXCEPTION` the returned
+            exception object is itself non-None and also stops the batch.
+            Processing continues past None results; once a non-None result
+            appears, pending tasks are cancelled and their entries in the
+            returned list are None.
         handle_exceptions: How to handle exceptions:
             - RAISE or False: Let exceptions propagate
             - RETURN_NONE or True: Convert exceptions to None in results

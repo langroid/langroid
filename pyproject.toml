@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.65.7"
+version = "0.65.16"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -29,13 +29,21 @@ dependencies = [
     "grpcio<2.0.0,>=1.62.1",
     "halo<1.0.0,>=0.0.31",
     "jinja2<4.0.0,>=3.1.2",
-    "json-repair<1.0.0,>=0.29.9",
-    "lxml<6.0.0,>=5.4.0",
+    # Capped below 0.61.3: that release changed how unquoted values are
+    # repaired, and an unquoted value followed by another key and a nested
+    # object silently swallows the next key/value pair, e.g.
+    #   {request: foo, args: bar baz, opts: {"a": b}}
+    # yields {'request': 'foo,\n args: bar baz', 'opts': {...}} -- the `args`
+    # field is LOST. langroid parses exactly this shape out of sloppy LLM tool
+    # calls, so the field loss is silent and material. 0.61.0-0.61.2 are fine;
+    # see tests/main/test_json.py::test_repair_keeps_unquoted_value_fields.
+    "json-repair>=0.29.9,<0.61.3",
+    "lxml<7.0.0,>=6.1.0",
     "markdownify>=0.13.1",
     "nest-asyncio<2.0.0,>=1.6.0",
     "nltk<4.0.0,>=3.8.2",
     "onnxruntime<2.0.0,>=1.16.1",
-    "openai>=1.61.1,<3.0.0",
+    "openai>=1.106.0,<3.0.0",
     "pandas<3.0.0,>=2.0.3",
     "prettytable<4.0.0,>=3.8.0",
     "pydantic<3.0.0,>=2.0.0",
@@ -82,9 +90,9 @@ hf-transformers = [
 ]
 
 vecdbs = [
-    "lancedb<0.9.0,>=0.8.2",
+    "lancedb>=0.9.0",
     "tantivy<0.22.0,>=0.21.0",
-    "pyarrow<16.0.0,>=15.0.0",
+    "pyarrow>=15.0.0",
     "chromadb<=0.4.23,>=0.4.21",
     "weaviate-client>=4.9.6",
     "pinecone-client>=5.0.1",
@@ -133,9 +141,9 @@ all = [
 
 # More granular groupings
 lancedb = [
-    "lancedb<0.9.0,>=0.8.2",
+    "lancedb>=0.9.0",
     "tantivy<0.22.0,>=0.21.0",
-    "pyarrow<16.0.0,>=15.0.0",
+    "pyarrow>=15.0.0",
 ]
 
 docling = [
