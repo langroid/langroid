@@ -180,7 +180,8 @@ GEMINI_CANONICAL_MODEL_NAMES = {model.value for model in GeminiModel}
 # Trailing "-MM-DD" date stamp on Gemini variant names (e.g. "-01-21").
 # ASCII digits only, anchored with \Z: "$" would also match just before a
 # trailing newline, letting hostile names like "...-05-20\n" through.
-_GEMINI_DATE_SUFFIX = re.compile(r"-[0-9]{2}-[0-9]{2}\Z")
+_GEMINI_DATE_SUFFIX = re.compile(r"-([0-9]{2})-([0-9]{2})\Z")
+_GEMINI_DAYS_PER_MONTH = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 # Keyword suffixes marking preview/experimental Gemini variants.
 _GEMINI_KEYWORD_SUFFIXES = ("-preview", "-exp", "-experimental", "-latest")
 DEFAULT_MODEL_INFO = ModelInfo()
@@ -840,7 +841,15 @@ def _normalize_gemini_model_name(model: str) -> str | None:
     # candidate only when it ends with a keyword suffix: a bare-dated
     # unknown name such as "gemini-2.5-pro-03-25" must not be guessed as
     # "gemini-2.5-pro".
-    candidate = _GEMINI_DATE_SUFFIX.sub("", base_model)
+    candidate = base_model
+    date_match = _GEMINI_DATE_SUFFIX.search(base_model)
+    if date_match is not None:
+        month, day = (int(part) for part in date_match.groups())
+        if (
+            1 <= month <= len(_GEMINI_DAYS_PER_MONTH)
+            and 1 <= day <= _GEMINI_DAYS_PER_MONTH[month - 1]
+        ):
+            candidate = base_model[: date_match.start()]
     if candidate in GEMINI_CANONICAL_MODEL_NAMES and candidate.endswith(
         _GEMINI_KEYWORD_SUFFIXES
     ):

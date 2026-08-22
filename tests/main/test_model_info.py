@@ -47,6 +47,16 @@ from langroid.language_models.model_info import (
             "gemini-2.0-flash-thinking-exp-12-31",
             GeminiModel.GEMINI_2_FLASH_THINKING.value,
         ),
+        # Malformed calendar dates must not expose canonical model metadata.
+        ("gemini-2.0-flash-thinking-exp-00-00", None),
+        ("gemini-2.0-flash-thinking-exp-13-01", None),
+        ("gemini-2.0-flash-thinking-exp-12-32", None),
+        ("gemini-2.0-flash-thinking-exp-02-30", None),
+        ("gemini-2.0-flash-thinking-exp-04-31", None),
+        (
+            "gemini-2.0-flash-thinking-exp-02-29",
+            GeminiModel.GEMINI_2_FLASH_THINKING.value,
+        ),
         # Non-Gemini -> None.
         ("gpt-4o", None),
         ("claude-3-opus-latest", None),
