@@ -1129,8 +1129,16 @@ class Agent(ABC):
         oai_tool_id2result: OrderedDict[str, str] | None = None,
         function_call: LLMFunctionCall | None = None,
         recipient: str = "",
+        tainted: bool = False,
     ) -> ChatDocument:
-        """Template for llm_response."""
+        """Template for llm_response.
+
+        Args:
+            tainted: Mark the response as USER-derived. Handlers that re-emit
+                attacker-influenceable content as an LLM-labelled message must
+                pass the taint of the message they read it from, so the content
+                stays vetoed by :meth:`_filter_user_origin_tools` (#1035).
+        """
         return self.response_template(
             Entity.LLM,
             content=content,
@@ -1141,6 +1149,7 @@ class Agent(ABC):
             oai_tool_id2result=oai_tool_id2result,
             function_call=function_call,
             recipient=recipient,
+            tainted=tainted,
         )
 
     @no_type_check
@@ -1186,7 +1195,7 @@ class Agent(ABC):
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-            print(cached + "[green]" + escape(response.message))
+            print(cached + "[green]" + escape(response.message or ""))
         async with self.lock:
             self.update_token_usage(
                 response,
@@ -1261,7 +1270,7 @@ class Agent(ABC):
             # If we are here, it means the response has not yet been displayed.
             cached = "[red](cached)[/red]" if response.cached else ""
             console.print(f"[green]{self.indent}", end="")
-            print(cached + "[green]" + escape(response.message))
+            print(cached + "[green]" + escape(response.message or ""))
         self.update_token_usage(
             response,
             prompt,
@@ -2206,7 +2215,7 @@ class Agent(ABC):
         else:
             return sum(
                 [
-                    self.parser.num_tokens(m.content)
+                    self.parser.num_tokens(m.content or "")
                     + self.parser.num_tokens(str(m.function_call or ""))
                     for m in prompt
                 ]
@@ -2290,7 +2299,7 @@ class Agent(ABC):
             cost = 0.0
             if not response.cached:
                 prompt_tokens = self.num_tokens(prompt)
-                completion_tokens = self.num_tokens(response.message)
+                completion_tokens = self.num_tokens(response.message or "")
                 if response.function_call is not None:
                     completion_tokens += self.num_tokens(str(response.function_call))
                 cost = self.compute_token_cost(prompt_tokens, 0, completion_tokens)

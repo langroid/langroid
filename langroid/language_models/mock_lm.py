@@ -87,7 +87,9 @@ class MockLM(LanguageModel):
         """
         Mock chat function for testing
         """
-        last_msg = messages[-1].content if isinstance(messages, list) else messages
+        last_msg = (
+            messages[-1].content or "" if isinstance(messages, list) else messages
+        )
         return self._response(last_msg)
 
     async def achat(
@@ -103,7 +105,9 @@ class MockLM(LanguageModel):
         """
         Mock chat function for testing
         """
-        last_msg = messages[-1].content if isinstance(messages, list) else messages
+        last_msg = (
+            messages[-1].content or "" if isinstance(messages, list) else messages
+        )
         return await self._response_async(last_msg)
 
     def generate(self, prompt: str, max_tokens: int = 200) -> lm.LLMResponse:

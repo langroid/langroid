@@ -16,9 +16,13 @@ try:
 except ImportError as e:
     raise LangroidImportError(extra="sql", error=str(e))
 
+import sqlglot
+from sqlglot import expressions as sqlglot_exp
+
 from langroid.agent.special.sql.sql_chat_agent import (
     SQLChatAgent,
     SQLChatAgentConfig,
+    _nested_write_kinds,
 )
 from langroid.agent.special.sql.utils.tools import RunQueryTool
 
@@ -284,3 +288,188 @@ def test_ast_dangerous_function_bypasses_blocked(session, query):
 def test_ast_check_does_not_overmatch_benign_functions(session, query):
     agent = _make_agent(session)
     assert agent._validate_query(query) is None
+
+
+# ---------------------------------------------------------------------------
+# Nested writes: the top-level parse node does not determine what a statement
+# writes (GHSA-3gpx-vwr3-xvwx / GHSA-wc83-4cvx-p8xc).
+# ---------------------------------------------------------------------------
+
+
+NESTED_WRITE_QUERIES = [
+    # Data-modifying CTEs: top node parses as Select, the CTE still executes.
+    "WITH x AS (DELETE FROM items RETURNING *) SELECT count(*) FROM x",
+    "WITH x AS (UPDATE items SET name='b' RETURNING *) SELECT * FROM x",
+    "WITH x AS (INSERT INTO items VALUES (2,'b') RETURNING *) SELECT * FROM x",
+    # Nested a level deeper, to be sure the walk is recursive.
+    "WITH a AS (WITH b AS (DELETE FROM items RETURNING *) SELECT * FROM b)"
+    " SELECT * FROM a",
+    # SELECT ... INTO creates and populates a table; no nested Create node,
+    # it is carried on the Select's `into` arg.
+    "SELECT * INTO evil FROM items",
+]
+
+
+@pytest.mark.parametrize("query", NESTED_WRITE_QUERIES)
+def test_nested_writes_blocked_under_select_only_default(session, query):
+    agent = _make_agent(session)
+    rejection = agent._validate_query(query)
+    assert rejection is not None, f"nested write slipped through: {query}"
+    assert "REJECTED" in rejection
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM items",
+        "SELECT count(*) FROM items WHERE name = 'a'",
+        # A read-only CTE must still be allowed -- the check keys on the
+        # embedded statement type, not on the presence of a WITH clause.
+        "WITH x AS (SELECT * FROM items) SELECT count(*) FROM x",
+        "WITH a AS (SELECT 1 AS n), b AS (SELECT n FROM a) SELECT * FROM b",
+    ],
+)
+def test_read_only_queries_still_allowed(session, query):
+    agent = _make_agent(session)
+    assert agent._validate_query(query) is None
+
+
+def test_nested_write_allowed_when_operator_extends_allowlist(session):
+    """The gate keys on `allowed_statement_types`, not on nesting itself."""
+    agent = _make_agent(
+        session,
+        allowed_statement_types=["SELECT", "DELETE"],
+    )
+    query = "WITH x AS (DELETE FROM items RETURNING *) SELECT count(*) FROM x"
+    assert agent._validate_query(query) is None
+    # An embedded INSERT is still not in the extended allowlist.
+    insert_q = (
+        "WITH x AS (INSERT INTO items VALUES (2,'b') RETURNING *) SELECT * FROM x"
+    )
+    assert agent._validate_query(insert_q) is not None
+
+
+def test_nested_write_bypass_when_dangerous_ops_allowed(session):
+    agent = _make_agent(session, allow_dangerous_operations=True)
+    query = "WITH x AS (DELETE FROM items RETURNING *) SELECT count(*) FROM x"
+    assert agent._validate_query(query) is None
+
+
+MERGE_QUERY = (
+    "MERGE INTO items t USING items s ON t.id = s.id "
+    "WHEN MATCHED THEN UPDATE SET name = s.name "
+    "WHEN NOT MATCHED THEN INSERT (id, name) VALUES (s.id, s.name)"
+)
+
+
+def test_merge_actions_are_not_treated_as_nested_statements(session):
+    """A MERGE's WHEN actions belong to the merge, not to the allowlist.
+
+    sqlglot parses `WHEN MATCHED THEN UPDATE/INSERT/DELETE` as child write
+    nodes. Counting them as nested statements would force an operator who
+    allows MERGE to also allow standalone UPDATE/INSERT/DELETE.
+    """
+    agent = _make_agent(session, allowed_statement_types=["MERGE"])
+    assert agent._validate_query(MERGE_QUERY) is None
+
+
+def test_merge_still_blocked_when_not_allowlisted(session):
+    agent = _make_agent(session)  # SELECT-only default
+    rejection = agent._validate_query(MERGE_QUERY)
+    assert rejection is not None
+    assert "REJECTED" in rejection
+
+
+def test_merge_nested_in_cte_is_still_caught(session):
+    """Only the top-level MERGE's own actions are exempt."""
+    agent = _make_agent(session)
+    query = (
+        "WITH x AS (MERGE INTO items t USING items s ON t.id = s.id "
+        "WHEN MATCHED THEN UPDATE SET name = s.name RETURNING *) "
+        "SELECT * FROM x"
+    )
+    rejection = agent._validate_query(query)
+    assert rejection is not None
+    assert "REJECTED" in rejection
+
+
+# ---------------------------------------------------------------------------
+# `_nested_write_kinds` unit tests. The agent fixture is SQLite-backed, so
+# dialect-specific parse shapes are exercised against the helper directly with
+# an explicit dialect rather than through a fake agent.
+# ---------------------------------------------------------------------------
+
+_KIND_MAP = {
+    sqlglot_exp.Select: "SELECT",
+    sqlglot_exp.Insert: "INSERT",
+    sqlglot_exp.Update: "UPDATE",
+    sqlglot_exp.Delete: "DELETE",
+    sqlglot_exp.Merge: "MERGE",
+    sqlglot_exp.Create: "CREATE",
+    sqlglot_exp.Drop: "DROP",
+    sqlglot_exp.Alter: "ALTER",
+    sqlglot_exp.TruncateTable: "TRUNCATE",
+    sqlglot_exp.Command: "COMMAND",
+}
+
+
+def _kinds(query: str, dialect: str) -> set:
+    return _nested_write_kinds(sqlglot.parse(query, read=dialect)[0], _KIND_MAP)
+
+
+@pytest.mark.parametrize(
+    "dialect, query, expected",
+    [
+        # MySQL `SELECT ... INTO @var` assigns a user variable and writes
+        # nothing; sqlglot models it as Table(this=Parameter(...)). Treating it
+        # as a table creation would reject a legitimate read under the
+        # SELECT-only default.
+        ("mysql", "SELECT name INTO @x FROM items", set()),
+        # A real table target still counts.
+        ("postgres", "SELECT * INTO evil FROM items", {"CREATE"}),
+        ("tsql", "SELECT * INTO evil FROM items", {"CREATE"}),
+        # `into` on a branch of a set operation: the top node is a Union, so
+        # checking only the top-level Select would miss the table creation.
+        (
+            "tsql",
+            "SELECT 1 AS x INTO new_t UNION ALL SELECT 2",
+            {"CREATE"},
+        ),
+        # Ordinary reads.
+        ("postgres", "SELECT * FROM items", set()),
+        ("postgres", "WITH x AS (SELECT 1) SELECT * FROM x", set()),
+        # Nested DML under a CTE.
+        (
+            "postgres",
+            "WITH x AS (DELETE FROM items RETURNING *) SELECT * FROM x",
+            {"DELETE"},
+        ),
+        # MERGE actions belong to the merge, not to the allowlist.
+        (
+            "postgres",
+            "MERGE INTO a USING b ON a.id = b.id "
+            "WHEN MATCHED THEN UPDATE SET a.n = b.n",
+            set(),
+        ),
+        # ...but only the WHEN ... THEN action itself is exempt. A write in the
+        # WHEN *condition* is a separate statement and must still be reported,
+        # otherwise the exemption becomes a smuggling route.
+        (
+            "postgres",
+            "MERGE INTO a USING b ON a.id = b.id "
+            "WHEN MATCHED AND EXISTS ("
+            "WITH x AS (DELETE FROM c RETURNING *) SELECT * FROM x"
+            ") THEN UPDATE SET a.n = b.n",
+            {"DELETE"},
+        ),
+        # A MERGE nested inside a CTE is still reported, as MERGE.
+        (
+            "postgres",
+            "WITH x AS (MERGE INTO a USING b ON a.id = b.id "
+            "WHEN MATCHED THEN UPDATE SET a.n = b.n RETURNING *) SELECT * FROM x",
+            {"MERGE"},
+        ),
+    ],
+)
+def test_nested_write_kinds_across_dialects(dialect, query, expected):
+    assert _kinds(query, dialect) == expected

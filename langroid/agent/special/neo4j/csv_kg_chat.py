@@ -3,6 +3,7 @@ from typing import List, Optional, Tuple
 import pandas as pd
 import typer
 
+from langroid.agent.special.neo4j.cypher_validator import validate_cypher_query
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
@@ -158,6 +159,17 @@ class CSVGraphAgent(Neo4jChatAgent):
         Returns:
             str: A string indicating the success or failure of the operation.
         """
+        # `msg.cypherQuery` is LLM-generated and must pass the same validation
+        # gate as `Neo4jChatAgent.cypher_creation_tool`; this handler previously
+        # called `write_query` directly, skipping it entirely.
+        rejection = validate_cypher_query(
+            msg.cypherQuery,
+            is_write=True,
+            allow_dangerous=self.config.allow_dangerous_operations,
+        )
+        if rejection is not None:
+            return rejection
+
         with status("[cyan]Generating graph database..."):
             if self.df is not None and hasattr(self.df, "iterrows"):
                 for counter, (index, row) in enumerate(self.df.iterrows()):

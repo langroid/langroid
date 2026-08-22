@@ -5,7 +5,19 @@ import logging
 import os
 from base64 import b64decode
 from io import BytesIO
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeAlias, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+    TypeAlias,
+    Union,
+    cast,
+)
 
 from dotenv import load_dotenv
 from fastmcp.client import Client
@@ -53,6 +65,10 @@ FastMCPServerConcrete: TypeAlias = str | FastMCP[Any] | ClientTransport | AnyUrl
 FastMCPServerSpec: TypeAlias = (
     FastMCPServerConcrete | Callable[[], FastMCPServerConcrete]
 )
+
+# Sentinel marking a $defs entry that is currently being resolved into a model,
+# used to break reference cycles when converting JSON-Schema $ref nodes.
+_REF_IN_PROGRESS = object()
 
 
 class FastMCPClient:
@@ -238,7 +254,13 @@ class FastMCPClient:
             )
 
     def _schema_to_field(
-        self, name: str, schema: Dict[str, Any], prefix: str, is_required: bool = True
+        self,
+        name: str,
+        schema: Any,
+        prefix: str,
+        is_required: bool = True,
+        defs: Optional[Dict[str, Any]] = None,
+        ref_cache: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, Any]:
         """Convert a JSON Schema snippet into a (type, Field) tuple.
 
@@ -247,10 +269,26 @@ class FastMCPClient:
             schema: JSON Schema for this field.
             prefix: Prefix to use for nested model names.
             is_required: Whether this field is required (from JSON Schema "required").
+            defs: The tool schema's ``$defs`` registry, used to resolve ``$ref``
+                nodes into nested models. fastmcp emits pydantic-model params
+                (and their nested/union/array members) as a local ``$ref`` into
+                ``$defs``.
+            ref_cache: Per-tool cache mapping a ``$defs`` name to its already
+                built type, so shared models are reused and reference cycles can
+                be detected (a name mapped to ``_REF_IN_PROGRESS`` is currently
+                being resolved).
 
         Returns:
             A tuple of (python_type, Field(...)) for create_model.
         """
+        if defs is None:
+            defs = {}
+        if ref_cache is None:
+            ref_cache = {}
+        if not isinstance(schema, dict):
+            default = ... if is_required else None
+            return Any, Field(default=default)
+
         t = schema.get("type")
         # Use schema default if present, otherwise:
         # ... for required fields, None for optional fields
@@ -259,15 +297,84 @@ class FastMCPClient:
         else:
             default = ... if is_required else None
         desc = schema.get("description")
+        # $ref → resolve against $defs and build a nested model. fastmcp emits
+        # pydantic-model params (and nested/union/array members) as a local
+        # ``$ref`` like "#/$defs/Address"; without resolution these degrade to
+        # the permissive `Any` fallback below. A ref to an unknown def, or one
+        # hit while that same def is still being resolved (a cycle), falls back
+        # to `Any`. Resolved types are cached per tool so shared defs are built
+        # once and reused.
+        ref = schema.get("$ref")
+        if "$ref" in schema and (
+            not isinstance(ref, str) or not ref.startswith("#/$defs/")
+        ):
+            return Any, Field(default=default, description=desc)
+        if isinstance(ref, str):
+            def_name = ref[len("#/$defs/") :]
+            if def_name in ref_cache:
+                cached = ref_cache[def_name]
+                if cached is _REF_IN_PROGRESS:
+                    return Any, Field(default=default, description=desc)
+                ref_type = cached if is_required else Optional[cached]
+                return ref_type, Field(default=default, description=desc)
+            resolved = defs.get(def_name)
+            if not isinstance(resolved, dict):
+                return Any, Field(default=default, description=desc)
+            ref_cache[def_name] = _REF_IN_PROGRESS
+            built, _ = self._schema_to_field(
+                def_name,
+                resolved,
+                prefix,
+                is_required=True,
+                defs=defs,
+                ref_cache=ref_cache,
+            )
+            ref_cache[def_name] = built
+            ref_type = built if is_required else Optional[built]
+            return ref_type, Field(default=default, description=desc)
+        # Enum / const → Literal, but only for Literal-compatible scalar values
+        # (str/int/bool/None). This takes precedence over the plain `type`
+        # branches so the allowed values are preserved for validation and echoed
+        # back into the model's JSON schema (which the LLM sees). JSON-Schema
+        # enums may also hold floats or objects, which Literal rejects; those
+        # fall through to the type-based handling below.
+        enum_values = schema.get(
+            "enum", [schema["const"]] if "const" in schema else None
+        )
+        # `enum` must be a list per JSON Schema; guard against malformed
+        # metadata (e.g. a bare scalar) so it degrades to type-based handling
+        # instead of raising when we iterate.
+        if (
+            isinstance(enum_values, list)
+            and enum_values
+            and all(isinstance(v, (str, int, bool)) or v is None for v in enum_values)
+        ):
+            literal_type = Literal[tuple(enum_values)]  # type: ignore[valid-type]
+            if not is_required:
+                literal_type = Optional[literal_type]  # type: ignore[assignment]
+            return literal_type, Field(default=default, description=desc)
         # Object → nested BaseModel
         if t == "object" and "properties" in schema:
             sub_name = f"{prefix}_{name.capitalize()}"
             sub_fields: Dict[str, Tuple[type, Any]] = {}
+            nested_properties = schema.get("properties")
+            if not isinstance(nested_properties, dict):
+                nested_properties = {}
             # Get required fields for this nested object
-            nested_required = set(schema.get("required", []))
-            for k, sub_s in schema["properties"].items():
+            nested_required_list = schema.get("required", [])
+            if not isinstance(nested_required_list, list):
+                nested_required_list = []
+            nested_required = {
+                name for name in nested_required_list if isinstance(name, str)
+            }
+            for k, sub_s in nested_properties.items():
                 ftype, fld = self._schema_to_field(
-                    sub_name + k, sub_s, sub_name, is_required=k in nested_required
+                    sub_name + k,
+                    sub_s,
+                    sub_name,
+                    is_required=k in nested_required,
+                    defs=defs,
+                    ref_cache=ref_cache,
                 )
                 sub_fields[k] = (ftype, fld)
             submodel = create_model(  # type: ignore
@@ -280,7 +387,10 @@ class FastMCPClient:
             return model_type, Field(default=default, description=desc)  # type: ignore
         # Array → List of items
         if t == "array" and "items" in schema:
-            item_type, _ = self._schema_to_field(name, schema["items"], prefix)
+            items_schema = schema.get("items")
+            item_type, _ = self._schema_to_field(
+                name, items_schema, prefix, defs=defs, ref_cache=ref_cache
+            )
             array_type = List[item_type]  # type: ignore
             if not is_required:
                 array_type = Optional[array_type]  # type: ignore
@@ -298,10 +408,53 @@ class FastMCPClient:
         if t == "boolean":
             bool_type = bool if is_required else Optional[bool]
             return bool_type, Field(default=default, description=desc)
-        # Fallback or unions
-        if any(key in schema for key in ("oneOf", "anyOf", "allOf")):
-            self.logger.warning("Unsupported union schema in field %s; using Any", name)
+        # anyOf / oneOf → Union (typing has no XOR, so oneOf also maps to
+        # Union). A `{"type": "null"}` branch — or an optional field — makes the
+        # result Optional. Each branch is converted recursively.
+        sub_schemas = schema.get("anyOf") or schema.get("oneOf")
+        if isinstance(sub_schemas, list) and sub_schemas:
+            non_null = [
+                s
+                for s in sub_schemas
+                if not (isinstance(s, dict) and s.get("type") == "null")
+            ]
+            has_null = len(non_null) != len(sub_schemas)
+            if non_null:
+                member_types = tuple(
+                    self._schema_to_field(
+                        name,
+                        s,
+                        prefix,
+                        is_required=True,
+                        defs=defs,
+                        ref_cache=ref_cache,
+                    )[0]
+                    for s in non_null
+                )
+                union_type = Union[member_types]  # type: ignore
+                if has_null or not is_required:
+                    union_type = Optional[union_type]  # type: ignore
+                return union_type, Field(default=default, description=desc)
+            if has_null:
+                return type(None), Field(default=default, description=desc)
+
+        # allOf: a single subschema is just that schema; a multi-schema
+        # intersection has no clean typing analogue, so fall back to Any.
+        all_of = schema.get("allOf")
+        if isinstance(all_of, list) and len(all_of) == 1:
+            inner_type, _ = self._schema_to_field(
+                name,
+                all_of[0],
+                prefix,
+                is_required=is_required,
+                defs=defs,
+                ref_cache=ref_cache,
+            )
+            return inner_type, Field(default=default, description=desc)
+        if all_of:
+            self.logger.warning("Unsupported allOf schema in field %s; using Any", name)
             return Any, Field(default=default, description=desc)
+
         # Default fallback
         return Any, Field(default=default, description=desc)
 
@@ -321,18 +474,63 @@ class FastMCPClient:
         target = await self.get_mcp_tool_async(tool_name)
         if target is None:
             raise ValueError(f"No tool named {tool_name}")
-        props = target.inputSchema.get("properties", {})
+        return self.tool_model_from_mcp_tool(target)
+
+    def tool_model_from_mcp_tool(self, target: Tool) -> Type[ToolMessage]:
+        """
+        Build a Langroid ToolMessage subclass from an already-fetched MCP
+        `Tool` object.
+
+        This is a pure, synchronous, network-free conversion: it performs no
+        ``list_tools()`` round-trip. Pair it with a single ``list_tools()`` call
+        to build many tools without re-listing the server once per tool
+        (see :meth:`get_tools_async`).
+
+        Args:
+            target: The raw ``mcp.types.Tool`` (name, description, inputSchema).
+
+        Returns:
+            A dynamically created Langroid ToolMessage subclass for `target`.
+        """
+        tool_name = getattr(target, "name", None)
+        if not isinstance(tool_name, str) or tool_name == "":
+            raise ValueError(f"Invalid MCP tool name for tool {target!r}")
+
+        input_schema = getattr(target, "inputSchema", None)
+        schema = input_schema if isinstance(input_schema, dict) else {}
+        props = schema.get("properties") or {}
+        if not isinstance(props, dict):
+            props = {}
+        # Registry of shared subschemas ($defs), used to resolve $ref nodes such
+        # as pydantic-model params. Captured before the loop below shadows
+        # `schema` with each property's schema.
+        defs = schema.get("$defs")
+        if not isinstance(defs, dict):
+            defs = {}
+        # Cache of resolved $ref types, shared across all properties so a def
+        # referenced by several params is built once and reused.
+        ref_cache: Dict[str, Any] = {}
         # Get the list of required fields from JSON Schema
-        required_fields = set(target.inputSchema.get("required", []))
+        required_fields = schema.get("required") or []
+        if not isinstance(required_fields, list):
+            required_fields = []
+        required_field_names = {
+            name for name in required_fields if isinstance(name, str)
+        }
         fields: Dict[str, Tuple[type, Any]] = {}
         for fname, schema in props.items():
             ftype, fld = self._schema_to_field(
-                fname, schema, target.name, is_required=fname in required_fields
+                fname,
+                schema,
+                tool_name,
+                is_required=fname in required_field_names,
+                defs=defs,
+                ref_cache=ref_cache,
             )
             fields[fname] = (ftype, fld)
 
         # Convert target.name to CamelCase and add Tool suffix
-        parts = target.name.replace("-", "_").split("_")
+        parts = tool_name.replace("-", "_").split("_")
         camel_case = "".join(part.capitalize() for part in parts)
         model_name = f"{camel_case}Tool"
 
@@ -359,8 +557,11 @@ class FastMCPClient:
             Type[ToolMessage],
             create_model(  # type: ignore[call-overload]
                 model_name,
-                request=(str, target.name),
-                purpose=(str, target.description or f"Use the tool {target.name}"),
+                request=(str, tool_name),
+                purpose=(
+                    str,
+                    getattr(target, "description", None) or f"Use the tool {tool_name}",
+                ),
                 __base__=ToolMessage,
                 **fields,
             ),
@@ -409,7 +610,9 @@ class FastMCPClient:
                 if new in payload:
                     payload[orig] = payload.pop(new)
 
-            client_cfg = getattr(itself.__class__, "_client_config", None)  # type: ignore
+            client_cfg = getattr(  # type: ignore
+                itself.__class__, "_client_config", None
+            )
             if not client_cfg:
                 # Fallback or error - ideally _client_config should always exist
                 raise RuntimeError(f"Client config missing on {itself.__class__}")
@@ -476,7 +679,7 @@ class FastMCPClient:
                     "Client not initialized. Use async with FastMCPClient."
                 )
         resp = await self.client.list_tools()
-        return [await self.get_tool_async(t.name) for t in resp]
+        return [self.tool_model_from_mcp_tool(t) for t in resp]
 
     async def get_mcp_tool_async(self, name: str) -> Optional[Tool]:
         """Find the "original" MCP Tool (i.e. of type mcp.types.Tool) on the server
