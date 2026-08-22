@@ -243,6 +243,8 @@ class ChatAgent(Agent):
         self.config: ChatAgentConfig = config
         self.config._set_fn_or_tools()
         self.message_history: List[LLMMessage] = []
+        # emit the attachment-token-estimate warning at most once per agent
+        self._attachment_tokens_warned: bool = False
         self.init_state()
         # An agent's "task" is defined by a system msg and an optional user msg;
         # These are "priming" messages that kick off the agent's conversation.
@@ -2680,7 +2682,7 @@ class ChatAgent(Agent):
             return 0
 
         model = self._chat_model_name_for_attachments()
-        return sum(
+        n_tokens = sum(
             self.parser.num_tokens(
                 json.dumps(
                     attachment.to_dict(model),
@@ -2690,6 +2692,15 @@ class ChatAgent(Agent):
             )
             for attachment in message.files
         )
+        if n_tokens > 0 and not self._attachment_tokens_warned:
+            self._attachment_tokens_warned = True
+            logger.warning(
+                "File attachment payloads are included in context-length "
+                "token accounting; this count is an estimate based on the "
+                "serialized (e.g. base64 data-URI) form of each attachment, "
+                "and may differ from the provider's own accounting."
+            )
+        return n_tokens
 
     def _chat_model_name_for_attachments(self) -> str:
         """Return the model name used for attachment serialization."""
