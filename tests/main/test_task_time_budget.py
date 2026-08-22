@@ -3,6 +3,7 @@
 import asyncio
 import time
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 
@@ -39,6 +40,20 @@ def test_run_stops_at_wall_clock_budget(
 ) -> None:
     """The sync loop reports TIMEOUT after a completed step exhausts its budget."""
     readings = _clock([0.0, 1.0])
+    monkeypatch.setattr("langroid.agent.task.monotonic", lambda: next(readings))
+    task = lr.Task(_looping_agent(), interactive=False)
+
+    result = task.run("start", turns=10, max_time=0.5)
+
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.status == lr.StatusCode.TIMEOUT
+
+
+def test_run_stops_exactly_at_wall_clock_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Elapsed time equal to the budget is already timed out."""
+    readings = _clock([0.0, 0.5])
     monkeypatch.setattr("langroid.agent.task.monotonic", lambda: next(readings))
     task = lr.Task(_looping_agent(), interactive=False)
 
@@ -275,6 +290,73 @@ async def test_async_completion_wins_when_step_also_exhausts_budget(
     assert result.metadata.status == lr.StatusCode.DONE
 
 
+def test_run_rechecks_budget_after_done_before_next_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deadline expiry inside done prevents another sync step."""
+    now = 0.0
+    calls = 0
+
+    def response(_: str) -> str:
+        nonlocal calls
+        calls += 1
+        return "continue"
+
+    monkeypatch.setattr("langroid.agent.task.monotonic", lambda: now)
+    agent = ChatAgent(ChatAgentConfig(llm=MockLMConfig(response_fn=response)))
+    task = lr.Task(agent, interactive=False)
+    original_done = task.done
+
+    def done(*args: Any, **kwargs: Any) -> tuple[bool, lr.StatusCode]:
+        nonlocal now
+        result = original_done(*args, **kwargs)
+        if not args and not kwargs:
+            now = 1.0
+        return result
+
+    monkeypatch.setattr(task, "done", done)
+
+    result = task.run("start", turns=10, max_time=0.5)
+
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.status == lr.StatusCode.TIMEOUT
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_run_async_rechecks_budget_after_done_before_next_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deadline expiry inside done prevents another async step."""
+    now = 0.0
+    calls = 0
+
+    async def response(_: str) -> str:
+        nonlocal calls
+        calls += 1
+        return "continue"
+
+    monkeypatch.setattr("langroid.agent.task.monotonic", lambda: now)
+    agent = ChatAgent(ChatAgentConfig(llm=MockLMConfig(response_fn_async=response)))
+    task = lr.Task(agent, interactive=False)
+    original_done = task.done
+
+    def done(*args: Any, **kwargs: Any) -> tuple[bool, lr.StatusCode]:
+        nonlocal now
+        result = original_done(*args, **kwargs)
+        if not args and not kwargs:
+            now = 1.0
+        return result
+
+    monkeypatch.setattr(task, "done", done)
+
+    result = await task.run_async("start", turns=10, max_time=0.5)
+
+    assert isinstance(result, ChatDocument)
+    assert result.metadata.status == lr.StatusCode.TIMEOUT
+    assert calls == 1
+
+
 def test_timeout_skips_unbudgeted_strict_decode_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -333,14 +415,14 @@ async def test_async_timeout_skips_unbudgeted_strict_decode_retry(
 def test_expired_done_response_skips_strict_decode_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An expired DONE response keeps DONE but cannot start a repair call."""
+    """Expiry during local decoding prevents a sync repair call."""
     calls: list[str] = []
 
     def response(message: str) -> str:
         calls.append(message)
         return "DONE: not structured"
 
-    readings = _clock([0.0, 1.0])
+    readings = _clock([0.0, 0.1, 1.0])
     monkeypatch.setattr("langroid.agent.task.monotonic", lambda: next(readings))
     agent = ChatAgent(ChatAgentConfig(llm=MockLMConfig(response_fn=response)))
     monkeypatch.setattr(agent, "_json_schema_available", lambda: True)
@@ -361,14 +443,14 @@ def test_expired_done_response_skips_strict_decode_retry(
 async def test_async_expired_done_response_skips_strict_decode_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An expired async DONE response cannot start a repair call."""
+    """Expiry during local decoding prevents an async repair call."""
     calls: list[str] = []
 
     def response(message: str) -> str:
         calls.append(message)
         return "DONE: not structured"
 
-    readings = _clock([0.0, 1.0])
+    readings = _clock([0.0, 0.1, 1.0])
     monkeypatch.setattr("langroid.agent.task.monotonic", lambda: next(readings))
     agent = ChatAgent(ChatAgentConfig(llm=MockLMConfig(response_fn=response)))
     monkeypatch.setattr(agent, "_json_schema_available", lambda: True)

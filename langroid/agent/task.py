@@ -857,10 +857,10 @@ class Task:
                     or self.pending_message.id() != self.response_sequence[-1].id()
                 ):
                     self.response_sequence.append(self.pending_message)
+            done, status = self.done()
             budget_exhausted = (
                 started_at is not None and monotonic() - started_at >= max_time
             )
-            done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
@@ -926,13 +926,18 @@ class Task:
                 output_args = strict_agent._function_args()[-1]
                 if output_args is not None:
                     schema = output_args.function.parameters
-                    strict_result = strict_agent.llm_response(
-                        f"""
-                        A response adhering to the following JSON schema was expected:
-                        {schema}
-
-                        Please resubmit with the correct schema.
-                        """
+                    budget_exhausted = (
+                        started_at is not None and monotonic() - started_at >= max_time
+                    )
+                    strict_result = (
+                        None
+                        if budget_exhausted
+                        else strict_agent.llm_response(
+                            "A response adhering to the following JSON schema "
+                            "was expected:\n"
+                            f"{schema}\n\n"
+                            "Please resubmit with the correct schema."
+                        )
                     )
 
                     if strict_result is not None:
@@ -1074,10 +1079,10 @@ class Task:
                 ):
                     self.response_sequence.append(self.pending_message)
 
+            done, status = self.done()
             budget_exhausted = (
                 started_at is not None and monotonic() - started_at >= max_time
             )
-            done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
@@ -1143,13 +1148,18 @@ class Task:
                 output_args = strict_agent._function_args()[-1]
                 if output_args is not None:
                     schema = output_args.function.parameters
-                    strict_result = await strict_agent.llm_response_async(
-                        f"""
-                        A response adhering to the following JSON schema was expected:
-                        {schema}
-
-                        Please resubmit with the correct schema.
-                        """
+                    budget_exhausted = (
+                        started_at is not None and monotonic() - started_at >= max_time
+                    )
+                    strict_result = (
+                        None
+                        if budget_exhausted
+                        else await strict_agent.llm_response_async(
+                            "A response adhering to the following JSON schema "
+                            "was expected:\n"
+                            f"{schema}\n\n"
+                            "Please resubmit with the correct schema."
+                        )
                     )
 
                     if strict_result is not None:

@@ -49,19 +49,22 @@ result = task.run("Start research", max_time=30.0)
 ```
 
 The synchronous and asynchronous run loops check this cooperative limit after
-each completed step. They do not interrupt an in-flight LLM, tool, or delegated
-task call, so the elapsed time can exceed `max_time` by the duration of that
-call. This avoids leaving agent or tool state half-updated. Each task run owns
-its budget; a delegated run does not implicitly inherit its parent's deadline.
-If a step both completes the task and exhausts the budget, completion wins.
-Otherwise, when the budget is exhausted, the returned `ChatDocument` has
-`metadata.status == StatusCode.TIMEOUT`.
+each completed step and its completion checks, immediately before deciding
+whether another step may begin. They do not interrupt an in-flight LLM, tool,
+or delegated task call, so the elapsed time can exceed `max_time` by the
+duration of that call. This avoids leaving agent or tool state half-updated.
+Each task run owns its budget; a delegated run does not implicitly inherit its
+parent's deadline. If a step both completes the task and exhausts the budget,
+completion wins. Otherwise, when the budget is exhausted, the returned
+`ChatDocument` has `metadata.status == StatusCode.TIMEOUT`.
 
-When a timed-out run requested a strict `return_type`, Langroid may decode the
-last response locally but does not make another LLM call to repair malformed
-structured output. In that case it returns the locally decoded value or `None`.
-A non-positive `max_time` keeps the existing unlimited behavior. NaN is rejected
-with `ValueError` because it is neither positive nor non-positive.
+When a budgeted run requests a strict `return_type`, Langroid may decode the
+last response locally. It checks the deadline again immediately before any LLM
+call that would repair malformed structured output, including when completion
+or local decoding consumed the remaining time. After expiry, it returns the
+locally decoded value or `None`. A non-positive `max_time` keeps the existing
+unlimited behavior. NaN is rejected with `ValueError` because it is neither
+positive nor non-positive.
 
 ### 2. Single Round Mode
 ```python
