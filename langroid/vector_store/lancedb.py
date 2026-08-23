@@ -20,6 +20,8 @@ from pydantic import BaseModel, ValidationError, create_model
 if TYPE_CHECKING:
     from lancedb.query import LanceVectorQueryBuilder
 
+from pydantic_settings import SettingsConfigDict
+
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
@@ -45,6 +47,8 @@ logger = logging.getLogger(__name__)
 
 
 class LanceDBConfig(VectorStoreConfig):
+    model_config = SettingsConfigDict(env_prefix="LANCEDB_")
+
     cloud: bool = False
     collection_name: str | None = "temp"
     storage_path: str = ".lancedb/data"

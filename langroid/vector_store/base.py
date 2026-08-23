@@ -1,11 +1,17 @@
 import copy
 import logging
+import re
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Sequence, Tuple, Type
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type
 
 import numpy as np
 import pandas as pd
-from pydantic_settings import BaseSettings
+from pydantic.fields import FieldInfo
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -19,8 +25,56 @@ from langroid.utils.pydantic_utils import flatten_dict
 
 logger = logging.getLogger(__name__)
 
+# the exact shape Kubernetes service links inject, e.g. tcp://10.0.0.8:6333
+# (\Z, not $: $ would match before a trailing newline, silently
+# discarding a value that should fail validation)
+_SERVICE_LINK_PORT_RE = re.compile(r"^tcp://\S+:\d+\Z")
+
+
+class _ServiceLinkPortFilter(PydanticBaseSettingsSource):
+    """Env-source wrapper dropping k8s/docker service-link `port` values.
+
+    With `enableServiceLinks` (on by default in Kubernetes), a service
+    named e.g. `qdrant` injects `QDRANT_PORT=tcp://IP:PORT` into every
+    pod, which would otherwise fail integer validation of the `port`
+    field. If the wrapped env source yields a `port` string matching
+    exactly that format, it is dropped (with a warning) so the class
+    default applies. Any other value — including malformed `tcp://`
+    junk, or a `tcp://` value passed to the constructor (which never
+    goes through this source) — still fails validation as usual.
+    """
+
+    def __init__(self, wrapped: PydanticBaseSettingsSource) -> None:
+        super().__init__(wrapped.settings_cls)
+        self._wrapped = wrapped
+
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> Tuple[Any, str, bool]:
+        return self._wrapped.get_field_value(field, field_name)
+
+    def __call__(self) -> Dict[str, Any]:
+        values = self._wrapped()
+        port = values.get("port")
+        if isinstance(port, str) and _SERVICE_LINK_PORT_RE.match(port):
+            default = self.settings_cls.model_fields["port"].default
+            logger.warning(
+                f"Ignoring port value {port!r} from the environment: it "
+                f"looks like a Kubernetes/Docker service-link artifact "
+                f"(an injected <SERVICE>_PORT env var); using default "
+                f"port {default} instead."
+            )
+            values = {k: v for k, v in values.items() if k != "port"}
+        return values
+
 
 class VectorStoreConfig(BaseSettings):
+    # Without a prefix, every field name would itself be a
+    # case-insensitive env var (e.g. a bare HOST, PORT, or FULL_EVAL
+    # in the environment would silently override defaults); subclasses
+    # each set their own prefix (QDRANT_, LANCEDB_, ...).
+    model_config = SettingsConfigDict(env_prefix="VECDB_")
+
     type: str = ""  # deprecated, keeping it for backward compatibility
     collection_name: str | None = "temp"
     replace_collection: bool = False  # replace collection if it already exists
@@ -39,6 +93,27 @@ class VectorStoreConfig(BaseSettings):
     metadata_class: Type[DocMetaData] = DocMetaData
     # compose_file: str = "langroid/vector_store/docker-compose-qdrant.yml"
     full_eval: bool = False  # runs eval without sanitization. Use only on trusted input
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        """Wrap the env source to drop k8s service-link `port` values.
+
+        Source precedence is unchanged (init beats env, etc.); only the
+        env source is filtered — see `_ServiceLinkPortFilter`.
+        """
+        return (
+            init_settings,
+            _ServiceLinkPortFilter(env_settings),
+            dotenv_settings,
+            file_secret_settings,
+        )
 
 
 class VectorStore(ABC):
