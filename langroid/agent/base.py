@@ -34,7 +34,7 @@ from rich.markup import escape
 from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tool_message import ToolMessage, handler_name
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.exceptions import XMLException
 from langroid.language_models.base import (
@@ -470,10 +470,7 @@ class Agent(ABC):
         if tool has handler method explicitly defined - use it,
         otherwise use the tool name as the handler
         """
-        if hasattr(message_class, "_handler"):
-            handler = getattr(message_class, "_handler", tool)
-        else:
-            handler = tool
+        handler = handler_name(message_class, tool)
 
         self.llm_tools_map[tool] = message_class
         if (
@@ -2276,11 +2273,10 @@ class Agent(ABC):
         Asynch version of `handle_tool_message`. See there for details.
         """
         tool_name = tool.default_value("request")
-        if hasattr(tool, "_handler"):
-            handler_name = getattr(tool, "_handler", tool_name)
-        else:
-            handler_name = tool_name
-        handler_method = getattr(self, handler_name + "_async", None)
+        # resolve from the CLASS: an LLM-injected `_handler` key would
+        # otherwise redirect dispatch to an arbitrary method (issue #1106)
+        handler = handler_name(type(tool), tool_name)
+        handler_method = getattr(self, handler + "_async", None)
         if handler_method is None:
             return self.handle_tool_message(tool, chat_doc=chat_doc)
         has_chat_doc_arg = (
@@ -2330,11 +2326,10 @@ class Agent(ABC):
 
         """
         tool_name = tool.default_value("request")
-        if hasattr(tool, "_handler"):
-            handler_name = getattr(tool, "_handler", tool_name)
-        else:
-            handler_name = tool_name
-        handler_method = getattr(self, handler_name, None)
+        # resolve from the CLASS: an LLM-injected `_handler` key would
+        # otherwise redirect dispatch to an arbitrary method (issue #1106)
+        handler = handler_name(type(tool), tool_name)
+        handler_method = getattr(self, handler, None)
         if handler_method is None:
             return None
         has_chat_doc_arg = (

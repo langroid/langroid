@@ -113,6 +113,7 @@ nav:
       - Task Termination: notes/task-termination.md
       - Chat History Snapshots: notes/chat-history-snapshots.md
       - Tool-Origin Taint Tracking: notes/tool-origin-taint.md
+      - Tool Handler Resolution: notes/tool-handler-resolution.md
       - Message Routing: notes/message-routing.md
       - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
       - Azure OpenAI models: notes/azure-openai-models.md
