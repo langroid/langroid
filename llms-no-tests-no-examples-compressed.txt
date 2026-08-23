@@ -19294,1030 +19294,6 @@ chromadb  # silence linters
 postgres  # silence linters
 </file>
 
-<file path="langroid/vector_store/chromadb.py">
-logger = logging.getLogger(__name__)
-⋮----
-class ChromaDBConfig(VectorStoreConfig)
-⋮----
-collection_name: str = "temp"
-storage_path: str = ".chroma/data"
-distance: Literal["cosine", "l2", "ip"] = "cosine"
-construction_ef: int = 100
-search_ef: int = 100
-max_neighbors: int = 16
-embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-host: str = "127.0.0.1"
-port: int = 6333
-⋮----
-class ChromaDB(VectorStore)
-⋮----
-def __init__(self, config: ChromaDBConfig = ChromaDBConfig())
-⋮----
-# chroma_db_impl="duckdb+parquet",
-# is_persistent=bool(config.storage_path),
-⋮----
-def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-"""Clear all collections in the vector store with the given prefix."""
-⋮----
-coll = [c for c in self.client.list_collections() if c.name.startswith(prefix)]
-⋮----
-n_empty_deletes = 0
-n_non_empty_deletes = 0
-⋮----
-def clear_empty_collections(self) -> int
-⋮----
-colls = self.client.list_collections()
-n_deletes = 0
-⋮----
-def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-"""
-        List non-empty collections in the vector store.
-        Args:
-            empty (bool, optional): Whether to list empty collections.
-        Returns:
-            List[str]: List of non-empty collection names.
-        """
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-"""
-        Create a collection in the vector store, optionally replacing an existing
-            collection if `replace` is True.
-        Args:
-            collection_name (str): Name of the collection to create or replace.
-            replace (bool, optional): Whether to replace an existing collection.
-                Defaults to False.
-
-        """
-⋮----
-# we could expose other configs, see:
-# https://docs.trychroma.com/docs/collections/configure
-⋮----
-def add_documents(self, documents: Sequence[Document]) -> None
-⋮----
-contents: List[str] = [document.content for document in documents]
-# convert metadatas to dicts so chroma can handle them
-metadata_dicts: List[dict[str, Any]] = [
-⋮----
-# chroma does not handle non-atomic types in metadata
-⋮----
-ids = [str(d.id()) for d in documents]
-⋮----
-colls = self.list_collections(empty=True)
-⋮----
-# embedding_models=embedding_models,
-⋮----
-def get_all_documents(self, where: str = "") -> List[Document]
-⋮----
-filter = json.loads(where) if where else None
-results = self.collection.get(
-⋮----
-def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-# get them one by one since chroma mangles the order of the results
-# when fetched from a list of ids.
-results = [
-final_results = {}
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-n = self.collection.count()
-⋮----
-results = self.collection.query(
-docs = self._docs_from_results(results)
-# chroma distances are 1 - cosine.
-scores = [1 - s for s in results["distances"][0]]
-⋮----
-def _docs_from_results(self, results: Dict[str, Any]) -> List[Document]
-⋮----
-"""
-        Helper function to convert results from ChromaDB to a list of Documents
-        Args:
-            results (dict): results from ChromaDB
-
-        Returns:
-            List[Document]: list of Documents
-        """
-⋮----
-contents = results["documents"][0]
-⋮----
-metadatas = results["metadatas"][0]
-⋮----
-# restore the stringified list of window_ids into the original List[str]
-⋮----
-docs = [
-</file>
-
-<file path="langroid/vector_store/lancedb.py">
-has_lancedb = True
-⋮----
-has_lancedb = False
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-class LanceDBConfig(VectorStoreConfig)
-⋮----
-cloud: bool = False
-collection_name: str | None = "temp"
-storage_path: str = ".lancedb/data"
-embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-distance: str = "cosine"
-⋮----
-class LanceDB(VectorStore)
-⋮----
-def __init__(self, config: LanceDBConfig = LanceDBConfig())
-⋮----
-self.is_from_dataframe = False  # were docs ingested from a dataframe?
-self.df_metadata_columns: List[str] = []  # metadata columns from dataframe
-⋮----
-new_storage_path = config.storage_path + ".new"
-⋮----
-def clear_empty_collections(self) -> int
-⋮----
-coll_names = self.list_collections()
-n_deletes = 0
-⋮----
-nr = self.client.open_table(name).head(1).shape[0]
-⋮----
-def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-"""Clear all collections with the given prefix."""
-⋮----
-coll_names = [
-⋮----
-n_empty_deletes = 0
-n_non_empty_deletes = 0
-⋮----
-def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-"""
-        Returns:
-            List of collection names that have at least one vector.
-
-        Args:
-            empty (bool, optional): Whether to include empty collections.
-        """
-colls = self.client.table_names(limit=None)
-⋮----
-if empty:  # include empty tbls
-return colls  # type: ignore
-counts = [self.client.open_table(coll).head(1).shape[0] for coll in colls]
-⋮----
-def _create_lance_schema(self, doc_cls: Type[Document]) -> Type[BaseModel]
-⋮----
-"""
-        NOTE: NOT USED, but leaving it here as it may be useful.
-
-        Create a subclass of LanceModel with fields:
-         - id (str)
-         - Vector field that has dims equal to
-            the embedding dimension of the embedding model, and a data field of type
-            DocClass.
-         - other fields from doc_cls
-
-        Args:
-            doc_cls (Type[Document]): A Pydantic model which should be a subclass of
-                Document, to be used as the type for the data field.
-
-        Returns:
-            Type[BaseModel]: A new Pydantic model subclassing from LanceModel.
-
-        Raises:
-            ValueError: If `n` is not a non-negative integer or if `DocClass` is not a
-                subclass of Document.
-        """
-⋮----
-n = self.embedding_dim
-⋮----
-# Prepare fields for the new model
-fields = {"id": (str, ...), "vector": (Vector(n), ...)}
-⋮----
-sorted_fields = dict(
-# Add both statically and dynamically defined fields from doc_cls
-⋮----
-field_type = field.annotation if hasattr(field, "annotation") else field
-⋮----
-# Create the new model with dynamic fields
-NewModel = create_model(
-⋮----
-)  # type: ignore
-return NewModel  # type: ignore
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-def add_documents(self, documents: Sequence[Document]) -> None
-⋮----
-colls = self.list_collections(empty=True)
-⋮----
-embedding_vecs = self.embedding_fn([doc.content for doc in documents])
-coll_name = self.config.collection_name
-⋮----
-# self._maybe_set_doc_class_schema(documents[0])
-table_exists = False
-⋮----
-# collection exists and  is not empty:
-# if replace_collection is True, we'll overwrite the existing collection,
-# else we'll append to it.
-⋮----
-table_exists = True
-⋮----
-ids = [str(d.id()) for d in documents]
-# don't insert all at once, batch in chunks of b,
-# else we get an API error
-b = self.config.batch_size
-⋮----
-def make_batches() -> Generator[List[Dict[str, Any]], None, None]
-⋮----
-batch = [
-⋮----
-tbl = self.client.open_table(coll_name)
-⋮----
-batch_gen = make_batches()
-batch = next(batch_gen)
-# use first batch to create table...
-tbl = self.client.create_table(
-# ... and add the rest
-⋮----
-"""
-        Add a dataframe to the collection.
-        Args:
-            df (pd.DataFrame): A dataframe
-            content (str): The name of the column in the dataframe that contains the
-                text content to be embedded using the embedding model.
-            metadata (List[str]): A list of column names in the dataframe that contain
-                metadata to be stored in the database. Defaults to [].
-        """
-⋮----
-actual_metadata = metadata.copy()
-self.df_metadata_columns = actual_metadata  # could be updated below
-# get content column
-content_values = df[content].values.tolist()
-embedding_vecs = self.embedding_fn(content_values)
-⋮----
-# add vector column
-⋮----
-# rename content column to "content", leave existing column intact
-df = df.rename(columns={content: "content"}, inplace=False)
-⋮----
-docs = dataframe_to_documents(df, content="content", metadata=metadata)
-ids = [str(d.id()) for d in docs]
-⋮----
-# collection either doesn't exist or is empty, so replace it
-# and set new schema from df
-⋮----
-doc_cls = dataframe_to_document_model(
-self.config.document_class = doc_cls  # type: ignore
-⋮----
-# collection exists and is not empty, so append to it
-tbl = self.client.open_table(self.config.collection_name)
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-df = result.to_pandas()
-⋮----
-records = result.to_arrow().to_pylist()
-⋮----
-def _records_to_docs(self, records: List[Dict[str, Any]]) -> List[Document]
-⋮----
-docs = [self.config.document_class(**rec) for rec in records]
-⋮----
-def get_all_documents(self, where: str = "") -> List[Document]
-⋮----
-pre_result = tbl.search(None).where(where or None).limit(None)
-⋮----
-def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-_ids = [str(id) for id in ids]
-⋮----
-docs = []
-⋮----
-results = self._lance_result_to_docs(tbl.search().where(f"id == '{_id}'"))
-⋮----
-embedding = self.embedding_fn([text])[0]
-⋮----
-result = (
-docs = self._lance_result_to_docs(result)
-# note _distance is 1 - cosine
-⋮----
-scores = [
-⋮----
-scores = [1 - rec["_distance"] for rec in result.to_arrow().to_pylist()]
-⋮----
-doc_score_pairs = list(zip(docs, scores))
-</file>
-
-<file path="langroid/vector_store/meilisearch.py">
-"""
-MeiliSearch as a pure document store, without its
-(experimental) vector-store functionality.
-We aim to use MeiliSearch for fast lexical search.
-Note that what we call "Collection" in Langroid is referred to as
-"Index" in MeiliSearch. Each data-store has its own terminology,
-but for uniformity we use the Langroid terminology here.
-"""
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-class MeiliSearchConfig(VectorStoreConfig)
-⋮----
-cloud: bool = False
-collection_name: str | None = None
-primary_key: str = "id"
-port: int = 7700
-⋮----
-class MeiliSearch(VectorStore)
-⋮----
-def __init__(self, config: MeiliSearchConfig = MeiliSearchConfig())
-⋮----
-# Note: Only create collection if a non-null collection name is provided.
-# This is useful to delay creation of db until we have a suitable
-# collection name (e.g. we could get it from the url or folder path).
-⋮----
-def clear_empty_collections(self) -> int
-⋮----
-"""All collections are treated as non-empty in MeiliSearch, so this is a
-        no-op"""
-⋮----
-async def _async_delete_indices(self, uids: List[str]) -> List[bool]
-⋮----
-"""Delete any indicecs in `uids` that exist.
-        Returns list of bools indicating whether the index has been deleted"""
-⋮----
-result = await asyncio.gather(
-⋮----
-def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-"""Delete all indices whose names start with `prefix`"""
-⋮----
-coll_names = [c for c in self.list_collections() if c.startswith(prefix)]
-deletes = asyncio.run(self._async_delete_indices(coll_names))
-n_deletes = sum(deletes)
-⋮----
-def _list_all_collections(self) -> List[str]
-⋮----
-"""
-        List all collections, including empty ones.
-        Returns:
-            List of collection names.
-        """
-⋮----
-async def _async_get_indexes(self) -> List[AsyncIndex]
-⋮----
-indexes = await client.get_indexes(limit=10_000)
-return [] if indexes is None else indexes  # type: ignore
-⋮----
-async def _async_get_index(self, index_uid: str) -> "AsyncIndex"
-⋮----
-index = await client.get_index(index_uid)
-return index  # type: ignore
-⋮----
-def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-"""
-        Returns:
-            List of index names stored. We treat any existing index as non-empty.
-        """
-indexes = asyncio.run(self._async_get_indexes())
-⋮----
-async def _async_create_index(self, collection_name: str) -> "AsyncIndex"
-⋮----
-index = await client.create_index(
-⋮----
-async def _async_delete_index(self, collection_name: str) -> bool
-⋮----
-"""Delete index if it exists. Returns True iff index was deleted"""
-⋮----
-result = await client.delete_index_if_exists(uid=collection_name)
-return result  # type: ignore
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-"""
-        Create a collection with the given name, optionally replacing an existing
-            collection if `replace` is True.
-        Args:
-            collection_name (str): Name of the collection to create.
-            replace (bool): Whether to replace an existing collection
-                with the same name. Defaults to False.
-        """
-⋮----
-collections = self.list_collections()
-⋮----
-collection_info = asyncio.run(self._async_get_index(collection_name))
-⋮----
-level = logger.getEffectiveLevel()
-⋮----
-index = client.index(collection_name)
-⋮----
-def add_documents(self, documents: Sequence[Document]) -> None
-⋮----
-colls = self._list_all_collections()
-⋮----
-docs = [
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-def _to_int_or_uuid(self, id: str) -> int | str
-⋮----
-async def _async_get_documents(self, where: str = "") -> "DocumentsInfo"
-⋮----
-filter = [] if where is None else where
-⋮----
-index = client.index(self.config.collection_name)
-documents = await index.get_documents(limit=10_000, filter=filter)
-⋮----
-def get_all_documents(self, where: str = "") -> List[Document]
-⋮----
-docs = asyncio.run(self._async_get_documents(where))
-⋮----
-doc_results = docs.results
-⋮----
-async def _async_get_documents_by_ids(self, ids: List[str]) -> List[Dict[str, Any]]
-⋮----
-documents = await asyncio.gather(*[index.get_document(id) for id in ids])
-⋮----
-def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-docs = asyncio.run(self._async_get_documents_by_ids(ids))
-⋮----
-results = await index.search(
-return results.hits  # type: ignore
-⋮----
-neighbors: int = 0,  # ignored
-⋮----
-_docs = asyncio.run(self._async_search(text, k, filter))  # type: ignore
-⋮----
-scores = [h["_rankingScore"] for h in _docs]
-⋮----
-doc_score_pairs = list(zip(docs, scores))
-</file>
-
-<file path="langroid/vector_store/pineconedb.py">
-# import dataclass
-⋮----
-logger = logging.getLogger(__name__)
-⋮----
-has_pinecone: bool = True
-⋮----
-class ServerlessSpec(BaseModel)
-⋮----
-"""
-            Fallback Serverless specification configuration to avoid import errors.
-            """
-⋮----
-cloud: str
-region: str
-⋮----
-PineconeApiException = Any  # type: ignore
-Pinecone = Any  # type: ignore
-has_pinecone = False
-⋮----
-@dataclass(frozen=True)
-class IndexMeta
-⋮----
-name: str
-total_vector_count: int
-⋮----
-class PineconeDBConfig(VectorStoreConfig)
-⋮----
-cloud: bool = True
-collection_name: str | None = "temp"
-spec: ServerlessSpec = ServerlessSpec(cloud="aws", region="us-east-1")
-deletion_protection: Literal["enabled", "disabled"] | None = None
-metric: str = "cosine"
-pagination_size: int = 100
-⋮----
-class PineconeDB(VectorStore)
-⋮----
-def __init__(self, config: PineconeDBConfig = PineconeDBConfig())
-⋮----
-key = os.getenv("PINECONE_API_KEY")
-⋮----
-def clear_empty_collections(self) -> int
-⋮----
-indexes = self._list_index_metas(empty=True)
-n_deletes = 0
-⋮----
-def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-"""
-        Returns:
-            Number of Pinecone indexes that were deleted
-
-        Args:
-            really: Optional[bool] - whether to really delete all Pinecone collections
-            prefix: Optional[str] - string to match potential Pinecone
-                indexes for deletion
-        """
-⋮----
-indexes = [
-⋮----
-def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-"""
-        Returns:
-            List of Pinecone indices that have at least one vector.
-
-        Args:
-            empty: Optional[bool] - whether to include empty collections
-        """
-indexes = self.client.list_indexes()
-res: List[str] = []
-⋮----
-index_meta = self.client.Index(name=index)
-⋮----
-def _list_index_metas(self, empty: bool = False) -> List[IndexMeta]
-⋮----
-"""
-        Returns:
-            List of objects describing Pinecone indices
-
-        Args:
-            empty: Optional[bool] - whether to include empty collections
-        """
-⋮----
-res = []
-⋮----
-index_meta = self._fetch_index_meta(index)
-⋮----
-def _fetch_index_meta(self, index_name: str) -> IndexMeta
-⋮----
-"""
-        Returns:
-            A dataclass describing the input Index by name and vector count
-            to save a bit on index description calls
-
-        Args:
-            index_name: str - Name of the index in Pinecone
-        """
-⋮----
-index = self.client.Index(name=index_name)
-stats = index.describe_index_stats()
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-"""
-        Create a collection with the given name, optionally replacing an existing
-        collection if `replace` is True.
-
-        Args:
-            collection_name: str - Configuration of the collection to create.
-            replace: Optional[Bool] - Whether to replace an existing collection
-                with the same name. Defaults to False.
-        """
-pattern = re.compile(r"^[a-z0-9-]+$")
-⋮----
-index = self.client.Index(name=collection_name)
-⋮----
-status = self.client.describe_index(name=collection_name)
-⋮----
-payload = {
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-def add_documents(self, documents: Sequence[Document], namespace: str = "") -> None
-⋮----
-document_dicts = [doc.model_dump() for doc in documents]
-document_ids = [doc.id() for doc in documents]
-embedding_vectors = self.embedding_fn([doc.content for doc in documents])
-vectors = [
-⋮----
-index = self.client.Index(name=self.config.collection_name)
-batch_size = self.config.batch_size
-⋮----
-"""
-        Returns:
-            All documents for the collection currently defined in
-            the configuration object
-
-        Args:
-            prefix: str - document id prefix to search for
-            namespace: str - partition of vectors to search within the index
-        """
-⋮----
-docs = []
-⋮----
-request_filters: Dict[str, Union[str, int]] = {
-⋮----
-response = index.list_paginated(**request_filters)
-vectors = response.get("vectors", [])
-⋮----
-pagination_token = response.get("pagination", {}).get("next", None)
-⋮----
-"""
-        Returns:
-            Fetches document text embedded in Pinecone index metadata
-
-        Args:
-            ids: List[str] - vector data object ids to retrieve
-            namespace: str - partition of vectors to search within the index
-        """
-⋮----
-records = index.fetch(ids=ids, namespace=namespace)
-⋮----
-records = index.fetch(ids=ids)
-⋮----
-id_mapping = {key: value for key, value in records["vectors"].items()}
-ordered_payloads = [id_mapping[_id] for _id in ids if _id in id_mapping]
-⋮----
-vector_search_request = {
-⋮----
-response = index.query(**vector_search_request)
-doc_score_pairs = [
-⋮----
-max_score = max([pair[1] for pair in doc_score_pairs])
-⋮----
-def transform_pinecone_vector(self, metadata_dict: Dict[str, Any]) -> Document
-⋮----
-"""
-        Parses the metadata response from the Pinecone vector query and
-        formats it into a dictionary that can be parsed by the Document class
-        associated with the PineconeDBConfig class
-
-        Returns:
-            Well formed dictionary object to be transformed into a Document
-
-        Args:
-            metadata_dict: Dict - the metadata dictionary from the Pinecone
-                vector query match
-        """
-</file>
-
-<file path="langroid/vector_store/qdrantdb.py">
-logger = logging.getLogger(__name__)
-⋮----
-T = TypeVar("T")
-⋮----
-def from_optional(x: Optional[T], default: T) -> T
-⋮----
-def is_valid_uuid(uuid_to_test: str) -> bool
-⋮----
-"""
-    Check if a given string is a valid UUID.
-    """
-⋮----
-uuid_obj = uuid.UUID(uuid_to_test)
-⋮----
-# Check for valid unsigned 64-bit integer
-⋮----
-int_value = int(uuid_to_test)
-⋮----
-class QdrantDBConfig(VectorStoreConfig)
-⋮----
-cloud: bool = True
-docker: bool = False
-collection_name: str | None = "temp"
-storage_path: str = ".qdrant/data"
-embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-use_sparse_embeddings: bool = False
-sparse_embedding_model: str = "naver/splade-v3-distilbert"
-sparse_limit: int = 3
-distance: str = "cosine"
-⋮----
-class QdrantDB(VectorStore)
-⋮----
-def __init__(self, config: QdrantDBConfig = QdrantDBConfig())
-⋮----
-key = os.getenv("QDRANT_API_KEY")
-url = os.getenv("QDRANT_API_URL")
-⋮----
-new_storage_path = config.storage_path + ".new"
-⋮----
-# Note: Only create collection if a non-null collection name is provided.
-# This is useful to delay creation of vecdb until we have a suitable
-# collection name (e.g. we could get it from the url or folder path).
-⋮----
-def clone(self) -> "QdrantDB"
-⋮----
-"""Create an independent Qdrant client when running against Qdrant Cloud."""
-⋮----
-cloned = super().clone()
-⋮----
-def close(self) -> None
-⋮----
-"""
-        Close the QdrantDB client and release any resources (e.g., file locks).
-        This is especially important for local storage to release the .lock file.
-        """
-⋮----
-# QdrantLocal has a close method that releases the lock
-⋮----
-def __enter__(self) -> "QdrantDB"
-⋮----
-"""Context manager entry."""
-⋮----
-def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
-⋮----
-"""Context manager exit - ensure cleanup even if an exception occurred."""
-⋮----
-def clear_empty_collections(self) -> int
-⋮----
-coll_names = self.list_collections()
-n_deletes = 0
-⋮----
-info = self.client.get_collection(collection_name=name)
-⋮----
-def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-"""Clear all collections with the given prefix."""
-⋮----
-coll_names = [
-⋮----
-n_empty_deletes = 0
-n_non_empty_deletes = 0
-⋮----
-points_count = from_optional(info.points_count, 0)
-⋮----
-def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-"""
-        Returns:
-            List of collection names that have at least one vector.
-
-        Args:
-            empty (bool, optional): Whether to include empty collections.
-        """
-⋮----
-colls = list(self.client.get_collections())[0][1]
-⋮----
-counts = []
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-"""
-        Create a collection with the given name, optionally replacing an existing
-            collection if `replace` is True.
-        Args:
-            collection_name (str): Name of the collection to create.
-            replace (bool): Whether to replace an existing collection
-                with the same name. Defaults to False.
-        """
-⋮----
-coll = self.client.get_collection(collection_name=collection_name)
-⋮----
-vectors_config = {
-sparse_vectors_config = None
-⋮----
-sparse_vectors_config = {
-⋮----
-collection_info = self.client.get_collection(collection_name=collection_name)
-⋮----
-level = logger.getEffectiveLevel()
-⋮----
-def get_sparse_embeddings(self, inputs: List[str]) -> List["SparseVector"]
-⋮----
-tokens = self.sparse_tokenizer(
-output = self.sparse_model(**tokens)
-vectors = torch.max(
-sparse_embeddings = []
-⋮----
-cols = vec.nonzero().squeeze().cpu().tolist()
-weights = vec[cols].cpu().tolist()
-⋮----
-def add_documents(self, documents: Sequence[Document]) -> None
-⋮----
-# Add id to metadata if not already present
-⋮----
-# Fix the ids due to qdrant finickiness
-⋮----
-colls = self.list_collections(empty=True)
-⋮----
-document_dicts = [doc.model_dump() for doc in documents]
-embedding_vecs = self.embedding_fn([doc.content for doc in documents])
-sparse_embedding_vecs = self.get_sparse_embeddings(
-⋮----
-ids = [self._to_int_or_uuid(d.id()) for d in documents]
-# don't insert all at once, batch in chunks of b,
-# else we get an API error
-b = self.config.batch_size
-⋮----
-vectors: Dict[str, Embeddings | List[SparseVector]] = {
-⋮----
-coll_found: bool = False
-⋮----
-# poll until collection is ready
-⋮----
-coll_found = True
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-def _to_int_or_uuid(self, id: str) -> int | str
-⋮----
-int_val = int(id)
-⋮----
-# If doc_id is already a valid UUID, return it as is
-⋮----
-# Otherwise, generate a UUID from the doc_id
-# Convert doc_id to string if it's not already
-id_str = str(id)
-⋮----
-# Hash the document ID using SHA-1
-hash_object = hashlib.sha1(id_str.encode())
-hash_digest = hash_object.hexdigest()
-⋮----
-# Truncate or manipulate the hash to fit into a UUID (128 bits)
-uuid_str = hash_digest[:32]
-⋮----
-# Format this string into a UUID format
-formatted_uuid = uuid.UUID(uuid_str)
-⋮----
-def get_all_documents(self, where: str = "") -> List[Document]
-⋮----
-docs = []
-offset = 0
-filter = Filter() if where == "" else Filter.model_validate(json.loads(where))
-⋮----
-limit=10_000,  # try getting all at once, if not we keep paging
-⋮----
-self.config.document_class(**record.payload)  # type: ignore
-⋮----
-# ignore
-⋮----
-offset = next_page_offset  # type: ignore
-⋮----
-def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-_ids = [self._to_int_or_uuid(id) for id in ids]
-records = self.client.retrieve(
-# Note the records may NOT be in the order of the ids,
-# so we re-order them here.
-id2payload = {record.id: record.payload for record in records}
-ordered_payloads = [id2payload[id] for id in _ids if id in id2payload]
-docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
-⋮----
-embedding = self.embedding_fn([text])[0]
-# TODO filter may not work yet
-⋮----
-filter = Filter()
-⋮----
-filter = Filter.model_validate(json.loads(where))
-requests = [
-⋮----
-sparse_embedding = self.get_sparse_embeddings([text])[0]
-⋮----
-search_result_lists: List[List[ScoredPoint]] = self.client.search_batch(
-⋮----
-search_result = [
-⋮----
-]  # 2D list -> 1D list
-scores = [match.score for match in search_result if match is not None]
-docs = [
-⋮----
-self.config.document_class(**(match.payload))  # type: ignore
-⋮----
-doc_score_pairs = list(zip(docs, scores))
-max_score = max(ds[1] for ds in doc_score_pairs)
-</file>
-
-<file path="langroid/vector_store/weaviatedb.py">
-logger = logging.getLogger(__name__)
-⋮----
-class VectorDistances
-⋮----
-"""
-    Fallback class when weaviate is not installed, to avoid import errors.
-    """
-⋮----
-COSINE: str = "cosine"
-DOTPRODUCT: str = "dot"
-L2: str = "l2"
-⋮----
-class WeaviateDBConfig(VectorStoreConfig)
-⋮----
-collection_name: str | None = "temp"
-embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-distance: str = VectorDistances.COSINE
-cloud: bool = False
-docker: bool = False
-host: str = "127.0.0.1"
-port: int = 8080
-storage_path: str = ".weaviate_embedded/data"
-⋮----
-class WeaviateDB(VectorStore)
-⋮----
-def __init__(self, config: WeaviateDBConfig = WeaviateDBConfig())
-⋮----
-key = os.getenv("WEAVIATE_API_KEY")
-url = os.getenv("WEAVIATE_API_URL")
-⋮----
-def clear_empty_collections(self) -> int
-⋮----
-colls = self.client.collections.list_all()
-n_deletes = 0
-⋮----
-val = self.client.collections.get(coll_name)
-⋮----
-def list_collections(self, empty: bool = False) -> List[str]
-⋮----
-non_empty_colls = [
-⋮----
-def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
-⋮----
-coll_names = [
-⋮----
-n_empty_deletes = 0
-n_non_empty_deletes = 0
-⋮----
-info = self.client.collections.get(name)
-points_count = len(info)
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-collection_name = WeaviateDB.validate_and_format_collection_name(
-⋮----
-coll = self.client.collections.get(name=collection_name)
-⋮----
-vector_index_config = Configure.VectorIndex.hnsw(
-⋮----
-vectorizer_config = Configure.Vectorizer.text2vec_openai(
-⋮----
-vectorizer_config = None
-⋮----
-collection_info = self.client.collections.create(
-collection_info = self.client.collections.get(name=collection_name)
-⋮----
-level = logger.getEffectiveLevel()
-⋮----
-def add_documents(self, documents: Sequence[Document]) -> None
-⋮----
-colls = self.list_collections(empty=True)
-⋮----
-document_dicts = [doc.model_dump() for doc in documents]
-embedding_vecs = self.embedding_fn([doc.content for doc in documents])
-⋮----
-coll_name = self.client.collections.get(self.config.collection_name)
-⋮----
-id = doc_dict["metadata"].pop("id", None)
-⋮----
-def get_all_documents(self, where: str = "") -> List[Document]
-⋮----
-# cannot use filter as client does not support json type queries
-coll = self.client.collections.get(self.config.collection_name)
-⋮----
-def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-docs = []
-⋮----
-result = coll_name.query.fetch_objects(
-⋮----
-id_to_doc = {}
-⋮----
-doc = self.weaviate_obj_to_doc(item)
-⋮----
-# Reconstruct the list of documents in the original order of input ids
-docs = [id_to_doc[id] for id in ids if id in id_to_doc]
-⋮----
-embedding = self.embedding_fn([text])[0]
-⋮----
-response = coll.query.near_vector(
-maybe_distances = [item.metadata.distance for item in response.objects]
-similarities = [0 if d is None else 1 - d for d in maybe_distances]
-docs = [self.weaviate_obj_to_doc(item) for item in response.objects]
-⋮----
-def _create_valid_uuid_id(self, id: str) -> Any
-⋮----
-id = get_valid_uuid(id)
-⋮----
-def weaviate_obj_to_doc(self, input_object: Any) -> Document
-⋮----
-content = input_object.properties.get("content", "")
-metadata_dict = input_object.properties.get("metadata", {})
-⋮----
-window_ids = metadata_dict.pop("window_ids", [])
-window_ids = [str(uuid) for uuid in window_ids]
-⋮----
-# Ensure the id is a valid UUID string
-id_value = get_valid_uuid(input_object.uuid)
-⋮----
-metadata = DocMetaData(id=id_value, window_ids=window_ids, **metadata_dict)
-⋮----
-@staticmethod
-    def validate_and_format_collection_name(name: str) -> str
-⋮----
-"""
-        Formats the collection name to comply with Weaviate's naming rules:
-        - Name must start with a capital letter.
-        - Name can only contain letters, numbers, and underscores.
-        - Replaces invalid characters with underscores.
-        """
-⋮----
-formatted_name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
-⋮----
-# Ensure the first letter is capitalized
-⋮----
-formatted_name = formatted_name.capitalize()
-⋮----
-# Check if the name now meets the criteria
-⋮----
-def __del__(self) -> None
-⋮----
-# Gracefully close the connection with local client
-</file>
-
 <file path="langroid/__init__.py">
 """
 Main langroid package
@@ -30420,203 +29396,1040 @@ flattened_deduped = list(dict.fromkeys(flattened))
 def show_if_debug(self, doc_score_pairs: List[Tuple[Document, float]]) -> None
 </file>
 
-<file path="langroid/vector_store/postgres.py">
-has_postgres: bool = True
-⋮----
-Engine = Any  # type: ignore
-Connection = Any  # type: ignore
-has_postgres = False
-⋮----
+<file path="langroid/vector_store/chromadb.py">
 logger = logging.getLogger(__name__)
 ⋮----
-def _quote_ident(name: str) -> str
+class ChromaDBConfig(VectorStoreConfig)
 ⋮----
-"""Quote a SQL identifier (table/index name) for use in raw DDL, so a name
-    containing characters that are invalid in an unquoted identifier -- e.g.
-    the ``-`` in a pytest-xdist worker suffix like ``mycollection-gw1`` -- does
-    not produce a syntax error. Embedded double-quotes are escaped per the SQL
-    standard.
-    """
-⋮----
-class PostgresDBConfig(VectorStoreConfig)
-⋮----
-collection_name: str = "embeddings"
-cloud: bool = False
-docker: bool = True
-host: str = "127.0.0.1"
-port: int = 5432
-replace_collection: bool = False
+collection_name: str = "temp"
+storage_path: str = ".chroma/data"
+distance: Literal["cosine", "l2", "ip"] = "cosine"
+construction_ef: int = 100
+search_ef: int = 100
+max_neighbors: int = 16
 embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-pool_size: int = 10
-max_overflow: int = 20
-hnsw_m: int = 16
-hnsw_ef_construction: int = 200
+host: str = "127.0.0.1"
+port: int = 6333
 ⋮----
-class PostgresDB(VectorStore)
+class ChromaDB(VectorStore)
 ⋮----
-def __init__(self, config: PostgresDBConfig = PostgresDBConfig())
+def __init__(self, config: ChromaDBConfig | None = None)
 ⋮----
-def _create_engine(self) -> Engine
+config = config if config is not None else ChromaDBConfig()
 ⋮----
-"""Creates a SQLAlchemy engine based on the configuration."""
-⋮----
-connection_string: str | None = None  # Ensure variable is always defined
-⋮----
-connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
-⋮----
-connection_string = connection_string.replace(
-⋮----
-username = os.getenv("POSTGRES_USER", "postgres")
-password = os.getenv("POSTGRES_PASSWORD", "postgres")
-database = os.getenv("POSTGRES_DB", "langroid")
-⋮----
-connection_string = (
-self.config.cloud = False  # Ensures cloud is disabled if using Docker
-⋮----
-def _setup_table(self) -> None
-⋮----
-# Create HNSW index for embeddings column if it doesn't exist.
-# This index enables efficient nearest-neighbor search using cosine similarity.
-# PostgreSQL automatically builds the index after creation;
-# no manual step required.
-# Read more about pgvector hnsw index here:
-# https://github.com/pgvector/pgvector?tab=readme-ov-file#hnsw
-⋮----
-index_name = f"hnsw_index_{self.config.collection_name}_embedding"
-⋮----
-create_index_query = text(
-⋮----
-def index_exists(self, connection: Connection, index_name: str) -> bool
-⋮----
-"""Check if an index exists."""
-query = text(
-result = connection.execute(query).scalar()
-⋮----
-@staticmethod
-    def _create_vector_extension(conn: Engine) -> None
-⋮----
-# The number is a unique identifier used to lock a specific resource
-# during transaction. Any 64-bit integer can be used for advisory locks.
-# Acquire advisory lock to ensure atomic, isolated setup
-# and prevent race conditions.
-⋮----
-statement = text(
-⋮----
-def set_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-inspector = inspect(self.engine)
-table_exists = collection_name in inspector.get_table_names()
-⋮----
-def list_collections(self, empty: bool = True) -> List[str]
-⋮----
-table_names = inspector.get_table_names()
-⋮----
-collections = []
-⋮----
-table = Table(table_name, self.metadata, autoload_with=self.engine)
-⋮----
-# Efficiently check for non-emptiness
-⋮----
-def create_collection(self, collection_name: str, replace: bool = False) -> None
-⋮----
-def delete_collection(self, collection_name: str) -> None
-⋮----
-"""
-        Deletes a collection and its associated HNSW index, handling metadata
-        synchronization issues.
-        """
-⋮----
-index_name = f"hnsw_index_{collection_name}_embedding"
-drop_index_query = text(
-⋮----
-# 3. Now, drop the table using SQLAlchemy
-table = Table(collection_name, self.metadata)
-⋮----
-# 4. Refresh metadata again after dropping the table
+# chroma_db_impl="duckdb+parquet",
+# is_persistent=bool(config.storage_path),
 ⋮----
 def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
 ⋮----
-deleted_count = 0
+"""Clear all collections in the vector store with the given prefix."""
 ⋮----
-# Use delete_collection to handle index and table deletion
+coll = [c for c in self.client.list_collections() if c.name.startswith(prefix)]
+⋮----
+n_empty_deletes = 0
+n_non_empty_deletes = 0
 ⋮----
 def clear_empty_collections(self) -> int
 ⋮----
-# Efficiently check for emptiness without fetching all rows
+colls = self.client.list_collections()
+n_deletes = 0
 ⋮----
-session.commit()  # Commit is likely not needed here
+def list_collections(self, empty: bool = False) -> List[str]
 ⋮----
-def _parse_embedding_store_record(self, res: Any) -> Dict[str, Any]
+"""
+        List non-empty collections in the vector store.
+        Args:
+            empty (bool, optional): Whether to list empty collections.
+        Returns:
+            List[str]: List of non-empty collection names.
+        """
 ⋮----
-metadata = res.cmetadata or {}
+def create_collection(self, collection_name: str, replace: bool = False) -> None
 ⋮----
-def get_all_documents(self, where: str = "") -> List[Document]
+"""
+        Create a collection in the vector store, optionally replacing an existing
+            collection if `replace` is True.
+        Args:
+            collection_name (str): Name of the collection to create or replace.
+            replace (bool, optional): Whether to replace an existing collection.
+                Defaults to False.
+
+        """
 ⋮----
-query = session.query(self.embeddings_table)
-⋮----
-# Apply 'where' clause if provided
-⋮----
-where_json = json.loads(where)
-query = query.filter(
-⋮----
-return []  # Return empty list or handle error as appropriate
-⋮----
-results = query.all()
-documents = [
-⋮----
-def get_documents_by_ids(self, ids: List[str]) -> List[Document]
-⋮----
-# Add a CASE statement to preserve the order of IDs
-case_stmt = case(
-⋮----
-query = (
-⋮----
-.order_by(case_stmt)  # Order by the CASE statement
+# we could expose other configs, see:
+# https://docs.trychroma.com/docs/collections/configure
 ⋮----
 def add_documents(self, documents: Sequence[Document]) -> None
 ⋮----
-embeddings = self.embedding_fn([doc.content for doc in documents])
+contents: List[str] = [document.content for document in documents]
+# convert metadatas to dicts so chroma can handle them
+metadata_dicts: List[dict[str, Any]] = [
 ⋮----
+# chroma does not handle non-atomic types in metadata
+⋮----
+ids = [str(d.id()) for d in documents]
+⋮----
+colls = self.list_collections(empty=True)
+⋮----
+# embedding_models=embedding_models,
+⋮----
+def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+filter = json.loads(where) if where else None
+results = self.collection.get(
+⋮----
+def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+# get them one by one since chroma mangles the order of the results
+# when fetched from a list of ids.
+results = [
+final_results = {}
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+n = self.collection.count()
+⋮----
+results = self.collection.query(
+docs = self._docs_from_results(results)
+# chroma distances are 1 - cosine.
+scores = [1 - s for s in results["distances"][0]]
+⋮----
+def _docs_from_results(self, results: Dict[str, Any]) -> List[Document]
+⋮----
+"""
+        Helper function to convert results from ChromaDB to a list of Documents
+        Args:
+            results (dict): results from ChromaDB
+
+        Returns:
+            List[Document]: list of Documents
+        """
+⋮----
+contents = results["documents"][0]
+⋮----
+metadatas = results["metadatas"][0]
+⋮----
+# restore the stringified list of window_ids into the original List[str]
+⋮----
+docs = [
+</file>
+
+<file path="langroid/vector_store/lancedb.py">
+has_lancedb = True
+⋮----
+has_lancedb = False
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+class LanceDBConfig(VectorStoreConfig)
+⋮----
+cloud: bool = False
+collection_name: str | None = "temp"
+storage_path: str = ".lancedb/data"
+embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
+distance: str = "cosine"
+⋮----
+class LanceDB(VectorStore)
+⋮----
+def __init__(self, config: LanceDBConfig | None = None)
+⋮----
+config = config if config is not None else LanceDBConfig()
+⋮----
+self.is_from_dataframe = False  # were docs ingested from a dataframe?
+self.df_metadata_columns: List[str] = []  # metadata columns from dataframe
+⋮----
+new_storage_path = config.storage_path + ".new"
+⋮----
+def clear_empty_collections(self) -> int
+⋮----
+coll_names = self.list_collections()
+n_deletes = 0
+⋮----
+nr = self.client.open_table(name).head(1).shape[0]
+⋮----
+def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+"""Clear all collections with the given prefix."""
+⋮----
+coll_names = [
+⋮----
+n_empty_deletes = 0
+n_non_empty_deletes = 0
+⋮----
+def list_collections(self, empty: bool = False) -> List[str]
+⋮----
+"""
+        Returns:
+            List of collection names that have at least one vector.
+
+        Args:
+            empty (bool, optional): Whether to include empty collections.
+        """
+colls = self.client.table_names(limit=None)
+⋮----
+if empty:  # include empty tbls
+return colls  # type: ignore
+counts = [self.client.open_table(coll).head(1).shape[0] for coll in colls]
+⋮----
+def _create_lance_schema(self, doc_cls: Type[Document]) -> Type[BaseModel]
+⋮----
+"""
+        NOTE: NOT USED, but leaving it here as it may be useful.
+
+        Create a subclass of LanceModel with fields:
+         - id (str)
+         - Vector field that has dims equal to
+            the embedding dimension of the embedding model, and a data field of type
+            DocClass.
+         - other fields from doc_cls
+
+        Args:
+            doc_cls (Type[Document]): A Pydantic model which should be a subclass of
+                Document, to be used as the type for the data field.
+
+        Returns:
+            Type[BaseModel]: A new Pydantic model subclassing from LanceModel.
+
+        Raises:
+            ValueError: If `n` is not a non-negative integer or if `DocClass` is not a
+                subclass of Document.
+        """
+⋮----
+n = self.embedding_dim
+⋮----
+# Prepare fields for the new model
+fields = {"id": (str, ...), "vector": (Vector(n), ...)}
+⋮----
+sorted_fields = dict(
+# Add both statically and dynamically defined fields from doc_cls
+⋮----
+field_type = field.annotation if hasattr(field, "annotation") else field
+⋮----
+# Create the new model with dynamic fields
+NewModel = create_model(
+⋮----
+)  # type: ignore
+return NewModel  # type: ignore
+⋮----
+def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+def add_documents(self, documents: Sequence[Document]) -> None
+⋮----
+colls = self.list_collections(empty=True)
+⋮----
+embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+coll_name = self.config.collection_name
+⋮----
+# self._maybe_set_doc_class_schema(documents[0])
+table_exists = False
+⋮----
+# collection exists and  is not empty:
+# if replace_collection is True, we'll overwrite the existing collection,
+# else we'll append to it.
+⋮----
+table_exists = True
+⋮----
+ids = [str(d.id()) for d in documents]
+# don't insert all at once, batch in chunks of b,
+# else we get an API error
+b = self.config.batch_size
+⋮----
+def make_batches() -> Generator[List[Dict[str, Any]], None, None]
+⋮----
+batch = [
+⋮----
+tbl = self.client.open_table(coll_name)
+⋮----
+batch_gen = make_batches()
+batch = next(batch_gen)
+# use first batch to create table...
+tbl = self.client.create_table(
+# ... and add the rest
+⋮----
+"""
+        Add a dataframe to the collection.
+        Args:
+            df (pd.DataFrame): A dataframe
+            content (str): The name of the column in the dataframe that contains the
+                text content to be embedded using the embedding model.
+            metadata (List[str]): A list of column names in the dataframe that contain
+                metadata to be stored in the database. Defaults to [].
+        """
+⋮----
+actual_metadata = metadata.copy()
+self.df_metadata_columns = actual_metadata  # could be updated below
+# get content column
+content_values = df[content].values.tolist()
+embedding_vecs = self.embedding_fn(content_values)
+⋮----
+# add vector column
+⋮----
+# rename content column to "content", leave existing column intact
+df = df.rename(columns={content: "content"}, inplace=False)
+⋮----
+docs = dataframe_to_documents(df, content="content", metadata=metadata)
+ids = [str(d.id()) for d in docs]
+⋮----
+# collection either doesn't exist or is empty, so replace it
+# and set new schema from df
+⋮----
+doc_cls = dataframe_to_document_model(
+self.config.document_class = doc_cls  # type: ignore
+⋮----
+# collection exists and is not empty, so append to it
+tbl = self.client.open_table(self.config.collection_name)
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+df = result.to_pandas()
+⋮----
+records = result.to_arrow().to_pylist()
+⋮----
+def _records_to_docs(self, records: List[Dict[str, Any]]) -> List[Document]
+⋮----
+docs = [self.config.document_class(**rec) for rec in records]
+⋮----
+def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+pre_result = tbl.search(None).where(where or None).limit(None)
+⋮----
+def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+_ids = [str(id) for id in ids]
+⋮----
+docs = []
+⋮----
+results = self._lance_result_to_docs(tbl.search().where(f"id == '{_id}'"))
+⋮----
+embedding = self.embedding_fn([text])[0]
+⋮----
+result = (
+docs = self._lance_result_to_docs(result)
+# note _distance is 1 - cosine
+⋮----
+scores = [
+⋮----
+scores = [1 - rec["_distance"] for rec in result.to_arrow().to_pylist()]
+⋮----
+doc_score_pairs = list(zip(docs, scores))
+</file>
+
+<file path="langroid/vector_store/meilisearch.py">
+"""
+MeiliSearch as a pure document store, without its
+(experimental) vector-store functionality.
+We aim to use MeiliSearch for fast lexical search.
+Note that what we call "Collection" in Langroid is referred to as
+"Index" in MeiliSearch. Each data-store has its own terminology,
+but for uniformity we use the Langroid terminology here.
+"""
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+class MeiliSearchConfig(VectorStoreConfig)
+⋮----
+cloud: bool = False
+collection_name: str | None = None
+primary_key: str = "id"
+port: int = 7700
+⋮----
+class MeiliSearch(VectorStore)
+⋮----
+def __init__(self, config: MeiliSearchConfig | None = None)
+⋮----
+config = config if config is not None else MeiliSearchConfig()
+⋮----
+# Note: Only create collection if a non-null collection name is provided.
+# This is useful to delay creation of db until we have a suitable
+# collection name (e.g. we could get it from the url or folder path).
+⋮----
+def clear_empty_collections(self) -> int
+⋮----
+"""All collections are treated as non-empty in MeiliSearch, so this is a
+        no-op"""
+⋮----
+async def _async_delete_indices(self, uids: List[str]) -> List[bool]
+⋮----
+"""Delete any indicecs in `uids` that exist.
+        Returns list of bools indicating whether the index has been deleted"""
+⋮----
+result = await asyncio.gather(
+⋮----
+def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+"""Delete all indices whose names start with `prefix`"""
+⋮----
+coll_names = [c for c in self.list_collections() if c.startswith(prefix)]
+deletes = asyncio.run(self._async_delete_indices(coll_names))
+n_deletes = sum(deletes)
+⋮----
+def _list_all_collections(self) -> List[str]
+⋮----
+"""
+        List all collections, including empty ones.
+        Returns:
+            List of collection names.
+        """
+⋮----
+async def _async_get_indexes(self) -> List[AsyncIndex]
+⋮----
+indexes = await client.get_indexes(limit=10_000)
+return [] if indexes is None else indexes  # type: ignore
+⋮----
+async def _async_get_index(self, index_uid: str) -> "AsyncIndex"
+⋮----
+index = await client.get_index(index_uid)
+return index  # type: ignore
+⋮----
+def list_collections(self, empty: bool = False) -> List[str]
+⋮----
+"""
+        Returns:
+            List of index names stored. We treat any existing index as non-empty.
+        """
+indexes = asyncio.run(self._async_get_indexes())
+⋮----
+async def _async_create_index(self, collection_name: str) -> "AsyncIndex"
+⋮----
+index = await client.create_index(
+⋮----
+async def _async_delete_index(self, collection_name: str) -> bool
+⋮----
+"""Delete index if it exists. Returns True iff index was deleted"""
+⋮----
+result = await client.delete_index_if_exists(uid=collection_name)
+return result  # type: ignore
+⋮----
+def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+"""
+        Create a collection with the given name, optionally replacing an existing
+            collection if `replace` is True.
+        Args:
+            collection_name (str): Name of the collection to create.
+            replace (bool): Whether to replace an existing collection
+                with the same name. Defaults to False.
+        """
+⋮----
+collections = self.list_collections()
+⋮----
+collection_info = asyncio.run(self._async_get_index(collection_name))
+⋮----
+level = logger.getEffectiveLevel()
+⋮----
+index = client.index(collection_name)
+⋮----
+def add_documents(self, documents: Sequence[Document]) -> None
+⋮----
+colls = self._list_all_collections()
+⋮----
+docs = [
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+def _to_int_or_uuid(self, id: str) -> int | str
+⋮----
+async def _async_get_documents(self, where: str = "") -> "DocumentsInfo"
+⋮----
+filter = [] if where is None else where
+⋮----
+index = client.index(self.config.collection_name)
+documents = await index.get_documents(limit=10_000, filter=filter)
+⋮----
+def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+docs = asyncio.run(self._async_get_documents(where))
+⋮----
+doc_results = docs.results
+⋮----
+async def _async_get_documents_by_ids(self, ids: List[str]) -> List[Dict[str, Any]]
+⋮----
+documents = await asyncio.gather(*[index.get_document(id) for id in ids])
+⋮----
+def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+docs = asyncio.run(self._async_get_documents_by_ids(ids))
+⋮----
+results = await index.search(
+return results.hits  # type: ignore
+⋮----
+neighbors: int = 0,  # ignored
+⋮----
+_docs = asyncio.run(self._async_search(text, k, filter))  # type: ignore
+⋮----
+scores = [h["_rankingScore"] for h in _docs]
+⋮----
+doc_score_pairs = list(zip(docs, scores))
+</file>
+
+<file path="langroid/vector_store/pineconedb.py">
+# import dataclass
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+has_pinecone: bool = True
+⋮----
+class ServerlessSpec(BaseModel)
+⋮----
+"""
+            Fallback Serverless specification configuration to avoid import errors.
+            """
+⋮----
+cloud: str
+region: str
+⋮----
+PineconeApiException = Any  # type: ignore
+Pinecone = Any  # type: ignore
+has_pinecone = False
+⋮----
+@dataclass(frozen=True)
+class IndexMeta
+⋮----
+name: str
+total_vector_count: int
+⋮----
+class PineconeDBConfig(VectorStoreConfig)
+⋮----
+cloud: bool = True
+collection_name: str | None = "temp"
+spec: ServerlessSpec = ServerlessSpec(cloud="aws", region="us-east-1")
+deletion_protection: Literal["enabled", "disabled"] | None = None
+metric: str = "cosine"
+pagination_size: int = 100
+⋮----
+class PineconeDB(VectorStore)
+⋮----
+def __init__(self, config: PineconeDBConfig | None = None)
+⋮----
+config = config if config is not None else PineconeDBConfig()
+⋮----
+key = os.getenv("PINECONE_API_KEY")
+⋮----
+def clear_empty_collections(self) -> int
+⋮----
+indexes = self._list_index_metas(empty=True)
+n_deletes = 0
+⋮----
+def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+"""
+        Returns:
+            Number of Pinecone indexes that were deleted
+
+        Args:
+            really: Optional[bool] - whether to really delete all Pinecone collections
+            prefix: Optional[str] - string to match potential Pinecone
+                indexes for deletion
+        """
+⋮----
+indexes = [
+⋮----
+def list_collections(self, empty: bool = False) -> List[str]
+⋮----
+"""
+        Returns:
+            List of Pinecone indices that have at least one vector.
+
+        Args:
+            empty: Optional[bool] - whether to include empty collections
+        """
+indexes = self.client.list_indexes()
+res: List[str] = []
+⋮----
+index_meta = self.client.Index(name=index)
+⋮----
+def _list_index_metas(self, empty: bool = False) -> List[IndexMeta]
+⋮----
+"""
+        Returns:
+            List of objects describing Pinecone indices
+
+        Args:
+            empty: Optional[bool] - whether to include empty collections
+        """
+⋮----
+res = []
+⋮----
+index_meta = self._fetch_index_meta(index)
+⋮----
+def _fetch_index_meta(self, index_name: str) -> IndexMeta
+⋮----
+"""
+        Returns:
+            A dataclass describing the input Index by name and vector count
+            to save a bit on index description calls
+
+        Args:
+            index_name: str - Name of the index in Pinecone
+        """
+⋮----
+index = self.client.Index(name=index_name)
+stats = index.describe_index_stats()
+⋮----
+def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+"""
+        Create a collection with the given name, optionally replacing an existing
+        collection if `replace` is True.
+
+        Args:
+            collection_name: str - Configuration of the collection to create.
+            replace: Optional[Bool] - Whether to replace an existing collection
+                with the same name. Defaults to False.
+        """
+pattern = re.compile(r"^[a-z0-9-]+$")
+⋮----
+index = self.client.Index(name=collection_name)
+⋮----
+status = self.client.describe_index(name=collection_name)
+⋮----
+payload = {
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+def add_documents(self, documents: Sequence[Document], namespace: str = "") -> None
+⋮----
+document_dicts = [doc.model_dump() for doc in documents]
+document_ids = [doc.id() for doc in documents]
+embedding_vectors = self.embedding_fn([doc.content for doc in documents])
+vectors = [
+⋮----
+index = self.client.Index(name=self.config.collection_name)
 batch_size = self.config.batch_size
 ⋮----
-batch_docs = documents[i : i + batch_size]
-batch_embeddings = embeddings[i : i + batch_size]
+"""
+        Returns:
+            All documents for the collection currently defined in
+            the configuration object
+
+        Args:
+            prefix: str - document id prefix to search for
+            namespace: str - partition of vectors to search within the index
+        """
 ⋮----
-new_records = [
+docs = []
 ⋮----
-stmt = insert(self.embeddings_table).values(new_records)
+request_filters: Dict[str, Union[str, int]] = {
+⋮----
+response = index.list_paginated(**request_filters)
+vectors = response.get("vectors", [])
+⋮----
+pagination_token = response.get("pagination", {}).get("next", None)
+⋮----
+"""
+        Returns:
+            Fetches document text embedded in Pinecone index metadata
+
+        Args:
+            ids: List[str] - vector data object ids to retrieve
+            namespace: str - partition of vectors to search within the index
+        """
+⋮----
+records = index.fetch(ids=ids, namespace=namespace)
+⋮----
+records = index.fetch(ids=ids)
+⋮----
+id_mapping = {key: value for key, value in records["vectors"].items()}
+ordered_payloads = [id_mapping[_id] for _id in ids if _id in id_mapping]
+⋮----
+vector_search_request = {
+⋮----
+response = index.query(**vector_search_request)
+doc_score_pairs = [
+⋮----
+max_score = max([pair[1] for pair in doc_score_pairs])
+⋮----
+def transform_pinecone_vector(self, metadata_dict: Dict[str, Any]) -> Document
+⋮----
+"""
+        Parses the metadata response from the Pinecone vector query and
+        formats it into a dictionary that can be parsed by the Document class
+        associated with the PineconeDBConfig class
+
+        Returns:
+            Well formed dictionary object to be transformed into a Document
+
+        Args:
+            metadata_dict: Dict - the metadata dictionary from the Pinecone
+                vector query match
+        """
+</file>
+
+<file path="langroid/vector_store/qdrantdb.py">
+logger = logging.getLogger(__name__)
+⋮----
+T = TypeVar("T")
+⋮----
+def from_optional(x: Optional[T], default: T) -> T
+⋮----
+def is_valid_uuid(uuid_to_test: str) -> bool
+⋮----
+"""
+    Check if a given string is a valid UUID.
+    """
+⋮----
+uuid_obj = uuid.UUID(uuid_to_test)
+⋮----
+# Check for valid unsigned 64-bit integer
+⋮----
+int_value = int(uuid_to_test)
+⋮----
+class QdrantDBConfig(VectorStoreConfig)
+⋮----
+cloud: bool = True
+docker: bool = False
+collection_name: str | None = "temp"
+storage_path: str = ".qdrant/data"
+embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
+use_sparse_embeddings: bool = False
+sparse_embedding_model: str = "naver/splade-v3-distilbert"
+sparse_limit: int = 3
+distance: str = "cosine"
+⋮----
+class QdrantDB(VectorStore)
+⋮----
+def __init__(self, config: QdrantDBConfig | None = None)
+⋮----
+config = config if config is not None else QdrantDBConfig()
+⋮----
+key = os.getenv("QDRANT_API_KEY")
+url = os.getenv("QDRANT_API_URL")
+⋮----
+new_storage_path = config.storage_path + ".new"
+⋮----
+# Note: Only create collection if a non-null collection name is provided.
+# This is useful to delay creation of vecdb until we have a suitable
+# collection name (e.g. we could get it from the url or folder path).
+⋮----
+def clone(self) -> "QdrantDB"
+⋮----
+"""Create an independent Qdrant client when running against Qdrant Cloud."""
+⋮----
+cloned = super().clone()
+⋮----
+def close(self) -> None
+⋮----
+"""
+        Close the QdrantDB client and release any resources (e.g., file locks).
+        This is especially important for local storage to release the .lock file.
+        """
+⋮----
+# QdrantLocal has a close method that releases the lock
+⋮----
+def __enter__(self) -> "QdrantDB"
+⋮----
+"""Context manager entry."""
+⋮----
+def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None
+⋮----
+"""Context manager exit - ensure cleanup even if an exception occurred."""
+⋮----
+def clear_empty_collections(self) -> int
+⋮----
+coll_names = self.list_collections()
+n_deletes = 0
+⋮----
+info = self.client.get_collection(collection_name=name)
+⋮----
+def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+"""Clear all collections with the given prefix."""
+⋮----
+coll_names = [
+⋮----
+n_empty_deletes = 0
+n_non_empty_deletes = 0
+⋮----
+points_count = from_optional(info.points_count, 0)
+⋮----
+def list_collections(self, empty: bool = False) -> List[str]
+⋮----
+"""
+        Returns:
+            List of collection names that have at least one vector.
+
+        Args:
+            empty (bool, optional): Whether to include empty collections.
+        """
+⋮----
+colls = list(self.client.get_collections())[0][1]
+⋮----
+counts = []
+⋮----
+def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+"""
+        Create a collection with the given name, optionally replacing an existing
+            collection if `replace` is True.
+        Args:
+            collection_name (str): Name of the collection to create.
+            replace (bool): Whether to replace an existing collection
+                with the same name. Defaults to False.
+        """
+⋮----
+coll = self.client.get_collection(collection_name=collection_name)
+⋮----
+vectors_config = {
+sparse_vectors_config = None
+⋮----
+sparse_vectors_config = {
+⋮----
+collection_info = self.client.get_collection(collection_name=collection_name)
+⋮----
+level = logger.getEffectiveLevel()
+⋮----
+def get_sparse_embeddings(self, inputs: List[str]) -> List["SparseVector"]
+⋮----
+tokens = self.sparse_tokenizer(
+output = self.sparse_model(**tokens)
+vectors = torch.max(
+sparse_embeddings = []
+⋮----
+cols = vec.nonzero().squeeze().cpu().tolist()
+weights = vec[cols].cpu().tolist()
+⋮----
+def add_documents(self, documents: Sequence[Document]) -> None
+⋮----
+# Add id to metadata if not already present
+⋮----
+# Fix the ids due to qdrant finickiness
+⋮----
+colls = self.list_collections(empty=True)
+⋮----
+document_dicts = [doc.model_dump() for doc in documents]
+embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+sparse_embedding_vecs = self.get_sparse_embeddings(
+⋮----
+ids = [self._to_int_or_uuid(d.id()) for d in documents]
+# don't insert all at once, batch in chunks of b,
+# else we get an API error
+b = self.config.batch_size
+⋮----
+vectors: Dict[str, Embeddings | List[SparseVector]] = {
+⋮----
+coll_found: bool = False
+⋮----
+# poll until collection is ready
+⋮----
+coll_found = True
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+def _to_int_or_uuid(self, id: str) -> int | str
+⋮----
+int_val = int(id)
+⋮----
+# If doc_id is already a valid UUID, return it as is
+⋮----
+# Otherwise, generate a UUID from the doc_id
+# Convert doc_id to string if it's not already
+id_str = str(id)
+⋮----
+# Hash the document ID using SHA-1
+hash_object = hashlib.sha1(id_str.encode())
+hash_digest = hash_object.hexdigest()
+⋮----
+# Truncate or manipulate the hash to fit into a UUID (128 bits)
+uuid_str = hash_digest[:32]
+⋮----
+# Format this string into a UUID format
+formatted_uuid = uuid.UUID(uuid_str)
+⋮----
+def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+docs = []
+offset = 0
+filter = Filter() if where == "" else Filter.model_validate(json.loads(where))
+⋮----
+limit=10_000,  # try getting all at once, if not we keep paging
+⋮----
+self.config.document_class(**record.payload)  # type: ignore
+⋮----
+# ignore
+⋮----
+offset = next_page_offset  # type: ignore
+⋮----
+def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+_ids = [self._to_int_or_uuid(id) for id in ids]
+records = self.client.retrieve(
+# Note the records may NOT be in the order of the ids,
+# so we re-order them here.
+id2payload = {record.id: record.payload for record in records}
+ordered_payloads = [id2payload[id] for id in _ids if id in id2payload]
+docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
+⋮----
+embedding = self.embedding_fn([text])[0]
+# TODO filter may not work yet
+⋮----
+filter = Filter()
+⋮----
+filter = Filter.model_validate(json.loads(where))
+requests = [
+⋮----
+sparse_embedding = self.get_sparse_embeddings([text])[0]
+⋮----
+search_result_lists: List[List[ScoredPoint]] = self.client.search_batch(
+⋮----
+search_result = [
+⋮----
+]  # 2D list -> 1D list
+scores = [match.score for match in search_result if match is not None]
+docs = [
+⋮----
+self.config.document_class(**(match.payload))  # type: ignore
+⋮----
+doc_score_pairs = list(zip(docs, scores))
+max_score = max(ds[1] for ds in doc_score_pairs)
+</file>
+
+<file path="langroid/vector_store/weaviatedb.py">
+logger = logging.getLogger(__name__)
+⋮----
+class VectorDistances
+⋮----
+"""
+    Fallback class when weaviate is not installed, to avoid import errors.
+    """
+⋮----
+COSINE: str = "cosine"
+DOTPRODUCT: str = "dot"
+L2: str = "l2"
+⋮----
+class WeaviateDBConfig(VectorStoreConfig)
+⋮----
+collection_name: str | None = "temp"
+embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
+distance: str = VectorDistances.COSINE
+cloud: bool = False
+docker: bool = False
+host: str = "127.0.0.1"
+port: int = 8080
+storage_path: str = ".weaviate_embedded/data"
+⋮----
+class WeaviateDB(VectorStore)
+⋮----
+def __init__(self, config: WeaviateDBConfig | None = None)
+⋮----
+config = config if config is not None else WeaviateDBConfig()
+⋮----
+key = os.getenv("WEAVIATE_API_KEY")
+url = os.getenv("WEAVIATE_API_URL")
+⋮----
+def clear_empty_collections(self) -> int
+⋮----
+colls = self.client.collections.list_all()
+n_deletes = 0
+⋮----
+val = self.client.collections.get(coll_name)
+⋮----
+def list_collections(self, empty: bool = False) -> List[str]
+⋮----
+non_empty_colls = [
+⋮----
+def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+coll_names = [
+⋮----
+n_empty_deletes = 0
+n_non_empty_deletes = 0
+⋮----
+info = self.client.collections.get(name)
+points_count = len(info)
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+collection_name = WeaviateDB.validate_and_format_collection_name(
+⋮----
+coll = self.client.collections.get(name=collection_name)
+⋮----
+vector_index_config = Configure.VectorIndex.hnsw(
+⋮----
+vectorizer_config = Configure.Vectorizer.text2vec_openai(
+⋮----
+vectorizer_config = None
+⋮----
+collection_info = self.client.collections.create(
+collection_info = self.client.collections.get(name=collection_name)
+⋮----
+level = logger.getEffectiveLevel()
+⋮----
+def add_documents(self, documents: Sequence[Document]) -> None
+⋮----
+colls = self.list_collections(empty=True)
+⋮----
+document_dicts = [doc.model_dump() for doc in documents]
+embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+⋮----
+coll_name = self.client.collections.get(self.config.collection_name)
+⋮----
+id = doc_dict["metadata"].pop("id", None)
+⋮----
+def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+# cannot use filter as client does not support json type queries
+coll = self.client.collections.get(self.config.collection_name)
+⋮----
+def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+docs = []
+⋮----
+result = coll_name.query.fetch_objects(
+⋮----
+id_to_doc = {}
+⋮----
+doc = self.weaviate_obj_to_doc(item)
+⋮----
+# Reconstruct the list of documents in the original order of input ids
+docs = [id_to_doc[id] for id in ids if id in id_to_doc]
+⋮----
+embedding = self.embedding_fn([text])[0]
+⋮----
+response = coll.query.near_vector(
+maybe_distances = [item.metadata.distance for item in response.objects]
+similarities = [0 if d is None else 1 - d for d in maybe_distances]
+docs = [self.weaviate_obj_to_doc(item) for item in response.objects]
+⋮----
+def _create_valid_uuid_id(self, id: str) -> Any
+⋮----
+id = get_valid_uuid(id)
+⋮----
+def weaviate_obj_to_doc(self, input_object: Any) -> Document
+⋮----
+content = input_object.properties.get("content", "")
+metadata_dict = input_object.properties.get("metadata", {})
+⋮----
+window_ids = metadata_dict.pop("window_ids", [])
+window_ids = [str(uuid) for uuid in window_ids]
+⋮----
+# Ensure the id is a valid UUID string
+id_value = get_valid_uuid(input_object.uuid)
+⋮----
+metadata = DocMetaData(id=id_value, window_ids=window_ids, **metadata_dict)
 ⋮----
 @staticmethod
-    def _id_to_uuid(id: str, obj: object) -> str
+    def validate_and_format_collection_name(name: str) -> str
 ⋮----
-doc_id = str(uuid.UUID(id))
+"""
+        Formats the collection name to comply with Weaviate's naming rules:
+        - Name must start with a capital letter.
+        - Name can only contain letters, numbers, and underscores.
+        - Replaces invalid characters with underscores.
+        """
 ⋮----
-obj_repr = repr(obj)
+formatted_name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
 ⋮----
-obj_hash = hashlib.sha256(obj_repr.encode()).hexdigest()
+# Ensure the first letter is capitalized
 ⋮----
-combined = f"{id}-{obj_hash}"
+formatted_name = formatted_name.capitalize()
 ⋮----
-doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, combined))
+# Check if the name now meets the criteria
 ⋮----
-neighbors: int = 1,  # Parameter not used in this implementation
+def __del__(self) -> None
 ⋮----
-embedding = self.embedding_fn([query])[0]
-⋮----
-# Calculate the score (1 - cosine_distance) and label it as "score"
-score = (
-⋮----
-json_query = json.loads(where)
-⋮----
-results = (
-⋮----
-score,  # Select the calculated score
-⋮----
-.order_by(score.desc())  # Order by score in descending order
-⋮----
-documents_with_scores = [
-⋮----
-result.score,  # Use the score from the query result
+# Gracefully close the connection with local client
 </file>
 
 <file path="CONTRIBUTING.md">
@@ -34105,6 +33918,207 @@ sub_indent = " " * 4 * (level + 1)
 contents = ""
 ⋮----
 path = file["path"]
+</file>
+
+<file path="langroid/vector_store/postgres.py">
+has_postgres: bool = True
+⋮----
+Engine = Any  # type: ignore
+Connection = Any  # type: ignore
+has_postgres = False
+⋮----
+logger = logging.getLogger(__name__)
+⋮----
+def _quote_ident(name: str) -> str
+⋮----
+"""Quote a SQL identifier (table/index name) for use in raw DDL, so a name
+    containing characters that are invalid in an unquoted identifier -- e.g.
+    the ``-`` in a pytest-xdist worker suffix like ``mycollection-gw1`` -- does
+    not produce a syntax error. Embedded double-quotes are escaped per the SQL
+    standard.
+    """
+⋮----
+class PostgresDBConfig(VectorStoreConfig)
+⋮----
+collection_name: str = "embeddings"
+cloud: bool = False
+docker: bool = True
+host: str = "127.0.0.1"
+port: int = 5432
+replace_collection: bool = False
+embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
+pool_size: int = 10
+max_overflow: int = 20
+hnsw_m: int = 16
+hnsw_ef_construction: int = 200
+⋮----
+class PostgresDB(VectorStore)
+⋮----
+def __init__(self, config: PostgresDBConfig | None = None)
+⋮----
+config = config if config is not None else PostgresDBConfig()
+⋮----
+def _create_engine(self) -> Engine
+⋮----
+"""Creates a SQLAlchemy engine based on the configuration."""
+⋮----
+connection_string: str | None = None  # Ensure variable is always defined
+⋮----
+connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
+⋮----
+connection_string = connection_string.replace(
+⋮----
+username = os.getenv("POSTGRES_USER", "postgres")
+password = os.getenv("POSTGRES_PASSWORD", "postgres")
+database = os.getenv("POSTGRES_DB", "langroid")
+⋮----
+connection_string = (
+self.config.cloud = False  # Ensures cloud is disabled if using Docker
+⋮----
+def _setup_table(self) -> None
+⋮----
+# Create HNSW index for embeddings column if it doesn't exist.
+# This index enables efficient nearest-neighbor search using cosine similarity.
+# PostgreSQL automatically builds the index after creation;
+# no manual step required.
+# Read more about pgvector hnsw index here:
+# https://github.com/pgvector/pgvector?tab=readme-ov-file#hnsw
+⋮----
+index_name = f"hnsw_index_{self.config.collection_name}_embedding"
+⋮----
+create_index_query = text(
+⋮----
+def index_exists(self, connection: Connection, index_name: str) -> bool
+⋮----
+"""Check if an index exists."""
+query = text(
+result = connection.execute(query).scalar()
+⋮----
+@staticmethod
+    def _create_vector_extension(conn: Engine) -> None
+⋮----
+# The number is a unique identifier used to lock a specific resource
+# during transaction. Any 64-bit integer can be used for advisory locks.
+# Acquire advisory lock to ensure atomic, isolated setup
+# and prevent race conditions.
+⋮----
+statement = text(
+⋮----
+def set_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+inspector = inspect(self.engine)
+table_exists = collection_name in inspector.get_table_names()
+⋮----
+def list_collections(self, empty: bool = True) -> List[str]
+⋮----
+table_names = inspector.get_table_names()
+⋮----
+collections = []
+⋮----
+table = Table(table_name, self.metadata, autoload_with=self.engine)
+⋮----
+# Efficiently check for non-emptiness
+⋮----
+def create_collection(self, collection_name: str, replace: bool = False) -> None
+⋮----
+def delete_collection(self, collection_name: str) -> None
+⋮----
+"""
+        Deletes a collection and its associated HNSW index, handling metadata
+        synchronization issues.
+        """
+⋮----
+index_name = f"hnsw_index_{collection_name}_embedding"
+drop_index_query = text(
+⋮----
+# 3. Now, drop the table using SQLAlchemy
+table = Table(collection_name, self.metadata)
+⋮----
+# 4. Refresh metadata again after dropping the table
+⋮----
+def clear_all_collections(self, really: bool = False, prefix: str = "") -> int
+⋮----
+deleted_count = 0
+⋮----
+# Use delete_collection to handle index and table deletion
+⋮----
+def clear_empty_collections(self) -> int
+⋮----
+# Efficiently check for emptiness without fetching all rows
+⋮----
+session.commit()  # Commit is likely not needed here
+⋮----
+def _parse_embedding_store_record(self, res: Any) -> Dict[str, Any]
+⋮----
+metadata = res.cmetadata or {}
+⋮----
+def get_all_documents(self, where: str = "") -> List[Document]
+⋮----
+query = session.query(self.embeddings_table)
+⋮----
+# Apply 'where' clause if provided
+⋮----
+where_json = json.loads(where)
+query = query.filter(
+⋮----
+return []  # Return empty list or handle error as appropriate
+⋮----
+results = query.all()
+documents = [
+⋮----
+def get_documents_by_ids(self, ids: List[str]) -> List[Document]
+⋮----
+# Add a CASE statement to preserve the order of IDs
+case_stmt = case(
+⋮----
+query = (
+⋮----
+.order_by(case_stmt)  # Order by the CASE statement
+⋮----
+def add_documents(self, documents: Sequence[Document]) -> None
+⋮----
+embeddings = self.embedding_fn([doc.content for doc in documents])
+⋮----
+batch_size = self.config.batch_size
+⋮----
+batch_docs = documents[i : i + batch_size]
+batch_embeddings = embeddings[i : i + batch_size]
+⋮----
+new_records = [
+⋮----
+stmt = insert(self.embeddings_table).values(new_records)
+⋮----
+@staticmethod
+    def _id_to_uuid(id: str, obj: object) -> str
+⋮----
+doc_id = str(uuid.UUID(id))
+⋮----
+obj_repr = repr(obj)
+⋮----
+obj_hash = hashlib.sha256(obj_repr.encode()).hexdigest()
+⋮----
+combined = f"{id}-{obj_hash}"
+⋮----
+doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, combined))
+⋮----
+neighbors: int = 1,  # Parameter not used in this implementation
+⋮----
+embedding = self.embedding_fn([query])[0]
+⋮----
+# Calculate the score (1 - cosine_distance) and label it as "score"
+score = (
+⋮----
+json_query = json.loads(where)
+⋮----
+results = (
+⋮----
+score,  # Select the calculated score
+⋮----
+.order_by(score.desc())  # Order by score in descending order
+⋮----
+documents_with_scores = [
+⋮----
+result.score,  # Use the score from the query result
 </file>
 
 <file path="README.md">
