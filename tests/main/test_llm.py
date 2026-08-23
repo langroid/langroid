@@ -221,13 +221,21 @@ def test_get_model_info_warns_on_unknown_models() -> None:
     logger = logging.getLogger("langroid.language_models.model_info")
     logger.addHandler(handler)
     try:
-        info = get_model_info(model_name)
+        # Call twice: every lookup of an unknown model must return the
+        # fallback-default ModelInfo, but the warning must fire only once
+        # (deduped via WARNED_UNKNOWN_MODELS).
+        first_info = get_model_info(model_name)
+        second_info = get_model_info(model_name)
     finally:
         logger.removeHandler(handler)
 
-    assert info.name == "unknown"
+    assert first_info.name == "unknown"
+    assert second_info.name == "unknown"
     messages = [record.getMessage() for record in handler.buffer]
-    assert any(model_name in msg and "fallback defaults" in msg for msg in messages)
+    matching = [
+        msg for msg in messages if model_name in msg and "fallback defaults" in msg
+    ]
+    assert len(matching) == 1
 
 
 def test_model_selection(test_settings: Settings):

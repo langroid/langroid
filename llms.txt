@@ -698,7 +698,6 @@ tests/
     test_embeddings.py
     test_file_attachment.py
     test_file_tools.py
-    test_gemini_routing.py
     test_git_utils.py
     test_global_settings.py
     test_global_state.py
@@ -50789,593 +50788,6 @@ class FileAttachment(BaseModel):
             )
 </file>
 
-<file path="langroid/parsing/md_parser.py">
-import re
-from typing import Any, List
-
-from pydantic import BaseModel, Field, field_validator
-
-HEADER_CONTEXT_SEP = "\n...\n"
-
-
-# Pydantic model definition for a node in the markdown hierarchy
-class Node(BaseModel):
-    content: str  # The text of the header or content block
-    path: List[str]  # List of header texts from root to this node
-    children: List["Node"] = Field(default_factory=list)
-    # Nested children nodes
-
-    def __repr__(self) -> str:
-        # for debug printing
-        return (
-            f"Node(content={self.content!r}, path={self.path!r}, "
-            f"children={len(self.children)})"
-        )
-
-    # Pydantic v1 requires forward references for self-referencing models
-    # Forward references will be resolved with the update_forward_refs call below.
-
-
-# Resolve forward references for Node (required for recursive models in Pydantic)
-Node.model_rebuild()
-
-
-def _cleanup_text(text: str) -> str:
-    # 1) Convert alternative newline representations (any CRLF or CR) to a single '\n'
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-
-    # 2) Replace 3 or more consecutive newlines with exactly 2 newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    return text
-
-
-HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
-
-
-def parse_markdown_headings(md_text: str) -> List[Node]:
-    """
-    Parse `md_text` to extract a heading-based hierarchy, skipping lines
-    that look like headings inside fenced code blocks. Each heading node
-    will have a child node for the text that appears between this heading
-    and the next heading.
-
-    Returns a list of top-level Node objects.
-
-    Example structure:
-        Node(content='# Chapter 1', path=['# Chapter 1'], children=[
-            Node(content='Intro paragraph...', path=['# Chapter 1'], children=[]),
-            Node(content='## Section 1.1', path=['# Chapter 1', '## Section 1.1'],
-                 children=[
-                  Node(content='Some text in Section 1.1.', path=[...], children=[])
-            ]),
-            ...
-        ])
-    """
-    # If doc is empty or only whitespace, return []
-    if not md_text.strip():
-        return []
-
-    lines = md_text.splitlines(True)  # keep the newline characters
-
-    # We'll scan line-by-line, track code-fence status, collect headings
-    headings = []  # list of (level, heading_line, start_line_idx)
-    in_code_fence = False
-    fence_marker = None  # track which triple-backtick or ~~~ opened
-
-    for i, line in enumerate(lines):
-        # Check if we're toggling in/out of a fenced code block
-        # Typically triple backtick or triple tilde: ``` or ~~~
-        # We do a *loose* check: a line that starts with at least 3 backticks or tildes
-        # ignoring trailing text. You can refine as needed.
-        fence_match = re.match(r"^(```+|~~~+)", line.strip())
-        if fence_match:
-            # If we are not in a fence, we enter one;
-            # If we are in a fence, we exit if the marker matches
-            marker = fence_match.group(1)  # e.g. "```" or "~~~~"
-            if not in_code_fence:
-                in_code_fence = True
-                fence_marker = marker[:3]  # store triple backtick or triple tilde
-            else:
-                # only close if the fence_marker matches
-                # E.g. if we opened with ```, we close only on ```
-                if fence_marker and marker.startswith(fence_marker):
-                    in_code_fence = False
-                    fence_marker = None
-
-        if not in_code_fence:
-            # Check if the line is a heading
-            m = HEADING_RE.match(line)
-            if m:
-                hashes = m.group(1)  # e.g. "##"
-                heading_text = line.rstrip("\n")  # entire line, exact
-                level = len(hashes)
-                headings.append((level, heading_text, i))
-
-    # If no headings found, return a single root node with the entire text
-    if not headings:
-        return [Node(content=md_text.strip(), path=[], children=[])]
-
-    # Add a sentinel heading at the end-of-file, so we can slice the last block
-    # after the final real heading. We'll use level=0 so it doesn't form a real node.
-    headings.append((0, "", len(lines)))
-
-    # Now we build "heading blocks" with
-    # (level, heading_text, start_line, end_line, content)
-    heading_blocks = []
-    for idx in range(len(headings) - 1):
-        level, heading_line, start_i = headings[idx]
-        next_level, _, next_start_i = headings[idx + 1]
-
-        # Content is everything after the heading line until the next heading
-        # i.e. lines[start_i+1 : next_start_i]
-        block_content_lines = lines[start_i + 1 : next_start_i]
-        block_content = "".join(block_content_lines).rstrip("\n")
-
-        heading_blocks.append(
-            {"level": level, "heading_text": heading_line, "content": block_content}
-        )
-    # (We skip the sentinel heading in the final result.)
-
-    # We'll now convert heading_blocks into a tree using a stack-based approach
-    root_nodes: List[Node] = []
-    stack: List[Node] = []
-    header_path: List[str] = []
-
-    for hb in heading_blocks:
-        level = hb["level"]  # type: ignore
-        heading_txt = hb["heading_text"]
-        content_txt = hb["content"]
-
-        # --- Pop stack first! ---
-        while stack and len(stack[-1].path) >= level:
-            stack.pop()
-            header_path.pop()
-
-        # build new path, create a node for the heading
-        new_path = header_path + [heading_txt]
-        heading_node = Node(
-            content=heading_txt, path=new_path, children=[]  # type: ignore
-        )
-
-        # Possibly create a content child for whatever lines were below the heading
-        if content_txt.strip():  # type: ignore
-            content_node = Node(
-                content=content_txt, path=new_path, children=[]  # type: ignore
-            )
-            heading_node.children.append(content_node)
-
-        # Attach heading_node to the stack top or as a root
-        if stack:
-            stack[-1].children.append(heading_node)
-        else:
-            root_nodes.append(heading_node)
-
-        stack.append(heading_node)
-        header_path.append(heading_txt)  # type: ignore
-
-    return root_nodes
-
-
-# The Chunk model for the final enriched chunks.
-class Chunk(BaseModel):
-    text: str  # The chunk text (which includes header context)
-    path: List[str]  # The header path (list of header strings)
-    token_count: int
-
-
-# Configuration for chunking
-class MarkdownChunkConfig(BaseModel):
-    chunk_size: int = 200  # desired chunk size in tokens
-    overlap_tokens: int = 30  # number of tokens to overlap between chunks
-    variation_percent: float = 0.3  # allowed variation
-    rollup: bool = True  # whether to roll up chunks
-    header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
-
-    @field_validator("chunk_size", mode="before")
-    @classmethod
-    def convert_chunk_size_to_int(cls, v: Any) -> int:
-        """Convert chunk_size to int, maintaining backward compatibility
-        with Pydantic V1.
-        """
-        if isinstance(v, float):
-            return int(v)
-        return int(v)
-
-
-# A simple tokenizer that counts tokens as whitespace-separated words.
-def count_words(text: str) -> int:
-    return len(text.split())
-
-
-def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
-    """
-    Enhanced chunker that:
-      1. Splits by paragraph (top-level).
-      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
-      3. Allows going over the upper bound rather than splitting a single sentence.
-      4. Overlaps only once between consecutive chunks.
-      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
-      6. Preserves \n\n (and other original spacing) as best as possible.
-    """
-
-    # -------------------------------------------------
-    # Helpers
-    # -------------------------------------------------
-    def count_words(text_block: str) -> int:
-        return len(text_block.split())
-
-    lower_bound = int(config.chunk_size * (1 - config.variation_percent))
-    upper_bound = int(config.chunk_size * (1 + config.variation_percent))
-
-    # Quick check: if the entire text is short enough, return as-is.
-    if count_words(text) <= upper_bound:
-        return [text.strip()]
-
-    # Split into paragraphs, preserving \n\n if it's there.
-    raw_paragraphs = text.split("\n\n")
-    paragraphs = []
-    for i, p in enumerate(raw_paragraphs):
-        if p.strip():
-            # Re-append the double-newline if not the last piece
-            if i < len(raw_paragraphs) - 1:
-                paragraphs.append(p + "\n\n")
-            else:
-                paragraphs.append(p)
-
-    # Split paragraphs into "segments": each segment is either
-    # a full short paragraph or (if too big) a list of sentences.
-    sentence_regex = r"(?<=[.!?])\s+"
-
-    def split_paragraph_into_sentences(paragraph: str) -> List[str]:
-        """
-        Return a list of sentence-sized segments. If a single sentence
-        is bigger than upper_bound, do a word-level fallback.
-        """
-        if count_words(paragraph) <= upper_bound:
-            return [paragraph]
-
-        sentences = re.split(sentence_regex, paragraph)
-        # Clean up stray whitespace
-        sentences = [s.strip() for s in sentences if s.strip()]
-
-        expanded = []
-        for s in sentences:
-            if count_words(s) > upper_bound:
-                expanded.extend(_fallback_word_split(s, config))
-            else:
-                expanded.append(s)
-        return expanded
-
-    def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]:
-        """
-        As a last resort, split extremely large 'sentence' by words.
-        """
-        words = long_text.split()
-        pieces = []
-        start = 0
-        while start < len(words):
-            end = start + cfg.chunk_size
-            chunk_words = words[start:end]
-            pieces.append(" ".join(chunk_words))
-            start = end
-        return pieces
-
-    # Build a list of segments
-    segments = []
-    for para in paragraphs:
-        if count_words(para) > upper_bound:
-            # split into sentences
-            segs = split_paragraph_into_sentences(para)
-            segments.extend(segs)
-        else:
-            segments.append(para)
-
-    # -------------------------------------------------
-    # Accumulate segments into final chunks
-    # -------------------------------------------------
-    chunks = []
-    current_chunk = ""
-    current_count = 0
-
-    def flush_chunk() -> None:
-        nonlocal current_chunk, current_count
-        trimmed = current_chunk.strip()
-        if trimmed:
-            chunks.append(trimmed)
-        current_chunk = ""
-        current_count = 0
-
-    def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int:
-        """Sum of word counts from current_index onward."""
-        return sum(count_words(s) for s in all_segments[current_index:])
-
-    for i, seg in enumerate(segments):
-        seg_count = count_words(seg)
-
-        # If this single segment alone exceeds upper_bound, we accept it as a big chunk.
-        if seg_count > upper_bound:
-            # If we have something in the current chunk, flush it first
-            flush_chunk()
-            # Then store this large segment as its own chunk
-            chunks.append(seg.strip())
-            continue
-
-        # Attempt to add seg to the current chunk
-        if (current_count + seg_count) > upper_bound and (current_count >= lower_bound):
-            # We would normally flush here, but let's see if we are nearing the end:
-            # If the remaining tokens (including this one) is < lower_bound,
-            # we just add it anyway to avoid creating a tiny final chunk.
-            future_tokens = remaining_tokens_in_future(segments, i)
-            if future_tokens < lower_bound:
-                # Just add it (allowing to exceed upper bound)
-                if current_chunk:
-                    # Add space or preserve newline carefully
-                    # We'll do a basic approach here:
-                    if seg.startswith("\n\n"):
-                        current_chunk += seg  # preserve double new line
-                    else:
-                        current_chunk += " " + seg
-                    current_count = count_words(current_chunk)
-                else:
-                    current_chunk = seg
-                    current_count = seg_count
-            else:
-                # Normal flush
-                old_chunk = current_chunk
-                flush_chunk()
-                # Overlap from old_chunk
-                overlap_tokens_list = (
-                    old_chunk.split()[-config.overlap_tokens :] if old_chunk else []
-                )
-                overlap_str = (
-                    " ".join(overlap_tokens_list) if overlap_tokens_list else ""
-                )
-                if overlap_str:
-                    current_chunk = overlap_str + " " + seg
-                else:
-                    current_chunk = seg
-                current_count = count_words(current_chunk)
-        else:
-            # Just accumulate
-            if current_chunk:
-                if seg.startswith("\n\n"):
-                    current_chunk += seg
-                else:
-                    current_chunk += " " + seg
-            else:
-                current_chunk = seg
-            current_count = count_words(current_chunk)
-
-    # Flush leftover
-    flush_chunk()
-
-    # Return non-empty
-    return [c for c in chunks if c.strip()]
-
-
-# Function to process a Node and produce enriched chunks.
-def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]:
-    chunks: List[Chunk] = []
-
-    # Check if this is a header-only node.
-    is_header_only = node.path and node.content.strip() == node.path[-1]
-
-    # Only generate a chunk for the node if it has non-header content,
-    # or if it’s header-only AND has no children (i.e., it's a leaf header).
-    if node.content.strip() and (not is_header_only or not node.children):
-        header_prefix = (
-            config.header_context_sep.join(node.path) + "\n\n" if node.path else ""
-        )
-        content_chunks = recursive_chunk(node.content, config)
-        for chunk_text in content_chunks:
-            full_text = header_prefix + chunk_text
-            chunks.append(
-                Chunk(
-                    text=full_text, path=node.path, token_count=count_words(full_text)
-                )
-            )
-
-    # Process children nodes recursively.
-    for child in node.children:
-        child_chunks = chunk_node(child, config)
-        chunks.extend(child_chunks)
-
-    return chunks
-
-
-# Function to process an entire tree of Nodes.
-def chunk_tree(root_nodes: List[Node], config: MarkdownChunkConfig) -> List[Chunk]:
-    all_chunks: List[Chunk] = []
-    for node in root_nodes:
-        all_chunks.extend(chunk_node(node, config))
-    return all_chunks
-
-
-def aggregate_content(node: Node) -> str:
-    """
-    Recursively aggregate the content from a node and all its descendants,
-    excluding header-only nodes to avoid duplication.
-    """
-    parts = []
-
-    # Skip header-only nodes in content aggregation
-    is_header_only = node.path and node.content.strip() == node.path[-1].strip()
-    if not is_header_only and node.content.strip():
-        parts.append(node.content.strip())
-
-    # Recurse on children
-    for child in node.children:
-        child_text = aggregate_content(child)
-        if child_text.strip():
-            parts.append(child_text.strip())
-
-    return "\n\n".join(parts)
-
-
-def flatten_tree(node: Node, level: int = 0) -> str:
-    """
-    Flatten a node and its children back into proper markdown text.
-
-    Args:
-        node: The node to flatten
-        level: The current heading level (depth in the tree)
-
-    Returns:
-        str: Properly formatted markdown text
-    """
-    result = ""
-
-    # Check if this is a header node (content matches last item in path)
-    is_header = node.path and node.content.strip().startswith("#")
-
-    # For header nodes, don't duplicate the hash marks
-    if is_header:
-        result = node.content.strip() + "\n\n"
-    elif node.content.strip():
-        result = node.content.strip() + "\n\n"
-
-    # Process all children
-    for child in node.children:
-        result += flatten_tree(child, level + 1)
-
-    return result
-
-
-def rollup_chunk_node(
-    node: Node, config: MarkdownChunkConfig, prefix: str = ""
-) -> List[Chunk]:
-    """
-    Recursively produce rollup chunks from `node`, passing down a `prefix`
-    (e.g., parent heading(s)).
-
-    - If a node is heading-only (content == last path item) and has children,
-      we skip creating a chunk for that node alone and instead add that heading
-      to the `prefix` for child nodes.
-    - If a node is NOT heading-only OR has no children, we try to fit all of its
-      flattened content into a single chunk. If it's too large, we chunk it.
-    - We pass the (possibly updated) prefix down to children, so each child's
-      chunk is enriched exactly once with all ancestor headings.
-    """
-
-    chunks: List[Chunk] = []
-
-    # Check if the node is "heading-only" and has children
-    # e.g. node.content=="# Chapter 1" and node.path[-1]=="# Chapter 1"
-    is_heading_only_with_children = (
-        node.path
-        and node.content.strip() == node.path[-1].strip()
-        and len(node.children) > 0
-    )
-
-    if is_heading_only_with_children:
-        # We do NOT create a chunk for this node alone.
-        # Instead, we add its heading to the prefix for child chunks.
-        new_prefix = prefix + node.content.strip()
-        for i, child in enumerate(node.children):
-            sep = "\n\n" if i == 0 else config.header_context_sep
-            chunks.extend(rollup_chunk_node(child, config, prefix=new_prefix + sep))
-        return chunks
-
-    # If not heading-only-with-children, we handle this node's own content:
-    # Flatten the entire node (including sub-children) in standard Markdown form.
-    flattened = flatten_tree(node, level=len(node.path))
-    flattened_with_prefix = prefix + flattened
-    total_tokens = count_words(flattened_with_prefix)
-
-    # Check if we can roll up everything (node + children) in a single chunk
-    if total_tokens <= config.chunk_size * (1 + config.variation_percent):
-        # One single chunk for the entire subtree
-        chunks.append(
-            Chunk(text=flattened_with_prefix, path=node.path, token_count=total_tokens)
-        )
-    else:
-        # It's too large overall. We'll chunk the node's own content first (if any),
-        # then recurse on children.
-        node_content = node.content.strip()
-
-        # If we have actual content that is not just a heading, chunk it with the prefix
-        # (like "preamble" text).
-        # Note: if this node is heading-only but has NO children,
-        # it will still land here
-        # (because is_heading_only_with_children was False due to zero children).
-        if node_content and (not node.path or node_content != node.path[-1].strip()):
-            # The node is actual content (not purely heading).
-            # We'll chunk it in paragraphs/sentences with the prefix.
-            content_chunks = recursive_chunk(node_content, config)
-            for text_block in content_chunks:
-                block_with_prefix = prefix + text_block
-                chunks.append(
-                    Chunk(
-                        text=block_with_prefix,
-                        path=node.path,
-                        token_count=count_words(block_with_prefix),
-                    )
-                )
-
-        # Now recurse on children, passing the same prefix so they get it too
-        for child in node.children:
-            chunks.extend(rollup_chunk_node(child, config, prefix=prefix))
-
-    return chunks
-
-
-def rollup_chunk_tree(
-    root_nodes: List[Node],
-    config: MarkdownChunkConfig,
-) -> List[Chunk]:
-    # Create a dummy root node that contains everything.
-    dummy_root = Node(content="", path=[], children=root_nodes)
-
-    # Now process just the dummy root node with an empty prefix.
-    chunks = rollup_chunk_node(dummy_root, config, prefix="")
-    return chunks
-
-
-def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]:
-    tree = parse_markdown_headings(markdown_text)
-    if len(tree) == 1 and len(tree[0].children) == 0:
-        # Pure text, no hierarchy, so just use recursive_chunk
-        text_chunks = recursive_chunk(markdown_text, config)
-        return [_cleanup_text(chunk) for chunk in text_chunks]
-    if config.rollup:
-        chunks = rollup_chunk_tree(tree, config)
-    else:
-        chunks = chunk_tree(tree, config)
-    return [_cleanup_text(chunk.text) for chunk in chunks]
-
-
-if __name__ == "__main__":
-    # Example usage:
-    markdown_text = """# Title
-Intro para. Hope this is not
-getting split.
-## SubTitle
-- Item1
-- Item2
-"""
-    # Set up chunking config with very large chunk size.
-    # (you can adjust chunk_size, overlap_tokens, variation_percent)
-    config = MarkdownChunkConfig(
-        chunk_size=200, overlap_tokens=5, variation_percent=0.2
-    )
-    chunks = chunk_markdown(markdown_text, config)
-
-    for idx, chunk in enumerate(chunks, 1):
-        print(f"--- Chunk {idx} --- ")
-        print(chunk)
-        print()
-
-    config.rollup = True
-    # with rollup_chunk_tree we get entire doc as 1 chunk
-    chunks = chunk_markdown(markdown_text, config)
-    assert len(chunks) == 1
-    for idx, chunk in enumerate(chunks, 1):
-        print(f"--- Chunk {idx} ---")
-        print(chunk)
-        print()
-</file>
-
 <file path="langroid/parsing/para_sentence_split.py">
 import re
 from typing import Callable, List
@@ -67047,718 +66459,6 @@ def test_markitdown_pptx_parser():
     assert len(pptx_chunks) > 0
     assert all(chunk.metadata.is_chunk for chunk in pptx_chunks)
     assert all(path in chunk.metadata.source for chunk in pptx_chunks)
-</file>
-
-<file path="tests/main/test_md_parser.py">
-import re
-from dataclasses import dataclass
-from typing import List
-
-import pytest
-
-from langroid.parsing.md_parser import (
-    MarkdownChunkConfig,
-    Node,
-    chunk_markdown,
-    count_words,
-    parse_markdown_headings,
-    recursive_chunk,
-)
-
-
-@dataclass
-class SectionData:
-    header: str
-    content: str
-
-    def to_markdown(self) -> str:
-        return f"{self.header}\n{self.content}\n\n"
-
-
-CH1_DATA = SectionData(
-    header="# Chapter 1",
-    content="""Intro paragraph under Chapter 1.
-This is a somewhat longer paragraph that might require splitting
-if token limits are low.
-```java
-# Fake Chapter in Code Block - just a comment!
-This is not a real chapter.
-## Comment in code!
-```
-""",
-)
-
-SEC1_1_DATA = SectionData(
-    header="## Section 1.1",
-    content="""Some text in Section 1.1. 
-It might include multiple sentences. Here is another sentence.
-```python
-# Throw in some comments just to mix things up.
-def some_function():
-    return None
-## end of function definition
-```
-""",
-)
-
-SEC1_2_DATA = SectionData(
-    header="## Section 1.2",
-    content="""- Bullet A
-- Bullet B""",
-)
-
-CH2_DATA = SectionData(
-    header="# Chapter 2", content="""Final paragraph in Chapter 2."""
-)
-
-
-# Combined fixture with all the data
-@pytest.fixture
-def markdown_sections() -> List[SectionData]:
-    return [CH1_DATA, SEC1_1_DATA, SEC1_2_DATA, CH2_DATA]
-
-
-@pytest.fixture
-def sample_markdown(markdown_sections) -> str:
-    return "".join(section.to_markdown() for section in markdown_sections)
-
-
-def test_parse_markdown_headings(sample_markdown, markdown_sections):
-    """
-    Test the parse_markdown_headings_only function using a sample Markdown document.
-    We verify that the resulting hierarchy of Nodes matches our expectations.
-    """
-    # Parse the sample markdown to a list of top-level Node objects
-    tree = parse_markdown_headings(sample_markdown)
-    ch1, sec1_1, sec1_2, ch2 = markdown_sections
-
-    # We expect two top-level headings: Chapter 1 and Chapter 2
-    assert len(tree) == 2
-
-    # Check Chapter 1 node
-    ch1_node = tree[0]
-    assert isinstance(ch1_node, Node)
-    assert ch1_node.content == ch1.header
-    assert ch1_node.path == [ch1.header]
-
-    # Under Chapter 1, we expect:
-    #   1. A paragraph (intro)
-    #   2. Heading "Section 1.1"
-    #   3. Heading "Section 1.2"
-    assert len(ch1_node.children) == 3
-
-    intro_para = ch1_node.children[0]
-    assert intro_para.content.strip() == ch1.content.strip()
-    assert intro_para.path == [ch1.header]
-    assert len(intro_para.children) == 0  # Paragraph has no sub-children
-
-    section_11 = ch1_node.children[1]
-    assert section_11.content == sec1_1.header
-    assert section_11.path == [ch1.header, sec1_1.header]
-
-    # Under Section 1.1, we expect a paragraph node
-    assert len(section_11.children) == 1
-    sec_11_para = section_11.children[0]
-    assert sec_11_para.content.strip() == sec1_1.content.strip()
-    assert sec_11_para.path == [ch1.header, sec1_1.header]
-
-    section_12 = ch1_node.children[2]
-    assert section_12.content == sec1_2.header
-    assert section_12.path == [ch1.header, sec1_2.header]
-
-    # Under Section 1.2, we expect a single content node containing the bullet points
-    assert len(section_12.children) == 1
-    bullets_node = section_12.children[0]
-    # The bullet items are joined with newlines (per the extract_text logic)
-    assert bullets_node.content.strip() == sec1_2.content.strip()
-    assert bullets_node.path == [ch1.header, sec1_2.header]
-
-    # Check Chapter 2 node
-    ch2_node = tree[1]
-    assert ch2_node.content == ch2.header
-    assert ch2_node.path == [ch2.header]
-    # Under Chapter 2, we expect a single paragraph
-    assert len(ch2_node.children) == 1
-    ch2_para = ch2_node.children[0]
-    assert ch2_para.content.strip() == ch2.content.strip()
-    assert ch2_para.path == [ch2.header]
-    assert len(ch2_para.children) == 0
-
-
-def test_empty_document():
-    tree = parse_markdown_headings("")
-    assert tree == []
-
-
-def test_no_headers_only_paragraphs():
-    md = """This is just a paragraph.
-    
-And another one.
-"""
-    tree = parse_markdown_headings(md)
-    assert len(tree) == 1
-    assert all(node.path == [] for node in tree)
-    assert tree[0].content.strip() == md.strip()
-
-
-def test_headers_with_no_content():
-    md = """# Title
-## Subsection
-### Subsubsection
-"""
-    tree = parse_markdown_headings(md)
-    assert len(tree) == 1
-    assert tree[0].content == "# Title"
-    assert len(tree[0].children) == 1
-    assert tree[0].children[0].content == "## Subsection"
-    assert len(tree[0].children[0].children) == 1
-    assert tree[0].children[0].children[0].content == "### Subsubsection"
-    assert tree[0].children[0].children[0].children == []
-
-
-def test_header_with_inline_formatting():
-    md = """# Header with **bold** and *italic* text
-Some _content_.
-"""
-    tree = parse_markdown_headings(md)
-    assert tree[0].content == "# Header with **bold** and *italic* text"
-    assert tree[0].children[0].content.strip() == "Some _content_."
-
-
-def test_lists_and_code_blocks():
-    md = """# List and Code
-
-## List Section
-- Item 1
-- Item 2
-
-## Code Section
-
-print("Hello, world!")
-    
-"""
-    tree = parse_markdown_headings(md)
-
-    list_section = tree[0].children[0]
-    assert list_section.content == "## List Section"
-    list_content = list_section.children[0]
-    assert list_content.content == "- Item 1\n- Item 2"
-
-    code_section = tree[0].children[1]
-    assert code_section.content == "## Code Section"
-    code_block = code_section.children[0]
-    assert 'print("Hello, world!")' in code_block.content
-
-
-def test_multiple_same_level_headers():
-    md = """# Header A
-Paragraph A.
-
-# Header B
-Paragraph B.
-"""
-    tree = parse_markdown_headings(md)
-    assert len(tree) == 2
-    assert tree[0].content == "# Header A"
-    assert tree[0].children[0].content.strip() == "Paragraph A."
-    assert tree[1].content == "# Header B"
-    assert tree[1].children[0].content.strip() == "Paragraph B."
-
-
-def test_header_skipping_levels():
-    md = """# H1
-### H3
-Some text.
-"""
-    tree = parse_markdown_headings(md)
-    h1 = tree[0]
-    assert h1.content == "# H1"
-    # H3 should be treated as a direct child of H1
-    h3 = h1.children[0]
-    assert h3.content == "### H3"
-    assert h3.path == ["# H1", "### H3"]
-    assert h3.children[0].content.strip() == "Some text."
-
-
-@pytest.mark.parametrize("chunk_size_factor", [1.2, 100])
-@pytest.mark.parametrize("rollup", [True, False])
-def test_markdown_chunking(
-    sample_markdown,
-    markdown_sections,
-    chunk_size_factor: int,
-    rollup: bool,
-):
-    """
-    Given a Markdown document with sections and sub-sections, this test verifies that:
-      - The tree is built correctly from the document.
-      - The chunking process produces distinct chunks with enriched header context.
-      - A header-only node does not duplicate the header in its own chunk.
-
-    The sample document has:
-      - Chapter 1 with a preamble.
-      - Section 1.1 with content.
-      - Section 1.2 with bullet content.
-      - Chapter 2 with its own content.
-    """
-
-    ch1, sec1_1, sec1_2, ch2 = markdown_sections
-    chunk_size = chunk_size_factor * count_words(ch1.content)
-    config = MarkdownChunkConfig(
-        chunk_size=chunk_size,
-        overlap_tokens=5,
-        variation_percent=0.2,
-        rollup=rollup,
-    )
-
-    # Structure-aware chunking of the text into enriched chunks.
-    chunks: List[str] = chunk_markdown(sample_markdown, config)
-
-    if rollup and chunk_size > count_words(sample_markdown):
-        assert len(chunks) == 1, f"Expected 1 chunk, got {len(chunks)}"
-        assert (
-            chunks[0].split() == sample_markdown.split()
-        ), "Chunk does not match original Markdown"
-        # check that line-breaks in each section content are preserved
-        for section in markdown_sections:
-            assert (
-                section.content in chunks[0]
-            ), f"Section content not found in the chunk: {section.content}"
-
-    if not rollup or chunk_size < count_words(sample_markdown):
-        # Based on our document structure, we expect four chunks:
-        # 1. Chapter 1's preamble content (enriched with prefix "# Chapter 1")
-        # 2. Section 1.1 content (enriched with prefix "# Chapter 1 \n\n # Section 1.1")
-        # 3. Section 1.2 content (enriched with prefix "# Chapter 1 \n\n # Section 1.2")
-        # 4. Chapter 2 content (enriched with prefix "# Chapter 2")
-        assert len(chunks) == 4, f"Expected 4 chunks, got {len(chunks)}"
-
-        assert (
-            chunks[0].split() == ch1.to_markdown().split()
-        ), "Chunk 1 does not match Chapter 1 preamble"
-        assert (
-            ch1.content.strip() in chunks[0]
-        ), "Chapter 1 content not preserved in Chunk 1"
-
-        assert chunks[1].split() == (
-            (ch1.header + config.header_context_sep + sec1_1.to_markdown()).split()
-        ), "Chunk 2 does not match Section 1.1"
-        assert (
-            sec1_1.content.strip() in chunks[1]
-        ), "Section 1.1 content not preserved in Chunk 2"
-
-        assert chunks[2].split() == (
-            (ch1.header + config.header_context_sep + sec1_2.to_markdown()).split()
-        ), "Chunk 3 does not match Section 1.2"
-        assert (
-            sec1_2.content.strip() in chunks[2]
-        ), "Section 1.2 content not preserved in Chunk 3"
-
-        assert (
-            chunks[3].split() == ch2.to_markdown().split()
-        ), "Chunk 4 does not match Chapter 2"
-        assert (
-            ch2.content.strip() in chunks[3]
-        ), "Chapter 2 content not preserved in Chunk 4"
-
-
-@pytest.mark.parametrize("rollup", [False, True])
-@pytest.mark.parametrize("chunk_size", [20, 500])
-def test_chunking_sizes(
-    chunk_size: int,
-    rollup: bool,
-):
-    """
-    Test that the chunking logic produces chunks that:
-      - Have token counts between the lower and upper bounds
-        (except possibly the final chunk)
-      - Include the header enrichment in each chunk's text
-      - Include the expected overlap between consecutive chunks
-    """
-    # Create a long text consisting of 200 repeated tokens ("word")
-    long_text = " ".join(["word"] * 200)  # 200 tokens
-    md_text = f"""# Chapter 1
-{long_text}
-"""
-
-    # Set chunking configuration.
-    # Here chunk_size=50 means that (with variation_percent=0.2)
-    # we expect chunks to have between 40 and 60 tokens.
-    config = MarkdownChunkConfig(
-        chunk_size=chunk_size, rollup=rollup, overlap_tokens=5, variation_percent=0.2
-    )
-
-    # Produce the enriched chunks from the tree.
-    chunks = chunk_markdown(md_text, config)
-
-    # Compute the allowed bounds.
-    lower_bound = config.chunk_size * (1 - config.variation_percent)
-    upper_bound = config.chunk_size * (1 + config.variation_percent)
-
-    # Verify each chunk's token count.
-    # For all chunks except possibly the final one,
-    # we expect at least lower_bound tokens.
-    for i, chunk in enumerate(chunks):
-        tokens = count_words(chunk)
-        if i < len(chunks) - 1:
-            assert (
-                tokens >= lower_bound
-            ), f"Chunk {i} has {tokens} tokens, expected at least {lower_bound}"
-        assert (
-            tokens <= 2 * upper_bound
-        ), (  # relaxed check
-            f"Chunk {i} has {tokens} tokens, expected at most {upper_bound}"
-        )
-
-    # Check that each chunk is enriched with the header context.
-    # Each chunk's text should contain "Chapter 1" since that is the header path.
-    for i, chunk in enumerate(chunks):
-        assert "Chapter 1" in chunk, f"Chunk {i} is missing header enrichment"
-
-    # Verify that consecutive chunks share the expected overlap.
-    # For each consecutive pair of chunks, the last `overlap_tokens`
-    # tokens of the previous chunk
-    # should appear among the first tokens of the next chunk.
-    if len(chunks) > 1:
-        for i in range(len(chunks) - 1):
-            prev_tokens = chunks[i].split()
-            next_tokens = chunks[i + 1].split()
-            # Get the last few tokens from the previous chunk:
-            expected_overlap = prev_tokens[-config.overlap_tokens :]
-            # Look at the beginning of the next chunk
-            # (allowing some room for header enrichment).
-            next_head = next_tokens[:15]
-            for word in expected_overlap:
-                assert (
-                    word in next_head
-                ), f"Overlap word '{word}' from chunk {i} not found in chunk {i+1}"
-
-
-@pytest.mark.parametrize("rollup", [False, True])
-def test_chunking_word_set_consistency(rollup: bool):
-    """
-    Test that when converting Markdown text to chunks, the union of distinct words
-    from the original content is the same as the union of distinct words from the
-    chunks (ignoring header enrichment).
-    """
-    # Define a header and content.
-    header = "# Chapter 1"
-    # Create content text with 100 unique words.
-    content_tokens = [f"word{i}" for i in range(1, 101)]
-    content_text = " ".join(content_tokens)
-
-    # Create a sample Markdown document with a header and content.
-    md_text = f"{header}\n\n{content_text}\n"
-
-    # Set up the chunking configuration.
-    config = MarkdownChunkConfig(
-        chunk_size=20,  # small chunk size for testing
-        overlap_tokens=5,  # intended overlap tokens
-        variation_percent=0.2,  # chunks between 16 and 24 tokens
-        rollup=rollup,
-    )
-
-    # Produce enriched chunks from the tree.
-    chunks = chunk_markdown(md_text, config)
-
-    # Remove header enrichment ("Chapter 1\n\n") from each chunk and collect all words.
-    chunk_word_set = set()
-    for chunk in chunks:
-        assert chunk.startswith(header)
-        # Split into words and update the set.
-        chunk_word_set.update(chunk[len(header) :].split())
-
-    # Compute the distinct set of words in the original content.
-    original_word_set = set(content_text.split())
-
-    # Verify that the union of words from the chunks
-    # matches the original content's words.
-    assert (
-        chunk_word_set == original_word_set
-    ), f"Word sets do not match.\nExpected: {original_word_set}\nGot: {chunk_word_set}"
-
-
-def smart_tokenize(text: str) -> list:
-    """
-    Tokenize text by first inserting a space after a period if it's immediately
-    followed by an uppercase letter (a common side-effect of line joining),
-    then splitting on whitespace.
-    """
-    fixed = re.sub(r"(\.)([A-Z])", r"\1 \2", text)
-    return fixed.split()
-
-
-def generate_sentence(word_count: int, sentence_id: int) -> str:
-    """
-    Generate a dummy sentence with `word_count` words and a trailing period.
-    Uses "wordX" to identify each word, plus a "sentence{ID}" marker at the end.
-    """
-    words = [f"word{i}" for i in range(1, word_count + 1)]
-    # Put a sentinel to identify the sentence number
-    # and close with a period for the splitting logic.
-    sentence_str = " ".join(words) + f" sentence{sentence_id}."
-    return sentence_str
-
-
-def generate_paragraph(
-    sentence_count: int,
-    words_per_sentence: int,
-    paragraph_id: int,
-) -> str:
-    """
-    Generate a dummy paragraph with `sentence_count` sentences,
-    each with `words_per_sentence` words.
-    """
-    sentences = [
-        generate_sentence(words_per_sentence, s_id + 1)
-        for s_id in range(sentence_count)
-    ]
-    # Add a sentinel "PARA{ID}" at the end to visually check paragraph boundaries.
-    para_str = " ".join(sentences) + f" PARA{paragraph_id}"
-    return para_str
-
-
-@pytest.mark.parametrize("chunk_size_factor", [0.5, 1, 1.5])
-@pytest.mark.parametrize("rollup", [False, True])
-def test_degenerate_markdown_parsing_and_chunking(
-    chunk_size_factor: float,
-    rollup: bool,
-):
-    # A degenerate Markdown document: plain text without any Markdown formatting.
-
-    paragraph1 = generate_paragraph(
-        sentence_count=10, words_per_sentence=50, paragraph_id=1
-    )
-    paragraph2 = generate_paragraph(
-        sentence_count=10, words_per_sentence=50, paragraph_id=2
-    )
-
-    # Combine paragraphs with a double-newline
-    plain_text = paragraph1 + "\n\n" + paragraph2
-    plain_text = plain_text.strip()
-
-    # Parse the plain text using our Markdown parser.
-    tree = parse_markdown_headings(plain_text)
-
-    # For plain text, we expect a single node.
-    assert len(tree) == 1, "Expected one node for plain text"
-    node = tree[0]
-
-    # Use smart_tokenize to account for missing spaces at line joins.
-    expected_tokens = set(smart_tokenize(plain_text))
-    actual_tokens = set(smart_tokenize(node.content))
-    assert (
-        expected_tokens == actual_tokens
-    ), "Distinct word sets from node content and original plain text do not match"
-
-    # Plain text should not have header enrichment.
-    assert node.path == [] or node.path == [""], "Plain text should have no header path"
-    assert node.children == [], "Plain text should not produce any children nodes"
-
-    # Set up a chunking configuration.
-    config = MarkdownChunkConfig(
-        desired_chunk_tokens=50,  # high enough to avoid splitting for this test
-        overlap_tokens=5,
-        variation_percent=0.2,
-        rollup=rollup,
-    )
-
-    # Generate chunks from the parsed tree.
-    chunks = chunk_markdown(plain_text, config)
-
-    # Collect distinct words from the chunks.
-    chunk_word_set = set()
-    for chunk in chunks:
-        # Since there is no header enrichment (no headers in plain text),
-        # we can tokenize directly.
-        chunk_word_set.update(smart_tokenize(chunk))
-
-    original_word_set = set(smart_tokenize(plain_text))
-    assert chunk_word_set == original_word_set, (
-        f"Word sets do not match between chunks and original text.\n"
-        f"Expected: {original_word_set}\nGot: {chunk_word_set}"
-    )
-
-
-def condensed_chunk_view(chunks: List[str], max_words: int = 5) -> str:
-    """
-    Return a compact string showing each chunk's first/last few words and total length.
-    """
-    lines = []
-    for i, c in enumerate(chunks):
-        words = c.split()
-        total = len(words)
-        if total <= 2 * max_words:
-            preview = " ".join(words)
-        else:
-            preview = (
-                " ".join(words[:max_words]) + " ... " + " ".join(words[-max_words:])
-            )
-        lines.append(f"Chunk {i+1} (total {total} words): {preview}")
-    return "\n".join(lines)
-
-
-# ----------------------------------------------------------------
-# THE TEST
-# ----------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "chunk_size, overlap_tokens, variation_percent",
-    [
-        (50, 5, 0.3),  # Scenario 1
-        (20, 5, 0.3),  # Scenario 2
-        (8, 3, 0.3),  # Scenario 3 (forces word-level splits)
-    ],
-)
-def test_recursive_chunk(chunk_size, overlap_tokens, variation_percent):
-    """
-    Tests that the chunker respects paragraph boundaries when possible,
-    then sentence boundaries, and only splits sentences when no other option
-    is possible under the given config.
-    """
-    # Generate some text with 2 paragraphs, each having 3 sentences of 10 words.
-    # ~ Each paragraph => 3 sentences =>
-    #    each sentence has ~10 words => ~30 words per paragraph.
-    # So total words ~60. This helps us see chunking behavior across boundaries.
-    paragraph1 = generate_paragraph(
-        sentence_count=3, words_per_sentence=10, paragraph_id=1
-    )
-    paragraph2 = generate_paragraph(
-        sentence_count=3, words_per_sentence=10, paragraph_id=2
-    )
-
-    # Combine paragraphs with a double-newline
-    text = paragraph1 + "\n\n" + paragraph2
-
-    config = MarkdownChunkConfig(
-        chunk_size=chunk_size,
-        overlap_tokens=overlap_tokens,
-        variation_percent=variation_percent,
-    )
-
-    chunks = recursive_chunk(text, config)
-
-    # Print a condensed view for manual inspection
-    print("\n===================================")
-    print(
-        f"Config: chunk_size={chunk_size}, "
-        f"overlap_tokens={overlap_tokens}, "
-        f"variation_percent={variation_percent}\n"
-    )
-    print("Generated Text (first 30 words):")
-    print(" ".join(text.split()[:30]), "...")
-    print("\nChunks:")
-    print(condensed_chunk_view(chunks, max_words=5))
-    print("===================================\n")
-
-    # Basic asserts:
-    # 1. No chunk should exceed the upper bound in terms of word count
-    upper_bound = chunk_size * (1 + variation_percent)
-    for i, chunk in enumerate(chunks):
-        word_count_in_chunk = len(chunk.split())
-        assert word_count_in_chunk <= upper_bound + 5, (
-            f"Chunk {i+1} has {word_count_in_chunk} words, "
-            f"exceeds upper bound (~{upper_bound:.1f})."
-        )
-
-    # 2. Check that chunking doesn't produce empty chunks
-    for i, chunk in enumerate(chunks):
-        assert chunk.strip(), f"Chunk {i+1} is empty!"
-
-    # 3. (Optional) If chunk_size is >= total words, we expect exactly 1 chunk
-    total_words = len(text.split())
-    if total_words <= chunk_size * (1 + variation_percent):
-        assert len(chunks) == 1, (
-            "Expected a single chunk since the text is short enough, "
-            f"but got {len(chunks)} chunks."
-        )
-
-
-def test_recursive_chunk_enhanced():
-    config = MarkdownChunkConfig(
-        chunk_size=8,
-        overlap_tokens=2,
-        variation_percent=0.3,
-    )
-
-    # Construct a text with 2 paragraphs, each containing 2 sentences,
-    # plus paragraph markers
-    paragraph1 = (
-        "word1 word2 word3 word4 sentence1.\n"
-        "word5 word6 word7 word8 sentence2. PARA1"
-    )
-    paragraph2 = (
-        "cat1 cat2 cat3 cat4 sentence1.\n" "cat5 cat6 cat7 cat8 sentence2. PARA2"
-    )
-
-    text = paragraph1 + "\n\n" + paragraph2
-
-    # Now chunk it
-    chunks = recursive_chunk(text, config)
-
-    print("\n------------------ ENHANCED CHUNK TEST ------------------")
-    for i, c in enumerate(chunks, 1):
-        print(f"Chunk {i} ({len(c.split())} words):\n{c}\n")
-
-    # A. Check no chunk splits mid-sentence
-    for i, chunk in enumerate(chunks, 1):
-        # We expect every sentence boundary to remain intact:
-        # "sentence1." or "sentence2." should not be truncated in the middle
-        assert (
-            "sentence1." in chunk or "sentence2." in chunk or "PARA" in chunk
-        ), f"Chunk {i} might have truncated a sentence or lost markers: {chunk}"
-
-    # B. Check paragraph markers do not get merged.
-    # We expect that "PARA1" and "PARA2" never appear in the same chunk.
-    for i, chunk in enumerate(chunks, 1):
-        assert not (
-            "PARA1" in chunk and "PARA2" in chunk
-        ), "Found both PARA1 and PARA2 in the same chunk!"
-
-    # C. If there's overlap, ensure it's only from chunk (i) to chunk (i+1).
-    # A naive check: the last 2 tokens of chunk i = the first 2 tokens of chunk i+1,
-    # but chunk i+2 does not contain that same overlap at the start.
-    for i in range(len(chunks) - 1):
-        chunk_i_tokens = chunks[i].split()
-        chunk_i_plus_1_tokens = chunks[i + 1].split()
-
-        overlap_i = chunk_i_tokens[-2:]  # last 2 tokens of chunk i
-        start_of_chunk_i_plus_1 = chunk_i_plus_1_tokens[
-            :2
-        ]  # first 2 tokens of chunk i+1
-        assert overlap_i == start_of_chunk_i_plus_1, (
-            f"Expected chunk {i+1} to start with overlap tokens from chunk {i}.\n"
-            f"Overlap {overlap_i}, got {start_of_chunk_i_plus_1}"
-        )
-
-        # Now check chunk (i+2) if it exists
-        if i + 2 < len(chunks):
-            chunk_i_plus_2_tokens = chunks[i + 2].split()
-            # The first 2 tokens of chunk i+2 should NOT match overlap_i
-            start_of_chunk_i_plus_2 = chunk_i_plus_2_tokens[:2]
-            assert (
-                start_of_chunk_i_plus_2 != overlap_i
-            ), f"Found repeated overlap in chunk {i+2} that belonged to chunk {i}!"
-
-    # D. For formatting, ensure that if a chunk boundary occurs right before
-    # a paragraph break, the next chunk still preserves '\n\n'
-    # if it was originally there.
-    # e.g. if chunk i ends in "sentence2. PARA1" plus "\n\n", the next chunk
-    # should start with something that includes the next paragraph. We
-    # can do a simple check that either chunk i ends with \n\n or chunk i+1
-    # starts with it.
-    for i in range(len(chunks) - 1):
-        # If the original text had \n\n between paragraphs, we expect
-        # either chunk i ends with \n\n or chunk i+1 starts with \n\n.
-        if "PARA1" in chunks[i]:  # likely the end of paragraph 1
-            # then chunk i+1 should contain the next paragraph's text,
-            # ideally starting with \n\n + "cat1" or an overlap snippet.
-            next_chunk = chunks[i + 1]
-            # Checking minimal condition: that next_chunk includes "cat1" or "cat5"...
-            assert "cat1" in next_chunk or "cat5" in next_chunk, (
-                f"Paragraph formatting might have been lost: chunk {i+1} "
-                f"does not contain cat1/cat5"
-            )
 </file>
 
 <file path="tests/main/test_msg_routing.py">
@@ -88231,6 +86931,591 @@ def async_retry_with_exponential_backoff(
     return wrapper
 </file>
 
+<file path="langroid/parsing/md_parser.py">
+import re
+from typing import Any, List
+
+from pydantic import BaseModel, Field, field_validator
+
+HEADER_CONTEXT_SEP = "\n...\n"
+
+
+# Pydantic model definition for a node in the markdown hierarchy
+class Node(BaseModel):
+    content: str  # The text of the header or content block
+    path: List[str]  # List of header texts from root to this node
+    children: List["Node"] = Field(default_factory=list)
+    # Nested children nodes
+
+    def __repr__(self) -> str:
+        # for debug printing
+        return (
+            f"Node(content={self.content!r}, path={self.path!r}, "
+            f"children={len(self.children)})"
+        )
+
+    # Pydantic v1 requires forward references for self-referencing models
+    # Forward references will be resolved with the update_forward_refs call below.
+
+
+# Resolve forward references for Node (required for recursive models in Pydantic)
+Node.model_rebuild()
+
+
+def _cleanup_text(text: str) -> str:
+    # 1) Convert alternative newline representations (any CRLF or CR) to a single '\n'
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # 2) Replace 3 or more consecutive newlines with exactly 2 newlines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text
+
+
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+
+
+def parse_markdown_headings(md_text: str) -> List[Node]:
+    """
+    Parse `md_text` to extract a heading-based hierarchy, skipping lines
+    that look like headings inside fenced code blocks. Each heading node
+    will have a child node for the text that appears between this heading
+    and the next heading.
+
+    Returns a list of top-level Node objects.
+
+    Example structure:
+        Node(content='# Chapter 1', path=['# Chapter 1'], children=[
+            Node(content='Intro paragraph...', path=['# Chapter 1'], children=[]),
+            Node(content='## Section 1.1', path=['# Chapter 1', '## Section 1.1'],
+                 children=[
+                  Node(content='Some text in Section 1.1.', path=[...], children=[])
+            ]),
+            ...
+        ])
+    """
+    # If doc is empty or only whitespace, return []
+    if not md_text.strip():
+        return []
+
+    lines = md_text.splitlines(True)  # keep the newline characters
+
+    # We'll scan line-by-line, track code-fence status, collect headings
+    headings = []  # list of (level, heading_line, start_line_idx)
+    in_code_fence = False
+    fence_marker = None  # track which triple-backtick or ~~~ opened
+
+    for i, line in enumerate(lines):
+        if not in_code_fence:
+            # Opening fences may be followed by an info string.
+            fence_match = re.match(r"^(```+|~~~+)", line.strip())
+            if fence_match:
+                marker = fence_match.group(1)  # e.g. "```" or "~~~~"
+                in_code_fence = True
+                fence_marker = marker
+        elif fence_marker:
+            # Closing fences contain only the opening character (plus optional
+            # surrounding spaces or tabs) and are at least as long as the opener.
+            closing_marker = line.rstrip("\r\n").strip(" \t")
+            if len(closing_marker) >= len(fence_marker) and set(closing_marker) == {
+                fence_marker[0]
+            }:
+                in_code_fence = False
+                fence_marker = None
+
+        if not in_code_fence:
+            # Check if the line is a heading
+            m = HEADING_RE.match(line)
+            if m:
+                hashes = m.group(1)  # e.g. "##"
+                heading_text = line.rstrip("\n")  # entire line, exact
+                level = len(hashes)
+                headings.append((level, heading_text, i))
+
+    # If no headings found, return a single root node with the entire text
+    if not headings:
+        return [Node(content=md_text.strip(), path=[], children=[])]
+
+    # Add a sentinel heading at the end-of-file, so we can slice the last block
+    # after the final real heading. We'll use level=0 so it doesn't form a real node.
+    headings.append((0, "", len(lines)))
+
+    # Now we build "heading blocks" with
+    # (level, heading_text, start_line, end_line, content)
+    heading_blocks = []
+    for idx in range(len(headings) - 1):
+        level, heading_line, start_i = headings[idx]
+        next_level, _, next_start_i = headings[idx + 1]
+
+        # Content is everything after the heading line until the next heading
+        # i.e. lines[start_i+1 : next_start_i]
+        block_content_lines = lines[start_i + 1 : next_start_i]
+        block_content = "".join(block_content_lines).rstrip("\n")
+
+        heading_blocks.append(
+            {"level": level, "heading_text": heading_line, "content": block_content}
+        )
+    # (We skip the sentinel heading in the final result.)
+
+    # We'll now convert heading_blocks into a tree using a stack-based approach
+    root_nodes: List[Node] = []
+    stack: List[Node] = []
+    header_path: List[str] = []
+
+    for hb in heading_blocks:
+        level = hb["level"]  # type: ignore
+        heading_txt = hb["heading_text"]
+        content_txt = hb["content"]
+
+        # --- Pop stack first! ---
+        while stack and len(stack[-1].path) >= level:
+            stack.pop()
+            header_path.pop()
+
+        # build new path, create a node for the heading
+        new_path = header_path + [heading_txt]
+        heading_node = Node(
+            content=heading_txt, path=new_path, children=[]  # type: ignore
+        )
+
+        # Possibly create a content child for whatever lines were below the heading
+        if content_txt.strip():  # type: ignore
+            content_node = Node(
+                content=content_txt, path=new_path, children=[]  # type: ignore
+            )
+            heading_node.children.append(content_node)
+
+        # Attach heading_node to the stack top or as a root
+        if stack:
+            stack[-1].children.append(heading_node)
+        else:
+            root_nodes.append(heading_node)
+
+        stack.append(heading_node)
+        header_path.append(heading_txt)  # type: ignore
+
+    return root_nodes
+
+
+# The Chunk model for the final enriched chunks.
+class Chunk(BaseModel):
+    text: str  # The chunk text (which includes header context)
+    path: List[str]  # The header path (list of header strings)
+    token_count: int
+
+
+# Configuration for chunking
+class MarkdownChunkConfig(BaseModel):
+    chunk_size: int = 200  # desired chunk size in tokens
+    overlap_tokens: int = 30  # number of tokens to overlap between chunks
+    variation_percent: float = 0.3  # allowed variation
+    rollup: bool = True  # whether to roll up chunks
+    header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
+
+    @field_validator("chunk_size", mode="before")
+    @classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int:
+        """Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+        if isinstance(v, float):
+            return int(v)
+        return int(v)
+
+
+# A simple tokenizer that counts tokens as whitespace-separated words.
+def count_words(text: str) -> int:
+    return len(text.split())
+
+
+def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
+    """
+    Enhanced chunker that:
+      1. Splits by paragraph (top-level).
+      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
+      3. Allows going over the upper bound rather than splitting a single sentence.
+      4. Overlaps only once between consecutive chunks.
+      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
+      6. Preserves \n\n (and other original spacing) as best as possible.
+    """
+
+    # -------------------------------------------------
+    # Helpers
+    # -------------------------------------------------
+    def count_words(text_block: str) -> int:
+        return len(text_block.split())
+
+    lower_bound = int(config.chunk_size * (1 - config.variation_percent))
+    upper_bound = int(config.chunk_size * (1 + config.variation_percent))
+
+    # Quick check: if the entire text is short enough, return as-is.
+    if count_words(text) <= upper_bound:
+        return [text.strip()]
+
+    # Split into paragraphs, preserving \n\n if it's there.
+    raw_paragraphs = text.split("\n\n")
+    paragraphs = []
+    for i, p in enumerate(raw_paragraphs):
+        if p.strip():
+            # Re-append the double-newline if not the last piece
+            if i < len(raw_paragraphs) - 1:
+                paragraphs.append(p + "\n\n")
+            else:
+                paragraphs.append(p)
+
+    # Split paragraphs into "segments": each segment is either
+    # a full short paragraph or (if too big) a list of sentences.
+    sentence_regex = r"(?<=[.!?])\s+"
+
+    def split_paragraph_into_sentences(paragraph: str) -> List[str]:
+        """
+        Return a list of sentence-sized segments. If a single sentence
+        is bigger than upper_bound, do a word-level fallback.
+        """
+        if count_words(paragraph) <= upper_bound:
+            return [paragraph]
+
+        sentences = re.split(sentence_regex, paragraph)
+        # Clean up stray whitespace
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        expanded = []
+        for s in sentences:
+            if count_words(s) > upper_bound:
+                expanded.extend(_fallback_word_split(s, config))
+            else:
+                expanded.append(s)
+        return expanded
+
+    def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]:
+        """
+        As a last resort, split extremely large 'sentence' by words.
+        """
+        words = long_text.split()
+        pieces = []
+        start = 0
+        while start < len(words):
+            end = start + cfg.chunk_size
+            chunk_words = words[start:end]
+            pieces.append(" ".join(chunk_words))
+            start = end
+        return pieces
+
+    # Build a list of segments
+    segments = []
+    for para in paragraphs:
+        if count_words(para) > upper_bound:
+            # split into sentences
+            segs = split_paragraph_into_sentences(para)
+            segments.extend(segs)
+        else:
+            segments.append(para)
+
+    # -------------------------------------------------
+    # Accumulate segments into final chunks
+    # -------------------------------------------------
+    chunks = []
+    current_chunk = ""
+    current_count = 0
+
+    def flush_chunk() -> None:
+        nonlocal current_chunk, current_count
+        trimmed = current_chunk.strip()
+        if trimmed:
+            chunks.append(trimmed)
+        current_chunk = ""
+        current_count = 0
+
+    def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int:
+        """Sum of word counts from current_index onward."""
+        return sum(count_words(s) for s in all_segments[current_index:])
+
+    for i, seg in enumerate(segments):
+        seg_count = count_words(seg)
+
+        # If this single segment alone exceeds upper_bound, we accept it as a big chunk.
+        if seg_count > upper_bound:
+            # If we have something in the current chunk, flush it first
+            flush_chunk()
+            # Then store this large segment as its own chunk
+            chunks.append(seg.strip())
+            continue
+
+        # Attempt to add seg to the current chunk
+        if (current_count + seg_count) > upper_bound and (current_count >= lower_bound):
+            # We would normally flush here, but let's see if we are nearing the end:
+            # If the remaining tokens (including this one) is < lower_bound,
+            # we just add it anyway to avoid creating a tiny final chunk.
+            future_tokens = remaining_tokens_in_future(segments, i)
+            if future_tokens < lower_bound:
+                # Just add it (allowing to exceed upper bound)
+                if current_chunk:
+                    # Add space or preserve newline carefully
+                    # We'll do a basic approach here:
+                    if seg.startswith("\n\n"):
+                        current_chunk += seg  # preserve double new line
+                    else:
+                        current_chunk += " " + seg
+                    current_count = count_words(current_chunk)
+                else:
+                    current_chunk = seg
+                    current_count = seg_count
+            else:
+                # Normal flush
+                old_chunk = current_chunk
+                flush_chunk()
+                # Overlap from old_chunk
+                overlap_tokens_list = (
+                    old_chunk.split()[-config.overlap_tokens :] if old_chunk else []
+                )
+                overlap_str = (
+                    " ".join(overlap_tokens_list) if overlap_tokens_list else ""
+                )
+                if overlap_str:
+                    current_chunk = overlap_str + " " + seg
+                else:
+                    current_chunk = seg
+                current_count = count_words(current_chunk)
+        else:
+            # Just accumulate
+            if current_chunk:
+                if seg.startswith("\n\n"):
+                    current_chunk += seg
+                else:
+                    current_chunk += " " + seg
+            else:
+                current_chunk = seg
+            current_count = count_words(current_chunk)
+
+    # Flush leftover
+    flush_chunk()
+
+    # Return non-empty
+    return [c for c in chunks if c.strip()]
+
+
+# Function to process a Node and produce enriched chunks.
+def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]:
+    chunks: List[Chunk] = []
+
+    # Check if this is a header-only node.
+    is_header_only = node.path and node.content.strip() == node.path[-1]
+
+    # Only generate a chunk for the node if it has non-header content,
+    # or if it’s header-only AND has no children (i.e., it's a leaf header).
+    if node.content.strip() and (not is_header_only or not node.children):
+        header_prefix = (
+            config.header_context_sep.join(node.path) + "\n\n" if node.path else ""
+        )
+        content_chunks = recursive_chunk(node.content, config)
+        for chunk_text in content_chunks:
+            full_text = header_prefix + chunk_text
+            chunks.append(
+                Chunk(
+                    text=full_text, path=node.path, token_count=count_words(full_text)
+                )
+            )
+
+    # Process children nodes recursively.
+    for child in node.children:
+        child_chunks = chunk_node(child, config)
+        chunks.extend(child_chunks)
+
+    return chunks
+
+
+# Function to process an entire tree of Nodes.
+def chunk_tree(root_nodes: List[Node], config: MarkdownChunkConfig) -> List[Chunk]:
+    all_chunks: List[Chunk] = []
+    for node in root_nodes:
+        all_chunks.extend(chunk_node(node, config))
+    return all_chunks
+
+
+def aggregate_content(node: Node) -> str:
+    """
+    Recursively aggregate the content from a node and all its descendants,
+    excluding header-only nodes to avoid duplication.
+    """
+    parts = []
+
+    # Skip header-only nodes in content aggregation
+    is_header_only = node.path and node.content.strip() == node.path[-1].strip()
+    if not is_header_only and node.content.strip():
+        parts.append(node.content.strip())
+
+    # Recurse on children
+    for child in node.children:
+        child_text = aggregate_content(child)
+        if child_text.strip():
+            parts.append(child_text.strip())
+
+    return "\n\n".join(parts)
+
+
+def flatten_tree(node: Node, level: int = 0) -> str:
+    """
+    Flatten a node and its children back into proper markdown text.
+
+    Args:
+        node: The node to flatten
+        level: The current heading level (depth in the tree)
+
+    Returns:
+        str: Properly formatted markdown text
+    """
+    result = ""
+
+    # Check if this is a header node (content matches last item in path)
+    is_header = node.path and node.content.strip().startswith("#")
+
+    # For header nodes, don't duplicate the hash marks
+    if is_header:
+        result = node.content.strip() + "\n\n"
+    elif node.content.strip():
+        result = node.content.strip() + "\n\n"
+
+    # Process all children
+    for child in node.children:
+        result += flatten_tree(child, level + 1)
+
+    return result
+
+
+def rollup_chunk_node(
+    node: Node, config: MarkdownChunkConfig, prefix: str = ""
+) -> List[Chunk]:
+    """
+    Recursively produce rollup chunks from `node`, passing down a `prefix`
+    (e.g., parent heading(s)).
+
+    - If a node is heading-only (content == last path item) and has children,
+      we skip creating a chunk for that node alone and instead add that heading
+      to the `prefix` for child nodes.
+    - If a node is NOT heading-only OR has no children, we try to fit all of its
+      flattened content into a single chunk. If it's too large, we chunk it.
+    - We pass the (possibly updated) prefix down to children, so each child's
+      chunk is enriched exactly once with all ancestor headings.
+    """
+
+    chunks: List[Chunk] = []
+
+    # Check if the node is "heading-only" and has children
+    # e.g. node.content=="# Chapter 1" and node.path[-1]=="# Chapter 1"
+    is_heading_only_with_children = (
+        node.path
+        and node.content.strip() == node.path[-1].strip()
+        and len(node.children) > 0
+    )
+
+    if is_heading_only_with_children:
+        # We do NOT create a chunk for this node alone.
+        # Instead, we add its heading to the prefix for child chunks.
+        new_prefix = prefix + node.content.strip()
+        for i, child in enumerate(node.children):
+            sep = "\n\n" if i == 0 else config.header_context_sep
+            chunks.extend(rollup_chunk_node(child, config, prefix=new_prefix + sep))
+        return chunks
+
+    # If not heading-only-with-children, we handle this node's own content:
+    # Flatten the entire node (including sub-children) in standard Markdown form.
+    flattened = flatten_tree(node, level=len(node.path))
+    flattened_with_prefix = prefix + flattened
+    total_tokens = count_words(flattened_with_prefix)
+
+    # Check if we can roll up everything (node + children) in a single chunk
+    if total_tokens <= config.chunk_size * (1 + config.variation_percent):
+        # One single chunk for the entire subtree
+        chunks.append(
+            Chunk(text=flattened_with_prefix, path=node.path, token_count=total_tokens)
+        )
+    else:
+        # It's too large overall. We'll chunk the node's own content first (if any),
+        # then recurse on children.
+        node_content = node.content.strip()
+
+        # If we have actual content that is not just a heading, chunk it with the prefix
+        # (like "preamble" text).
+        # Note: if this node is heading-only but has NO children,
+        # it will still land here
+        # (because is_heading_only_with_children was False due to zero children).
+        if node_content and (not node.path or node_content != node.path[-1].strip()):
+            # The node is actual content (not purely heading).
+            # We'll chunk it in paragraphs/sentences with the prefix.
+            content_chunks = recursive_chunk(node_content, config)
+            for text_block in content_chunks:
+                block_with_prefix = prefix + text_block
+                chunks.append(
+                    Chunk(
+                        text=block_with_prefix,
+                        path=node.path,
+                        token_count=count_words(block_with_prefix),
+                    )
+                )
+
+        # Now recurse on children, passing the same prefix so they get it too
+        for child in node.children:
+            chunks.extend(rollup_chunk_node(child, config, prefix=prefix))
+
+    return chunks
+
+
+def rollup_chunk_tree(
+    root_nodes: List[Node],
+    config: MarkdownChunkConfig,
+) -> List[Chunk]:
+    # Create a dummy root node that contains everything.
+    dummy_root = Node(content="", path=[], children=root_nodes)
+
+    # Now process just the dummy root node with an empty prefix.
+    chunks = rollup_chunk_node(dummy_root, config, prefix="")
+    return chunks
+
+
+def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]:
+    tree = parse_markdown_headings(markdown_text)
+    if len(tree) == 1 and len(tree[0].children) == 0:
+        # Pure text, no hierarchy, so just use recursive_chunk
+        text_chunks = recursive_chunk(markdown_text, config)
+        return [_cleanup_text(chunk) for chunk in text_chunks]
+    if config.rollup:
+        chunks = rollup_chunk_tree(tree, config)
+    else:
+        chunks = chunk_tree(tree, config)
+    return [_cleanup_text(chunk.text) for chunk in chunks]
+
+
+if __name__ == "__main__":
+    # Example usage:
+    markdown_text = """# Title
+Intro para. Hope this is not
+getting split.
+## SubTitle
+- Item1
+- Item2
+"""
+    # Set up chunking config with very large chunk size.
+    # (you can adjust chunk_size, overlap_tokens, variation_percent)
+    config = MarkdownChunkConfig(
+        chunk_size=200, overlap_tokens=5, variation_percent=0.2
+    )
+    chunks = chunk_markdown(markdown_text, config)
+
+    for idx, chunk in enumerate(chunks, 1):
+        print(f"--- Chunk {idx} --- ")
+        print(chunk)
+        print()
+
+    config.rollup = True
+    # with rollup_chunk_tree we get entire doc as 1 chunk
+    chunks = chunk_markdown(markdown_text, config)
+    assert len(chunks) == 1
+    for idx, chunk in enumerate(chunks, 1):
+        print(f"--- Chunk {idx} ---")
+        print(chunk)
+        print()
+</file>
+
 <file path="langroid/parsing/parser.py">
 import logging
 import re
@@ -94604,43 +93889,6 @@ def test_file_tools_allow_paths_within_curr_dir(temp_dir):
 
     list_res = ListDirTool.create(get_curr_dir=lambda: sandbox)(dir_path=".").handle()
     assert "sub" in list_res
-</file>
-
-<file path="tests/main/test_gemini_routing.py">
-import langroid.language_models as lm
-from langroid.utils.configuration import settings
-
-
-def test_gemini_config_subclass_default_preserves_api_base(monkeypatch):
-    """Gemini configs retain an API base defined by a config subclass."""
-
-    class VertexConfig(lm.OpenAIGPTConfig):
-        api_base: str | None = "https://vertex.example/v1"
-
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
-
-    llm = lm.OpenAIGPT(VertexConfig(chat_model="google/gemini-2.0-flash"))
-
-    assert llm.is_gemini
-    assert llm.api_base == "https://vertex.example/v1"
-
-
-def test_gemini_ignores_lowercase_openai_api_base(monkeypatch):
-    """Gemini routing ignores case-insensitive ambient OpenAI settings."""
-    openai_base = "https://ambient-openai.example/v1"
-    gemini_base = "https://gemini-env.example/v1"
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-    monkeypatch.setenv("openai_api_base", openai_base)
-    monkeypatch.setenv("GEMINI_API_BASE", gemini_base)
-
-    config = lm.OpenAIGPTConfig(chat_model="google/gemini-2.0-flash")
-    llm = lm.OpenAIGPT(config)
-
-    assert config.api_base == openai_base
-    assert llm.api_base == gemini_base
 </file>
 
 <file path="tests/main/test_handle_message_security.py">
@@ -108920,6 +108168,881 @@ def test_self_referential_model_param_breaks_ref_cycle() -> None:
     assert inst.root.child == {"val": 2}
 </file>
 
+<file path="tests/main/test_md_parser.py">
+import re
+from dataclasses import dataclass
+from typing import List
+
+import pytest
+
+from langroid.parsing.md_parser import (
+    MarkdownChunkConfig,
+    Node,
+    chunk_markdown,
+    count_words,
+    parse_markdown_headings,
+    recursive_chunk,
+)
+
+
+@dataclass
+class SectionData:
+    header: str
+    content: str
+
+    def to_markdown(self) -> str:
+        return f"{self.header}\n{self.content}\n\n"
+
+
+CH1_DATA = SectionData(
+    header="# Chapter 1",
+    content="""Intro paragraph under Chapter 1.
+This is a somewhat longer paragraph that might require splitting
+if token limits are low.
+```java
+# Fake Chapter in Code Block - just a comment!
+This is not a real chapter.
+## Comment in code!
+```
+""",
+)
+
+SEC1_1_DATA = SectionData(
+    header="## Section 1.1",
+    content="""Some text in Section 1.1. 
+It might include multiple sentences. Here is another sentence.
+```python
+# Throw in some comments just to mix things up.
+def some_function():
+    return None
+## end of function definition
+```
+""",
+)
+
+SEC1_2_DATA = SectionData(
+    header="## Section 1.2",
+    content="""- Bullet A
+- Bullet B""",
+)
+
+CH2_DATA = SectionData(
+    header="# Chapter 2", content="""Final paragraph in Chapter 2."""
+)
+
+
+# Combined fixture with all the data
+@pytest.fixture
+def markdown_sections() -> List[SectionData]:
+    return [CH1_DATA, SEC1_1_DATA, SEC1_2_DATA, CH2_DATA]
+
+
+@pytest.fixture
+def sample_markdown(markdown_sections) -> str:
+    return "".join(section.to_markdown() for section in markdown_sections)
+
+
+def test_parse_markdown_headings(sample_markdown, markdown_sections):
+    """
+    Test the parse_markdown_headings_only function using a sample Markdown document.
+    We verify that the resulting hierarchy of Nodes matches our expectations.
+    """
+    # Parse the sample markdown to a list of top-level Node objects
+    tree = parse_markdown_headings(sample_markdown)
+    ch1, sec1_1, sec1_2, ch2 = markdown_sections
+
+    # We expect two top-level headings: Chapter 1 and Chapter 2
+    assert len(tree) == 2
+
+    # Check Chapter 1 node
+    ch1_node = tree[0]
+    assert isinstance(ch1_node, Node)
+    assert ch1_node.content == ch1.header
+    assert ch1_node.path == [ch1.header]
+
+    # Under Chapter 1, we expect:
+    #   1. A paragraph (intro)
+    #   2. Heading "Section 1.1"
+    #   3. Heading "Section 1.2"
+    assert len(ch1_node.children) == 3
+
+    intro_para = ch1_node.children[0]
+    assert intro_para.content.strip() == ch1.content.strip()
+    assert intro_para.path == [ch1.header]
+    assert len(intro_para.children) == 0  # Paragraph has no sub-children
+
+    section_11 = ch1_node.children[1]
+    assert section_11.content == sec1_1.header
+    assert section_11.path == [ch1.header, sec1_1.header]
+
+    # Under Section 1.1, we expect a paragraph node
+    assert len(section_11.children) == 1
+    sec_11_para = section_11.children[0]
+    assert sec_11_para.content.strip() == sec1_1.content.strip()
+    assert sec_11_para.path == [ch1.header, sec1_1.header]
+
+    section_12 = ch1_node.children[2]
+    assert section_12.content == sec1_2.header
+    assert section_12.path == [ch1.header, sec1_2.header]
+
+    # Under Section 1.2, we expect a single content node containing the bullet points
+    assert len(section_12.children) == 1
+    bullets_node = section_12.children[0]
+    # The bullet items are joined with newlines (per the extract_text logic)
+    assert bullets_node.content.strip() == sec1_2.content.strip()
+    assert bullets_node.path == [ch1.header, sec1_2.header]
+
+    # Check Chapter 2 node
+    ch2_node = tree[1]
+    assert ch2_node.content == ch2.header
+    assert ch2_node.path == [ch2.header]
+    # Under Chapter 2, we expect a single paragraph
+    assert len(ch2_node.children) == 1
+    ch2_para = ch2_node.children[0]
+    assert ch2_para.content.strip() == ch2.content.strip()
+    assert ch2_para.path == [ch2.header]
+    assert len(ch2_para.children) == 0
+
+
+def test_empty_document():
+    tree = parse_markdown_headings("")
+    assert tree == []
+
+
+def test_no_headers_only_paragraphs():
+    md = """This is just a paragraph.
+    
+And another one.
+"""
+    tree = parse_markdown_headings(md)
+    assert len(tree) == 1
+    assert all(node.path == [] for node in tree)
+    assert tree[0].content.strip() == md.strip()
+
+
+def test_headers_with_no_content():
+    md = """# Title
+## Subsection
+### Subsubsection
+"""
+    tree = parse_markdown_headings(md)
+    assert len(tree) == 1
+    assert tree[0].content == "# Title"
+    assert len(tree[0].children) == 1
+    assert tree[0].children[0].content == "## Subsection"
+    assert len(tree[0].children[0].children) == 1
+    assert tree[0].children[0].children[0].content == "### Subsubsection"
+    assert tree[0].children[0].children[0].children == []
+
+
+def test_header_with_inline_formatting():
+    md = """# Header with **bold** and *italic* text
+Some _content_.
+"""
+    tree = parse_markdown_headings(md)
+    assert tree[0].content == "# Header with **bold** and *italic* text"
+    assert tree[0].children[0].content.strip() == "Some _content_."
+
+
+def test_lists_and_code_blocks():
+    md = """# List and Code
+
+## List Section
+- Item 1
+- Item 2
+
+## Code Section
+
+print("Hello, world!")
+    
+"""
+    tree = parse_markdown_headings(md)
+
+    list_section = tree[0].children[0]
+    assert list_section.content == "## List Section"
+    list_content = list_section.children[0]
+    assert list_content.content == "- Item 1\n- Item 2"
+
+    code_section = tree[0].children[1]
+    assert code_section.content == "## Code Section"
+    code_block = code_section.children[0]
+    assert 'print("Hello, world!")' in code_block.content
+
+
+def test_longer_code_fence_not_closed_by_shorter_fence():
+    md = """# Real Header
+
+````python
+```text
+# Not a Header
+```
+````
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_long_tilde_fence_not_closed_by_shorter_tilde_fence():
+    """A shorter tilde fence must not close a longer tilde opener."""
+    md = """# Real Header
+
+~~~~text
+~~~
+# Not a Header
+~~~
+~~~~
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_backtick_fence_not_closed_by_tilde_fence():
+    """A tilde fence line inside a backtick block must not close it."""
+    md = """# Real Header
+
+```text
+~~~
+# Not a Header
+## Also Not a Header
+~~~
+```
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_tilde_fence_not_closed_by_backtick_fence():
+    """A backtick fence line inside a tilde block must not close it."""
+    md = """# Real Header
+
+~~~text
+```
+# Not a Header
+## Also Not a Header
+```
+~~~
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_fence_closed_by_longer_same_char_fence():
+    """A closing fence may be strictly longer than the opening fence."""
+    md = """# Real Header
+
+```python
+# not a header, just a comment
+`````
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+@pytest.mark.parametrize("fence", ["````", "~~~~"])
+def test_fence_run_followed_by_text_does_not_close(fence: str):
+    """A fence-length run with trailing text is content, not a closer."""
+    md = f"""# Real Header
+
+{fence}python
+{fence}not-a-close
+# Not a Header
+{fence}
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_unclosed_fence_suppresses_headings_without_leaking_state():
+    """An unclosed fence suppresses all later headings through EOF.
+
+    A subsequent parse call must start with a clean (closed) fence state.
+    """
+    md = """# Real Header
+Intro text.
+
+```python
+# Fake Heading Inside
+## Another Fake Heading
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    assert tree[0].content == "# Real Header"
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == []
+    # The fenced lines remain part of the header's content block.
+    assert "# Fake Heading Inside" in tree[0].children[0].content
+
+    # A fresh parse must not inherit the open-fence state of the prior call.
+    fresh = parse_markdown_headings("# Fresh Header\n\n## Fresh Subheader\nText.\n")
+    assert [node.content for node in fresh] == ["# Fresh Header"]
+    fresh_child_headings = [
+        child.content for child in fresh[0].children if child.content.startswith("#")
+    ]
+    assert fresh_child_headings == ["## Fresh Subheader"]
+
+
+def test_multiple_same_level_headers():
+    md = """# Header A
+Paragraph A.
+
+# Header B
+Paragraph B.
+"""
+    tree = parse_markdown_headings(md)
+    assert len(tree) == 2
+    assert tree[0].content == "# Header A"
+    assert tree[0].children[0].content.strip() == "Paragraph A."
+    assert tree[1].content == "# Header B"
+    assert tree[1].children[0].content.strip() == "Paragraph B."
+
+
+def test_header_skipping_levels():
+    md = """# H1
+### H3
+Some text.
+"""
+    tree = parse_markdown_headings(md)
+    h1 = tree[0]
+    assert h1.content == "# H1"
+    # H3 should be treated as a direct child of H1
+    h3 = h1.children[0]
+    assert h3.content == "### H3"
+    assert h3.path == ["# H1", "### H3"]
+    assert h3.children[0].content.strip() == "Some text."
+
+
+@pytest.mark.parametrize("chunk_size_factor", [1.2, 100])
+@pytest.mark.parametrize("rollup", [True, False])
+def test_markdown_chunking(
+    sample_markdown,
+    markdown_sections,
+    chunk_size_factor: int,
+    rollup: bool,
+):
+    """
+    Given a Markdown document with sections and sub-sections, this test verifies that:
+      - The tree is built correctly from the document.
+      - The chunking process produces distinct chunks with enriched header context.
+      - A header-only node does not duplicate the header in its own chunk.
+
+    The sample document has:
+      - Chapter 1 with a preamble.
+      - Section 1.1 with content.
+      - Section 1.2 with bullet content.
+      - Chapter 2 with its own content.
+    """
+
+    ch1, sec1_1, sec1_2, ch2 = markdown_sections
+    chunk_size = chunk_size_factor * count_words(ch1.content)
+    config = MarkdownChunkConfig(
+        chunk_size=chunk_size,
+        overlap_tokens=5,
+        variation_percent=0.2,
+        rollup=rollup,
+    )
+
+    # Structure-aware chunking of the text into enriched chunks.
+    chunks: List[str] = chunk_markdown(sample_markdown, config)
+
+    if rollup and chunk_size > count_words(sample_markdown):
+        assert len(chunks) == 1, f"Expected 1 chunk, got {len(chunks)}"
+        assert (
+            chunks[0].split() == sample_markdown.split()
+        ), "Chunk does not match original Markdown"
+        # check that line-breaks in each section content are preserved
+        for section in markdown_sections:
+            assert (
+                section.content in chunks[0]
+            ), f"Section content not found in the chunk: {section.content}"
+
+    if not rollup or chunk_size < count_words(sample_markdown):
+        # Based on our document structure, we expect four chunks:
+        # 1. Chapter 1's preamble content (enriched with prefix "# Chapter 1")
+        # 2. Section 1.1 content (enriched with prefix "# Chapter 1 \n\n # Section 1.1")
+        # 3. Section 1.2 content (enriched with prefix "# Chapter 1 \n\n # Section 1.2")
+        # 4. Chapter 2 content (enriched with prefix "# Chapter 2")
+        assert len(chunks) == 4, f"Expected 4 chunks, got {len(chunks)}"
+
+        assert (
+            chunks[0].split() == ch1.to_markdown().split()
+        ), "Chunk 1 does not match Chapter 1 preamble"
+        assert (
+            ch1.content.strip() in chunks[0]
+        ), "Chapter 1 content not preserved in Chunk 1"
+
+        assert chunks[1].split() == (
+            (ch1.header + config.header_context_sep + sec1_1.to_markdown()).split()
+        ), "Chunk 2 does not match Section 1.1"
+        assert (
+            sec1_1.content.strip() in chunks[1]
+        ), "Section 1.1 content not preserved in Chunk 2"
+
+        assert chunks[2].split() == (
+            (ch1.header + config.header_context_sep + sec1_2.to_markdown()).split()
+        ), "Chunk 3 does not match Section 1.2"
+        assert (
+            sec1_2.content.strip() in chunks[2]
+        ), "Section 1.2 content not preserved in Chunk 3"
+
+        assert (
+            chunks[3].split() == ch2.to_markdown().split()
+        ), "Chunk 4 does not match Chapter 2"
+        assert (
+            ch2.content.strip() in chunks[3]
+        ), "Chapter 2 content not preserved in Chunk 4"
+
+
+@pytest.mark.parametrize("rollup", [False, True])
+@pytest.mark.parametrize("chunk_size", [20, 500])
+def test_chunking_sizes(
+    chunk_size: int,
+    rollup: bool,
+):
+    """
+    Test that the chunking logic produces chunks that:
+      - Have token counts between the lower and upper bounds
+        (except possibly the final chunk)
+      - Include the header enrichment in each chunk's text
+      - Include the expected overlap between consecutive chunks
+    """
+    # Create a long text consisting of 200 repeated tokens ("word")
+    long_text = " ".join(["word"] * 200)  # 200 tokens
+    md_text = f"""# Chapter 1
+{long_text}
+"""
+
+    # Set chunking configuration.
+    # Here chunk_size=50 means that (with variation_percent=0.2)
+    # we expect chunks to have between 40 and 60 tokens.
+    config = MarkdownChunkConfig(
+        chunk_size=chunk_size, rollup=rollup, overlap_tokens=5, variation_percent=0.2
+    )
+
+    # Produce the enriched chunks from the tree.
+    chunks = chunk_markdown(md_text, config)
+
+    # Compute the allowed bounds.
+    lower_bound = config.chunk_size * (1 - config.variation_percent)
+    upper_bound = config.chunk_size * (1 + config.variation_percent)
+
+    # Verify each chunk's token count.
+    # For all chunks except possibly the final one,
+    # we expect at least lower_bound tokens.
+    for i, chunk in enumerate(chunks):
+        tokens = count_words(chunk)
+        if i < len(chunks) - 1:
+            assert (
+                tokens >= lower_bound
+            ), f"Chunk {i} has {tokens} tokens, expected at least {lower_bound}"
+        assert (
+            tokens <= 2 * upper_bound
+        ), (  # relaxed check
+            f"Chunk {i} has {tokens} tokens, expected at most {upper_bound}"
+        )
+
+    # Check that each chunk is enriched with the header context.
+    # Each chunk's text should contain "Chapter 1" since that is the header path.
+    for i, chunk in enumerate(chunks):
+        assert "Chapter 1" in chunk, f"Chunk {i} is missing header enrichment"
+
+    # Verify that consecutive chunks share the expected overlap.
+    # For each consecutive pair of chunks, the last `overlap_tokens`
+    # tokens of the previous chunk
+    # should appear among the first tokens of the next chunk.
+    if len(chunks) > 1:
+        for i in range(len(chunks) - 1):
+            prev_tokens = chunks[i].split()
+            next_tokens = chunks[i + 1].split()
+            # Get the last few tokens from the previous chunk:
+            expected_overlap = prev_tokens[-config.overlap_tokens :]
+            # Look at the beginning of the next chunk
+            # (allowing some room for header enrichment).
+            next_head = next_tokens[:15]
+            for word in expected_overlap:
+                assert (
+                    word in next_head
+                ), f"Overlap word '{word}' from chunk {i} not found in chunk {i+1}"
+
+
+@pytest.mark.parametrize("rollup", [False, True])
+def test_chunking_word_set_consistency(rollup: bool):
+    """
+    Test that when converting Markdown text to chunks, the union of distinct words
+    from the original content is the same as the union of distinct words from the
+    chunks (ignoring header enrichment).
+    """
+    # Define a header and content.
+    header = "# Chapter 1"
+    # Create content text with 100 unique words.
+    content_tokens = [f"word{i}" for i in range(1, 101)]
+    content_text = " ".join(content_tokens)
+
+    # Create a sample Markdown document with a header and content.
+    md_text = f"{header}\n\n{content_text}\n"
+
+    # Set up the chunking configuration.
+    config = MarkdownChunkConfig(
+        chunk_size=20,  # small chunk size for testing
+        overlap_tokens=5,  # intended overlap tokens
+        variation_percent=0.2,  # chunks between 16 and 24 tokens
+        rollup=rollup,
+    )
+
+    # Produce enriched chunks from the tree.
+    chunks = chunk_markdown(md_text, config)
+
+    # Remove header enrichment ("Chapter 1\n\n") from each chunk and collect all words.
+    chunk_word_set = set()
+    for chunk in chunks:
+        assert chunk.startswith(header)
+        # Split into words and update the set.
+        chunk_word_set.update(chunk[len(header) :].split())
+
+    # Compute the distinct set of words in the original content.
+    original_word_set = set(content_text.split())
+
+    # Verify that the union of words from the chunks
+    # matches the original content's words.
+    assert (
+        chunk_word_set == original_word_set
+    ), f"Word sets do not match.\nExpected: {original_word_set}\nGot: {chunk_word_set}"
+
+
+def smart_tokenize(text: str) -> list:
+    """
+    Tokenize text by first inserting a space after a period if it's immediately
+    followed by an uppercase letter (a common side-effect of line joining),
+    then splitting on whitespace.
+    """
+    fixed = re.sub(r"(\.)([A-Z])", r"\1 \2", text)
+    return fixed.split()
+
+
+def generate_sentence(word_count: int, sentence_id: int) -> str:
+    """
+    Generate a dummy sentence with `word_count` words and a trailing period.
+    Uses "wordX" to identify each word, plus a "sentence{ID}" marker at the end.
+    """
+    words = [f"word{i}" for i in range(1, word_count + 1)]
+    # Put a sentinel to identify the sentence number
+    # and close with a period for the splitting logic.
+    sentence_str = " ".join(words) + f" sentence{sentence_id}."
+    return sentence_str
+
+
+def generate_paragraph(
+    sentence_count: int,
+    words_per_sentence: int,
+    paragraph_id: int,
+) -> str:
+    """
+    Generate a dummy paragraph with `sentence_count` sentences,
+    each with `words_per_sentence` words.
+    """
+    sentences = [
+        generate_sentence(words_per_sentence, s_id + 1)
+        for s_id in range(sentence_count)
+    ]
+    # Add a sentinel "PARA{ID}" at the end to visually check paragraph boundaries.
+    para_str = " ".join(sentences) + f" PARA{paragraph_id}"
+    return para_str
+
+
+@pytest.mark.parametrize("chunk_size_factor", [0.5, 1, 1.5])
+@pytest.mark.parametrize("rollup", [False, True])
+def test_degenerate_markdown_parsing_and_chunking(
+    chunk_size_factor: float,
+    rollup: bool,
+):
+    # A degenerate Markdown document: plain text without any Markdown formatting.
+
+    paragraph1 = generate_paragraph(
+        sentence_count=10, words_per_sentence=50, paragraph_id=1
+    )
+    paragraph2 = generate_paragraph(
+        sentence_count=10, words_per_sentence=50, paragraph_id=2
+    )
+
+    # Combine paragraphs with a double-newline
+    plain_text = paragraph1 + "\n\n" + paragraph2
+    plain_text = plain_text.strip()
+
+    # Parse the plain text using our Markdown parser.
+    tree = parse_markdown_headings(plain_text)
+
+    # For plain text, we expect a single node.
+    assert len(tree) == 1, "Expected one node for plain text"
+    node = tree[0]
+
+    # Use smart_tokenize to account for missing spaces at line joins.
+    expected_tokens = set(smart_tokenize(plain_text))
+    actual_tokens = set(smart_tokenize(node.content))
+    assert (
+        expected_tokens == actual_tokens
+    ), "Distinct word sets from node content and original plain text do not match"
+
+    # Plain text should not have header enrichment.
+    assert node.path == [] or node.path == [""], "Plain text should have no header path"
+    assert node.children == [], "Plain text should not produce any children nodes"
+
+    # Set up a chunking configuration.
+    config = MarkdownChunkConfig(
+        desired_chunk_tokens=50,  # high enough to avoid splitting for this test
+        overlap_tokens=5,
+        variation_percent=0.2,
+        rollup=rollup,
+    )
+
+    # Generate chunks from the parsed tree.
+    chunks = chunk_markdown(plain_text, config)
+
+    # Collect distinct words from the chunks.
+    chunk_word_set = set()
+    for chunk in chunks:
+        # Since there is no header enrichment (no headers in plain text),
+        # we can tokenize directly.
+        chunk_word_set.update(smart_tokenize(chunk))
+
+    original_word_set = set(smart_tokenize(plain_text))
+    assert chunk_word_set == original_word_set, (
+        f"Word sets do not match between chunks and original text.\n"
+        f"Expected: {original_word_set}\nGot: {chunk_word_set}"
+    )
+
+
+def condensed_chunk_view(chunks: List[str], max_words: int = 5) -> str:
+    """
+    Return a compact string showing each chunk's first/last few words and total length.
+    """
+    lines = []
+    for i, c in enumerate(chunks):
+        words = c.split()
+        total = len(words)
+        if total <= 2 * max_words:
+            preview = " ".join(words)
+        else:
+            preview = (
+                " ".join(words[:max_words]) + " ... " + " ".join(words[-max_words:])
+            )
+        lines.append(f"Chunk {i+1} (total {total} words): {preview}")
+    return "\n".join(lines)
+
+
+# ----------------------------------------------------------------
+# THE TEST
+# ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "chunk_size, overlap_tokens, variation_percent",
+    [
+        (50, 5, 0.3),  # Scenario 1
+        (20, 5, 0.3),  # Scenario 2
+        (8, 3, 0.3),  # Scenario 3 (forces word-level splits)
+    ],
+)
+def test_recursive_chunk(chunk_size, overlap_tokens, variation_percent):
+    """
+    Tests that the chunker respects paragraph boundaries when possible,
+    then sentence boundaries, and only splits sentences when no other option
+    is possible under the given config.
+    """
+    # Generate some text with 2 paragraphs, each having 3 sentences of 10 words.
+    # ~ Each paragraph => 3 sentences =>
+    #    each sentence has ~10 words => ~30 words per paragraph.
+    # So total words ~60. This helps us see chunking behavior across boundaries.
+    paragraph1 = generate_paragraph(
+        sentence_count=3, words_per_sentence=10, paragraph_id=1
+    )
+    paragraph2 = generate_paragraph(
+        sentence_count=3, words_per_sentence=10, paragraph_id=2
+    )
+
+    # Combine paragraphs with a double-newline
+    text = paragraph1 + "\n\n" + paragraph2
+
+    config = MarkdownChunkConfig(
+        chunk_size=chunk_size,
+        overlap_tokens=overlap_tokens,
+        variation_percent=variation_percent,
+    )
+
+    chunks = recursive_chunk(text, config)
+
+    # Print a condensed view for manual inspection
+    print("\n===================================")
+    print(
+        f"Config: chunk_size={chunk_size}, "
+        f"overlap_tokens={overlap_tokens}, "
+        f"variation_percent={variation_percent}\n"
+    )
+    print("Generated Text (first 30 words):")
+    print(" ".join(text.split()[:30]), "...")
+    print("\nChunks:")
+    print(condensed_chunk_view(chunks, max_words=5))
+    print("===================================\n")
+
+    # Basic asserts:
+    # 1. No chunk should exceed the upper bound in terms of word count
+    upper_bound = chunk_size * (1 + variation_percent)
+    for i, chunk in enumerate(chunks):
+        word_count_in_chunk = len(chunk.split())
+        assert word_count_in_chunk <= upper_bound + 5, (
+            f"Chunk {i+1} has {word_count_in_chunk} words, "
+            f"exceeds upper bound (~{upper_bound:.1f})."
+        )
+
+    # 2. Check that chunking doesn't produce empty chunks
+    for i, chunk in enumerate(chunks):
+        assert chunk.strip(), f"Chunk {i+1} is empty!"
+
+    # 3. (Optional) If chunk_size is >= total words, we expect exactly 1 chunk
+    total_words = len(text.split())
+    if total_words <= chunk_size * (1 + variation_percent):
+        assert len(chunks) == 1, (
+            "Expected a single chunk since the text is short enough, "
+            f"but got {len(chunks)} chunks."
+        )
+
+
+def test_recursive_chunk_enhanced():
+    config = MarkdownChunkConfig(
+        chunk_size=8,
+        overlap_tokens=2,
+        variation_percent=0.3,
+    )
+
+    # Construct a text with 2 paragraphs, each containing 2 sentences,
+    # plus paragraph markers
+    paragraph1 = (
+        "word1 word2 word3 word4 sentence1.\n"
+        "word5 word6 word7 word8 sentence2. PARA1"
+    )
+    paragraph2 = (
+        "cat1 cat2 cat3 cat4 sentence1.\n" "cat5 cat6 cat7 cat8 sentence2. PARA2"
+    )
+
+    text = paragraph1 + "\n\n" + paragraph2
+
+    # Now chunk it
+    chunks = recursive_chunk(text, config)
+
+    print("\n------------------ ENHANCED CHUNK TEST ------------------")
+    for i, c in enumerate(chunks, 1):
+        print(f"Chunk {i} ({len(c.split())} words):\n{c}\n")
+
+    # A. Check no chunk splits mid-sentence
+    for i, chunk in enumerate(chunks, 1):
+        # We expect every sentence boundary to remain intact:
+        # "sentence1." or "sentence2." should not be truncated in the middle
+        assert (
+            "sentence1." in chunk or "sentence2." in chunk or "PARA" in chunk
+        ), f"Chunk {i} might have truncated a sentence or lost markers: {chunk}"
+
+    # B. Check paragraph markers do not get merged.
+    # We expect that "PARA1" and "PARA2" never appear in the same chunk.
+    for i, chunk in enumerate(chunks, 1):
+        assert not (
+            "PARA1" in chunk and "PARA2" in chunk
+        ), "Found both PARA1 and PARA2 in the same chunk!"
+
+    # C. If there's overlap, ensure it's only from chunk (i) to chunk (i+1).
+    # A naive check: the last 2 tokens of chunk i = the first 2 tokens of chunk i+1,
+    # but chunk i+2 does not contain that same overlap at the start.
+    for i in range(len(chunks) - 1):
+        chunk_i_tokens = chunks[i].split()
+        chunk_i_plus_1_tokens = chunks[i + 1].split()
+
+        overlap_i = chunk_i_tokens[-2:]  # last 2 tokens of chunk i
+        start_of_chunk_i_plus_1 = chunk_i_plus_1_tokens[
+            :2
+        ]  # first 2 tokens of chunk i+1
+        assert overlap_i == start_of_chunk_i_plus_1, (
+            f"Expected chunk {i+1} to start with overlap tokens from chunk {i}.\n"
+            f"Overlap {overlap_i}, got {start_of_chunk_i_plus_1}"
+        )
+
+        # Now check chunk (i+2) if it exists
+        if i + 2 < len(chunks):
+            chunk_i_plus_2_tokens = chunks[i + 2].split()
+            # The first 2 tokens of chunk i+2 should NOT match overlap_i
+            start_of_chunk_i_plus_2 = chunk_i_plus_2_tokens[:2]
+            assert (
+                start_of_chunk_i_plus_2 != overlap_i
+            ), f"Found repeated overlap in chunk {i+2} that belonged to chunk {i}!"
+
+    # D. For formatting, ensure that if a chunk boundary occurs right before
+    # a paragraph break, the next chunk still preserves '\n\n'
+    # if it was originally there.
+    # e.g. if chunk i ends in "sentence2. PARA1" plus "\n\n", the next chunk
+    # should start with something that includes the next paragraph. We
+    # can do a simple check that either chunk i ends with \n\n or chunk i+1
+    # starts with it.
+    for i in range(len(chunks) - 1):
+        # If the original text had \n\n between paragraphs, we expect
+        # either chunk i ends with \n\n or chunk i+1 starts with \n\n.
+        if "PARA1" in chunks[i]:  # likely the end of paragraph 1
+            # then chunk i+1 should contain the next paragraph's text,
+            # ideally starting with \n\n + "cat1" or an overlap snippet.
+            next_chunk = chunks[i + 1]
+            # Checking minimal condition: that next_chunk includes "cat1" or "cat5"...
+            assert "cat1" in next_chunk or "cat5" in next_chunk, (
+                f"Paragraph formatting might have been lost: chunk {i+1} "
+                f"does not contain cat1/cat5"
+            )
+</file>
+
 <file path="tests/main/test_minimax_provider.py">
 """
 Tests for MiniMax LLM provider support.
@@ -119360,6 +119483,875 @@ def test_nested_write_kinds_across_dialects(dialect, query, expected):
     assert _kinds(query, dialect) == expected
 </file>
 
+<file path="tests/main/test_llm.py">
+import io
+import logging.handlers
+import os
+import random
+import warnings
+from pathlib import Path
+
+import openai
+import pytest
+from pydantic_settings import SettingsConfigDict
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.base import LLMMessage, Role
+from langroid.language_models.model_info import get_model_info
+from langroid.language_models.openai_gpt import (
+    AccessWarning,
+    OpenAIChatModel,
+    OpenAICompletionModel,
+    OpenAIGPT,
+    OpenAIGPTConfig,
+)
+from langroid.parsing.file_attachment import FileAttachment
+from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.parsing.utils import generate_random_sentences
+from langroid.utils.configuration import Settings, set_global, settings
+
+# allow streaming globally, but can be turned off by individual models
+set_global(Settings(stream=True))
+
+
+@pytest.mark.parametrize(
+    "streaming, country, capital",
+    [(False, "India", "Delhi"), (True, "France", "Paris")],
+)
+@pytest.mark.parametrize("use_cache", [True, False])
+def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache):
+    test_settings.cache = False  # cache response but don't retrieve from cache
+    set_global(test_settings)
+
+    cfg = OpenAIGPTConfig(
+        stream=streaming,  # use streaming output if enabled globally
+        type="openai",
+        max_output_tokens=100,
+        min_output_tokens=10,
+        completion_model=OpenAICompletionModel.DAVINCI,
+        cache_config=RedisCacheConfig(fake=True) if use_cache else None,
+    )
+
+    mdl = OpenAIGPT(config=cfg)
+    question = "What is the capital of " + country + "?"
+    # chat mode via `generate`,
+    # i.e. use same call as for completion, but the setting below
+    # actually calls `chat` under the hood
+    cfg.use_chat_for_completion = True
+    # check that "generate" works when "use_chat_for_completion" is True
+    response = mdl.generate(prompt=question, max_tokens=800)
+    assert response.usage is not None and response.usage.total_tokens > 0
+    assert capital in response.message
+    assert not response.cached
+
+    # actual chat mode
+    messages = [
+        LLMMessage(
+            role=Role.SYSTEM,
+            content="You are a serious, helpful assistant. Be very concise, not funny",
+        ),
+        LLMMessage(role=Role.USER, content=question),
+    ]
+    response = mdl.chat(messages=messages, max_tokens=500)
+    assert response.usage is not None and response.usage.total_tokens > 0
+    assert capital in response.message
+    assert not response.cached
+
+    test_settings.cache = True
+    set_global(test_settings)
+    # should be from cache this time, Provided config.cache_config is not None
+    response = mdl.chat(messages=messages, max_tokens=500)
+    assert response.usage is not None
+    if use_cache:
+        response.usage.total_tokens == 0
+    else:
+        response.usage.total_tokens > 0
+
+    assert capital in response.message
+    assert response.cached == use_cache
+
+    # pass intentional bad msg to test error handling
+    messages = [
+        LLMMessage(
+            role=Role.FUNCTION,
+            content="Hello!",
+        ),
+    ]
+
+    with pytest.raises(Exception):
+        _ = mdl.chat(messages=messages, max_tokens=500)
+
+
+@pytest.mark.parametrize(
+    "mode, max_tokens",
+    [("completion", 100), ("chat", 100), ("completion", 1000), ("chat", 1000)],
+)
+def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int):
+    """
+    Test disabled, see TODO below.
+    Also it takes too long since we are trying to test
+    that it raises the expected error when the context length is exceeded.
+    Args:
+        test_settings: from conftest.py
+        mode: "completion" or "chat"
+        max_tokens: number of tokens to generate
+    """
+    set_global(test_settings)
+    set_global(Settings(cache=False))
+
+    cfg = OpenAIGPTConfig(
+        stream=False,
+        max_output_tokens=max_tokens,
+        completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
+        cache_config=RedisCacheConfig(fake=False),
+    )
+    parser = Parser(config=ParsingConfig())
+    llm = OpenAIGPT(config=cfg)
+    context_length = (
+        llm.chat_context_length() if mode == "chat" else llm.completion_context_length()
+    )
+
+    toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
+    max_sentences = int(context_length * 1.5 / toks_per_sentence)
+    big_message = generate_random_sentences(max_sentences + 1)
+    big_message_tokens = parser.num_tokens(big_message)
+    assert big_message_tokens + max_tokens > context_length
+    response = None
+    # TODO need to figure out what error type to expect here
+    with pytest.raises(openai.BadRequestError) as e:
+        if mode == "chat":
+            response = llm.chat(big_message, max_tokens=max_tokens)
+        else:
+            response = llm.generate(prompt=big_message, max_tokens=max_tokens)
+
+    assert response is None
+    assert "context length" in str(e.value).lower()
+
+
+@pytest.mark.parametrize(
+    "mdl",
+    [
+        lm.OpenAIChatModel.GPT4o,
+        lm.GeminiModel.GEMINI_2_PRO,
+        "gemini/" + lm.GeminiModel.GEMINI_2_PRO.value,
+    ],
+)
+@pytest.mark.parametrize("ctx", [16_000, None])
+def test_llm_config_context_length(mdl: str, ctx: int | None):
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=mdl,
+        chat_context_length=ctx,  # even if wrong, use if explicitly set
+    )
+    mdl = lm.OpenAIGPT(config=llm_config)
+    assert mdl.chat_context_length() == ctx or mdl.info().context_length
+
+
+@pytest.mark.parametrize(
+    ("alias_model", "canonical_model"),
+    [
+        (
+            "gemini/gemini-3-flash-preview",
+            lm.GeminiModel.GEMINI_3_FLASH.value,
+        ),
+        (
+            "google/gemini-3-flash-preview",
+            lm.GeminiModel.GEMINI_3_FLASH.value,
+        ),
+        (
+            "gemini/gemini-2.5-flash-lite-preview-06-17",
+            lm.GeminiModel.GEMINI_2_5_FLASH_LITE.value,
+        ),
+    ],
+)
+def test_get_model_info_normalizes_gemini_aliases(
+    alias_model: str, canonical_model: str
+) -> None:
+    assert get_model_info(alias_model) == get_model_info(canonical_model)
+
+
+@pytest.mark.parametrize(
+    ("alias_model", "canonical_model"),
+    [
+        (
+            "gemini/gemini-3-flash-preview",
+            lm.GeminiModel.GEMINI_3_FLASH.value,
+        ),
+        (
+            "gemini/gemini-2.5-flash-lite-preview-06-17",
+            lm.GeminiModel.GEMINI_2_5_FLASH_LITE.value,
+        ),
+    ],
+)
+def test_openai_gpt_context_length_uses_gemini_alias_info(
+    alias_model: str, canonical_model: str
+) -> None:
+    alias_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=alias_model))
+    canonical_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=canonical_model))
+
+    assert alias_llm.info() == canonical_llm.info()
+    assert alias_llm.chat_context_length() == canonical_llm.chat_context_length()
+
+
+def test_get_model_info_warns_on_unknown_models() -> None:
+    from langroid.language_models.model_info import WARNED_UNKNOWN_MODELS
+
+    model_name = "gemini/gemini-999-unknown-preview"
+    # Ensure this model hasn't been warned about in a prior test so the
+    # warning actually fires.  The cache key is a tuple of the full model
+    # strings passed to _warn_unknown_model (i.e. with the provider prefix).
+    WARNED_UNKNOWN_MODELS.discard((model_name,))
+
+    handler = logging.handlers.MemoryHandler(capacity=100)
+    logger = logging.getLogger("langroid.language_models.model_info")
+    logger.addHandler(handler)
+    try:
+        info = get_model_info(model_name)
+    finally:
+        logger.removeHandler(handler)
+
+    assert info.name == "unknown"
+    messages = [record.getMessage() for record in handler.buffer]
+    assert any(model_name in msg and "fallback defaults" in msg for msg in messages)
+
+
+def test_model_selection(test_settings: Settings):
+    set_global(test_settings)
+
+    defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
+
+    def get_response(llm):
+        llm.generate(prompt="What is the capital of France?", max_tokens=50)
+
+    def simulate_response(llm):
+        llm.run_on_first_use()
+
+    def check_warning(
+        llm,
+        assert_warn,
+        function=get_response,
+        warning_type=AccessWarning,
+        catch_errors=(ImportError,),
+    ):
+        if assert_warn:
+            with pytest.warns(expected_warning=warning_type):
+                try:
+                    function(llm)
+                except catch_errors:
+                    pass
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", category=warning_type)
+
+                try:
+                    function(llm)
+                except catch_errors:
+                    pass
+
+    # Default is GPT4o; we should not generate the warning in this case
+    lr.language_models.openai_gpt.default_openai_chat_model = OpenAIChatModel.GPT4_TURBO
+    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
+    check_warning(llm, False)
+
+    llm = OpenAIGPT(config=OpenAIGPTConfig())
+    check_warning(llm, False)
+
+    # Default is GPT3.5 (simulate GPT 4 inaccessible)
+    lr.language_models.openai_gpt.default_openai_chat_model = (
+        OpenAIChatModel.GPT3_5_TURBO
+    )
+
+    # No warnings generated if we specify the model explicitly
+    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
+    check_warning(llm, False)
+
+    # No warnings generated if we are using a local model
+    llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
+    check_warning(llm, False, function=simulate_response)
+    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
+    check_warning(llm, False, function=simulate_response)
+    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
+    check_warning(llm, False, function=simulate_response)
+
+    # We should warn on the first usage of a model with auto-selected GPT-3.5
+    llm = OpenAIGPT(config=OpenAIGPTConfig())
+    check_warning(llm, True)
+
+    # We should not warn on subsequent uses and models with auto-selected GPT-3.5
+    check_warning(llm, False)
+    llm = OpenAIGPT(config=OpenAIGPTConfig())
+    check_warning(llm, False)
+
+    lr.language_models.openai_gpt.default_openai_chat_model = defaultOpenAIChatModel
+
+
+def test_keys():
+    # Do not override the explicit settings below
+    settings.chat_model = ""
+
+    providers = [
+        "vllm",
+        "ollama",
+        "llamacpp",
+        "openai",
+        "groq",
+        "gemini",
+        "glhf",
+        "openrouter",
+        "deepseek",
+        "cerebras",
+    ]
+    key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
+    key_dict["llamacpp"] = "LLAMA_API_KEY"
+
+    for p, var in key_dict.items():
+        os.environ[var] = p
+
+    for p in providers:
+        config = lm.OpenAIGPTConfig(
+            chat_model=f"{p}/model",
+        )
+
+        llm = lm.OpenAIGPT(config)
+
+        assert llm.api_key == p
+
+        rand_key = str(random.randint(0, 10**9))
+        config = lm.OpenAIGPTConfig(
+            chat_model=f"{p}/model",
+            api_key=rand_key,
+        )
+
+        llm = lm.OpenAIGPT(config)
+        assert llm.api_key == rand_key
+
+
+@pytest.mark.xfail(
+    reason="LangDB may fail due to unknown flakiness!",
+    run=True,
+    strict=False,
+)
+@pytest.mark.parametrize(
+    "model",
+    [
+        "langdb/gpt-4o-mini",
+        "langdb/openai/gpt-4o-mini",
+        "langdb/anthropic/claude-3-haiku-20240307",
+        "langdb/claude-3-haiku-20240307",
+        "langdb/gemini/gemini-2.0-flash-lite",
+        "langdb/gemini-2.0-flash-lite",
+    ],
+)
+def test_llm_langdb(model: str):
+    """Test that LLM access via LangDB works."""
+    # override any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+    llm_config_langdb = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config_langdb)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "openrouter/anthropic/claude-haiku-4.5",
+        "openrouter/google/gemini-2.5-flash-lite",
+    ],
+)
+def test_llm_openrouter(model: str):
+    # override any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "portkey/openai/gpt-4o-mini",
+        "portkey/anthropic/claude-3-5-haiku-latest",
+        "portkey/google/gemini-2.0-flash-lite",
+    ],
+)
+def test_llm_portkey(model: str):
+    """Test that LLM access via Portkey works."""
+    # override any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+
+    # Skip if PORTKEY_API_KEY is not set
+    if not os.getenv("PORTKEY_API_KEY"):
+        pytest.skip("PORTKEY_API_KEY not set")
+
+    # Extract provider from model string
+    provider = model.split("/")[1] if "/" in model else ""
+    provider_key_var = f"{provider.upper()}_API_KEY"
+
+    # Skip if provider API key is not set
+    if not os.getenv(provider_key_var):
+        pytest.skip(f"{provider_key_var} not set")
+
+    llm_config_portkey = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config_portkey)
+    result = llm.chat("what is 3+4 equal to?")
+    assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
+
+
+def test_portkey_params():
+    """Test that PortkeyParams are correctly configured."""
+    from langroid.language_models.provider_params import PortkeyParams
+
+    # Test with explicit parameters
+    params = PortkeyParams(
+        api_key="test-key",
+        provider="anthropic",
+        virtual_key="vk-123",
+        trace_id="trace-456",
+        metadata={"user": "test"},
+        retry={"max_retries": 3},
+        cache={"enabled": True},
+        cache_force_refresh=True,
+        user="user-123",
+        organization="org-456",
+        custom_headers={"x-custom": "value"},
+    )
+
+    headers = params.get_headers()
+
+    assert headers["x-portkey-api-key"] == "test-key"
+    assert headers["x-portkey-provider"] == "anthropic"
+    assert headers["x-portkey-virtual-key"] == "vk-123"
+    assert headers["x-portkey-trace-id"] == "trace-456"
+    assert headers["x-portkey-metadata"] == '{"user": "test"}'
+    assert headers["x-portkey-retry"] == '{"max_retries": 3}'
+    assert headers["x-portkey-cache"] == '{"enabled": true}'
+    assert headers["x-portkey-cache-force-refresh"] == "true"
+    assert headers["x-portkey-user"] == "user-123"
+    assert headers["x-portkey-organization"] == "org-456"
+    assert headers["x-custom"] == "value"
+
+    # Test model string parsing
+    provider, model = params.parse_model_string("portkey/anthropic/claude-3-sonnet")
+    assert provider == "anthropic"
+    assert model == "claude-3-sonnet"
+
+    # Test fallback parsing
+    provider2, model2 = params.parse_model_string("portkey/some-model")
+    assert provider2 == ""
+    assert model2 == "some-model"
+
+    # Test provider API key retrieval
+    os.environ["TEST_PROVIDER_API_KEY"] = "test-api-key"
+    key = params.get_provider_api_key("test_provider")
+    assert key == "test-api-key"
+    del os.environ["TEST_PROVIDER_API_KEY"]
+
+
+def test_portkey_integration():
+    """Test that Portkey integration is properly configured in OpenAIGPT."""
+    from langroid.language_models.provider_params import PortkeyParams
+
+    # Save the current chat model setting
+    original_chat_model = settings.chat_model
+
+    # Clear any global chat model override
+    settings.chat_model = ""
+
+    try:
+        # Test basic portkey model configuration
+        config = lm.OpenAIGPTConfig(
+            chat_model="portkey/anthropic/claude-3-haiku-20240307",
+            portkey_params=PortkeyParams(
+                api_key="pk-test-key",
+            ),
+        )
+
+        llm = lm.OpenAIGPT(config)
+
+        # Check that model was parsed correctly
+        assert llm.config.chat_model == "claude-3-haiku-20240307"
+        assert llm.is_portkey
+        assert llm.api_base == "https://api.portkey.ai/v1"
+        assert llm.config.portkey_params.provider == "anthropic"
+
+        # Check headers are set correctly
+        assert "x-portkey-api-key" in llm.config.headers
+        assert llm.config.headers["x-portkey-api-key"] == "pk-test-key"
+        assert llm.config.headers["x-portkey-provider"] == "anthropic"
+
+    finally:
+        # Restore original chat model setting
+        settings.chat_model = original_chat_model
+
+
+def test_gemini_api_base():
+    """Test that Gemini api_base is configurable for Vertex AI support."""
+    from langroid.language_models.openai_gpt import GEMINI_BASE_URL
+
+    original_chat_model = settings.chat_model
+    settings.chat_model = ""
+
+    # Save and clear env vars that could interfere
+    saved_openai_api_base = os.environ.pop("OPENAI_API_BASE", None)
+    saved_gemini_api_base = os.environ.pop("GEMINI_API_BASE", None)
+
+    try:
+        # Default: api_base should be GEMINI_BASE_URL
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.config.chat_model == "gemini-2.0-flash"
+        assert llm.api_base == GEMINI_BASE_URL
+
+        # Custom api_base: should override default (e.g. Vertex AI endpoint)
+        vertex_url = "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-project/locations/us-central1/endpoints/openapi"
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+            api_base=vertex_url,
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == vertex_url
+
+        # Empty string api_base: should fall back to default
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+            api_base="",
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == GEMINI_BASE_URL
+
+        # None api_base: should fall back to default
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+            api_base=None,
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == GEMINI_BASE_URL
+
+        # OPENAI_API_BASE env var should NOT leak into Gemini api_base
+        os.environ["OPENAI_API_BASE"] = "http://localhost:8000/v1"
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == GEMINI_BASE_URL
+        os.environ.pop("OPENAI_API_BASE")
+
+        # GEMINI_API_BASE env var should be used (e.g. Vertex AI)
+        os.environ["GEMINI_API_BASE"] = vertex_url
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == vertex_url
+        os.environ.pop("GEMINI_API_BASE")
+
+        # GEMINI_API_BASE should take priority over OPENAI_API_BASE
+        os.environ["OPENAI_API_BASE"] = "http://localhost:8000/v1"
+        os.environ["GEMINI_API_BASE"] = vertex_url
+        config = lm.OpenAIGPTConfig(
+            chat_model="gemini/gemini-2.0-flash",
+        )
+        llm = lm.OpenAIGPT(config)
+        assert llm.is_gemini
+        assert llm.api_base == vertex_url
+        os.environ.pop("OPENAI_API_BASE")
+        os.environ.pop("GEMINI_API_BASE")
+    finally:
+        settings.chat_model = original_chat_model
+        # Restore original env vars
+        if saved_openai_api_base is not None:
+            os.environ["OPENAI_API_BASE"] = saved_openai_api_base
+        if saved_gemini_api_base is not None:
+            os.environ["GEMINI_API_BASE"] = saved_gemini_api_base
+
+
+def test_followup_standalone():
+    """Test that followup_to_standalone works."""
+
+    llm = OpenAIGPT(OpenAIGPTConfig())
+    dialog = [
+        ("Is 5 a prime number?", "yes"),
+        ("Is 10 a prime number?", "no"),
+    ]
+    followup = "What about 11?"
+    response = llm.followup_to_standalone(dialog, followup)
+    assert response is not None
+    assert "prime" in response.lower() and "11" in response
+
+
+def test_llm_pdf_attachment():
+    """Test sending a PDF file attachment to the LLM."""
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment = FileAttachment.from_path(pdf_path)
+
+    # Verify the attachment properties
+    assert attachment.mime_type == "application/pdf"
+    assert attachment.filename == "dummy.pdf"
+
+    # Create messages with the attachment
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER, content="What's title of the paper?", files=[attachment]
+        ),
+    ]
+
+    # Set up the LLM with a suitable model that supports PDFs
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+
+    # Get response from the LLM
+    response = llm.chat(messages=messages)
+
+    assert response is not None
+    assert response.message is not None
+    assert "Supply Chain" in response.message
+
+    # follow-up question
+    messages += [
+        LLMMessage(role=Role.ASSISTANT, content="Supply Chain"),
+        LLMMessage(role=Role.USER, content="Who is the first author?"),
+    ]
+    response = llm.chat(messages=messages)
+    assert response is not None
+    assert response.message is not None
+    assert "Takio" in response.message
+
+
+@pytest.mark.xfail(
+    reason="Multi-file attachments may not work yet",
+    run=True,
+    strict=False,
+)
+def test_llm_multi_pdf_attachments():
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment = FileAttachment.from_path(pdf_path)
+
+    # multiple attachments
+    pdf_path2 = Path("tests/main/data/sample-test.pdf")
+
+    # Create a FileAttachment from the PDF file
+    attachment2 = FileAttachment.from_path(pdf_path2)
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="How many pages are in the Supply Chain paper?",
+            files=[attachment2, attachment],
+        ),
+    ]
+    # Set up the LLM with a suitable model that supports PDFs
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
+
+    response = llm.chat(messages=messages)
+    print(response.message)
+    assert any(x in response.message for x in ["4", "four"])
+
+    # follow-up question
+    messages += [
+        LLMMessage(role=Role.ASSISTANT, content="4 pages"),
+        LLMMessage(
+            role=Role.USER,
+            content="""
+            How many columns are in the table in the 
+            document that is NOT about Supply Chain?
+            """,
+        ),
+    ]
+    response = llm.chat(messages=messages)
+    assert any(x in response.message for x in ["3", "three"])
+
+
+def test_llm_pdf_bytes_and_split():
+    """Test sending PDF files to LLM as bytes and split into pages."""
+
+    # Path to the test PDF file
+    pdf_path = Path("tests/main/data/dummy.pdf")
+
+    # Test creating attachment from bytes
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+
+    attachment_from_bytes = FileAttachment.from_bytes(
+        content=pdf_bytes,
+        filename="supply_chain_paper.pdf",
+    )
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="Who is the first author of this paper?",
+            files=[attachment_from_bytes],
+        ),
+    ]
+
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
+    response = llm.chat(messages=messages)
+
+    assert response is not None
+    assert "Takio" in response.message
+
+    # Test creating attachment from file-like object
+    pdf_io = io.BytesIO(pdf_bytes)
+    attachment_from_io = FileAttachment.from_io(
+        file_obj=pdf_io,
+        filename="paper_from_io.pdf",
+    )
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="What is the title of this paper?",
+            files=[attachment_from_io],
+        ),
+    ]
+
+    response = llm.chat(messages=messages)
+    assert "Supply Chain" in response.message
+
+    # Test splitting PDF into pages and sending individual pages
+    import fitz
+
+    doc = fitz.open(pdf_path)
+    page_attachments = []
+
+    for i, page in enumerate(doc):
+        # Extract page as PDF
+        page_pdf = io.BytesIO()
+        page_doc = fitz.open()
+        page_doc.insert_pdf(doc, from_page=i, to_page=i)
+        page_doc.save(page_pdf)
+        page_pdf.seek(0)
+
+        # Create attachment for this page
+        page_attachment = FileAttachment.from_io(
+            file_obj=page_pdf,
+            filename=f"page_{i+1}.pdf",
+        )
+        page_attachments.append(page_attachment)
+
+    # Send just the first page
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="Based on just this page, what is this document about?",
+            files=[page_attachments[0]],
+        ),
+    ]
+
+    response = llm.chat(messages=messages)
+    assert "supply chain" in response.message.lower()
+
+    # Test with multiple pages as separate attachments
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="I'm sending you pages from a paper. "
+            "How many figures are shown across all pages?",
+            files=page_attachments,
+        ),
+    ]
+
+    response = llm.chat(messages=messages)
+    assert response is not None
+    assert any(
+        x in response.message.lower() for x in ["figure", "diagram", "illustration"]
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/main/data/color-shape-series.jpg",
+        "tests/main/data/color-shape-series.png",
+        "tests/main/data/color-shape-series.pdf",
+        "https://upload.wikimedia.org/wikipedia/commons/1/18/Seriation_task_w_shapes.jpg",
+    ],
+)
+def test_llm_image_input(path: str):
+    attachment = FileAttachment.from_path(path, detail="low")
+
+    messages = [
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+        LLMMessage(
+            role=Role.USER,
+            content="How many squares are here?",
+            files=[attachment],
+        ),
+    ]
+    # Set up the LLM with a suitable model that supports PDFs
+    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
+
+    response = llm.chat(messages=messages)
+    print(response.message)
+    assert any(x in response.message for x in ["three", "3"])
+
+
+def test_litellm_model_key():
+    """
+    Test that passing in explicit api_key works with `litellm/*` models
+    """
+    model = "litellm/anthropic/claude-3-5-haiku-latest"
+    # disable any chat model passed via --m arg to pytest cmd
+    settings.chat_model = model
+
+    class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig):
+        """OpenAI config that doesn't auto-load from environment variables."""
+
+        # Disable environment prefix to prevent auto-loading
+        model_config = SettingsConfigDict(env_prefix="")
+
+    llm_config = CustomOpenAIGPTConfig(
+        chat_model=model,
+        api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    print(f"\nTesting with model: {llm.chat_model_orig} => {llm.config.chat_model}")
+    response = llm.chat("What is 3+4?")
+    assert "7" in response.message
+</file>
+
 <file path="tests/main/test_prep_llm_message.py">
 import json
 from typing import Any
@@ -124827,1026 +125819,6 @@ extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
-<file path="tests/main/test_llm.py">
-import io
-import logging.handlers
-import os
-import random
-import warnings
-from pathlib import Path
-
-import openai
-import pytest
-from pydantic_settings import SettingsConfigDict
-
-import langroid as lr
-import langroid.language_models as lm
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.base import LLMMessage, Role
-from langroid.language_models.model_info import get_model_info
-from langroid.language_models.openai_gpt import (
-    AccessWarning,
-    OpenAIChatModel,
-    OpenAICompletionModel,
-    OpenAIGPT,
-    OpenAIGPTConfig,
-)
-from langroid.parsing.file_attachment import FileAttachment
-from langroid.parsing.parser import Parser, ParsingConfig
-from langroid.parsing.utils import generate_random_sentences
-from langroid.utils.configuration import Settings, set_global, settings
-
-# allow streaming globally, but can be turned off by individual models
-set_global(Settings(stream=True))
-
-
-@pytest.mark.parametrize(
-    "streaming, country, capital",
-    [(False, "India", "Delhi"), (True, "France", "Paris")],
-)
-@pytest.mark.parametrize("use_cache", [True, False])
-def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache):
-    test_settings.cache = False  # cache response but don't retrieve from cache
-    set_global(test_settings)
-
-    cfg = OpenAIGPTConfig(
-        stream=streaming,  # use streaming output if enabled globally
-        type="openai",
-        max_output_tokens=100,
-        min_output_tokens=10,
-        completion_model=OpenAICompletionModel.DAVINCI,
-        cache_config=RedisCacheConfig(fake=True) if use_cache else None,
-    )
-
-    mdl = OpenAIGPT(config=cfg)
-    question = "What is the capital of " + country + "?"
-    # chat mode via `generate`,
-    # i.e. use same call as for completion, but the setting below
-    # actually calls `chat` under the hood
-    cfg.use_chat_for_completion = True
-    # check that "generate" works when "use_chat_for_completion" is True
-    response = mdl.generate(prompt=question, max_tokens=800)
-    assert response.usage is not None and response.usage.total_tokens > 0
-    assert capital in response.message
-    assert not response.cached
-
-    # actual chat mode
-    messages = [
-        LLMMessage(
-            role=Role.SYSTEM,
-            content="You are a serious, helpful assistant. Be very concise, not funny",
-        ),
-        LLMMessage(role=Role.USER, content=question),
-    ]
-    response = mdl.chat(messages=messages, max_tokens=500)
-    assert response.usage is not None and response.usage.total_tokens > 0
-    assert capital in response.message
-    assert not response.cached
-
-    test_settings.cache = True
-    set_global(test_settings)
-    # should be from cache this time, Provided config.cache_config is not None
-    response = mdl.chat(messages=messages, max_tokens=500)
-    assert response.usage is not None
-    if use_cache:
-        response.usage.total_tokens == 0
-    else:
-        response.usage.total_tokens > 0
-
-    assert capital in response.message
-    assert response.cached == use_cache
-
-    # pass intentional bad msg to test error handling
-    messages = [
-        LLMMessage(
-            role=Role.FUNCTION,
-            content="Hello!",
-        ),
-    ]
-
-    with pytest.raises(Exception):
-        _ = mdl.chat(messages=messages, max_tokens=500)
-
-
-@pytest.mark.parametrize(
-    "mode, max_tokens",
-    [("completion", 100), ("chat", 100), ("completion", 1000), ("chat", 1000)],
-)
-def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int):
-    """
-    Test disabled, see TODO below.
-    Also it takes too long since we are trying to test
-    that it raises the expected error when the context length is exceeded.
-    Args:
-        test_settings: from conftest.py
-        mode: "completion" or "chat"
-        max_tokens: number of tokens to generate
-    """
-    set_global(test_settings)
-    set_global(Settings(cache=False))
-
-    cfg = OpenAIGPTConfig(
-        stream=False,
-        max_output_tokens=max_tokens,
-        completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
-        cache_config=RedisCacheConfig(fake=False),
-    )
-    parser = Parser(config=ParsingConfig())
-    llm = OpenAIGPT(config=cfg)
-    context_length = (
-        llm.chat_context_length() if mode == "chat" else llm.completion_context_length()
-    )
-
-    toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
-    max_sentences = int(context_length * 1.5 / toks_per_sentence)
-    big_message = generate_random_sentences(max_sentences + 1)
-    big_message_tokens = parser.num_tokens(big_message)
-    assert big_message_tokens + max_tokens > context_length
-    response = None
-    # TODO need to figure out what error type to expect here
-    with pytest.raises(openai.BadRequestError) as e:
-        if mode == "chat":
-            response = llm.chat(big_message, max_tokens=max_tokens)
-        else:
-            response = llm.generate(prompt=big_message, max_tokens=max_tokens)
-
-    assert response is None
-    assert "context length" in str(e.value).lower()
-
-
-@pytest.mark.parametrize(
-    "mdl",
-    [
-        lm.OpenAIChatModel.GPT4o,
-        lm.GeminiModel.GEMINI_2_PRO,
-        "gemini/" + lm.GeminiModel.GEMINI_2_PRO.value,
-    ],
-)
-@pytest.mark.parametrize("ctx", [16_000, None])
-def test_llm_config_context_length(mdl: str, ctx: int | None):
-    llm_config = lm.OpenAIGPTConfig(
-        chat_model=mdl,
-        chat_context_length=ctx,  # even if wrong, use if explicitly set
-    )
-    mdl = lm.OpenAIGPT(config=llm_config)
-    assert mdl.chat_context_length() == ctx or mdl.info().context_length
-
-
-@pytest.mark.parametrize(
-    ("alias_model", "canonical_model"),
-    [
-        (
-            "gemini/gemini-3-flash-preview",
-            lm.GeminiModel.GEMINI_3_FLASH.value,
-        ),
-        (
-            "google/gemini-3-flash-preview",
-            lm.GeminiModel.GEMINI_3_FLASH.value,
-        ),
-        (
-            "gemini/gemini-2.5-flash-lite-preview-06-17",
-            lm.GeminiModel.GEMINI_2_5_FLASH_LITE.value,
-        ),
-    ],
-)
-def test_get_model_info_normalizes_gemini_aliases(
-    alias_model: str, canonical_model: str
-) -> None:
-    assert get_model_info(alias_model) == get_model_info(canonical_model)
-
-
-@pytest.mark.parametrize(
-    ("alias_model", "canonical_model"),
-    [
-        (
-            "gemini/gemini-3-flash-preview",
-            lm.GeminiModel.GEMINI_3_FLASH.value,
-        ),
-        (
-            "gemini/gemini-2.5-flash-lite-preview-06-17",
-            lm.GeminiModel.GEMINI_2_5_FLASH_LITE.value,
-        ),
-    ],
-)
-def test_openai_gpt_context_length_uses_gemini_alias_info(
-    alias_model: str, canonical_model: str
-) -> None:
-    alias_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=alias_model))
-    canonical_llm = lm.OpenAIGPT(config=lm.OpenAIGPTConfig(chat_model=canonical_model))
-
-    assert alias_llm.info() == canonical_llm.info()
-    assert alias_llm.chat_context_length() == canonical_llm.chat_context_length()
-
-
-def test_get_model_info_warns_on_unknown_models() -> None:
-    from langroid.language_models.model_info import WARNED_UNKNOWN_MODELS
-
-    model_name = "gemini/gemini-999-unknown-preview"
-    # Ensure this model hasn't been warned about in a prior test so the
-    # warning actually fires.  The cache key is a tuple of the full model
-    # strings passed to _warn_unknown_model (i.e. with the provider prefix).
-    WARNED_UNKNOWN_MODELS.discard((model_name,))
-
-    handler = logging.handlers.MemoryHandler(capacity=100)
-    logger = logging.getLogger("langroid.language_models.model_info")
-    logger.addHandler(handler)
-    try:
-        info = get_model_info(model_name)
-    finally:
-        logger.removeHandler(handler)
-
-    assert info.name == "unknown"
-    messages = [record.getMessage() for record in handler.buffer]
-    assert any(model_name in msg and "fallback defaults" in msg for msg in messages)
-
-
-def test_model_selection(test_settings: Settings):
-    set_global(test_settings)
-
-    defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
-
-    def get_response(llm):
-        llm.generate(prompt="What is the capital of France?", max_tokens=50)
-
-    def simulate_response(llm):
-        llm.run_on_first_use()
-
-    def check_warning(
-        llm,
-        assert_warn,
-        function=get_response,
-        warning_type=AccessWarning,
-        catch_errors=(ImportError,),
-    ):
-        if assert_warn:
-            with pytest.warns(expected_warning=warning_type):
-                try:
-                    function(llm)
-                except catch_errors:
-                    pass
-        else:
-            with warnings.catch_warnings():
-                warnings.simplefilter("error", category=warning_type)
-
-                try:
-                    function(llm)
-                except catch_errors:
-                    pass
-
-    # Default is GPT4o; we should not generate the warning in this case
-    lr.language_models.openai_gpt.default_openai_chat_model = OpenAIChatModel.GPT4_TURBO
-    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
-    check_warning(llm, False)
-
-    llm = OpenAIGPT(config=OpenAIGPTConfig())
-    check_warning(llm, False)
-
-    # Default is GPT3.5 (simulate GPT 4 inaccessible)
-    lr.language_models.openai_gpt.default_openai_chat_model = (
-        OpenAIChatModel.GPT3_5_TURBO
-    )
-
-    # No warnings generated if we specify the model explicitly
-    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
-    check_warning(llm, False)
-
-    # No warnings generated if we are using a local model
-    llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
-    check_warning(llm, False, function=simulate_response)
-    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
-    check_warning(llm, False, function=simulate_response)
-    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
-    check_warning(llm, False, function=simulate_response)
-
-    # We should warn on the first usage of a model with auto-selected GPT-3.5
-    llm = OpenAIGPT(config=OpenAIGPTConfig())
-    check_warning(llm, True)
-
-    # We should not warn on subsequent uses and models with auto-selected GPT-3.5
-    check_warning(llm, False)
-    llm = OpenAIGPT(config=OpenAIGPTConfig())
-    check_warning(llm, False)
-
-    lr.language_models.openai_gpt.default_openai_chat_model = defaultOpenAIChatModel
-
-
-def test_keys():
-    # Do not override the explicit settings below
-    settings.chat_model = ""
-
-    providers = [
-        "vllm",
-        "ollama",
-        "llamacpp",
-        "openai",
-        "groq",
-        "gemini",
-        "glhf",
-        "openrouter",
-        "deepseek",
-        "cerebras",
-    ]
-    key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
-    key_dict["llamacpp"] = "LLAMA_API_KEY"
-
-    for p, var in key_dict.items():
-        os.environ[var] = p
-
-    for p in providers:
-        config = lm.OpenAIGPTConfig(
-            chat_model=f"{p}/model",
-        )
-
-        llm = lm.OpenAIGPT(config)
-
-        assert llm.api_key == p
-
-        rand_key = str(random.randint(0, 10**9))
-        config = lm.OpenAIGPTConfig(
-            chat_model=f"{p}/model",
-            api_key=rand_key,
-        )
-
-        llm = lm.OpenAIGPT(config)
-        assert llm.api_key == rand_key
-
-
-@pytest.mark.xfail(
-    reason="LangDB may fail due to unknown flakiness!",
-    run=True,
-    strict=False,
-)
-@pytest.mark.parametrize(
-    "model",
-    [
-        "langdb/gpt-4o-mini",
-        "langdb/openai/gpt-4o-mini",
-        "langdb/anthropic/claude-3-haiku-20240307",
-        "langdb/claude-3-haiku-20240307",
-        "langdb/gemini/gemini-2.0-flash-lite",
-        "langdb/gemini-2.0-flash-lite",
-    ],
-)
-def test_llm_langdb(model: str):
-    """Test that LLM access via LangDB works."""
-    # override any chat model passed via --m arg to pytest cmd
-    settings.chat_model = model
-    llm_config_langdb = lm.OpenAIGPTConfig(
-        chat_model=model,
-    )
-    llm = lm.OpenAIGPT(config=llm_config_langdb)
-    result = llm.chat("what is 3+4?")
-    assert "7" in result.message
-    if result.cached:
-        assert result.usage.total_tokens == 0
-    else:
-        assert result.usage.total_tokens > 0
-
-
-@pytest.mark.parametrize(
-    "model",
-    [
-        "openrouter/anthropic/claude-haiku-4.5",
-        "openrouter/google/gemini-2.5-flash-lite",
-    ],
-)
-def test_llm_openrouter(model: str):
-    # override any chat model passed via --m arg to pytest cmd
-    settings.chat_model = model
-    llm_config = lm.OpenAIGPTConfig(
-        chat_model=model,
-    )
-    llm = lm.OpenAIGPT(config=llm_config)
-    result = llm.chat("what is 3+4?")
-    assert "7" in result.message
-    if result.cached:
-        assert result.usage.total_tokens == 0
-    else:
-        assert result.usage.total_tokens > 0
-
-
-@pytest.mark.parametrize(
-    "model",
-    [
-        "portkey/openai/gpt-4o-mini",
-        "portkey/anthropic/claude-3-5-haiku-latest",
-        "portkey/google/gemini-2.0-flash-lite",
-    ],
-)
-def test_llm_portkey(model: str):
-    """Test that LLM access via Portkey works."""
-    # override any chat model passed via --m arg to pytest cmd
-    settings.chat_model = model
-
-    # Skip if PORTKEY_API_KEY is not set
-    if not os.getenv("PORTKEY_API_KEY"):
-        pytest.skip("PORTKEY_API_KEY not set")
-
-    # Extract provider from model string
-    provider = model.split("/")[1] if "/" in model else ""
-    provider_key_var = f"{provider.upper()}_API_KEY"
-
-    # Skip if provider API key is not set
-    if not os.getenv(provider_key_var):
-        pytest.skip(f"{provider_key_var} not set")
-
-    llm_config_portkey = lm.OpenAIGPTConfig(
-        chat_model=model,
-    )
-    llm = lm.OpenAIGPT(config=llm_config_portkey)
-    result = llm.chat("what is 3+4 equal to?")
-    assert "7" in result.message
-    if result.cached:
-        assert result.usage.total_tokens == 0
-    else:
-        assert result.usage.total_tokens > 0
-
-
-def test_portkey_params():
-    """Test that PortkeyParams are correctly configured."""
-    from langroid.language_models.provider_params import PortkeyParams
-
-    # Test with explicit parameters
-    params = PortkeyParams(
-        api_key="test-key",
-        provider="anthropic",
-        virtual_key="vk-123",
-        trace_id="trace-456",
-        metadata={"user": "test"},
-        retry={"max_retries": 3},
-        cache={"enabled": True},
-        cache_force_refresh=True,
-        user="user-123",
-        organization="org-456",
-        custom_headers={"x-custom": "value"},
-    )
-
-    headers = params.get_headers()
-
-    assert headers["x-portkey-api-key"] == "test-key"
-    assert headers["x-portkey-provider"] == "anthropic"
-    assert headers["x-portkey-virtual-key"] == "vk-123"
-    assert headers["x-portkey-trace-id"] == "trace-456"
-    assert headers["x-portkey-metadata"] == '{"user": "test"}'
-    assert headers["x-portkey-retry"] == '{"max_retries": 3}'
-    assert headers["x-portkey-cache"] == '{"enabled": true}'
-    assert headers["x-portkey-cache-force-refresh"] == "true"
-    assert headers["x-portkey-user"] == "user-123"
-    assert headers["x-portkey-organization"] == "org-456"
-    assert headers["x-custom"] == "value"
-
-    # Test model string parsing
-    provider, model = params.parse_model_string("portkey/anthropic/claude-3-sonnet")
-    assert provider == "anthropic"
-    assert model == "claude-3-sonnet"
-
-    # Test fallback parsing
-    provider2, model2 = params.parse_model_string("portkey/some-model")
-    assert provider2 == ""
-    assert model2 == "some-model"
-
-    # Test provider API key retrieval
-    os.environ["TEST_PROVIDER_API_KEY"] = "test-api-key"
-    key = params.get_provider_api_key("test_provider")
-    assert key == "test-api-key"
-    del os.environ["TEST_PROVIDER_API_KEY"]
-
-
-def test_portkey_integration():
-    """Test that Portkey integration is properly configured in OpenAIGPT."""
-    from langroid.language_models.provider_params import PortkeyParams
-
-    # Save the current chat model setting
-    original_chat_model = settings.chat_model
-
-    # Clear any global chat model override
-    settings.chat_model = ""
-
-    try:
-        # Test basic portkey model configuration
-        config = lm.OpenAIGPTConfig(
-            chat_model="portkey/anthropic/claude-3-haiku-20240307",
-            portkey_params=PortkeyParams(
-                api_key="pk-test-key",
-            ),
-        )
-
-        llm = lm.OpenAIGPT(config)
-
-        # Check that model was parsed correctly
-        assert llm.config.chat_model == "claude-3-haiku-20240307"
-        assert llm.is_portkey
-        assert llm.api_base == "https://api.portkey.ai/v1"
-        assert llm.config.portkey_params.provider == "anthropic"
-
-        # Check headers are set correctly
-        assert "x-portkey-api-key" in llm.config.headers
-        assert llm.config.headers["x-portkey-api-key"] == "pk-test-key"
-        assert llm.config.headers["x-portkey-provider"] == "anthropic"
-
-    finally:
-        # Restore original chat model setting
-        settings.chat_model = original_chat_model
-
-
-def test_gemini_api_base():
-    """Test that Gemini api_base is configurable for Vertex AI support."""
-    from langroid.language_models.openai_gpt import GEMINI_BASE_URL
-
-    original_chat_model = settings.chat_model
-    settings.chat_model = ""
-
-    # Save and clear env vars that could interfere
-    saved_openai_api_base = os.environ.pop("OPENAI_API_BASE", None)
-    saved_gemini_api_base = os.environ.pop("GEMINI_API_BASE", None)
-
-    try:
-        # Default: api_base should be GEMINI_BASE_URL
-        config = lm.OpenAIGPTConfig(
-            chat_model="gemini/gemini-2.0-flash",
-        )
-        llm = lm.OpenAIGPT(config)
-        assert llm.is_gemini
-        assert llm.config.chat_model == "gemini-2.0-flash"
-        assert llm.api_base == GEMINI_BASE_URL
-
-        # Custom api_base: should override default (e.g. Vertex AI endpoint)
-        vertex_url = "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-project/locations/us-central1/endpoints/openapi"
-        config = lm.OpenAIGPTConfig(
-            chat_model="gemini/gemini-2.0-flash",
-            api_base=vertex_url,
-        )
-        llm = lm.OpenAIGPT(config)
-        assert llm.is_gemini
-        assert llm.api_base == vertex_url
-
-        # Empty string api_base: should fall back to default
-        config = lm.OpenAIGPTConfig(
-            chat_model="gemini/gemini-2.0-flash",
-            api_base="",
-        )
-        llm = lm.OpenAIGPT(config)
-        assert llm.is_gemini
-        assert llm.api_base == GEMINI_BASE_URL
-
-        # None api_base: should fall back to default
-        config = lm.OpenAIGPTConfig(
-            chat_model="gemini/gemini-2.0-flash",
-            api_base=None,
-        )
-        llm = lm.OpenAIGPT(config)
-        assert llm.is_gemini
-        assert llm.api_base == GEMINI_BASE_URL
-
-        # OPENAI_API_BASE env var should NOT leak into Gemini api_base
-        os.environ["OPENAI_API_BASE"] = "http://localhost:8000/v1"
-        config = lm.OpenAIGPTConfig(
-            chat_model="gemini/gemini-2.0-flash",
-        )
-        llm = lm.OpenAIGPT(config)
-        assert llm.is_gemini
-        assert llm.api_base == GEMINI_BASE_URL
-        os.environ.pop("OPENAI_API_BASE")
-
-        # GEMINI_API_BASE env var should be used (e.g. Vertex AI)
-        os.environ["GEMINI_API_BASE"] = vertex_url
-        config = lm.OpenAIGPTConfig(
-            chat_model="gemini/gemini-2.0-flash",
-        )
-        llm = lm.OpenAIGPT(config)
-        assert llm.is_gemini
-        assert llm.api_base == vertex_url
-        os.environ.pop("GEMINI_API_BASE")
-
-        # GEMINI_API_BASE should take priority over OPENAI_API_BASE
-        os.environ["OPENAI_API_BASE"] = "http://localhost:8000/v1"
-        os.environ["GEMINI_API_BASE"] = vertex_url
-        config = lm.OpenAIGPTConfig(
-            chat_model="gemini/gemini-2.0-flash",
-        )
-        llm = lm.OpenAIGPT(config)
-        assert llm.is_gemini
-        assert llm.api_base == vertex_url
-        os.environ.pop("OPENAI_API_BASE")
-        os.environ.pop("GEMINI_API_BASE")
-    finally:
-        settings.chat_model = original_chat_model
-        # Restore original env vars
-        if saved_openai_api_base is not None:
-            os.environ["OPENAI_API_BASE"] = saved_openai_api_base
-        if saved_gemini_api_base is not None:
-            os.environ["GEMINI_API_BASE"] = saved_gemini_api_base
-
-
-def test_gemini_google_prefix(monkeypatch):
-    """`google/`-prefixed Gemini models route to the Gemini API (issue #995)."""
-    from langroid.language_models.openai_gpt import GEMINI_BASE_URL
-
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-    monkeypatch.delenv("GEMINI_API_BASE", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
-    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
-
-    for chat_model in ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"):
-        llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=chat_model))
-        assert llm.is_gemini
-        assert llm.config.chat_model == "gemini-2.0-flash"
-        assert llm.api_base == GEMINI_BASE_URL
-        assert llm.api_key == "gemini-key"
-
-
-def test_gemini_ignores_last_case_variant_openai_api_base(monkeypatch):
-    """Gemini routing follows pydantic's last-wins env case normalization."""
-    from langroid.language_models.openai_gpt import GEMINI_BASE_URL
-
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-    monkeypatch.delenv("openai_api_base", raising=False)
-    monkeypatch.delenv("GEMINI_API_BASE", raising=False)
-    monkeypatch.setenv("OPENAI_API_BASE", "https://first.example/v1")
-    monkeypatch.setenv("openai_api_base", "https://last.example/v1")
-
-    llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model="google/gemini-2.0-flash"))
-
-    assert llm.is_gemini
-    assert llm.api_base == GEMINI_BASE_URL
-
-
-@pytest.mark.parametrize(
-    "chat_model",
-    ("google/gemma-3-27b-it", "google/text-bison-001"),
-)
-def test_non_gemini_google_model_is_not_rerouted(monkeypatch, chat_model):
-    """Non-Gemini Google models retain caller routing and credentials."""
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-    monkeypatch.delenv("GEMINI_API_BASE", raising=False)
-    monkeypatch.setenv("GEMINI_API_KEY", "ambient-gemini-key")
-    caller_api_key = "caller-api-key"
-
-    llm = lm.OpenAIGPT(
-        lm.OpenAIGPTConfig(chat_model=chat_model, api_key=caller_api_key)
-    )
-
-    assert not llm.is_gemini
-    assert llm.config.chat_model == chat_model
-    assert llm.api_base is None
-    assert llm.api_key == caller_api_key
-
-
-@pytest.mark.parametrize(
-    "chat_model",
-    ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"),
-)
-@pytest.mark.parametrize(
-    "openai_api_base, explicit_api_base",
-    (
-        ("https://openai-env.example/v1", "https://caller.example/v1"),
-        ("https://shared.example/v1", "https://shared.example/v1"),
-    ),
-)
-def test_gemini_alias_preserves_explicit_api_base(
-    monkeypatch, chat_model, openai_api_base, explicit_api_base
-):
-    """Gemini aliases retain an explicitly configured API base."""
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.setenv("OPENAI_API_BASE", openai_api_base)
-    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
-
-    llm = lm.OpenAIGPT(
-        lm.OpenAIGPTConfig(
-            chat_model=chat_model,
-            api_base=explicit_api_base,
-        )
-    )
-
-    assert llm.is_gemini
-    assert llm.api_base == explicit_api_base
-    expected_model = (
-        chat_model if chat_model.startswith("google/") else "gemini-2.0-flash"
-    )
-    assert llm.config.chat_model == expected_model
-
-
-@pytest.mark.parametrize(
-    "chat_model",
-    ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"),
-)
-def test_gemini_model_copy_preserves_explicit_api_base(monkeypatch, chat_model):
-    """Gemini configs copied with an API base retain the caller endpoint."""
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
-    custom_base = "https://caller.example/v1"
-    config = lm.OpenAIGPTConfig(chat_model=chat_model).model_copy(
-        update={"api_base": custom_base}
-    )
-
-    llm = lm.OpenAIGPT(config)
-
-    assert llm.is_gemini
-    assert llm.api_base == custom_base
-
-
-@pytest.mark.parametrize(
-    "chat_model",
-    ("gemini/gemini-2.0-flash", "google/gemini-2.0-flash"),
-)
-def test_gemini_assignment_preserves_explicit_api_base(monkeypatch, chat_model):
-    """Gemini configs assigned an API base retain the caller endpoint."""
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
-    custom_base = "https://caller.example/v1"
-    config = lm.OpenAIGPTConfig(chat_model=chat_model)
-    config.api_base = custom_base
-
-    llm = lm.OpenAIGPT(config)
-
-    assert llm.is_gemini
-    assert llm.api_base == custom_base
-
-
-def test_gemini_dynamic_config_preserves_api_base(monkeypatch):
-    """Dynamically prefixed Gemini settings retain their API base."""
-    monkeypatch.setattr(settings, "chat_model", "")
-    monkeypatch.setenv("VERTEX_API_BASE", "https://vertex.example/v1")
-    monkeypatch.setenv("GEMINI_API_BASE", "https://gemini-env.example/v1")
-    vertex_config = lm.OpenAIGPTConfig.create("vertex")
-
-    llm = lm.OpenAIGPT(vertex_config(chat_model="google/gemini-2.0-flash"))
-
-    assert llm.is_gemini
-    assert llm.api_base == "https://vertex.example/v1"
-    assert llm.config.chat_model == "google/gemini-2.0-flash"
-
-
-def test_followup_standalone():
-    """Test that followup_to_standalone works."""
-
-    llm = OpenAIGPT(OpenAIGPTConfig())
-    dialog = [
-        ("Is 5 a prime number?", "yes"),
-        ("Is 10 a prime number?", "no"),
-    ]
-    followup = "What about 11?"
-    response = llm.followup_to_standalone(dialog, followup)
-    assert response is not None
-    assert "prime" in response.lower() and "11" in response
-
-
-def test_llm_pdf_attachment():
-    """Test sending a PDF file attachment to the LLM."""
-
-    # Path to the test PDF file
-    pdf_path = Path("tests/main/data/dummy.pdf")
-
-    # Create a FileAttachment from the PDF file
-    attachment = FileAttachment.from_path(pdf_path)
-
-    # Verify the attachment properties
-    assert attachment.mime_type == "application/pdf"
-    assert attachment.filename == "dummy.pdf"
-
-    # Create messages with the attachment
-    messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-        LLMMessage(
-            role=Role.USER, content="What's title of the paper?", files=[attachment]
-        ),
-    ]
-
-    # Set up the LLM with a suitable model that supports PDFs
-    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
-
-    # Get response from the LLM
-    response = llm.chat(messages=messages)
-
-    assert response is not None
-    assert response.message is not None
-    assert "Supply Chain" in response.message
-
-    # follow-up question
-    messages += [
-        LLMMessage(role=Role.ASSISTANT, content="Supply Chain"),
-        LLMMessage(role=Role.USER, content="Who is the first author?"),
-    ]
-    response = llm.chat(messages=messages)
-    assert response is not None
-    assert response.message is not None
-    assert "Takio" in response.message
-
-
-@pytest.mark.xfail(
-    reason="Multi-file attachments may not work yet",
-    run=True,
-    strict=False,
-)
-def test_llm_multi_pdf_attachments():
-
-    # Path to the test PDF file
-    pdf_path = Path("tests/main/data/dummy.pdf")
-
-    # Create a FileAttachment from the PDF file
-    attachment = FileAttachment.from_path(pdf_path)
-
-    # multiple attachments
-    pdf_path2 = Path("tests/main/data/sample-test.pdf")
-
-    # Create a FileAttachment from the PDF file
-    attachment2 = FileAttachment.from_path(pdf_path2)
-
-    messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-        LLMMessage(
-            role=Role.USER,
-            content="How many pages are in the Supply Chain paper?",
-            files=[attachment2, attachment],
-        ),
-    ]
-    # Set up the LLM with a suitable model that supports PDFs
-    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=1000))
-
-    response = llm.chat(messages=messages)
-    print(response.message)
-    assert any(x in response.message for x in ["4", "four"])
-
-    # follow-up question
-    messages += [
-        LLMMessage(role=Role.ASSISTANT, content="4 pages"),
-        LLMMessage(
-            role=Role.USER,
-            content="""
-            How many columns are in the table in the 
-            document that is NOT about Supply Chain?
-            """,
-        ),
-    ]
-    response = llm.chat(messages=messages)
-    assert any(x in response.message for x in ["3", "three"])
-
-
-def test_llm_pdf_bytes_and_split():
-    """Test sending PDF files to LLM as bytes and split into pages."""
-
-    # Path to the test PDF file
-    pdf_path = Path("tests/main/data/dummy.pdf")
-
-    # Test creating attachment from bytes
-    with open(pdf_path, "rb") as f:
-        pdf_bytes = f.read()
-
-    attachment_from_bytes = FileAttachment.from_bytes(
-        content=pdf_bytes,
-        filename="supply_chain_paper.pdf",
-    )
-
-    messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-        LLMMessage(
-            role=Role.USER,
-            content="Who is the first author of this paper?",
-            files=[attachment_from_bytes],
-        ),
-    ]
-
-    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=100))
-    response = llm.chat(messages=messages)
-
-    assert response is not None
-    assert "Takio" in response.message
-
-    # Test creating attachment from file-like object
-    pdf_io = io.BytesIO(pdf_bytes)
-    attachment_from_io = FileAttachment.from_io(
-        file_obj=pdf_io,
-        filename="paper_from_io.pdf",
-    )
-
-    messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-        LLMMessage(
-            role=Role.USER,
-            content="What is the title of this paper?",
-            files=[attachment_from_io],
-        ),
-    ]
-
-    response = llm.chat(messages=messages)
-    assert "Supply Chain" in response.message
-
-    # Test splitting PDF into pages and sending individual pages
-    import fitz
-
-    doc = fitz.open(pdf_path)
-    page_attachments = []
-
-    for i, page in enumerate(doc):
-        # Extract page as PDF
-        page_pdf = io.BytesIO()
-        page_doc = fitz.open()
-        page_doc.insert_pdf(doc, from_page=i, to_page=i)
-        page_doc.save(page_pdf)
-        page_pdf.seek(0)
-
-        # Create attachment for this page
-        page_attachment = FileAttachment.from_io(
-            file_obj=page_pdf,
-            filename=f"page_{i+1}.pdf",
-        )
-        page_attachments.append(page_attachment)
-
-    # Send just the first page
-    messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-        LLMMessage(
-            role=Role.USER,
-            content="Based on just this page, what is this document about?",
-            files=[page_attachments[0]],
-        ),
-    ]
-
-    response = llm.chat(messages=messages)
-    assert "supply chain" in response.message.lower()
-
-    # Test with multiple pages as separate attachments
-    messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-        LLMMessage(
-            role=Role.USER,
-            content="I'm sending you pages from a paper. "
-            "How many figures are shown across all pages?",
-            files=page_attachments,
-        ),
-    ]
-
-    response = llm.chat(messages=messages)
-    assert response is not None
-    assert any(
-        x in response.message.lower() for x in ["figure", "diagram", "illustration"]
-    )
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "tests/main/data/color-shape-series.jpg",
-        "tests/main/data/color-shape-series.png",
-        "tests/main/data/color-shape-series.pdf",
-        "https://upload.wikimedia.org/wikipedia/commons/1/18/Seriation_task_w_shapes.jpg",
-    ],
-)
-def test_llm_image_input(path: str):
-    attachment = FileAttachment.from_path(path, detail="low")
-
-    messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-        LLMMessage(
-            role=Role.USER,
-            content="How many squares are here?",
-            files=[attachment],
-        ),
-    ]
-    # Set up the LLM with a suitable model that supports PDFs
-    llm = OpenAIGPT(OpenAIGPTConfig(max_output_tokens=500))
-
-    response = llm.chat(messages=messages)
-    print(response.message)
-    assert any(x in response.message for x in ["three", "3"])
-
-
-def test_litellm_model_key():
-    """
-    Test that passing in explicit api_key works with `litellm/*` models
-    """
-    model = "litellm/anthropic/claude-3-5-haiku-latest"
-    # disable any chat model passed via --m arg to pytest cmd
-    settings.chat_model = model
-
-    class CustomOpenAIGPTConfig(lm.OpenAIGPTConfig):
-        """OpenAI config that doesn't auto-load from environment variables."""
-
-        # Disable environment prefix to prevent auto-loading
-        model_config = SettingsConfigDict(env_prefix="")
-
-    llm_config = CustomOpenAIGPTConfig(
-        chat_model=model,
-        api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-    )
-    llm = lm.OpenAIGPT(config=llm_config)
-    print(f"\nTesting with model: {llm.chat_model_orig} => {llm.config.chat_model}")
-    response = llm.chat("What is 3+4?")
-    assert "7" in response.message
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.16.0
-  hooks:
-    - id: ruff
-</file>
-
 <file path="langroid/language_models/openai_gpt.py">
 import hashlib
 import json
@@ -125947,8 +125919,6 @@ else:
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-# Provider prefixes that route to the Gemini OpenAI-compatible API.
-GEMINI_MODEL_PREFIXES = ("gemini/", "google/gemini-")
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 OLLAMA_API_KEY = "ollama"
@@ -126157,10 +126127,8 @@ class OpenAIGPTConfig(LLMConfig):
     )
     http_verify_ssl: bool = True  # Simple flag for SSL verification
     http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
-    _api_base_was_supplied: bool = False
 
     def __init__(self, **kwargs) -> None:  # type: ignore
-        api_base_was_supplied = "api_base" in kwargs
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
         chat_model = kwargs.get("chat_model", "")
@@ -126184,27 +126152,8 @@ class OpenAIGPTConfig(LLMConfig):
             kwargs["run_on_first_use"] = with_warning
 
         super().__init__(**kwargs)
-        env_prefix = self.model_config.get("env_prefix")
-        env_api_base_name = f"{env_prefix}API_BASE"
-        env_api_base = os.getenv(env_api_base_name)
-        if not self.model_config.get("case_sensitive"):
-            case_insensitive_env = {
-                name.lower(): value for name, value in os.environ.items()
-            }
-            env_api_base = case_insensitive_env.get(env_api_base_name.lower())
-        api_base_was_supplied = api_base_was_supplied or (
-            self.api_base is not None
-            and (env_prefix != "OPENAI_" or self.api_base != env_api_base)
-        )
-        self._api_base_was_supplied = api_base_was_supplied
 
     model_config = SettingsConfigDict(env_prefix="OPENAI_")
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        """Track API bases assigned after config construction."""
-        super().__setattr__(name, value)
-        if name == "api_base":
-            self._api_base_was_supplied = True
 
     def model_copy(
         self, *, update: Mapping[str, Any] | None = None, deep: bool = False
@@ -126216,15 +126165,9 @@ class OpenAIGPTConfig(LLMConfig):
         models to their annotated base types (dropping subclass-only fields).
         Instead, defer to Pydantic's native `model_copy`, which keeps nested
         `BaseModel` instances (and their concrete subclasses) intact.
-
-        An `api_base` supplied through `update` is caller configuration, so the
-        copy must retain that provenance for provider-specific routing.
         """
         # Delegate to BaseSettings/BaseModel implementation to preserve types
-        copied = super().model_copy(update=update, deep=deep)
-        if update is not None and "api_base" in update:
-            copied._api_base_was_supplied = True
-        return copied  # type: ignore[return-value]
+        return super().model_copy(update=update, deep=deep)  # type: ignore[return-value]
 
     def _validate_litellm(self) -> None:
         """
@@ -126499,19 +126442,21 @@ class OpenAIGPT(LanguageModel):
                     self.api_key = self.config.litellm_proxy.api_key or self.api_key
                 self.api_base = self.config.litellm_proxy.api_base or self.api_base
             elif self.is_gemini:
+                self.config.chat_model = self.config.chat_model.replace("gemini/", "")
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
-                # Prefer caller config, then Gemini env, then the default.
+                # Use GEMINI_API_BASE env var if set (e.g. for Vertex AI),
+                # then config.api_base only if explicitly set by the user
+                # (not inherited from OPENAI_API_BASE via env_prefix),
+                # then fall back to the default Gemini endpoint.
                 gemini_api_base = os.getenv("GEMINI_API_BASE", "")
+                openai_api_base = os.getenv("OPENAI_API_BASE")
                 explicit_api_base = (
-                    self.config.api_base if self.config._api_base_was_supplied else None
+                    self.config.api_base
+                    if self.config.api_base and self.config.api_base != openai_api_base
+                    else None
                 )
-                self.api_base = explicit_api_base or gemini_api_base or GEMINI_BASE_URL
-                if (
-                    self.config.chat_model.startswith("gemini/")
-                    or self.api_base == GEMINI_BASE_URL
-                ):
-                    self.config.chat_model = self.config.chat_model.split("/", 1)[1]
+                self.api_base = gemini_api_base or explicit_api_base or GEMINI_BASE_URL
             elif self.is_glhf:
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
                 if self.api_key == OPENAI_API_KEY:
@@ -126763,7 +126708,7 @@ class OpenAIGPT(LanguageModel):
 
     def is_gemini_model(self) -> bool:
         """Are we using the gemini OpenAI-compatible API?"""
-        return self.chat_model_orig.startswith(GEMINI_MODEL_PREFIXES)
+        return self.chat_model_orig.startswith("gemini/")
 
     def is_deepseek_model(self) -> bool:
         deepseek_models = [e.value for e in DeepSeekModel]
@@ -128443,6 +128388,15 @@ class OpenAIGPT(LanguageModel):
         else:
             response_dict = response.model_dump()
         return self._process_chat_completion_response(cached, response_dict)
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.16.0
+  hooks:
+    - id: ruff
 </file>
 
 <file path="pyproject.toml">

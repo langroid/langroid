@@ -72,24 +72,22 @@ def parse_markdown_headings(md_text: str) -> List[Node]:
     fence_marker = None  # track which triple-backtick or ~~~ opened
 
     for i, line in enumerate(lines):
-        # Check if we're toggling in/out of a fenced code block
-        # Typically triple backtick or triple tilde: ``` or ~~~
-        # We do a *loose* check: a line that starts with at least 3 backticks or tildes
-        # ignoring trailing text. You can refine as needed.
-        fence_match = re.match(r"^(```+|~~~+)", line.strip())
-        if fence_match:
-            # If we are not in a fence, we enter one;
-            # If we are in a fence, we exit if the marker matches
-            marker = fence_match.group(1)  # e.g. "```" or "~~~~"
-            if not in_code_fence:
+        if not in_code_fence:
+            # Opening fences may be followed by an info string.
+            fence_match = re.match(r"^(```+|~~~+)", line.strip())
+            if fence_match:
+                marker = fence_match.group(1)  # e.g. "```" or "~~~~"
                 in_code_fence = True
-                fence_marker = marker[:3]  # store triple backtick or triple tilde
-            else:
-                # only close if the fence_marker matches
-                # E.g. if we opened with ```, we close only on ```
-                if fence_marker and marker.startswith(fence_marker):
-                    in_code_fence = False
-                    fence_marker = None
+                fence_marker = marker
+        elif fence_marker:
+            # Closing fences contain only the opening character (plus optional
+            # surrounding spaces or tabs) and are at least as long as the opener.
+            closing_marker = line.rstrip("\r\n").strip(" \t")
+            if len(closing_marker) >= len(fence_marker) and set(closing_marker) == {
+                fence_marker[0]
+            }:
+                in_code_fence = False
+                fence_marker = None
 
         if not in_code_fence:
             # Check if the line is a heading
