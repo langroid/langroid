@@ -3251,6 +3251,89 @@ Here is what a run starting with $n=12$ looks like:
 ![chat-tree.png](chat-tree.png)
 </file>
 
+<file path="docs/examples/guide.md">
+# Guide to examples in `langroid-examples` repo
+
+!!! warning "Outdated"
+    This guide is from Feb 2024; there have been numerous additional examples
+    since then. We recommend you visit the `examples` folder in the core `langroid`
+    repo for the most up-to-date examples. These examples are periodically copied
+    over to the `examples` folder in the `langroid-examples` repo.
+
+The [`langroid-examples`](https://github.com/langroid/langroid-examples) repo
+contains several examples of using
+the [Langroid](https://github.com/langroid/langroid) agent-oriented programming 
+framework for LLM applications.
+Below is a guide to the examples. First please ensure you follow the
+installation instructions in the `langroid-examples` repo README.
+
+**At minimum a GPT4-compatible OpenAI API key is required.** As currently set
+up, many of the examples will _not_ work with a weaker model. Weaker models may
+require more detailed or different prompting, and possibly a more iterative
+approach with multiple agents to verify and retry, etc — this is on our roadmap.
+
+All the example scripts are meant to be run on the command line.
+In each script there is a description and sometimes instructions on how to run
+the script.
+
+NOTE: When you run any script, it pauses for “human” input at every step, and
+depending on the context, you can either hit enter to continue, or in case there
+is a question/response expected from the human, you can enter your question or
+response and then hit enter.
+
+### Basic Examples
+- [`/examples/basic/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py) This is a basic chat application.
+
+    - Illustrates Agent task loop.
+
+- [`/examples/basic/autocorrect.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/autocorrect.py) Chat with autocorrect: type fast and carelessly/lazily and 
+the LLM will try its best to interpret what you want, and offer choices when confused.
+
+    - Illustrates Agent task loop.
+
+- [`/examples/basic/chat-search.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat-search.py)  This uses a `GoogleSearchTool` function-call/tool to answer questions using a google web search if needed.
+  Try asking questions about facts known after Sep 2021 (GPT4 training cutoff),
+  like  `when was llama2 released`
+
+    - Illustrates Agent + Tools/function-calling + web-search
+
+- [`/examples/basic/chat-search-seltz.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-seltz.py) Similar to the above, but uses `SeltzSearchTool` for web search powered by [Seltz](https://seltz.ai/). Requires `SELTZ_API_KEY` and `pip install langroid[seltz]`. See [Seltz Search Tool docs](../notes/seltz_search.md) for setup details.
+
+    - Illustrates Agent + Tools/function-calling + web-search via Seltz
+
+- [`/examples/basic/chat-tree.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat-tree.py) is a toy example of tree-structured multi-agent
+  computation, see a detailed writeup [here.](https://langroid.github.io/langroid/examples/agent-tree/)
+  
+    - Illustrates multi-agent task collaboration, task delegation.
+
+### Document-chat examples, or RAG (Retrieval Augmented Generation)
+
+- [`/examples/docqa/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat.py) is a document-chat application. Point it to local file,
+  directory or web url, and ask questions
+    - Illustrates basic RAG
+- [`/examples/docqa/chat-search.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-search.py): ask about anything and it will try to answer
+  based on docs indexed in vector-db, otherwise it will do a Google search, and
+  index the results in the vec-db for this and later answers.
+    - Illustrates RAG + Function-calling/tools
+- [`/examples/docqa/chat_multi.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi.py):  — this is a 2-agent system that will summarize
+  a large document with 5 bullet points: the first agent generates questions for
+  the retrieval agent, and is done when it gathers 5 key points.
+    - Illustrates 2-agent collaboration + RAG to summarize a document
+- [`/examples/docqa/chat_multi_extract.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py):  — extracts structured info from a
+  lease document: Main agent asks questions to a retrieval agent. 
+    - Illustrates 2-agent collaboration, RAG, Function-calling/tools, Structured Information Extraction.
+
+### Data-chat examples (tabular, SQL)
+
+- [`/examples/data-qa/table_chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/data-qa/table_chat):  - point to a URL or local csv file and ask
+  questions. The agent generates pandas code that is run within langroid.
+    - Illustrates function-calling/tools and code-generation
+- [`/examples/data-qa/sql-chat/sql_chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/data-qa/sql-chat/sql_chat.py):  — chat with a sql db — ask questions in
+  English, it will generate sql code to answer them.
+  See [tutorial here](https://langroid.github.io/langroid/tutorials/postgresql-agent/)
+    - Illustrates function-calling/tools and code-generation
+</file>
+
 <file path="docs/javascripts/mathjax.js">
 window.MathJax = {
   tex: {
@@ -6690,6 +6773,112 @@ def my_show_llm_response(
 agent = Agent(config)
 agent.callbacks.show_llm_response = my_show_llm_response
 ```
+</file>
+
+<file path="docs/notes/seltz_search.md">
+---
+
+# **Using Seltz Search with Langroid**
+
+---
+
+## **1. Set Up Seltz**
+
+1. **Access Seltz Platform**
+   Go to [Seltz](https://seltz.ai/).
+
+2. **Sign Up or Log In**
+   Create an account or log in if you already have one.
+
+3. **Get Your API Key**
+   - Navigate to your dashboard
+   - Copy your API key
+
+4. **Set Environment Variable**
+   Add the following variable to your `.env` file:
+   ```env
+   SELTZ_API_KEY=<your_api_key>
+   ```
+
+---
+
+## **2. Install**
+
+```bash
+pip install langroid[seltz]
+# or
+uv pip install langroid[seltz]
+```
+
+---
+
+## **3. Use Seltz Search with Langroid**
+
+```python
+import langroid as lr
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
+
+# Configure the ChatAgent
+config = ChatAgentConfig(
+    name="search-agent",
+    llm=lr.language_models.OpenAIGPTConfig(
+        chat_model=lr.language_models.OpenAIChatModel.GPT4o
+    ),
+)
+
+# Create the agent and enable the Seltz search tool
+agent = ChatAgent(config)
+agent.enable_message(SeltzSearchTool)
+```
+
+---
+
+## **4. Perform Web Searches**
+
+Use the agent to perform web searches using Seltz.
+
+```python
+# Simple search query
+response = agent.llm_response(
+    "What are the latest developments in quantum computing?"
+)
+print(response)
+```
+
+---
+
+## **5. Direct Tool Usage**
+
+You can also use the tool directly without an agent:
+
+```python
+from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
+
+# Create a search request
+search_request = SeltzSearchTool(
+    query="Latest breakthroughs in fusion energy",
+    num_results=3,
+)
+
+# Get search results
+results = search_request.handle()
+print(results)
+```
+
+---
+
+## **6. Full Example**
+
+See the complete working example at
+[`examples/basic/chat-search-seltz.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-seltz.py).
+
+Run it with:
+```bash
+python3 examples/basic/chat-search-seltz.py
+```
+
+---
 </file>
 
 <file path="docs/notes/structured-output.md">
@@ -13157,6 +13346,299 @@ def main(
     assistant_task.add_sub_task(search_task)
     question = Prompt.ask("What do you want to know?")
     assistant_task.run(question)
+
+
+if __name__ == "__main__":
+    app()
+</file>
+
+<file path="examples/basic/chat-search-seltz.py">
+"""
+This is a basic example of a chatbot that uses SeltzSearchTool to
+answer questions using web search results powered by Seltz.
+
+Run like this:
+
+    python3 examples/basic/chat-search-seltz.py
+
+There are optional args:
+-m <model_name>: to run with a different LLM model (default: gpt4o)
+-d: debug mode
+-ns: no streaming
+-nc: don't use cache
+
+NOTE: You need to:
+* set the SELTZ_API_KEY environment variable in
+your `.env` file, e.g. `SELTZ_API_KEY=your_api_key_here`
+
+* install langroid with the `seltz` extra, e.g.
+`pip install langroid[seltz]` or `uv pip install langroid[seltz]`
+or `poetry add langroid[seltz]` or `uv add langroid[seltz]`
+
+For more information, please refer to https://seltz.ai/
+"""
+
+import typer
+from dotenv import load_dotenv
+from rich import print
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
+from langroid.utils.configuration import Settings, set_global
+
+app = typer.Typer()
+
+
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    model: str = typer.Option("", "--model", "-m", help="model name"),
+    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+) -> None:
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+            stream=not no_stream,
+        )
+    )
+    print(
+        """
+        [blue]Welcome to the Seltz Web Search chatbot!
+        I will try to answer your questions using web search
+        results powered by Seltz.
+
+        Enter x or q to quit at any point.
+        """
+    )
+
+    load_dotenv()
+
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
+        chat_context_length=32_000,
+        temperature=0.15,
+        max_output_tokens=1000,
+        timeout=45,
+    )
+
+    search_tool_handler_method = SeltzSearchTool.name()
+    config = lr.ChatAgentConfig(
+        name="Seeker",
+        handle_llm_no_tool="user",
+        llm=llm_config,
+        vecdb=None,
+        system_message=f"""
+        You are a helpful assistant. You will try your best to answer my questions.
+        Here is how you should answer my questions:
+        - IF my question is about a topic you ARE CERTAIN about, answer it directly
+        - OTHERWISE, use the `{search_tool_handler_method}` tool/function-call to
+          get up to 5 results from a web-search, to help you answer the question.
+          I will show you the results from the web-search, and you can use those
+          to answer the question.
+        - If I EXPLICITLY ask you to search the web/internet, then use the
+            `{search_tool_handler_method}` tool/function-call to get up to 5 results
+            from a web-search, to help you answer the question.
+
+        In case you use the TOOL `{search_tool_handler_method}`, you MUST WAIT
+        for results from this tool; do not make up results!
+
+        Be very CONCISE in your answers, use no more than 1-2 sentences.
+        When you answer based on a web search, First show me your answer,
+        and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
+        in this format:
+
+        <your answer here>
+        SOURCE: https://www.example.com/article
+        EXTRACT: First few words ... last few words.
+
+        SOURCE: ...
+        EXTRACT: ...
+
+        For the EXTRACT, ONLY show up to first 3 words, and last 3 words.
+        DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
+        """,
+    )
+    agent = lr.ChatAgent(config)
+
+    agent.enable_message(SeltzSearchTool)
+
+    task = lr.Task(agent, interactive=False)
+
+    user_message = "Can you help me with some questions?"
+    task.run(user_message)
+
+
+if __name__ == "__main__":
+    app()
+</file>
+
+<file path="examples/basic/chat-search.py">
+"""
+This is a basic example of a chatbot that uses one of these web-search Tools to
+answer questions:
+ - GoogleSearchTool
+ - DuckduckgoSearchTool
+ - ExaSearchTool
+ - SeltzSearchTool
+When the LLM doesn't know the answer to a question, it will use the tool to
+search the web for relevant results, and then use the results to answer the
+question.
+
+Run like this:
+
+    python3 examples/basic/chat-search.py
+
+or
+
+    uv run examples/basic/chat-search.py -m groq/deepseek-r1-distill-llama-70b
+
+There are optional args, especially note these:
+
+-p or --provider: google or ddg or Exa (default: google)
+-m <model_name>: to run with a different LLM model (default: gpt4-turbo)
+
+You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
+or `-m ollama/mistral` etc. See here how to use Langroid with local LLMs:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
+
+
+NOTE:
+(a) If using Google Search, you must have GOOGLE_API_KEY and GOOGLE_CSE_ID
+environment variables in your `.env` file, as explained in the
+[README](https://github.com/langroid/langroid#gear-installation-and-setup).
+
+
+(b) If using ExaSearchTool, you need to:
+* set the EXA_API_KEY environment variables in
+your `.env` file, e.g. `EXA_API_KEY=your_api_key_here`
+* install langroid with the `exa` extra, e.g.
+`pip install langroid[exa]` or `uv pip install langroid[exa]`
+or `poetry add langroid[exa]`  or `uv add langroid[exa]`
+(it installs the `exa-py` package from pypi).
+For more information, please refer to the official docs:
+https://exa.ai/
+
+"""
+
+import typer
+from dotenv import load_dotenv
+from rich import print
+
+import langroid as lr
+import langroid.language_models as lm
+from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
+from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.utils.configuration import Settings, set_global
+
+app = typer.Typer()
+
+
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    model: str = typer.Option("", "--model", "-m", help="model name"),
+    provider: str = typer.Option(
+        "ddg",
+        "--provider",
+        "-p",
+        help="search provider name (google, ddg, exa, seltz)",
+    ),
+    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+) -> None:
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+            stream=not no_stream,
+        )
+    )
+    print(
+        """
+        [blue]Welcome to the Web Search chatbot!
+        I will try to answer your questions, relying on (summaries of links from) 
+        Web-Search when needed.
+        
+        Enter x or q to quit at any point.
+        """
+    )
+
+    load_dotenv()
+
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
+        chat_context_length=32_000,
+        temperature=0.15,
+        max_output_tokens=1000,
+        timeout=45,
+    )
+
+    match provider:
+        case "google":
+            search_tool_class = GoogleSearchTool
+        case "exa":
+            from langroid.agent.tools.exa_search_tool import ExaSearchTool
+
+            search_tool_class = ExaSearchTool
+        case "ddg":
+            search_tool_class = DuckduckgoSearchTool
+        case "seltz":
+            from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
+
+            search_tool_class = SeltzSearchTool
+        case _:
+            raise ValueError(f"Unsupported provider {provider} specified.")
+
+    search_tool_handler_method = search_tool_class.name()
+    config = lr.ChatAgentConfig(
+        name="Seeker",
+        handle_llm_no_tool="user",  # fwd to user when LLM sends non-tool msg
+        llm=llm_config,
+        vecdb=None,
+        system_message=f"""
+        You are a helpful assistant. You will try your best to answer my questions.
+        Here is how you should answer my questions:
+        - IF my question is about a topic you ARE CERTAIN about, answer it directly
+        - OTHERWISE, use the `{search_tool_handler_method}` tool/function-call to
+          get up to 5 results from a web-search, to help you answer the question.
+          I will show you the results from the web-search, and you can use those
+          to answer the question.
+        - If I EXPLICITLY ask you to search the web/internet, then use the 
+            `{search_tool_handler_method}` tool/function-call to get up to 5 results
+            from a web-search, to help you answer the question.
+
+
+        In case you use the TOOL `{search_tool_handler_method}`, you MUST WAIT
+        for results from this tool; do not make up results!
+        
+        Be very CONCISE in your answers, use no more than 1-2 sentences.
+        When you answer based on a web search, First show me your answer, 
+        and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
+        in this format:
+        
+        <your answer here>
+        SOURCE: https://www.wikihow.com/Be-a-Good-Assistant-Manager
+        EXTRACT: Be a Good Assistant ... requires good leadership skills.
+        
+        SOURCE: ...
+        EXTRACT: ...
+        
+        For the EXTRACT, ONLY show up to first 3 words, and last 3 words.
+        DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
+        """,
+    )
+    agent = lr.ChatAgent(config)
+
+    agent.enable_message(search_tool_class)
+
+    task = lr.Task(agent, interactive=False)
+
+    # local models do not like the first message to be empty
+    user_message = "Can you help me with some questions?"
+    task.run(user_message)
 
 
 if __name__ == "__main__":
@@ -46470,6 +46952,72 @@ class SegmentExtractTool(ToolMessage):
         """
 </file>
 
+<file path="langroid/agent/tools/seltz_search_tool.py">
+"""
+A tool to trigger a Seltz search for a given query and return the top results.
+Since the tool is stateless (i.e. does not need
+access to agent state), it can be enabled for any agent, without having to define a
+special method inside the agent: `agent.enable_message(SeltzSearchTool)`
+
+NOTE: To use this tool, you need to:
+
+* set the SELTZ_API_KEY environment variable in
+your `.env` file, e.g. `SELTZ_API_KEY=your_api_key_here`
+
+* install langroid with the `seltz` extra, e.g.
+`pip install langroid[seltz]` or `uv pip install langroid[seltz]`
+or `poetry add langroid[seltz]` or `uv add langroid[seltz]`
+(it installs the `seltz` package from pypi).
+
+For more information, please refer to: https://seltz.ai/
+"""
+
+from typing import List, Tuple
+
+from langroid.agent.tool_message import ToolMessage
+from langroid.parsing.web_search import seltz_search
+
+
+class SeltzSearchTool(ToolMessage):
+    request: str = "seltz_search"
+    purpose: str = """
+            To search the web using Seltz and return up to <num_results>
+            results relevant to the given <query>. When using this tool,
+            ONLY show the required JSON, DO NOT SAY ANYTHING ELSE.
+            Wait for the results of the web search, and then use them to
+            compose your response.
+            """
+    query: str
+    num_results: int
+
+    def handle(self) -> str:
+        """
+        Conducts a search using the Seltz API based on the provided query
+        and number of results by triggering a seltz_search.
+
+        Returns:
+            str: A formatted string containing the titles, links, and
+                summaries of each search result, separated by two newlines.
+        """
+
+        search_results = seltz_search(self.query, self.num_results)
+        # return Title, Link, Summary of each result, separated by two newlines
+        results_str = "\n\n".join(str(result) for result in search_results)
+        return f"""
+        BELOW ARE THE RESULTS FROM THE WEB SEARCH. USE THESE TO COMPOSE YOUR RESPONSE:
+        {results_str}
+        """
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
+        return [
+            cls(
+                query="When was the Llama2 Large Language Model (LLM) released?",
+                num_results=3,
+            ),
+        ]
+</file>
+
 <file path="langroid/agent/tools/tavily_search_tool.py">
 """
 A tool to trigger a Tavily search for a given query, and return the top results with
@@ -50597,6 +51145,335 @@ def extract_content_from_path(
         return docs[0].content
     else:
         return [d.content for d in docs]
+</file>
+
+<file path="langroid/parsing/web_search.py">
+"""
+Utilities for web search.
+
+NOTE: Using Google Search requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
+environment variables in your `.env` file, as explained in the
+[README](https://github.com/langroid/langroid#gear-installation-and-setup).
+"""
+
+import os
+from typing import Dict, List
+
+import requests
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+from duckduckgo_search import DDGS
+from googleapiclient.discovery import Resource, build
+from requests.models import Response
+
+from langroid.exceptions import LangroidImportError
+
+
+class WebSearchResult:
+    """
+    Class representing a Web Search result, containing the title, link,
+    summary and full content of the result.
+    """
+
+    def __init__(
+        self,
+        title: str,
+        link: str | None,
+        max_content_length: int = 3500,
+        max_summary_length: int = 300,
+    ):
+        """
+        Args:
+            title (str): The title of the search result.
+            link (str): The link to the search result.
+            max_content_length (int): The maximum length of the full content.
+            max_summary_length (int): The maximum length of the summary.
+        """
+        self.title = title
+        self.link = link
+        self.max_content_length = max_content_length
+        self.max_summary_length = max_summary_length
+        self.full_content = self.get_full_content()
+        self.summary = self.get_summary()
+
+    def get_summary(self) -> str:
+        return self.full_content[: self.max_summary_length]
+
+    def get_full_content(self) -> str:
+        if self.link is None:
+            return "Error: No Search Result"
+        try:
+            # First check headers only to get content length and type
+            head_response: Response = requests.head(self.link, timeout=5)
+            content_type = head_response.headers.get("content-type", "").lower()
+
+            # Skip large files
+            content_length = int(head_response.headers.get("content-length", 0))
+            if content_length > 5_000_000:  # 5MB limit
+                return (
+                    f"Error: Content too large ({content_length} bytes) for {self.link}"
+                )
+            # Skip non-HTML content types
+            if content_type and not any(
+                html_type in content_type
+                for html_type in ["text/html", "application/xhtml", "text/plain"]
+            ):
+                return f"Skipping Content type '{content_type}' " f"in {self.link}"
+
+            response: Response = requests.get(self.link, timeout=10)
+            if response.status_code != 200:
+                return f"Error: HTTP {response.status_code} for {self.link}"
+
+            import warnings
+
+            from bs4 import XMLParsedAsHTMLWarning
+
+            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
+            soup: BeautifulSoup = BeautifulSoup(response.text, "html.parser")
+            text = " ".join(soup.stripped_strings)
+            return text[: self.max_content_length]
+        except Exception as e:
+            return f"Error fetching content from {self.link}: {e}"
+
+    def __str__(self) -> str:
+        return f"Title: {self.title}\nLink: {self.link}\nSummary: {self.summary}"
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "title": self.title,
+            "link": self.link or "",
+            "summary": self.summary,
+            "full_content": self.full_content,
+        }
+
+
+def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    load_dotenv()
+    api_key = os.getenv("GOOGLE_API_KEY")
+    cse_id = os.getenv("GOOGLE_CSE_ID")
+    service: Resource = build("customsearch", "v1", developerKey=api_key)
+    raw_results = (
+        service.cse().list(q=query, cx=cse_id, num=num_results).execute()["items"]
+    )
+
+    return [
+        WebSearchResult(result["title"], result["link"], 3500, 300)
+        for result in raw_results
+    ]
+
+
+def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call by Metaphor client that queries
+    the top num_results links that matches the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("METAPHOR_API_KEY") or os.getenv("EXA_API_KEY")
+    if not api_key:
+        raise ValueError(
+            """
+            Neither METAPHOR_API_KEY nor EXA_API_KEY environment variables are set. 
+            Please set one of them to your API key, and try again.
+            """
+        )
+
+    try:
+        from metaphor_python import Metaphor
+    except ImportError:
+        raise LangroidImportError("metaphor-python", "metaphor")
+
+    client = Metaphor(api_key=api_key)
+
+    response = client.search(
+        query=query,
+        num_results=num_results,
+    )
+    raw_results = response.results
+
+    return [
+        WebSearchResult(result.title, result.url, 3500, 300) for result in raw_results
+    ]
+
+
+def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call by Exa client that queries
+    the top num_results links that matches the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("EXA_API_KEY")
+    if not api_key:
+        raise ValueError(
+            """
+            EXA_API_KEY environment variables are not set. 
+            Please set one of them to your API key, and try again.
+            """
+        )
+
+    try:
+        from exa_py import Exa
+    except ImportError:
+        raise LangroidImportError("exa-py", "exa")
+
+    client = Exa(api_key=api_key)
+
+    try:
+        response = client.search(
+            query=query,
+            num_results=num_results,
+        )
+        raw_results = response.results
+
+        return [
+            WebSearchResult(
+                title=result.title or "",
+                link=result.url,
+                max_content_length=3500,
+                max_summary_length=300,
+            )
+            for result in raw_results
+            if result.url is not None
+        ]
+    except Exception:
+        return [
+            WebSearchResult(
+                title="Error",
+                link=None,
+                max_content_length=3500,
+                max_summary_length=300,
+            )
+        ]
+
+
+def duckduckgo_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call by DuckDuckGo client that queries
+    the top `num_results` links that matche the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    with DDGS() as ddgs:
+        search_results = [r for r in ddgs.text(query, max_results=num_results)]
+
+    return [
+        WebSearchResult(
+            title=result["title"],
+            link=result["href"],
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        for result in search_results
+    ]
+
+
+def tavily_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call to Tavily API that queries
+    the top `num_results` links that match the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "TAVILY_API_KEY environment variable is not set. "
+            "Please set it to your API key and try again."
+        )
+
+    try:
+        from tavily import TavilyClient
+    except ImportError:
+        raise LangroidImportError("tavily-python", "tavily")
+
+    client = TavilyClient(api_key=api_key)
+    response = client.search(query=query, max_results=num_results)
+    search_results = response["results"]
+
+    return [
+        WebSearchResult(
+            title=result["title"],
+            link=result["url"],
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        for result in search_results
+    ]
+
+
+def seltz_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call to Seltz API that queries
+    the top `num_results` results. Returns a list of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("SELTZ_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "SELTZ_API_KEY environment variable is not set. "
+            "Please set it to your API key and try again."
+        )
+
+    try:
+        from seltz import Includes, Seltz
+    except ImportError:
+        raise LangroidImportError("seltz", "seltz")
+
+    client = Seltz(api_key=api_key)
+    response = client.search(
+        query=query,
+        includes=Includes(max_documents=num_results),
+    )
+
+    results = []
+    for doc in response.documents:
+        result = WebSearchResult(
+            title=doc.url,
+            link=None,  # skip HTTP fetch; Seltz already provides content
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        result.link = doc.url
+        result.full_content = doc.content[:3500]
+        result.summary = doc.content[:300]
+        results.append(result)
+
+    return results
 </file>
 
 <file path="langroid/prompts/__init__.py">
@@ -64961,6 +65838,143 @@ def test_write_after_peer_close(tmp_path: Path) -> None:
     logger2.close()
 </file>
 
+<file path="tests/main/test_seltz_search.py">
+"""
+Tests for Seltz search integration.
+
+Unit tests use mocking and do not require a SELTZ_API_KEY.
+Integration tests require SELTZ_API_KEY to be set.
+"""
+
+import os
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
+from langroid.parsing.web_search import seltz_search
+
+
+@pytest.fixture
+def mock_seltz_response():
+    """Create a mock Seltz API response."""
+    doc1 = SimpleNamespace(
+        url="https://example.com/page1",
+        content="First result content about LK-99 superconductor material.",
+    )
+    doc2 = SimpleNamespace(
+        url="https://example.com/page2",
+        content="Second result content about LK-99 research findings.",
+    )
+    response = SimpleNamespace(documents=[doc1, doc2])
+    return response
+
+
+class TestSeltzSearchUnit:
+    """Unit tests for seltz_search (mocked, no API key needed)."""
+
+    @patch.dict(os.environ, {"SELTZ_API_KEY": "test-key"})
+    def test_seltz_search_returns_results(self, mock_seltz_response):
+        """Test that seltz_search returns properly formatted WebSearchResult objects."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = mock_seltz_response
+
+        with patch.dict("sys.modules", {"seltz": MagicMock()}):
+            import sys
+
+            sys.modules["seltz"].Seltz.return_value = mock_client
+
+            results = seltz_search("LK-99 superconductor", num_results=2)
+
+        assert len(results) == 2
+        assert results[0].link == "https://example.com/page1"
+        assert "LK-99 superconductor" in results[0].full_content
+        assert results[1].link == "https://example.com/page2"
+
+    @patch.dict(os.environ, {"SELTZ_API_KEY": "test-key"})
+    def test_seltz_search_content_assignment(self, mock_seltz_response):
+        """Test that content is assigned directly without HTTP fetch."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = mock_seltz_response
+
+        with patch.dict("sys.modules", {"seltz": MagicMock()}):
+            import sys
+
+            sys.modules["seltz"].Seltz.return_value = mock_client
+
+            results = seltz_search("test query", num_results=2)
+
+        # Content should come from Seltz, not from HTTP fetch
+        assert results[0].full_content == (
+            "First result content about LK-99 superconductor material."
+        )
+        assert results[0].summary == (
+            "First result content about LK-99 superconductor material."
+        )
+
+    def test_seltz_search_missing_api_key(self):
+        """Test that missing API key raises ValueError."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("SELTZ_API_KEY", None)
+            with pytest.raises(ValueError, match="SELTZ_API_KEY"):
+                seltz_search("test query")
+
+
+class TestSeltzSearchToolUnit:
+    """Unit tests for SeltzSearchTool (mocked)."""
+
+    @patch.dict(os.environ, {"SELTZ_API_KEY": "test-key"})
+    def test_seltz_search_tool_handle(self, mock_seltz_response):
+        """Test that SeltzSearchTool.handle() returns formatted results."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = mock_seltz_response
+
+        with patch.dict("sys.modules", {"seltz": MagicMock()}):
+            import sys
+
+            sys.modules["seltz"].Seltz.return_value = mock_client
+
+            tool = SeltzSearchTool(query="LK-99", num_results=2)
+            result = tool.handle()
+
+        assert "BELOW ARE THE RESULTS FROM THE WEB SEARCH" in result
+        assert "example.com/page1" in result
+
+    def test_seltz_search_tool_examples(self):
+        """Test that examples are properly defined."""
+        examples = SeltzSearchTool.examples()
+        assert len(examples) == 1
+        assert isinstance(examples[0], SeltzSearchTool)
+        assert examples[0].num_results == 3
+
+    def test_seltz_search_tool_name(self):
+        """Test the tool request name."""
+        assert SeltzSearchTool.name() == "seltz_search"
+
+
+@pytest.mark.skipif(
+    not os.environ.get("SELTZ_API_KEY"),
+    reason="SELTZ_API_KEY not set",
+)
+class TestSeltzSearchIntegration:
+    """Integration tests requiring a real SELTZ_API_KEY."""
+
+    def test_seltz_search_real_query(self):
+        """Test a real Seltz search query."""
+        results = seltz_search("Python programming language", num_results=3)
+        assert len(results) > 0
+        assert all(r.link is not None for r in results)
+        assert all(len(r.full_content) > 0 for r in results)
+
+    def test_seltz_search_tool_real_query(self):
+        """Test SeltzSearchTool with a real query."""
+        tool = SeltzSearchTool(query="Python programming language", num_results=3)
+        result = tool.handle()
+        assert "BELOW ARE THE RESULTS FROM THE WEB SEARCH" in result
+        assert len(result) > 100
+</file>
+
 <file path="tests/main/test_split_inline_reasoning.py">
 """
 Tests for OpenAIGPT._split_inline_reasoning, which separates inline
@@ -73413,89 +74427,6 @@ max-line-length = 88
 ignore = W291, W293, E501, E203, W503
 </file>
 
-<file path="docs/examples/guide.md">
-# Guide to examples in `langroid-examples` repo
-
-!!! warning "Outdated"
-    This guide is from Feb 2024; there have been numerous additional examples
-    since then. We recommend you visit the `examples` folder in the core `langroid`
-    repo for the most up-to-date examples. These examples are periodically copied
-    over to the `examples` folder in the `langroid-examples` repo.
-
-The [`langroid-examples`](https://github.com/langroid/langroid-examples) repo
-contains several examples of using
-the [Langroid](https://github.com/langroid/langroid) agent-oriented programming 
-framework for LLM applications.
-Below is a guide to the examples. First please ensure you follow the
-installation instructions in the `langroid-examples` repo README.
-
-**At minimum a GPT4-compatible OpenAI API key is required.** As currently set
-up, many of the examples will _not_ work with a weaker model. Weaker models may
-require more detailed or different prompting, and possibly a more iterative
-approach with multiple agents to verify and retry, etc — this is on our roadmap.
-
-All the example scripts are meant to be run on the command line.
-In each script there is a description and sometimes instructions on how to run
-the script.
-
-NOTE: When you run any script, it pauses for “human” input at every step, and
-depending on the context, you can either hit enter to continue, or in case there
-is a question/response expected from the human, you can enter your question or
-response and then hit enter.
-
-### Basic Examples
-- [`/examples/basic/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py) This is a basic chat application.
-
-    - Illustrates Agent task loop.
-
-- [`/examples/basic/autocorrect.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/autocorrect.py) Chat with autocorrect: type fast and carelessly/lazily and 
-the LLM will try its best to interpret what you want, and offer choices when confused.
-
-    - Illustrates Agent task loop.
-
-- [`/examples/basic/chat-search.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat-search.py)  This uses a `GoogleSearchTool` function-call/tool to answer questions using a google web search if needed.
-  Try asking questions about facts known after Sep 2021 (GPT4 training cutoff),
-  like  `when was llama2 released`
-
-    - Illustrates Agent + Tools/function-calling + web-search
-
-- [`/examples/basic/chat-search-seltz.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-seltz.py) Similar to the above, but uses `SeltzSearchTool` for web search powered by [Seltz](https://seltz.ai/). Requires `SELTZ_API_KEY` and `pip install langroid[seltz]`. See [Seltz Search Tool docs](../notes/seltz_search.md) for setup details.
-
-    - Illustrates Agent + Tools/function-calling + web-search via Seltz
-
-- [`/examples/basic/chat-tree.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat-tree.py) is a toy example of tree-structured multi-agent
-  computation, see a detailed writeup [here.](https://langroid.github.io/langroid/examples/agent-tree/)
-  
-    - Illustrates multi-agent task collaboration, task delegation.
-
-### Document-chat examples, or RAG (Retrieval Augmented Generation)
-
-- [`/examples/docqa/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat.py) is a document-chat application. Point it to local file,
-  directory or web url, and ask questions
-    - Illustrates basic RAG
-- [`/examples/docqa/chat-search.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-search.py): ask about anything and it will try to answer
-  based on docs indexed in vector-db, otherwise it will do a Google search, and
-  index the results in the vec-db for this and later answers.
-    - Illustrates RAG + Function-calling/tools
-- [`/examples/docqa/chat_multi.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi.py):  — this is a 2-agent system that will summarize
-  a large document with 5 bullet points: the first agent generates questions for
-  the retrieval agent, and is done when it gathers 5 key points.
-    - Illustrates 2-agent collaboration + RAG to summarize a document
-- [`/examples/docqa/chat_multi_extract.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py):  — extracts structured info from a
-  lease document: Main agent asks questions to a retrieval agent. 
-    - Illustrates 2-agent collaboration, RAG, Function-calling/tools, Structured Information Extraction.
-
-### Data-chat examples (tabular, SQL)
-
-- [`/examples/data-qa/table_chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/data-qa/table_chat):  - point to a URL or local csv file and ask
-  questions. The agent generates pandas code that is run within langroid.
-    - Illustrates function-calling/tools and code-generation
-- [`/examples/data-qa/sql-chat/sql_chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/data-qa/sql-chat/sql_chat.py):  — chat with a sql db — ask questions in
-  English, it will generate sql code to answer them.
-  See [tutorial here](https://langroid.github.io/langroid/tutorials/postgresql-agent/)
-    - Illustrates function-calling/tools and code-generation
-</file>
-
 <file path="docs/notes/attachment-token-preflight.md">
 # Attachment Token Preflight
 
@@ -74546,112 +75477,6 @@ See [Custom Azure OpenAI client](custom-azure-client.md) for details.
   and shared
 </file>
 
-<file path="docs/notes/seltz_search.md">
----
-
-# **Using Seltz Search with Langroid**
-
----
-
-## **1. Set Up Seltz**
-
-1. **Access Seltz Platform**
-   Go to [Seltz](https://seltz.ai/).
-
-2. **Sign Up or Log In**
-   Create an account or log in if you already have one.
-
-3. **Get Your API Key**
-   - Navigate to your dashboard
-   - Copy your API key
-
-4. **Set Environment Variable**
-   Add the following variable to your `.env` file:
-   ```env
-   SELTZ_API_KEY=<your_api_key>
-   ```
-
----
-
-## **2. Install**
-
-```bash
-pip install langroid[seltz]
-# or
-uv pip install langroid[seltz]
-```
-
----
-
-## **3. Use Seltz Search with Langroid**
-
-```python
-import langroid as lr
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
-
-# Configure the ChatAgent
-config = ChatAgentConfig(
-    name="search-agent",
-    llm=lr.language_models.OpenAIGPTConfig(
-        chat_model=lr.language_models.OpenAIChatModel.GPT4o
-    ),
-)
-
-# Create the agent and enable the Seltz search tool
-agent = ChatAgent(config)
-agent.enable_message(SeltzSearchTool)
-```
-
----
-
-## **4. Perform Web Searches**
-
-Use the agent to perform web searches using Seltz.
-
-```python
-# Simple search query
-response = agent.llm_response(
-    "What are the latest developments in quantum computing?"
-)
-print(response)
-```
-
----
-
-## **5. Direct Tool Usage**
-
-You can also use the tool directly without an agent:
-
-```python
-from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
-
-# Create a search request
-search_request = SeltzSearchTool(
-    query="Latest breakthroughs in fusion energy",
-    num_results=3,
-)
-
-# Get search results
-results = search_request.handle()
-print(results)
-```
-
----
-
-## **6. Full Example**
-
-See the complete working example at
-[`examples/basic/chat-search-seltz.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-seltz.py).
-
-Run it with:
-```bash
-python3 examples/basic/chat-search-seltz.py
-```
-
----
-</file>
-
 <file path="docs/notes/task-termination.md">
 # Task Termination in Langroid
 
@@ -75349,290 +76174,6 @@ The script loads the Xquik MCP tools with `get_tools_async`, enables them on a
 `ChatAgent`, and asks the agent to search X for matching posts.
 
 See the full example in `examples/mcp/xquik-twitter-search.py`.
-</file>
-
-<file path="docs/notes/vecstore-env-prefix.md">
-# Vector-Store Config Env-Var Prefixes
-
-!!! warning "Behavior change in 0.67.0"
-    As of Langroid 0.67.0, **bare environment variables such as `HOST`,
-    `PORT`, `COLLECTION_NAME`, and `FULL_EVAL` no longer configure
-    vector stores.** If you relied on any of these (this was never
-    documented, but it did work), you must rename them with the
-    per-provider prefix from the table below, e.g.
-    `QDRANT_HOST`, `QDRANT_PORT`, `VECDB_FULL_EVAL`.
-    The documented variables (`QDRANT_API_KEY`, `QDRANT_API_URL`,
-    `WEAVIATE_API_KEY`, etc.) are **unaffected**.
-
-Vector-store configs are `pydantic-settings` classes, which means their
-fields can be set via environment variables. Prior to this change (see
-issue #1078), `VectorStoreConfig` and its subclasses declared **no
-`env_prefix`**, so every field name was itself a case-insensitive
-environment variable. A bare `HOST`, `PORT`, `CLOUD`, `TIMEOUT`,
-`BATCH_SIZE`, `STORAGE_PATH`, `COLLECTION_NAME`, or `FULL_EVAL` in the
-environment silently overrode the default for *every* vector-store
-config:
-
-```bash
-HOST=evil.example.com PORT=9999 FULL_EVAL=true \
-  python -c "from langroid.vector_store.qdrantdb import QdrantDBConfig; \
-             c = QdrantDBConfig(); print(c.host, c.port, c.full_eval)"
-# old behavior: evil.example.com 9999 True
-```
-
-This was dangerous for two reasons:
-
-- `HOST` and `PORT` are routinely set by shells, containers, and CI
-  systems, so vector-store clients could silently point at the wrong
-  server.
-- `FULL_EVAL=true` disabled the code-injection guard (see
-  [code-injection-protection](code-injection-protection.md)) with no
-  explicit opt-in anywhere in the user's code.
-
-## New behavior
-
-Each vector-store config now has its own env prefix, consistent with
-the rest of the codebase (`OPENAI_`, `AZURE_OPENAI_`, `NEO4J_`, ...):
-
-| Config class        | Env prefix     |
-|---------------------|----------------|
-| `VectorStoreConfig` | `VECDB_`       |
-| `QdrantDBConfig`    | `QDRANT_`      |
-| `ChromaDBConfig`    | `CHROMA_`      |
-| `LanceDBConfig`     | `LANCEDB_`     |
-| `PineconeDBConfig`  | `PINECONE_`    |
-| `PostgresDBConfig`  | `POSTGRES_`    |
-| `MeiliSearchConfig` | `MEILISEARCH_` |
-| `WeaviateDBConfig`  | `WEAVIATE_`    |
-
-Bare env vars (`HOST`, `FULL_EVAL`, ...) are now ignored by all of
-these configs. To set a field via the environment, use the prefix of
-the specific config class, e.g. `QDRANT_HOST=my.qdrant.example` or
-`QDRANT_FULL_EVAL=true` for `QdrantDBConfig`. Every provider subclass
-in langroid overrides the prefix with its own, so within langroid
-`VECDB_*` vars affect only direct `VectorStoreConfig` instances.
-However, pydantic inherits `model_config`, so a third-party subclass
-of `VectorStoreConfig` that does not set its own `env_prefix` will
-read `VECDB_*` vars.
-
-A `port` value coming from the *environment* that matches the exact
-Kubernetes service-link format `tcp://<host>:<digits>` (e.g.
-`QDRANT_PORT=tcp://10.0.0.8:6333`, injected into every pod by a
-service named `qdrant` when `enableServiceLinks` is on) is ignored
-with a warning and the default port is used. This exception applies
-only to the env settings source and only to that full format:
-malformed `tcp://` junk in the environment, and any `tcp://...` value
-passed explicitly to the constructor, fail validation as usual.
-
-Explicit constructor arguments always take priority over environment
-values (standard `pydantic-settings` precedence):
-
-```python
-config = QdrantDBConfig(host="10.0.0.5")  # wins over QDRANT_HOST
-```
-
-## Migration
-
-If you (deliberately) relied on bare env vars to configure a
-vector store, rename them with the appropriate prefix from the table
-above, e.g. `COLLECTION_NAME=mydocs` becomes
-`QDRANT_COLLECTION_NAME=mydocs`.
-
-Env vars read via `os.getenv` outside the config classes are
-unaffected, e.g. `QDRANT_API_KEY`, `PINECONE_API_KEY`,
-`MEILISEARCH_API_KEY`, `MEILISEARCH_API_URL`, `WEAVIATE_API_KEY`, and
-`WEAVIATE_API_URL` keep their existing meanings. Note that the
-`QDRANT_*` and `PINECONE_*` prefixes overlap with those existing
-names, but the config classes have no `api_key`/`api_url` fields, so
-extra prefixed vars are ignored.
-</file>
-
-<file path="docs/quick-start/setup.md">
-# Setup
-
-
-## Install
-Ensure you are using Python 3.11. It is best to work in a virtual environment:
-
-```bash
-# go to your repo root (which may be langroid-examples)
-cd <your repo root>
-python3 -m venv .venv
-. ./.venv/bin/activate
-```
-To see how to use Langroid in your own repo, you can take a look at the
-[`langroid-examples`](https://github.com/langroid/langroid-examples) repo, which can be a good starting point for your own repo, 
-or use the [`langroid-template`](https://github.com/langroid/langroid-template) repo.
-These repos contain a `pyproject.toml` file suitable for use with the [`uv`](https://docs.astral.sh/uv/) dependency manager. After installing `uv` you can 
-set up your virtual env, activate it, and install langroid into your venv like this:
-
-```bash
-uv venv --python 3.11
-. ./.venv/bin/activate 
-uv sync
-```
-
-Alternatively, use `pip` to install `langroid` into your virtual environment:
-```bash
-pip install langroid
-```
-
-The core Langroid package lets you use OpenAI Embeddings models via their API.
-If you instead want to use the `sentence-transformers` embedding models from HuggingFace,
-install Langroid like this:
-```bash
-pip install "langroid[hf-embeddings]"
-```
-For many practical scenarios, you may need additional optional dependencies:
-- To use various document-parsers, install langroid with the `doc-chat` extra:
-    ```bash
-    pip install "langroid[doc-chat]"
-    ```
-- For "chat with databases", use the `db` extra:
-    ```bash
-    pip install "langroid[db]"
-    ``
-- You can specify multiple extras by separating them with commas, e.g.:
-    ```bash
-    pip install "langroid[doc-chat,db]"
-    ```
-- To simply install _all_ optional dependencies, use the `all` extra (but note that this will result in longer load/startup times and a larger install size):
-    ```bash
-    pip install "langroid[all]"
-    ```
-
-??? note "Optional Installs for using SQL Chat with a PostgreSQL DB"
-    If you are using `SQLChatAgent`
-    (e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](https://github.com/langroid/langroid/blob/main/examples/data-qa/sql-chat/sql_chat.py),
-    with a postgres db, you will need to:
-    
-    - Install PostgreSQL dev libraries for your platform, e.g.
-        - `sudo apt-get install libpq-dev` on Ubuntu,
-        - `brew install postgresql` on Mac, etc.
-    - Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
-      or `uv add "langroid[postgres]"` or `uv pip install --extra postgres -r pyproject.toml`.
-      If this gives you an error, try 
-      `uv pip install psycopg2-binary` in your virtualenv.
-
-
-!!! tip "Work in a nice terminal, such as Iterm2, rather than a notebook"
-    All of the examples we will go through are command-line applications.
-    For the best experience we recommend you work in a nice terminal that supports 
-    colored outputs, such as [Iterm2](https://iterm2.com/).    
-
-
-!!! note "mysqlclient errors"
-    If you get strange errors involving `mysqlclient`, try doing `pip uninstall mysqlclient` followed by `pip install mysqlclient` 
-
-## Set up tokens/keys 
-
-To get started, all you need is an OpenAI API Key.
-If you don't have one, see [this OpenAI Page](https://platform.openai.com/docs/quickstart).
-(Note that while this is the simplest way to get started, Langroid works with practically any LLM, not just those from OpenAI.
-See the guides to using [Open/Local LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
-and other [non-OpenAI](https://langroid.github.io/langroid/tutorials/non-openai-llms/) proprietary LLMs.)
-
-In the root of the repo, copy the `.env-template` file to a new file `.env`:
-```bash
-cp .env-template .env
-```
-Then insert your OpenAI API Key.
-Your `.env` file should look like this:
-```bash
-OPENAI_API_KEY=your-key-here-without-quotes
-```
-
-Alternatively, you can set this as an environment variable in your shell
-(you will need to do this every time you open a new shell):
-```bash
-export OPENAI_API_KEY=your-key-here-without-quotes
-```
-
-All of the following environment variable settings are optional, and some are only needed
-to use specific features (as noted below).
-
-- **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
-  Langroid uses LanceDB as the default vector store in its `DocChatAgent` class (for RAG).
-  Alternatively [Chroma](https://docs.trychroma.com/) and
-  [Milvus](https://milvus.io/) are also currently supported.
-  We use the local-storage version of Chroma, so there is no need for an API key.
-- **Milvus** Vector Store URI, token, database name. These are optional.
-  Without them, Milvus uses local storage at `./milvus.db`. Set `MILVUS_URI`
-  for Milvus server or Zilliz Cloud, `MILVUS_TOKEN` for token-based access,
-  and `MILVUS_DB_NAME` for a named database. Milvus Lite is unavailable on
-  Windows, so Windows users must set `MILVUS_URI` to a Milvus server or Zilliz
-  Cloud endpoint.
-- **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
-  using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
-  which is more than sufficient to try out Langroid and even beyond.
-  If you don't set up these, Langroid will use a pure-python
-  Redis in-memory cache via the [Fakeredis](https://fakeredis.readthedocs.io/en/latest/) library.
-- **GitHub** Personal Access Token (required for apps that need to analyze git
-  repos; token-based API calls are less rate-limited). See this
-  [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
-- **Google Custom Search API Credentials:** Only needed to enable an Agent to use the `GoogleSearchTool`.
-  To use Google Search as an LLM Tool/Plugin/function-call,
-  you'll need to set up
-  [a Google API key](https://developers.google.com/custom-search/v1/introduction#identify_your_application_to_google_with_api_key),
-  then [setup a Google Custom Search Engine (CSE) and get the CSE ID](https://developers.google.com/custom-search/docs/tutorial/creatingcse).
-  (Documentation for these can be challenging, we suggest asking GPT4 for a step-by-step guide.)
-  After obtaining these credentials, store them as values of
-  `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in your `.env` file.
-  Full documentation on using this (and other such "stateless" tools) is coming soon, but
-  in the meantime take a peek at the test
-  [`tests/main/test_web_search_tools.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_web_search_tools.py) to see how to use it.
-
-
-An `.env` file with commonly used optional variables looks like this:
-```bash
-OPENAI_API_KEY=your-key-here-without-quotes
-GITHUB_ACCESS_TOKEN=your-personal-access-token-no-quotes
-CACHE_TYPE=redis
-REDIS_PASSWORD=your-redis-password-no-quotes
-REDIS_HOST=your-redis-hostname-no-quotes
-REDIS_PORT=your-redis-port-no-quotes
-QDRANT_API_KEY=your-key
-QDRANT_API_URL=https://your.url.here:6333 # note port number must be included
-GOOGLE_API_KEY=your-key
-GOOGLE_CSE_ID=your-cse-id
-```
-
-!!! warning "Vector-store settings need a provider prefix (0.67.0+)"
-    Vector-store config fields can also be set via env vars, but only
-    with a per-provider prefix, e.g. `QDRANT_HOST`, `LANCEDB_STORAGE_PATH`,
-    `VECDB_FULL_EVAL`. Bare names like `HOST`, `PORT`, or `FULL_EVAL`
-    are ignored as of Langroid 0.67.0 — see
-    [Vector-Store Env Prefixes](../notes/vecstore-env-prefix.md).
-
-### Microsoft Azure OpenAI setup[Optional]
-
-This section applies only if you are using Microsoft Azure OpenAI.
-
-When using Azure OpenAI, additional environment variables are required in the
-`.env` file.
-This page [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line&pivots=programming-language-python#environment-variables)
-provides more information, and you can set each environment variable as follows:
-
-- `AZURE_OPENAI_API_KEY`, from the value of `API_KEY`
-- `AZURE_OPENAI_API_BASE` from the value of `ENDPOINT`, typically looks like `https://your_resource.openai.azure.com`.
-- For `AZURE_OPENAI_API_VERSION`, you can use the default value in `.env-template`, and latest version can be found [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/whats-new#azure-openai-chat-completion-general-availability-ga)
-- `AZURE_OPENAI_DEPLOYMENT_NAME` is an OPTIONAL deployment name which may be 
-   defined by the user during the model setup.
-- `AZURE_OPENAI_CHAT_MODEL` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisely the exact model name that was selected. For example, GPT-3.5 (should be `gpt-35-turbo-16k` or `gpt-35-turbo`) or GPT-4 (should be `gpt-4-32k` or `gpt-4`).
-- `AZURE_OPENAI_MODEL_NAME` (Deprecated, use `AZURE_OPENAI_CHAT_MODEL` instead).
-  
-!!! note "For Azure-based models use `AzureConfig` instead of `OpenAIGPTConfig`"
-    In most of the docs you will see that LLMs are configured using `OpenAIGPTConfig`.
-    However if you want to use Azure-deployed models, you should replace `OpenAIGPTConfig` with `AzureConfig`. See 
-    the [`test_azure_openai.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_azure_openai.py) and 
-    [`example/basic/chat.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat.py)
-
-
-## Next steps
-
-Now you should be ready to use Langroid!
-As a next step, you may want to see how you can use Langroid to [interact 
-directly with the LLM](llm-interaction.md) (OpenAI GPT models only for now).
 </file>
 
 <file path="docs/tutorials/local-llm-setup.md">
@@ -76427,299 +76968,6 @@ def main(
     # Save the conversation state to hist_path
     hist_path.write_text(agent.export_history())
     logger.info(f"Saved {len(agent.message_history)} messages to cache")
-
-
-if __name__ == "__main__":
-    app()
-</file>
-
-<file path="examples/basic/chat-search-seltz.py">
-"""
-This is a basic example of a chatbot that uses SeltzSearchTool to
-answer questions using web search results powered by Seltz.
-
-Run like this:
-
-    python3 examples/basic/chat-search-seltz.py
-
-There are optional args:
--m <model_name>: to run with a different LLM model (default: gpt4o)
--d: debug mode
--ns: no streaming
--nc: don't use cache
-
-NOTE: You need to:
-* set the SELTZ_API_KEY environment variable in
-your `.env` file, e.g. `SELTZ_API_KEY=your_api_key_here`
-
-* install langroid with the `seltz` extra, e.g.
-`pip install langroid[seltz]` or `uv pip install langroid[seltz]`
-or `poetry add langroid[seltz]` or `uv add langroid[seltz]`
-
-For more information, please refer to https://seltz.ai/
-"""
-
-import typer
-from dotenv import load_dotenv
-from rich import print
-
-import langroid as lr
-import langroid.language_models as lm
-from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
-from langroid.utils.configuration import Settings, set_global
-
-app = typer.Typer()
-
-
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    model: str = typer.Option("", "--model", "-m", help="model name"),
-    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-) -> None:
-    set_global(
-        Settings(
-            debug=debug,
-            cache=not nocache,
-            stream=not no_stream,
-        )
-    )
-    print(
-        """
-        [blue]Welcome to the Seltz Web Search chatbot!
-        I will try to answer your questions using web search
-        results powered by Seltz.
-
-        Enter x or q to quit at any point.
-        """
-    )
-
-    load_dotenv()
-
-    llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4o,
-        chat_context_length=32_000,
-        temperature=0.15,
-        max_output_tokens=1000,
-        timeout=45,
-    )
-
-    search_tool_handler_method = SeltzSearchTool.name()
-    config = lr.ChatAgentConfig(
-        name="Seeker",
-        handle_llm_no_tool="user",
-        llm=llm_config,
-        vecdb=None,
-        system_message=f"""
-        You are a helpful assistant. You will try your best to answer my questions.
-        Here is how you should answer my questions:
-        - IF my question is about a topic you ARE CERTAIN about, answer it directly
-        - OTHERWISE, use the `{search_tool_handler_method}` tool/function-call to
-          get up to 5 results from a web-search, to help you answer the question.
-          I will show you the results from the web-search, and you can use those
-          to answer the question.
-        - If I EXPLICITLY ask you to search the web/internet, then use the
-            `{search_tool_handler_method}` tool/function-call to get up to 5 results
-            from a web-search, to help you answer the question.
-
-        In case you use the TOOL `{search_tool_handler_method}`, you MUST WAIT
-        for results from this tool; do not make up results!
-
-        Be very CONCISE in your answers, use no more than 1-2 sentences.
-        When you answer based on a web search, First show me your answer,
-        and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
-        in this format:
-
-        <your answer here>
-        SOURCE: https://www.example.com/article
-        EXTRACT: First few words ... last few words.
-
-        SOURCE: ...
-        EXTRACT: ...
-
-        For the EXTRACT, ONLY show up to first 3 words, and last 3 words.
-        DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
-        """,
-    )
-    agent = lr.ChatAgent(config)
-
-    agent.enable_message(SeltzSearchTool)
-
-    task = lr.Task(agent, interactive=False)
-
-    user_message = "Can you help me with some questions?"
-    task.run(user_message)
-
-
-if __name__ == "__main__":
-    app()
-</file>
-
-<file path="examples/basic/chat-search.py">
-"""
-This is a basic example of a chatbot that uses one of these web-search Tools to
-answer questions:
- - GoogleSearchTool
- - DuckduckgoSearchTool
- - ExaSearchTool
- - SeltzSearchTool
-When the LLM doesn't know the answer to a question, it will use the tool to
-search the web for relevant results, and then use the results to answer the
-question.
-
-Run like this:
-
-    python3 examples/basic/chat-search.py
-
-or
-
-    uv run examples/basic/chat-search.py -m groq/deepseek-r1-distill-llama-70b
-
-There are optional args, especially note these:
-
--p or --provider: google or ddg or Exa (default: google)
--m <model_name>: to run with a different LLM model (default: gpt4-turbo)
-
-You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
-or `-m ollama/mistral` etc. See here how to use Langroid with local LLMs:
-https://langroid.github.io/langroid/tutorials/local-llm-setup/
-
-
-NOTE:
-(a) If using Google Search, you must have GOOGLE_API_KEY and GOOGLE_CSE_ID
-environment variables in your `.env` file, as explained in the
-[README](https://github.com/langroid/langroid#gear-installation-and-setup).
-
-
-(b) If using ExaSearchTool, you need to:
-* set the EXA_API_KEY environment variables in
-your `.env` file, e.g. `EXA_API_KEY=your_api_key_here`
-* install langroid with the `exa` extra, e.g.
-`pip install langroid[exa]` or `uv pip install langroid[exa]`
-or `poetry add langroid[exa]`  or `uv add langroid[exa]`
-(it installs the `exa-py` package from pypi).
-For more information, please refer to the official docs:
-https://exa.ai/
-
-"""
-
-import typer
-from dotenv import load_dotenv
-from rich import print
-
-import langroid as lr
-import langroid.language_models as lm
-from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
-from langroid.agent.tools.google_search_tool import GoogleSearchTool
-from langroid.utils.configuration import Settings, set_global
-
-app = typer.Typer()
-
-
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    model: str = typer.Option("", "--model", "-m", help="model name"),
-    provider: str = typer.Option(
-        "ddg",
-        "--provider",
-        "-p",
-        help="search provider name (google, ddg, exa, seltz)",
-    ),
-    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-) -> None:
-    set_global(
-        Settings(
-            debug=debug,
-            cache=not nocache,
-            stream=not no_stream,
-        )
-    )
-    print(
-        """
-        [blue]Welcome to the Web Search chatbot!
-        I will try to answer your questions, relying on (summaries of links from) 
-        Web-Search when needed.
-        
-        Enter x or q to quit at any point.
-        """
-    )
-
-    load_dotenv()
-
-    llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4o,
-        chat_context_length=32_000,
-        temperature=0.15,
-        max_output_tokens=1000,
-        timeout=45,
-    )
-
-    match provider:
-        case "google":
-            search_tool_class = GoogleSearchTool
-        case "exa":
-            from langroid.agent.tools.exa_search_tool import ExaSearchTool
-
-            search_tool_class = ExaSearchTool
-        case "ddg":
-            search_tool_class = DuckduckgoSearchTool
-        case "seltz":
-            from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
-
-            search_tool_class = SeltzSearchTool
-        case _:
-            raise ValueError(f"Unsupported provider {provider} specified.")
-
-    search_tool_handler_method = search_tool_class.name()
-    config = lr.ChatAgentConfig(
-        name="Seeker",
-        handle_llm_no_tool="user",  # fwd to user when LLM sends non-tool msg
-        llm=llm_config,
-        vecdb=None,
-        system_message=f"""
-        You are a helpful assistant. You will try your best to answer my questions.
-        Here is how you should answer my questions:
-        - IF my question is about a topic you ARE CERTAIN about, answer it directly
-        - OTHERWISE, use the `{search_tool_handler_method}` tool/function-call to
-          get up to 5 results from a web-search, to help you answer the question.
-          I will show you the results from the web-search, and you can use those
-          to answer the question.
-        - If I EXPLICITLY ask you to search the web/internet, then use the 
-            `{search_tool_handler_method}` tool/function-call to get up to 5 results
-            from a web-search, to help you answer the question.
-
-
-        In case you use the TOOL `{search_tool_handler_method}`, you MUST WAIT
-        for results from this tool; do not make up results!
-        
-        Be very CONCISE in your answers, use no more than 1-2 sentences.
-        When you answer based on a web search, First show me your answer, 
-        and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
-        in this format:
-        
-        <your answer here>
-        SOURCE: https://www.wikihow.com/Be-a-Good-Assistant-Manager
-        EXTRACT: Be a Good Assistant ... requires good leadership skills.
-        
-        SOURCE: ...
-        EXTRACT: ...
-        
-        For the EXTRACT, ONLY show up to first 3 words, and last 3 words.
-        DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
-        """,
-    )
-    agent = lr.ChatAgent(config)
-
-    agent.enable_message(search_tool_class)
-
-    task = lr.Task(agent, interactive=False)
-
-    # local models do not like the first message to be empty
-    user_message = "Can you help me with some questions?"
-    task.run(user_message)
 
 
 if __name__ == "__main__":
@@ -80076,72 +80324,6 @@ class RewindTool(ToolMessage):
         return result_doc
 </file>
 
-<file path="langroid/agent/tools/seltz_search_tool.py">
-"""
-A tool to trigger a Seltz search for a given query and return the top results.
-Since the tool is stateless (i.e. does not need
-access to agent state), it can be enabled for any agent, without having to define a
-special method inside the agent: `agent.enable_message(SeltzSearchTool)`
-
-NOTE: To use this tool, you need to:
-
-* set the SELTZ_API_KEY environment variable in
-your `.env` file, e.g. `SELTZ_API_KEY=your_api_key_here`
-
-* install langroid with the `seltz` extra, e.g.
-`pip install langroid[seltz]` or `uv pip install langroid[seltz]`
-or `poetry add langroid[seltz]` or `uv add langroid[seltz]`
-(it installs the `seltz` package from pypi).
-
-For more information, please refer to: https://seltz.ai/
-"""
-
-from typing import List, Tuple
-
-from langroid.agent.tool_message import ToolMessage
-from langroid.parsing.web_search import seltz_search
-
-
-class SeltzSearchTool(ToolMessage):
-    request: str = "seltz_search"
-    purpose: str = """
-            To search the web using Seltz and return up to <num_results>
-            results relevant to the given <query>. When using this tool,
-            ONLY show the required JSON, DO NOT SAY ANYTHING ELSE.
-            Wait for the results of the web search, and then use them to
-            compose your response.
-            """
-    query: str
-    num_results: int
-
-    def handle(self) -> str:
-        """
-        Conducts a search using the Seltz API based on the provided query
-        and number of results by triggering a seltz_search.
-
-        Returns:
-            str: A formatted string containing the titles, links, and
-                summaries of each search result, separated by two newlines.
-        """
-
-        search_results = seltz_search(self.query, self.num_results)
-        # return Title, Link, Summary of each result, separated by two newlines
-        results_str = "\n\n".join(str(result) for result in search_results)
-        return f"""
-        BELOW ARE THE RESULTS FROM THE WEB SEARCH. USE THESE TO COMPOSE YOUR RESPONSE:
-        {results_str}
-        """
-
-    @classmethod
-    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
-        return [
-            cls(
-                query="When was the Llama2 Large Language Model (LLM) released?",
-                num_results=3,
-            ),
-        ]
-</file>
-
 <file path="langroid/agent/tools/task_tool.py">
 """
 TaskTool: A tool that allows agents to delegate a task to a sub-agent with
@@ -83422,335 +83604,6 @@ def eliminate_near_duplicates(passages: List[str], threshold: float = 0.8) -> Li
             unique_idxs.add(idx)
 
     return [passages[idx] for idx in unique_idxs]
-</file>
-
-<file path="langroid/parsing/web_search.py">
-"""
-Utilities for web search.
-
-NOTE: Using Google Search requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
-environment variables in your `.env` file, as explained in the
-[README](https://github.com/langroid/langroid#gear-installation-and-setup).
-"""
-
-import os
-from typing import Dict, List
-
-import requests
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-from duckduckgo_search import DDGS
-from googleapiclient.discovery import Resource, build
-from requests.models import Response
-
-from langroid.exceptions import LangroidImportError
-
-
-class WebSearchResult:
-    """
-    Class representing a Web Search result, containing the title, link,
-    summary and full content of the result.
-    """
-
-    def __init__(
-        self,
-        title: str,
-        link: str | None,
-        max_content_length: int = 3500,
-        max_summary_length: int = 300,
-    ):
-        """
-        Args:
-            title (str): The title of the search result.
-            link (str): The link to the search result.
-            max_content_length (int): The maximum length of the full content.
-            max_summary_length (int): The maximum length of the summary.
-        """
-        self.title = title
-        self.link = link
-        self.max_content_length = max_content_length
-        self.max_summary_length = max_summary_length
-        self.full_content = self.get_full_content()
-        self.summary = self.get_summary()
-
-    def get_summary(self) -> str:
-        return self.full_content[: self.max_summary_length]
-
-    def get_full_content(self) -> str:
-        if self.link is None:
-            return "Error: No Search Result"
-        try:
-            # First check headers only to get content length and type
-            head_response: Response = requests.head(self.link, timeout=5)
-            content_type = head_response.headers.get("content-type", "").lower()
-
-            # Skip large files
-            content_length = int(head_response.headers.get("content-length", 0))
-            if content_length > 5_000_000:  # 5MB limit
-                return (
-                    f"Error: Content too large ({content_length} bytes) for {self.link}"
-                )
-            # Skip non-HTML content types
-            if content_type and not any(
-                html_type in content_type
-                for html_type in ["text/html", "application/xhtml", "text/plain"]
-            ):
-                return f"Skipping Content type '{content_type}' " f"in {self.link}"
-
-            response: Response = requests.get(self.link, timeout=10)
-            if response.status_code != 200:
-                return f"Error: HTTP {response.status_code} for {self.link}"
-
-            import warnings
-
-            from bs4 import XMLParsedAsHTMLWarning
-
-            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
-
-            soup: BeautifulSoup = BeautifulSoup(response.text, "html.parser")
-            text = " ".join(soup.stripped_strings)
-            return text[: self.max_content_length]
-        except Exception as e:
-            return f"Error fetching content from {self.link}: {e}"
-
-    def __str__(self) -> str:
-        return f"Title: {self.title}\nLink: {self.link}\nSummary: {self.summary}"
-
-    def to_dict(self) -> Dict[str, str]:
-        return {
-            "title": self.title,
-            "link": self.link or "",
-            "summary": self.summary,
-            "full_content": self.full_content,
-        }
-
-
-def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
-    load_dotenv()
-    api_key = os.getenv("GOOGLE_API_KEY")
-    cse_id = os.getenv("GOOGLE_CSE_ID")
-    service: Resource = build("customsearch", "v1", developerKey=api_key)
-    raw_results = (
-        service.cse().list(q=query, cx=cse_id, num=num_results).execute()["items"]
-    )
-
-    return [
-        WebSearchResult(result["title"], result["link"], 3500, 300)
-        for result in raw_results
-    ]
-
-
-def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
-    """
-    Method that makes an API call by Metaphor client that queries
-    the top num_results links that matches the query. Returns a list
-    of WebSearchResult objects.
-
-    Args:
-        query (str): The query body that users wants to make.
-        num_results (int): Number of top matching results that we want
-            to grab
-    """
-
-    load_dotenv()
-
-    api_key = os.getenv("METAPHOR_API_KEY") or os.getenv("EXA_API_KEY")
-    if not api_key:
-        raise ValueError(
-            """
-            Neither METAPHOR_API_KEY nor EXA_API_KEY environment variables are set. 
-            Please set one of them to your API key, and try again.
-            """
-        )
-
-    try:
-        from metaphor_python import Metaphor
-    except ImportError:
-        raise LangroidImportError("metaphor-python", "metaphor")
-
-    client = Metaphor(api_key=api_key)
-
-    response = client.search(
-        query=query,
-        num_results=num_results,
-    )
-    raw_results = response.results
-
-    return [
-        WebSearchResult(result.title, result.url, 3500, 300) for result in raw_results
-    ]
-
-
-def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
-    """
-    Method that makes an API call by Exa client that queries
-    the top num_results links that matches the query. Returns a list
-    of WebSearchResult objects.
-
-    Args:
-        query (str): The query body that users wants to make.
-        num_results (int): Number of top matching results that we want
-            to grab
-    """
-
-    load_dotenv()
-
-    api_key = os.getenv("EXA_API_KEY")
-    if not api_key:
-        raise ValueError(
-            """
-            EXA_API_KEY environment variables are not set. 
-            Please set one of them to your API key, and try again.
-            """
-        )
-
-    try:
-        from exa_py import Exa
-    except ImportError:
-        raise LangroidImportError("exa-py", "exa")
-
-    client = Exa(api_key=api_key)
-
-    try:
-        response = client.search(
-            query=query,
-            num_results=num_results,
-        )
-        raw_results = response.results
-
-        return [
-            WebSearchResult(
-                title=result.title or "",
-                link=result.url,
-                max_content_length=3500,
-                max_summary_length=300,
-            )
-            for result in raw_results
-            if result.url is not None
-        ]
-    except Exception:
-        return [
-            WebSearchResult(
-                title="Error",
-                link=None,
-                max_content_length=3500,
-                max_summary_length=300,
-            )
-        ]
-
-
-def duckduckgo_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
-    """
-    Method that makes an API call by DuckDuckGo client that queries
-    the top `num_results` links that matche the query. Returns a list
-    of WebSearchResult objects.
-
-    Args:
-        query (str): The query body that users wants to make.
-        num_results (int): Number of top matching results that we want
-            to grab
-    """
-
-    with DDGS() as ddgs:
-        search_results = [r for r in ddgs.text(query, max_results=num_results)]
-
-    return [
-        WebSearchResult(
-            title=result["title"],
-            link=result["href"],
-            max_content_length=3500,
-            max_summary_length=300,
-        )
-        for result in search_results
-    ]
-
-
-def tavily_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
-    """
-    Method that makes an API call to Tavily API that queries
-    the top `num_results` links that match the query. Returns a list
-    of WebSearchResult objects.
-
-    Args:
-        query (str): The query body that users wants to make.
-        num_results (int): Number of top matching results that we want
-            to grab
-    """
-
-    load_dotenv()
-
-    api_key = os.getenv("TAVILY_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "TAVILY_API_KEY environment variable is not set. "
-            "Please set it to your API key and try again."
-        )
-
-    try:
-        from tavily import TavilyClient
-    except ImportError:
-        raise LangroidImportError("tavily-python", "tavily")
-
-    client = TavilyClient(api_key=api_key)
-    response = client.search(query=query, max_results=num_results)
-    search_results = response["results"]
-
-    return [
-        WebSearchResult(
-            title=result["title"],
-            link=result["url"],
-            max_content_length=3500,
-            max_summary_length=300,
-        )
-        for result in search_results
-    ]
-
-
-def seltz_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
-    """
-    Method that makes an API call to Seltz API that queries
-    the top `num_results` results. Returns a list of WebSearchResult objects.
-
-    Args:
-        query (str): The query body that users wants to make.
-        num_results (int): Number of top matching results that we want
-            to grab
-    """
-
-    load_dotenv()
-
-    api_key = os.getenv("SELTZ_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "SELTZ_API_KEY environment variable is not set. "
-            "Please set it to your API key and try again."
-        )
-
-    try:
-        from seltz import Includes, Seltz
-    except ImportError:
-        raise LangroidImportError("seltz", "seltz")
-
-    client = Seltz(api_key=api_key)
-    response = client.search(
-        query=query,
-        includes=Includes(max_documents=num_results),
-    )
-
-    results = []
-    for doc in response.documents:
-        result = WebSearchResult(
-            title=doc.url,
-            link=None,  # skip HTTP fetch; Seltz already provides content
-            max_content_length=3500,
-            max_summary_length=300,
-        )
-        result.link = doc.url
-        result.full_content = doc.content[:3500]
-        result.summary = doc.content[:300]
-        results.append(result)
-
-    return results
 </file>
 
 <file path="langroid/utils/configuration.py">
@@ -96770,143 +96623,6 @@ class TestRotatingApiKeys:
         assert seen == ["Bearer tok-1", "Bearer tok-2"]
 </file>
 
-<file path="tests/main/test_seltz_search.py">
-"""
-Tests for Seltz search integration.
-
-Unit tests use mocking and do not require a SELTZ_API_KEY.
-Integration tests require SELTZ_API_KEY to be set.
-"""
-
-import os
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
-
-import pytest
-
-from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
-from langroid.parsing.web_search import seltz_search
-
-
-@pytest.fixture
-def mock_seltz_response():
-    """Create a mock Seltz API response."""
-    doc1 = SimpleNamespace(
-        url="https://example.com/page1",
-        content="First result content about LK-99 superconductor material.",
-    )
-    doc2 = SimpleNamespace(
-        url="https://example.com/page2",
-        content="Second result content about LK-99 research findings.",
-    )
-    response = SimpleNamespace(documents=[doc1, doc2])
-    return response
-
-
-class TestSeltzSearchUnit:
-    """Unit tests for seltz_search (mocked, no API key needed)."""
-
-    @patch.dict(os.environ, {"SELTZ_API_KEY": "test-key"})
-    def test_seltz_search_returns_results(self, mock_seltz_response):
-        """Test that seltz_search returns properly formatted WebSearchResult objects."""
-        mock_client = MagicMock()
-        mock_client.search.return_value = mock_seltz_response
-
-        with patch.dict("sys.modules", {"seltz": MagicMock()}):
-            import sys
-
-            sys.modules["seltz"].Seltz.return_value = mock_client
-
-            results = seltz_search("LK-99 superconductor", num_results=2)
-
-        assert len(results) == 2
-        assert results[0].link == "https://example.com/page1"
-        assert "LK-99 superconductor" in results[0].full_content
-        assert results[1].link == "https://example.com/page2"
-
-    @patch.dict(os.environ, {"SELTZ_API_KEY": "test-key"})
-    def test_seltz_search_content_assignment(self, mock_seltz_response):
-        """Test that content is assigned directly without HTTP fetch."""
-        mock_client = MagicMock()
-        mock_client.search.return_value = mock_seltz_response
-
-        with patch.dict("sys.modules", {"seltz": MagicMock()}):
-            import sys
-
-            sys.modules["seltz"].Seltz.return_value = mock_client
-
-            results = seltz_search("test query", num_results=2)
-
-        # Content should come from Seltz, not from HTTP fetch
-        assert results[0].full_content == (
-            "First result content about LK-99 superconductor material."
-        )
-        assert results[0].summary == (
-            "First result content about LK-99 superconductor material."
-        )
-
-    def test_seltz_search_missing_api_key(self):
-        """Test that missing API key raises ValueError."""
-        with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("SELTZ_API_KEY", None)
-            with pytest.raises(ValueError, match="SELTZ_API_KEY"):
-                seltz_search("test query")
-
-
-class TestSeltzSearchToolUnit:
-    """Unit tests for SeltzSearchTool (mocked)."""
-
-    @patch.dict(os.environ, {"SELTZ_API_KEY": "test-key"})
-    def test_seltz_search_tool_handle(self, mock_seltz_response):
-        """Test that SeltzSearchTool.handle() returns formatted results."""
-        mock_client = MagicMock()
-        mock_client.search.return_value = mock_seltz_response
-
-        with patch.dict("sys.modules", {"seltz": MagicMock()}):
-            import sys
-
-            sys.modules["seltz"].Seltz.return_value = mock_client
-
-            tool = SeltzSearchTool(query="LK-99", num_results=2)
-            result = tool.handle()
-
-        assert "BELOW ARE THE RESULTS FROM THE WEB SEARCH" in result
-        assert "example.com/page1" in result
-
-    def test_seltz_search_tool_examples(self):
-        """Test that examples are properly defined."""
-        examples = SeltzSearchTool.examples()
-        assert len(examples) == 1
-        assert isinstance(examples[0], SeltzSearchTool)
-        assert examples[0].num_results == 3
-
-    def test_seltz_search_tool_name(self):
-        """Test the tool request name."""
-        assert SeltzSearchTool.name() == "seltz_search"
-
-
-@pytest.mark.skipif(
-    not os.environ.get("SELTZ_API_KEY"),
-    reason="SELTZ_API_KEY not set",
-)
-class TestSeltzSearchIntegration:
-    """Integration tests requiring a real SELTZ_API_KEY."""
-
-    def test_seltz_search_real_query(self):
-        """Test a real Seltz search query."""
-        results = seltz_search("Python programming language", num_results=3)
-        assert len(results) > 0
-        assert all(r.link is not None for r in results)
-        assert all(len(r.full_content) > 0 for r in results)
-
-    def test_seltz_search_tool_real_query(self):
-        """Test SeltzSearchTool with a real query."""
-        tool = SeltzSearchTool(query="Python programming language", num_results=3)
-        result = tool.handle()
-        assert "BELOW ARE THE RESULTS FROM THE WEB SEARCH" in result
-        assert len(result) > 100
-</file>
-
 <file path="tests/main/test_string_search.py">
 import pytest
 
@@ -98072,6 +97788,94 @@ def test_end_to_end_agent_response_does_not_fire_secret_tool(
     assert "SECRET:pwned" not in text
 </file>
 
+<file path="tests/main/test_web_search_tools.py">
+"""
+NOTE: running this test requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
+environment variables in your `.env` file, as explained in the
+[README](https://github.com/langroid/langroid#gear-installation-and-setup).
+
+"""
+
+import pytest
+
+import langroid as lr
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
+from langroid.agent.tools.exa_search_tool import ExaSearchTool
+from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
+from langroid.agent.tools.tavily_search_tool import TavilySearchTool
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
+
+cfg = ChatAgentConfig(
+    name="test-langroid",
+    vecdb=None,
+    llm=OpenAIGPTConfig(
+        type="openai",
+        cache_config=RedisCacheConfig(fake=False),
+    ),
+    parsing=ParsingConfig(),
+    prompts=PromptsConfig(),
+    use_functions_api=False,
+    use_tools=True,
+)
+agent = ChatAgent(cfg)
+
+
+@pytest.mark.parametrize(
+    "search_tool_cls",
+    [
+        ExaSearchTool,
+        TavilySearchTool,
+        GoogleSearchTool,
+        DuckduckgoSearchTool,
+        SeltzSearchTool,
+    ],
+)
+@pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+def test_agent_web_search_tool(
+    test_settings: Settings,
+    search_tool_cls: lr.ToolMessage,
+    use_functions_api: bool,
+    use_tools_api: bool,
+):
+    """
+    Test whether LLM is able to GENERATE message (tool) in required format, AND the
+    agent handles the message correctly.
+    Args:
+        test_settings: test settings from conftest.py
+        use_functions_api: whether to use LLM's functions api or not
+            (i.e. use the langroid ToolMessage tools instead).
+    """
+    set_global(test_settings)
+    agent = ChatAgent(cfg)
+    agent.config.use_functions_api = use_functions_api
+    agent.config.use_tools = not use_functions_api
+    agent.config.use_tools_api = use_tools_api
+    agent.enable_message(search_tool_cls)
+
+    llm_msg = agent.llm_response_forget(
+        "Find 3 results on the internet about the LK-99 superconducting material."
+    )
+    assert isinstance(agent.get_tool_messages(llm_msg)[0], search_tool_cls)
+
+    try:
+        agent_result = agent.handle_message(llm_msg).content
+    except Exception as e:
+        pytest.skip(f"Skipping test: {e}")
+    results = agent_result.lower().split("\n\n")
+    assert len(results) == 3
+    # Live web-search results drift over time; require a MAJORITY (not all) of
+    # the results to mention the topic, so one tangential result from an engine
+    # (e.g. Tavily) does not fail the test.
+    assert sum(("lk-99" in r or "supercond" in r) for r in results) >= 2
+</file>
+
 <file path="README.md">
 <div align="center">
   <img src="https://raw.githubusercontent.com/langroid/langroid/main/docs/assets/langroid-card-lambda-ossem-rust-1200-630.png" alt="Logo"
@@ -98221,6 +98025,23 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Aug 2026:**
+  - [0.67.0](https://github.com/langroid/langroid/releases/tag/0.67.0) Security hardening: 
+    per-provider `env_prefix` for vector-store configs (env-var naming change -- see 
+    [migration notes](https://langroid.github.io/langroid/notes/vecstore-env-prefix/)), 
+    generalized taint propagation across tool re-emission paths, and a one-time warning 
+    when `FileAttachment` payloads inflate context preflight.
+  - [0.66.0](https://github.com/langroid/langroid/releases/tag/0.66.0) Big community batch (14 PRs):
+    [Milvus vector store](https://langroid.github.io/langroid/notes/milvus/) (thanks @zc277584121); 
+    [Markdown/HTML document parsing](https://langroid.github.io/langroid/notes/markdown-html-parsing/) 
+    (thanks @nuthalapativarun); cooperative `max_time` 
+    [task budgets](https://langroid.github.io/langroid/notes/task-termination/), MCP tool 
+    namespacing for multi-server agents, and portable JSON chat-history snapshots 
+    (thanks @Whxuan0701); video attachments (thanks @octo-patch); retrieval score 
+    thresholds (thanks @Koushik-Salammagari); even 
+    [context-overflow truncation](https://langroid.github.io/langroid/notes/context-overflow/) 
+    and several routing/parsing fixes -- full details in the 
+    [release notes](https://github.com/langroid/langroid/releases/tag/0.66.0).
 - **Aug 2025:**
   - [0.59.0](https://github.com/langroid/langroid/releases/tag/0.59.0) Complete Pydantic V2 Migration - 
     5-50x faster validation, modern Python patterns, 100% backward compatible.
@@ -99149,6 +98970,290 @@ Your support will help build Langroid's momentum and community.
 
 - [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
 - [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
+</file>
+
+<file path="docs/notes/vecstore-env-prefix.md">
+# Vector-Store Config Env-Var Prefixes
+
+!!! warning "Behavior change in 0.67.0"
+    As of Langroid 0.67.0, **bare environment variables such as `HOST`,
+    `PORT`, `COLLECTION_NAME`, and `FULL_EVAL` no longer configure
+    vector stores.** If you relied on any of these (this was never
+    documented, but it did work), you must rename them with the
+    per-provider prefix from the table below, e.g.
+    `QDRANT_HOST`, `QDRANT_PORT`, `VECDB_FULL_EVAL`.
+    The documented variables (`QDRANT_API_KEY`, `QDRANT_API_URL`,
+    `WEAVIATE_API_KEY`, etc.) are **unaffected**.
+
+Vector-store configs are `pydantic-settings` classes, which means their
+fields can be set via environment variables. Prior to this change (see
+issue #1078), `VectorStoreConfig` and its subclasses declared **no
+`env_prefix`**, so every field name was itself a case-insensitive
+environment variable. A bare `HOST`, `PORT`, `CLOUD`, `TIMEOUT`,
+`BATCH_SIZE`, `STORAGE_PATH`, `COLLECTION_NAME`, or `FULL_EVAL` in the
+environment silently overrode the default for *every* vector-store
+config:
+
+```bash
+HOST=evil.example.com PORT=9999 FULL_EVAL=true \
+  python -c "from langroid.vector_store.qdrantdb import QdrantDBConfig; \
+             c = QdrantDBConfig(); print(c.host, c.port, c.full_eval)"
+# old behavior: evil.example.com 9999 True
+```
+
+This was dangerous for two reasons:
+
+- `HOST` and `PORT` are routinely set by shells, containers, and CI
+  systems, so vector-store clients could silently point at the wrong
+  server.
+- `FULL_EVAL=true` disabled the code-injection guard (see
+  [code-injection-protection](code-injection-protection.md)) with no
+  explicit opt-in anywhere in the user's code.
+
+## New behavior
+
+Each vector-store config now has its own env prefix, consistent with
+the rest of the codebase (`OPENAI_`, `AZURE_OPENAI_`, `NEO4J_`, ...):
+
+| Config class        | Env prefix     |
+|---------------------|----------------|
+| `VectorStoreConfig` | `VECDB_`       |
+| `QdrantDBConfig`    | `QDRANT_`      |
+| `ChromaDBConfig`    | `CHROMA_`      |
+| `LanceDBConfig`     | `LANCEDB_`     |
+| `PineconeDBConfig`  | `PINECONE_`    |
+| `PostgresDBConfig`  | `POSTGRES_`    |
+| `MeiliSearchConfig` | `MEILISEARCH_` |
+| `WeaviateDBConfig`  | `WEAVIATE_`    |
+
+Bare env vars (`HOST`, `FULL_EVAL`, ...) are now ignored by all of
+these configs. To set a field via the environment, use the prefix of
+the specific config class, e.g. `QDRANT_HOST=my.qdrant.example` or
+`QDRANT_FULL_EVAL=true` for `QdrantDBConfig`. Every provider subclass
+in langroid overrides the prefix with its own, so within langroid
+`VECDB_*` vars affect only direct `VectorStoreConfig` instances.
+However, pydantic inherits `model_config`, so a third-party subclass
+of `VectorStoreConfig` that does not set its own `env_prefix` will
+read `VECDB_*` vars.
+
+A `port` value coming from the *environment* that matches the exact
+Kubernetes service-link format `tcp://<host>:<digits>` (e.g.
+`QDRANT_PORT=tcp://10.0.0.8:6333`, injected into every pod by a
+service named `qdrant` when `enableServiceLinks` is on) is ignored
+with a warning and the default port is used. This exception applies
+only to the env settings source and only to that full format:
+malformed `tcp://` junk in the environment, and any `tcp://...` value
+passed explicitly to the constructor, fail validation as usual.
+
+Explicit constructor arguments always take priority over environment
+values (standard `pydantic-settings` precedence):
+
+```python
+config = QdrantDBConfig(host="10.0.0.5")  # wins over QDRANT_HOST
+```
+
+## Migration
+
+If you (deliberately) relied on bare env vars to configure a
+vector store, rename them with the appropriate prefix from the table
+above, e.g. `COLLECTION_NAME=mydocs` becomes
+`QDRANT_COLLECTION_NAME=mydocs`.
+
+Env vars read via `os.getenv` outside the config classes are
+unaffected, e.g. `QDRANT_API_KEY`, `PINECONE_API_KEY`,
+`MEILISEARCH_API_KEY`, `MEILISEARCH_API_URL`, `WEAVIATE_API_KEY`, and
+`WEAVIATE_API_URL` keep their existing meanings. Note that the
+`QDRANT_*` and `PINECONE_*` prefixes overlap with those existing
+names, but the config classes have no `api_key`/`api_url` fields, so
+extra prefixed vars are ignored.
+</file>
+
+<file path="docs/quick-start/setup.md">
+# Setup
+
+
+## Install
+Ensure you are using Python 3.11. It is best to work in a virtual environment:
+
+```bash
+# go to your repo root (which may be langroid-examples)
+cd <your repo root>
+python3 -m venv .venv
+. ./.venv/bin/activate
+```
+To see how to use Langroid in your own repo, you can take a look at the
+[`langroid-examples`](https://github.com/langroid/langroid-examples) repo, which can be a good starting point for your own repo, 
+or use the [`langroid-template`](https://github.com/langroid/langroid-template) repo.
+These repos contain a `pyproject.toml` file suitable for use with the [`uv`](https://docs.astral.sh/uv/) dependency manager. After installing `uv` you can 
+set up your virtual env, activate it, and install langroid into your venv like this:
+
+```bash
+uv venv --python 3.11
+. ./.venv/bin/activate 
+uv sync
+```
+
+Alternatively, use `pip` to install `langroid` into your virtual environment:
+```bash
+pip install langroid
+```
+
+The core Langroid package lets you use OpenAI Embeddings models via their API.
+If you instead want to use the `sentence-transformers` embedding models from HuggingFace,
+install Langroid like this:
+```bash
+pip install "langroid[hf-embeddings]"
+```
+For many practical scenarios, you may need additional optional dependencies:
+- To use various document-parsers, install langroid with the `doc-chat` extra:
+    ```bash
+    pip install "langroid[doc-chat]"
+    ```
+- For "chat with databases", use the `db` extra:
+    ```bash
+    pip install "langroid[db]"
+    ``
+- You can specify multiple extras by separating them with commas, e.g.:
+    ```bash
+    pip install "langroid[doc-chat,db]"
+    ```
+- To simply install _all_ optional dependencies, use the `all` extra (but note that this will result in longer load/startup times and a larger install size):
+    ```bash
+    pip install "langroid[all]"
+    ```
+
+??? note "Optional Installs for using SQL Chat with a PostgreSQL DB"
+    If you are using `SQLChatAgent`
+    (e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](https://github.com/langroid/langroid/blob/main/examples/data-qa/sql-chat/sql_chat.py),
+    with a postgres db, you will need to:
+    
+    - Install PostgreSQL dev libraries for your platform, e.g.
+        - `sudo apt-get install libpq-dev` on Ubuntu,
+        - `brew install postgresql` on Mac, etc.
+    - Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
+      or `uv add "langroid[postgres]"` or `uv pip install --extra postgres -r pyproject.toml`.
+      If this gives you an error, try 
+      `uv pip install psycopg2-binary` in your virtualenv.
+
+
+!!! tip "Work in a nice terminal, such as Iterm2, rather than a notebook"
+    All of the examples we will go through are command-line applications.
+    For the best experience we recommend you work in a nice terminal that supports 
+    colored outputs, such as [Iterm2](https://iterm2.com/).    
+
+
+!!! note "mysqlclient errors"
+    If you get strange errors involving `mysqlclient`, try doing `pip uninstall mysqlclient` followed by `pip install mysqlclient` 
+
+## Set up tokens/keys 
+
+To get started, all you need is an OpenAI API Key.
+If you don't have one, see [this OpenAI Page](https://platform.openai.com/docs/quickstart).
+(Note that while this is the simplest way to get started, Langroid works with practically any LLM, not just those from OpenAI.
+See the guides to using [Open/Local LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
+and other [non-OpenAI](https://langroid.github.io/langroid/tutorials/non-openai-llms/) proprietary LLMs.)
+
+In the root of the repo, copy the `.env-template` file to a new file `.env`:
+```bash
+cp .env-template .env
+```
+Then insert your OpenAI API Key.
+Your `.env` file should look like this:
+```bash
+OPENAI_API_KEY=your-key-here-without-quotes
+```
+
+Alternatively, you can set this as an environment variable in your shell
+(you will need to do this every time you open a new shell):
+```bash
+export OPENAI_API_KEY=your-key-here-without-quotes
+```
+
+All of the following environment variable settings are optional, and some are only needed
+to use specific features (as noted below).
+
+- **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
+  Langroid uses LanceDB as the default vector store in its `DocChatAgent` class (for RAG).
+  Alternatively [Chroma](https://docs.trychroma.com/) and
+  [Milvus](https://milvus.io/) are also currently supported.
+  We use the local-storage version of Chroma, so there is no need for an API key.
+- **Milvus** Vector Store URI, token, database name. These are optional.
+  Without them, Milvus uses local storage at `./milvus.db`. Set `MILVUS_URI`
+  for Milvus server or Zilliz Cloud, `MILVUS_TOKEN` for token-based access,
+  and `MILVUS_DB_NAME` for a named database. Milvus Lite is unavailable on
+  Windows, so Windows users must set `MILVUS_URI` to a Milvus server or Zilliz
+  Cloud endpoint.
+- **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
+  using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
+  which is more than sufficient to try out Langroid and even beyond.
+  If you don't set up these, Langroid will use a pure-python
+  Redis in-memory cache via the [Fakeredis](https://fakeredis.readthedocs.io/en/latest/) library.
+- **GitHub** Personal Access Token (required for apps that need to analyze git
+  repos; token-based API calls are less rate-limited). See this
+  [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+- **Google Custom Search API Credentials:** Only needed to enable an Agent to use the `GoogleSearchTool`.
+  To use Google Search as an LLM Tool/Plugin/function-call,
+  you'll need to set up
+  [a Google API key](https://developers.google.com/custom-search/v1/introduction#identify_your_application_to_google_with_api_key),
+  then [setup a Google Custom Search Engine (CSE) and get the CSE ID](https://developers.google.com/custom-search/docs/tutorial/creatingcse).
+  (Documentation for these can be challenging, we suggest asking GPT4 for a step-by-step guide.)
+  After obtaining these credentials, store them as values of
+  `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in your `.env` file.
+  Full documentation on using this (and other such "stateless" tools) is coming soon, but
+  in the meantime take a peek at the test
+  [`tests/main/test_web_search_tools.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_web_search_tools.py) to see how to use it.
+
+
+An `.env` file with commonly used optional variables looks like this:
+```bash
+OPENAI_API_KEY=your-key-here-without-quotes
+GITHUB_ACCESS_TOKEN=your-personal-access-token-no-quotes
+CACHE_TYPE=redis
+REDIS_PASSWORD=your-redis-password-no-quotes
+REDIS_HOST=your-redis-hostname-no-quotes
+REDIS_PORT=your-redis-port-no-quotes
+QDRANT_API_KEY=your-key
+QDRANT_API_URL=https://your.url.here:6333 # note port number must be included
+GOOGLE_API_KEY=your-key
+GOOGLE_CSE_ID=your-cse-id
+```
+
+!!! warning "Vector-store settings need a provider prefix (0.67.0+)"
+    Vector-store config fields can also be set via env vars, but only
+    with a per-provider prefix, e.g. `QDRANT_HOST`, `LANCEDB_STORAGE_PATH`,
+    `VECDB_FULL_EVAL`. Bare names like `HOST`, `PORT`, or `FULL_EVAL`
+    are ignored as of Langroid 0.67.0 — see
+    [Vector-Store Env Prefixes](../notes/vecstore-env-prefix.md).
+
+### Microsoft Azure OpenAI setup[Optional]
+
+This section applies only if you are using Microsoft Azure OpenAI.
+
+When using Azure OpenAI, additional environment variables are required in the
+`.env` file.
+This page [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line&pivots=programming-language-python#environment-variables)
+provides more information, and you can set each environment variable as follows:
+
+- `AZURE_OPENAI_API_KEY`, from the value of `API_KEY`
+- `AZURE_OPENAI_API_BASE` from the value of `ENDPOINT`, typically looks like `https://your_resource.openai.azure.com`.
+- For `AZURE_OPENAI_API_VERSION`, you can use the default value in `.env-template`, and latest version can be found [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/whats-new#azure-openai-chat-completion-general-availability-ga)
+- `AZURE_OPENAI_DEPLOYMENT_NAME` is an OPTIONAL deployment name which may be 
+   defined by the user during the model setup.
+- `AZURE_OPENAI_CHAT_MODEL` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisely the exact model name that was selected. For example, GPT-3.5 (should be `gpt-35-turbo-16k` or `gpt-35-turbo`) or GPT-4 (should be `gpt-4-32k` or `gpt-4`).
+- `AZURE_OPENAI_MODEL_NAME` (Deprecated, use `AZURE_OPENAI_CHAT_MODEL` instead).
+  
+!!! note "For Azure-based models use `AzureConfig` instead of `OpenAIGPTConfig`"
+    In most of the docs you will see that LLMs are configured using `OpenAIGPTConfig`.
+    However if you want to use Azure-deployed models, you should replace `OpenAIGPTConfig` with `AzureConfig`. See 
+    the [`test_azure_openai.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_azure_openai.py) and 
+    [`example/basic/chat.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat.py)
+
+
+## Next steps
+
+Now you should be ready to use Langroid!
+As a next step, you may want to see how you can use Langroid to [interact 
+directly with the LLM](llm-interaction.md) (OpenAI GPT models only for now).
 </file>
 
 <file path="docs/tutorials/non-openai-llms.md">
@@ -108816,94 +108921,6 @@ def test_postgres_where_clause(vecdb: PostgresDB):
     assert len(all_docs) == 3
 
     vecdb.delete_collection("test_get_all_documents_where")
-</file>
-
-<file path="tests/main/test_web_search_tools.py">
-"""
-NOTE: running this test requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
-environment variables in your `.env` file, as explained in the
-[README](https://github.com/langroid/langroid#gear-installation-and-setup).
-
-"""
-
-import pytest
-
-import langroid as lr
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
-from langroid.agent.tools.exa_search_tool import ExaSearchTool
-from langroid.agent.tools.google_search_tool import GoogleSearchTool
-from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
-from langroid.agent.tools.tavily_search_tool import TavilySearchTool
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.parsing.parser import ParsingConfig
-from langroid.prompts.prompts_config import PromptsConfig
-from langroid.utils.configuration import Settings, set_global
-
-cfg = ChatAgentConfig(
-    name="test-langroid",
-    vecdb=None,
-    llm=OpenAIGPTConfig(
-        type="openai",
-        cache_config=RedisCacheConfig(fake=False),
-    ),
-    parsing=ParsingConfig(),
-    prompts=PromptsConfig(),
-    use_functions_api=False,
-    use_tools=True,
-)
-agent = ChatAgent(cfg)
-
-
-@pytest.mark.parametrize(
-    "search_tool_cls",
-    [
-        ExaSearchTool,
-        TavilySearchTool,
-        GoogleSearchTool,
-        DuckduckgoSearchTool,
-        SeltzSearchTool,
-    ],
-)
-@pytest.mark.parametrize("use_functions_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
-def test_agent_web_search_tool(
-    test_settings: Settings,
-    search_tool_cls: lr.ToolMessage,
-    use_functions_api: bool,
-    use_tools_api: bool,
-):
-    """
-    Test whether LLM is able to GENERATE message (tool) in required format, AND the
-    agent handles the message correctly.
-    Args:
-        test_settings: test settings from conftest.py
-        use_functions_api: whether to use LLM's functions api or not
-            (i.e. use the langroid ToolMessage tools instead).
-    """
-    set_global(test_settings)
-    agent = ChatAgent(cfg)
-    agent.config.use_functions_api = use_functions_api
-    agent.config.use_tools = not use_functions_api
-    agent.config.use_tools_api = use_tools_api
-    agent.enable_message(search_tool_cls)
-
-    llm_msg = agent.llm_response_forget(
-        "Find 3 results on the internet about the LK-99 superconducting material."
-    )
-    assert isinstance(agent.get_tool_messages(llm_msg)[0], search_tool_cls)
-
-    try:
-        agent_result = agent.handle_message(llm_msg).content
-    except Exception as e:
-        pytest.skip(f"Skipping test: {e}")
-    results = agent_result.lower().split("\n\n")
-    assert len(results) == 3
-    # Live web-search results drift over time; require a MAJORITY (not all) of
-    # the results to mention the topic, so one tangential result from an engine
-    # (e.g. Tavily) does not fail the test.
-    assert sum(("lk-99" in r or "supercond" in r) for r in results) >= 2
 </file>
 
 <file path="CONTRIBUTING.md">
@@ -131715,6 +131732,15 @@ def test_litellm_model_key():
     assert "7" in response.message
 </file>
 
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.16.4
+  hooks:
+    - id: ruff
+</file>
+
 <file path="langroid/agent/base.py">
 import asyncio
 import copy
@@ -134247,15 +134273,6 @@ class Agent(ABC):
         if answer != no_answer:
             return (f"{agent_type} says: " + str(answer)).strip()
         return None
-</file>
-
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.16.4
-  hooks:
-    - id: ruff
 </file>
 
 <file path="langroid/agent/chat_agent.py">

@@ -146,6 +146,23 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Aug 2026:**
+  - [0.67.0](https://github.com/langroid/langroid/releases/tag/0.67.0) Security hardening: 
+    per-provider `env_prefix` for vector-store configs (env-var naming change -- see 
+    [migration notes](https://langroid.github.io/langroid/notes/vecstore-env-prefix/)), 
+    generalized taint propagation across tool re-emission paths, and a one-time warning 
+    when `FileAttachment` payloads inflate context preflight.
+  - [0.66.0](https://github.com/langroid/langroid/releases/tag/0.66.0) Big community batch (14 PRs):
+    [Milvus vector store](https://langroid.github.io/langroid/notes/milvus/) (thanks @zc277584121); 
+    [Markdown/HTML document parsing](https://langroid.github.io/langroid/notes/markdown-html-parsing/) 
+    (thanks @nuthalapativarun); cooperative `max_time` 
+    [task budgets](https://langroid.github.io/langroid/notes/task-termination/), MCP tool 
+    namespacing for multi-server agents, and portable JSON chat-history snapshots 
+    (thanks @Whxuan0701); video attachments (thanks @octo-patch); retrieval score 
+    thresholds (thanks @Koushik-Salammagari); even 
+    [context-overflow truncation](https://langroid.github.io/langroid/notes/context-overflow/) 
+    and several routing/parsing fixes -- full details in the 
+    [release notes](https://github.com/langroid/langroid/releases/tag/0.66.0).
 - **Aug 2025:**
   - [0.59.0](https://github.com/langroid/langroid/releases/tag/0.59.0) Complete Pydantic V2 Migration - 
     5-50x faster validation, modern Python patterns, 100% backward compatible.
