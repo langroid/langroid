@@ -18,6 +18,7 @@ import asyncio
 import copy
 import importlib
 import logging
+import math
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -37,6 +38,7 @@ from typing import (
 import nest_asyncio
 import numpy as np
 import pandas as pd
+from pydantic import Field
 from rich.prompt import Prompt
 
 from langroid.agent.batch import run_batch_agent_method, run_batch_tasks
@@ -89,6 +91,47 @@ def apply_nest_asyncio() -> None:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_finite_float(value: Any) -> Optional[float]:
+    """Coerce an arbitrary runtime value to a finite float, if possible.
+
+    Args:
+        value (Any): A value expected to be numeric (e.g. a retrieval
+            score or threshold), but which at runtime may be None or
+            oddly-shaped (non-numeric, or NaN/infinite).
+
+    Returns:
+        Optional[float]: The value as a finite float, or None if it
+            cannot be coerced to one.
+    """
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(result):
+        return None
+    return result
+
+
+def _finite_positive_threshold(value: Any) -> Optional[float]:
+    """Normalize a runtime score-threshold value to an "active" filter value.
+
+    Args:
+        value (Any): The raw threshold read off a config object at runtime;
+            it may be absent/None or an oddly-shaped (non-numeric,
+            non-finite) value that never went through pydantic validation.
+
+    Returns:
+        Optional[float]: The threshold as a finite float strictly greater
+            than 0.0 if `value` coerces to one, else None, meaning the
+            score filter is INACTIVE (invalid, `None`, `NaN`, infinite,
+            zero, and negative values all deactivate the filter).
+    """
+    threshold = _coerce_finite_float(value)
+    if threshold is None or threshold <= 0.0:
+        return None
+    return threshold
 
 
 @dataclass
@@ -220,6 +263,32 @@ class DocChatAgentConfig(ChatAgentConfig):
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
+    bm25_score_threshold: float = Field(
+        default=0.0,
+        description="""
+        Keep a BM25-retrieved chunk only if its BM25 score satisfies
+        `score >= bm25_score_threshold`. The filter is applied only when
+        this threshold is > 0.0; the default 0.0 means no filtering.
+        Values that are not finite positive numbers (e.g. None, NaN,
+        +/-inf, negatives) also deactivate the filter at runtime.
+        NOTE: BM25 scores are unbounded and corpus-dependent (they vary
+        with document/corpus statistics), so no single value is right
+        for every collection; this is an expert opt-in knob to tune
+        per corpus.
+        """,
+    )
+    fuzzy_score_threshold: float = Field(
+        default=50.0,
+        description="""
+        Keep a fuzzy match only if its score satisfies
+        `score > fuzzy_score_threshold` (strictly greater), on the 0-100
+        `rapidfuzz` scale (100 = perfect match). The default 50.0
+        preserves the long-standing behavior of dropping matches with
+        score <= 50; lower it to admit weaker matches, or raise it to
+        keep only stronger ones. A value that is not a finite number
+        (e.g. None, NaN, +/-inf) yields NO fuzzy matches at runtime.
+        """,
+    )
     use_reciprocal_rank_fusion: bool = False
     cross_encoder_reranking_model: str = (  # ignored if use_reciprocal_rank_fusion=True
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
@@ -293,10 +362,27 @@ class DocChatAgentConfig(ChatAgentConfig):
     )
 
 
-def _append_metadata_source(orig_source: str, source: str) -> str:
-    if orig_source != source and source != "" and orig_source != "":
-        return f"{orig_source.strip()}; {source.strip()}"
-    return orig_source.strip() + source.strip()
+def _append_metadata_source(orig_source: object, source: object) -> str:
+    """Append a source unless it is already in the ``; ``-delimited list.
+
+    Leading and trailing whitespace is ignored for both empty-value and
+    duplicate checks, including around entries in the existing source list.
+    The ``; `` sequence is structural and is interpreted as a list boundary;
+    plain semicolons remain part of a source value.
+
+    Args:
+        orig_source: Existing source or source list. Non-strings are empty.
+        source: Source to append. Non-string values are treated as empty.
+
+    Returns:
+        The trimmed existing sources, optionally followed by the new source.
+    """
+    orig = orig_source.strip() if isinstance(orig_source, str) else ""
+    src = source.strip() if isinstance(source, str) else ""
+    if orig and src:
+        sources = (item.strip() for item in orig.split("; "))
+        return orig if orig == src or src in sources else f"{orig}; {src}"
+    return orig or src
 
 
 class DocChatAgent(ChatAgent):
@@ -1179,6 +1265,11 @@ class DocChatAgent(ChatAgent):
                 k=self.config.n_similar_chunks * multiple,
                 words_before=self.config.n_fuzzy_neighbor_words or None,
                 words_after=self.config.n_fuzzy_neighbor_words or None,
+                # tolerate a config lacking the field (e.g. deserialized
+                # from an older version); 50.0 is the legacy default.
+                # Invalid/non-finite values are handled (=> no matches)
+                # inside find_fuzzy_matches_in_docs itself.
+                score_threshold=getattr(self.config, "fuzzy_score_threshold", 50.0),
             )
         return fuzzy_match_docs
 
@@ -1405,8 +1496,32 @@ class DocChatAgent(ChatAgent):
 
         id2_rank_bm25 = {}
         if self.config.use_bm25_search:
-            # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+            # Read the threshold defensively: tolerate absent/None or
+            # oddly-shaped runtime values by treating them as "no filtering".
+            bm25_threshold = _finite_positive_threshold(
+                getattr(self.config, "bm25_score_threshold", None)
+            )
+            if bm25_threshold is not None:
+                # Compare defensively: a runtime BM25/FTS backend may
+                # return scores that are None or otherwise non-orderable,
+                # so coerce each score first and drop pairs lacking a
+                # finite numeric score, rather than crash on `>=`.
+                filtered_docs_scores: List[Tuple[Document, float]] = []
+                for d, s in docs_scores:
+                    score = _coerce_finite_float(s)
+                    if score is not None and score >= bm25_threshold:
+                        filtered_docs_scores.append((d, score))
+                docs_scores = filtered_docs_scores
+            elif self.config.use_reciprocal_rank_fusion:
+                # RRF always ranks BM25 pairs by score, so even when the
+                # threshold is inactive, normalize scores before sorting
+                # mixed raw values. Unrankable scores sort as 0.0.
+                normalized_docs_scores: List[Tuple[Document, float]] = []
+                for d, s in docs_scores:
+                    score = _coerce_finite_float(s)
+                    normalized_docs_scores.append((d, 0.0 if score is None else score))
+                docs_scores = normalized_docs_scores
             id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder, and have RRF enabled,
@@ -1421,7 +1536,6 @@ class DocChatAgent(ChatAgent):
 
         id2_rank_fuzzy = {}
         if self.config.use_fuzzy_match:
-            # TODO: Add score threshold in config
             fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
             if self.config.use_reciprocal_rank_fusion:
                 # if we're not re-ranking with a cross-encoder,

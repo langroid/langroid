@@ -24,20 +24,25 @@ if TYPE_CHECKING:
     import pypdf
 
 
-import requests
 from bs4 import BeautifulSoup
 
 if TYPE_CHECKING:
     from PIL import Image
 
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.document_url import (
+    decode_document_text,
+    fetch_configured_url,
+    fetch_url_sample,
+    is_http_url,
+    url_extension_source,
+)
 from langroid.parsing.parser import LLMPdfParserConfig, Parser, ParsingConfig
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentType(str, Enum):
-    # TODO add `md` (Markdown) and `html`
     PDF = "pdf"
     DOCX = "docx"
     DOC = "doc"
@@ -45,6 +50,8 @@ class DocumentType(str, Enum):
     XLSX = "xlsx"
     XLS = "xls"
     PPTX = "pptx"
+    MD = "md"
+    HTML = "html"
 
 
 def find_last_full_char(possible_unicode: bytes) -> int:
@@ -62,7 +69,55 @@ def find_last_full_char(possible_unicode: bytes) -> int:
     return 0
 
 
-def is_plain_text(path_or_bytes: str | bytes) -> bool:
+_BINARY_SIGNATURES = (
+    b"%PDF-",
+    b"\x89PNG\r\n\x1a\n",
+    b"\xff\xd8\xff",
+    b"GIF87a",
+    b"GIF89a",
+    b"PK\x03\x04",
+    b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",
+)
+
+
+def _looks_like_binary(content: bytes) -> bool:
+    """Return true for byte samples that are unlikely to be plain text."""
+    if any(content.startswith(signature) for signature in _BINARY_SIGNATURES):
+        return True
+    if b"\x00" in content:
+        return True
+    if not content:
+        return False
+
+    allowed_controls = {9, 10, 12, 13}
+    control_count = sum(
+        1 for byte in content if byte < 32 and byte not in allowed_controls
+    )
+    return control_count / len(content) > 0.30
+
+
+def _decodes_as_utf8_text(content: bytes) -> bool:
+    """Decode a text sample, tolerating only an incomplete trailing character."""
+    try:
+        _decode_utf8_text(content)
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+def _decode_utf8_text(content: bytes) -> str:
+    """Decode UTF-8 bytes, trimming only an incomplete trailing character."""
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError as e:
+        if e.reason == "unexpected end of data" and e.end == len(content):
+            return content[: e.start].decode("utf-8")
+        raise
+
+
+def is_plain_text(
+    path_or_bytes: str | bytes, config: ParsingConfig | None = None
+) -> bool:
     """
     Check if a file is plain text by attempting to decode it as UTF-8.
     Args:
@@ -71,10 +126,8 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
         bool: True if the file is plain text, False otherwise.
     """
     if isinstance(path_or_bytes, str):
-        if path_or_bytes.startswith(("http://", "https://")):
-            response = requests.get(path_or_bytes)
-            response.raise_for_status()
-            content = response.content[:1024]
+        if is_http_url(path_or_bytes):
+            content, _ = fetch_url_sample(path_or_bytes, config)
         else:
             with open(path_or_bytes, "rb") as f:
                 content = f.read(1024)
@@ -89,20 +142,45 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
         # Check if the MIME type is not a text type
         if not mime_type.startswith("text/"):
             return False
+    except Exception:
+        # python-magic not installed, or the native libmagic library is
+        # missing/broken: skip MIME screening and rely on the UTF-8 decode
+        # check below, so plain-text detection keeps working.
+        pass
 
-        # Attempt to decode the content as UTF-8
-        content = content[: find_last_full_char(content)]
-
-        try:
-            _ = content.decode("utf-8")
-            # Additional checks can go here, e.g., to verify that the content
-            # doesn't contain too many unusual characters for it to be considered text
-            return True
-        except UnicodeDecodeError:
-            return False
-    except UnicodeDecodeError:
-        # If decoding fails, it's likely not plain text (or not encoded in UTF-8)
+    if _looks_like_binary(content):
         return False
+
+    return _decodes_as_utf8_text(content)
+
+
+# Matches a leading --- ... --- block (candidate front-matter). The
+# delimiter lines allow only trailing spaces/tabs ([ \t]*, NOT \s*, which
+# would match newlines and cause quadratic backtracking on hostile inputs
+# such as "---" followed by megabytes of blank lines).
+_FRONTMATTER_BLOCK_RE = re.compile(r"^---[ \t]*\n(.*?)\n---[ \t]*(?:\n|$)", re.DOTALL)
+# A line that looks like a YAML key: value pair (e.g. "title: Foo").
+# Requirements to avoid false positives:
+#   - Key is a bare identifier: word chars and hyphens only (no spaces, slashes)
+#   - Colon is followed by whitespace or end-of-line (excludes "https://…")
+# [ \t]* (not \s*) keeps the scan single-line and linear-time.
+_YAML_KEY_RE = re.compile(r"^[ \t]*[\w][\w-]*[ \t]*:(?:\s|$)", re.MULTILINE)
+
+
+def _strip_yaml_frontmatter(text: str) -> str:
+    """Strip YAML front-matter from a Markdown string, if present.
+
+    Only strips the leading ``--- ... ---`` block when it genuinely contains
+    at least one ``key: value`` line.  Thematic breaks, content sections, or
+    other non-YAML dash-delimited blocks are left untouched.
+    """
+    m = _FRONTMATTER_BLOCK_RE.match(text)
+    if m and _YAML_KEY_RE.search(m.group(1)):
+        # Strip only leading newlines after the front-matter block; do not
+        # use full strip() which would remove semantically meaningful leading
+        # spaces (e.g. indented code blocks at the start of the document).
+        return text[m.end() :].lstrip("\n")
+    return text
 
 
 class DocumentParser(Parser):
@@ -135,7 +213,7 @@ class DocumentParser(Parser):
         Returns:
             DocumentParser: An instance of a DocumentParser subclass.
         """
-        inferred_doc_type = DocumentParser._document_type(source, doc_type)
+        inferred_doc_type = DocumentParser._document_type(source, doc_type, config)
         if inferred_doc_type == DocumentType.PDF:
             if config.pdf.library == "fitz":
                 return FitzPDFParser(source, config)
@@ -178,6 +256,12 @@ class DocumentParser(Parser):
             return MarkitdownXLSXParser(source, config)
         elif inferred_doc_type == DocumentType.PPTX:
             return MarkitdownPPTXParser(source, config)
+        elif inferred_doc_type in (DocumentType.MD, DocumentType.HTML):
+            raise ValueError(
+                f"DocumentParser.create() does not handle {inferred_doc_type.value!r} "
+                "documents directly. Use DocumentParser.chunks_from_path_or_bytes() "
+                "instead, which processes Markdown and HTML as plain text."
+            )
         else:
             source_name = source if isinstance(source, str) else "bytes"
             raise ValueError(f"Unsupported document type: {source_name}")
@@ -199,7 +283,9 @@ class DocumentParser(Parser):
 
     @staticmethod
     def _document_type(
-        source: str | bytes, doc_type: str | DocumentType | None = None
+        source: str | bytes,
+        doc_type: str | DocumentType | None = None,
+        config: ParsingConfig | None = None,
     ) -> DocumentType:
         """
         Determine the type of document based on the source.
@@ -208,6 +294,7 @@ class DocumentParser(Parser):
             source (str|bytes): The source, which could be a URL,
                 a file path, or a bytes object.
             doc_type (str|DocumentType|None): The type of document, if known.
+            config (ParsingConfig|None): URL retrieval settings, if available.
 
         Returns:
             str: The document type.
@@ -216,30 +303,52 @@ class DocumentParser(Parser):
             return doc_type
         if doc_type:
             return DocumentType(doc_type.lower())
-        if is_plain_text(source):
-            return DocumentType.TXT
         if isinstance(source, str):
-            # detect file type from path extension
-            if source.lower().endswith(".pdf"):
+            # Detect file type from path/URL extension first so that
+            # format-specific types (md, html) are not mis-classified as TXT
+            # by the is_plain_text heuristic below.
+            lower = url_extension_source(source)
+            if lower.endswith(".pdf"):
                 return DocumentType.PDF
-            elif source.lower().endswith(".docx"):
+            elif lower.endswith(".docx"):
                 return DocumentType.DOCX
-            elif source.lower().endswith(".doc"):
+            elif lower.endswith(".doc"):
                 return DocumentType.DOC
-            elif source.lower().endswith(".xlsx"):
+            elif lower.endswith(".xlsx"):
                 return DocumentType.XLSX
-            elif source.lower().endswith(".xls"):
+            elif lower.endswith(".xls"):
                 return DocumentType.XLS
-            elif source.lower().endswith(".pptx"):
+            elif lower.endswith(".pptx"):
                 return DocumentType.PPTX
-            else:
-                raise ValueError(f"Unsupported document type: {source}")
+            elif lower.endswith(".md"):
+                return DocumentType.MD
+            elif lower.endswith((".html", ".htm")):
+                return DocumentType.HTML
+            # For strings with no recognised extension, fall back to the
+            # plain-text heuristic (covers .txt and bare URLs).
+            if is_plain_text(source, config):
+                return DocumentType.TXT
+            raise ValueError(f"Unsupported document type: {source}")
         else:
-            # must be bytes: attempt to detect type from content
-            # using magic mime type detection
-            import magic
+            # Bytes: use MIME detection first so that HTML/Markdown bytes
+            # are not swallowed by is_plain_text() as TXT before we can
+            # assign the correct DocumentType.
+            mime_type: str | None
+            try:
+                import magic
 
-            mime_type = magic.from_buffer(source, mime=True)
+                mime_type = magic.from_buffer(source, mime=True)
+            except Exception as e:
+                # python-magic not installed, or the native libmagic library
+                # is missing/broken: fall through to the is_plain_text()
+                # fallback below, so plain-text bytes ingestion never
+                # regresses in environments without functional magic.
+                logger.warning(
+                    "MIME detection via python-magic failed (%s); "
+                    "falling back to plain-text detection",
+                    e,
+                )
+                mime_type = None
             if mime_type == "application/pdf":
                 return DocumentType.PDF
             elif mime_type in [
@@ -256,6 +365,13 @@ class DocumentParser(Parser):
                 return DocumentType.XLSX
             elif mime_type == "application/vnd.ms-excel":
                 return DocumentType.XLS
+            elif mime_type == "text/html":
+                return DocumentType.HTML
+            elif mime_type in ("text/markdown", "text/x-markdown"):
+                return DocumentType.MD
+            elif is_plain_text(source):
+                # Generic plain text (text/plain, etc.)
+                return DocumentType.TXT
             else:
                 raise ValueError("Unsupported document type from bytes")
 
@@ -266,10 +382,9 @@ class DocumentParser(Parser):
         Returns:
             BytesIO: A BytesIO object containing the doc data.
         """
-        if self.source.startswith(("http://", "https://")):
-            response = requests.get(self.source)
-            response.raise_for_status()
-            return BytesIO(response.content)
+        if is_http_url(self.source):
+            content, _ = fetch_configured_url(self.source, self.config)
+            return BytesIO(content)
         else:
             with open(self.source, "rb") as f:
                 return BytesIO(f.read())
@@ -293,7 +408,7 @@ class DocumentParser(Parser):
                 each containing a chunk of text, determined by the
                 chunking and splitting settings in the parser config.
         """
-        dtype: DocumentType = DocumentParser._document_type(source, doc_type)
+        dtype = DocumentParser._document_type(source, doc_type, parser.config)
         if dtype in [
             DocumentType.PDF,
             DocumentType.DOC,
@@ -313,22 +428,60 @@ class DocumentParser(Parser):
                 chunks = doc_parser.get_doc_chunks()
             return chunks
         else:
-            # try getting as plain text; these will be chunked downstream
-            # -- could be a bytes object or a path
+            # Plain-text formats (TXT, MD, HTML) and unknown types:
+            # read content, extract text, and chunk.
             if isinstance(source, bytes):
-                content = source.decode()
+                if dtype == DocumentType.HTML:
+                    content = decode_document_text(source, html=True)
+                else:
+                    content = _decode_utf8_text(source)
+                if lines is not None:
+                    file_lines = content.splitlines()[:lines]
+                    content = "\n".join(line.strip() for line in file_lines)
+            elif is_http_url(source):
+                # Fetch URL-based plain text rather than opening it as a path.
+                url_content, headers = fetch_configured_url(source, parser.config)
+                content = decode_document_text(
+                    url_content,
+                    headers,
+                    html=dtype == DocumentType.HTML,
+                )
                 if lines is not None:
                     file_lines = content.splitlines()[:lines]
                     content = "\n".join(line.strip() for line in file_lines)
             else:
-                with open(source, "r") as f:
+                if dtype == DocumentType.HTML:
+                    with open(source, "rb") as f:
+                        content = decode_document_text(f.read(), html=True)
                     if lines is not None:
-                        file_lines = list(itertools.islice(f, lines))
+                        file_lines = content.splitlines()[:lines]
                         content = "\n".join(line.strip() for line in file_lines)
-                    else:
-                        content = f.read()
-            soup = BeautifulSoup(content, "html.parser")
-            text = soup.get_text()
+                else:
+                    with open(source, "r") as f:
+                        if lines is not None:
+                            file_lines = list(itertools.islice(f, lines))
+                            content = "\n".join(line.strip() for line in file_lines)
+                        else:
+                            content = f.read()
+
+            if dtype == DocumentType.HTML:
+                # Strip HTML tags; preserve readable text.
+                soup = BeautifulSoup(content, "html.parser")
+                text = soup.get_text(separator="\n")
+            elif dtype == DocumentType.MD:
+                # Normalise CRLF → LF so the front-matter regex matches
+                # consistently on Windows-saved files.
+                content = content.replace("\r\n", "\n")
+                # Return Markdown as-is; strip YAML front-matter only when
+                # the leading --- block genuinely contains YAML key: value
+                # pairs.  A bare thematic break (---) or a non-metadata
+                # divider block must not be removed.
+                text = _strip_yaml_frontmatter(content)
+            else:
+                # TXT and any unrecognised plain-text format.
+                soup = BeautifulSoup(content, "html.parser")
+                text = soup.get_text()
+
             source_name = source if isinstance(source, str) else "bytes"
             doc = Document(
                 content=text,

@@ -3946,6 +3946,189 @@ for a complete example. Also see the tests related to "enrichment" in
 [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py).
 </file>
 
+<file path="docs/notes/file-input.md">
+# PDF Files and Image inputs to LLMs
+
+Langroid supports sending PDF files and images (either URLs or local files)
+directly to Large Language Models with multi-modal 
+capabilities. This feature allows models to "see" files and other documents,
+and works with most multi-modal models served via an OpenAI-compatible API,
+e.g.:
+
+- OpenAI's GPT-4o series and GPT-4.1 series
+- Gemini models
+- Claude series models (via OpenAI-compatible providers like OpenRouter or LiteLLM )
+
+To see example usage, see:
+
+- tests: [test_llm.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm.py), 
+   [test_llm_async.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm_async.py),
+   [test_chat-agent.py](https://github.com/langroid/langroid/blob/main/tests/main/test_chat_agent.py).
+- example script: [pdf-json-no-parse.py](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py), which shows
+  how you can directly extract structured information from a document 
+  **without having to first parse it to markdown** (which is inherently lossy).
+
+## Basic Usage directly with LLM `chat` and `achat` methods
+
+First create a `FileAttachment` object using one of the `from_` methods.
+For image (`png`, `jpg/jpeg`) files you can use `FileAttachment.from_path(p)`
+where `p` is either a local file path, or a http/https URL.
+For PDF files, you can use `from_path` with a local file, or `from_bytes` or `from_io`
+(see below). In the examples below we show only `pdf` examples.
+
+```python
+from langroid.language_models.base import LLMMessage, Role
+from langroid.parsing.file_attachment import FileAttachment
+import langroid.language_models as lm
+
+# Create a file attachment
+attachment = FileAttachment.from_path("path/to/document.pdf")
+
+# Create messages with attachment
+messages = [
+    LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+    LLMMessage(
+        role=Role.USER, content="What's the title of this document?", 
+        files=[attachment]
+    )
+]
+
+# Set up LLM with model that supports attachments
+llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=lm.OpenAIChatModel.GPT4o))
+
+# Get response
+response = llm.chat(messages=messages)
+```
+
+## Supported File Formats
+
+Currently the OpenAI-API supports:
+
+- PDF files (including image-based PDFs)
+- image files and URLs
+
+
+## Creating Attachments
+
+There are multiple ways to create file attachments:
+
+```python
+# From a file path
+attachment = FileAttachment.from_path("path/to/file.pdf")
+
+# From bytes
+with open("path/to/file.pdf", "rb") as f:
+    attachment = FileAttachment.from_bytes(f.read(), filename="document.pdf")
+
+# From a file-like object
+from io import BytesIO
+file_obj = BytesIO(pdf_bytes)
+attachment = FileAttachment.from_io(file_obj, filename="document.pdf")
+```
+
+## Follow-up Questions
+
+You can continue the conversation with follow-up questions that reference the attached files:
+
+```python
+messages.append(LLMMessage(role=Role.ASSISTANT, content=response.message))
+messages.append(LLMMessage(role=Role.USER, content="What is the main topic?"))
+response = llm.chat(messages=messages)
+```
+
+## Multiple Attachments
+
+Langroid allows multiple files can be sent in a single message,
+but as of 16 Apr 2025, sending multiple PDF files does not appear to be properly supported in the 
+APIs (they seem to only use the last file attached), although sending multiple 
+images does work. 
+
+```python
+messages = [
+    LLMMessage(
+        role=Role.USER,
+        content="Compare these documents",
+        files=[attachment1, attachment2]
+    )
+]
+```
+
+## Using File Attachments with Agents
+
+Agents can process file attachments as well, in the `llm_response` method,
+which takes a `ChatDocument` object as input. 
+To pass in file attachments, include the `files` field in the `ChatDocument`,
+in addition to the content:
+
+```python
+import langroid as lr
+from langroid.agent.chat_document import ChatDocument, ChatDocMetaData
+from langroid.mytypes import Entity
+
+
+agent = lr.ChatAgent(lr.ChatAgentConfig())
+
+user_input = ChatDocument(
+    content="What is the title of this document?",
+    files=[attachment],
+    metadata=ChatDocMetaData(
+        sender=Entity.USER,
+    )
+)
+# or more simply, use the agent's `create_user_response` method:
+# user_input = agent.create_user_response(
+#     content="What is the title of this document?",
+#     files=[attachment],    
+# )
+response = agent.llm_response(user_input)
+```
+
+
+## Using File Attachments with Tasks
+
+In Langroid,  `Task.run()` can take a `ChatDocument` object as input,
+and as mentioned above, it can contain attached files in the `files` field.
+To ensure proper orchestration, you'd want to properly set various `metadata` fields
+as well, such as `sender`, etc. Langroid provides a convenient 
+`create_user_response` method to create a `ChatDocument` object with the necessary 
+metadata, so you only need to specify the `content` and `files` fields:
+
+
+```python
+from langroid.parsing.file_attachment import FileAttachment
+from langroid.agent.task import Task
+
+agent = ...
+# Create task
+task = Task(agent, interactive=True)
+
+# Create a file attachment
+attachment = FileAttachment.from_path("path/to/document.pdf")
+
+# Create input with attachment
+input_message = agent.create_user_response(
+    content="Extract data from this document",
+    files=[attachment]
+)
+
+# Run task with file attachment
+result = task.run(input_message)
+```
+
+See the script [`pdf-json-no-parse.py`](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py)
+for a complete example of using file attachments with tasks.
+
+## Practical Applications
+
+- PDF document analysis and data extraction
+- Report summarization
+- Structured information extraction from documents
+- Visual content analysis
+
+For more complex applications, consider using the Task and Agent infrastructure in 
+Langroid to orchestrate multi-step document processing workflows.
+</file>
+
 <file path="docs/notes/gemini.md">
 # Gemini LLMs & Embeddings via OpenAI client (without LiteLLM)
 
@@ -50356,591 +50539,253 @@ class CodeParser:
         return reduce(lambda x, y: x + y, chunked_docs)
 </file>
 
-<file path="langroid/parsing/md_parser.py">
-import re
-from typing import Any, List
+<file path="langroid/parsing/file_attachment.py">
+import base64
+import mimetypes
+import uuid
+from pathlib import Path
+from typing import Any, BinaryIO, Dict, Optional, Union
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator
-
-HEADER_CONTEXT_SEP = "\n...\n"
-
-
-# Pydantic model definition for a node in the markdown hierarchy
-class Node(BaseModel):
-    content: str  # The text of the header or content block
-    path: List[str]  # List of header texts from root to this node
-    children: List["Node"] = Field(default_factory=list)
-    # Nested children nodes
-
-    def __repr__(self) -> str:
-        # for debug printing
-        return (
-            f"Node(content={self.content!r}, path={self.path!r}, "
-            f"children={len(self.children)})"
-        )
-
-    # Pydantic v1 requires forward references for self-referencing models
-    # Forward references will be resolved with the update_forward_refs call below.
+from pydantic import BaseModel
 
 
-# Resolve forward references for Node (required for recursive models in Pydantic)
-Node.model_rebuild()
+class FileAttachment(BaseModel):
+    """Represents a file attachment to be sent to an LLM API."""
 
+    content: bytes
+    filename: Optional[str] = None
+    mime_type: str = "application/octet-stream"
+    url: str | None = None
+    detail: str | None = None
 
-def _cleanup_text(text: str) -> str:
-    # 1) Convert alternative newline representations (any CRLF or CR) to a single '\n'
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    def __init__(self, **data: Any) -> None:
+        """Initialize with sensible defaults for filename if not provided."""
+        if "filename" not in data or data["filename"] is None:
+            # Generate a more readable unique filename
+            unique_id = str(uuid.uuid4())[:8]
+            data["filename"] = f"attachment_{unique_id}.bin"
+        super().__init__(**data)
 
-    # 2) Replace 3 or more consecutive newlines with exactly 2 newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    return text
-
-
-HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
-
-
-def parse_markdown_headings(md_text: str) -> List[Node]:
-    """
-    Parse `md_text` to extract a heading-based hierarchy, skipping lines
-    that look like headings inside fenced code blocks. Each heading node
-    will have a child node for the text that appears between this heading
-    and the next heading.
-
-    Returns a list of top-level Node objects.
-
-    Example structure:
-        Node(content='# Chapter 1', path=['# Chapter 1'], children=[
-            Node(content='Intro paragraph...', path=['# Chapter 1'], children=[]),
-            Node(content='## Section 1.1', path=['# Chapter 1', '## Section 1.1'],
-                 children=[
-                  Node(content='Some text in Section 1.1.', path=[...], children=[])
-            ]),
-            ...
-        ])
-    """
-    # If doc is empty or only whitespace, return []
-    if not md_text.strip():
-        return []
-
-    lines = md_text.splitlines(True)  # keep the newline characters
-
-    # We'll scan line-by-line, track code-fence status, collect headings
-    headings = []  # list of (level, heading_line, start_line_idx)
-    in_code_fence = False
-    fence_marker = None  # track which triple-backtick or ~~~ opened
-
-    for i, line in enumerate(lines):
-        # Check if we're toggling in/out of a fenced code block
-        # Typically triple backtick or triple tilde: ``` or ~~~
-        # We do a *loose* check: a line that starts with at least 3 backticks or tildes
-        # ignoring trailing text. You can refine as needed.
-        fence_match = re.match(r"^(```+|~~~+)", line.strip())
-        if fence_match:
-            # If we are not in a fence, we enter one;
-            # If we are in a fence, we exit if the marker matches
-            marker = fence_match.group(1)  # e.g. "```" or "~~~~"
-            if not in_code_fence:
-                in_code_fence = True
-                fence_marker = marker[:3]  # store triple backtick or triple tilde
-            else:
-                # only close if the fence_marker matches
-                # E.g. if we opened with ```, we close only on ```
-                if fence_marker and marker.startswith(fence_marker):
-                    in_code_fence = False
-                    fence_marker = None
-
-        if not in_code_fence:
-            # Check if the line is a heading
-            m = HEADING_RE.match(line)
-            if m:
-                hashes = m.group(1)  # e.g. "##"
-                heading_text = line.rstrip("\n")  # entire line, exact
-                level = len(hashes)
-                headings.append((level, heading_text, i))
-
-    # If no headings found, return a single root node with the entire text
-    if not headings:
-        return [Node(content=md_text.strip(), path=[], children=[])]
-
-    # Add a sentinel heading at the end-of-file, so we can slice the last block
-    # after the final real heading. We'll use level=0 so it doesn't form a real node.
-    headings.append((0, "", len(lines)))
-
-    # Now we build "heading blocks" with
-    # (level, heading_text, start_line, end_line, content)
-    heading_blocks = []
-    for idx in range(len(headings) - 1):
-        level, heading_line, start_i = headings[idx]
-        next_level, _, next_start_i = headings[idx + 1]
-
-        # Content is everything after the heading line until the next heading
-        # i.e. lines[start_i+1 : next_start_i]
-        block_content_lines = lines[start_i + 1 : next_start_i]
-        block_content = "".join(block_content_lines).rstrip("\n")
-
-        heading_blocks.append(
-            {"level": level, "heading_text": heading_line, "content": block_content}
-        )
-    # (We skip the sentinel heading in the final result.)
-
-    # We'll now convert heading_blocks into a tree using a stack-based approach
-    root_nodes: List[Node] = []
-    stack: List[Node] = []
-    header_path: List[str] = []
-
-    for hb in heading_blocks:
-        level = hb["level"]  # type: ignore
-        heading_txt = hb["heading_text"]
-        content_txt = hb["content"]
-
-        # --- Pop stack first! ---
-        while stack and len(stack[-1].path) >= level:
-            stack.pop()
-            header_path.pop()
-
-        # build new path, create a node for the heading
-        new_path = header_path + [heading_txt]
-        heading_node = Node(
-            content=heading_txt, path=new_path, children=[]  # type: ignore
-        )
-
-        # Possibly create a content child for whatever lines were below the heading
-        if content_txt.strip():  # type: ignore
-            content_node = Node(
-                content=content_txt, path=new_path, children=[]  # type: ignore
-            )
-            heading_node.children.append(content_node)
-
-        # Attach heading_node to the stack top or as a root
-        if stack:
-            stack[-1].children.append(heading_node)
-        else:
-            root_nodes.append(heading_node)
-
-        stack.append(heading_node)
-        header_path.append(heading_txt)  # type: ignore
-
-    return root_nodes
-
-
-# The Chunk model for the final enriched chunks.
-class Chunk(BaseModel):
-    text: str  # The chunk text (which includes header context)
-    path: List[str]  # The header path (list of header strings)
-    token_count: int
-
-
-# Configuration for chunking
-class MarkdownChunkConfig(BaseModel):
-    chunk_size: int = 200  # desired chunk size in tokens
-    overlap_tokens: int = 30  # number of tokens to overlap between chunks
-    variation_percent: float = 0.3  # allowed variation
-    rollup: bool = True  # whether to roll up chunks
-    header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
-
-    @field_validator("chunk_size", mode="before")
     @classmethod
-    def convert_chunk_size_to_int(cls, v: Any) -> int:
-        """Convert chunk_size to int, maintaining backward compatibility
-        with Pydantic V1.
+    def _from_path(
+        cls,
+        file_path: Union[str, Path],
+        detail: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a file path.
+
+        Args:
+            file_path: Path to the file to attach
+
+        Returns:
+            FileAttachment instance
         """
-        if isinstance(v, float):
-            return int(v)
-        return int(v)
+        path = Path(file_path)
+        with open(path, "rb") as f:
+            content = f.read()
 
+        mime_type, _ = mimetypes.guess_type(path)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
 
-# A simple tokenizer that counts tokens as whitespace-separated words.
-def count_words(text: str) -> int:
-    return len(text.split())
-
-
-def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
-    """
-    Enhanced chunker that:
-      1. Splits by paragraph (top-level).
-      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
-      3. Allows going over the upper bound rather than splitting a single sentence.
-      4. Overlaps only once between consecutive chunks.
-      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
-      6. Preserves \n\n (and other original spacing) as best as possible.
-    """
-
-    # -------------------------------------------------
-    # Helpers
-    # -------------------------------------------------
-    def count_words(text_block: str) -> int:
-        return len(text_block.split())
-
-    lower_bound = int(config.chunk_size * (1 - config.variation_percent))
-    upper_bound = int(config.chunk_size * (1 + config.variation_percent))
-
-    # Quick check: if the entire text is short enough, return as-is.
-    if count_words(text) <= upper_bound:
-        return [text.strip()]
-
-    # Split into paragraphs, preserving \n\n if it's there.
-    raw_paragraphs = text.split("\n\n")
-    paragraphs = []
-    for i, p in enumerate(raw_paragraphs):
-        if p.strip():
-            # Re-append the double-newline if not the last piece
-            if i < len(raw_paragraphs) - 1:
-                paragraphs.append(p + "\n\n")
-            else:
-                paragraphs.append(p)
-
-    # Split paragraphs into "segments": each segment is either
-    # a full short paragraph or (if too big) a list of sentences.
-    sentence_regex = r"(?<=[.!?])\s+"
-
-    def split_paragraph_into_sentences(paragraph: str) -> List[str]:
-        """
-        Return a list of sentence-sized segments. If a single sentence
-        is bigger than upper_bound, do a word-level fallback.
-        """
-        if count_words(paragraph) <= upper_bound:
-            return [paragraph]
-
-        sentences = re.split(sentence_regex, paragraph)
-        # Clean up stray whitespace
-        sentences = [s.strip() for s in sentences if s.strip()]
-
-        expanded = []
-        for s in sentences:
-            if count_words(s) > upper_bound:
-                expanded.extend(_fallback_word_split(s, config))
-            else:
-                expanded.append(s)
-        return expanded
-
-    def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]:
-        """
-        As a last resort, split extremely large 'sentence' by words.
-        """
-        words = long_text.split()
-        pieces = []
-        start = 0
-        while start < len(words):
-            end = start + cfg.chunk_size
-            chunk_words = words[start:end]
-            pieces.append(" ".join(chunk_words))
-            start = end
-        return pieces
-
-    # Build a list of segments
-    segments = []
-    for para in paragraphs:
-        if count_words(para) > upper_bound:
-            # split into sentences
-            segs = split_paragraph_into_sentences(para)
-            segments.extend(segs)
-        else:
-            segments.append(para)
-
-    # -------------------------------------------------
-    # Accumulate segments into final chunks
-    # -------------------------------------------------
-    chunks = []
-    current_chunk = ""
-    current_count = 0
-
-    def flush_chunk() -> None:
-        nonlocal current_chunk, current_count
-        trimmed = current_chunk.strip()
-        if trimmed:
-            chunks.append(trimmed)
-        current_chunk = ""
-        current_count = 0
-
-    def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int:
-        """Sum of word counts from current_index onward."""
-        return sum(count_words(s) for s in all_segments[current_index:])
-
-    for i, seg in enumerate(segments):
-        seg_count = count_words(seg)
-
-        # If this single segment alone exceeds upper_bound, we accept it as a big chunk.
-        if seg_count > upper_bound:
-            # If we have something in the current chunk, flush it first
-            flush_chunk()
-            # Then store this large segment as its own chunk
-            chunks.append(seg.strip())
-            continue
-
-        # Attempt to add seg to the current chunk
-        if (current_count + seg_count) > upper_bound and (current_count >= lower_bound):
-            # We would normally flush here, but let's see if we are nearing the end:
-            # If the remaining tokens (including this one) is < lower_bound,
-            # we just add it anyway to avoid creating a tiny final chunk.
-            future_tokens = remaining_tokens_in_future(segments, i)
-            if future_tokens < lower_bound:
-                # Just add it (allowing to exceed upper bound)
-                if current_chunk:
-                    # Add space or preserve newline carefully
-                    # We'll do a basic approach here:
-                    if seg.startswith("\n\n"):
-                        current_chunk += seg  # preserve double new line
-                    else:
-                        current_chunk += " " + seg
-                    current_count = count_words(current_chunk)
-                else:
-                    current_chunk = seg
-                    current_count = seg_count
-            else:
-                # Normal flush
-                old_chunk = current_chunk
-                flush_chunk()
-                # Overlap from old_chunk
-                overlap_tokens_list = (
-                    old_chunk.split()[-config.overlap_tokens :] if old_chunk else []
-                )
-                overlap_str = (
-                    " ".join(overlap_tokens_list) if overlap_tokens_list else ""
-                )
-                if overlap_str:
-                    current_chunk = overlap_str + " " + seg
-                else:
-                    current_chunk = seg
-                current_count = count_words(current_chunk)
-        else:
-            # Just accumulate
-            if current_chunk:
-                if seg.startswith("\n\n"):
-                    current_chunk += seg
-                else:
-                    current_chunk += " " + seg
-            else:
-                current_chunk = seg
-            current_count = count_words(current_chunk)
-
-    # Flush leftover
-    flush_chunk()
-
-    # Return non-empty
-    return [c for c in chunks if c.strip()]
-
-
-# Function to process a Node and produce enriched chunks.
-def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]:
-    chunks: List[Chunk] = []
-
-    # Check if this is a header-only node.
-    is_header_only = node.path and node.content.strip() == node.path[-1]
-
-    # Only generate a chunk for the node if it has non-header content,
-    # or if it’s header-only AND has no children (i.e., it's a leaf header).
-    if node.content.strip() and (not is_header_only or not node.children):
-        header_prefix = (
-            config.header_context_sep.join(node.path) + "\n\n" if node.path else ""
+        return cls(
+            content=content,
+            filename=path.name,
+            mime_type=mime_type,
+            detail=detail,
         )
-        content_chunks = recursive_chunk(node.content, config)
-        for chunk_text in content_chunks:
-            full_text = header_prefix + chunk_text
-            chunks.append(
-                Chunk(
-                    text=full_text, path=node.path, token_count=count_words(full_text)
-                )
+
+    @classmethod
+    def _from_url(
+        cls,
+        url: str,
+        content: Optional[bytes] = None,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        detail: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a URL.
+
+        Args:
+            url: URL to the file
+            content: Optional raw bytes content (if already fetched)
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename or url
+
+        Returns:
+            FileAttachment instance
+        """
+        if filename is None and url:
+            # Extract filename from URL if possible
+
+            parsed_url = urlparse(url)
+            path = parsed_url.path
+            filename = path.split("/")[-1] if path else None
+
+        if mime_type is None and filename:
+            mime_type, _ = mimetypes.guess_type(filename)
+
+        return cls(
+            content=content or b"",  # Empty bytes if no content provided
+            filename=filename,
+            mime_type=mime_type or "application/octet-stream",
+            url=url,
+            detail=detail,
+        )
+
+    @classmethod
+    def from_path(
+        cls,
+        path: Union[str, Path],
+        detail: str | None = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from either a local file path or a URL.
+
+        Args:
+            path_or_url: Path to the file or URL to fetch
+
+        Returns:
+            FileAttachment instance
+        """
+        # Convert to string if Path object
+        path_str = str(path)
+
+        # Check if it's a URL
+        if path_str.startswith(("http://", "https://", "ftp://")):
+            return cls._from_url(url=path_str, detail=detail)
+        else:
+            # Assume it's a local file path
+            return cls._from_path(path_str, detail=detail)
+
+    @classmethod
+    def from_bytes(
+        cls,
+        content: bytes,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from bytes content.
+
+        Args:
+            content: Raw bytes content
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename if provided
+
+        Returns:
+            FileAttachment instance
+        """
+        if mime_type is None and filename is not None:
+            mime_type, _ = mimetypes.guess_type(filename)
+
+        return cls(
+            content=content,
+            filename=filename,
+            mime_type=mime_type or "application/octet-stream",
+        )
+
+    @classmethod
+    def from_io(
+        cls,
+        file_obj: BinaryIO,
+        filename: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> "FileAttachment":
+        """Create a FileAttachment from a file-like object.
+
+        Args:
+            file_obj: File-like object with binary content
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content, guessed from filename if provided
+
+        Returns:
+            FileAttachment instance
+        """
+        content = file_obj.read()
+        return cls.from_bytes(content, filename, mime_type)
+
+    @classmethod
+    def from_text(
+        cls,
+        text: str,
+        filename: Optional[str] = None,
+        mime_type: str = "text/plain",
+        encoding: str = "utf-8",
+    ) -> "FileAttachment":
+        """Create a FileAttachment from text content.
+
+        Args:
+            text: Text content to include
+            filename: Optional name to use for the file
+            mime_type: MIME type of the content
+            encoding: Text encoding to use
+
+        Returns:
+            FileAttachment instance
+        """
+        content = text.encode(encoding)
+        return cls(content=content, filename=filename, mime_type=mime_type)
+
+    def to_base64(self) -> str:
+        """Convert content to base64 encoding.
+
+        Returns:
+            Base64 encoded string
+        """
+        return base64.b64encode(self.content).decode("utf-8")
+
+    def to_data_uri(self) -> str:
+        """Convert content to a data URI.
+
+        Returns:
+            A data URI string containing the base64-encoded content with MIME type
+        """
+        base64_content = self.to_base64()
+        return f"data:{self.mime_type};base64,{base64_content}"
+
+    def to_dict(self, model: str) -> Dict[str, Any]:
+        """
+        Convert to a dictionary suitable for API requests.
+        Tested only for PDF files.
+
+        Returns:
+            Dictionary with file data
+        """
+        if (
+            self.mime_type
+            and self.mime_type.startswith("image/")
+            or "gemini" in model.lower()
+        ):
+            # for gemini models, we use `image_url` for both pdf-files and images
+
+            image_url_dict = {}
+
+            # If we have a URL and it's a full http/https URL, use it directly
+            if self.url and (
+                self.url.startswith("http://") or self.url.startswith("https://")
+            ):
+                image_url_dict["url"] = self.url
+            # Otherwise use base64 data URI
+            else:
+                image_url_dict["url"] = self.to_data_uri()
+
+            # Add detail parameter if specified
+            if self.detail:
+                image_url_dict["detail"] = self.detail
+
+            return dict(
+                type="image_url",
+                image_url=image_url_dict,
             )
-
-    # Process children nodes recursively.
-    for child in node.children:
-        child_chunks = chunk_node(child, config)
-        chunks.extend(child_chunks)
-
-    return chunks
-
-
-# Function to process an entire tree of Nodes.
-def chunk_tree(root_nodes: List[Node], config: MarkdownChunkConfig) -> List[Chunk]:
-    all_chunks: List[Chunk] = []
-    for node in root_nodes:
-        all_chunks.extend(chunk_node(node, config))
-    return all_chunks
-
-
-def aggregate_content(node: Node) -> str:
-    """
-    Recursively aggregate the content from a node and all its descendants,
-    excluding header-only nodes to avoid duplication.
-    """
-    parts = []
-
-    # Skip header-only nodes in content aggregation
-    is_header_only = node.path and node.content.strip() == node.path[-1].strip()
-    if not is_header_only and node.content.strip():
-        parts.append(node.content.strip())
-
-    # Recurse on children
-    for child in node.children:
-        child_text = aggregate_content(child)
-        if child_text.strip():
-            parts.append(child_text.strip())
-
-    return "\n\n".join(parts)
-
-
-def flatten_tree(node: Node, level: int = 0) -> str:
-    """
-    Flatten a node and its children back into proper markdown text.
-
-    Args:
-        node: The node to flatten
-        level: The current heading level (depth in the tree)
-
-    Returns:
-        str: Properly formatted markdown text
-    """
-    result = ""
-
-    # Check if this is a header node (content matches last item in path)
-    is_header = node.path and node.content.strip().startswith("#")
-
-    # For header nodes, don't duplicate the hash marks
-    if is_header:
-        result = node.content.strip() + "\n\n"
-    elif node.content.strip():
-        result = node.content.strip() + "\n\n"
-
-    # Process all children
-    for child in node.children:
-        result += flatten_tree(child, level + 1)
-
-    return result
-
-
-def rollup_chunk_node(
-    node: Node, config: MarkdownChunkConfig, prefix: str = ""
-) -> List[Chunk]:
-    """
-    Recursively produce rollup chunks from `node`, passing down a `prefix`
-    (e.g., parent heading(s)).
-
-    - If a node is heading-only (content == last path item) and has children,
-      we skip creating a chunk for that node alone and instead add that heading
-      to the `prefix` for child nodes.
-    - If a node is NOT heading-only OR has no children, we try to fit all of its
-      flattened content into a single chunk. If it's too large, we chunk it.
-    - We pass the (possibly updated) prefix down to children, so each child's
-      chunk is enriched exactly once with all ancestor headings.
-    """
-
-    chunks: List[Chunk] = []
-
-    # Check if the node is "heading-only" and has children
-    # e.g. node.content=="# Chapter 1" and node.path[-1]=="# Chapter 1"
-    is_heading_only_with_children = (
-        node.path
-        and node.content.strip() == node.path[-1].strip()
-        and len(node.children) > 0
-    )
-
-    if is_heading_only_with_children:
-        # We do NOT create a chunk for this node alone.
-        # Instead, we add its heading to the prefix for child chunks.
-        new_prefix = prefix + node.content.strip()
-        for i, child in enumerate(node.children):
-            sep = "\n\n" if i == 0 else config.header_context_sep
-            chunks.extend(rollup_chunk_node(child, config, prefix=new_prefix + sep))
-        return chunks
-
-    # If not heading-only-with-children, we handle this node's own content:
-    # Flatten the entire node (including sub-children) in standard Markdown form.
-    flattened = flatten_tree(node, level=len(node.path))
-    flattened_with_prefix = prefix + flattened
-    total_tokens = count_words(flattened_with_prefix)
-
-    # Check if we can roll up everything (node + children) in a single chunk
-    if total_tokens <= config.chunk_size * (1 + config.variation_percent):
-        # One single chunk for the entire subtree
-        chunks.append(
-            Chunk(text=flattened_with_prefix, path=node.path, token_count=total_tokens)
-        )
-    else:
-        # It's too large overall. We'll chunk the node's own content first (if any),
-        # then recurse on children.
-        node_content = node.content.strip()
-
-        # If we have actual content that is not just a heading, chunk it with the prefix
-        # (like "preamble" text).
-        # Note: if this node is heading-only but has NO children,
-        # it will still land here
-        # (because is_heading_only_with_children was False due to zero children).
-        if node_content and (not node.path or node_content != node.path[-1].strip()):
-            # The node is actual content (not purely heading).
-            # We'll chunk it in paragraphs/sentences with the prefix.
-            content_chunks = recursive_chunk(node_content, config)
-            for text_block in content_chunks:
-                block_with_prefix = prefix + text_block
-                chunks.append(
-                    Chunk(
-                        text=block_with_prefix,
-                        path=node.path,
-                        token_count=count_words(block_with_prefix),
-                    )
-                )
-
-        # Now recurse on children, passing the same prefix so they get it too
-        for child in node.children:
-            chunks.extend(rollup_chunk_node(child, config, prefix=prefix))
-
-    return chunks
-
-
-def rollup_chunk_tree(
-    root_nodes: List[Node],
-    config: MarkdownChunkConfig,
-) -> List[Chunk]:
-    # Create a dummy root node that contains everything.
-    dummy_root = Node(content="", path=[], children=root_nodes)
-
-    # Now process just the dummy root node with an empty prefix.
-    chunks = rollup_chunk_node(dummy_root, config, prefix="")
-    return chunks
-
-
-def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]:
-    tree = parse_markdown_headings(markdown_text)
-    if len(tree) == 1 and len(tree[0].children) == 0:
-        # Pure text, no hierarchy, so just use recursive_chunk
-        text_chunks = recursive_chunk(markdown_text, config)
-        return [_cleanup_text(chunk) for chunk in text_chunks]
-    if config.rollup:
-        chunks = rollup_chunk_tree(tree, config)
-    else:
-        chunks = chunk_tree(tree, config)
-    return [_cleanup_text(chunk.text) for chunk in chunks]
-
-
-if __name__ == "__main__":
-    # Example usage:
-    markdown_text = """# Title
-Intro para. Hope this is not
-getting split.
-## SubTitle
-- Item1
-- Item2
-"""
-    # Set up chunking config with very large chunk size.
-    # (you can adjust chunk_size, overlap_tokens, variation_percent)
-    config = MarkdownChunkConfig(
-        chunk_size=200, overlap_tokens=5, variation_percent=0.2
-    )
-    chunks = chunk_markdown(markdown_text, config)
-
-    for idx, chunk in enumerate(chunks, 1):
-        print(f"--- Chunk {idx} --- ")
-        print(chunk)
-        print()
-
-    config.rollup = True
-    # with rollup_chunk_tree we get entire doc as 1 chunk
-    chunks = chunk_markdown(markdown_text, config)
-    assert len(chunks) == 1
-    for idx, chunk in enumerate(chunks, 1):
-        print(f"--- Chunk {idx} ---")
-        print(chunk)
-        print()
+        else:
+            # For non-image files
+            return dict(
+                type="file",
+                file=dict(
+                    filename=self.filename,
+                    file_data=self.to_data_uri(),
+                ),
+            )
 </file>
 
 <file path="langroid/parsing/para_sentence_split.py">
@@ -65482,6 +65327,114 @@ def test_langdb_embeddings():
     assert len(emb_fn(["hello"])[0]) == langdb_openai_embed_config.dims
 </file>
 
+<file path="tests/main/test_file_attachment.py">
+import base64
+import io
+import tempfile
+from pathlib import Path
+
+from langroid.parsing.file_attachment import FileAttachment
+
+
+class TestFileAttachment:
+    def test_from_bytes(self):
+        """Test creating attachment from bytes."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(
+            content=content, filename="test.txt", mime_type="text/plain"
+        )
+
+        assert attachment.content == content
+        assert attachment.filename == "test.txt"
+        assert attachment.mime_type == "text/plain"
+
+    def test_from_io(self):
+        """Test creating attachment from BytesIO object."""
+        content = b"test content"
+        file_obj = io.BytesIO(content)
+
+        attachment = FileAttachment.from_io(
+            file_obj=file_obj, filename="test.txt", mime_type="text/plain"
+        )
+
+        assert attachment.content == content
+        assert attachment.filename == "test.txt"
+        assert attachment.mime_type == "text/plain"
+
+    def test_from_text(self):
+        """Test creating attachment from text."""
+        text = "Hello, world!"
+        attachment = FileAttachment.from_text(text=text)
+
+        assert attachment.content == text.encode("utf-8")
+        assert attachment.mime_type == "text/plain"
+        assert attachment.filename is not None  # Should have default filename
+
+    def test_from_path(self):
+        """Test creating attachment from file path."""
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
+            tmp.write(b"test content")
+            tmp.flush()
+
+            attachment = FileAttachment.from_path(tmp.name)
+
+            assert attachment.content == b"test content"
+            assert attachment.filename == Path(tmp.name).name
+            assert attachment.mime_type == "text/plain"
+
+    def test_default_filename(self):
+        """Test default filename generation when none provided."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content)
+
+        assert attachment.filename is not None
+        assert "attachment_" in attachment.filename
+        assert attachment.filename.endswith(".bin")
+
+    def test_to_base64(self):
+        """Test base64 encoding."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content)
+
+        expected = base64.b64encode(content).decode("utf-8")
+        assert attachment.to_base64() == expected
+
+    def test_to_data_uri(self):
+        """Test data URI generation."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(content=content, mime_type="text/plain")
+
+        data_uri = attachment.to_data_uri()
+        expected_base64 = base64.b64encode(content).decode("utf-8")
+        expected_uri = f"data:text/plain;base64,{expected_base64}"
+
+        assert data_uri == expected_uri
+
+    def test_to_dict(self):
+        """Test conversion to dict for API requests."""
+        content = b"test content"
+        attachment = FileAttachment.from_bytes(
+            content=content, filename="test.txt", mime_type="text/plain"
+        )
+
+        result = attachment.to_dict("gpt-4.1")
+        assert result is not None
+
+    def test_mime_type_inference(self):
+        """Test MIME type is correctly inferred from filename."""
+        content = b"test content"
+
+        pdf = FileAttachment.from_bytes(content=content, filename="doc.pdf")
+        assert pdf.mime_type == "application/pdf"
+
+        png = FileAttachment.from_bytes(content=content, filename="image.png")
+        assert png.mime_type == "image/png"
+
+        # Change .xyz to .unknown123 which should definitely be unrecognized
+        unknown = FileAttachment.from_bytes(content=content, filename="file.unknown123")
+        assert unknown.mime_type == "application/octet-stream"
+</file>
+
 <file path="tests/main/test_git_utils.py">
 import os
 from unittest.mock import patch
@@ -66506,718 +66459,6 @@ def test_markitdown_pptx_parser():
     assert len(pptx_chunks) > 0
     assert all(chunk.metadata.is_chunk for chunk in pptx_chunks)
     assert all(path in chunk.metadata.source for chunk in pptx_chunks)
-</file>
-
-<file path="tests/main/test_md_parser.py">
-import re
-from dataclasses import dataclass
-from typing import List
-
-import pytest
-
-from langroid.parsing.md_parser import (
-    MarkdownChunkConfig,
-    Node,
-    chunk_markdown,
-    count_words,
-    parse_markdown_headings,
-    recursive_chunk,
-)
-
-
-@dataclass
-class SectionData:
-    header: str
-    content: str
-
-    def to_markdown(self) -> str:
-        return f"{self.header}\n{self.content}\n\n"
-
-
-CH1_DATA = SectionData(
-    header="# Chapter 1",
-    content="""Intro paragraph under Chapter 1.
-This is a somewhat longer paragraph that might require splitting
-if token limits are low.
-```java
-# Fake Chapter in Code Block - just a comment!
-This is not a real chapter.
-## Comment in code!
-```
-""",
-)
-
-SEC1_1_DATA = SectionData(
-    header="## Section 1.1",
-    content="""Some text in Section 1.1. 
-It might include multiple sentences. Here is another sentence.
-```python
-# Throw in some comments just to mix things up.
-def some_function():
-    return None
-## end of function definition
-```
-""",
-)
-
-SEC1_2_DATA = SectionData(
-    header="## Section 1.2",
-    content="""- Bullet A
-- Bullet B""",
-)
-
-CH2_DATA = SectionData(
-    header="# Chapter 2", content="""Final paragraph in Chapter 2."""
-)
-
-
-# Combined fixture with all the data
-@pytest.fixture
-def markdown_sections() -> List[SectionData]:
-    return [CH1_DATA, SEC1_1_DATA, SEC1_2_DATA, CH2_DATA]
-
-
-@pytest.fixture
-def sample_markdown(markdown_sections) -> str:
-    return "".join(section.to_markdown() for section in markdown_sections)
-
-
-def test_parse_markdown_headings(sample_markdown, markdown_sections):
-    """
-    Test the parse_markdown_headings_only function using a sample Markdown document.
-    We verify that the resulting hierarchy of Nodes matches our expectations.
-    """
-    # Parse the sample markdown to a list of top-level Node objects
-    tree = parse_markdown_headings(sample_markdown)
-    ch1, sec1_1, sec1_2, ch2 = markdown_sections
-
-    # We expect two top-level headings: Chapter 1 and Chapter 2
-    assert len(tree) == 2
-
-    # Check Chapter 1 node
-    ch1_node = tree[0]
-    assert isinstance(ch1_node, Node)
-    assert ch1_node.content == ch1.header
-    assert ch1_node.path == [ch1.header]
-
-    # Under Chapter 1, we expect:
-    #   1. A paragraph (intro)
-    #   2. Heading "Section 1.1"
-    #   3. Heading "Section 1.2"
-    assert len(ch1_node.children) == 3
-
-    intro_para = ch1_node.children[0]
-    assert intro_para.content.strip() == ch1.content.strip()
-    assert intro_para.path == [ch1.header]
-    assert len(intro_para.children) == 0  # Paragraph has no sub-children
-
-    section_11 = ch1_node.children[1]
-    assert section_11.content == sec1_1.header
-    assert section_11.path == [ch1.header, sec1_1.header]
-
-    # Under Section 1.1, we expect a paragraph node
-    assert len(section_11.children) == 1
-    sec_11_para = section_11.children[0]
-    assert sec_11_para.content.strip() == sec1_1.content.strip()
-    assert sec_11_para.path == [ch1.header, sec1_1.header]
-
-    section_12 = ch1_node.children[2]
-    assert section_12.content == sec1_2.header
-    assert section_12.path == [ch1.header, sec1_2.header]
-
-    # Under Section 1.2, we expect a single content node containing the bullet points
-    assert len(section_12.children) == 1
-    bullets_node = section_12.children[0]
-    # The bullet items are joined with newlines (per the extract_text logic)
-    assert bullets_node.content.strip() == sec1_2.content.strip()
-    assert bullets_node.path == [ch1.header, sec1_2.header]
-
-    # Check Chapter 2 node
-    ch2_node = tree[1]
-    assert ch2_node.content == ch2.header
-    assert ch2_node.path == [ch2.header]
-    # Under Chapter 2, we expect a single paragraph
-    assert len(ch2_node.children) == 1
-    ch2_para = ch2_node.children[0]
-    assert ch2_para.content.strip() == ch2.content.strip()
-    assert ch2_para.path == [ch2.header]
-    assert len(ch2_para.children) == 0
-
-
-def test_empty_document():
-    tree = parse_markdown_headings("")
-    assert tree == []
-
-
-def test_no_headers_only_paragraphs():
-    md = """This is just a paragraph.
-    
-And another one.
-"""
-    tree = parse_markdown_headings(md)
-    assert len(tree) == 1
-    assert all(node.path == [] for node in tree)
-    assert tree[0].content.strip() == md.strip()
-
-
-def test_headers_with_no_content():
-    md = """# Title
-## Subsection
-### Subsubsection
-"""
-    tree = parse_markdown_headings(md)
-    assert len(tree) == 1
-    assert tree[0].content == "# Title"
-    assert len(tree[0].children) == 1
-    assert tree[0].children[0].content == "## Subsection"
-    assert len(tree[0].children[0].children) == 1
-    assert tree[0].children[0].children[0].content == "### Subsubsection"
-    assert tree[0].children[0].children[0].children == []
-
-
-def test_header_with_inline_formatting():
-    md = """# Header with **bold** and *italic* text
-Some _content_.
-"""
-    tree = parse_markdown_headings(md)
-    assert tree[0].content == "# Header with **bold** and *italic* text"
-    assert tree[0].children[0].content.strip() == "Some _content_."
-
-
-def test_lists_and_code_blocks():
-    md = """# List and Code
-
-## List Section
-- Item 1
-- Item 2
-
-## Code Section
-
-print("Hello, world!")
-    
-"""
-    tree = parse_markdown_headings(md)
-
-    list_section = tree[0].children[0]
-    assert list_section.content == "## List Section"
-    list_content = list_section.children[0]
-    assert list_content.content == "- Item 1\n- Item 2"
-
-    code_section = tree[0].children[1]
-    assert code_section.content == "## Code Section"
-    code_block = code_section.children[0]
-    assert 'print("Hello, world!")' in code_block.content
-
-
-def test_multiple_same_level_headers():
-    md = """# Header A
-Paragraph A.
-
-# Header B
-Paragraph B.
-"""
-    tree = parse_markdown_headings(md)
-    assert len(tree) == 2
-    assert tree[0].content == "# Header A"
-    assert tree[0].children[0].content.strip() == "Paragraph A."
-    assert tree[1].content == "# Header B"
-    assert tree[1].children[0].content.strip() == "Paragraph B."
-
-
-def test_header_skipping_levels():
-    md = """# H1
-### H3
-Some text.
-"""
-    tree = parse_markdown_headings(md)
-    h1 = tree[0]
-    assert h1.content == "# H1"
-    # H3 should be treated as a direct child of H1
-    h3 = h1.children[0]
-    assert h3.content == "### H3"
-    assert h3.path == ["# H1", "### H3"]
-    assert h3.children[0].content.strip() == "Some text."
-
-
-@pytest.mark.parametrize("chunk_size_factor", [1.2, 100])
-@pytest.mark.parametrize("rollup", [True, False])
-def test_markdown_chunking(
-    sample_markdown,
-    markdown_sections,
-    chunk_size_factor: int,
-    rollup: bool,
-):
-    """
-    Given a Markdown document with sections and sub-sections, this test verifies that:
-      - The tree is built correctly from the document.
-      - The chunking process produces distinct chunks with enriched header context.
-      - A header-only node does not duplicate the header in its own chunk.
-
-    The sample document has:
-      - Chapter 1 with a preamble.
-      - Section 1.1 with content.
-      - Section 1.2 with bullet content.
-      - Chapter 2 with its own content.
-    """
-
-    ch1, sec1_1, sec1_2, ch2 = markdown_sections
-    chunk_size = chunk_size_factor * count_words(ch1.content)
-    config = MarkdownChunkConfig(
-        chunk_size=chunk_size,
-        overlap_tokens=5,
-        variation_percent=0.2,
-        rollup=rollup,
-    )
-
-    # Structure-aware chunking of the text into enriched chunks.
-    chunks: List[str] = chunk_markdown(sample_markdown, config)
-
-    if rollup and chunk_size > count_words(sample_markdown):
-        assert len(chunks) == 1, f"Expected 1 chunk, got {len(chunks)}"
-        assert (
-            chunks[0].split() == sample_markdown.split()
-        ), "Chunk does not match original Markdown"
-        # check that line-breaks in each section content are preserved
-        for section in markdown_sections:
-            assert (
-                section.content in chunks[0]
-            ), f"Section content not found in the chunk: {section.content}"
-
-    if not rollup or chunk_size < count_words(sample_markdown):
-        # Based on our document structure, we expect four chunks:
-        # 1. Chapter 1's preamble content (enriched with prefix "# Chapter 1")
-        # 2. Section 1.1 content (enriched with prefix "# Chapter 1 \n\n # Section 1.1")
-        # 3. Section 1.2 content (enriched with prefix "# Chapter 1 \n\n # Section 1.2")
-        # 4. Chapter 2 content (enriched with prefix "# Chapter 2")
-        assert len(chunks) == 4, f"Expected 4 chunks, got {len(chunks)}"
-
-        assert (
-            chunks[0].split() == ch1.to_markdown().split()
-        ), "Chunk 1 does not match Chapter 1 preamble"
-        assert (
-            ch1.content.strip() in chunks[0]
-        ), "Chapter 1 content not preserved in Chunk 1"
-
-        assert chunks[1].split() == (
-            (ch1.header + config.header_context_sep + sec1_1.to_markdown()).split()
-        ), "Chunk 2 does not match Section 1.1"
-        assert (
-            sec1_1.content.strip() in chunks[1]
-        ), "Section 1.1 content not preserved in Chunk 2"
-
-        assert chunks[2].split() == (
-            (ch1.header + config.header_context_sep + sec1_2.to_markdown()).split()
-        ), "Chunk 3 does not match Section 1.2"
-        assert (
-            sec1_2.content.strip() in chunks[2]
-        ), "Section 1.2 content not preserved in Chunk 3"
-
-        assert (
-            chunks[3].split() == ch2.to_markdown().split()
-        ), "Chunk 4 does not match Chapter 2"
-        assert (
-            ch2.content.strip() in chunks[3]
-        ), "Chapter 2 content not preserved in Chunk 4"
-
-
-@pytest.mark.parametrize("rollup", [False, True])
-@pytest.mark.parametrize("chunk_size", [20, 500])
-def test_chunking_sizes(
-    chunk_size: int,
-    rollup: bool,
-):
-    """
-    Test that the chunking logic produces chunks that:
-      - Have token counts between the lower and upper bounds
-        (except possibly the final chunk)
-      - Include the header enrichment in each chunk's text
-      - Include the expected overlap between consecutive chunks
-    """
-    # Create a long text consisting of 200 repeated tokens ("word")
-    long_text = " ".join(["word"] * 200)  # 200 tokens
-    md_text = f"""# Chapter 1
-{long_text}
-"""
-
-    # Set chunking configuration.
-    # Here chunk_size=50 means that (with variation_percent=0.2)
-    # we expect chunks to have between 40 and 60 tokens.
-    config = MarkdownChunkConfig(
-        chunk_size=chunk_size, rollup=rollup, overlap_tokens=5, variation_percent=0.2
-    )
-
-    # Produce the enriched chunks from the tree.
-    chunks = chunk_markdown(md_text, config)
-
-    # Compute the allowed bounds.
-    lower_bound = config.chunk_size * (1 - config.variation_percent)
-    upper_bound = config.chunk_size * (1 + config.variation_percent)
-
-    # Verify each chunk's token count.
-    # For all chunks except possibly the final one,
-    # we expect at least lower_bound tokens.
-    for i, chunk in enumerate(chunks):
-        tokens = count_words(chunk)
-        if i < len(chunks) - 1:
-            assert (
-                tokens >= lower_bound
-            ), f"Chunk {i} has {tokens} tokens, expected at least {lower_bound}"
-        assert (
-            tokens <= 2 * upper_bound
-        ), (  # relaxed check
-            f"Chunk {i} has {tokens} tokens, expected at most {upper_bound}"
-        )
-
-    # Check that each chunk is enriched with the header context.
-    # Each chunk's text should contain "Chapter 1" since that is the header path.
-    for i, chunk in enumerate(chunks):
-        assert "Chapter 1" in chunk, f"Chunk {i} is missing header enrichment"
-
-    # Verify that consecutive chunks share the expected overlap.
-    # For each consecutive pair of chunks, the last `overlap_tokens`
-    # tokens of the previous chunk
-    # should appear among the first tokens of the next chunk.
-    if len(chunks) > 1:
-        for i in range(len(chunks) - 1):
-            prev_tokens = chunks[i].split()
-            next_tokens = chunks[i + 1].split()
-            # Get the last few tokens from the previous chunk:
-            expected_overlap = prev_tokens[-config.overlap_tokens :]
-            # Look at the beginning of the next chunk
-            # (allowing some room for header enrichment).
-            next_head = next_tokens[:15]
-            for word in expected_overlap:
-                assert (
-                    word in next_head
-                ), f"Overlap word '{word}' from chunk {i} not found in chunk {i+1}"
-
-
-@pytest.mark.parametrize("rollup", [False, True])
-def test_chunking_word_set_consistency(rollup: bool):
-    """
-    Test that when converting Markdown text to chunks, the union of distinct words
-    from the original content is the same as the union of distinct words from the
-    chunks (ignoring header enrichment).
-    """
-    # Define a header and content.
-    header = "# Chapter 1"
-    # Create content text with 100 unique words.
-    content_tokens = [f"word{i}" for i in range(1, 101)]
-    content_text = " ".join(content_tokens)
-
-    # Create a sample Markdown document with a header and content.
-    md_text = f"{header}\n\n{content_text}\n"
-
-    # Set up the chunking configuration.
-    config = MarkdownChunkConfig(
-        chunk_size=20,  # small chunk size for testing
-        overlap_tokens=5,  # intended overlap tokens
-        variation_percent=0.2,  # chunks between 16 and 24 tokens
-        rollup=rollup,
-    )
-
-    # Produce enriched chunks from the tree.
-    chunks = chunk_markdown(md_text, config)
-
-    # Remove header enrichment ("Chapter 1\n\n") from each chunk and collect all words.
-    chunk_word_set = set()
-    for chunk in chunks:
-        assert chunk.startswith(header)
-        # Split into words and update the set.
-        chunk_word_set.update(chunk[len(header) :].split())
-
-    # Compute the distinct set of words in the original content.
-    original_word_set = set(content_text.split())
-
-    # Verify that the union of words from the chunks
-    # matches the original content's words.
-    assert (
-        chunk_word_set == original_word_set
-    ), f"Word sets do not match.\nExpected: {original_word_set}\nGot: {chunk_word_set}"
-
-
-def smart_tokenize(text: str) -> list:
-    """
-    Tokenize text by first inserting a space after a period if it's immediately
-    followed by an uppercase letter (a common side-effect of line joining),
-    then splitting on whitespace.
-    """
-    fixed = re.sub(r"(\.)([A-Z])", r"\1 \2", text)
-    return fixed.split()
-
-
-def generate_sentence(word_count: int, sentence_id: int) -> str:
-    """
-    Generate a dummy sentence with `word_count` words and a trailing period.
-    Uses "wordX" to identify each word, plus a "sentence{ID}" marker at the end.
-    """
-    words = [f"word{i}" for i in range(1, word_count + 1)]
-    # Put a sentinel to identify the sentence number
-    # and close with a period for the splitting logic.
-    sentence_str = " ".join(words) + f" sentence{sentence_id}."
-    return sentence_str
-
-
-def generate_paragraph(
-    sentence_count: int,
-    words_per_sentence: int,
-    paragraph_id: int,
-) -> str:
-    """
-    Generate a dummy paragraph with `sentence_count` sentences,
-    each with `words_per_sentence` words.
-    """
-    sentences = [
-        generate_sentence(words_per_sentence, s_id + 1)
-        for s_id in range(sentence_count)
-    ]
-    # Add a sentinel "PARA{ID}" at the end to visually check paragraph boundaries.
-    para_str = " ".join(sentences) + f" PARA{paragraph_id}"
-    return para_str
-
-
-@pytest.mark.parametrize("chunk_size_factor", [0.5, 1, 1.5])
-@pytest.mark.parametrize("rollup", [False, True])
-def test_degenerate_markdown_parsing_and_chunking(
-    chunk_size_factor: float,
-    rollup: bool,
-):
-    # A degenerate Markdown document: plain text without any Markdown formatting.
-
-    paragraph1 = generate_paragraph(
-        sentence_count=10, words_per_sentence=50, paragraph_id=1
-    )
-    paragraph2 = generate_paragraph(
-        sentence_count=10, words_per_sentence=50, paragraph_id=2
-    )
-
-    # Combine paragraphs with a double-newline
-    plain_text = paragraph1 + "\n\n" + paragraph2
-    plain_text = plain_text.strip()
-
-    # Parse the plain text using our Markdown parser.
-    tree = parse_markdown_headings(plain_text)
-
-    # For plain text, we expect a single node.
-    assert len(tree) == 1, "Expected one node for plain text"
-    node = tree[0]
-
-    # Use smart_tokenize to account for missing spaces at line joins.
-    expected_tokens = set(smart_tokenize(plain_text))
-    actual_tokens = set(smart_tokenize(node.content))
-    assert (
-        expected_tokens == actual_tokens
-    ), "Distinct word sets from node content and original plain text do not match"
-
-    # Plain text should not have header enrichment.
-    assert node.path == [] or node.path == [""], "Plain text should have no header path"
-    assert node.children == [], "Plain text should not produce any children nodes"
-
-    # Set up a chunking configuration.
-    config = MarkdownChunkConfig(
-        desired_chunk_tokens=50,  # high enough to avoid splitting for this test
-        overlap_tokens=5,
-        variation_percent=0.2,
-        rollup=rollup,
-    )
-
-    # Generate chunks from the parsed tree.
-    chunks = chunk_markdown(plain_text, config)
-
-    # Collect distinct words from the chunks.
-    chunk_word_set = set()
-    for chunk in chunks:
-        # Since there is no header enrichment (no headers in plain text),
-        # we can tokenize directly.
-        chunk_word_set.update(smart_tokenize(chunk))
-
-    original_word_set = set(smart_tokenize(plain_text))
-    assert chunk_word_set == original_word_set, (
-        f"Word sets do not match between chunks and original text.\n"
-        f"Expected: {original_word_set}\nGot: {chunk_word_set}"
-    )
-
-
-def condensed_chunk_view(chunks: List[str], max_words: int = 5) -> str:
-    """
-    Return a compact string showing each chunk's first/last few words and total length.
-    """
-    lines = []
-    for i, c in enumerate(chunks):
-        words = c.split()
-        total = len(words)
-        if total <= 2 * max_words:
-            preview = " ".join(words)
-        else:
-            preview = (
-                " ".join(words[:max_words]) + " ... " + " ".join(words[-max_words:])
-            )
-        lines.append(f"Chunk {i+1} (total {total} words): {preview}")
-    return "\n".join(lines)
-
-
-# ----------------------------------------------------------------
-# THE TEST
-# ----------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "chunk_size, overlap_tokens, variation_percent",
-    [
-        (50, 5, 0.3),  # Scenario 1
-        (20, 5, 0.3),  # Scenario 2
-        (8, 3, 0.3),  # Scenario 3 (forces word-level splits)
-    ],
-)
-def test_recursive_chunk(chunk_size, overlap_tokens, variation_percent):
-    """
-    Tests that the chunker respects paragraph boundaries when possible,
-    then sentence boundaries, and only splits sentences when no other option
-    is possible under the given config.
-    """
-    # Generate some text with 2 paragraphs, each having 3 sentences of 10 words.
-    # ~ Each paragraph => 3 sentences =>
-    #    each sentence has ~10 words => ~30 words per paragraph.
-    # So total words ~60. This helps us see chunking behavior across boundaries.
-    paragraph1 = generate_paragraph(
-        sentence_count=3, words_per_sentence=10, paragraph_id=1
-    )
-    paragraph2 = generate_paragraph(
-        sentence_count=3, words_per_sentence=10, paragraph_id=2
-    )
-
-    # Combine paragraphs with a double-newline
-    text = paragraph1 + "\n\n" + paragraph2
-
-    config = MarkdownChunkConfig(
-        chunk_size=chunk_size,
-        overlap_tokens=overlap_tokens,
-        variation_percent=variation_percent,
-    )
-
-    chunks = recursive_chunk(text, config)
-
-    # Print a condensed view for manual inspection
-    print("\n===================================")
-    print(
-        f"Config: chunk_size={chunk_size}, "
-        f"overlap_tokens={overlap_tokens}, "
-        f"variation_percent={variation_percent}\n"
-    )
-    print("Generated Text (first 30 words):")
-    print(" ".join(text.split()[:30]), "...")
-    print("\nChunks:")
-    print(condensed_chunk_view(chunks, max_words=5))
-    print("===================================\n")
-
-    # Basic asserts:
-    # 1. No chunk should exceed the upper bound in terms of word count
-    upper_bound = chunk_size * (1 + variation_percent)
-    for i, chunk in enumerate(chunks):
-        word_count_in_chunk = len(chunk.split())
-        assert word_count_in_chunk <= upper_bound + 5, (
-            f"Chunk {i+1} has {word_count_in_chunk} words, "
-            f"exceeds upper bound (~{upper_bound:.1f})."
-        )
-
-    # 2. Check that chunking doesn't produce empty chunks
-    for i, chunk in enumerate(chunks):
-        assert chunk.strip(), f"Chunk {i+1} is empty!"
-
-    # 3. (Optional) If chunk_size is >= total words, we expect exactly 1 chunk
-    total_words = len(text.split())
-    if total_words <= chunk_size * (1 + variation_percent):
-        assert len(chunks) == 1, (
-            "Expected a single chunk since the text is short enough, "
-            f"but got {len(chunks)} chunks."
-        )
-
-
-def test_recursive_chunk_enhanced():
-    config = MarkdownChunkConfig(
-        chunk_size=8,
-        overlap_tokens=2,
-        variation_percent=0.3,
-    )
-
-    # Construct a text with 2 paragraphs, each containing 2 sentences,
-    # plus paragraph markers
-    paragraph1 = (
-        "word1 word2 word3 word4 sentence1.\n"
-        "word5 word6 word7 word8 sentence2. PARA1"
-    )
-    paragraph2 = (
-        "cat1 cat2 cat3 cat4 sentence1.\n" "cat5 cat6 cat7 cat8 sentence2. PARA2"
-    )
-
-    text = paragraph1 + "\n\n" + paragraph2
-
-    # Now chunk it
-    chunks = recursive_chunk(text, config)
-
-    print("\n------------------ ENHANCED CHUNK TEST ------------------")
-    for i, c in enumerate(chunks, 1):
-        print(f"Chunk {i} ({len(c.split())} words):\n{c}\n")
-
-    # A. Check no chunk splits mid-sentence
-    for i, chunk in enumerate(chunks, 1):
-        # We expect every sentence boundary to remain intact:
-        # "sentence1." or "sentence2." should not be truncated in the middle
-        assert (
-            "sentence1." in chunk or "sentence2." in chunk or "PARA" in chunk
-        ), f"Chunk {i} might have truncated a sentence or lost markers: {chunk}"
-
-    # B. Check paragraph markers do not get merged.
-    # We expect that "PARA1" and "PARA2" never appear in the same chunk.
-    for i, chunk in enumerate(chunks, 1):
-        assert not (
-            "PARA1" in chunk and "PARA2" in chunk
-        ), "Found both PARA1 and PARA2 in the same chunk!"
-
-    # C. If there's overlap, ensure it's only from chunk (i) to chunk (i+1).
-    # A naive check: the last 2 tokens of chunk i = the first 2 tokens of chunk i+1,
-    # but chunk i+2 does not contain that same overlap at the start.
-    for i in range(len(chunks) - 1):
-        chunk_i_tokens = chunks[i].split()
-        chunk_i_plus_1_tokens = chunks[i + 1].split()
-
-        overlap_i = chunk_i_tokens[-2:]  # last 2 tokens of chunk i
-        start_of_chunk_i_plus_1 = chunk_i_plus_1_tokens[
-            :2
-        ]  # first 2 tokens of chunk i+1
-        assert overlap_i == start_of_chunk_i_plus_1, (
-            f"Expected chunk {i+1} to start with overlap tokens from chunk {i}.\n"
-            f"Overlap {overlap_i}, got {start_of_chunk_i_plus_1}"
-        )
-
-        # Now check chunk (i+2) if it exists
-        if i + 2 < len(chunks):
-            chunk_i_plus_2_tokens = chunks[i + 2].split()
-            # The first 2 tokens of chunk i+2 should NOT match overlap_i
-            start_of_chunk_i_plus_2 = chunk_i_plus_2_tokens[:2]
-            assert (
-                start_of_chunk_i_plus_2 != overlap_i
-            ), f"Found repeated overlap in chunk {i+2} that belonged to chunk {i}!"
-
-    # D. For formatting, ensure that if a chunk boundary occurs right before
-    # a paragraph break, the next chunk still preserves '\n\n'
-    # if it was originally there.
-    # e.g. if chunk i ends in "sentence2. PARA1" plus "\n\n", the next chunk
-    # should start with something that includes the next paragraph. We
-    # can do a simple check that either chunk i ends with \n\n or chunk i+1
-    # starts with it.
-    for i in range(len(chunks) - 1):
-        # If the original text had \n\n between paragraphs, we expect
-        # either chunk i ends with \n\n or chunk i+1 starts with \n\n.
-        if "PARA1" in chunks[i]:  # likely the end of paragraph 1
-            # then chunk i+1 should contain the next paragraph's text,
-            # ideally starting with \n\n + "cat1" or an overlap snippet.
-            next_chunk = chunks[i + 1]
-            # Checking minimal condition: that next_chunk includes "cat1" or "cat5"...
-            assert "cat1" in next_chunk or "cat5" in next_chunk, (
-                f"Paragraph formatting might have been lost: chunk {i+1} "
-                f"does not contain cat1/cat5"
-            )
 </file>
 
 <file path="tests/main/test_msg_routing.py">
@@ -79068,97 +78309,6 @@ self.api_base = self.config.api_base or GEMINI_BASE_URL
 ```
 </file>
 
-<file path="PR_REVIEW_975.md">
-# PR #975 Review: Remove traceback from OpenAI API error logs
-
-**Author:** alexagr
-**Branch:** `api_error_log` → `main`
-**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
-
-## Summary
-
-This PR adds `except openai.APIError` handlers before the generic `except Exception`
-blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
-and `achat`. The intent is to log API errors cleanly (without a full traceback) since
-server-side errors don't benefit from a local stack trace.
-
-The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
-produces multi-line stack traces for every OpenAI API error. For authentication
-failures, bad requests, and similar server-side errors these tracebacks are noisy and
-provide no diagnostic value.
-
-## Issues
-
-### 1. `openai.APIError` is too broad — catches connection and timeout errors too
-
-`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
-
-```
-openai.APIError
-├── openai.APIConnectionError    ← network/local issues
-│   └── openai.APITimeoutError   ← timeout issues
-└── openai.APIStatusError        ← HTTP status errors from the API server
-    ├── openai.BadRequestError (400)
-    ├── openai.AuthenticationError (401)
-    ├── openai.PermissionDeniedError (403)
-    ├── openai.NotFoundError (404)
-    ├── openai.UnprocessableEntityError (422)
-    ├── openai.RateLimitError (429)
-    └── openai.InternalServerError (>=500)
-```
-
-The PR description correctly identifies that server-side errors (AuthenticationError,
-BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
-and `APITimeoutError` **are** related to the local environment (network configuration,
-DNS, proxy issues), where a traceback **could** help diagnose the problem.
-
-**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
-captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
-while letting connection/timeout errors fall through to the `except Exception` handler
-where `friendly_error()` provides the full traceback.
-
-### 2. `raise e` vs bare `raise`
-
-The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
-`raise` preserves the original traceback chain. This is consistent with the existing
-code (the `except Exception` blocks also use `raise e`), but `raise` is generally
-preferred — especially since callers higher up the stack may want the full traceback
-context even if the log message omits it.
-
-This is a minor style point and not a blocker — it could be a separate cleanup across
-the file.
-
-### 3. Log level consideration
-
-Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
-(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
-a transient condition. That said, by the time the error reaches this outer handler the
-retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
-
-Not a blocker.
-
-## Suggested Change
-
-Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
-
-```python
-except openai.APIStatusError as e:
-    logging.error(f"API error in OpenAIGPT.generate: {e}")
-    raise e
-```
-
-## Verdict
-
-The change addresses a real usability issue — excessively noisy tracebacks for
-server-side API errors. With the suggested narrowing from `APIError` to
-`APIStatusError`, this would be a clean, well-targeted improvement. The code is
-consistent with existing patterns and correctly placed before the generic exception
-handlers.
-
-**Recommendation: Request changes** — use `openai.APIStatusError` instead of
-`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
-</file>
-
 <file path="pytest.ini">
 [pytest]
 markers =
@@ -79473,192 +78623,6 @@ df.apply(lambda x: dangerous_function(x))
 ## Testing Considerations
 
 When writing tests that use `TableChatAgent` or `VectorStore.compute_from_docs()` with pandas expressions that go beyond the whitelisted operations, you may need to set `full_eval=True` to ensure the tests pass.
-</file>
-
-<file path="docs/notes/file-input.md">
-# PDF Files and Image inputs to LLMs
-
-Langroid supports sending PDF files and images (either URLs or local files)
-directly to Large Language Models with multi-modal 
-capabilities. This feature allows models to "see" files and other documents,
-and works with most multi-modal models served via an OpenAI-compatible API,
-e.g.:
-
-- OpenAI's GPT-4o series and GPT-4.1 series
-- Gemini models
-- Claude series models (via OpenAI-compatible providers like OpenRouter or LiteLLM )
-
-To see example usage, see:
-
-- tests: [test_llm.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm.py), 
-   [test_llm_async.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm_async.py),
-   [test_chat-agent.py](https://github.com/langroid/langroid/blob/main/tests/main/test_chat_agent.py).
-- example script: [pdf-json-no-parse.py](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py), which shows
-  how you can directly extract structured information from a document 
-  **without having to first parse it to markdown** (which is inherently lossy).
-
-## Basic Usage directly with LLM `chat` and `achat` methods
-
-First create a `FileAttachment` object using one of the `from_` methods.
-For image (`png`, `jpg/jpeg`) files you can use `FileAttachment.from_path(p)`
-where `p` is either a local file path, or a http/https URL.
-For PDF files, you can use `from_path` with a local file, or `from_bytes` or `from_io`
-(see below). In the examples below we show only `pdf` examples.
-
-```python
-from langroid.language_models.base import LLMMessage, Role
-from langroid.parsing.file_attachment import FileAttachment
-import langroid.language_models as lm
-
-# Create a file attachment
-attachment = FileAttachment.from_path("path/to/document.pdf")
-
-# Create messages with attachment
-messages = [
-    LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-    LLMMessage(
-        role=Role.USER, content="What's the title of this document?", 
-        files=[attachment]
-    )
-]
-
-# Set up LLM with model that supports attachments
-llm = lm.OpenAIGPT(lm.OpenAIGPTConfig(chat_model=lm.OpenAIChatModel.GPT4o))
-
-# Get response
-response = llm.chat(messages=messages)
-```
-
-## Supported File Formats
-
-Currently the OpenAI-API supports:
-
-- PDF files (including image-based PDFs)
-- image files and URLs
-
-Video files and URLs are serialized as `video_url` content-parts, and work with
-any chat-completions API that accepts video input.
-
-
-## Creating Attachments
-
-There are multiple ways to create file attachments:
-
-```python
-# From a file path
-attachment = FileAttachment.from_path("path/to/file.pdf")
-
-# From bytes
-with open("path/to/file.pdf", "rb") as f:
-    attachment = FileAttachment.from_bytes(f.read(), filename="document.pdf")
-
-# From a file-like object
-from io import BytesIO
-file_obj = BytesIO(pdf_bytes)
-attachment = FileAttachment.from_io(file_obj, filename="document.pdf")
-```
-
-## Follow-up Questions
-
-You can continue the conversation with follow-up questions that reference the attached files:
-
-```python
-messages.append(LLMMessage(role=Role.ASSISTANT, content=response.message))
-messages.append(LLMMessage(role=Role.USER, content="What is the main topic?"))
-response = llm.chat(messages=messages)
-```
-
-## Multiple Attachments
-
-Langroid allows multiple files can be sent in a single message,
-but as of 16 Apr 2025, sending multiple PDF files does not appear to be properly supported in the 
-APIs (they seem to only use the last file attached), although sending multiple 
-images does work. 
-
-```python
-messages = [
-    LLMMessage(
-        role=Role.USER,
-        content="Compare these documents",
-        files=[attachment1, attachment2]
-    )
-]
-```
-
-## Using File Attachments with Agents
-
-Agents can process file attachments as well, in the `llm_response` method,
-which takes a `ChatDocument` object as input. 
-To pass in file attachments, include the `files` field in the `ChatDocument`,
-in addition to the content:
-
-```python
-import langroid as lr
-from langroid.agent.chat_document import ChatDocument, ChatDocMetaData
-from langroid.mytypes import Entity
-
-
-agent = lr.ChatAgent(lr.ChatAgentConfig())
-
-user_input = ChatDocument(
-    content="What is the title of this document?",
-    files=[attachment],
-    metadata=ChatDocMetaData(
-        sender=Entity.USER,
-    )
-)
-# or more simply, use the agent's `create_user_response` method:
-# user_input = agent.create_user_response(
-#     content="What is the title of this document?",
-#     files=[attachment],    
-# )
-response = agent.llm_response(user_input)
-```
-
-
-## Using File Attachments with Tasks
-
-In Langroid,  `Task.run()` can take a `ChatDocument` object as input,
-and as mentioned above, it can contain attached files in the `files` field.
-To ensure proper orchestration, you'd want to properly set various `metadata` fields
-as well, such as `sender`, etc. Langroid provides a convenient 
-`create_user_response` method to create a `ChatDocument` object with the necessary 
-metadata, so you only need to specify the `content` and `files` fields:
-
-
-```python
-from langroid.parsing.file_attachment import FileAttachment
-from langroid.agent.task import Task
-
-agent = ...
-# Create task
-task = Task(agent, interactive=True)
-
-# Create a file attachment
-attachment = FileAttachment.from_path("path/to/document.pdf")
-
-# Create input with attachment
-input_message = agent.create_user_response(
-    content="Extract data from this document",
-    files=[attachment]
-)
-
-# Run task with file attachment
-result = task.run(input_message)
-```
-
-See the script [`pdf-json-no-parse.py`](https://github.com/langroid/langroid/blob/main/examples/extract/pdf-json-no-parse.py)
-for a complete example of using file attachments with tasks.
-
-## Practical Applications
-
-- PDF document analysis and data extraction
-- Report summarization
-- Structured information extraction from documents
-- Visual content analysis
-
-For more complex applications, consider using the Task and Agent infrastructure in 
-Langroid to orchestrate multi-step document processing workflows.
 </file>
 
 <file path="docs/notes/handle-llm-no-tool.md">
@@ -87965,6 +86929,591 @@ def async_retry_with_exponential_backoff(
                 raise e
 
     return wrapper
+</file>
+
+<file path="langroid/parsing/md_parser.py">
+import re
+from typing import Any, List
+
+from pydantic import BaseModel, Field, field_validator
+
+HEADER_CONTEXT_SEP = "\n...\n"
+
+
+# Pydantic model definition for a node in the markdown hierarchy
+class Node(BaseModel):
+    content: str  # The text of the header or content block
+    path: List[str]  # List of header texts from root to this node
+    children: List["Node"] = Field(default_factory=list)
+    # Nested children nodes
+
+    def __repr__(self) -> str:
+        # for debug printing
+        return (
+            f"Node(content={self.content!r}, path={self.path!r}, "
+            f"children={len(self.children)})"
+        )
+
+    # Pydantic v1 requires forward references for self-referencing models
+    # Forward references will be resolved with the update_forward_refs call below.
+
+
+# Resolve forward references for Node (required for recursive models in Pydantic)
+Node.model_rebuild()
+
+
+def _cleanup_text(text: str) -> str:
+    # 1) Convert alternative newline representations (any CRLF or CR) to a single '\n'
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # 2) Replace 3 or more consecutive newlines with exactly 2 newlines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text
+
+
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+
+
+def parse_markdown_headings(md_text: str) -> List[Node]:
+    """
+    Parse `md_text` to extract a heading-based hierarchy, skipping lines
+    that look like headings inside fenced code blocks. Each heading node
+    will have a child node for the text that appears between this heading
+    and the next heading.
+
+    Returns a list of top-level Node objects.
+
+    Example structure:
+        Node(content='# Chapter 1', path=['# Chapter 1'], children=[
+            Node(content='Intro paragraph...', path=['# Chapter 1'], children=[]),
+            Node(content='## Section 1.1', path=['# Chapter 1', '## Section 1.1'],
+                 children=[
+                  Node(content='Some text in Section 1.1.', path=[...], children=[])
+            ]),
+            ...
+        ])
+    """
+    # If doc is empty or only whitespace, return []
+    if not md_text.strip():
+        return []
+
+    lines = md_text.splitlines(True)  # keep the newline characters
+
+    # We'll scan line-by-line, track code-fence status, collect headings
+    headings = []  # list of (level, heading_line, start_line_idx)
+    in_code_fence = False
+    fence_marker = None  # track which triple-backtick or ~~~ opened
+
+    for i, line in enumerate(lines):
+        if not in_code_fence:
+            # Opening fences may be followed by an info string.
+            fence_match = re.match(r"^(```+|~~~+)", line.strip())
+            if fence_match:
+                marker = fence_match.group(1)  # e.g. "```" or "~~~~"
+                in_code_fence = True
+                fence_marker = marker
+        elif fence_marker:
+            # Closing fences contain only the opening character (plus optional
+            # surrounding spaces or tabs) and are at least as long as the opener.
+            closing_marker = line.rstrip("\r\n").strip(" \t")
+            if len(closing_marker) >= len(fence_marker) and set(closing_marker) == {
+                fence_marker[0]
+            }:
+                in_code_fence = False
+                fence_marker = None
+
+        if not in_code_fence:
+            # Check if the line is a heading
+            m = HEADING_RE.match(line)
+            if m:
+                hashes = m.group(1)  # e.g. "##"
+                heading_text = line.rstrip("\n")  # entire line, exact
+                level = len(hashes)
+                headings.append((level, heading_text, i))
+
+    # If no headings found, return a single root node with the entire text
+    if not headings:
+        return [Node(content=md_text.strip(), path=[], children=[])]
+
+    # Add a sentinel heading at the end-of-file, so we can slice the last block
+    # after the final real heading. We'll use level=0 so it doesn't form a real node.
+    headings.append((0, "", len(lines)))
+
+    # Now we build "heading blocks" with
+    # (level, heading_text, start_line, end_line, content)
+    heading_blocks = []
+    for idx in range(len(headings) - 1):
+        level, heading_line, start_i = headings[idx]
+        next_level, _, next_start_i = headings[idx + 1]
+
+        # Content is everything after the heading line until the next heading
+        # i.e. lines[start_i+1 : next_start_i]
+        block_content_lines = lines[start_i + 1 : next_start_i]
+        block_content = "".join(block_content_lines).rstrip("\n")
+
+        heading_blocks.append(
+            {"level": level, "heading_text": heading_line, "content": block_content}
+        )
+    # (We skip the sentinel heading in the final result.)
+
+    # We'll now convert heading_blocks into a tree using a stack-based approach
+    root_nodes: List[Node] = []
+    stack: List[Node] = []
+    header_path: List[str] = []
+
+    for hb in heading_blocks:
+        level = hb["level"]  # type: ignore
+        heading_txt = hb["heading_text"]
+        content_txt = hb["content"]
+
+        # --- Pop stack first! ---
+        while stack and len(stack[-1].path) >= level:
+            stack.pop()
+            header_path.pop()
+
+        # build new path, create a node for the heading
+        new_path = header_path + [heading_txt]
+        heading_node = Node(
+            content=heading_txt, path=new_path, children=[]  # type: ignore
+        )
+
+        # Possibly create a content child for whatever lines were below the heading
+        if content_txt.strip():  # type: ignore
+            content_node = Node(
+                content=content_txt, path=new_path, children=[]  # type: ignore
+            )
+            heading_node.children.append(content_node)
+
+        # Attach heading_node to the stack top or as a root
+        if stack:
+            stack[-1].children.append(heading_node)
+        else:
+            root_nodes.append(heading_node)
+
+        stack.append(heading_node)
+        header_path.append(heading_txt)  # type: ignore
+
+    return root_nodes
+
+
+# The Chunk model for the final enriched chunks.
+class Chunk(BaseModel):
+    text: str  # The chunk text (which includes header context)
+    path: List[str]  # The header path (list of header strings)
+    token_count: int
+
+
+# Configuration for chunking
+class MarkdownChunkConfig(BaseModel):
+    chunk_size: int = 200  # desired chunk size in tokens
+    overlap_tokens: int = 30  # number of tokens to overlap between chunks
+    variation_percent: float = 0.3  # allowed variation
+    rollup: bool = True  # whether to roll up chunks
+    header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
+
+    @field_validator("chunk_size", mode="before")
+    @classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int:
+        """Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+        if isinstance(v, float):
+            return int(v)
+        return int(v)
+
+
+# A simple tokenizer that counts tokens as whitespace-separated words.
+def count_words(text: str) -> int:
+    return len(text.split())
+
+
+def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
+    """
+    Enhanced chunker that:
+      1. Splits by paragraph (top-level).
+      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
+      3. Allows going over the upper bound rather than splitting a single sentence.
+      4. Overlaps only once between consecutive chunks.
+      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
+      6. Preserves \n\n (and other original spacing) as best as possible.
+    """
+
+    # -------------------------------------------------
+    # Helpers
+    # -------------------------------------------------
+    def count_words(text_block: str) -> int:
+        return len(text_block.split())
+
+    lower_bound = int(config.chunk_size * (1 - config.variation_percent))
+    upper_bound = int(config.chunk_size * (1 + config.variation_percent))
+
+    # Quick check: if the entire text is short enough, return as-is.
+    if count_words(text) <= upper_bound:
+        return [text.strip()]
+
+    # Split into paragraphs, preserving \n\n if it's there.
+    raw_paragraphs = text.split("\n\n")
+    paragraphs = []
+    for i, p in enumerate(raw_paragraphs):
+        if p.strip():
+            # Re-append the double-newline if not the last piece
+            if i < len(raw_paragraphs) - 1:
+                paragraphs.append(p + "\n\n")
+            else:
+                paragraphs.append(p)
+
+    # Split paragraphs into "segments": each segment is either
+    # a full short paragraph or (if too big) a list of sentences.
+    sentence_regex = r"(?<=[.!?])\s+"
+
+    def split_paragraph_into_sentences(paragraph: str) -> List[str]:
+        """
+        Return a list of sentence-sized segments. If a single sentence
+        is bigger than upper_bound, do a word-level fallback.
+        """
+        if count_words(paragraph) <= upper_bound:
+            return [paragraph]
+
+        sentences = re.split(sentence_regex, paragraph)
+        # Clean up stray whitespace
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        expanded = []
+        for s in sentences:
+            if count_words(s) > upper_bound:
+                expanded.extend(_fallback_word_split(s, config))
+            else:
+                expanded.append(s)
+        return expanded
+
+    def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]:
+        """
+        As a last resort, split extremely large 'sentence' by words.
+        """
+        words = long_text.split()
+        pieces = []
+        start = 0
+        while start < len(words):
+            end = start + cfg.chunk_size
+            chunk_words = words[start:end]
+            pieces.append(" ".join(chunk_words))
+            start = end
+        return pieces
+
+    # Build a list of segments
+    segments = []
+    for para in paragraphs:
+        if count_words(para) > upper_bound:
+            # split into sentences
+            segs = split_paragraph_into_sentences(para)
+            segments.extend(segs)
+        else:
+            segments.append(para)
+
+    # -------------------------------------------------
+    # Accumulate segments into final chunks
+    # -------------------------------------------------
+    chunks = []
+    current_chunk = ""
+    current_count = 0
+
+    def flush_chunk() -> None:
+        nonlocal current_chunk, current_count
+        trimmed = current_chunk.strip()
+        if trimmed:
+            chunks.append(trimmed)
+        current_chunk = ""
+        current_count = 0
+
+    def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int:
+        """Sum of word counts from current_index onward."""
+        return sum(count_words(s) for s in all_segments[current_index:])
+
+    for i, seg in enumerate(segments):
+        seg_count = count_words(seg)
+
+        # If this single segment alone exceeds upper_bound, we accept it as a big chunk.
+        if seg_count > upper_bound:
+            # If we have something in the current chunk, flush it first
+            flush_chunk()
+            # Then store this large segment as its own chunk
+            chunks.append(seg.strip())
+            continue
+
+        # Attempt to add seg to the current chunk
+        if (current_count + seg_count) > upper_bound and (current_count >= lower_bound):
+            # We would normally flush here, but let's see if we are nearing the end:
+            # If the remaining tokens (including this one) is < lower_bound,
+            # we just add it anyway to avoid creating a tiny final chunk.
+            future_tokens = remaining_tokens_in_future(segments, i)
+            if future_tokens < lower_bound:
+                # Just add it (allowing to exceed upper bound)
+                if current_chunk:
+                    # Add space or preserve newline carefully
+                    # We'll do a basic approach here:
+                    if seg.startswith("\n\n"):
+                        current_chunk += seg  # preserve double new line
+                    else:
+                        current_chunk += " " + seg
+                    current_count = count_words(current_chunk)
+                else:
+                    current_chunk = seg
+                    current_count = seg_count
+            else:
+                # Normal flush
+                old_chunk = current_chunk
+                flush_chunk()
+                # Overlap from old_chunk
+                overlap_tokens_list = (
+                    old_chunk.split()[-config.overlap_tokens :] if old_chunk else []
+                )
+                overlap_str = (
+                    " ".join(overlap_tokens_list) if overlap_tokens_list else ""
+                )
+                if overlap_str:
+                    current_chunk = overlap_str + " " + seg
+                else:
+                    current_chunk = seg
+                current_count = count_words(current_chunk)
+        else:
+            # Just accumulate
+            if current_chunk:
+                if seg.startswith("\n\n"):
+                    current_chunk += seg
+                else:
+                    current_chunk += " " + seg
+            else:
+                current_chunk = seg
+            current_count = count_words(current_chunk)
+
+    # Flush leftover
+    flush_chunk()
+
+    # Return non-empty
+    return [c for c in chunks if c.strip()]
+
+
+# Function to process a Node and produce enriched chunks.
+def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]:
+    chunks: List[Chunk] = []
+
+    # Check if this is a header-only node.
+    is_header_only = node.path and node.content.strip() == node.path[-1]
+
+    # Only generate a chunk for the node if it has non-header content,
+    # or if it’s header-only AND has no children (i.e., it's a leaf header).
+    if node.content.strip() and (not is_header_only or not node.children):
+        header_prefix = (
+            config.header_context_sep.join(node.path) + "\n\n" if node.path else ""
+        )
+        content_chunks = recursive_chunk(node.content, config)
+        for chunk_text in content_chunks:
+            full_text = header_prefix + chunk_text
+            chunks.append(
+                Chunk(
+                    text=full_text, path=node.path, token_count=count_words(full_text)
+                )
+            )
+
+    # Process children nodes recursively.
+    for child in node.children:
+        child_chunks = chunk_node(child, config)
+        chunks.extend(child_chunks)
+
+    return chunks
+
+
+# Function to process an entire tree of Nodes.
+def chunk_tree(root_nodes: List[Node], config: MarkdownChunkConfig) -> List[Chunk]:
+    all_chunks: List[Chunk] = []
+    for node in root_nodes:
+        all_chunks.extend(chunk_node(node, config))
+    return all_chunks
+
+
+def aggregate_content(node: Node) -> str:
+    """
+    Recursively aggregate the content from a node and all its descendants,
+    excluding header-only nodes to avoid duplication.
+    """
+    parts = []
+
+    # Skip header-only nodes in content aggregation
+    is_header_only = node.path and node.content.strip() == node.path[-1].strip()
+    if not is_header_only and node.content.strip():
+        parts.append(node.content.strip())
+
+    # Recurse on children
+    for child in node.children:
+        child_text = aggregate_content(child)
+        if child_text.strip():
+            parts.append(child_text.strip())
+
+    return "\n\n".join(parts)
+
+
+def flatten_tree(node: Node, level: int = 0) -> str:
+    """
+    Flatten a node and its children back into proper markdown text.
+
+    Args:
+        node: The node to flatten
+        level: The current heading level (depth in the tree)
+
+    Returns:
+        str: Properly formatted markdown text
+    """
+    result = ""
+
+    # Check if this is a header node (content matches last item in path)
+    is_header = node.path and node.content.strip().startswith("#")
+
+    # For header nodes, don't duplicate the hash marks
+    if is_header:
+        result = node.content.strip() + "\n\n"
+    elif node.content.strip():
+        result = node.content.strip() + "\n\n"
+
+    # Process all children
+    for child in node.children:
+        result += flatten_tree(child, level + 1)
+
+    return result
+
+
+def rollup_chunk_node(
+    node: Node, config: MarkdownChunkConfig, prefix: str = ""
+) -> List[Chunk]:
+    """
+    Recursively produce rollup chunks from `node`, passing down a `prefix`
+    (e.g., parent heading(s)).
+
+    - If a node is heading-only (content == last path item) and has children,
+      we skip creating a chunk for that node alone and instead add that heading
+      to the `prefix` for child nodes.
+    - If a node is NOT heading-only OR has no children, we try to fit all of its
+      flattened content into a single chunk. If it's too large, we chunk it.
+    - We pass the (possibly updated) prefix down to children, so each child's
+      chunk is enriched exactly once with all ancestor headings.
+    """
+
+    chunks: List[Chunk] = []
+
+    # Check if the node is "heading-only" and has children
+    # e.g. node.content=="# Chapter 1" and node.path[-1]=="# Chapter 1"
+    is_heading_only_with_children = (
+        node.path
+        and node.content.strip() == node.path[-1].strip()
+        and len(node.children) > 0
+    )
+
+    if is_heading_only_with_children:
+        # We do NOT create a chunk for this node alone.
+        # Instead, we add its heading to the prefix for child chunks.
+        new_prefix = prefix + node.content.strip()
+        for i, child in enumerate(node.children):
+            sep = "\n\n" if i == 0 else config.header_context_sep
+            chunks.extend(rollup_chunk_node(child, config, prefix=new_prefix + sep))
+        return chunks
+
+    # If not heading-only-with-children, we handle this node's own content:
+    # Flatten the entire node (including sub-children) in standard Markdown form.
+    flattened = flatten_tree(node, level=len(node.path))
+    flattened_with_prefix = prefix + flattened
+    total_tokens = count_words(flattened_with_prefix)
+
+    # Check if we can roll up everything (node + children) in a single chunk
+    if total_tokens <= config.chunk_size * (1 + config.variation_percent):
+        # One single chunk for the entire subtree
+        chunks.append(
+            Chunk(text=flattened_with_prefix, path=node.path, token_count=total_tokens)
+        )
+    else:
+        # It's too large overall. We'll chunk the node's own content first (if any),
+        # then recurse on children.
+        node_content = node.content.strip()
+
+        # If we have actual content that is not just a heading, chunk it with the prefix
+        # (like "preamble" text).
+        # Note: if this node is heading-only but has NO children,
+        # it will still land here
+        # (because is_heading_only_with_children was False due to zero children).
+        if node_content and (not node.path or node_content != node.path[-1].strip()):
+            # The node is actual content (not purely heading).
+            # We'll chunk it in paragraphs/sentences with the prefix.
+            content_chunks = recursive_chunk(node_content, config)
+            for text_block in content_chunks:
+                block_with_prefix = prefix + text_block
+                chunks.append(
+                    Chunk(
+                        text=block_with_prefix,
+                        path=node.path,
+                        token_count=count_words(block_with_prefix),
+                    )
+                )
+
+        # Now recurse on children, passing the same prefix so they get it too
+        for child in node.children:
+            chunks.extend(rollup_chunk_node(child, config, prefix=prefix))
+
+    return chunks
+
+
+def rollup_chunk_tree(
+    root_nodes: List[Node],
+    config: MarkdownChunkConfig,
+) -> List[Chunk]:
+    # Create a dummy root node that contains everything.
+    dummy_root = Node(content="", path=[], children=root_nodes)
+
+    # Now process just the dummy root node with an empty prefix.
+    chunks = rollup_chunk_node(dummy_root, config, prefix="")
+    return chunks
+
+
+def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]:
+    tree = parse_markdown_headings(markdown_text)
+    if len(tree) == 1 and len(tree[0].children) == 0:
+        # Pure text, no hierarchy, so just use recursive_chunk
+        text_chunks = recursive_chunk(markdown_text, config)
+        return [_cleanup_text(chunk) for chunk in text_chunks]
+    if config.rollup:
+        chunks = rollup_chunk_tree(tree, config)
+    else:
+        chunks = chunk_tree(tree, config)
+    return [_cleanup_text(chunk.text) for chunk in chunks]
+
+
+if __name__ == "__main__":
+    # Example usage:
+    markdown_text = """# Title
+Intro para. Hope this is not
+getting split.
+## SubTitle
+- Item1
+- Item2
+"""
+    # Set up chunking config with very large chunk size.
+    # (you can adjust chunk_size, overlap_tokens, variation_percent)
+    config = MarkdownChunkConfig(
+        chunk_size=200, overlap_tokens=5, variation_percent=0.2
+    )
+    chunks = chunk_markdown(markdown_text, config)
+
+    for idx, chunk in enumerate(chunks, 1):
+        print(f"--- Chunk {idx} --- ")
+        print(chunk)
+        print()
+
+    config.rollup = True
+    # with rollup_chunk_tree we get entire doc as 1 chunk
+    chunks = chunk_markdown(markdown_text, config)
+    assert len(chunks) == 1
+    for idx, chunk in enumerate(chunks, 1):
+        print(f"--- Chunk {idx} ---")
+        print(chunk)
+        print()
 </file>
 
 <file path="langroid/parsing/parser.py">
@@ -100624,6 +100173,97 @@ It is strongly recommended to use the `gh` command-line utility when working wit
 Read more [here](docs/development/github-cli.md).
 </file>
 
+<file path="PR_REVIEW_975.md">
+# PR #975 Review: Remove traceback from OpenAI API error logs
+
+**Author:** alexagr
+**Branch:** `api_error_log` → `main`
+**Changed file:** `langroid/language_models/openai_gpt.py` (+12, -0)
+
+## Summary
+
+This PR adds `except openai.APIError` handlers before the generic `except Exception`
+blocks in the four public methods of `OpenAIGPT`: `generate`, `agenerate`, `chat`,
+and `achat`. The intent is to log API errors cleanly (without a full traceback) since
+server-side errors don't benefit from a local stack trace.
+
+The motivation is sound — `friendly_error()` includes `traceback.format_exc()` which
+produces multi-line stack traces for every OpenAI API error. For authentication
+failures, bad requests, and similar server-side errors these tracebacks are noisy and
+provide no diagnostic value.
+
+## Issues
+
+### 1. `openai.APIError` is too broad — catches connection and timeout errors too
+
+`openai.APIError` is the base class for the entire OpenAI exception hierarchy:
+
+```
+openai.APIError
+├── openai.APIConnectionError    ← network/local issues
+│   └── openai.APITimeoutError   ← timeout issues
+└── openai.APIStatusError        ← HTTP status errors from the API server
+    ├── openai.BadRequestError (400)
+    ├── openai.AuthenticationError (401)
+    ├── openai.PermissionDeniedError (403)
+    ├── openai.NotFoundError (404)
+    ├── openai.UnprocessableEntityError (422)
+    ├── openai.RateLimitError (429)
+    └── openai.InternalServerError (>=500)
+```
+
+The PR description correctly identifies that server-side errors (AuthenticationError,
+BadRequestError, etc.) don't benefit from tracebacks. However, `APIConnectionError`
+and `APITimeoutError` **are** related to the local environment (network configuration,
+DNS, proxy issues), where a traceback **could** help diagnose the problem.
+
+**Recommendation:** Use `openai.APIStatusError` instead of `openai.APIError`. This
+captures exactly the server-side HTTP errors (400, 401, 403, 404, 422, 429, 500+)
+while letting connection/timeout errors fall through to the `except Exception` handler
+where `friendly_error()` provides the full traceback.
+
+### 2. `raise e` vs bare `raise`
+
+The PR uses `raise e` which resets the exception's `__traceback__` attribute. A bare
+`raise` preserves the original traceback chain. This is consistent with the existing
+code (the `except Exception` blocks also use `raise e`), but `raise` is generally
+preferred — especially since callers higher up the stack may want the full traceback
+context even if the log message omits it.
+
+This is a minor style point and not a blocker — it could be a separate cleanup across
+the file.
+
+### 3. Log level consideration
+
+Using `logging.error()` is appropriate for most API errors, but for `RateLimitError`
+(a subclass of `APIStatusError`) `logging.warning()` might be more fitting since it's
+a transient condition. That said, by the time the error reaches this outer handler the
+retry logic in `utils.py` has already been exhausted, so `error` level is reasonable.
+
+Not a blocker.
+
+## Suggested Change
+
+Replace `openai.APIError` with `openai.APIStatusError` in all four handlers:
+
+```python
+except openai.APIStatusError as e:
+    logging.error(f"API error in OpenAIGPT.generate: {e}")
+    raise e
+```
+
+## Verdict
+
+The change addresses a real usability issue — excessively noisy tracebacks for
+server-side API errors. With the suggested narrowing from `APIError` to
+`APIStatusError`, this would be a clean, well-targeted improvement. The code is
+consistent with existing patterns and correctly placed before the generic exception
+handlers.
+
+**Recommendation: Request changes** — use `openai.APIStatusError` instead of
+`openai.APIError` to avoid suppressing tracebacks for connection/timeout errors.
+</file>
+
 <file path="docs/notes/mcp-tools.md">
 # Langroid MCP Integration
 
@@ -108526,6 +108166,881 @@ def test_self_referential_model_param_breaks_ref_cycle() -> None:
     inst = tool_model(root={"val": 1, "child": {"val": 2}})
     assert inst.root.val == 1
     assert inst.root.child == {"val": 2}
+</file>
+
+<file path="tests/main/test_md_parser.py">
+import re
+from dataclasses import dataclass
+from typing import List
+
+import pytest
+
+from langroid.parsing.md_parser import (
+    MarkdownChunkConfig,
+    Node,
+    chunk_markdown,
+    count_words,
+    parse_markdown_headings,
+    recursive_chunk,
+)
+
+
+@dataclass
+class SectionData:
+    header: str
+    content: str
+
+    def to_markdown(self) -> str:
+        return f"{self.header}\n{self.content}\n\n"
+
+
+CH1_DATA = SectionData(
+    header="# Chapter 1",
+    content="""Intro paragraph under Chapter 1.
+This is a somewhat longer paragraph that might require splitting
+if token limits are low.
+```java
+# Fake Chapter in Code Block - just a comment!
+This is not a real chapter.
+## Comment in code!
+```
+""",
+)
+
+SEC1_1_DATA = SectionData(
+    header="## Section 1.1",
+    content="""Some text in Section 1.1. 
+It might include multiple sentences. Here is another sentence.
+```python
+# Throw in some comments just to mix things up.
+def some_function():
+    return None
+## end of function definition
+```
+""",
+)
+
+SEC1_2_DATA = SectionData(
+    header="## Section 1.2",
+    content="""- Bullet A
+- Bullet B""",
+)
+
+CH2_DATA = SectionData(
+    header="# Chapter 2", content="""Final paragraph in Chapter 2."""
+)
+
+
+# Combined fixture with all the data
+@pytest.fixture
+def markdown_sections() -> List[SectionData]:
+    return [CH1_DATA, SEC1_1_DATA, SEC1_2_DATA, CH2_DATA]
+
+
+@pytest.fixture
+def sample_markdown(markdown_sections) -> str:
+    return "".join(section.to_markdown() for section in markdown_sections)
+
+
+def test_parse_markdown_headings(sample_markdown, markdown_sections):
+    """
+    Test the parse_markdown_headings_only function using a sample Markdown document.
+    We verify that the resulting hierarchy of Nodes matches our expectations.
+    """
+    # Parse the sample markdown to a list of top-level Node objects
+    tree = parse_markdown_headings(sample_markdown)
+    ch1, sec1_1, sec1_2, ch2 = markdown_sections
+
+    # We expect two top-level headings: Chapter 1 and Chapter 2
+    assert len(tree) == 2
+
+    # Check Chapter 1 node
+    ch1_node = tree[0]
+    assert isinstance(ch1_node, Node)
+    assert ch1_node.content == ch1.header
+    assert ch1_node.path == [ch1.header]
+
+    # Under Chapter 1, we expect:
+    #   1. A paragraph (intro)
+    #   2. Heading "Section 1.1"
+    #   3. Heading "Section 1.2"
+    assert len(ch1_node.children) == 3
+
+    intro_para = ch1_node.children[0]
+    assert intro_para.content.strip() == ch1.content.strip()
+    assert intro_para.path == [ch1.header]
+    assert len(intro_para.children) == 0  # Paragraph has no sub-children
+
+    section_11 = ch1_node.children[1]
+    assert section_11.content == sec1_1.header
+    assert section_11.path == [ch1.header, sec1_1.header]
+
+    # Under Section 1.1, we expect a paragraph node
+    assert len(section_11.children) == 1
+    sec_11_para = section_11.children[0]
+    assert sec_11_para.content.strip() == sec1_1.content.strip()
+    assert sec_11_para.path == [ch1.header, sec1_1.header]
+
+    section_12 = ch1_node.children[2]
+    assert section_12.content == sec1_2.header
+    assert section_12.path == [ch1.header, sec1_2.header]
+
+    # Under Section 1.2, we expect a single content node containing the bullet points
+    assert len(section_12.children) == 1
+    bullets_node = section_12.children[0]
+    # The bullet items are joined with newlines (per the extract_text logic)
+    assert bullets_node.content.strip() == sec1_2.content.strip()
+    assert bullets_node.path == [ch1.header, sec1_2.header]
+
+    # Check Chapter 2 node
+    ch2_node = tree[1]
+    assert ch2_node.content == ch2.header
+    assert ch2_node.path == [ch2.header]
+    # Under Chapter 2, we expect a single paragraph
+    assert len(ch2_node.children) == 1
+    ch2_para = ch2_node.children[0]
+    assert ch2_para.content.strip() == ch2.content.strip()
+    assert ch2_para.path == [ch2.header]
+    assert len(ch2_para.children) == 0
+
+
+def test_empty_document():
+    tree = parse_markdown_headings("")
+    assert tree == []
+
+
+def test_no_headers_only_paragraphs():
+    md = """This is just a paragraph.
+    
+And another one.
+"""
+    tree = parse_markdown_headings(md)
+    assert len(tree) == 1
+    assert all(node.path == [] for node in tree)
+    assert tree[0].content.strip() == md.strip()
+
+
+def test_headers_with_no_content():
+    md = """# Title
+## Subsection
+### Subsubsection
+"""
+    tree = parse_markdown_headings(md)
+    assert len(tree) == 1
+    assert tree[0].content == "# Title"
+    assert len(tree[0].children) == 1
+    assert tree[0].children[0].content == "## Subsection"
+    assert len(tree[0].children[0].children) == 1
+    assert tree[0].children[0].children[0].content == "### Subsubsection"
+    assert tree[0].children[0].children[0].children == []
+
+
+def test_header_with_inline_formatting():
+    md = """# Header with **bold** and *italic* text
+Some _content_.
+"""
+    tree = parse_markdown_headings(md)
+    assert tree[0].content == "# Header with **bold** and *italic* text"
+    assert tree[0].children[0].content.strip() == "Some _content_."
+
+
+def test_lists_and_code_blocks():
+    md = """# List and Code
+
+## List Section
+- Item 1
+- Item 2
+
+## Code Section
+
+print("Hello, world!")
+    
+"""
+    tree = parse_markdown_headings(md)
+
+    list_section = tree[0].children[0]
+    assert list_section.content == "## List Section"
+    list_content = list_section.children[0]
+    assert list_content.content == "- Item 1\n- Item 2"
+
+    code_section = tree[0].children[1]
+    assert code_section.content == "## Code Section"
+    code_block = code_section.children[0]
+    assert 'print("Hello, world!")' in code_block.content
+
+
+def test_longer_code_fence_not_closed_by_shorter_fence():
+    md = """# Real Header
+
+````python
+```text
+# Not a Header
+```
+````
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_long_tilde_fence_not_closed_by_shorter_tilde_fence():
+    """A shorter tilde fence must not close a longer tilde opener."""
+    md = """# Real Header
+
+~~~~text
+~~~
+# Not a Header
+~~~
+~~~~
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_backtick_fence_not_closed_by_tilde_fence():
+    """A tilde fence line inside a backtick block must not close it."""
+    md = """# Real Header
+
+```text
+~~~
+# Not a Header
+## Also Not a Header
+~~~
+```
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_tilde_fence_not_closed_by_backtick_fence():
+    """A backtick fence line inside a tilde block must not close it."""
+    md = """# Real Header
+
+~~~text
+```
+# Not a Header
+## Also Not a Header
+```
+~~~
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_fence_closed_by_longer_same_char_fence():
+    """A closing fence may be strictly longer than the opening fence."""
+    md = """# Real Header
+
+```python
+# not a header, just a comment
+`````
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+@pytest.mark.parametrize("fence", ["````", "~~~~"])
+def test_fence_run_followed_by_text_does_not_close(fence: str):
+    """A fence-length run with trailing text is content, not a closer."""
+    md = f"""# Real Header
+
+{fence}python
+{fence}not-a-close
+# Not a Header
+{fence}
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_unclosed_fence_suppresses_headings_without_leaking_state():
+    """An unclosed fence suppresses all later headings through EOF.
+
+    A subsequent parse call must start with a clean (closed) fence state.
+    """
+    md = """# Real Header
+Intro text.
+
+```python
+# Fake Heading Inside
+## Another Fake Heading
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    assert tree[0].content == "# Real Header"
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == []
+    # The fenced lines remain part of the header's content block.
+    assert "# Fake Heading Inside" in tree[0].children[0].content
+
+    # A fresh parse must not inherit the open-fence state of the prior call.
+    fresh = parse_markdown_headings("# Fresh Header\n\n## Fresh Subheader\nText.\n")
+    assert [node.content for node in fresh] == ["# Fresh Header"]
+    fresh_child_headings = [
+        child.content for child in fresh[0].children if child.content.startswith("#")
+    ]
+    assert fresh_child_headings == ["## Fresh Subheader"]
+
+
+def test_multiple_same_level_headers():
+    md = """# Header A
+Paragraph A.
+
+# Header B
+Paragraph B.
+"""
+    tree = parse_markdown_headings(md)
+    assert len(tree) == 2
+    assert tree[0].content == "# Header A"
+    assert tree[0].children[0].content.strip() == "Paragraph A."
+    assert tree[1].content == "# Header B"
+    assert tree[1].children[0].content.strip() == "Paragraph B."
+
+
+def test_header_skipping_levels():
+    md = """# H1
+### H3
+Some text.
+"""
+    tree = parse_markdown_headings(md)
+    h1 = tree[0]
+    assert h1.content == "# H1"
+    # H3 should be treated as a direct child of H1
+    h3 = h1.children[0]
+    assert h3.content == "### H3"
+    assert h3.path == ["# H1", "### H3"]
+    assert h3.children[0].content.strip() == "Some text."
+
+
+@pytest.mark.parametrize("chunk_size_factor", [1.2, 100])
+@pytest.mark.parametrize("rollup", [True, False])
+def test_markdown_chunking(
+    sample_markdown,
+    markdown_sections,
+    chunk_size_factor: int,
+    rollup: bool,
+):
+    """
+    Given a Markdown document with sections and sub-sections, this test verifies that:
+      - The tree is built correctly from the document.
+      - The chunking process produces distinct chunks with enriched header context.
+      - A header-only node does not duplicate the header in its own chunk.
+
+    The sample document has:
+      - Chapter 1 with a preamble.
+      - Section 1.1 with content.
+      - Section 1.2 with bullet content.
+      - Chapter 2 with its own content.
+    """
+
+    ch1, sec1_1, sec1_2, ch2 = markdown_sections
+    chunk_size = chunk_size_factor * count_words(ch1.content)
+    config = MarkdownChunkConfig(
+        chunk_size=chunk_size,
+        overlap_tokens=5,
+        variation_percent=0.2,
+        rollup=rollup,
+    )
+
+    # Structure-aware chunking of the text into enriched chunks.
+    chunks: List[str] = chunk_markdown(sample_markdown, config)
+
+    if rollup and chunk_size > count_words(sample_markdown):
+        assert len(chunks) == 1, f"Expected 1 chunk, got {len(chunks)}"
+        assert (
+            chunks[0].split() == sample_markdown.split()
+        ), "Chunk does not match original Markdown"
+        # check that line-breaks in each section content are preserved
+        for section in markdown_sections:
+            assert (
+                section.content in chunks[0]
+            ), f"Section content not found in the chunk: {section.content}"
+
+    if not rollup or chunk_size < count_words(sample_markdown):
+        # Based on our document structure, we expect four chunks:
+        # 1. Chapter 1's preamble content (enriched with prefix "# Chapter 1")
+        # 2. Section 1.1 content (enriched with prefix "# Chapter 1 \n\n # Section 1.1")
+        # 3. Section 1.2 content (enriched with prefix "# Chapter 1 \n\n # Section 1.2")
+        # 4. Chapter 2 content (enriched with prefix "# Chapter 2")
+        assert len(chunks) == 4, f"Expected 4 chunks, got {len(chunks)}"
+
+        assert (
+            chunks[0].split() == ch1.to_markdown().split()
+        ), "Chunk 1 does not match Chapter 1 preamble"
+        assert (
+            ch1.content.strip() in chunks[0]
+        ), "Chapter 1 content not preserved in Chunk 1"
+
+        assert chunks[1].split() == (
+            (ch1.header + config.header_context_sep + sec1_1.to_markdown()).split()
+        ), "Chunk 2 does not match Section 1.1"
+        assert (
+            sec1_1.content.strip() in chunks[1]
+        ), "Section 1.1 content not preserved in Chunk 2"
+
+        assert chunks[2].split() == (
+            (ch1.header + config.header_context_sep + sec1_2.to_markdown()).split()
+        ), "Chunk 3 does not match Section 1.2"
+        assert (
+            sec1_2.content.strip() in chunks[2]
+        ), "Section 1.2 content not preserved in Chunk 3"
+
+        assert (
+            chunks[3].split() == ch2.to_markdown().split()
+        ), "Chunk 4 does not match Chapter 2"
+        assert (
+            ch2.content.strip() in chunks[3]
+        ), "Chapter 2 content not preserved in Chunk 4"
+
+
+@pytest.mark.parametrize("rollup", [False, True])
+@pytest.mark.parametrize("chunk_size", [20, 500])
+def test_chunking_sizes(
+    chunk_size: int,
+    rollup: bool,
+):
+    """
+    Test that the chunking logic produces chunks that:
+      - Have token counts between the lower and upper bounds
+        (except possibly the final chunk)
+      - Include the header enrichment in each chunk's text
+      - Include the expected overlap between consecutive chunks
+    """
+    # Create a long text consisting of 200 repeated tokens ("word")
+    long_text = " ".join(["word"] * 200)  # 200 tokens
+    md_text = f"""# Chapter 1
+{long_text}
+"""
+
+    # Set chunking configuration.
+    # Here chunk_size=50 means that (with variation_percent=0.2)
+    # we expect chunks to have between 40 and 60 tokens.
+    config = MarkdownChunkConfig(
+        chunk_size=chunk_size, rollup=rollup, overlap_tokens=5, variation_percent=0.2
+    )
+
+    # Produce the enriched chunks from the tree.
+    chunks = chunk_markdown(md_text, config)
+
+    # Compute the allowed bounds.
+    lower_bound = config.chunk_size * (1 - config.variation_percent)
+    upper_bound = config.chunk_size * (1 + config.variation_percent)
+
+    # Verify each chunk's token count.
+    # For all chunks except possibly the final one,
+    # we expect at least lower_bound tokens.
+    for i, chunk in enumerate(chunks):
+        tokens = count_words(chunk)
+        if i < len(chunks) - 1:
+            assert (
+                tokens >= lower_bound
+            ), f"Chunk {i} has {tokens} tokens, expected at least {lower_bound}"
+        assert (
+            tokens <= 2 * upper_bound
+        ), (  # relaxed check
+            f"Chunk {i} has {tokens} tokens, expected at most {upper_bound}"
+        )
+
+    # Check that each chunk is enriched with the header context.
+    # Each chunk's text should contain "Chapter 1" since that is the header path.
+    for i, chunk in enumerate(chunks):
+        assert "Chapter 1" in chunk, f"Chunk {i} is missing header enrichment"
+
+    # Verify that consecutive chunks share the expected overlap.
+    # For each consecutive pair of chunks, the last `overlap_tokens`
+    # tokens of the previous chunk
+    # should appear among the first tokens of the next chunk.
+    if len(chunks) > 1:
+        for i in range(len(chunks) - 1):
+            prev_tokens = chunks[i].split()
+            next_tokens = chunks[i + 1].split()
+            # Get the last few tokens from the previous chunk:
+            expected_overlap = prev_tokens[-config.overlap_tokens :]
+            # Look at the beginning of the next chunk
+            # (allowing some room for header enrichment).
+            next_head = next_tokens[:15]
+            for word in expected_overlap:
+                assert (
+                    word in next_head
+                ), f"Overlap word '{word}' from chunk {i} not found in chunk {i+1}"
+
+
+@pytest.mark.parametrize("rollup", [False, True])
+def test_chunking_word_set_consistency(rollup: bool):
+    """
+    Test that when converting Markdown text to chunks, the union of distinct words
+    from the original content is the same as the union of distinct words from the
+    chunks (ignoring header enrichment).
+    """
+    # Define a header and content.
+    header = "# Chapter 1"
+    # Create content text with 100 unique words.
+    content_tokens = [f"word{i}" for i in range(1, 101)]
+    content_text = " ".join(content_tokens)
+
+    # Create a sample Markdown document with a header and content.
+    md_text = f"{header}\n\n{content_text}\n"
+
+    # Set up the chunking configuration.
+    config = MarkdownChunkConfig(
+        chunk_size=20,  # small chunk size for testing
+        overlap_tokens=5,  # intended overlap tokens
+        variation_percent=0.2,  # chunks between 16 and 24 tokens
+        rollup=rollup,
+    )
+
+    # Produce enriched chunks from the tree.
+    chunks = chunk_markdown(md_text, config)
+
+    # Remove header enrichment ("Chapter 1\n\n") from each chunk and collect all words.
+    chunk_word_set = set()
+    for chunk in chunks:
+        assert chunk.startswith(header)
+        # Split into words and update the set.
+        chunk_word_set.update(chunk[len(header) :].split())
+
+    # Compute the distinct set of words in the original content.
+    original_word_set = set(content_text.split())
+
+    # Verify that the union of words from the chunks
+    # matches the original content's words.
+    assert (
+        chunk_word_set == original_word_set
+    ), f"Word sets do not match.\nExpected: {original_word_set}\nGot: {chunk_word_set}"
+
+
+def smart_tokenize(text: str) -> list:
+    """
+    Tokenize text by first inserting a space after a period if it's immediately
+    followed by an uppercase letter (a common side-effect of line joining),
+    then splitting on whitespace.
+    """
+    fixed = re.sub(r"(\.)([A-Z])", r"\1 \2", text)
+    return fixed.split()
+
+
+def generate_sentence(word_count: int, sentence_id: int) -> str:
+    """
+    Generate a dummy sentence with `word_count` words and a trailing period.
+    Uses "wordX" to identify each word, plus a "sentence{ID}" marker at the end.
+    """
+    words = [f"word{i}" for i in range(1, word_count + 1)]
+    # Put a sentinel to identify the sentence number
+    # and close with a period for the splitting logic.
+    sentence_str = " ".join(words) + f" sentence{sentence_id}."
+    return sentence_str
+
+
+def generate_paragraph(
+    sentence_count: int,
+    words_per_sentence: int,
+    paragraph_id: int,
+) -> str:
+    """
+    Generate a dummy paragraph with `sentence_count` sentences,
+    each with `words_per_sentence` words.
+    """
+    sentences = [
+        generate_sentence(words_per_sentence, s_id + 1)
+        for s_id in range(sentence_count)
+    ]
+    # Add a sentinel "PARA{ID}" at the end to visually check paragraph boundaries.
+    para_str = " ".join(sentences) + f" PARA{paragraph_id}"
+    return para_str
+
+
+@pytest.mark.parametrize("chunk_size_factor", [0.5, 1, 1.5])
+@pytest.mark.parametrize("rollup", [False, True])
+def test_degenerate_markdown_parsing_and_chunking(
+    chunk_size_factor: float,
+    rollup: bool,
+):
+    # A degenerate Markdown document: plain text without any Markdown formatting.
+
+    paragraph1 = generate_paragraph(
+        sentence_count=10, words_per_sentence=50, paragraph_id=1
+    )
+    paragraph2 = generate_paragraph(
+        sentence_count=10, words_per_sentence=50, paragraph_id=2
+    )
+
+    # Combine paragraphs with a double-newline
+    plain_text = paragraph1 + "\n\n" + paragraph2
+    plain_text = plain_text.strip()
+
+    # Parse the plain text using our Markdown parser.
+    tree = parse_markdown_headings(plain_text)
+
+    # For plain text, we expect a single node.
+    assert len(tree) == 1, "Expected one node for plain text"
+    node = tree[0]
+
+    # Use smart_tokenize to account for missing spaces at line joins.
+    expected_tokens = set(smart_tokenize(plain_text))
+    actual_tokens = set(smart_tokenize(node.content))
+    assert (
+        expected_tokens == actual_tokens
+    ), "Distinct word sets from node content and original plain text do not match"
+
+    # Plain text should not have header enrichment.
+    assert node.path == [] or node.path == [""], "Plain text should have no header path"
+    assert node.children == [], "Plain text should not produce any children nodes"
+
+    # Set up a chunking configuration.
+    config = MarkdownChunkConfig(
+        desired_chunk_tokens=50,  # high enough to avoid splitting for this test
+        overlap_tokens=5,
+        variation_percent=0.2,
+        rollup=rollup,
+    )
+
+    # Generate chunks from the parsed tree.
+    chunks = chunk_markdown(plain_text, config)
+
+    # Collect distinct words from the chunks.
+    chunk_word_set = set()
+    for chunk in chunks:
+        # Since there is no header enrichment (no headers in plain text),
+        # we can tokenize directly.
+        chunk_word_set.update(smart_tokenize(chunk))
+
+    original_word_set = set(smart_tokenize(plain_text))
+    assert chunk_word_set == original_word_set, (
+        f"Word sets do not match between chunks and original text.\n"
+        f"Expected: {original_word_set}\nGot: {chunk_word_set}"
+    )
+
+
+def condensed_chunk_view(chunks: List[str], max_words: int = 5) -> str:
+    """
+    Return a compact string showing each chunk's first/last few words and total length.
+    """
+    lines = []
+    for i, c in enumerate(chunks):
+        words = c.split()
+        total = len(words)
+        if total <= 2 * max_words:
+            preview = " ".join(words)
+        else:
+            preview = (
+                " ".join(words[:max_words]) + " ... " + " ".join(words[-max_words:])
+            )
+        lines.append(f"Chunk {i+1} (total {total} words): {preview}")
+    return "\n".join(lines)
+
+
+# ----------------------------------------------------------------
+# THE TEST
+# ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "chunk_size, overlap_tokens, variation_percent",
+    [
+        (50, 5, 0.3),  # Scenario 1
+        (20, 5, 0.3),  # Scenario 2
+        (8, 3, 0.3),  # Scenario 3 (forces word-level splits)
+    ],
+)
+def test_recursive_chunk(chunk_size, overlap_tokens, variation_percent):
+    """
+    Tests that the chunker respects paragraph boundaries when possible,
+    then sentence boundaries, and only splits sentences when no other option
+    is possible under the given config.
+    """
+    # Generate some text with 2 paragraphs, each having 3 sentences of 10 words.
+    # ~ Each paragraph => 3 sentences =>
+    #    each sentence has ~10 words => ~30 words per paragraph.
+    # So total words ~60. This helps us see chunking behavior across boundaries.
+    paragraph1 = generate_paragraph(
+        sentence_count=3, words_per_sentence=10, paragraph_id=1
+    )
+    paragraph2 = generate_paragraph(
+        sentence_count=3, words_per_sentence=10, paragraph_id=2
+    )
+
+    # Combine paragraphs with a double-newline
+    text = paragraph1 + "\n\n" + paragraph2
+
+    config = MarkdownChunkConfig(
+        chunk_size=chunk_size,
+        overlap_tokens=overlap_tokens,
+        variation_percent=variation_percent,
+    )
+
+    chunks = recursive_chunk(text, config)
+
+    # Print a condensed view for manual inspection
+    print("\n===================================")
+    print(
+        f"Config: chunk_size={chunk_size}, "
+        f"overlap_tokens={overlap_tokens}, "
+        f"variation_percent={variation_percent}\n"
+    )
+    print("Generated Text (first 30 words):")
+    print(" ".join(text.split()[:30]), "...")
+    print("\nChunks:")
+    print(condensed_chunk_view(chunks, max_words=5))
+    print("===================================\n")
+
+    # Basic asserts:
+    # 1. No chunk should exceed the upper bound in terms of word count
+    upper_bound = chunk_size * (1 + variation_percent)
+    for i, chunk in enumerate(chunks):
+        word_count_in_chunk = len(chunk.split())
+        assert word_count_in_chunk <= upper_bound + 5, (
+            f"Chunk {i+1} has {word_count_in_chunk} words, "
+            f"exceeds upper bound (~{upper_bound:.1f})."
+        )
+
+    # 2. Check that chunking doesn't produce empty chunks
+    for i, chunk in enumerate(chunks):
+        assert chunk.strip(), f"Chunk {i+1} is empty!"
+
+    # 3. (Optional) If chunk_size is >= total words, we expect exactly 1 chunk
+    total_words = len(text.split())
+    if total_words <= chunk_size * (1 + variation_percent):
+        assert len(chunks) == 1, (
+            "Expected a single chunk since the text is short enough, "
+            f"but got {len(chunks)} chunks."
+        )
+
+
+def test_recursive_chunk_enhanced():
+    config = MarkdownChunkConfig(
+        chunk_size=8,
+        overlap_tokens=2,
+        variation_percent=0.3,
+    )
+
+    # Construct a text with 2 paragraphs, each containing 2 sentences,
+    # plus paragraph markers
+    paragraph1 = (
+        "word1 word2 word3 word4 sentence1.\n"
+        "word5 word6 word7 word8 sentence2. PARA1"
+    )
+    paragraph2 = (
+        "cat1 cat2 cat3 cat4 sentence1.\n" "cat5 cat6 cat7 cat8 sentence2. PARA2"
+    )
+
+    text = paragraph1 + "\n\n" + paragraph2
+
+    # Now chunk it
+    chunks = recursive_chunk(text, config)
+
+    print("\n------------------ ENHANCED CHUNK TEST ------------------")
+    for i, c in enumerate(chunks, 1):
+        print(f"Chunk {i} ({len(c.split())} words):\n{c}\n")
+
+    # A. Check no chunk splits mid-sentence
+    for i, chunk in enumerate(chunks, 1):
+        # We expect every sentence boundary to remain intact:
+        # "sentence1." or "sentence2." should not be truncated in the middle
+        assert (
+            "sentence1." in chunk or "sentence2." in chunk or "PARA" in chunk
+        ), f"Chunk {i} might have truncated a sentence or lost markers: {chunk}"
+
+    # B. Check paragraph markers do not get merged.
+    # We expect that "PARA1" and "PARA2" never appear in the same chunk.
+    for i, chunk in enumerate(chunks, 1):
+        assert not (
+            "PARA1" in chunk and "PARA2" in chunk
+        ), "Found both PARA1 and PARA2 in the same chunk!"
+
+    # C. If there's overlap, ensure it's only from chunk (i) to chunk (i+1).
+    # A naive check: the last 2 tokens of chunk i = the first 2 tokens of chunk i+1,
+    # but chunk i+2 does not contain that same overlap at the start.
+    for i in range(len(chunks) - 1):
+        chunk_i_tokens = chunks[i].split()
+        chunk_i_plus_1_tokens = chunks[i + 1].split()
+
+        overlap_i = chunk_i_tokens[-2:]  # last 2 tokens of chunk i
+        start_of_chunk_i_plus_1 = chunk_i_plus_1_tokens[
+            :2
+        ]  # first 2 tokens of chunk i+1
+        assert overlap_i == start_of_chunk_i_plus_1, (
+            f"Expected chunk {i+1} to start with overlap tokens from chunk {i}.\n"
+            f"Overlap {overlap_i}, got {start_of_chunk_i_plus_1}"
+        )
+
+        # Now check chunk (i+2) if it exists
+        if i + 2 < len(chunks):
+            chunk_i_plus_2_tokens = chunks[i + 2].split()
+            # The first 2 tokens of chunk i+2 should NOT match overlap_i
+            start_of_chunk_i_plus_2 = chunk_i_plus_2_tokens[:2]
+            assert (
+                start_of_chunk_i_plus_2 != overlap_i
+            ), f"Found repeated overlap in chunk {i+2} that belonged to chunk {i}!"
+
+    # D. For formatting, ensure that if a chunk boundary occurs right before
+    # a paragraph break, the next chunk still preserves '\n\n'
+    # if it was originally there.
+    # e.g. if chunk i ends in "sentence2. PARA1" plus "\n\n", the next chunk
+    # should start with something that includes the next paragraph. We
+    # can do a simple check that either chunk i ends with \n\n or chunk i+1
+    # starts with it.
+    for i in range(len(chunks) - 1):
+        # If the original text had \n\n between paragraphs, we expect
+        # either chunk i ends with \n\n or chunk i+1 starts with \n\n.
+        if "PARA1" in chunks[i]:  # likely the end of paragraph 1
+            # then chunk i+1 should contain the next paragraph's text,
+            # ideally starting with \n\n + "cat1" or an overlap snippet.
+            next_chunk = chunks[i + 1]
+            # Checking minimal condition: that next_chunk includes "cat1" or "cat5"...
+            assert "cat1" in next_chunk or "cat5" in next_chunk, (
+                f"Paragraph formatting might have been lost: chunk {i+1} "
+                f"does not contain cat1/cat5"
+            )
 </file>
 
 <file path="tests/main/test_minimax_provider.py">
@@ -120078,7 +120593,7 @@ def test_chat_num_tokens_counts_attachment_payload(agent):
 
 def test_attachment_payload_reduces_output_length():
     """Test preflight shrinks output length when attachments consume context."""
-    context_length = 1100
+    context_length = 1000
     max_output_tokens = 500
     min_output_tokens = 50
     config = ChatAgentConfig(
@@ -125111,427 +125626,197 @@ def _model_name(model: str | ModelName) -> str:
     return model.value
 </file>
 
-<file path="tests/main/test_file_attachment.py">
-import base64
-import io
-import socket
-import tempfile
-from pathlib import Path
-
-import pytest
-
-from langroid.parsing.file_attachment import FileAttachment
-
-
-class TestFileAttachment:
-    def test_from_bytes(self):
-        """Test creating attachment from bytes."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(
-            content=content, filename="test.txt", mime_type="text/plain"
-        )
-
-        assert attachment.content == content
-        assert attachment.filename == "test.txt"
-        assert attachment.mime_type == "text/plain"
-
-    def test_from_io(self):
-        """Test creating attachment from BytesIO object."""
-        content = b"test content"
-        file_obj = io.BytesIO(content)
-
-        attachment = FileAttachment.from_io(
-            file_obj=file_obj, filename="test.txt", mime_type="text/plain"
-        )
-
-        assert attachment.content == content
-        assert attachment.filename == "test.txt"
-        assert attachment.mime_type == "text/plain"
-
-    def test_from_text(self):
-        """Test creating attachment from text."""
-        text = "Hello, world!"
-        attachment = FileAttachment.from_text(text=text)
-
-        assert attachment.content == text.encode("utf-8")
-        assert attachment.mime_type == "text/plain"
-        assert attachment.filename is not None  # Should have default filename
-
-    def test_from_path(self):
-        """Test creating attachment from file path."""
-        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
-            tmp.write(b"test content")
-            tmp.flush()
-
-            attachment = FileAttachment.from_path(tmp.name)
-
-            assert attachment.content == b"test content"
-            assert attachment.filename == Path(tmp.name).name
-            assert attachment.mime_type == "text/plain"
-
-    def test_default_filename(self):
-        """Test default filename generation when none provided."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content)
-
-        assert attachment.filename is not None
-        assert "attachment_" in attachment.filename
-        assert attachment.filename.endswith(".bin")
-
-    def test_to_base64(self):
-        """Test base64 encoding."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content)
-
-        expected = base64.b64encode(content).decode("utf-8")
-        assert attachment.to_base64() == expected
-
-    def test_to_data_uri(self):
-        """Test data URI generation."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content, mime_type="text/plain")
-
-        data_uri = attachment.to_data_uri()
-        expected_base64 = base64.b64encode(content).decode("utf-8")
-        expected_uri = f"data:text/plain;base64,{expected_base64}"
-
-        assert data_uri == expected_uri
-
-    def test_to_dict(self):
-        """Test conversion to dict for API requests."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(
-            content=content, filename="test.txt", mime_type="text/plain"
-        )
-
-        result = attachment.to_dict("gpt-4.1")
-        assert result is not None
-
-    def test_to_dict_image(self):
-        """Images are sent as `image_url` content-parts."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(
-            content=content, filename="image.png", mime_type="image/png"
-        )
-
-        result = attachment.to_dict("gpt-4.1")
-
-        assert result["type"] == "image_url"
-        assert result["image_url"]["url"] == attachment.to_data_uri()
-
-    def test_to_dict_video(self):
-        """Videos are sent as `video_url` content-parts, not generic file parts."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content, filename="clip.mp4")
-
-        assert attachment.mime_type == "video/mp4"
-
-        result = attachment.to_dict("test-model")
-
-        assert result["type"] == "video_url"
-        assert result["video_url"]["url"] == attachment.to_data_uri()
-        assert "file" not in result
-
-    def test_to_dict_video_mime_type_case_insensitive(self):
-        """Video MIME matching is case-insensitive."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.mp4",
-            mime_type="Video/MP4",
-        )
-
-        result = attachment.to_dict("gpt-4.1")
-
-        assert result["type"] == "video_url"
-        assert result["video_url"]["url"] == attachment.to_data_uri()
-
-    @pytest.mark.parametrize(
-        "model",
-        ["gemini-2.5-flash", "litellm/gemini/gemini-2.5-flash"],
-    )
-    def test_to_dict_video_for_gemini_model(self, model: str):
-        """Gemini model routing does not reclassify videos as images."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.webm",
-            mime_type="video/webm",
-        )
-
-        result = attachment.to_dict(model)
-
-        assert result["type"] == "video_url"
-        assert result["video_url"]["url"] == attachment.to_data_uri()
-        assert "image_url" not in result
-
-    @pytest.mark.parametrize("scheme", ["http", "https"])
-    def test_to_dict_video_url_passthrough(self, scheme: str) -> None:
-        """A remote video URL is passed through instead of being base64-encoded."""
-        url = f"{scheme}://example.com/videos/clip.mp4"
-        attachment = FileAttachment.from_path(url)
-
-        assert attachment.mime_type == "video/mp4"
-
-        result = attachment.to_dict("test-model")
-
-        assert result["type"] == "video_url"
-        assert result["video_url"]["url"] == url
-
-    def test_to_dict_video_url_passthrough_is_offline(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Serializing a remote video URL does not open a network socket."""
-
-        def fail_socket(*args: object, **kwargs: object) -> None:
-            raise AssertionError("serialization attempted network access")
-
-        monkeypatch.setattr(socket, "socket", fail_socket)
-        url = "https://example.com/videos/clip.mp4"
-        attachment = FileAttachment.from_path(url)
-
-        assert attachment.to_dict("test-model") == {
-            "type": "video_url",
-            "video_url": {"url": url},
-        }
-
-    def test_to_dict_ftp_video_url_uses_data_uri(self) -> None:
-        """FTP video URLs fall back to the available attachment data."""
-        content = b"known video bytes"
-        attachment = FileAttachment(
-            content=content,
-            filename="clip.mp4",
-            mime_type="video/mp4",
-            url="ftp://example.com/videos/clip.mp4",
-        )
-
-        assert attachment.to_dict("test-model") == {
-            "type": "video_url",
-            "video_url": {"url": "data:video/mp4;base64,a25vd24gdmlkZW8gYnl0ZXM="},
-        }
-
-    def test_to_dict_video_url_mixed_case_scheme(self) -> None:
-        """HTTP URL schemes are matched case-insensitively."""
-        url = "HTTPS://example.com/videos/clip.mp4"
-        attachment = FileAttachment.from_path(url)
-
-        result = attachment.to_dict("test-model")
-
-        assert result == {
-            "type": "video_url",
-            "video_url": {"url": url},
-        }
-
-    def test_to_dict_scheme_only_video_url_uses_data_uri(self) -> None:
-        """An HTTP scheme without a host is not treated as a remote URL."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.mp4",
-        )
-        attachment.url = "https:clip.mp4"
-
-        result = attachment.to_dict("test-model")
-
-        assert result == {
-            "type": "video_url",
-            "video_url": {"url": attachment.to_data_uri()},
-        }
-
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "https://@/clip.mp4",
-            "https://:443/clip.mp4",
-            "https://user@/clip.mp4",
-            "https:// /clip.mp4",
-        ],
-    )
-    def test_to_dict_malformed_video_url_uses_data_uri(self, url: str) -> None:
-        """Malformed HTTP authorities fall back to attachment data."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.mp4",
-        )
-        attachment.url = url
-
-        assert attachment.to_dict("test-model") == {
-            "type": "video_url",
-            "video_url": {"url": attachment.to_data_uri()},
-        }
-
-    def test_from_path_colon_filename_is_local(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """A local filename resembling a scheme-only URI remains local."""
-        monkeypatch.chdir(tmp_path)
-        local_path = Path("https:clip.mp4")
-        local_path.write_bytes(b"video content")
-
-        attachment = FileAttachment.from_path(local_path.name)
-
-        assert attachment.content == b"video content"
-        assert attachment.filename == local_path.name
-        assert attachment.url is None
-
-    def test_to_dict_extensionless_video_url(self) -> None:
-        """An explicit MIME type supports video URLs without file extensions."""
-        url = "https://example.com/watch?id=123"
-        attachment = FileAttachment.from_path(url, mime_type="video/mp4")
-
-        result = attachment.to_dict("test-model")
-
-        assert result == {
-            "type": "video_url",
-            "video_url": {"url": url},
-        }
-
-    @pytest.mark.parametrize("url", [object(), 123, ["https://example.com"]])
-    def test_to_dict_odd_runtime_url_uses_data_uri(self, url: object) -> None:
-        """Non-string runtime URL values safely fall back to attachment data."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="clip.mp4",
-        )
-        attachment.__dict__["url"] = url
-
-        result = attachment.to_dict("test-model")
-
-        assert result == {
-            "type": "video_url",
-            "video_url": {"url": attachment.to_data_uri()},
-        }
-
-    def test_to_dict_non_media_file(self):
-        """Non-image, non-video files keep using generic `file` content-parts."""
-        content = b"test content"
-        attachment = FileAttachment.from_bytes(content=content, filename="doc.pdf")
-
-        result = attachment.to_dict("test-model")
-
-        assert result["type"] == "file"
-        assert result["file"]["filename"] == "doc.pdf"
-        assert result["file"]["file_data"] == attachment.to_data_uri()
-
-    def test_to_dict_non_video_file_for_gemini_model(self) -> None:
-        """Gemini PDF attachments retain image URL serialization."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="doc.pdf",
-            mime_type="application/pdf",
-        )
-        attachment.detail = "high"
-
-        result = attachment.to_dict("gemini-2.5-flash")
-
-        assert result == {
-            "type": "image_url",
-            "image_url": {
-                "url": attachment.to_data_uri(),
-                "detail": "high",
-            },
-        }
-
-    @pytest.mark.parametrize(
-        ("filename", "mime_type"),
-        [
-            ("file.bin", "application/octet-stream"),
-            ("recording.mp3", "audio/mpeg"),
-        ],
-    )
-    def test_to_dict_other_mime_type_for_gemini_model(
-        self,
-        filename: str,
-        mime_type: str,
-    ) -> None:
-        """Gemini retains image URL serialization for other attachments."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename=filename,
-            mime_type=mime_type,
-        )
-
-        assert attachment.to_dict("gemini-2.5-flash") == {
-            "type": "image_url",
-            "image_url": {
-                "url": attachment.to_data_uri(),
-            },
-        }
-
-    def test_from_path_rejects_ftp_url(self) -> None:
-        """The public constructor rejects unsupported FTP URLs."""
-        with pytest.raises(ValueError, match="FTP URLs are not supported"):
-            FileAttachment.from_path("ftp://example.com/videos/clip.mp4")
-
-    def test_to_dict_unknown_type(self):
-        """Unknown MIME types keep using generic `file` content-parts."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="file.unknown123",
-        )
-
-        result = attachment.to_dict("gpt-4.1")
-
-        assert attachment.mime_type == "application/octet-stream"
-        assert result == {
-            "type": "file",
-            "file": {
-                "filename": "file.unknown123",
-                "file_data": attachment.to_data_uri(),
-            },
-        }
-
-    def test_to_dict_null_mime_type(self):
-        """A post-construction null MIME type keeps generic serialization."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="file.unknown123",
-        )
-        attachment.__dict__["mime_type"] = None
-
-        result = attachment.to_dict("gpt-4.1")
-
-        assert result == {
-            "type": "file",
-            "file": {
-                "filename": "file.unknown123",
-                "file_data": "data:None;base64,dGVzdCBjb250ZW50",
-            },
-        }
-
-    @pytest.mark.parametrize("mime_type", [123, {}, []])
-    def test_to_dict_non_string_mime_type_uses_generic_file(
-        self,
-        mime_type: object,
-    ) -> None:
-        """Odd runtime MIME values retain generic file serialization."""
-        attachment = FileAttachment.from_bytes(
-            content=b"test content",
-            filename="file.bin",
-        )
-        attachment.__dict__["mime_type"] = mime_type
-
-        assert attachment.to_dict("gpt-4.1") == {
-            "type": "file",
-            "file": {
-                "filename": "file.bin",
-                "file_data": f"data:{mime_type};base64,dGVzdCBjb250ZW50",
-            },
-        }
-
-    def test_mime_type_inference(self):
-        """Test MIME type is correctly inferred from filename."""
-        content = b"test content"
-
-        pdf = FileAttachment.from_bytes(content=content, filename="doc.pdf")
-        assert pdf.mime_type == "application/pdf"
-
-        png = FileAttachment.from_bytes(content=content, filename="image.png")
-        assert png.mime_type == "image/png"
-
-        # Change .xyz to .unknown123 which should definitely be unrecognized
-        unknown = FileAttachment.from_bytes(content=content, filename="file.unknown123")
-        assert unknown.mime_type == "application/octet-stream"
+<file path="mkdocs.yml">
+site_name: "langroid"
+repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
+repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
+
+edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
+theme:
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
+  features:
+    - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
+    - toc
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  icon:
+      repo: fontawesome/brands/github
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - blog:
+      archive: false
+      blog_toc: true
+      categories: false
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
+  - search
+  - autorefs
+  #- awesome-pages
+  - gen-files:
+      scripts:
+      - docs/auto_docstring.py
+      #- docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            members_order: source
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+  - section-index
+
+watch:
+  - langroid
+
+nav:
+  - Home: index.md
+  - Blog: blog/index.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/llm-interaction.md
+    - Simple Chat Agent: quick-start/chat-agent.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
+    - Three Agent Chat: quick-start/three-agent-chat-num.md
+    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
+    - Agent with Retrieval: quick-start/chat-agent-docs.md
+  # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
+      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
+      - Large Tool Results: notes/large-tool-results.md
+      - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handlers: notes/tool-message-handler.md
+      - Task Termination: notes/task-termination.md
+      - Message Routing: notes/message-routing.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - None Content in LLM Messages: notes/llm-none-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
+      - Seltz Search Tool: notes/seltz_search.md
+      - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
+      - URLLoader : notes/url_loader.md
+      - Crawl4AI Crawler: notes/crawl4ai.md
+      - LangDB AI Gateway: notes/langdb.md
+      - Portkey AI Gateway: notes/portkey.md
+      - Markitdown Parsers: notes/markitdown.md
+      - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
+      - Image, PDF Input: notes/file-input.md
+      - MCP Tools: notes/mcp-tools.md
+      - Code-Injection Protection: notes/code-injection-protection.md
+      - TaskTool: notes/task-tool.md
+      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
+      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
+      - OpenAI Client Caching: notes/openai-client-caching.md
+      - Rotating API Keys: notes/rotating-api-keys.md
+      - Cross-Encoder Reranking: notes/cross-encoder.md
+      - Task Logs: notes/html-logger.md
+      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Batch Processing: notes/batch-processing.md
+
+  - Examples:
+    - Guide: examples/guide.md
+    - Hierarchical Agent Computation: examples/agent-tree.md
+    - Demos:
+      - Audience Targeting: demos/targeting/audience-targeting.md
+  - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
+    - Local LLM Setup: tutorials/local-llm-setup.md
+    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
+    - SQLChatAgent: tutorials/postgresql-agent.md
+    - LLM Usage Options: tutorials/llm-usage-options.md
+  - Code/API Docs: reference/
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
+
+markdown_extensions:
+  - footnotes
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - markdown.extensions.attr_list:
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path="langroid/language_models/openai_gpt.py">
@@ -128103,492 +128388,6 @@ class OpenAIGPT(LanguageModel):
         else:
             response_dict = response.model_dump()
         return self._process_chat_completion_response(cached, response_dict)
-</file>
-
-<file path="langroid/parsing/file_attachment.py">
-import base64
-import mimetypes
-import uuid
-from pathlib import Path
-from typing import Any, BinaryIO, Dict, Optional, Union
-from urllib.parse import urlparse
-
-from pydantic import BaseModel
-
-_HTTP_URL_SCHEMES = frozenset({"http", "https"})
-_FTP_URL_SCHEMES = frozenset({"ftp"})
-
-
-def _is_full_url(value: str, schemes: frozenset[str]) -> bool:
-    """Whether a value is a URL with an allowed scheme and valid hostname."""
-    try:
-        parsed_url = urlparse(value)
-        hostname = parsed_url.hostname
-    except ValueError:
-        return False
-    return (
-        parsed_url.scheme.casefold() in schemes
-        and hostname is not None
-        and bool(hostname.strip())
-    )
-
-
-class FileAttachment(BaseModel):
-    """Represents a file attachment to be sent to an LLM API."""
-
-    content: bytes
-    filename: Optional[str] = None
-    mime_type: str = "application/octet-stream"
-    url: str | None = None
-    detail: str | None = None
-
-    def __init__(self, **data: Any) -> None:
-        """Initialize with sensible defaults for filename if not provided."""
-        if "filename" not in data or data["filename"] is None:
-            # Generate a more readable unique filename
-            unique_id = str(uuid.uuid4())[:8]
-            data["filename"] = f"attachment_{unique_id}.bin"
-        super().__init__(**data)
-
-    @classmethod
-    def _from_path(
-        cls,
-        file_path: Union[str, Path],
-        detail: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a file path.
-
-        Args:
-            file_path: Path to the file to attach
-
-        Returns:
-            FileAttachment instance
-        """
-        path = Path(file_path)
-        with open(path, "rb") as f:
-            content = f.read()
-
-        mime_type, _ = mimetypes.guess_type(path)
-        if mime_type is None:
-            mime_type = "application/octet-stream"
-
-        return cls(
-            content=content,
-            filename=path.name,
-            mime_type=mime_type,
-            detail=detail,
-        )
-
-    @classmethod
-    def _from_url(
-        cls,
-        url: str,
-        content: Optional[bytes] = None,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-        detail: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a URL.
-
-        Args:
-            url: URL to the file
-            content: Optional raw bytes content (if already fetched)
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename or url
-
-        Returns:
-            FileAttachment instance
-        """
-        if filename is None and url:
-            # Extract filename from URL if possible
-
-            parsed_url = urlparse(url)
-            path = parsed_url.path
-            filename = path.split("/")[-1] if path else None
-
-        if mime_type is None and filename:
-            mime_type, _ = mimetypes.guess_type(filename)
-
-        return cls(
-            content=content or b"",  # Empty bytes if no content provided
-            filename=filename,
-            mime_type=mime_type or "application/octet-stream",
-            url=url,
-            detail=detail,
-        )
-
-    @classmethod
-    def from_path(
-        cls,
-        path: Union[str, Path],
-        detail: str | None = None,
-        mime_type: str | None = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from either a local file path or a URL.
-
-        Args:
-            path: Path to the file or URL to fetch.
-            detail: Optional image detail level.
-            mime_type: Optional MIME type for a URL. Local paths infer their
-                MIME type from the filename.
-
-        Returns:
-            FileAttachment instance
-
-        Raises:
-            ValueError: If path is an FTP URL, which is not supported.
-        """
-        # Convert to string if Path object
-        path_str = str(path)
-
-        if _is_full_url(path_str, _FTP_URL_SCHEMES):
-            raise ValueError("FTP URLs are not supported; use an HTTP(S) URL")
-
-        # Check if it's a URL
-        if _is_full_url(path_str, _HTTP_URL_SCHEMES):
-            return cls._from_url(
-                url=path_str,
-                detail=detail,
-                mime_type=mime_type,
-            )
-        else:
-            # Assume it's a local file path
-            return cls._from_path(path_str, detail=detail)
-
-    @classmethod
-    def from_bytes(
-        cls,
-        content: bytes,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from bytes content.
-
-        Args:
-            content: Raw bytes content
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename if provided
-
-        Returns:
-            FileAttachment instance
-        """
-        if mime_type is None and filename is not None:
-            mime_type, _ = mimetypes.guess_type(filename)
-
-        return cls(
-            content=content,
-            filename=filename,
-            mime_type=mime_type or "application/octet-stream",
-        )
-
-    @classmethod
-    def from_io(
-        cls,
-        file_obj: BinaryIO,
-        filename: Optional[str] = None,
-        mime_type: Optional[str] = None,
-    ) -> "FileAttachment":
-        """Create a FileAttachment from a file-like object.
-
-        Args:
-            file_obj: File-like object with binary content
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content, guessed from filename if provided
-
-        Returns:
-            FileAttachment instance
-        """
-        content = file_obj.read()
-        return cls.from_bytes(content, filename, mime_type)
-
-    @classmethod
-    def from_text(
-        cls,
-        text: str,
-        filename: Optional[str] = None,
-        mime_type: str = "text/plain",
-        encoding: str = "utf-8",
-    ) -> "FileAttachment":
-        """Create a FileAttachment from text content.
-
-        Args:
-            text: Text content to include
-            filename: Optional name to use for the file
-            mime_type: MIME type of the content
-            encoding: Text encoding to use
-
-        Returns:
-            FileAttachment instance
-        """
-        content = text.encode(encoding)
-        return cls(content=content, filename=filename, mime_type=mime_type)
-
-    def to_base64(self) -> str:
-        """Convert content to base64 encoding.
-
-        Returns:
-            Base64 encoded string
-        """
-        return base64.b64encode(self.content).decode("utf-8")
-
-    def to_data_uri(self) -> str:
-        """Convert content to a data URI.
-
-        Returns:
-            A data URI string containing the base64-encoded content with MIME type
-        """
-        base64_content = self.to_base64()
-        return f"data:{self.mime_type};base64,{base64_content}"
-
-    def _content_url(self) -> str:
-        """URL to send to the API for this attachment.
-
-        Returns:
-            The original URL when it is a full http/https URL that the API can
-            fetch directly, else a base64-encoded data URI of the content.
-        """
-        # If we have a URL and it's a full http/https URL, use it directly
-        if isinstance(self.url, str) and _is_full_url(
-            self.url,
-            _HTTP_URL_SCHEMES,
-        ):
-            return self.url
-        # Otherwise use base64 data URI
-        return self.to_data_uri()
-
-    def to_dict(self, model: str) -> Dict[str, Any]:
-        """
-        Convert to a dictionary suitable for API requests.
-        Tested only for PDF files.
-
-        Returns:
-            Dictionary with file data
-        """
-        if isinstance(self.mime_type, str):
-            if self.mime_type.casefold().startswith("video/"):
-                # Videos are sent as `video_url` content-parts, mirroring the
-                # `image_url` parts used for images: a generic `file` part is not
-                # recognized as video input by the API.
-                return dict(
-                    type="video_url",
-                    video_url=dict(url=self._content_url()),
-                )
-            if (
-                self.mime_type.casefold().startswith("image/")
-                or "gemini" in model.casefold()
-            ):
-                image_url_dict: Dict[str, str] = dict(url=self._content_url())
-
-                # Add detail parameter if specified
-                if self.detail:
-                    image_url_dict["detail"] = self.detail
-
-                return dict(
-                    type="image_url",
-                    image_url=image_url_dict,
-                )
-
-        # For non-image files and unexpected runtime MIME values
-        return dict(
-            type="file",
-            file=dict(
-                filename=self.filename,
-                file_data=self.to_data_uri(),
-            ),
-        )
-</file>
-
-<file path="mkdocs.yml">
-site_name: "langroid"
-repo_name: langroid/langroid
-site_description: "Langroid LLM App Development Framework"
-repo_url: https://github.com/langroid/langroid
-site_url: https://langroid.github.io/langroid
-
-edit_uri: ""
-extra_css:
-  - stylesheets/extra.css
-
-theme:
-  logo: assets/orange-logo-lambda-563.png
-  favicon: assets/orange-logo-lambda-563.png
-  features:
-    - navigation.tabs
-#    - navigation.tracking
-#    - navigation.sections
-#    - navigation.indexes
-    - toc
-    - content.code.copy
-    - content.code.select
-    - content.code.annotate
-  icon:
-      repo: fontawesome/brands/github
-  name: material
-  custom_dir: docs/overrides
-  palette:
-    # Palette toggle for light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-
-    # Palette toggle for dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-
-plugins:
-  - blog:
-      archive: false
-      blog_toc: true
-      categories: false
-      blog_dir: blog
-
-  - rss:
-      enabled: true
-      match_path: blog/posts/.*
-      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
-      date_from_meta:
-        as_creation: date
-      categories:
-        - categories
-        - tags
-  - search
-  - autorefs
-  #- awesome-pages
-  - gen-files:
-      scripts:
-      - docs/auto_docstring.py
-      #- docs/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          paths: [.]
-          options:
-            members_order: source
-            separate_signature: false
-            filters: ["!^_"]
-            docstring_options:
-              ignore_init_summary: true
-            merge_init_into_class: true
-  - section-index
-
-watch:
-  - langroid
-
-nav:
-  - Home: index.md
-  - Blog: blog/index.md
-  - Getting Started:
-    - quick-start/index.md
-    - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/llm-interaction.md
-    - Simple Chat Agent: quick-start/chat-agent.md
-    - Task Delegation: quick-start/multi-agent-task-delegation.md
-    - Two Agent Chat: quick-start/two-agent-chat-num.md
-    - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Agent with Tools/Functions: quick-start/chat-agent-tool.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
-    - Agent with Retrieval: quick-start/chat-agent-docs.md
-  # defer to gen-files + literate-nav
-  - FAQ: FAQ.md
-  - Notes-Updates:
-      - Overview: notes/overview.md
-      - XML-based Tools: notes/xml-tools.md
-      - Async Streaming: notes/async-streaming.md
-      - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs, Embeddings, Vertex AI: notes/gemini.md
-      - LLM-based Pdf Parsing: notes/llm-pdf-parser.md
-      - Large Tool Results: notes/large-tool-results.md
-      - GLHF.chat Support: notes/glhf-chat.md
-      - Structured Output: notes/structured-output.md
-      - Tool Handlers: notes/tool-message-handler.md
-      - Task Termination: notes/task-termination.md
-      - Message Routing: notes/message-routing.md
-      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
-      - Azure OpenAI models: notes/azure-openai-models.md
-      - Custom Azure OpenAI client: notes/custom-azure-client.md
-      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
-      - Reasoning Content: notes/reasoning-content.md
-      - None Content in LLM Messages: notes/llm-none-content.md
-      - Weaviate: notes/weaviate.md
-      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
-      - PGVector: notes/pgvector.md
-      - Pinecone: notes/pinecone.md
-      - Tavily Search Tool: notes/tavily_search.md
-      - Seltz Search Tool: notes/seltz_search.md
-      - Twitter Search via Xquik MCP: notes/twitter-search.md
-      - Marker Pdf Parser: notes/marker-pdf.md
-      - URLLoader : notes/url_loader.md
-      - Crawl4AI Crawler: notes/crawl4ai.md
-      - LangDB AI Gateway: notes/langdb.md
-      - Portkey AI Gateway: notes/portkey.md
-      - Markitdown Parsers: notes/markitdown.md
-      - LiteLLM Proxy: notes/litellm-proxy.md
-      - Chunking: notes/chunking.md
-      - Image, PDF Input: notes/file-input.md
-      - MCP Tools: notes/mcp-tools.md
-      - Code-Injection Protection: notes/code-injection-protection.md
-      - TaskTool: notes/task-tool.md
-      - Local Qdrant VectorDB Cleanup: notes/qdrant-resource-cleanup.md
-      - OpenAI HTTP Client Configuration: notes/openai-http-client.md
-      - OpenAI Client Caching: notes/openai-client-caching.md
-      - Rotating API Keys: notes/rotating-api-keys.md
-      - Cross-Encoder Reranking: notes/cross-encoder.md
-      - Task Logs: notes/html-logger.md
-      - Pydantic v2 Migration: notes/pydantic-v2-migration.md
-      - Batch Processing: notes/batch-processing.md
-
-  - Examples:
-    - Guide: examples/guide.md
-    - Hierarchical Agent Computation: examples/agent-tree.md
-    - Demos:
-      - Audience Targeting: demos/targeting/audience-targeting.md
-  - Tutorials:
-    - Langroid Tour: tutorials/langroid-tour.md
-    - Supported LLMs: tutorials/supported-models.md
-    - Local LLM Setup: tutorials/local-llm-setup.md
-    - Non-OpenAI LLMs: tutorials/non-openai-llms.md
-    - SQLChatAgent: tutorials/postgresql-agent.md
-    - LLM Usage Options: tutorials/llm-usage-options.md
-  - Code/API Docs: reference/
-#  - API Documentation:
-#    - language_models: api/language_models_base.md
-
-
-markdown_extensions:
-  - footnotes
-  - toc:
-      permalink: true
-  - attr_list
-  - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      use_pygments: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.arithmatex:
-      generic: true
-  - markdown.extensions.attr_list:
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 </file>
 
 <file path=".pre-commit-config.yaml">

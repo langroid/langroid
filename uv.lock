@@ -2055,6 +2055,23 @@ wheels = [
 ]
 
 [[package]]
+name = "faiss-cpu"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", marker = "platform_system == 'Darwin' or platform_system == 'Linux' or sys_platform != 'win32'" },
+    { name = "packaging", marker = "platform_system == 'Darwin' or platform_system == 'Linux' or sys_platform != 'win32'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/68/20e91694ad9a8b2bb48af956899e52b645cb1501e7e2ec31cb733da4d4c5/faiss_cpu-1.15.0-cp310-abi3-macosx_14_0_arm64.whl", hash = "sha256:50ea471ef1f4f3580eda8ab0ec9727d4bf65fd71c444bf306ce7cdbba8a42b21", size = 4904897 },
+    { url = "https://files.pythonhosted.org/packages/d2/cd/ef4cf498977c4a84af7a8920bc97ca49fc19060c8464c63fab58847b4692/faiss_cpu-1.15.0-cp310-abi3-macosx_15_0_x86_64.whl", hash = "sha256:dd383bb1ce06fabcff5785f998f253aa88f88dcbe1fe36c922417cd6666dd896", size = 7087977 },
+    { url = "https://files.pythonhosted.org/packages/94/c8/88b072bf55714405d0d7e11c12349510f15a69ae56033b1cd894fb2be7d6/faiss_cpu-1.15.0-cp310-abi3-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5d0a2d5d33fe023e263d0d355a837f20db67578e3be27fc5f4012a273274abf6", size = 9835009 },
+    { url = "https://files.pythonhosted.org/packages/c8/3b/8878dbfc78a0084bbd408b34827a58b530be98132fcf620b7e15f9191614/faiss_cpu-1.15.0-cp310-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ec9b29aae29e428c085c2d49dbb02e4673cdea75db418d420f9e60e0b4184498", size = 18764625 },
+    { url = "https://files.pythonhosted.org/packages/db/2a/654116e6ee2808562a6b2a11c396bdb46d45689e3bf7206ee99400589cab/faiss_cpu-1.15.0-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:30da3029952f0de69f16ce31946fd63fc3e292c867749bbcd2c0a0f09fd06f65", size = 11413863 },
+    { url = "https://files.pythonhosted.org/packages/9d/8c/0a0f09659c1972aa83b9820cd3dd7f68f6678cfcfebde542e1c23d7d8663/faiss_cpu-1.15.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:88fbe1acac6978869063cb2f9477f85718da596a6e0a17751618f9c756bce255", size = 19470092 },
+]
+
+[[package]]
 name = "fake-useragent"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3732,7 +3749,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.65.15"
+version = "0.65.16"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -3804,6 +3821,7 @@ all = [
     { name = "pgvector" },
     { name = "psycopg2" },
     { name = "psycopg2-binary" },
+    { name = "pymilvus", extra = ["milvus-lite"] },
     { name = "pymupdf" },
     { name = "pymupdf4llm" },
     { name = "pymysql" },
@@ -3917,6 +3935,9 @@ meilisearch = [
 metaphor = [
     { name = "metaphor-python" },
 ]
+milvus = [
+    { name = "pymilvus", extra = ["milvus-lite"] },
+]
 mysql = [
     { name = "pymysql" },
     { name = "sqlglot" },
@@ -3979,6 +4000,7 @@ vecdbs = [
     { name = "lancedb" },
     { name = "pinecone-client" },
     { name = "pyarrow" },
+    { name = "pymilvus", extra = ["milvus-lite"] },
     { name = "tantivy" },
     { name = "weaviate-client" },
 ]
@@ -4042,7 +4064,7 @@ requires-dist = [
     { name = "chromadb", marker = "extra == 'vecdbs'", specifier = ">=0.4.21,<=0.4.23" },
     { name = "colorlog", specifier = ">=6.7.0,<7.0.0" },
     { name = "crawl4ai", marker = "extra == 'crawl4ai'", specifier = ">=0.6.3" },
-    { name = "docling", marker = "extra == 'all'", specifier = ">=2.16.0,<3.0.0" },
+    { name = "docling", marker = "extra == 'all'", specifier = ">=2.20.0,<3.0.0" },
     { name = "docling", marker = "extra == 'doc-chat'", specifier = ">=2.20.0,<3.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.16.0,<3.0.0" },
     { name = "docling", marker = "extra == 'pdf-parsers'", specifier = ">=2.16.0,<3.0.0" },
@@ -4116,6 +4138,9 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0.0,<3.0.0" },
     { name = "pygithub", specifier = ">=1.58.1,<2.0.0" },
     { name = "pygments", specifier = ">=2.15.1,<3.0.0" },
+    { name = "pymilvus", extras = ["milvus-lite"], marker = "extra == 'all'", specifier = ">=3.0.0" },
+    { name = "pymilvus", extras = ["milvus-lite"], marker = "extra == 'milvus'", specifier = ">=3.0.0" },
+    { name = "pymilvus", extras = ["milvus-lite"], marker = "extra == 'vecdbs'", specifier = ">=3.0.0" },
     { name = "pymupdf", marker = "extra == 'all'", specifier = ">=1.23.3,<2.0.0" },
     { name = "pymupdf", marker = "extra == 'doc-chat'", specifier = ">=1.23.3,<2.0.0" },
     { name = "pymupdf", marker = "extra == 'pdf-parsers'", specifier = ">=1.23.3,<2.0.0" },
@@ -4973,6 +4998,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/39/f4/458fbd9c8624aab58deca73468df107201cadc5ca8ea449511d318140de3/metaphor-python-0.1.23.tar.gz", hash = "sha256:ce3a8f9d81b2ee7201dac225095cdf2da34b003fe889c5b4629a8b480e8de7ba", size = 5563 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ff/ef/44b06a7269a596fb23ce0a318c1b2e6e67012624c9122d5a73883c23f9f9/metaphor_python-0.1.23-py3-none-any.whl", hash = "sha256:993b594373efdd5223631f8997dfd68801241db112a214d7c56aeac03fc74b4f", size = 6138 },
+]
+
+[[package]]
+name = "milvus-lite"
+version = "3.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "faiss-cpu", marker = "platform_system == 'Darwin' or platform_system == 'Linux' or sys_platform != 'win32'" },
+    { name = "grpcio", marker = "platform_system == 'Darwin' or platform_system == 'Linux' or sys_platform != 'win32'" },
+    { name = "numpy", marker = "platform_system == 'Darwin' or platform_system == 'Linux' or sys_platform != 'win32'" },
+    { name = "pyarrow", marker = "platform_system == 'Darwin' or platform_system == 'Linux' or sys_platform != 'win32'" },
+    { name = "tomli", marker = "(python_full_version < '3.11' and platform_system == 'Darwin') or (python_full_version < '3.11' and platform_system == 'Linux') or (python_full_version < '3.11' and sys_platform != 'win32')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4d/59/caab693e260fb00704672838f332eb0ffeff552806d270ee61f736e14dd4/milvus_lite-3.2.0.tar.gz", hash = "sha256:d6735d7a5bcb14fed2cc9a42da84d7396fef0040a0f7c2d1cace9f2134925571", size = 719788 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0d/f8/1b710dd8cf8d1e957086b59d5cf3a7ca1b0d58b3e5199917c3d02a7b3873/milvus_lite-3.2.0-py3-none-any.whl", hash = "sha256:f0f5656b033b1b5cbcfdfb8a9d676e52236338f102c8011d7bbf611afe512bb4", size = 268734 },
 ]
 
 [[package]]
@@ -8299,6 +8340,29 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/21/a9/5f0c535ba3b08fe09270c16808e053a968868242ecbd5676d4e3a488bf28/pymdown_extensions-11.0.1.tar.gz", hash = "sha256:dd2905ae6fc5b75582fafb139a1266ffc754705efa902aa50067fa7ff4f94ec0", size = 857113 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d6/54/da572c98c0b77626a91b5d3b89f0231d8bff5125c225420908632f8b342d/pymdown_extensions-11.0.1-py3-none-any.whl", hash = "sha256:db3943a62bab7e03af1364f0c4083e64b91fb097675a4b6cceccfbe9a77e5eb2", size = 269455 },
+]
+
+[[package]]
+name = "pymilvus"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cachetools" },
+    { name = "grpcio" },
+    { name = "orjson" },
+    { name = "pandas" },
+    { name = "protobuf" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/78/6bd0dba340706bc63346af96f0ebe36ff17f75404f5de935fda94d476c98/pymilvus-3.0.1.tar.gz", hash = "sha256:c02389059088b18d6e598cd175541e445c772fab4926c5e527c4913be34887f1", size = 347593 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/9d/7011887b29f452905745e8bd321f404068d5bfe78fe84e42c0b7cd81a065/pymilvus-3.0.1-py3-none-any.whl", hash = "sha256:c5a8d5c1fa1de7b416e3529d383d8cc2e7da2170433ffa4a2d9087e14f70171a", size = 386820 },
+]
+
+[package.optional-dependencies]
+milvus-lite = [
+    { name = "milvus-lite", marker = "sys_platform != 'win32'" },
 ]
 
 [[package]]
