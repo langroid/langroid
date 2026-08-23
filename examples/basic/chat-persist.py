@@ -23,7 +23,6 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
 import logging
-import pickle
 from pathlib import Path
 
 import typer
@@ -82,27 +81,12 @@ def main(
         timeout=45,
     )
 
-    # check if history.pkl exists under STATE_CACHE_DIR, and if it does, load it
-    # into agent.message_history
-    hist_path = Path(STATE_CACHE_DIR) / "history.pkl"
-    hist_found = False
-    try:
-        if hist_path.exists():
-            # read the history from the cache
-            with open(str(hist_path), "rb") as f:
-                msg_history = pickle.load(f)
-            n_msgs = len(msg_history)
-            logger.info(f"Loaded {n_msgs} messages from cache")
-            hist_found = True
-        else:
-            sys_msg = Prompt.ask(
-                "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
-                default=sys_msg,
-            )
-
-    except Exception:
-        logger.warning("Failed to load message history from cache")
-        pass
+    hist_path = Path(STATE_CACHE_DIR) / "history.json"
+    if not hist_path.exists():
+        sys_msg = Prompt.ask(
+            "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
+            default=sys_msg,
+        )
 
     config = ChatAgentConfig(
         system_message=sys_msg,
@@ -110,9 +94,12 @@ def main(
     )
     agent = ChatAgent(config)
 
-    if hist_found:
-        # overrides sys_msg set in config
-        agent.message_history = msg_history
+    if hist_path.exists():
+        try:
+            agent.import_history(hist_path.read_text())
+            logger.info(f"Loaded {len(agent.message_history)} messages from cache")
+        except (OSError, ValueError):
+            logger.warning("Failed to load message history from cache")
 
     # use restart=False so the state is not cleared out at start,
     # which allows continuing the conversation.
@@ -129,8 +116,7 @@ def main(
     # Create STATE_CACHE_DIR if it doesn't exist
     Path(STATE_CACHE_DIR).mkdir(parents=True, exist_ok=True)
     # Save the conversation state to hist_path
-    with open(str(hist_path), "wb") as f:
-        pickle.dump(agent.message_history, f)
+    hist_path.write_text(agent.export_history())
     logger.info(f"Saved {len(agent.message_history)} messages to cache")
 
 
