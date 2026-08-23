@@ -7,6 +7,23 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
+_HTTP_URL_SCHEMES = frozenset({"http", "https"})
+_FTP_URL_SCHEMES = frozenset({"ftp"})
+
+
+def _is_full_url(value: str, schemes: frozenset[str]) -> bool:
+    """Whether a value is a URL with an allowed scheme and valid hostname."""
+    try:
+        parsed_url = urlparse(value)
+        hostname = parsed_url.hostname
+    except ValueError:
+        return False
+    return (
+        parsed_url.scheme.casefold() in schemes
+        and hostname is not None
+        and bool(hostname.strip())
+    )
+
 
 class FileAttachment(BaseModel):
     """Represents a file attachment to be sent to an LLM API."""
@@ -97,21 +114,35 @@ class FileAttachment(BaseModel):
         cls,
         path: Union[str, Path],
         detail: str | None = None,
+        mime_type: str | None = None,
     ) -> "FileAttachment":
         """Create a FileAttachment from either a local file path or a URL.
 
         Args:
-            path_or_url: Path to the file or URL to fetch
+            path: Path to the file or URL to fetch.
+            detail: Optional image detail level.
+            mime_type: Optional MIME type for a URL. Local paths infer their
+                MIME type from the filename.
 
         Returns:
             FileAttachment instance
+
+        Raises:
+            ValueError: If path is an FTP URL, which is not supported.
         """
         # Convert to string if Path object
         path_str = str(path)
 
+        if _is_full_url(path_str, _FTP_URL_SCHEMES):
+            raise ValueError("FTP URLs are not supported; use an HTTP(S) URL")
+
         # Check if it's a URL
-        if path_str.startswith(("http://", "https://", "ftp://")):
-            return cls._from_url(url=path_str, detail=detail)
+        if _is_full_url(path_str, _HTTP_URL_SCHEMES):
+            return cls._from_url(
+                url=path_str,
+                detail=detail,
+                mime_type=mime_type,
+            )
         else:
             # Assume it's a local file path
             return cls._from_path(path_str, detail=detail)
@@ -201,6 +232,22 @@ class FileAttachment(BaseModel):
         base64_content = self.to_base64()
         return f"data:{self.mime_type};base64,{base64_content}"
 
+    def _content_url(self) -> str:
+        """URL to send to the API for this attachment.
+
+        Returns:
+            The original URL when it is a full http/https URL that the API can
+            fetch directly, else a base64-encoded data URI of the content.
+        """
+        # If we have a URL and it's a full http/https URL, use it directly
+        if isinstance(self.url, str) and _is_full_url(
+            self.url,
+            _HTTP_URL_SCHEMES,
+        ):
+            return self.url
+        # Otherwise use base64 data URI
+        return self.to_data_uri()
+
     def to_dict(self, model: str) -> Dict[str, Any]:
         """
         Convert to a dictionary suitable for API requests.
@@ -209,38 +256,35 @@ class FileAttachment(BaseModel):
         Returns:
             Dictionary with file data
         """
-        if (
-            self.mime_type
-            and self.mime_type.startswith("image/")
-            or "gemini" in model.lower()
-        ):
-            # for gemini models, we use `image_url` for both pdf-files and images
-
-            image_url_dict = {}
-
-            # If we have a URL and it's a full http/https URL, use it directly
-            if self.url and (
-                self.url.startswith("http://") or self.url.startswith("https://")
+        if isinstance(self.mime_type, str):
+            if self.mime_type.casefold().startswith("video/"):
+                # Videos are sent as `video_url` content-parts, mirroring the
+                # `image_url` parts used for images: a generic `file` part is not
+                # recognized as video input by the API.
+                return dict(
+                    type="video_url",
+                    video_url=dict(url=self._content_url()),
+                )
+            if (
+                self.mime_type.casefold().startswith("image/")
+                or "gemini" in model.casefold()
             ):
-                image_url_dict["url"] = self.url
-            # Otherwise use base64 data URI
-            else:
-                image_url_dict["url"] = self.to_data_uri()
+                image_url_dict: Dict[str, str] = dict(url=self._content_url())
 
-            # Add detail parameter if specified
-            if self.detail:
-                image_url_dict["detail"] = self.detail
+                # Add detail parameter if specified
+                if self.detail:
+                    image_url_dict["detail"] = self.detail
 
-            return dict(
-                type="image_url",
-                image_url=image_url_dict,
-            )
-        else:
-            # For non-image files
-            return dict(
-                type="file",
-                file=dict(
-                    filename=self.filename,
-                    file_data=self.to_data_uri(),
-                ),
-            )
+                return dict(
+                    type="image_url",
+                    image_url=image_url_dict,
+                )
+
+        # For non-image files and unexpected runtime MIME values
+        return dict(
+            type="file",
+            file=dict(
+                filename=self.filename,
+                file_data=self.to_data_uri(),
+            ),
+        )

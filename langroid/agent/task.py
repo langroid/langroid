@@ -1701,6 +1701,14 @@ class Task:
             result.content = result.content.replace(
                 f"{PASS_TO}:{recipient}", PASS
             ).strip()
+            # The replace above only handles the PASS_TO:<recipient> form; a
+            # pass-through expressed via an address prefix (@<recipient> or
+            # SEND_TO:<recipient>) with no content leaves the literal address in
+            # result.content, so step() would not recognize it as a pass-through
+            # (it checks `PASS in result.content`) and would forward the address
+            # string instead of the pending message. Normalize to PASS here.
+            if PASS not in result.content:
+                result.content = PASS
             return result
         elif recipient is not None:
             # we are sending non-empty content to non-null recipient
@@ -2343,8 +2351,9 @@ class Task:
                 str: content to send, or None
         """
         msg_str = msg.content if isinstance(msg, ChatDocument) else msg
+        has_tool_attempt = self.agent.has_tool_message_attempt(msg)
         if (
-            self.agent.has_tool_message_attempt(msg)
+            has_tool_attempt
             and not msg_str.startswith(PASS)
             and not msg_str.startswith(PASS_TO)
             and not msg_str.startswith(SEND_TO)
@@ -2363,6 +2372,12 @@ class Task:
         ):
             (addressee, content_to_send) = addressee_content
             if content_to_send == "":
+                if has_tool_attempt:
+                    # A bare address (no content after it) is a pass-through,
+                    # which would replace this msg with the pending message
+                    # and silently drop the tool attempt this msg carries;
+                    # so never treat a tool-bearing msg as a pass-through.
+                    return None, None, None
                 return True, addressee, None
             else:
                 return False, addressee, content_to_send
@@ -2376,6 +2391,12 @@ class Task:
         ):
             (addressee, content_to_send) = addressee_content
             if content_to_send == "":
+                if has_tool_attempt:
+                    # A bare address (no content after it) is a pass-through,
+                    # which would replace this msg with the pending message
+                    # and silently drop the tool attempt this msg carries;
+                    # so never treat a tool-bearing msg as a pass-through.
+                    return None, None, None
                 return True, addressee, None
             else:
                 return False, addressee, content_to_send
