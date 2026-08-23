@@ -20,8 +20,10 @@ def parse_addressed_message(
         Tuple[Optional[str], str]:
         A tuple containing the last addressee and the subsequent message content.
     """
-    # Regex to find all occurrences of the pattern
-    pattern = re.compile(rf"{re.escape(addressing)}(\w+)[^\w]")
+    # Regex to find all occurrences of the pattern. The addressee name is
+    # terminated by a non-word character or the end of the string, so that an
+    # addressee appearing as the final token (e.g. "@alice") is still matched.
+    pattern = re.compile(rf"{re.escape(addressing)}(\w+)(?:[^\w]|$)")
     matches = list(pattern.finditer(content))
 
     if not matches:

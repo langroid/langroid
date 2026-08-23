@@ -37,7 +37,8 @@ class MeiliSearchConfig(VectorStoreConfig):
 
 
 class MeiliSearch(VectorStore):
-    def __init__(self, config: MeiliSearchConfig = MeiliSearchConfig()):
+    def __init__(self, config: MeiliSearchConfig | None = None):
+        config = config if config is not None else MeiliSearchConfig()
         super().__init__(config)
         try:
             import meilisearch_python_sdk as meilisearch

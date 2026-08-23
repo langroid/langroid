@@ -96,6 +96,7 @@ vecdbs = [
     "chromadb<=0.4.23,>=0.4.21",
     "weaviate-client>=4.9.6",
     "pinecone-client>=5.0.1",
+    "pymilvus[milvus-lite]>=3.0.0",
 ]
 
 db = [
@@ -110,7 +111,7 @@ all = [
     "pdf2image<2.0.0,>=1.17.0",
     "pymupdf<2.0.0,>=1.23.3",
     "pymupdf4llm<0.1.0,>=0.0.17",
-    "docling<3.0.0,>=2.16.0",
+    "docling<3.0.0,>=2.20.0",
     "pypdf>=5.1.0",
     "pytesseract<0.4.0,>=0.3.10",
     "python-docx<2.0.0,>=1.1.0",
@@ -137,6 +138,7 @@ all = [
     "psycopg2-binary>=2.9.10",
     "marker-pdf",
     "seltz>=0.2.0",
+    "pymilvus[milvus-lite]>=3.0.0",
 ]
 
 # More granular groupings
@@ -295,6 +297,9 @@ firecrawl = [
 ]
 crawl4ai = [
     "crawl4ai>=0.6.3",
+]
+milvus = [
+    "pymilvus[milvus-lite]>=3.0.0",
 ]
 
 
