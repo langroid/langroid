@@ -555,6 +555,8 @@ class ChatAgent(Agent):
             raw_messages = payload.get("messages")
             if not isinstance(raw_messages, list):
                 raise ValueError("messages must be a list")
+            if not raw_messages:
+                raise ValueError("messages must not be empty")
 
             messages: List[LLMMessage] = []
             total_attachment_bytes = 0
@@ -595,10 +597,10 @@ class ChatAgent(Agent):
                 message_data["files"] = files
                 message_data["chat_document_id"] = ""
                 messages.append(LLMMessage.model_validate(message_data))
-            if messages and messages[0].role != Role.SYSTEM:
+            if messages[0].role != Role.SYSTEM:
                 raise ValueError("first message must have role 'system'")
             seen_call_ids: Set[str] = set()
-            for index, message in enumerate(messages):
+            for message in messages:
                 if message.role in (Role.TOOL, Role.FUNCTION) and (
                     message.function_call is not None or message.tool_calls is not None
                 ):
@@ -615,17 +617,6 @@ class ChatAgent(Agent):
                     if name is None or not name or name != name.strip():
                         raise ValueError(
                             "function result name must be nonblank and normalized"
-                        )
-                    previous = messages[index - 1] if index > 0 else None
-                    if (
-                        previous is None
-                        or previous.role != Role.ASSISTANT
-                        or previous.function_call is None
-                        or previous.function_call.name != name
-                    ):
-                        raise ValueError(
-                            "function result must match a preceding pending "
-                            f"function call directly; offending index {index}"
                         )
                 if message.tool_calls is not None:
                     if message.role != Role.ASSISTANT:
@@ -645,35 +636,6 @@ class ChatAgent(Agent):
                         seen_call_ids.add(call_id)
                     if not message.tool_calls:
                         message.tool_calls = None
-                if message.role == Role.TOOL:
-                    call_id = message.tool_call_id
-                    if call_id is None or not call_id or call_id != call_id.strip():
-                        raise ValueError(
-                            "tool result must reference a preceding pending tool "
-                            f"call; offending index {index}"
-                        )
-                    call_turn_index = index - 1
-                    result_offset = 0
-                    while (
-                        call_turn_index >= 0
-                        and messages[call_turn_index].role == Role.TOOL
-                    ):
-                        call_turn_index -= 1
-                        result_offset += 1
-                    call_turn = (
-                        messages[call_turn_index] if call_turn_index >= 0 else None
-                    )
-                    if (
-                        call_turn is None
-                        or call_turn.role != Role.ASSISTANT
-                        or call_turn.tool_calls is None
-                        or result_offset >= len(call_turn.tool_calls)
-                        or call_turn.tool_calls[result_offset].id != call_id
-                    ):
-                        raise ValueError(
-                            "tool result must reference a preceding pending tool "
-                            f"call directly; offending index {index}"
-                        )
         except (
             KeyError,
             RecursionError,

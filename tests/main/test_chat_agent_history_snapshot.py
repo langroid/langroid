@@ -213,6 +213,18 @@ def test_history_snapshot_rejects_non_system_first_message_atomically() -> None:
     assert agent.message_history == original
 
 
+def test_history_snapshot_rejects_empty_message_list_atomically() -> None:
+    """Imported histories must contain a system message."""
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    original = list(agent.message_history)
+    snapshot = json.dumps({"version": 1, "messages": []})
+
+    with pytest.raises(ValueError, match="messages must not be empty"):
+        agent.import_history(snapshot)
+
+    assert agent.message_history == original
+
+
 def test_invalid_snapshot_preserves_registered_chat_documents() -> None:
     """Failed import keeps existing history documents registered."""
     agent = ChatAgent(ChatAgentConfig(llm=MockLMConfig(default_response="answer")))
@@ -238,14 +250,14 @@ def test_invalid_snapshot_preserves_registered_chat_documents() -> None:
                 {"role": "user", "content": "valid so far"},
                 {
                     "role": "function",
-                    "name": "orphaned_function",
-                    "content": "invalid later result",
+                    "name": " ",
+                    "content": "invalid blank function name",
                 },
             ],
         }
     )
 
-    with pytest.raises(ValueError, match="function result must match"):
+    with pytest.raises(ValueError, match="function result name must be nonblank"):
         agent.import_history(snapshot)
 
     assert agent.message_history == original_history
@@ -519,78 +531,8 @@ def test_history_snapshot_escapes_surrogates_for_utf8_persistence(
     assert restored.message_history[-1].content == content
 
 
-@pytest.mark.parametrize("tool_call_id", [None, "orphan-call"])
-def test_history_snapshot_rejects_invalid_tool_result_sequence(
-    tool_call_id: str | None,
-) -> None:
-    """Tool results must identify an earlier assistant tool call."""
-    agent = ChatAgent(ChatAgentConfig(llm=None))
-    snapshot = json.dumps(
-        {
-            "version": 1,
-            "messages": [
-                {"role": "system", "content": "snapshot system"},
-                {
-                    "role": "tool",
-                    "content": "result",
-                    "tool_call_id": tool_call_id,
-                },
-            ],
-        }
-    )
-
-    with pytest.raises(ValueError, match="tool result must reference"):
-        agent.import_history(snapshot)
-
-
-@pytest.mark.parametrize(
-    "call_message,result_message",
-    [
-        (
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                        "id": "call-1",
-                        "type": "function",
-                        "function": {"name": "weather", "arguments": {}},
-                    }
-                ],
-            },
-            {"role": "tool", "tool_call_id": "call-1", "content": "result"},
-        ),
-        (
-            {
-                "role": "assistant",
-                "function_call": {"name": "weather", "arguments": {}},
-            },
-            {"role": "function", "name": "weather", "content": "result"},
-        ),
-    ],
-)
-def test_history_snapshot_rejects_non_adjacent_results(
-    call_message: dict[str, Any],
-    result_message: dict[str, Any],
-) -> None:
-    """Call results cannot be separated from their assistant call turn."""
-    snapshot = json.dumps(
-        {
-            "version": 1,
-            "messages": [
-                {"role": "system", "content": "snapshot system"},
-                call_message,
-                {"role": "assistant", "content": "intervening"},
-                result_message,
-            ],
-        }
-    )
-
-    with pytest.raises(ValueError, match="index 3"):
-        ChatAgent(ChatAgentConfig(llm=None)).import_history(snapshot)
-
-
-def test_history_snapshot_accepts_adjacent_multi_call_results_in_order() -> None:
-    """Ordered results may form one contiguous block after a multi-call turn."""
+def test_history_snapshot_accepts_unsequenced_partial_multi_call_results() -> None:
+    """Import leaves call sequencing checks to the next provider request."""
     agent = ChatAgent(ChatAgentConfig(llm=None))
     snapshot = json.dumps(
         {
@@ -612,59 +554,18 @@ def test_history_snapshot_accepts_adjacent_multi_call_results_in_order() -> None
                         },
                     ],
                 },
-                {"role": "tool", "tool_call_id": "call-1", "content": "sunny"},
+                {"role": "assistant", "content": "intervening"},
                 {"role": "tool", "tool_call_id": "call-2", "content": "clear"},
+                {"role": "function", "name": "unmatched", "content": "result"},
             ],
         }
     )
 
     agent.import_history(snapshot)
 
-    assert agent.oai_tool_calls == []
-
-
-@pytest.mark.parametrize(
-    "messages",
-    [
-        [{"role": "function", "name": "weather", "content": "result"}],
-        [
-            {
-                "role": "assistant",
-                "function_call": {"name": "weather", "arguments": {}},
-            },
-            {"role": "function", "name": "traffic", "content": "result"},
-        ],
-        [
-            {
-                "role": "assistant",
-                "function_call": {"name": "weather", "arguments": {}},
-            },
-            {"role": "function", "name": "weather", "content": "first"},
-            {"role": "function", "name": "weather", "content": "duplicate"},
-        ],
-    ],
-)
-def test_history_snapshot_rejects_invalid_function_result_sequence_atomically(
-    messages: list[dict[str, Any]],
-) -> None:
-    """Legacy function results must consume a matching earlier call."""
-    agent = ChatAgent(ChatAgentConfig(llm=None))
-    original = LLMMessage(role=Role.SYSTEM, content="keep me")
-    original_call = _tool_call("existing-call", "Rome")
-    agent.message_history = [original]
-    agent.oai_tool_calls = [original_call]
-    agent.oai_tool_id2call = {"existing-call": original_call}
-    snapshot_messages = [
-        {"role": "system", "content": "snapshot system"},
-        *messages,
-    ]
-
-    with pytest.raises(ValueError, match="function result must match"):
-        agent.import_history(json.dumps({"version": 1, "messages": snapshot_messages}))
-
-    assert agent.message_history == [original]
-    assert agent.oai_tool_calls == [original_call]
-    assert agent.oai_tool_id2call == {"existing-call": original_call}
+    assert [call.id for call in agent.oai_tool_calls] == ["call-1"]
+    assert set(agent.oai_tool_id2call) == {"call-1", "call-2"}
+    assert agent.message_history[-1].name == "unmatched"
 
 
 @pytest.mark.parametrize("call_ids", [[None], [""], [" padded "], ["same", "same"]])

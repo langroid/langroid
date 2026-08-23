@@ -35,10 +35,13 @@ does not contain a matching `tool` result. This bookkeeping does not execute or
 automatically resume an interrupted tool call.
 
 Import validates the complete snapshot before replacing the current history.
-Malformed JSON, unsupported versions, invalid messages, a non-system first
-message, or invalid Base64 data raise `ValueError` and leave the existing
-conversation unchanged. Attachment decoding has a cumulative 100 MiB default
-limit. Set a different budget explicitly when needed:
+Malformed JSON, unsupported versions, an empty message list, invalid message
+structure, a non-system first message, or invalid Base64 data raise
+`ValueError` and leave the existing conversation unchanged. Import does not
+validate tool-call and result ordering or sequencing. Real exported histories
+are valid by construction; malformed hand-edited sequencing instead surfaces
+as a provider error on the next LLM call. Attachment decoding has a cumulative
+100 MiB default limit. Set a different budget explicitly when needed:
 
 ```python
 agent.import_history(snapshot, max_size_bytes=20 * 1024 * 1024)
