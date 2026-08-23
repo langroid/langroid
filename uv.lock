@@ -4064,7 +4064,7 @@ requires-dist = [
     { name = "chromadb", marker = "extra == 'vecdbs'", specifier = ">=0.4.21,<=0.4.23" },
     { name = "colorlog", specifier = ">=6.7.0,<7.0.0" },
     { name = "crawl4ai", marker = "extra == 'crawl4ai'", specifier = ">=0.6.3" },
-    { name = "docling", marker = "extra == 'all'", specifier = ">=2.16.0,<3.0.0" },
+    { name = "docling", marker = "extra == 'all'", specifier = ">=2.20.0,<3.0.0" },
     { name = "docling", marker = "extra == 'doc-chat'", specifier = ">=2.20.0,<3.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.16.0,<3.0.0" },
     { name = "docling", marker = "extra == 'pdf-parsers'", specifier = ">=2.16.0,<3.0.0" },

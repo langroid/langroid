@@ -61,7 +61,8 @@ class PostgresDBConfig(VectorStoreConfig):
 
 
 class PostgresDB(VectorStore):
-    def __init__(self, config: PostgresDBConfig = PostgresDBConfig()):
+    def __init__(self, config: PostgresDBConfig | None = None):
+        config = config if config is not None else PostgresDBConfig()
         super().__init__(config)
         if not has_postgres:
             raise LangroidImportError("pgvector", "postgres")
