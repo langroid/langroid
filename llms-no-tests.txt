@@ -91020,15 +91020,6 @@ def _model_name(model: str | ModelName) -> str:
     return model.value
 </file>
 
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.16.4
-  hooks:
-    - id: ruff
-</file>
-
 <file path="langroid/agent/base.py">
 import asyncio
 import copy
@@ -93561,6 +93552,15 @@ class Agent(ABC):
         if answer != no_answer:
             return (f"{agent_type} says: " + str(answer)).strip()
         return None
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.16.4
+  hooks:
+    - id: ruff
 </file>
 
 <file path="langroid/agent/chat_agent.py">

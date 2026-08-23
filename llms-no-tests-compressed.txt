@@ -57784,15 +57784,6 @@ model_names = tuple(_model_name(model) for model in models)
 def _model_name(model: str | ModelName) -> str
 </file>
 
-<file path=".pre-commit-config.yaml">
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.16.4
-  hooks:
-    - id: ruff
-</file>
-
 <file path="langroid/agent/base.py">
 ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
 console = Console(quiet=settings.quiet)
@@ -59075,6 +59066,15 @@ agent_type = type(agent).__name__
 user_response = Prompt.ask(
 ⋮----
 answer = agent.llm_response(request)
+</file>
+
+<file path=".pre-commit-config.yaml">
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.16.4
+  hooks:
+    - id: ruff
 </file>
 
 <file path="langroid/agent/chat_agent.py">
