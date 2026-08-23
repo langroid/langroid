@@ -7,7 +7,9 @@ import re
 import threading
 from collections import Counter, OrderedDict, deque
 from enum import Enum
+from math import isnan
 from pathlib import Path
+from time import monotonic
 from types import SimpleNamespace
 from typing import (
     Any,
@@ -770,6 +772,7 @@ class Task:
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
+        max_time: float = 0,
     ) -> Optional[ChatDocument]: ...  # noqa
 
     @overload
@@ -783,6 +786,7 @@ class Task:
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
+        max_time: float = 0,
         return_type: Type[T],
     ) -> Optional[T]: ...  # noqa
 
@@ -796,9 +800,14 @@ class Task:
         session_id: str = "",
         allow_restart: bool = True,
         return_type: Optional[Type[T]] = None,
+        max_time: float = 0,
     ) -> Optional[ChatDocument | T]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
+        if isnan(max_time):
+            raise ValueError("max_time must not be NaN")
+        started_at = monotonic() if max_time > 0 else None
+
         if allow_restart and (
             (self.restart and caller is None)
             or (self.config_sub_task.restart_as_subtask and caller is not None)
@@ -837,6 +846,7 @@ class Task:
         # self.turns overrides if it is > 0 and turns not set (i.e. = -1)
         turns = self.turns if turns < 0 else turns
         i = 0
+        budget_exhausted = False
         while True:
             self._step_idx = i  # used in step() below
             self.step()
@@ -848,9 +858,15 @@ class Task:
                 ):
                     self.response_sequence.append(self.pending_message)
             done, status = self.done()
+            budget_exhausted = (
+                started_at is not None and monotonic() - started_at >= max_time
+            )
             if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
+                break
+            if budget_exhausted:
+                status = StatusCode.TIMEOUT
                 break
             i += 1
             max_turns = (
@@ -901,6 +917,8 @@ class Task:
 
             if (
                 parsed_result is None
+                and status != StatusCode.TIMEOUT
+                and not budget_exhausted
                 and isinstance(self.agent, ChatAgent)
                 and self.agent._json_schema_available()
             ):
@@ -908,13 +926,18 @@ class Task:
                 output_args = strict_agent._function_args()[-1]
                 if output_args is not None:
                     schema = output_args.function.parameters
-                    strict_result = strict_agent.llm_response(
-                        f"""
-                        A response adhering to the following JSON schema was expected:
-                        {schema}
-
-                        Please resubmit with the correct schema.
-                        """
+                    budget_exhausted = (
+                        started_at is not None and monotonic() - started_at >= max_time
+                    )
+                    strict_result = (
+                        None
+                        if budget_exhausted
+                        else strict_agent.llm_response(
+                            "A response adhering to the following JSON schema "
+                            "was expected:\n"
+                            f"{schema}\n\n"
+                            "Please resubmit with the correct schema."
+                        )
                     )
 
                     if strict_result is not None:
@@ -938,6 +961,7 @@ class Task:
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
+        max_time: float = 0,
     ) -> Optional[ChatDocument]: ...  # noqa
 
     @overload
@@ -951,6 +975,7 @@ class Task:
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
+        max_time: float = 0,
         return_type: Type[T],
     ) -> Optional[T]: ...  # noqa
 
@@ -964,6 +989,7 @@ class Task:
         session_id: str = "",
         allow_restart: bool = True,
         return_type: Optional[Type[T]] = None,
+        max_time: float = 0,
     ) -> Optional[ChatDocument | T]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
@@ -984,6 +1010,8 @@ class Task:
             caller (Task|None): the calling task, if any
             max_cost (float): max cost allowed for the task (default 0 -> no limit)
             max_tokens (int): max tokens allowed for the task (default 0 -> no limit)
+            max_time (float): max wall-clock seconds for the task. The limit is
+                checked after each completed step (default 0 -> no limit).
             session_id (str): session id for the task
             allow_restart (bool): whether to allow restarting the task
             return_type (Optional[Type[T]]): desired final result type
@@ -991,6 +1019,9 @@ class Task:
         Returns:
             Optional[ChatDocument]: valid result of the task.
         """
+        if isnan(max_time):
+            raise ValueError("max_time must not be NaN")
+        started_at = monotonic() if max_time > 0 else None
 
         # Even if the initial "sender" is not literally the USER (since the task could
         # have come from another LLM), as far as this agent is concerned, the initial
@@ -1035,6 +1066,7 @@ class Task:
         # self.turns overrides if it is > 0 and turns not set (i.e. = -1)
         turns = self.turns if turns < 0 else turns
         i = 0
+        budget_exhausted = False
         while True:
             self._step_idx = i  # used in step() below
             await self.step_async()
@@ -1048,9 +1080,15 @@ class Task:
                     self.response_sequence.append(self.pending_message)
 
             done, status = self.done()
+            budget_exhausted = (
+                started_at is not None and monotonic() - started_at >= max_time
+            )
             if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
+                break
+            if budget_exhausted:
+                status = StatusCode.TIMEOUT
                 break
             i += 1
             max_turns = (
@@ -1101,6 +1139,8 @@ class Task:
 
             if (
                 parsed_result is None
+                and status != StatusCode.TIMEOUT
+                and not budget_exhausted
                 and isinstance(self.agent, ChatAgent)
                 and self.agent._json_schema_available()
             ):
@@ -1108,13 +1148,18 @@ class Task:
                 output_args = strict_agent._function_args()[-1]
                 if output_args is not None:
                     schema = output_args.function.parameters
-                    strict_result = await strict_agent.llm_response_async(
-                        f"""
-                        A response adhering to the following JSON schema was expected:
-                        {schema}
-
-                        Please resubmit with the correct schema.
-                        """
+                    budget_exhausted = (
+                        started_at is not None and monotonic() - started_at >= max_time
+                    )
+                    strict_result = (
+                        None
+                        if budget_exhausted
+                        else await strict_agent.llm_response_async(
+                            "A response adhering to the following JSON schema "
+                            "was expected:\n"
+                            f"{schema}\n\n"
+                            "Please resubmit with the correct schema."
+                        )
                     )
 
                     if strict_result is not None:
