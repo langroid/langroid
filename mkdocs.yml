@@ -145,6 +145,7 @@ nav:
       - Cross-Encoder Reranking: notes/cross-encoder.md
       - Task Logs: notes/html-logger.md
       - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Markdown, HTML Parsing: notes/markdown-html-parsing.md
       - Context-Overflow Handling: notes/context-overflow.md
       - Batch Processing: notes/batch-processing.md
 
