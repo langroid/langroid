@@ -147,6 +147,13 @@ GOOGLE_API_KEY=your-key
 GOOGLE_CSE_ID=your-cse-id
 ```
 
+!!! warning "Vector-store settings need a provider prefix (0.67.0+)"
+    Vector-store config fields can also be set via env vars, but only
+    with a per-provider prefix, e.g. `QDRANT_HOST`, `LANCEDB_STORAGE_PATH`,
+    `VECDB_FULL_EVAL`. Bare names like `HOST`, `PORT`, or `FULL_EVAL`
+    are ignored as of Langroid 0.67.0 — see
+    [Vector-Store Env Prefixes](../notes/vecstore-env-prefix.md).
+
 ### Microsoft Azure OpenAI setup[Optional]
 
 This section applies only if you are using Microsoft Azure OpenAI.

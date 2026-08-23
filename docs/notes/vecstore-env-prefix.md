@@ -1,5 +1,15 @@
 # Vector-Store Config Env-Var Prefixes
 
+!!! warning "Behavior change in 0.67.0"
+    As of Langroid 0.67.0, **bare environment variables such as `HOST`,
+    `PORT`, `COLLECTION_NAME`, and `FULL_EVAL` no longer configure
+    vector stores.** If you relied on any of these (this was never
+    documented, but it did work), you must rename them with the
+    per-provider prefix from the table below, e.g.
+    `QDRANT_HOST`, `QDRANT_PORT`, `VECDB_FULL_EVAL`.
+    The documented variables (`QDRANT_API_KEY`, `QDRANT_API_URL`,
+    `WEAVIATE_API_KEY`, etc.) are **unaffected**.
+
 Vector-store configs are `pydantic-settings` classes, which means their
 fields can be set via environment variables. Prior to this change (see
 issue #1078), `VectorStoreConfig` and its subclasses declared **no
