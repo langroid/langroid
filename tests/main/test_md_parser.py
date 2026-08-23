@@ -198,6 +198,169 @@ print("Hello, world!")
     assert 'print("Hello, world!")' in code_block.content
 
 
+def test_longer_code_fence_not_closed_by_shorter_fence():
+    md = """# Real Header
+
+````python
+```text
+# Not a Header
+```
+````
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_long_tilde_fence_not_closed_by_shorter_tilde_fence():
+    """A shorter tilde fence must not close a longer tilde opener."""
+    md = """# Real Header
+
+~~~~text
+~~~
+# Not a Header
+~~~
+~~~~
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_backtick_fence_not_closed_by_tilde_fence():
+    """A tilde fence line inside a backtick block must not close it."""
+    md = """# Real Header
+
+```text
+~~~
+# Not a Header
+## Also Not a Header
+~~~
+```
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_tilde_fence_not_closed_by_backtick_fence():
+    """A backtick fence line inside a tilde block must not close it."""
+    md = """# Real Header
+
+~~~text
+```
+# Not a Header
+## Also Not a Header
+```
+~~~
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_fence_closed_by_longer_same_char_fence():
+    """A closing fence may be strictly longer than the opening fence."""
+    md = """# Real Header
+
+```python
+# not a header, just a comment
+`````
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+@pytest.mark.parametrize("fence", ["````", "~~~~"])
+def test_fence_run_followed_by_text_does_not_close(fence: str):
+    """A fence-length run with trailing text is content, not a closer."""
+    md = f"""# Real Header
+
+{fence}python
+{fence}not-a-close
+# Not a Header
+{fence}
+
+## Real Subheader
+Real content.
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == ["## Real Subheader"]
+
+
+def test_unclosed_fence_suppresses_headings_without_leaking_state():
+    """An unclosed fence suppresses all later headings through EOF.
+
+    A subsequent parse call must start with a clean (closed) fence state.
+    """
+    md = """# Real Header
+Intro text.
+
+```python
+# Fake Heading Inside
+## Another Fake Heading
+"""
+    tree = parse_markdown_headings(md)
+
+    assert len(tree) == 1
+    assert tree[0].content == "# Real Header"
+    child_headings = [
+        child.content for child in tree[0].children if child.content.startswith("#")
+    ]
+    assert child_headings == []
+    # The fenced lines remain part of the header's content block.
+    assert "# Fake Heading Inside" in tree[0].children[0].content
+
+    # A fresh parse must not inherit the open-fence state of the prior call.
+    fresh = parse_markdown_headings("# Fresh Header\n\n## Fresh Subheader\nText.\n")
+    assert [node.content for node in fresh] == ["# Fresh Header"]
+    fresh_child_headings = [
+        child.content for child in fresh[0].children if child.content.startswith("#")
+    ]
+    assert fresh_child_headings == ["## Fresh Subheader"]
+
+
 def test_multiple_same_level_headers():
     md = """# Header A
 Paragraph A.

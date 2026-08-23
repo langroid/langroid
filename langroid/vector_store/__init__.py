@@ -47,6 +47,14 @@ try:
     PostgresDBConfig
     __all__.extend(["postgres", "PostgresDB", "PostgresDBConfig"])
 
+    from . import milvusdb
+    from .milvusdb import MilvusDB, MilvusDBConfig
+
+    milvusdb
+    MilvusDB
+    MilvusDBConfig
+    __all__.extend(["milvusdb", "MilvusDB", "MilvusDBConfig"])
+
     from . import weaviatedb
     from .weaviatedb import WeaviateDBConfig, WeaviateDB
 
