@@ -57497,6 +57497,11 @@ console = Console()
 ⋮----
 logger = logging.getLogger(__name__)
 ⋮----
+# Stable origin sentinel for the dynamically generated strict-recovery AnyTool
+# class ("tool_or_function"): a fresh class is built per call (its tool-union
+# type varies), so re-registration must be recognized as the same logical tool.
+_ANY_TOOL_MESSAGE_ORIGIN: Any = object()
+⋮----
 # Safety margin (in tokens) subtracted from the model context length when
 # shrinking chat history and/or the requested output length to fit, in case
 # our token-count estimates are off.
@@ -58274,6 +58279,11 @@ def response(self, agent: ChatAgent) -> None | str | ChatDocument
 request = self.tool.request
 ⋮----
 tool = agent.llm_tools_map[request].model_validate_json(
+⋮----
+# Every call builds a distinct class; share one origin so enabling a
+# regenerated AnyTool under "tool_or_function" stays idempotent instead
+# of tripping the same-name/different-tool registration guard.
+AnyTool.__tool_message_origin__ = (  # type: ignore[attr-defined]
 ⋮----
 """Returns instructions for strict recovery."""
 optional_instructions = (

@@ -2186,6 +2186,41 @@ def test_enable_message_rejects_recipient_wrapper_subclass_origin() -> None:
     assert agent.llm_tools_map["recipient_collision"] is recipient_wrapper
 
 
+def test_any_tool_reenable_is_idempotent() -> None:
+    """Regenerated strict-recovery AnyTool must re-register without error.
+
+    `_get_any_tool_message()` builds a fresh class per call (its tool-union
+    varies with enabled tools), so two generations of "tool_or_function" are
+    distinct classes; the same-name registration guard must treat them as the
+    same logical tool (regression: SQLChatAgent strict recovery raised
+    "already registered to AnyTool; cannot register AnyTool").
+    """
+
+    class ToolA(ToolMessage):
+        request: str = "any_tool_idem_a"
+        purpose: str = "Tool A"
+
+    class ToolB(ToolMessage):
+        request: str = "any_tool_idem_b"
+        purpose: str = "Tool B"
+
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    agent.enable_message(ToolA)
+
+    any_tool_1 = agent._get_any_tool_message()
+    assert any_tool_1 is not None
+    agent.enable_message(any_tool_1, use=False, handle=True)
+
+    # enabling another tool changes the union => a distinct AnyTool class
+    agent.enable_message(ToolB)
+    any_tool_2 = agent._get_any_tool_message()
+    assert any_tool_2 is not None
+    assert any_tool_2 is not any_tool_1
+    agent.enable_message(any_tool_2, use=False, handle=True)  # must not raise
+
+    assert agent.llm_tools_map["tool_or_function"] is any_tool_2
+
+
 def test_multi_agent_tool_caching(test_settings: Settings):
     """
     Test that tool message caching is agent-specific.
