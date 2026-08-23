@@ -460,6 +460,39 @@ async with FastMCPClient(server) as client:
     models = [client.tool_model_from_mcp_tool(t) for t in wanted]
 ```
 
+## Namespacing tools from multiple servers
+
+Two MCP servers can expose the same tool name. Pass `tool_name_prefix` when
+loading each server to give the Langroid-facing names distinct namespaces:
+
+```python
+weather_tools = await get_tools_async(
+    weather_server,
+    tool_name_prefix="weather",
+)
+inventory_tools = await get_tools_async(
+    inventory_server,
+    tool_name_prefix="inventory",
+)
+
+agent.enable_message(weather_tools + inventory_tools)
+```
+
+The prefix must fully match the ASCII pattern `[a-zA-Z0-9_]+`; an empty string
+is invalid. Langroid joins the prefix and original MCP tool name with two
+underscores. If both servers expose `lookup`, the agent therefore sees
+`weather__lookup` and `inventory__lookup`.
+
+The namespace changes only the Langroid-facing request name. Protocol calls use
+the original server tool name for fresh clients and persistent connections.
+Passing `tool_name_prefix=None`, or omitting the argument, applies no prefix and
+preserves the existing behavior.
+
+`ChatAgent.enable_message` identifies collisions by the underlying tool origin.
+It raises `ValueError` if a tool from a different origin is already registered
+with the same final request name. Re-enabling the same class remains valid, as
+does registering a regenerated recipient wrapper for the same underlying tool.
+
 ## Tool parameter type mapping
 
 When an MCP tool is converted into a Langroid `ToolMessage`,

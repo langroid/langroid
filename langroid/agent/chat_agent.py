@@ -799,6 +799,25 @@ class ChatAgent(Agent):
 
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
+        if message_class is not None:
+            if not issubclass(message_class, ToolMessage):
+                raise ValueError("message_class must be a subclass of ToolMessage")
+            request = message_class.default_value("request")
+            existing_class = self.llm_tools_map.get(request)
+            existing_origin = (
+                existing_class.__dict__.get("__tool_message_origin__", existing_class)
+                if existing_class is not None
+                else None
+            )
+            message_origin = message_class.__dict__.get(
+                "__tool_message_origin__", message_class
+            )
+            if existing_class is not None and existing_origin is not message_origin:
+                raise ValueError(
+                    f"Tool request name {request!r} is already registered to "
+                    f"{existing_class.__name__}; cannot register "
+                    f"{message_class.__name__}"
+                )
         if isinstance(message_class, XMLToolMessage):
             # XMLToolMessage is not compatible with OpenAI's Tools/functions API,
             # so we disable use of functions API, enable langroid-native Tools,
@@ -808,7 +827,6 @@ class ChatAgent(Agent):
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
         if message_class is not None:
-            request = message_class.default_value("request")
             if request == "":
                 raise ValueError(
                     f"""
