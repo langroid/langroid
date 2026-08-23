@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 
 from docstring_parser import parse
 from pydantic import BaseModel, ConfigDict
+from pydantic.fields import ModelPrivateAttr
 
 from langroid.language_models.base import LLMFunctionSpec
 from langroid.utils.pydantic_utils import (
@@ -24,6 +25,35 @@ from langroid.utils.pydantic_utils import (
 from langroid.utils.types import is_instance_of
 
 K = TypeVar("K")
+
+
+def handler_name(message_class: Type["ToolMessage"], default: str) -> str:
+    """Name of the agent method that handles this tool class.
+
+    A tool may declare `_handler = "some_method"` to route itself to an
+    agent method whose name differs from the tool's `request` value. This
+    is a *class*-level declaration and must be resolved from the class:
+    `ToolMessage` sets `extra="allow"`, so an LLM-supplied `"_handler"`
+    key in tool JSON lands on the instance, and reading it from there
+    would let a tool call redirect dispatch to an arbitrary agent method
+    (issue #1106).
+
+    Pydantic v2 represents a class-level underscore attribute as a
+    `ModelPrivateAttr`, so unwrap that to get the declared name.
+
+    Args:
+        message_class: The tool class to read the declaration from.
+        default: Name to use when the class declares no usable `_handler`.
+
+    Returns:
+        The declared handler-method name, else `default`.
+    """
+    declared: Any = getattr(message_class, "_handler", None)
+    if isinstance(declared, ModelPrivateAttr):
+        declared = declared.default
+    if isinstance(declared, str) and declared:
+        return declared
+    return default
 
 
 def remove_if_exists(k: K, d: dict[K, Any]) -> None:
