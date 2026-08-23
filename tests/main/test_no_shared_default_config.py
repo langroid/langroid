@@ -189,6 +189,19 @@ def _seed_default_qdrant_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.delenv("QDRANT_API_URL", raising=False)
     monkeypatch.setattr(qdrantdb_module, "load_dotenv", lambda: None)
 
+    # load_dotenv() resolves the repo .env from the CALLING module's directory
+    # (not cwd), so any langroid module doing its own load_dotenv() during
+    # construction resurrects QDRANT_* vars deleted above. Neutralize at the
+    # os.getenv level so this test always exercises local-storage mode.
+    real_getenv = os.getenv
+
+    def _getenv(name: str, default: str | None = None) -> str | None:
+        if name.startswith("QDRANT_"):
+            return default
+        return real_getenv(name, default)
+
+    monkeypatch.setattr(os, "getenv", _getenv)
+
     client = QdrantClient(path=".qdrant/data")
     try:
         client.create_collection(
