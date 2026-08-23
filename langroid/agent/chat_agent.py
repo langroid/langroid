@@ -65,6 +65,11 @@ console = Console()
 
 logger = logging.getLogger(__name__)
 
+# Safety margin (in tokens) subtracted from the model context length when
+# shrinking chat history and/or the requested output length to fit, in case
+# our token-count estimates are off.
+CHAT_HISTORY_BUFFER = 300
+
 
 def _reject_json_constant(constant: str) -> None:
     """Reject JavaScript numeric constants that are not valid JSON."""
@@ -986,6 +991,25 @@ class ChatAgent(Agent):
 
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
+        if message_class is not None:
+            if not issubclass(message_class, ToolMessage):
+                raise ValueError("message_class must be a subclass of ToolMessage")
+            request = message_class.default_value("request")
+            existing_class = self.llm_tools_map.get(request)
+            existing_origin = (
+                existing_class.__dict__.get("__tool_message_origin__", existing_class)
+                if existing_class is not None
+                else None
+            )
+            message_origin = message_class.__dict__.get(
+                "__tool_message_origin__", message_class
+            )
+            if existing_class is not None and existing_origin is not message_origin:
+                raise ValueError(
+                    f"Tool request name {request!r} is already registered to "
+                    f"{existing_class.__name__}; cannot register "
+                    f"{message_class.__name__}"
+                )
         if isinstance(message_class, XMLToolMessage):
             # XMLToolMessage is not compatible with OpenAI's Tools/functions API,
             # so we disable use of functions API, enable langroid-native Tools,
@@ -995,7 +1019,6 @@ class ChatAgent(Agent):
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
         if message_class is not None:
-            request = message_class.default_value("request")
             if request == "":
                 raise ValueError(
                     f"""
@@ -1882,7 +1905,6 @@ class ChatAgent(Agent):
             truncate
             and output_len > self.llm.chat_context_length() - self.chat_num_tokens(hist)
         ):
-            CHAT_HISTORY_BUFFER = 300
             # chat + output > max context length,
             # so first try to shorten requested output len to fit;
             # use an extra margin of CHAT_HISTORY_BUFFER tokens
@@ -1922,12 +1944,43 @@ class ChatAgent(Agent):
                         - 1
                     )
                     n_truncated = 0
-                    while (
-                        self.chat_num_tokens(hist)
-                        > self.llm.chat_context_length()
+                    _target_tokens = (
+                        self.llm.chat_context_length()
                         - self.config.llm.min_output_tokens
                         - CHAT_HISTORY_BUFFER
-                    ):
+                    )
+                    # Truncation floor: never reduce a message's content below
+                    # this many tokens.
+                    _min_keep_tokens = 30
+                    _truncation_warning = "... [Contents truncated!]"
+
+                    def _content_tokens(text: str | None) -> int:
+                        """Token count of message *content* only.
+
+                        `truncate_message` only trims `message.content`, so
+                        using the full `_message_num_tokens` (which includes
+                        attachment payloads) would inflate the count and make
+                        the keep-target too large to ever converge, for
+                        messages carrying file attachments.
+                        """
+                        return (
+                            self.parser.num_tokens(text or "")
+                            if self.parser is not None
+                            # approx fallback, matches truncate_message
+                            else len(text or "") // 4
+                        )
+
+                    # Account for the warning that truncate_message appends
+                    # ("\n" + warning), so the final token count of a
+                    # truncated message does not exceed its keep-target.
+                    _warning_tokens = _content_tokens("\n" + _truncation_warning)
+                    # NOTE: loop termination is guaranteed:
+                    # msg_idx_to_compress strictly increases every iteration
+                    # (truncate or skip), and once it exceeds
+                    # last_msg_idx_to_compress a ValueError is raised. (The
+                    # token count need not decrease every iteration, so
+                    # termination rests on the index advancing.)
+                    while self.chat_num_tokens(hist) > _target_tokens:
                         if msg_idx_to_compress > last_msg_idx_to_compress:
                             # We want to preserve the first message (typically
                             # system msg) and last message (user msg).
@@ -1947,12 +2000,59 @@ class ChatAgent(Agent):
                             - decreasing `max_output_tokens`
                             """
                             )
+                        _msg_tokens = _content_tokens(hist[msg_idx_to_compress].content)
+                        if _msg_tokens <= _min_keep_tokens + _warning_tokens:
+                            # Truncating this message cannot shrink the total:
+                            # its content is already at/below the keep-floor
+                            # plus the appended warning; leave it intact.
+                            msg_idx_to_compress += 1
+                            continue
                         n_truncated += 1
+                        # Distribute the current excess evenly across the
+                        # remaining *compressible* messages, so each retains
+                        # as much content as possible instead of being
+                        # collapsed to the fixed 30-token floor. The excess is
+                        # recomputed every iteration, so the distribution
+                        # self-corrects as we move forward through the
+                        # history.
+                        _current_excess = self.chat_num_tokens(hist) - _target_tokens
+                        # Shrink capacity of each *later* message in the
+                        # compressible range: its content above the floor (net
+                        # of the appended warning). Non-positive entries are
+                        # the tiny messages the skip-check above will leave
+                        # untouched; they must not dilute the even share, so
+                        # only messages with positive capacity count toward
+                        # the denominator (plus this message, which passed the
+                        # skip-check and is therefore compressible).
+                        _later_capacities = [
+                            _content_tokens(m.content)
+                            - _min_keep_tokens
+                            - _warning_tokens
+                            for m in hist[
+                                msg_idx_to_compress + 1 : last_msg_idx_to_compress + 1
+                            ]
+                        ]
+                        _n_remaining = 1 + sum(1 for c in _later_capacities if c > 0)
+                        _even_share = math.ceil(_current_excess / _n_remaining)
+                        # Later messages can shed at most their capacity; this
+                        # message must absorb whatever they cannot, so that
+                        # this single forward pass reaches the target whenever
+                        # that is possible at all.
+                        _later_capacity = sum(c for c in _later_capacities if c > 0)
+                        _reduction = max(_even_share, _current_excess - _later_capacity)
+                        # Extra 2-token slack: re-encoding truncated content
+                        # plus the appended warning can merge/split tokens at
+                        # the boundary, so aim slightly below the target to
+                        # keep the achieved reduction from falling short.
+                        _keep_tokens = max(
+                            _min_keep_tokens,
+                            _msg_tokens - _reduction - _warning_tokens - 2,
+                        )
                         # compress the msg at idx `msg_idx_to_compress`
                         hist[msg_idx_to_compress] = self.truncate_message(
                             msg_idx_to_compress,
-                            tokens=30,
-                            warning="... [Contents truncated!]",
+                            tokens=_keep_tokens,
+                            warning=_truncation_warning,
                         )
                         msg_idx_to_compress += 1
 

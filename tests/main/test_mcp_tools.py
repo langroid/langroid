@@ -1520,6 +1520,131 @@ def test_tool_model_from_mcp_tool_handles_malformed_enum() -> None:
     assert tool_model(bad_enum=5).bad_enum == 5
 
 
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        " ",
+        "two words",
+        "hyphen-name",
+        "dot.name",
+        "caf\u00e9",
+        "\u5de5\u5177",
+        1,
+        True,
+        ["prefix"],
+    ],
+)
+def test_fastmcp_client_rejects_invalid_tool_name_prefix(prefix: Any) -> None:
+    """Prefixes must be non-empty ASCII identifier-safe strings."""
+    with pytest.raises(ValueError) as exc_info:
+        FastMCPClient(mcp_server(), tool_name_prefix=prefix)
+
+    message = str(exc_info.value)
+    assert "tool_name_prefix" in message
+    assert "[a-zA-Z0-9_]+" in message
+
+
+@pytest.mark.parametrize(
+    ("prefix", "expected_request"),
+    [("A", "A__lookup"), ("prefix_1", "prefix_1__lookup"), ("_", "___lookup")],
+)
+def test_fastmcp_client_accepts_valid_tool_name_prefix(
+    prefix: str,
+    expected_request: str,
+) -> None:
+    """Every allowed ASCII prefix character contributes to the request name."""
+    client = FastMCPClient(mcp_server(), tool_name_prefix=prefix)
+    tool = Tool(name="lookup", description="Lookup", inputSchema={})
+
+    tool_model = client.tool_model_from_mcp_tool(tool)
+
+    assert tool_model.default_value("request") == expected_request
+
+
+@pytest.mark.asyncio
+async def test_namespaced_tools_avoid_cross_server_name_collisions() -> None:
+    """Namespaced tools with the same server name remain independently usable."""
+    weather_server = FastMCP("WeatherServer")
+    inventory_server = FastMCP("InventoryServer")
+
+    @weather_server.tool(name="lookup")
+    def weather_lookup(item: str) -> str:
+        return f"weather:{item}"
+
+    @inventory_server.tool(name="lookup")
+    def inventory_lookup(item: str) -> str:
+        return f"inventory:{item}"
+
+    weather_tools = await get_tools_async(
+        weather_server,
+        tool_name_prefix="weather",
+    )
+    inventory_tools = await get_tools_async(
+        inventory_server,
+        tool_name_prefix="inventory",
+    )
+    weather_tool = weather_tools[0]
+    inventory_tool = inventory_tools[0]
+
+    assert weather_tool.default_value("request") == "weather__lookup"
+    assert inventory_tool.default_value("request") == "inventory__lookup"
+
+    agent = lr.ChatAgent(lr.ChatAgentConfig(llm=None))
+    agent.enable_message([weather_tool, inventory_tool])
+    assert set(agent.llm_tools_map) >= {
+        "weather__lookup",
+        "inventory__lookup",
+    }
+
+    weather_result = await weather_tool(item="Paris").handle_async()
+    inventory_result = await inventory_tool(item="sprocket").handle_async()
+    assert weather_result == "weather:Paris"
+    assert inventory_result == "inventory:sprocket"
+
+
+@pytest.mark.asyncio
+async def test_namespaced_dispatch_uses_original_name_on_persistent_client() -> None:
+    """A connected client dispatches the unprefixed name to its MCP server."""
+    server = FastMCP("PersistentServer")
+    received_values: list[str] = []
+
+    @server.tool(name="record")
+    def record_value(value: str) -> str:
+        received_values.append(value)
+        return f"recorded:{value}"
+
+    async with FastMCPClient(
+        server,
+        persist_connection=True,
+        tool_name_prefix="audit",
+    ) as client:
+        assert client.client is not None
+        tool = await client.get_tool_async("record")
+        assert tool.default_value("request") == "audit__record"
+
+        result = await tool(value="payload").handle_async()
+
+    assert result == "recorded:payload"
+    assert received_values == ["payload"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_kwargs",
+    [{}, {"tool_name_prefix": None}],
+    ids=["omitted", "explicit-none"],
+)
+async def test_mcp_tool_names_remain_unchanged_without_prefix(
+    tool_kwargs: dict[str, Any],
+) -> None:
+    """An omitted or ``None`` namespace preserves the public tool name."""
+    tools = await get_tools_async(mcp_server(), **tool_kwargs)
+    requests = {tool.default_value("request") for tool in tools}
+
+    assert "get_alerts" in requests
+
+
 def test_tool_model_from_mcp_tool_maps_one_of_to_union() -> None:
     """A oneOf schema should produce a union whose members both validate."""
     from typing import Union, get_args, get_origin

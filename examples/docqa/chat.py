@@ -165,6 +165,11 @@ def main(
             config.vecdb = lr.vector_store.PostgresDBConfig(
                 embedding=embed_cfg, cloud=True
             )
+        case "milvus" | "milvusdb":
+            config.vecdb = lr.vector_store.MilvusDBConfig(
+                collection_name="doc_chat_milvus",
+                embedding=embed_cfg,
+            )
 
     set_global(
         Settings(

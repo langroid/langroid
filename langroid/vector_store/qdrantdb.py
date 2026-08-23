@@ -61,7 +61,8 @@ class QdrantDBConfig(VectorStoreConfig):
 
 
 class QdrantDB(VectorStore):
-    def __init__(self, config: QdrantDBConfig = QdrantDBConfig()):
+    def __init__(self, config: QdrantDBConfig | None = None):
+        config = config if config is not None else QdrantDBConfig()
         super().__init__(config)
         self.config: QdrantDBConfig = config
         from qdrant_client import QdrantClient
@@ -78,7 +79,7 @@ class QdrantDB(VectorStore):
                     """
                 )
 
-            self.sparse_tokenizer = AutoTokenizer.from_pretrained(
+            self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
                 self.config.sparse_embedding_model
             )
             self.sparse_model = AutoModelForMaskedLM.from_pretrained(

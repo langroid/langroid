@@ -3,6 +3,7 @@ import datetime
 import inspect
 import logging
 import os
+import re
 from base64 import b64decode
 from io import BytesIO
 from typing import (
@@ -94,11 +95,15 @@ class FastMCPClient:
         log_handler: LoggingFnT | None = None,
         message_handler: MessageHandlerFnT | None = None,
         read_timeout_seconds: datetime.timedelta | None = None,
+        tool_name_prefix: str | None = None,
     ) -> None:
         """Initialize the FastMCPClient.
 
         Args:
             server: FastMCP server or path to such a server
+            tool_name_prefix: Optional namespace prepended to generated Langroid
+                tool names as ``<prefix>__<server-tool-name>``. Calls to the MCP
+                server continue to use its original tool name.
         """
         self.server = server
         self.client = None
@@ -117,10 +122,18 @@ class FastMCPClient:
                 self.read_timeout_seconds = None
         else:
             self.read_timeout_seconds = read_timeout_seconds
+        if tool_name_prefix is not None and (
+            not isinstance(tool_name_prefix, str)
+            or re.fullmatch(r"[a-zA-Z0-9_]+", tool_name_prefix) is None
+        ):
+            raise ValueError(
+                "tool_name_prefix must fully match the ASCII pattern " "[a-zA-Z0-9_]+"
+            )
         self.persist_connection = persist_connection
         self.forward_text_resources = forward_text_resources
         self.forward_blob_resources = forward_blob_resources
         self.forward_images = forward_images
+        self.tool_name_prefix = tool_name_prefix
 
     async def __aenter__(self) -> "FastMCPClient":
         """Enter the async context manager and connect inner client.
@@ -492,9 +505,14 @@ class FastMCPClient:
         Returns:
             A dynamically created Langroid ToolMessage subclass for `target`.
         """
-        tool_name = getattr(target, "name", None)
-        if not isinstance(tool_name, str) or tool_name == "":
+        mcp_tool_name = getattr(target, "name", None)
+        if not isinstance(mcp_tool_name, str) or mcp_tool_name == "":
             raise ValueError(f"Invalid MCP tool name for tool {target!r}")
+        tool_name = (
+            f"{self.tool_name_prefix}__{mcp_tool_name}"
+            if self.tool_name_prefix is not None
+            else mcp_tool_name
+        )
 
         input_schema = getattr(target, "inputSchema", None)
         schema = input_schema if isinstance(input_schema, dict) else {}
@@ -579,6 +597,7 @@ class FastMCPClient:
 
         tool_model._client_config = client_config  # type: ignore [attr-defined]
         tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
+        tool_model._mcp_tool_name = mcp_tool_name  # type: ignore[attr-defined]
 
         # 2) define an arg-free call_tool_async()
         async def call_tool_async(itself: ToolMessage) -> Any:
@@ -622,11 +641,17 @@ class FastMCPClient:
                 if not self.client:
                     await self.connect()
 
-                return await self.call_mcp_tool(itself.request, payload)
+                return await self.call_mcp_tool(
+                    itself.__class__._mcp_tool_name,  # type: ignore[attr-defined]
+                    payload,
+                )
 
             # open a fresh client, call the tool, then close
             async with FastMCPClient(**client_cfg) as client:  # type: ignore
-                return await client.call_mcp_tool(itself.request, payload)
+                return await client.call_mcp_tool(
+                    itself.__class__._mcp_tool_name,  # type: ignore[attr-defined]
+                    payload,
+                )
 
         tool_model.call_tool_async = call_tool_async  # type: ignore
 

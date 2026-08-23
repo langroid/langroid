@@ -122,6 +122,7 @@ nav:
       - Weaviate: notes/weaviate.md
       - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
       - PGVector: notes/pgvector.md
+      - Milvus: notes/milvus.md
       - Pinecone: notes/pinecone.md
       - Tavily Search Tool: notes/tavily_search.md
       - Seltz Search Tool: notes/seltz_search.md
@@ -145,6 +146,8 @@ nav:
       - Cross-Encoder Reranking: notes/cross-encoder.md
       - Task Logs: notes/html-logger.md
       - Pydantic v2 Migration: notes/pydantic-v2-migration.md
+      - Markdown, HTML Parsing: notes/markdown-html-parsing.md
+      - Context-Overflow Handling: notes/context-overflow.md
       - Batch Processing: notes/batch-processing.md
 
   - Examples:

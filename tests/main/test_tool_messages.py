@@ -2114,6 +2114,78 @@ def test_enable_message_validates_arguments(test_settings: Settings):
     assert "tool3" in agent.llm_tools_usable
 
 
+def test_enable_message_rejects_distinct_classes_with_same_request() -> None:
+    """Different tool classes cannot silently replace the same request name."""
+
+    class FirstCollisionTool(ToolMessage):
+        request: str = "shared_request"
+        purpose: str = "First tool"
+
+    class SecondCollisionTool(ToolMessage):
+        request: str = "shared_request"
+        purpose: str = "Second tool"
+
+    class DerivedCollisionTool(FirstCollisionTool):
+        purpose: str = "Derived tool"
+
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    agent.enable_message(FirstCollisionTool)
+    agent.enable_message(FirstCollisionTool)
+
+    with pytest.raises(ValueError) as exc_info:
+        agent.enable_message(SecondCollisionTool)
+
+    message = str(exc_info.value)
+    assert "shared_request" in message
+    assert "FirstCollisionTool" in message
+    assert "SecondCollisionTool" in message
+    assert agent.llm_tools_map["shared_request"] is FirstCollisionTool
+
+    derived_agent = ChatAgent(ChatAgentConfig(llm=None))
+    derived_agent.enable_message(DerivedCollisionTool)
+    with pytest.raises(ValueError, match="shared_request"):
+        derived_agent.enable_message(FirstCollisionTool)
+    assert derived_agent.llm_tools_map["shared_request"] is DerivedCollisionTool
+
+    recipient_wrapper = FirstCollisionTool.require_recipient()
+
+    class DerivedRecipientCollisionTool(recipient_wrapper):  # type: ignore
+        purpose: str = "Derived recipient tool"
+
+    recipient_agent = ChatAgent(ChatAgentConfig(llm=None))
+    recipient_agent.enable_message(recipient_wrapper)
+    with pytest.raises(ValueError, match="shared_request"):
+        recipient_agent.enable_message(DerivedRecipientCollisionTool)
+    assert recipient_agent.llm_tools_map["shared_request"] is recipient_wrapper
+
+
+def test_enable_message_rejects_recipient_wrapper_subclass_origin() -> None:
+    """Recipient wrapping must preserve a subclass as a distinct tool origin."""
+
+    class OriginalTool(ToolMessage):
+        request: str = "recipient_collision"
+        purpose: str = "Original tool"
+
+    recipient_wrapper = OriginalTool.require_recipient()
+
+    class RecipientWrapperSubclass(recipient_wrapper):  # type: ignore
+        purpose: str = "Distinct recipient-wrapper subclass"
+
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    agent.enable_message(recipient_wrapper)
+
+    with pytest.raises(
+        ValueError,
+        match="Tool request name 'recipient_collision' is already registered",
+    ):
+        agent.enable_message(
+            RecipientWrapperSubclass,
+            require_recipient=True,
+        )
+
+    assert agent.llm_tools_map["recipient_collision"] is recipient_wrapper
+
+
 def test_multi_agent_tool_caching(test_settings: Settings):
     """
     Test that tool message caching is agent-specific.
