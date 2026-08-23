@@ -74,6 +74,84 @@ def test_find_match_with_surrounding_words(
     assert all(e in results[0][0].content for e in expected)
 
 
+@pytest.fixture
+def threshold_docs():
+    # For the query "quantum entanglement" (see tests below), these docs get
+    # fuzzy partial-ratio scores of ~100 ("high"), ~42 ("low"), ~15 ("noise"):
+    # "high" contains the query verbatim; the others match only weakly.
+    return [
+        Document(
+            content="Quantum entanglement is a physical phenomenon.",
+            metadata=DocMetaData(id="high"),
+        ),
+        Document(
+            content="Bananas are rich in potassium and easy to digest.",
+            metadata=DocMetaData(id="low"),
+        ),
+        Document(content="zzz qqq xxx vvv www", metadata=DocMetaData(id="noise")),
+    ]
+
+
+def test_fuzzy_default_threshold_excludes_low_scores(threshold_docs):
+    """Default score_threshold=50 preserves the legacy `score > 50` filter."""
+    query = "quantum entanglement"
+    low_docs = threshold_docs[1:]
+    # sanity check: these docs DO match, with scores in the (0, 50] range...
+    weak_matches = find_fuzzy_matches_in_docs(
+        query, low_docs, low_docs, k=2, score_threshold=0.0
+    )
+    assert {d.metadata.id for d, _ in weak_matches} == {"low", "noise"}
+    assert all(0 < score <= 50 for _, score in weak_matches)
+    # ... so with the default threshold they must all be excluded,
+    # exactly as with the previously hard-coded `score > 50` filter
+    assert find_fuzzy_matches_in_docs(query, low_docs, low_docs, k=2) == []
+
+
+@pytest.mark.parametrize(
+    "score_threshold, expected_ids",
+    [
+        (None, {"high"}),  # default 50.0 = legacy `score > 50` behavior
+        (0.0, {"high", "low", "noise"}),  # low threshold admits weak matches
+        (30.0, {"high", "low"}),
+        (100.0, set()),  # strict comparison: even a perfect 100 is excluded
+    ],
+)
+def test_fuzzy_score_threshold_filtering(threshold_docs, score_threshold, expected_ids):
+    query = "quantum entanglement"
+    kwargs = {} if score_threshold is None else {"score_threshold": score_threshold}
+    results = find_fuzzy_matches_in_docs(
+        query, threshold_docs, threshold_docs, k=3, **kwargs
+    )
+    assert {d.metadata.id for d, _ in results} == expected_ids
+
+
+@pytest.mark.parametrize(
+    "bad_threshold",
+    [
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+        None,  # runtime null must not raise TypeError
+        "not-a-number",
+    ],
+)
+def test_fuzzy_non_finite_threshold_yields_no_matches(threshold_docs, bad_threshold):
+    """Non-finite/invalid thresholds must yield NO matches (and not crash).
+
+    In particular `-inf` must NOT keep every candidate, and a runtime
+    `None` must not raise a TypeError.
+    """
+    query = "quantum entanglement"
+    results = find_fuzzy_matches_in_docs(
+        query,
+        threshold_docs,
+        threshold_docs,
+        k=3,
+        score_threshold=bad_threshold,
+    )
+    assert results == []
+
+
 def test_empty_docs():
     docs = []
     docs_clean = []

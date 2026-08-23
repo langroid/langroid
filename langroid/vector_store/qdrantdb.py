@@ -61,7 +61,8 @@ class QdrantDBConfig(VectorStoreConfig):
 
 
 class QdrantDB(VectorStore):
-    def __init__(self, config: QdrantDBConfig = QdrantDBConfig()):
+    def __init__(self, config: QdrantDBConfig | None = None):
+        config = config if config is not None else QdrantDBConfig()
         super().__init__(config)
         self.config: QdrantDBConfig = config
         from qdrant_client import QdrantClient

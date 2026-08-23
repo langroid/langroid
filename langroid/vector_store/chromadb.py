@@ -28,7 +28,8 @@ class ChromaDBConfig(VectorStoreConfig):
 
 
 class ChromaDB(VectorStore):
-    def __init__(self, config: ChromaDBConfig = ChromaDBConfig()):
+    def __init__(self, config: ChromaDBConfig | None = None):
+        config = config if config is not None else ChromaDBConfig()
         super().__init__(config)
         try:
             import chromadb
