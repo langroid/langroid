@@ -13,7 +13,7 @@ No live vector-store connections are needed: config construction only.
 
 import logging
 import os
-from typing import Type
+from typing import List, Type
 
 import pytest
 from pydantic import ValidationError
@@ -167,21 +167,39 @@ def test_service_link_port_is_ignored_with_warning(
     config_cls: Type[VectorStoreConfig],
     env_var: str,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A k8s/docker service-link `tcp://...` port is ignored with a warning.
 
     With `enableServiceLinks` (on by default in Kubernetes), a service
     named e.g. `qdrant` injects `QDRANT_PORT=tcp://10.0.0.8:6333` into
     every pod; construction must succeed with the default port.
+
+    Warnings are captured with a plain handler (not caplog) because CI
+    disables pytest's logging plugin (`PYTEST_ADDOPTS="-p no:logging"`).
     """
     monkeypatch.setenv(env_var, "tcp://10.0.0.8:6333")
     default_port = config_cls.model_fields["port"].default
-    with caplog.at_level(logging.WARNING, logger="langroid.vector_store.base"):
+
+    records: List[logging.LogRecord] = []
+
+    class Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    logger = logging.getLogger("langroid.vector_store.base")
+    handler = Collector(level=logging.WARNING)
+    old_level = logger.level
+    logger.addHandler(handler)
+    logger.setLevel(logging.WARNING)
+    try:
         config = config_cls()
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(old_level)
     assert config.port == default_port
-    assert "tcp://10.0.0.8:6333" in caplog.text
-    assert "ignor" in caplog.text.lower()
+    text = "\n".join(r.getMessage() for r in records)
+    assert "tcp://10.0.0.8:6333" in text
+    assert "ignor" in text.lower()
 
 
 def test_non_service_link_bad_port_still_fails(
