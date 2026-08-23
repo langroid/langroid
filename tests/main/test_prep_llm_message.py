@@ -238,7 +238,7 @@ def test_chat_num_tokens_counts_attachment_payload(agent):
 
 def test_attachment_payload_reduces_output_length():
     """Test preflight shrinks output length when attachments consume context."""
-    context_length = 1000
+    context_length = 1100
     max_output_tokens = 500
     min_output_tokens = 50
     config = ChatAgentConfig(
