@@ -16825,422 +16825,6 @@ image_url_dict = {}
 # For non-image files
 </file>
 
-<file path="langroid/parsing/md_parser.py">
-HEADER_CONTEXT_SEP = "\n...\n"
-⋮----
-# Pydantic model definition for a node in the markdown hierarchy
-class Node(BaseModel)
-⋮----
-content: str  # The text of the header or content block
-path: List[str]  # List of header texts from root to this node
-children: List["Node"] = Field(default_factory=list)
-# Nested children nodes
-⋮----
-def __repr__(self) -> str
-⋮----
-# for debug printing
-⋮----
-# Pydantic v1 requires forward references for self-referencing models
-# Forward references will be resolved with the update_forward_refs call below.
-⋮----
-# Resolve forward references for Node (required for recursive models in Pydantic)
-⋮----
-def _cleanup_text(text: str) -> str
-⋮----
-# 1) Convert alternative newline representations (any CRLF or CR) to a single '\n'
-text = text.replace("\r\n", "\n").replace("\r", "\n")
-⋮----
-# 2) Replace 3 or more consecutive newlines with exactly 2 newlines
-text = re.sub(r"\n{3,}", "\n\n", text)
-⋮----
-HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
-⋮----
-def parse_markdown_headings(md_text: str) -> List[Node]
-⋮----
-"""
-    Parse `md_text` to extract a heading-based hierarchy, skipping lines
-    that look like headings inside fenced code blocks. Each heading node
-    will have a child node for the text that appears between this heading
-    and the next heading.
-
-    Returns a list of top-level Node objects.
-
-    Example structure:
-        Node(content='# Chapter 1', path=['# Chapter 1'], children=[
-            Node(content='Intro paragraph...', path=['# Chapter 1'], children=[]),
-            Node(content='## Section 1.1', path=['# Chapter 1', '## Section 1.1'],
-                 children=[
-                  Node(content='Some text in Section 1.1.', path=[...], children=[])
-            ]),
-            ...
-        ])
-    """
-# If doc is empty or only whitespace, return []
-⋮----
-lines = md_text.splitlines(True)  # keep the newline characters
-⋮----
-# We'll scan line-by-line, track code-fence status, collect headings
-headings = []  # list of (level, heading_line, start_line_idx)
-in_code_fence = False
-fence_marker = None  # track which triple-backtick or ~~~ opened
-⋮----
-# Check if we're toggling in/out of a fenced code block
-# Typically triple backtick or triple tilde: ``` or ~~~
-# We do a *loose* check: a line that starts with at least 3 backticks or tildes
-# ignoring trailing text. You can refine as needed.
-fence_match = re.match(r"^(```+|~~~+)", line.strip())
-⋮----
-# If we are not in a fence, we enter one;
-# If we are in a fence, we exit if the marker matches
-marker = fence_match.group(1)  # e.g. "```" or "~~~~"
-⋮----
-in_code_fence = True
-fence_marker = marker[:3]  # store triple backtick or triple tilde
-⋮----
-# only close if the fence_marker matches
-# E.g. if we opened with ```, we close only on ```
-⋮----
-fence_marker = None
-⋮----
-# Check if the line is a heading
-m = HEADING_RE.match(line)
-⋮----
-hashes = m.group(1)  # e.g. "##"
-heading_text = line.rstrip("\n")  # entire line, exact
-level = len(hashes)
-⋮----
-# If no headings found, return a single root node with the entire text
-⋮----
-# Add a sentinel heading at the end-of-file, so we can slice the last block
-# after the final real heading. We'll use level=0 so it doesn't form a real node.
-⋮----
-# Now we build "heading blocks" with
-# (level, heading_text, start_line, end_line, content)
-heading_blocks = []
-⋮----
-# Content is everything after the heading line until the next heading
-# i.e. lines[start_i+1 : next_start_i]
-block_content_lines = lines[start_i + 1 : next_start_i]
-block_content = "".join(block_content_lines).rstrip("\n")
-⋮----
-# (We skip the sentinel heading in the final result.)
-⋮----
-# We'll now convert heading_blocks into a tree using a stack-based approach
-root_nodes: List[Node] = []
-stack: List[Node] = []
-header_path: List[str] = []
-⋮----
-level = hb["level"]  # type: ignore
-heading_txt = hb["heading_text"]
-content_txt = hb["content"]
-⋮----
-# --- Pop stack first! ---
-⋮----
-# build new path, create a node for the heading
-new_path = header_path + [heading_txt]
-heading_node = Node(
-⋮----
-content=heading_txt, path=new_path, children=[]  # type: ignore
-⋮----
-# Possibly create a content child for whatever lines were below the heading
-if content_txt.strip():  # type: ignore
-content_node = Node(
-⋮----
-content=content_txt, path=new_path, children=[]  # type: ignore
-⋮----
-# Attach heading_node to the stack top or as a root
-⋮----
-header_path.append(heading_txt)  # type: ignore
-⋮----
-# The Chunk model for the final enriched chunks.
-class Chunk(BaseModel)
-⋮----
-text: str  # The chunk text (which includes header context)
-path: List[str]  # The header path (list of header strings)
-token_count: int
-⋮----
-# Configuration for chunking
-class MarkdownChunkConfig(BaseModel)
-⋮----
-chunk_size: int = 200  # desired chunk size in tokens
-overlap_tokens: int = 30  # number of tokens to overlap between chunks
-variation_percent: float = 0.3  # allowed variation
-rollup: bool = True  # whether to roll up chunks
-header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
-⋮----
-@field_validator("chunk_size", mode="before")
-@classmethod
-    def convert_chunk_size_to_int(cls, v: Any) -> int
-⋮----
-"""Convert chunk_size to int, maintaining backward compatibility
-        with Pydantic V1.
-        """
-⋮----
-# A simple tokenizer that counts tokens as whitespace-separated words.
-def count_words(text: str) -> int
-⋮----
-def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]
-⋮----
-"""
-    Enhanced chunker that:
-      1. Splits by paragraph (top-level).
-      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
-      3. Allows going over the upper bound rather than splitting a single sentence.
-      4. Overlaps only once between consecutive chunks.
-      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
-      6. Preserves \n\n (and other original spacing) as best as possible.
-    """
-⋮----
-# -------------------------------------------------
-# Helpers
-⋮----
-def count_words(text_block: str) -> int
-⋮----
-lower_bound = int(config.chunk_size * (1 - config.variation_percent))
-upper_bound = int(config.chunk_size * (1 + config.variation_percent))
-⋮----
-# Quick check: if the entire text is short enough, return as-is.
-⋮----
-# Split into paragraphs, preserving \n\n if it's there.
-raw_paragraphs = text.split("\n\n")
-paragraphs = []
-⋮----
-# Re-append the double-newline if not the last piece
-⋮----
-# Split paragraphs into "segments": each segment is either
-# a full short paragraph or (if too big) a list of sentences.
-sentence_regex = r"(?<=[.!?])\s+"
-⋮----
-def split_paragraph_into_sentences(paragraph: str) -> List[str]
-⋮----
-"""
-        Return a list of sentence-sized segments. If a single sentence
-        is bigger than upper_bound, do a word-level fallback.
-        """
-⋮----
-sentences = re.split(sentence_regex, paragraph)
-# Clean up stray whitespace
-sentences = [s.strip() for s in sentences if s.strip()]
-⋮----
-expanded = []
-⋮----
-def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]
-⋮----
-"""
-        As a last resort, split extremely large 'sentence' by words.
-        """
-words = long_text.split()
-pieces = []
-start = 0
-⋮----
-end = start + cfg.chunk_size
-chunk_words = words[start:end]
-⋮----
-start = end
-⋮----
-# Build a list of segments
-segments = []
-⋮----
-# split into sentences
-segs = split_paragraph_into_sentences(para)
-⋮----
-# Accumulate segments into final chunks
-⋮----
-chunks = []
-current_chunk = ""
-current_count = 0
-⋮----
-def flush_chunk() -> None
-⋮----
-trimmed = current_chunk.strip()
-⋮----
-def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int
-⋮----
-"""Sum of word counts from current_index onward."""
-⋮----
-seg_count = count_words(seg)
-⋮----
-# If this single segment alone exceeds upper_bound, we accept it as a big chunk.
-⋮----
-# If we have something in the current chunk, flush it first
-⋮----
-# Then store this large segment as its own chunk
-⋮----
-# Attempt to add seg to the current chunk
-⋮----
-# We would normally flush here, but let's see if we are nearing the end:
-# If the remaining tokens (including this one) is < lower_bound,
-# we just add it anyway to avoid creating a tiny final chunk.
-future_tokens = remaining_tokens_in_future(segments, i)
-⋮----
-# Just add it (allowing to exceed upper bound)
-⋮----
-# Add space or preserve newline carefully
-# We'll do a basic approach here:
-⋮----
-current_chunk += seg  # preserve double new line
-⋮----
-current_count = count_words(current_chunk)
-⋮----
-current_chunk = seg
-current_count = seg_count
-⋮----
-# Normal flush
-old_chunk = current_chunk
-⋮----
-# Overlap from old_chunk
-overlap_tokens_list = (
-overlap_str = (
-⋮----
-current_chunk = overlap_str + " " + seg
-⋮----
-# Just accumulate
-⋮----
-# Flush leftover
-⋮----
-# Return non-empty
-⋮----
-# Function to process a Node and produce enriched chunks.
-def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]
-⋮----
-chunks: List[Chunk] = []
-⋮----
-# Check if this is a header-only node.
-is_header_only = node.path and node.content.strip() == node.path[-1]
-⋮----
-# Only generate a chunk for the node if it has non-header content,
-# or if it’s header-only AND has no children (i.e., it's a leaf header).
-⋮----
-header_prefix = (
-content_chunks = recursive_chunk(node.content, config)
-⋮----
-full_text = header_prefix + chunk_text
-⋮----
-# Process children nodes recursively.
-⋮----
-child_chunks = chunk_node(child, config)
-⋮----
-# Function to process an entire tree of Nodes.
-def chunk_tree(root_nodes: List[Node], config: MarkdownChunkConfig) -> List[Chunk]
-⋮----
-all_chunks: List[Chunk] = []
-⋮----
-def aggregate_content(node: Node) -> str
-⋮----
-"""
-    Recursively aggregate the content from a node and all its descendants,
-    excluding header-only nodes to avoid duplication.
-    """
-parts = []
-⋮----
-# Skip header-only nodes in content aggregation
-is_header_only = node.path and node.content.strip() == node.path[-1].strip()
-⋮----
-# Recurse on children
-⋮----
-child_text = aggregate_content(child)
-⋮----
-def flatten_tree(node: Node, level: int = 0) -> str
-⋮----
-"""
-    Flatten a node and its children back into proper markdown text.
-
-    Args:
-        node: The node to flatten
-        level: The current heading level (depth in the tree)
-
-    Returns:
-        str: Properly formatted markdown text
-    """
-result = ""
-⋮----
-# Check if this is a header node (content matches last item in path)
-is_header = node.path and node.content.strip().startswith("#")
-⋮----
-# For header nodes, don't duplicate the hash marks
-⋮----
-result = node.content.strip() + "\n\n"
-⋮----
-# Process all children
-⋮----
-"""
-    Recursively produce rollup chunks from `node`, passing down a `prefix`
-    (e.g., parent heading(s)).
-
-    - If a node is heading-only (content == last path item) and has children,
-      we skip creating a chunk for that node alone and instead add that heading
-      to the `prefix` for child nodes.
-    - If a node is NOT heading-only OR has no children, we try to fit all of its
-      flattened content into a single chunk. If it's too large, we chunk it.
-    - We pass the (possibly updated) prefix down to children, so each child's
-      chunk is enriched exactly once with all ancestor headings.
-    """
-⋮----
-# Check if the node is "heading-only" and has children
-# e.g. node.content=="# Chapter 1" and node.path[-1]=="# Chapter 1"
-is_heading_only_with_children = (
-⋮----
-# We do NOT create a chunk for this node alone.
-# Instead, we add its heading to the prefix for child chunks.
-new_prefix = prefix + node.content.strip()
-⋮----
-sep = "\n\n" if i == 0 else config.header_context_sep
-⋮----
-# If not heading-only-with-children, we handle this node's own content:
-# Flatten the entire node (including sub-children) in standard Markdown form.
-flattened = flatten_tree(node, level=len(node.path))
-flattened_with_prefix = prefix + flattened
-total_tokens = count_words(flattened_with_prefix)
-⋮----
-# Check if we can roll up everything (node + children) in a single chunk
-⋮----
-# One single chunk for the entire subtree
-⋮----
-# It's too large overall. We'll chunk the node's own content first (if any),
-# then recurse on children.
-node_content = node.content.strip()
-⋮----
-# If we have actual content that is not just a heading, chunk it with the prefix
-# (like "preamble" text).
-# Note: if this node is heading-only but has NO children,
-# it will still land here
-# (because is_heading_only_with_children was False due to zero children).
-⋮----
-# The node is actual content (not purely heading).
-# We'll chunk it in paragraphs/sentences with the prefix.
-content_chunks = recursive_chunk(node_content, config)
-⋮----
-block_with_prefix = prefix + text_block
-⋮----
-# Now recurse on children, passing the same prefix so they get it too
-⋮----
-# Create a dummy root node that contains everything.
-dummy_root = Node(content="", path=[], children=root_nodes)
-⋮----
-# Now process just the dummy root node with an empty prefix.
-chunks = rollup_chunk_node(dummy_root, config, prefix="")
-⋮----
-def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]
-⋮----
-tree = parse_markdown_headings(markdown_text)
-⋮----
-# Pure text, no hierarchy, so just use recursive_chunk
-text_chunks = recursive_chunk(markdown_text, config)
-⋮----
-chunks = rollup_chunk_tree(tree, config)
-⋮----
-chunks = chunk_tree(tree, config)
-⋮----
-# Example usage:
-markdown_text = """# Title
-# Set up chunking config with very large chunk size.
-# (you can adjust chunk_size, overlap_tokens, variation_percent)
-config = MarkdownChunkConfig(
-chunks = chunk_markdown(markdown_text, config)
-⋮----
-# with rollup_chunk_tree we get entire doc as 1 chunk
-</file>
-
 <file path="langroid/parsing/para_sentence_split.py">
 def remove_extra_whitespace(s: str) -> str
 ⋮----
@@ -27976,6 +27560,417 @@ openai.UnprocessableEntityError,  # 422
 async def wrapper(*args: List[Any], **kwargs: Dict[Any, Any]) -> Any
 ⋮----
 result = await func(*args, **kwargs)
+</file>
+
+<file path="langroid/parsing/md_parser.py">
+HEADER_CONTEXT_SEP = "\n...\n"
+⋮----
+# Pydantic model definition for a node in the markdown hierarchy
+class Node(BaseModel)
+⋮----
+content: str  # The text of the header or content block
+path: List[str]  # List of header texts from root to this node
+children: List["Node"] = Field(default_factory=list)
+# Nested children nodes
+⋮----
+def __repr__(self) -> str
+⋮----
+# for debug printing
+⋮----
+# Pydantic v1 requires forward references for self-referencing models
+# Forward references will be resolved with the update_forward_refs call below.
+⋮----
+# Resolve forward references for Node (required for recursive models in Pydantic)
+⋮----
+def _cleanup_text(text: str) -> str
+⋮----
+# 1) Convert alternative newline representations (any CRLF or CR) to a single '\n'
+text = text.replace("\r\n", "\n").replace("\r", "\n")
+⋮----
+# 2) Replace 3 or more consecutive newlines with exactly 2 newlines
+text = re.sub(r"\n{3,}", "\n\n", text)
+⋮----
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+⋮----
+def parse_markdown_headings(md_text: str) -> List[Node]
+⋮----
+"""
+    Parse `md_text` to extract a heading-based hierarchy, skipping lines
+    that look like headings inside fenced code blocks. Each heading node
+    will have a child node for the text that appears between this heading
+    and the next heading.
+
+    Returns a list of top-level Node objects.
+
+    Example structure:
+        Node(content='# Chapter 1', path=['# Chapter 1'], children=[
+            Node(content='Intro paragraph...', path=['# Chapter 1'], children=[]),
+            Node(content='## Section 1.1', path=['# Chapter 1', '## Section 1.1'],
+                 children=[
+                  Node(content='Some text in Section 1.1.', path=[...], children=[])
+            ]),
+            ...
+        ])
+    """
+# If doc is empty or only whitespace, return []
+⋮----
+lines = md_text.splitlines(True)  # keep the newline characters
+⋮----
+# We'll scan line-by-line, track code-fence status, collect headings
+headings = []  # list of (level, heading_line, start_line_idx)
+in_code_fence = False
+fence_marker = None  # track which triple-backtick or ~~~ opened
+⋮----
+# Opening fences may be followed by an info string.
+fence_match = re.match(r"^(```+|~~~+)", line.strip())
+⋮----
+marker = fence_match.group(1)  # e.g. "```" or "~~~~"
+in_code_fence = True
+fence_marker = marker
+⋮----
+# Closing fences contain only the opening character (plus optional
+# surrounding spaces or tabs) and are at least as long as the opener.
+closing_marker = line.rstrip("\r\n").strip(" \t")
+⋮----
+fence_marker = None
+⋮----
+# Check if the line is a heading
+m = HEADING_RE.match(line)
+⋮----
+hashes = m.group(1)  # e.g. "##"
+heading_text = line.rstrip("\n")  # entire line, exact
+level = len(hashes)
+⋮----
+# If no headings found, return a single root node with the entire text
+⋮----
+# Add a sentinel heading at the end-of-file, so we can slice the last block
+# after the final real heading. We'll use level=0 so it doesn't form a real node.
+⋮----
+# Now we build "heading blocks" with
+# (level, heading_text, start_line, end_line, content)
+heading_blocks = []
+⋮----
+# Content is everything after the heading line until the next heading
+# i.e. lines[start_i+1 : next_start_i]
+block_content_lines = lines[start_i + 1 : next_start_i]
+block_content = "".join(block_content_lines).rstrip("\n")
+⋮----
+# (We skip the sentinel heading in the final result.)
+⋮----
+# We'll now convert heading_blocks into a tree using a stack-based approach
+root_nodes: List[Node] = []
+stack: List[Node] = []
+header_path: List[str] = []
+⋮----
+level = hb["level"]  # type: ignore
+heading_txt = hb["heading_text"]
+content_txt = hb["content"]
+⋮----
+# --- Pop stack first! ---
+⋮----
+# build new path, create a node for the heading
+new_path = header_path + [heading_txt]
+heading_node = Node(
+⋮----
+content=heading_txt, path=new_path, children=[]  # type: ignore
+⋮----
+# Possibly create a content child for whatever lines were below the heading
+if content_txt.strip():  # type: ignore
+content_node = Node(
+⋮----
+content=content_txt, path=new_path, children=[]  # type: ignore
+⋮----
+# Attach heading_node to the stack top or as a root
+⋮----
+header_path.append(heading_txt)  # type: ignore
+⋮----
+# The Chunk model for the final enriched chunks.
+class Chunk(BaseModel)
+⋮----
+text: str  # The chunk text (which includes header context)
+path: List[str]  # The header path (list of header strings)
+token_count: int
+⋮----
+# Configuration for chunking
+class MarkdownChunkConfig(BaseModel)
+⋮----
+chunk_size: int = 200  # desired chunk size in tokens
+overlap_tokens: int = 30  # number of tokens to overlap between chunks
+variation_percent: float = 0.3  # allowed variation
+rollup: bool = True  # whether to roll up chunks
+header_context_sep: str = HEADER_CONTEXT_SEP  # separator for header context
+⋮----
+@field_validator("chunk_size", mode="before")
+@classmethod
+    def convert_chunk_size_to_int(cls, v: Any) -> int
+⋮----
+"""Convert chunk_size to int, maintaining backward compatibility
+        with Pydantic V1.
+        """
+⋮----
+# A simple tokenizer that counts tokens as whitespace-separated words.
+def count_words(text: str) -> int
+⋮----
+def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]
+⋮----
+"""
+    Enhanced chunker that:
+      1. Splits by paragraph (top-level).
+      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
+      3. Allows going over the upper bound rather than splitting a single sentence.
+      4. Overlaps only once between consecutive chunks.
+      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
+      6. Preserves \n\n (and other original spacing) as best as possible.
+    """
+⋮----
+# -------------------------------------------------
+# Helpers
+⋮----
+def count_words(text_block: str) -> int
+⋮----
+lower_bound = int(config.chunk_size * (1 - config.variation_percent))
+upper_bound = int(config.chunk_size * (1 + config.variation_percent))
+⋮----
+# Quick check: if the entire text is short enough, return as-is.
+⋮----
+# Split into paragraphs, preserving \n\n if it's there.
+raw_paragraphs = text.split("\n\n")
+paragraphs = []
+⋮----
+# Re-append the double-newline if not the last piece
+⋮----
+# Split paragraphs into "segments": each segment is either
+# a full short paragraph or (if too big) a list of sentences.
+sentence_regex = r"(?<=[.!?])\s+"
+⋮----
+def split_paragraph_into_sentences(paragraph: str) -> List[str]
+⋮----
+"""
+        Return a list of sentence-sized segments. If a single sentence
+        is bigger than upper_bound, do a word-level fallback.
+        """
+⋮----
+sentences = re.split(sentence_regex, paragraph)
+# Clean up stray whitespace
+sentences = [s.strip() for s in sentences if s.strip()]
+⋮----
+expanded = []
+⋮----
+def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]
+⋮----
+"""
+        As a last resort, split extremely large 'sentence' by words.
+        """
+words = long_text.split()
+pieces = []
+start = 0
+⋮----
+end = start + cfg.chunk_size
+chunk_words = words[start:end]
+⋮----
+start = end
+⋮----
+# Build a list of segments
+segments = []
+⋮----
+# split into sentences
+segs = split_paragraph_into_sentences(para)
+⋮----
+# Accumulate segments into final chunks
+⋮----
+chunks = []
+current_chunk = ""
+current_count = 0
+⋮----
+def flush_chunk() -> None
+⋮----
+trimmed = current_chunk.strip()
+⋮----
+def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int
+⋮----
+"""Sum of word counts from current_index onward."""
+⋮----
+seg_count = count_words(seg)
+⋮----
+# If this single segment alone exceeds upper_bound, we accept it as a big chunk.
+⋮----
+# If we have something in the current chunk, flush it first
+⋮----
+# Then store this large segment as its own chunk
+⋮----
+# Attempt to add seg to the current chunk
+⋮----
+# We would normally flush here, but let's see if we are nearing the end:
+# If the remaining tokens (including this one) is < lower_bound,
+# we just add it anyway to avoid creating a tiny final chunk.
+future_tokens = remaining_tokens_in_future(segments, i)
+⋮----
+# Just add it (allowing to exceed upper bound)
+⋮----
+# Add space or preserve newline carefully
+# We'll do a basic approach here:
+⋮----
+current_chunk += seg  # preserve double new line
+⋮----
+current_count = count_words(current_chunk)
+⋮----
+current_chunk = seg
+current_count = seg_count
+⋮----
+# Normal flush
+old_chunk = current_chunk
+⋮----
+# Overlap from old_chunk
+overlap_tokens_list = (
+overlap_str = (
+⋮----
+current_chunk = overlap_str + " " + seg
+⋮----
+# Just accumulate
+⋮----
+# Flush leftover
+⋮----
+# Return non-empty
+⋮----
+# Function to process a Node and produce enriched chunks.
+def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]
+⋮----
+chunks: List[Chunk] = []
+⋮----
+# Check if this is a header-only node.
+is_header_only = node.path and node.content.strip() == node.path[-1]
+⋮----
+# Only generate a chunk for the node if it has non-header content,
+# or if it’s header-only AND has no children (i.e., it's a leaf header).
+⋮----
+header_prefix = (
+content_chunks = recursive_chunk(node.content, config)
+⋮----
+full_text = header_prefix + chunk_text
+⋮----
+# Process children nodes recursively.
+⋮----
+child_chunks = chunk_node(child, config)
+⋮----
+# Function to process an entire tree of Nodes.
+def chunk_tree(root_nodes: List[Node], config: MarkdownChunkConfig) -> List[Chunk]
+⋮----
+all_chunks: List[Chunk] = []
+⋮----
+def aggregate_content(node: Node) -> str
+⋮----
+"""
+    Recursively aggregate the content from a node and all its descendants,
+    excluding header-only nodes to avoid duplication.
+    """
+parts = []
+⋮----
+# Skip header-only nodes in content aggregation
+is_header_only = node.path and node.content.strip() == node.path[-1].strip()
+⋮----
+# Recurse on children
+⋮----
+child_text = aggregate_content(child)
+⋮----
+def flatten_tree(node: Node, level: int = 0) -> str
+⋮----
+"""
+    Flatten a node and its children back into proper markdown text.
+
+    Args:
+        node: The node to flatten
+        level: The current heading level (depth in the tree)
+
+    Returns:
+        str: Properly formatted markdown text
+    """
+result = ""
+⋮----
+# Check if this is a header node (content matches last item in path)
+is_header = node.path and node.content.strip().startswith("#")
+⋮----
+# For header nodes, don't duplicate the hash marks
+⋮----
+result = node.content.strip() + "\n\n"
+⋮----
+# Process all children
+⋮----
+"""
+    Recursively produce rollup chunks from `node`, passing down a `prefix`
+    (e.g., parent heading(s)).
+
+    - If a node is heading-only (content == last path item) and has children,
+      we skip creating a chunk for that node alone and instead add that heading
+      to the `prefix` for child nodes.
+    - If a node is NOT heading-only OR has no children, we try to fit all of its
+      flattened content into a single chunk. If it's too large, we chunk it.
+    - We pass the (possibly updated) prefix down to children, so each child's
+      chunk is enriched exactly once with all ancestor headings.
+    """
+⋮----
+# Check if the node is "heading-only" and has children
+# e.g. node.content=="# Chapter 1" and node.path[-1]=="# Chapter 1"
+is_heading_only_with_children = (
+⋮----
+# We do NOT create a chunk for this node alone.
+# Instead, we add its heading to the prefix for child chunks.
+new_prefix = prefix + node.content.strip()
+⋮----
+sep = "\n\n" if i == 0 else config.header_context_sep
+⋮----
+# If not heading-only-with-children, we handle this node's own content:
+# Flatten the entire node (including sub-children) in standard Markdown form.
+flattened = flatten_tree(node, level=len(node.path))
+flattened_with_prefix = prefix + flattened
+total_tokens = count_words(flattened_with_prefix)
+⋮----
+# Check if we can roll up everything (node + children) in a single chunk
+⋮----
+# One single chunk for the entire subtree
+⋮----
+# It's too large overall. We'll chunk the node's own content first (if any),
+# then recurse on children.
+node_content = node.content.strip()
+⋮----
+# If we have actual content that is not just a heading, chunk it with the prefix
+# (like "preamble" text).
+# Note: if this node is heading-only but has NO children,
+# it will still land here
+# (because is_heading_only_with_children was False due to zero children).
+⋮----
+# The node is actual content (not purely heading).
+# We'll chunk it in paragraphs/sentences with the prefix.
+content_chunks = recursive_chunk(node_content, config)
+⋮----
+block_with_prefix = prefix + text_block
+⋮----
+# Now recurse on children, passing the same prefix so they get it too
+⋮----
+# Create a dummy root node that contains everything.
+dummy_root = Node(content="", path=[], children=root_nodes)
+⋮----
+# Now process just the dummy root node with an empty prefix.
+chunks = rollup_chunk_node(dummy_root, config, prefix="")
+⋮----
+def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]
+⋮----
+tree = parse_markdown_headings(markdown_text)
+⋮----
+# Pure text, no hierarchy, so just use recursive_chunk
+text_chunks = recursive_chunk(markdown_text, config)
+⋮----
+chunks = rollup_chunk_tree(tree, config)
+⋮----
+chunks = chunk_tree(tree, config)
+⋮----
+# Example usage:
+markdown_text = """# Title
+# Set up chunking config with very large chunk size.
+# (you can adjust chunk_size, overlap_tokens, variation_percent)
+config = MarkdownChunkConfig(
+chunks = chunk_markdown(markdown_text, config)
+⋮----
+# with rollup_chunk_tree we get entire doc as 1 chunk
 </file>
 
 <file path="langroid/parsing/parser.py">
@@ -41027,6 +41022,8 @@ OLLAMA_BASE_URL = "http://localhost:11434/v1"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+# Provider prefixes that route to the Gemini OpenAI-compatible API.
+GEMINI_MODEL_PREFIXES = ("gemini/", "google/gemini-")
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 OLLAMA_API_KEY = "ollama"
@@ -41165,9 +41162,11 @@ None  # Factory: returns Client or (Client, AsyncClient)
 ⋮----
 http_verify_ssl: bool = True  # Simple flag for SSL verification
 http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
+_api_base_was_supplied: bool = False
 ⋮----
 def __init__(self, **kwargs) -> None:  # type: ignore
 ⋮----
+api_base_was_supplied = "api_base" in kwargs
 local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 ⋮----
 chat_model = kwargs.get("chat_model", "")
@@ -41181,7 +41180,19 @@ existing_hook = kwargs.get("run_on_first_use", noop)
 ⋮----
 def with_warning() -> None
 ⋮----
+env_prefix = self.model_config.get("env_prefix")
+env_api_base_name = f"{env_prefix}API_BASE"
+env_api_base = os.getenv(env_api_base_name)
+⋮----
+case_insensitive_env = {
+env_api_base = case_insensitive_env.get(env_api_base_name.lower())
+api_base_was_supplied = api_base_was_supplied or (
+⋮----
 model_config = SettingsConfigDict(env_prefix="OPENAI_")
+⋮----
+def __setattr__(self, name: str, value: Any) -> None
+⋮----
+"""Track API bases assigned after config construction."""
 ⋮----
 """
         Copy config while preserving nested model instances and subclasses.
@@ -41190,9 +41201,14 @@ model_config = SettingsConfigDict(env_prefix="OPENAI_")
         models to their annotated base types (dropping subclass-only fields).
         Instead, defer to Pydantic's native `model_copy`, which keeps nested
         `BaseModel` instances (and their concrete subclasses) intact.
+
+        An `api_base` supplied through `update` is caller configuration, so the
+        copy must retain that provenance for provider-specific routing.
         """
 # Delegate to BaseSettings/BaseModel implementation to preserve types
-return super().model_copy(update=update, deep=deep)  # type: ignore[return-value]
+copied = super().model_copy(update=update, deep=deep)
+⋮----
+return copied  # type: ignore[return-value]
 ⋮----
 def _validate_litellm(self) -> None
 ⋮----
@@ -41328,16 +41344,13 @@ self.config.seed = None  # some models raise an error when seed is set
 ⋮----
 # in these cases, there's no specific client: OpenAI python client suffices
 ⋮----
-# Use GEMINI_API_BASE env var if set (e.g. for Vertex AI),
-# then config.api_base only if explicitly set by the user
-# (not inherited from OPENAI_API_BASE via env_prefix),
-# then fall back to the default Gemini endpoint.
+# Prefer caller config, then Gemini env, then the default.
 gemini_api_base = os.getenv("GEMINI_API_BASE", "")
-openai_api_base = os.getenv("OPENAI_API_BASE")
 explicit_api_base = (
 ⋮----
 # Honor caller-supplied base URL (e.g. regional endpoints,
 # proxies) instead of always forcing the default.
+openai_api_base = os.getenv("OPENAI_API_BASE")
 ⋮----
 # Only overwrite with MINIMAX_API_KEY when it is actually
 # set, so users who intentionally put their MiniMax key in
