@@ -47,6 +47,7 @@ class MyDocMetaData(DocMetaData):
 class MyDoc(Document):
     content: str
     metadata: MyDocMetaData
+    category: str = ""
 
 
 stored_docs = [
