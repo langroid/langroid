@@ -445,6 +445,9 @@ class ChatDocument(Document):
                 recipient=recipient,
                 oai_tool_id=message.tool_call_id,
                 tool_ids=[message.tool_id] if message.tool_id else [],
+                # USER-role history is external user input (#1035), symmetric
+                # with from_str / _user_response_final.
+                tainted=sender_entity == Entity.USER,
             ),
         )
 

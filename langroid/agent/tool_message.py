@@ -105,6 +105,14 @@ class ToolMessage(ABC, BaseModel):
     _strict: Optional[bool] = None
     _allow_llm_use: bool = True  # allow an LLM to use (i.e. generate) this tool?
 
+    # DISTRUST mark (#1035): True when this tool object was parsed out of
+    # tainted (external-USER-derived) content, or repackages such a tool.
+    # A private attr, so it never appears in LLM-facing schemas or serialized
+    # JSON, and it survives copy.deepcopy (hence ChatDocument.deepcopy).
+    # Read via getattr(t, "_tainted", False) in Agent.response_template and
+    # Agent._filter_user_origin_tools; stamped in Agent.get_tool_messages.
+    _tainted: bool = False
+
     # Optional param to limit number of result tokens to retain in msg history.
     # Some tools can have large results that we may not want to fully retain,
     # e.g. result of a db query, which the LLM later reduces to a summary, so
