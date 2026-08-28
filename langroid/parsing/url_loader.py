@@ -12,6 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_parser import DocumentParser, ImagePdfParser
+from langroid.parsing.document_url import fetch_configured_url
 from langroid.parsing.parser import Parser, ParsingConfig
 
 if TYPE_CHECKING:
@@ -133,8 +134,15 @@ class BaseCrawler(ABC):
                     return []
 
             else:
+                config = self.parser.config
                 try:
-                    headers = requests.head(url).headers
+                    headers = requests.head(
+                        url,
+                        timeout=(
+                            config.url_connect_timeout,
+                            config.url_read_timeout,
+                        ),
+                    ).headers
                 except Exception as e:
                     logging.warning(f"Error getting headers for {url}: {e}")
                     headers = CaseInsensitiveDict()
@@ -153,15 +161,13 @@ class BaseCrawler(ABC):
 
                 if temp_file_suffix:
                     try:
-                        response = requests.get(url)
+                        content, _ = fetch_configured_url(url, config)
                         with NamedTemporaryFile(
                             delete=False, suffix=temp_file_suffix
                         ) as temp_file:
-                            temp_file.write(response.content)
+                            temp_file.write(content)
                             temp_file_path = temp_file.name
-                        doc_parser = DocumentParser.create(
-                            temp_file_path, self.parser.config
-                        )
+                        doc_parser = DocumentParser.create(temp_file_path, config)
                         docs = doc_parser.get_doc_chunks()
                         os.remove(temp_file_path)
                         return docs
