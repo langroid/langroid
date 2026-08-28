@@ -171,8 +171,8 @@ def async_retry_with_exponential_backoff(
                     f"""OpenAI API request failed with error{e}. 
                     Retrying in {delay} seconds..."""
                 )
-                # Sleep for the delay
-                time.sleep(delay)
+                # Sleep for the delay, without blocking the event loop
+                await asyncio.sleep(delay)
 
             # Raise exceptions for any errors not specified
             except Exception as e:

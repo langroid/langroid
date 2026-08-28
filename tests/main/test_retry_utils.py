@@ -7,6 +7,8 @@ retried with exponential backoff. See the type-based guard in
 `retry_with_exponential_backoff` / `async_retry_with_exponential_backoff`.
 """
 
+import asyncio
+
 import httpx
 import openai
 import pytest
@@ -15,6 +17,10 @@ from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
     retry_with_exponential_backoff,
 )
+
+# Backoff timing used by the event-loop responsiveness test below.
+_DELAY = 0.2
+_TICK = 0.005
 
 
 def _make_openai_error(exc_cls: type, status: int) -> openai.APIStatusError:
@@ -152,6 +158,46 @@ async def test_async_rate_limit_is_retried():
         await wrapped()
 
     assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_async_retry_delay_does_not_block_event_loop():
+    """Regression guard: the async backoff must not freeze the event loop.
+
+    The retry tests above use `initial_delay=0.0`, so they never exercise the
+    sleep itself. With a real delay, a blocking `time.sleep` inside the
+    coroutine stalls every other task on the loop for the whole backoff.
+    """
+    ticks = 0
+    running = True
+
+    async def heartbeat() -> None:
+        nonlocal ticks
+        while running:
+            await asyncio.sleep(_TICK)
+            ticks += 1
+
+    async def fn():
+        raise _make_openai_error(openai.RateLimitError, 429)
+
+    # exponential_base=1.0 keeps every backoff at exactly _DELAY seconds.
+    wrapped = async_retry_with_exponential_backoff(
+        fn,
+        max_retries=2,
+        initial_delay=_DELAY,
+        exponential_base=1.0,
+        jitter=False,
+    )
+
+    beat = asyncio.create_task(heartbeat())
+    await asyncio.sleep(0)  # let the heartbeat reach its first await
+    with pytest.raises(Exception, match="Maximum number of retries"):
+        await wrapped()
+    running = False
+    await beat
+
+    # 2 backoffs of _DELAY leave room for ~80 ticks; a blocked loop yields ~0.
+    assert ticks > 20
 
 
 def test_sync_internal_server_error_is_retried() -> None:
