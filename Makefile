@@ -153,7 +153,8 @@ publish:
 		echo "Error: PyPI environment file not found: $(PYPI_ENV_FILE)" >&2; \
 		exit 1; \
 	fi
-	@uv run --no-sync --env-file "$(PYPI_ENV_FILE)" -- sh -eu -c '\
+	@env -u PYPI_TOKEN -u UV_NO_ENV_FILE \
+		uv run --no-sync --env-file "$(PYPI_ENV_FILE)" -- sh -eu -c '\
 		set +x; \
 		if [ -z "$${PYPI_TOKEN:-}" ]; then \
 			echo "Error: PYPI_TOKEN is not defined in $(PYPI_ENV_FILE)" >&2; \
