@@ -1,4 +1,5 @@
 import http.server
+import logging
 import os
 import threading
 import time
@@ -167,9 +168,32 @@ def crawl_server_url() -> Iterator[str]:
         thread.join()
 
 
+@pytest.fixture
+def root_log_messages() -> Iterator[list[str]]:
+    """Collect root-logger messages via a plain handler.
+
+    CI runs tests/main with `-p no:logging`, which disables pytest's
+    `caplog` fixture, so capture with a temporary `logging.Handler` (as in
+    `tests/main/test_vecstore_env_prefix.py`).
+    """
+    messages: list[str] = []
+
+    class Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    root = logging.getLogger()
+    handler = Collector(level=logging.WARNING)
+    root.addHandler(handler)
+    try:
+        yield messages
+    finally:
+        root.removeHandler(handler)
+
+
 @pytest.mark.parametrize("path", ["stalled-head", "stalled-body"])
 def test_url_loader_document_fetch_honors_timeouts(
-    crawl_server_url: str, path: str, caplog: pytest.LogCaptureFixture
+    crawl_server_url: str, path: str, root_log_messages: list[str]
 ) -> None:
     """A stalled server must not hang the crawler.
 
@@ -188,11 +212,11 @@ def test_url_loader_document_fetch_honors_timeouts(
 
     assert time.monotonic() - start < _STALL / 2
     # The timeout must be reported with a pointer to the config knobs.
-    assert "url_read_timeout" in caplog.text
+    assert any("url_read_timeout" in msg for msg in root_log_messages)
 
 
 def test_url_loader_document_fetch_honors_max_size(
-    crawl_server_url: str, caplog: pytest.LogCaptureFixture
+    crawl_server_url: str, root_log_messages: list[str]
 ) -> None:
     """An unbounded response body must not be buffered whole into memory.
 
@@ -207,4 +231,4 @@ def test_url_loader_document_fetch_honors_max_size(
     # the whole body.
     assert _CrawlHandler.served_bytes < _OVERSIZED_BODY // 2
     # The size rejection must tell the user which config field to raise.
-    assert "url_max_size" in caplog.text
+    assert any("url_max_size" in msg for msg in root_log_messages)
