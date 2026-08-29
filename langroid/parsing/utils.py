@@ -228,8 +228,17 @@ def parse_number_range_list(specs: str) -> List[int]:
         # some weak LLMs may generate <#1#> instead of 1, so extract just the digits
         # or the "-"
         part = "".join(char for char in part if char.isdigit() or char == "-")
+        if part == "" or part == "-":
+            # skip empty/digit-less fragments, e.g. from a trailing comma,
+            # stray whitespace, or a lone hyphen
+            continue
         if "-" in part:
-            start, end = map(int, part.split("-"))
+            endpoints = part.split("-")
+            # a well-formed range has exactly two integer endpoints;
+            # skip anything malformed (e.g. "1-", "-5", "1-2-3")
+            if len(endpoints) != 2 or endpoints[0] == "" or endpoints[1] == "":
+                continue
+            start, end = int(endpoints[0]), int(endpoints[1])
             spec_indices.update(range(start, end + 1))
         else:
             spec_indices.add(int(part))

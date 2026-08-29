@@ -240,6 +240,31 @@ def test_relevance_extractor_batch(
 
 
 @pytest.mark.parametrize(
+    "specs, expected",
+    [
+        # well-formed inputs (existing behavior must be preserved)
+        ("3,5,7-10", [3, 5, 7, 8, 9, 10]),
+        ("2-4,7,12-13", [2, 3, 4, 7, 12, 13]),
+        # weak LLMs may wrap numbers as <#1#>, or use spaces
+        ("<#1#>,<#2#>", [1, 2]),
+        (" 1 , 2 ", [1, 2]),
+        # messy fragments that must NOT crash: trailing comma, empty
+        # entries, or a lone hyphen (regression for a ValueError crash)
+        ("1,2,3,", [1, 2, 3]),
+        ("1,,2", [1, 2]),
+        ("1,-,2", [1, 2]),
+        ("", []),
+        (",", []),
+        # malformed ranges are skipped rather than crashing
+        ("1-2-3,5", [5]),
+        ("1-,4", [4]),
+    ],
+)
+def test_parse_number_range_list(specs, expected):
+    assert parse_number_range_list(specs) == expected
+
+
+@pytest.mark.parametrize(
     "passage, spec, expected",
     [
         (
