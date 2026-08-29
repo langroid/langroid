@@ -95,6 +95,17 @@ def test_read_file_with_line_numbers(tmp_path):
     assert read_file(str(file_path), line_numbers=True) == expected
 
 
+def test_read_file_tilde_expansion(tmp_path, monkeypatch):
+    # simulate a home directory and read a file via a "~/..." path;
+    # read_file must expand "~" before checking existence (regression
+    # for a FileNotFoundError raised on a path that actually exists).
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows
+    content = "Line 1\nLine 2"
+    (tmp_path / "tilde_read_test.txt").write_text(content)
+    assert read_file("~/tilde_read_test.txt") == content
+
+
 def test_diff_files(tmp_path):
     file1 = tmp_path / "file1.txt"
     file2 = tmp_path / "file2.txt"

@@ -274,10 +274,12 @@ def read_file(path: str, line_numbers: bool = False) -> str:
     Raises:
         FileNotFoundError: If the specified file does not exist.
     """
-    # raise an error if the file does not exist
-    if not Path(path).exists():
-        raise FileNotFoundError(f"File not found: {path}")
+    # expand "~" before checking existence, so a "~/..." path is not
+    # spuriously reported as missing
     file = Path(path).expanduser()
+    # raise an error if the file does not exist
+    if not file.exists():
+        raise FileNotFoundError(f"File not found: {path}")
     content = file.read_text()
     if line_numbers:
         lines = content.splitlines()
