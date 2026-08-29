@@ -33,6 +33,29 @@ load_dotenv()
 logging.getLogger("url_loader").setLevel(logging.WARNING)
 
 
+def _limit_hint(e: Exception, config: ParsingConfig) -> str:
+    """Actionable suffix for a URL-fetch error caused by the configured limits.
+
+    Returns an empty string for errors unrelated to the limits.
+    """
+    import requests
+    from urllib3.exceptions import TimeoutError as Urllib3TimeoutError
+
+    timed_out = isinstance(e, requests.exceptions.Timeout) or (
+        # requests wraps read-timeouts during streamed body reads in
+        # ConnectionError, not Timeout
+        isinstance(e, requests.exceptions.ConnectionError)
+        and any(isinstance(arg, Urllib3TimeoutError) for arg in e.args)
+    )
+    if timed_out:
+        return (
+            "; if the server is just slow, increase "
+            f"ParsingConfig.url_connect_timeout (now {config.url_connect_timeout}s)"
+            f" / url_read_timeout (now {config.url_read_timeout}s)"
+        )
+    return ""
+
+
 # Base crawler config and specific configurations
 class BaseCrawlerConfig(BaseSettings):
     """Base configuration for web crawlers."""
@@ -130,7 +153,8 @@ class BaseCrawler(ABC):
                         new_chunks = img_parser.get_doc_chunks()
                     return new_chunks
                 except Exception as e:
-                    logging.error(f"Error parsing {url}: {e}")
+                    hint = _limit_hint(e, self.parser.config)
+                    logging.error(f"Error parsing {url}: {e}{hint}")
                     return []
 
             else:
@@ -144,7 +168,8 @@ class BaseCrawler(ABC):
                         ),
                     ).headers
                 except Exception as e:
-                    logging.warning(f"Error getting headers for {url}: {e}")
+                    hint = _limit_hint(e, config)
+                    logging.warning(f"Error getting headers for {url}: {e}{hint}")
                     headers = CaseInsensitiveDict()
 
                 content_type = headers.get("Content-Type", "").lower()
@@ -172,7 +197,8 @@ class BaseCrawler(ABC):
                         os.remove(temp_file_path)
                         return docs
                     except Exception as e:
-                        logging.error(f"Error downloading/parsing {url}: {e}")
+                        hint = _limit_hint(e, config)
+                        logging.error(f"Error downloading/parsing {url}: {e}{hint}")
                         return []
         return []
 
