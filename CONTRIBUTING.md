@@ -309,3 +309,38 @@ is an ongoing PR, just push to github again and the PR will be updated.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
 Read more [here](docs/development/github-cli.md).
+
+## Releasing (maintainers)
+
+A release consists of a version bump + GitHub release, followed by a
+PyPI upload. Both steps run non-interactively:
+
+```bash
+make all-patch   # or all-minor / all-major
+make publish
+```
+
+- `make all-patch` bumps the version (via commitizen), pushes `main`
+  and the new tag, creates the GitHub release with auto-generated
+  notes (`gh release create ... --generate-notes`), and builds the
+  wheel + sdist into `dist/`. Release notes can be refined afterwards
+  with `gh release edit <version> --notes-file <file>`.
+- `make publish` uploads `dist/` to PyPI. It reads `PYPI_TOKEN` from
+  the `.env` file in the repository's primary checkout at runtime, so
+  the token never appears on a command line or in any output. Add a
+  line like this to `.env` (which is gitignored):
+
+  ```bash
+  PYPI_TOKEN=pypi-...
+  ```
+
+  The target fails with a clear error if `dist/` is missing either
+  distribution, if the `.env` file is absent, or if `PYPI_TOKEN` is
+  not defined in it. Any `PYPI_TOKEN` already exported in the
+  environment is deliberately ignored; the `.env` file is the single
+  source of truth.
+- Verify the upload independently, e.g.:
+
+  ```bash
+  curl -s https://pypi.org/pypi/langroid/json | jq -r .info.version
+  ```
