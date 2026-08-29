@@ -2,6 +2,12 @@
 
 SHELL := /bin/bash
 
+# Primary checkout's .env (works from any worktree); holds PYPI_TOKEN
+# for `make publish`.
+GIT_PRIMARY_WORKTREE := $(realpath $(shell git rev-parse \
+	--path-format=absolute --git-common-dir)/..)
+PYPI_ENV_FILE ?= $(GIT_PRIMARY_WORKTREE)/.env
+
 .PHONY: setup update
 
 setup: ## Setup the git pre-commit hooks
@@ -134,7 +140,26 @@ clean:
 
 .PHONY: release
 release:
-	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+	@VERSION=$$(cz version -p | cut -d' ' -f2) && \
+		gh release create $${VERSION} dist/* --generate-notes
+
+.PHONY: publish
+publish:
+	@if ! ls dist/*.whl >/dev/null 2>&1 || ! ls dist/*.tar.gz >/dev/null 2>&1; then \
+		echo "Error: dist/ must contain both wheel and source distributions" >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(PYPI_ENV_FILE)" ]; then \
+		echo "Error: PyPI environment file not found: $(PYPI_ENV_FILE)" >&2; \
+		exit 1; \
+	fi
+	@uv run --no-sync --env-file "$(PYPI_ENV_FILE)" -- sh -eu -c '\
+		set +x; \
+		if [ -z "$${PYPI_TOKEN:-}" ]; then \
+			echo "Error: PYPI_TOKEN is not defined in $(PYPI_ENV_FILE)" >&2; \
+			exit 1; \
+		fi; \
+		UV_PUBLISH_TOKEN="$$PYPI_TOKEN" uv publish'
 
 .PHONY: bump-rc
 bump-rc:
@@ -260,7 +285,3 @@ pre-release-alpha-patch: bump-alpha-patch clean build pre-release-push pre-relea
 
 .PHONY: pre-release-alpha-minor
 pre-release-alpha-minor: bump-alpha-minor clean build pre-release-push pre-release-release
-
-.PHONY: publish
-publish:
-	uv publish
