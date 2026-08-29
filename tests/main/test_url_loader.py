@@ -169,7 +169,7 @@ def crawl_server_url() -> Iterator[str]:
 
 @pytest.mark.parametrize("path", ["stalled-head", "stalled-body"])
 def test_url_loader_document_fetch_honors_timeouts(
-    crawl_server_url: str, path: str
+    crawl_server_url: str, path: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A stalled server must not hang the crawler.
 
@@ -187,9 +187,13 @@ def test_url_loader_document_fetch_honors_timeouts(
     assert loader.crawler._process_document(f"{crawl_server_url}/{path}") == []
 
     assert time.monotonic() - start < _STALL / 2
+    # The timeout must be reported with a pointer to the config knobs.
+    assert "url_read_timeout" in caplog.text
 
 
-def test_url_loader_document_fetch_honors_max_size(crawl_server_url: str) -> None:
+def test_url_loader_document_fetch_honors_max_size(
+    crawl_server_url: str, caplog: pytest.LogCaptureFixture
+) -> None:
     """An unbounded response body must not be buffered whole into memory.
 
     Regression test: `_process_document` read `requests.get(url).content`,
@@ -202,3 +206,5 @@ def test_url_loader_document_fetch_honors_max_size(crawl_server_url: str) -> Non
     # Streaming aborts within a chunk or two; only an unbounded read drains
     # the whole body.
     assert _CrawlHandler.served_bytes < _OVERSIZED_BODY // 2
+    # The size rejection must tell the user which config field to raise.
+    assert "url_max_size" in caplog.text

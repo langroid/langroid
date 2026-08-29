@@ -77,7 +77,9 @@ def fetch_url_bytes(
                 declared_size = None
             if declared_size is not None and declared_size > max_size:
                 raise ValueError(
-                    f"URL document exceeds maximum size of {max_size} bytes"
+                    f"URL document exceeds maximum size of {max_size} bytes; "
+                    "increase ParsingConfig.url_max_size to allow larger "
+                    "documents"
                 )
 
         limit = sample_size if sample_size is not None else max_size
@@ -91,7 +93,9 @@ def fetch_url_bytes(
                 return bytes(body[:sample_size]), response.headers
             if len(body) > max_size:
                 raise ValueError(
-                    f"URL document exceeds maximum size of {max_size} bytes"
+                    f"URL document exceeds maximum size of {max_size} bytes; "
+                    "increase ParsingConfig.url_max_size to allow larger "
+                    "documents"
                 )
         return bytes(body), response.headers
 
