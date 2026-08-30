@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from langroid.utils.system import create_file, diff_files, read_file
+from langroid.utils.system import (
+    create_file,
+    diff_files,
+    read_file,
+    safe_resolve_path,
+)
 
 
 @pytest.fixture
@@ -93,6 +98,45 @@ def test_read_file_with_line_numbers(tmp_path):
     file_path.write_text(content)
     expected = "1: Line 1\n2: Line 2\n3: Line 3"
     assert read_file(str(file_path), line_numbers=True) == expected
+
+
+def test_read_file_tilde_expansion(tmp_path, monkeypatch):
+    # simulate a home directory and read a file via a "~/..." path;
+    # read_file must expand "~" before checking existence (regression
+    # for a FileNotFoundError raised on a path that actually exists).
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows
+    content = "Line 1\nLine 2"
+    (tmp_path / "tilde_read_test.txt").write_text(content)
+    assert read_file("~/tilde_read_test.txt") == content
+
+
+def test_read_file_missing_tilde_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows
+    with pytest.raises(FileNotFoundError):
+        read_file("~/no_such_file.txt")
+
+
+def test_safe_resolve_path_rejects_tilde(tmp_path, monkeypatch):
+    # "~" must not be treated as a literal directory name under base_dir:
+    # read_file expands it, so the guard has to expand it too.
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "secret.txt").write_text("SECRET")
+    base = tmp_path / "sandbox"
+    base.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # Windows
+    with pytest.raises(ValueError, match="outside the allowed directory"):
+        safe_resolve_path(base, "~/secret.txt")
+
+
+def test_safe_resolve_path_allows_path_within_base(tmp_path):
+    base = tmp_path / "sandbox"
+    (base / "sub").mkdir(parents=True)
+    (base / "sub" / "ok.txt").write_text("ok")
+    assert safe_resolve_path(base, "sub/ok.txt") == (base / "sub" / "ok.txt").resolve()
 
 
 def test_diff_files(tmp_path):

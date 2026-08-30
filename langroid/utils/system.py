@@ -192,9 +192,10 @@ def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
     Resolve ``user_path`` relative to ``base_dir`` and ensure the result stays
     within ``base_dir`` (a path-traversal guard for file tools).
 
-    A ``user_path`` containing ``..`` segments, an absolute path, or a symlink
-    pointing outside ``base_dir`` is rejected. Symlinks are resolved via
-    :meth:`pathlib.Path.resolve`, so symlink-based escapes are caught as well.
+    A ``user_path`` containing ``..`` segments, an absolute path, a ``~`` home
+    reference, or a symlink pointing outside ``base_dir`` is rejected. Symlinks
+    are resolved via :meth:`pathlib.Path.resolve`, so symlink-based escapes are
+    caught as well.
 
     Args:
         base_dir (str|Path): Directory that file operations must stay within.
@@ -207,7 +208,9 @@ def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
         ValueError: If the resolved path escapes ``base_dir``.
     """
     base = Path(base_dir).resolve()
-    target = (base / Path(user_path)).resolve()
+    # expand "~" here too, so a "~/..." path is checked as the home path it
+    # actually refers to, rather than as a literal "~" directory under base_dir
+    target = (base / Path(user_path).expanduser()).resolve()
     if target != base and base not in target.parents:
         raise ValueError(
             f"Path '{user_path}' is outside the allowed directory '{base}'"
@@ -274,10 +277,12 @@ def read_file(path: str, line_numbers: bool = False) -> str:
     Raises:
         FileNotFoundError: If the specified file does not exist.
     """
-    # raise an error if the file does not exist
-    if not Path(path).exists():
-        raise FileNotFoundError(f"File not found: {path}")
+    # expand "~" before checking existence, so a "~/..." path is not
+    # spuriously reported as missing
     file = Path(path).expanduser()
+    # raise an error if the file does not exist
+    if not file.exists():
+        raise FileNotFoundError(f"File not found: {path}")
     content = file.read_text()
     if line_numbers:
         lines = content.splitlines()
