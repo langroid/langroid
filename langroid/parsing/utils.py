@@ -212,14 +212,14 @@ def parse_number_range_list(specs: str) -> List[int]:
     """
     Parse a specs string like "3,5,7-10" into a list of integers.
 
-    Args:
-        specs (str): A string containing segment numbers and/or ranges
-                     (e.g., "3,5,7-10").
-
     Weak LLMs sometimes emit messy specs (a trailing comma, an empty entry, a
     lone hyphen, or a malformed range like "1-" or "1-2-3"). Such fragments are
     skipped -- and logged at WARNING -- rather than raised on, so the
     well-formed part of the spec is still honored.
+
+    Args:
+        specs (str): A string containing segment numbers and/or ranges
+                     (e.g., "3,5,7-10").
 
     Returns:
         List[int]: List of segment numbers.
