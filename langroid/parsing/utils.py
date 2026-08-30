@@ -212,10 +212,15 @@ def parse_number_range_list(specs: str) -> List[int]:
     """
     Parse a specs string like "3,5,7-10" into a list of integers.
 
-    Weak LLMs sometimes emit messy specs (a trailing comma, an empty entry, a
-    lone hyphen, or a malformed range like "1-" or "1-2-3"). Such fragments are
-    skipped -- and logged at WARNING -- rather than raised on, so the
-    well-formed part of the spec is still honored.
+    Weak LLMs sometimes emit messy specs. Rather than raising, such fragments
+    are skipped so the well-formed part of the spec is still honored:
+
+    - A fragment with no digits at all (a trailing comma, an empty entry, a
+      lone hyphen) refers to no segment, so nothing is lost and it is skipped
+      quietly.
+    - A fragment that does contain digits but is not a valid spec (``"1-"``,
+      ``"-5"``, ``"1-2-3"``) drops a segment reference the model meant to make,
+      so it is skipped *and* logged at WARNING.
 
     Args:
         specs (str): A string containing segment numbers and/or ranges
@@ -235,9 +240,8 @@ def parse_number_range_list(specs: str) -> List[int]:
         # or the "-"
         part = "".join(char for char in original if char.isdigit() or char == "-")
         if part == "" or part == "-":
-            # no digits at all, e.g. from a trailing comma or a lone hyphen
-            if original.strip() != "":
-                skipped.append(original)
+            # no digits at all, e.g. from a trailing comma or a lone hyphen:
+            # this refers to no segment, so nothing is lost -- skip quietly
             continue
         if "-" in part:
             endpoints = part.split("-")

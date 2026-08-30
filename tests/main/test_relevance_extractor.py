@@ -296,23 +296,37 @@ def root_log_messages():
         ("1-2-3,5", "1-2-3"),
         ("1-,4", "1-"),
         ("-5,4", "-5"),
-        ("1,-,2", "-"),
     ],
 )
-def test_parse_number_range_list_warns_on_skip(specs, skipped, root_log_messages):
-    # skipping must be observable: a malformed fragment is dropped, but the
-    # loss is logged rather than silent.
+def test_parse_number_range_list_warns_on_dropped_segment(
+    specs, skipped, root_log_messages
+):
+    # a fragment that carried digits but was malformed drops a segment the
+    # model meant to name, so the loss must be logged rather than silent.
     parse_number_range_list(specs)
     warnings = [m for m in root_log_messages if "skipped malformed segment spec" in m]
     assert warnings, f"no skip warning logged for {specs!r}"
     assert any(skipped in m for m in warnings)
 
 
-def test_parse_number_range_list_no_warning_when_clean(root_log_messages):
-    assert parse_number_range_list("3,5,7-10") == [3, 5, 7, 8, 9, 10]
+@pytest.mark.parametrize(
+    "specs",
+    [
+        # well-formed: nothing skipped at all
+        "3,5,7-10",
+        # digit-less fragments refer to no segment, so nothing is lost
+        "1,2,3,",
+        "1,,2",
+        "1,-,2",
+        "",
+        ",",
+    ],
+)
+def test_parse_number_range_list_no_warning_when_nothing_lost(specs, root_log_messages):
+    parse_number_range_list(specs)
     assert not [
         m for m in root_log_messages if "skipped malformed segment spec" in m
-    ], "well-formed spec must not warn"
+    ], f"{specs!r} loses no segment, so it must not warn"
 
 
 @pytest.mark.parametrize(
