@@ -216,6 +216,11 @@ def parse_number_range_list(specs: str) -> List[int]:
         specs (str): A string containing segment numbers and/or ranges
                      (e.g., "3,5,7-10").
 
+    Weak LLMs sometimes emit messy specs (a trailing comma, an empty entry, a
+    lone hyphen, or a malformed range like "1-" or "1-2-3"). Such fragments are
+    skipped -- and logged at WARNING -- rather than raised on, so the
+    well-formed part of the spec is still honored.
+
     Returns:
         List[int]: List of segment numbers.
 
@@ -224,16 +229,34 @@ def parse_number_range_list(specs: str) -> List[int]:
         [3, 5, 7, 8, 9, 10]
     """
     spec_indices = set()  # type: ignore
-    for part in specs.split(","):
+    skipped: List[str] = []
+    for original in specs.split(","):
         # some weak LLMs may generate <#1#> instead of 1, so extract just the digits
         # or the "-"
-        part = "".join(char for char in part if char.isdigit() or char == "-")
+        part = "".join(char for char in original if char.isdigit() or char == "-")
+        if part == "" or part == "-":
+            # no digits at all, e.g. from a trailing comma or a lone hyphen
+            if original.strip() != "":
+                skipped.append(original)
+            continue
         if "-" in part:
-            start, end = map(int, part.split("-"))
-            spec_indices.update(range(start, end + 1))
+            endpoints = part.split("-")
+            # a well-formed range has exactly two integer endpoints
+            if len(endpoints) != 2 or endpoints[0] == "" or endpoints[1] == "":
+                skipped.append(original)
+                continue
+            spec_indices.update(range(int(endpoints[0]), int(endpoints[1]) + 1))
         else:
             spec_indices.add(int(part))
 
+    if skipped:
+        logger.warning(
+            "parse_number_range_list: skipped malformed segment spec(s) %s "
+            "in %r; returning only the well-formed segments %s",
+            skipped,
+            specs,
+            sorted(spec_indices),
+        )
     return sorted(list(spec_indices))
 
 
