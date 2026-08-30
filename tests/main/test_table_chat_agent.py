@@ -76,7 +76,10 @@ def mock_data_file(tmp_path: Path) -> Generator[str, None, None]:
 class _SequenceLLM(MockLM):
     """Return a deterministic sequence of responses for TableChatAgent tests."""
 
-    def __init__(self, responses: list[LLMResponse]) -> None:
+    def __init__(
+        self,
+        responses: list[tuple[tuple[str, ...], tuple[str, ...], LLMResponse]],
+    ) -> None:
         super().__init__(MockLMConfig())
         self.responses = responses
         self.index = 0
@@ -87,11 +90,16 @@ class _SequenceLLM(MockLM):
         *args: Any,
         **kwargs: Any,
     ) -> LLMResponse:
-        del messages, args, kwargs
-        if self.index >= len(self.responses):
-            return self.responses[-1]
-        response = self.responses[self.index]
+        del args, kwargs
+        assert isinstance(messages, list)
+        assert self.index < len(self.responses), "unexpected extra model call"
+        expected, forbidden, response = self.responses[self.index]
         self.index += 1
+        last_message = messages[-1].content or ""
+        for text in expected:
+            assert text in last_message
+        for text in forbidden:
+            assert text not in last_message
         return response
 
 
@@ -150,8 +158,16 @@ def _test_table_chat_agent(
     expression, answer = _average_income_expression_and_answer(agent)
     agent.llm = _SequenceLLM(
         [
-            _pandas_eval_response(expression, fn_api),
-            LLMResponse(message=f"DONE The average income is {answer}"),
+            (
+                ("average income",),
+                (),
+                _pandas_eval_response(expression, fn_api),
+            ),
+            (
+                (str(answer),),
+                ("ERROR",),
+                LLMResponse(message=f"DONE The average income is {answer}"),
+            ),
         ]
     )
 
@@ -244,23 +260,35 @@ def test_table_chat_agent_assignment_self_correction(test_settings: Settings) ->
     )
     agent.llm = _SequenceLLM(
         [
-            _pandas_eval_response(
-                "df['airline'] = df['airline'].str.replace('*', '', regex=False)",
-                fn_api=False,
+            (
+                ("asterisk",),
+                (),
+                _pandas_eval_response(
+                    "df['airline'] = df['airline'].str.replace('*', '', regex=False)",
+                    fn_api=False,
+                ),
             ),
-            _pandas_eval_response(
-                "df.assign(airline=df['airline'].str.replace('*', ''))",
-                fn_api=False,
+            (
+                ("ERROR", "SyntaxError"),
+                (),
+                _pandas_eval_response(
+                    "df.assign(airline=df['airline'].str.replace('*', ''))",
+                    fn_api=False,
+                ),
             ),
-            LLMResponse(
-                message=(
-                    "DONE Removed the asterisks and cleaned data.\n"
-                    "airline  price destination\n"
-                    "United   100 NYC\n"
-                    "Delta    150 LAX\n"
-                    "American 120 CHI\n"
-                    "Southwest 80 DEN"
-                )
+            (
+                ("United", "Delta", "American", "Southwest"),
+                ("*", "ERROR"),
+                LLMResponse(
+                    message=(
+                        "DONE Removed the asterisks and cleaned data.\n"
+                        "airline  price destination\n"
+                        "United   100 NYC\n"
+                        "Delta    150 LAX\n"
+                        "American 120 CHI\n"
+                        "Southwest 80 DEN"
+                    )
+                ),
             ),
         ]
     )
@@ -304,11 +332,19 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
     answer = agent.df[agent.df["cotton"] < 500]["poultry"].mean()
     agent.llm = _SequenceLLM(
         [
-            _pandas_eval_response(
-                "df[df['cotton'] < 500]['poultry'].mean()",
-                fn_api=fn_api,
+            (
+                ("average poultry",),
+                (),
+                _pandas_eval_response(
+                    "df[df['cotton'] < 500]['poultry'].mean()",
+                    fn_api=fn_api,
+                ),
             ),
-            LLMResponse(message=f"DONE The average poultry export is {answer}"),
+            (
+                (str(answer),),
+                ("ERROR",),
+                LLMResponse(message=f"DONE The average poultry export is {answer}"),
+            ),
         ]
     )
 
