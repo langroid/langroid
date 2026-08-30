@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import List
 
 import nltk
@@ -237,6 +238,101 @@ def test_relevance_extractor_batch(
     expected_sentences = [s.strip() for s in expected_sentences]
     extracted_sentences = [s.strip() for s in extracted_sentences]
     assert set(extracted_sentences) == set(expected_sentences)
+
+
+@pytest.mark.parametrize(
+    "specs, expected",
+    [
+        # well-formed inputs (existing behavior must be preserved)
+        ("3,5,7-10", [3, 5, 7, 8, 9, 10]),
+        ("2-4,7,12-13", [2, 3, 4, 7, 12, 13]),
+        # weak LLMs may wrap numbers as <#1#>, or use spaces
+        ("<#1#>,<#2#>", [1, 2]),
+        (" 1 , 2 ", [1, 2]),
+        # messy fragments that must NOT crash: trailing comma, empty
+        # entries, or a lone hyphen (regression for a ValueError crash)
+        ("1,2,3,", [1, 2, 3]),
+        ("1,,2", [1, 2]),
+        ("1,-,2", [1, 2]),
+        ("1,--,2", [1, 2]),
+        ("1,-foo-,2", [1, 2]),
+        ("", []),
+        (",", []),
+        # malformed ranges are skipped rather than crashing
+        ("1-2-3,5", [5]),
+        ("1-,4", [4]),
+        ("-5,4", [4]),
+        ("1-2-3", []),
+    ],
+)
+def test_parse_number_range_list(specs, expected):
+    assert parse_number_range_list(specs) == expected
+
+
+@pytest.fixture
+def root_log_messages():
+    """Collect root-logger messages via a plain handler.
+
+    CI runs tests/main with `-p no:logging`, which disables pytest's
+    `caplog` fixture, so capture with a temporary `logging.Handler` (as in
+    `tests/main/test_url_loader.py`).
+    """
+    messages = []
+
+    class Collector(logging.Handler):
+        def emit(self, record):
+            messages.append(record.getMessage())
+
+    root = logging.getLogger()
+    handler = Collector(level=logging.WARNING)
+    root.addHandler(handler)
+    try:
+        yield messages
+    finally:
+        root.removeHandler(handler)
+
+
+@pytest.mark.parametrize(
+    "specs, skipped",
+    [
+        ("1-2-3,5", "1-2-3"),
+        ("1-,4", "1-"),
+        ("-5,4", "-5"),
+    ],
+)
+def test_parse_number_range_list_warns_on_dropped_segment(
+    specs, skipped, root_log_messages
+):
+    # a fragment that carried digits but was malformed drops a segment the
+    # model meant to name, so the loss must be logged rather than silent.
+    parse_number_range_list(specs)
+    warnings = [m for m in root_log_messages if "skipped malformed segment spec" in m]
+    assert warnings, f"no skip warning logged for {specs!r}"
+    assert any(skipped in m for m in warnings)
+
+
+@pytest.mark.parametrize(
+    "specs",
+    [
+        # well-formed: nothing skipped at all
+        "3,5,7-10",
+        # digit-less fragments refer to no segment, so nothing is lost
+        "1,2,3,",
+        "1,,2",
+        "1,-,2",
+        "",
+        ",",
+        # several stray hyphens still carry no segment reference
+        "1,--,2",
+        "1,-foo-,2",
+        "--",
+    ],
+)
+def test_parse_number_range_list_no_warning_when_nothing_lost(specs, root_log_messages):
+    parse_number_range_list(specs)
+    assert not [
+        m for m in root_log_messages if "skipped malformed segment spec" in m
+    ], f"{specs!r} loses no segment, so it must not warn"
 
 
 @pytest.mark.parametrize(

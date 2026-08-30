@@ -212,6 +212,16 @@ def parse_number_range_list(specs: str) -> List[int]:
     """
     Parse a specs string like "3,5,7-10" into a list of integers.
 
+    Weak LLMs sometimes emit messy specs. Rather than raising, such fragments
+    are skipped so the well-formed part of the spec is still honored:
+
+    - A fragment with no digits at all (a trailing comma, an empty entry, a
+      lone hyphen) refers to no segment, so nothing is lost and it is skipped
+      quietly.
+    - A fragment that does contain digits but is not a valid spec (``"1-"``,
+      ``"-5"``, ``"1-2-3"``) drops a segment reference the model meant to make,
+      so it is skipped *and* logged at WARNING.
+
     Args:
         specs (str): A string containing segment numbers and/or ranges
                      (e.g., "3,5,7-10").
@@ -224,16 +234,34 @@ def parse_number_range_list(specs: str) -> List[int]:
         [3, 5, 7, 8, 9, 10]
     """
     spec_indices = set()  # type: ignore
-    for part in specs.split(","):
+    skipped: List[str] = []
+    for original in specs.split(","):
         # some weak LLMs may generate <#1#> instead of 1, so extract just the digits
         # or the "-"
-        part = "".join(char for char in part if char.isdigit() or char == "-")
+        part = "".join(char for char in original if char.isdigit() or char == "-")
+        if not any(char.isdigit() for char in part):
+            # no digits at all, e.g. from a trailing comma or one or more
+            # stray hyphens: this refers to no segment, so nothing is lost
+            # -- skip quietly
+            continue
         if "-" in part:
-            start, end = map(int, part.split("-"))
-            spec_indices.update(range(start, end + 1))
+            endpoints = part.split("-")
+            # a well-formed range has exactly two integer endpoints
+            if len(endpoints) != 2 or endpoints[0] == "" or endpoints[1] == "":
+                skipped.append(original)
+                continue
+            spec_indices.update(range(int(endpoints[0]), int(endpoints[1]) + 1))
         else:
             spec_indices.add(int(part))
 
+    if skipped:
+        logger.warning(
+            "parse_number_range_list: skipped malformed segment spec(s) %s "
+            "in %r; returning only the well-formed segments %s",
+            skipped,
+            specs,
+            sorted(spec_indices),
+        )
     return sorted(list(spec_indices))
 
 
