@@ -357,6 +357,34 @@ def test_read_file_tool_symlink_escape_blocked(sandbox_with_secret):
     assert _ESCAPE_MARKER in result
 
 
+def test_read_file_tool_tilde_escape_blocked(sandbox_with_secret, monkeypatch):
+    # "~/..." must be checked as the home path it refers to, not as a literal
+    # "~" directory under the sandbox -- otherwise read_file's expanduser()
+    # reads it from the real home dir after the guard has already passed.
+    sandbox, secret = sandbox_with_secret
+    monkeypatch.setenv("HOME", str(secret.parent))
+    monkeypatch.setenv("USERPROFILE", str(secret.parent))  # Windows
+    tool = ReadFileTool.create(get_curr_dir=lambda: sandbox)(
+        file_path=f"~/{secret.name}"
+    )
+    result = tool.handle()
+    assert "LANGROID_TOOL_ESCAPE_SECRET" not in result
+    assert _ESCAPE_MARKER in result
+
+
+def test_read_file_tool_unresolvable_tilde_user_no_crash(sandbox_with_secret):
+    # "~nosuchuser/..." cannot be expanded (Path.expanduser raises
+    # RuntimeError for it); the tool must return its normal error string
+    # rather than propagating RuntimeError out of the handler.
+    sandbox, _ = sandbox_with_secret
+    tool = ReadFileTool.create(get_curr_dir=lambda: sandbox)(
+        file_path="~nosuchuser12345/f.txt"
+    )
+    result = tool.handle()
+    assert "LANGROID_TOOL_ESCAPE_SECRET" not in result
+    assert "File not found" in result
+
+
 def test_write_file_tool_parent_traversal_blocked(temp_dir):
     sandbox = temp_dir / "sandbox"
     sandbox.mkdir()

@@ -187,14 +187,45 @@ def generate_unique_id() -> str:
     return str(uuid.uuid4())
 
 
+def expand_user_path(path: str | Path) -> Path:
+    """
+    Expand a leading ``~`` in ``path``, falling back to the literal path when
+    the home directory cannot be determined.
+
+    :meth:`pathlib.Path.expanduser` raises ``RuntimeError`` for an unresolvable
+    reference such as ``~nosuchuser/f.txt``. Callers here treat a path they
+    cannot expand as an ordinary (literal) path, so an agent-supplied path can
+    never crash a file tool.
+
+    Args:
+        path (str|Path): The path to expand.
+
+    Returns:
+        Path: The expanded path, or the literal path if expansion failed.
+    """
+    p = Path(path)
+    try:
+        return p.expanduser()
+    except RuntimeError:
+        return p
+
+
 def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
     """
     Resolve ``user_path`` relative to ``base_dir`` and ensure the result stays
     within ``base_dir`` (a path-traversal guard for file tools).
 
-    A ``user_path`` containing ``..`` segments, an absolute path, or a symlink
-    pointing outside ``base_dir`` is rejected. Symlinks are resolved via
-    :meth:`pathlib.Path.resolve`, so symlink-based escapes are caught as well.
+    A ``user_path`` containing ``..`` segments, an absolute path, a ``~`` home
+    reference, or a symlink pointing outside ``base_dir`` is rejected. Symlinks
+    are resolved via :meth:`pathlib.Path.resolve`, so symlink-based escapes are
+    caught as well.
+
+    A ``~`` path is checked under *both* interpretations -- expanded (as
+    :func:`read_file` reads it) and literal (as ``create_file`` and
+    :func:`list_dir` write/list it, since those do not expand) -- and rejected
+    if either one escapes. Callers validate with this function but then operate
+    on the raw path, so validating only one interpretation would leave the other
+    unguarded.
 
     Args:
         base_dir (str|Path): Directory that file operations must stay within.
@@ -207,12 +238,14 @@ def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
         ValueError: If the resolved path escapes ``base_dir``.
     """
     base = Path(base_dir).resolve()
-    target = (base / Path(user_path)).resolve()
-    if target != base and base not in target.parents:
-        raise ValueError(
-            f"Path '{user_path}' is outside the allowed directory '{base}'"
-        )
-    return target
+    expanded = (base / expand_user_path(user_path)).resolve()
+    literal = (base / Path(user_path)).resolve()
+    for target in (expanded, literal):
+        if target != base and base not in target.parents:
+            raise ValueError(
+                f"Path '{user_path}' is outside the allowed directory '{base}'"
+            )
+    return expanded
 
 
 def create_file(
@@ -274,10 +307,12 @@ def read_file(path: str, line_numbers: bool = False) -> str:
     Raises:
         FileNotFoundError: If the specified file does not exist.
     """
+    # expand "~" before checking existence, so a "~/..." path is not
+    # spuriously reported as missing
+    file = expand_user_path(path)
     # raise an error if the file does not exist
-    if not Path(path).exists():
+    if not file.exists():
         raise FileNotFoundError(f"File not found: {path}")
-    file = Path(path).expanduser()
     content = file.read_text()
     if line_numbers:
         lines = content.splitlines()
