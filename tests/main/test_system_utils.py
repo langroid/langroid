@@ -150,6 +150,27 @@ def test_safe_resolve_path_unresolvable_tilde_user(tmp_path):
     assert base in resolved.parents
 
 
+def test_safe_resolve_path_rejects_literal_tilde_symlink_escape(tmp_path, monkeypatch):
+    # The tools validate with safe_resolve_path but then operate on the RAW
+    # path: create_file/list_dir do not expand "~". So when base_dir is the
+    # home dir, "~/x" expands to an in-base path while the literal "base/~/x"
+    # can follow a "~" symlink out of the sandbox. Both readings must be
+    # checked.
+    home = tmp_path / "home"
+    home.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("SECRET")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # Windows
+    try:
+        (home / "~").symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported on this platform")
+    with pytest.raises(ValueError, match="outside the allowed directory"):
+        safe_resolve_path(home, "~/secret.txt")
+
+
 def test_safe_resolve_path_allows_path_within_base(tmp_path):
     base = tmp_path / "sandbox"
     (base / "sub").mkdir(parents=True)

@@ -220,6 +220,13 @@ def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
     are resolved via :meth:`pathlib.Path.resolve`, so symlink-based escapes are
     caught as well.
 
+    A ``~`` path is checked under *both* interpretations -- expanded (as
+    :func:`read_file` reads it) and literal (as ``create_file`` and
+    :func:`list_dir` write/list it, since those do not expand) -- and rejected
+    if either one escapes. Callers validate with this function but then operate
+    on the raw path, so validating only one interpretation would leave the other
+    unguarded.
+
     Args:
         base_dir (str|Path): Directory that file operations must stay within.
         user_path (str|Path): User/agent-supplied path (relative or absolute).
@@ -231,14 +238,14 @@ def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
         ValueError: If the resolved path escapes ``base_dir``.
     """
     base = Path(base_dir).resolve()
-    # expand "~" here too, so a "~/..." path is checked as the home path it
-    # actually refers to, rather than as a literal "~" directory under base_dir
-    target = (base / expand_user_path(user_path)).resolve()
-    if target != base and base not in target.parents:
-        raise ValueError(
-            f"Path '{user_path}' is outside the allowed directory '{base}'"
-        )
-    return target
+    expanded = (base / expand_user_path(user_path)).resolve()
+    literal = (base / Path(user_path)).resolve()
+    for target in (expanded, literal):
+        if target != base and base not in target.parents:
+            raise ValueError(
+                f"Path '{user_path}' is outside the allowed directory '{base}'"
+            )
+    return expanded
 
 
 def create_file(
