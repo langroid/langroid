@@ -132,6 +132,24 @@ def test_safe_resolve_path_rejects_tilde(tmp_path, monkeypatch):
         safe_resolve_path(base, "~/secret.txt")
 
 
+def test_read_file_unresolvable_tilde_user(tmp_path, monkeypatch):
+    # "~nosuchuser/..." cannot be expanded; Path.expanduser() raises
+    # RuntimeError for it. read_file must still report it as missing, as it
+    # documents, rather than propagating RuntimeError.
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        read_file("~nosuchuser12345/f.txt")
+
+
+def test_safe_resolve_path_unresolvable_tilde_user(tmp_path):
+    # an unexpandable "~user" path is treated literally, so it stays inside
+    # base_dir and must not raise RuntimeError out of the guard.
+    base = tmp_path / "sandbox"
+    base.mkdir()
+    resolved = safe_resolve_path(base, "~nosuchuser12345/f.txt")
+    assert base in resolved.parents
+
+
 def test_safe_resolve_path_allows_path_within_base(tmp_path):
     base = tmp_path / "sandbox"
     (base / "sub").mkdir(parents=True)

@@ -187,6 +187,29 @@ def generate_unique_id() -> str:
     return str(uuid.uuid4())
 
 
+def expand_user_path(path: str | Path) -> Path:
+    """
+    Expand a leading ``~`` in ``path``, falling back to the literal path when
+    the home directory cannot be determined.
+
+    :meth:`pathlib.Path.expanduser` raises ``RuntimeError`` for an unresolvable
+    reference such as ``~nosuchuser/f.txt``. Callers here treat a path they
+    cannot expand as an ordinary (literal) path, so an agent-supplied path can
+    never crash a file tool.
+
+    Args:
+        path (str|Path): The path to expand.
+
+    Returns:
+        Path: The expanded path, or the literal path if expansion failed.
+    """
+    p = Path(path)
+    try:
+        return p.expanduser()
+    except RuntimeError:
+        return p
+
+
 def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
     """
     Resolve ``user_path`` relative to ``base_dir`` and ensure the result stays
@@ -210,7 +233,7 @@ def safe_resolve_path(base_dir: str | Path, user_path: str | Path) -> Path:
     base = Path(base_dir).resolve()
     # expand "~" here too, so a "~/..." path is checked as the home path it
     # actually refers to, rather than as a literal "~" directory under base_dir
-    target = (base / Path(user_path).expanduser()).resolve()
+    target = (base / expand_user_path(user_path)).resolve()
     if target != base and base not in target.parents:
         raise ValueError(
             f"Path '{user_path}' is outside the allowed directory '{base}'"
@@ -279,7 +302,7 @@ def read_file(path: str, line_numbers: bool = False) -> str:
     """
     # expand "~" before checking existence, so a "~/..." path is not
     # spuriously reported as missing
-    file = Path(path).expanduser()
+    file = expand_user_path(path)
     # raise an error if the file does not exist
     if not file.exists():
         raise FileNotFoundError(f"File not found: {path}")
