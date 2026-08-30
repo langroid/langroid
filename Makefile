@@ -2,6 +2,9 @@
 
 SHELL := /bin/bash
 
+# commitizen via uv, so release targets work without an activated venv
+CZ := uv run --no-sync cz
+
 # Primary checkout's .env (works from any worktree); holds PYPI_TOKEN
 # for `make publish`.
 GIT_PRIMARY_WORKTREE := $(realpath $(shell git rev-parse \
@@ -115,15 +118,15 @@ revert: revert-bump revert-tag
 	
 .PHONY: bump-patch
 bump-patch:
-	@cz bump --increment PATCH
+	@$(CZ) bump --increment PATCH
 
 .PHONY: bump-minor
 bump-minor:
-	@cz bump --increment MINOR 
+	@$(CZ) bump --increment MINOR 
 
 .PHONY: bump-major
 bump-major:
-	@cz bump --increment MAJOR 
+	@$(CZ) bump --increment MAJOR 
 
 .PHONY: build
 build:
@@ -140,7 +143,7 @@ clean:
 
 .PHONY: release
 release:
-	@VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	@VERSION=$$($(CZ) version -p | cut -d' ' -f2) && \
 		gh release create $${VERSION} dist/* --generate-notes
 
 .PHONY: publish
@@ -164,15 +167,15 @@ publish:
 
 .PHONY: bump-rc
 bump-rc:
-	@cz bump --prerelease rc
+	@$(CZ) bump --prerelease rc
 
 .PHONY: bump-beta
 bump-beta:
-	@cz bump --prerelease beta
+	@$(CZ) bump --prerelease beta
 
 .PHONY: bump-alpha
 bump-alpha:
-	@cz bump --prerelease alpha
+	@$(CZ) bump --prerelease alpha
 
 .PHONY: all-patch
 all-patch: bump-patch clean build push release
@@ -200,8 +203,8 @@ pre-release-branch: ## Create and push pre-release from current branch
 		exit 1; \
 	fi && \
 	PRERELEASE_TYPE=$${PRERELEASE_TYPE:-rc} && \
-	cz bump --prerelease "$$PRERELEASE_TYPE" && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	$(CZ) bump --prerelease "$$PRERELEASE_TYPE" && \
+	VERSION=$$($(CZ) version -p | cut -d' ' -f2) && \
 	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
 	git push origin "$$CURRENT_BRANCH" --tags && \
 	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
@@ -234,37 +237,37 @@ pre-release-release: ## Create GitHub pre-release (requires VERSION env var)
 		echo "Error: Cannot create pre-release from main branch"; \
 		exit 1; \
 	fi && \
-	VERSION=$$(cz version -p | cut -d' ' -f2) && \
+	VERSION=$$($(CZ) version -p | cut -d' ' -f2) && \
 	echo "Creating pre-release $$VERSION from branch $$CURRENT_BRANCH" && \
 	gh release create "$$VERSION" dist/* --target "$$CURRENT_BRANCH" --prerelease --title "Pre-release $$VERSION" --notes "Experimental pre-release from $$CURRENT_BRANCH"
 
 .PHONY: bump-rc-patch
 bump-rc-patch: ## Bump to release candidate patch
-	@cz bump --increment PATCH --prerelease rc
+	@$(CZ) bump --increment PATCH --prerelease rc
 
 .PHONY: bump-rc-minor
 bump-rc-minor: ## Bump to release candidate minor
-	@cz bump --increment MINOR --prerelease rc
+	@$(CZ) bump --increment MINOR --prerelease rc
 
 .PHONY: bump-rc-major
 bump-rc-major: ## Bump to release candidate major
-	@cz bump --increment MAJOR --prerelease rc
+	@$(CZ) bump --increment MAJOR --prerelease rc
 
 .PHONY: bump-beta-patch
 bump-beta-patch: ## Bump to beta patch
-	@cz bump --increment PATCH --prerelease beta
+	@$(CZ) bump --increment PATCH --prerelease beta
 
 .PHONY: bump-beta-minor
 bump-beta-minor: ## Bump to beta minor
-	@cz bump --increment MINOR --prerelease beta
+	@$(CZ) bump --increment MINOR --prerelease beta
 
 .PHONY: bump-alpha-patch
 bump-alpha-patch: ## Bump to alpha patch
-	@cz bump --increment PATCH --prerelease alpha
+	@$(CZ) bump --increment PATCH --prerelease alpha
 
 .PHONY: bump-alpha-minor
 bump-alpha-minor: ## Bump to alpha minor
-	@cz bump --increment MINOR --prerelease alpha
+	@$(CZ) bump --increment MINOR --prerelease alpha
 
 .PHONY: pre-release-rc-patch
 pre-release-rc-patch: bump-rc-patch clean build pre-release-push pre-release-release
