@@ -239,9 +239,10 @@ def parse_number_range_list(specs: str) -> List[int]:
         # some weak LLMs may generate <#1#> instead of 1, so extract just the digits
         # or the "-"
         part = "".join(char for char in original if char.isdigit() or char == "-")
-        if part == "" or part == "-":
-            # no digits at all, e.g. from a trailing comma or a lone hyphen:
-            # this refers to no segment, so nothing is lost -- skip quietly
+        if not any(char.isdigit() for char in part):
+            # no digits at all, e.g. from a trailing comma or one or more
+            # stray hyphens: this refers to no segment, so nothing is lost
+            # -- skip quietly
             continue
         if "-" in part:
             endpoints = part.split("-")

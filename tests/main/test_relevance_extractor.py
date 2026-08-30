@@ -254,6 +254,8 @@ def test_relevance_extractor_batch(
         ("1,2,3,", [1, 2, 3]),
         ("1,,2", [1, 2]),
         ("1,-,2", [1, 2]),
+        ("1,--,2", [1, 2]),
+        ("1,-foo-,2", [1, 2]),
         ("", []),
         (",", []),
         # malformed ranges are skipped rather than crashing
@@ -320,6 +322,10 @@ def test_parse_number_range_list_warns_on_dropped_segment(
         "1,-,2",
         "",
         ",",
+        # several stray hyphens still carry no segment reference
+        "1,--,2",
+        "1,-foo-,2",
+        "--",
     ],
 )
 def test_parse_number_range_list_no_warning_when_nothing_lost(specs, root_log_messages):
