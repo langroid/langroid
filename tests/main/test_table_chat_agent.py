@@ -10,7 +10,12 @@ import pytest
 
 from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.base import LLMFunctionCall, LLMMessage, LLMResponse
+from langroid.language_models.base import (
+    LLMFunctionCall,
+    LLMMessage,
+    LLMResponse,
+    OpenAIToolCall,
+)
 from langroid.language_models.mock_lm import MockLM, MockLMConfig
 from langroid.parsing.table_loader import read_tabular_data
 from langroid.parsing.utils import closest_string
@@ -102,17 +107,43 @@ class _SequenceLLM(MockLM):
             assert text not in last_message
         return response
 
+    def assert_fully_consumed(self) -> None:
+        """Fail if the agent stopped before using every scripted response.
 
-def _pandas_eval_response(expression: str, fn_api: bool) -> LLMResponse:
-    """Build the first model response that asks TableChatAgent to eval code."""
-    if fn_api:
-        return LLMResponse(
-            message="",
-            function_call=LLMFunctionCall(
-                name="pandas_eval",
-                arguments={"expression": expression},
-            ),
+        Without this, a task that terminates early still passes the final
+        content assertions, so the later scripted turns (and their
+        expected/forbidden checks) would never run.
+        """
+        assert self.index == len(self.responses), (
+            f"only {self.index} of {len(self.responses)} scripted model "
+            "responses were consumed"
         )
+
+
+def _pandas_eval_response(agent: TableChatAgent, expression: str) -> LLMResponse:
+    """Build the model response that asks `agent` to eval `expression`.
+
+    The response *shape* is derived from the agent's own config so the test
+    always exercises the code path the agent is actually configured for:
+    OpenAI tool-calls, legacy function-calls, or a Langroid tool message.
+    """
+    if agent.config.use_functions_api:
+        function_call = LLMFunctionCall(
+            name="pandas_eval",
+            arguments={"expression": expression},
+        )
+        if agent.config.use_tools_api:
+            return LLMResponse(
+                message="",
+                oai_tool_calls=[
+                    OpenAIToolCall(
+                        id="call_pandas_eval",
+                        type="function",
+                        function=function_call,
+                    )
+                ],
+            )
+        return LLMResponse(message="", function_call=function_call)
 
     return LLMResponse(
         message=json.dumps({"request": "pandas_eval", "expression": expression})
@@ -156,12 +187,12 @@ def _test_table_chat_agent(
         )
     )
     expression, answer = _average_income_expression_and_answer(agent)
-    agent.llm = _SequenceLLM(
+    llm = _SequenceLLM(
         [
             (
                 ("average income",),
                 (),
-                _pandas_eval_response(expression, fn_api),
+                _pandas_eval_response(agent, expression),
             ),
             (
                 (str(answer),),
@@ -170,6 +201,7 @@ def _test_table_chat_agent(
             ),
         ]
     )
+    agent.llm = llm
 
     task = Task(
         agent,
@@ -180,6 +212,7 @@ def _test_table_chat_agent(
 
     assert result is not None
     assert contains_approx_float(result.content, answer)
+    llm.assert_fully_consumed()
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
@@ -258,22 +291,22 @@ def test_table_chat_agent_assignment_self_correction(test_settings: Settings) ->
             full_eval=False,  # Keep security restrictions to test self-correction
         )
     )
-    agent.llm = _SequenceLLM(
+    llm = _SequenceLLM(
         [
             (
                 ("asterisk",),
                 (),
                 _pandas_eval_response(
+                    agent,
                     "df['airline'] = df['airline'].str.replace('*', '', regex=False)",
-                    fn_api=False,
                 ),
             ),
             (
                 ("ERROR", "SyntaxError"),
                 (),
                 _pandas_eval_response(
+                    agent,
                     "df.assign(airline=df['airline'].str.replace('*', ''))",
-                    fn_api=False,
                 ),
             ),
             (
@@ -292,6 +325,7 @@ def test_table_chat_agent_assignment_self_correction(test_settings: Settings) ->
             ),
         ]
     )
+    agent.llm = llm
 
     task = Task(
         agent,
@@ -311,6 +345,7 @@ def test_table_chat_agent_assignment_self_correction(test_settings: Settings) ->
     assert "Delta*" not in result.content
     # The agent successfully cleaned the data (it says so in the message)
     assert "removed" in result.content.lower() and "cleaned" in result.content.lower()
+    llm.assert_fully_consumed()
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
@@ -330,14 +365,14 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
         )
     )
     answer = agent.df[agent.df["cotton"] < 500]["poultry"].mean()
-    agent.llm = _SequenceLLM(
+    llm = _SequenceLLM(
         [
             (
                 ("average poultry",),
                 (),
                 _pandas_eval_response(
+                    agent,
                     "df[df['cotton'] < 500]['poultry'].mean()",
-                    fn_api=fn_api,
                 ),
             ),
             (
@@ -347,6 +382,7 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
             ),
         ]
     )
+    agent.llm = llm
 
     task = Task(
         agent,
@@ -367,3 +403,4 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
 
     assert result is not None
     assert contains_approx_float(result.content, answer)
+    llm.assert_fully_consumed()
