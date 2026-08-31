@@ -226,7 +226,7 @@ class Task:
         default_return_type: Optional[type] = None,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
-        config: TaskConfig = TaskConfig(),
+        config: TaskConfig | None = None,
         **kwargs: Any,  # catch-all for any legacy params, for backwards compatibility
     ):
         """
@@ -308,6 +308,7 @@ class Task:
             show_subtask_response=noop_fn,
             set_parent_agent=noop_fn,
         )
+        config = config if config is not None else TaskConfig()
         self.config = config
         # Store parsed done sequences (will be initialized after agent assignment)
         self._parsed_done_sequences: Optional[List[DoneSequence]] = None
