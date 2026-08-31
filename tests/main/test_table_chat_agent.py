@@ -15,6 +15,7 @@ from langroid.language_models.base import (
     LLMMessage,
     LLMResponse,
     OpenAIToolCall,
+    Role,
 )
 from langroid.language_models.mock_lm import MockLM, MockLMConfig
 from langroid.parsing.table_loader import read_tabular_data
@@ -99,13 +100,35 @@ class _SequenceLLM(MockLM):
         assert isinstance(messages, list)
         assert self.index < len(self.responses), "unexpected extra model call"
         expected, forbidden, response = self.responses[self.index]
+        previous = self.responses[self.index - 1][2] if self.index > 0 else None
         self.index += 1
+        self._assert_tool_result_shape(messages[-1], previous)
         last_message = messages[-1].content or ""
         for text in expected:
             assert text in last_message
         for text in forbidden:
             assert text not in last_message
         return response
+
+    @staticmethod
+    def _assert_tool_result_shape(
+        message: LLMMessage,
+        previous: LLMResponse | None,
+    ) -> None:
+        """Check the tool result is fed back in the shape the API requires.
+
+        Content assertions alone would still pass if the result came back
+        with the wrong role or an absent/mismatched `tool_call_id`, which a
+        real OpenAI request would reject.
+        """
+        if previous is None:
+            return
+        if previous.oai_tool_calls:
+            assert message.role == Role.TOOL
+            assert message.tool_call_id == previous.oai_tool_calls[0].id
+        elif previous.function_call is not None:
+            assert message.role == Role.FUNCTION
+            assert message.name == previous.function_call.name
 
     def assert_fully_consumed(self) -> None:
         """Fail if the agent stopped before using every scripted response.
