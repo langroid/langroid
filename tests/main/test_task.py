@@ -32,6 +32,21 @@ from langroid.utils.configuration import (
 from langroid.utils.constants import DONE, PASS
 
 
+def test_task_config_identity_contract() -> None:
+    """Default tasks get fresh configs while explicit configs retain identity."""
+    first = Task()
+    second = Task()
+
+    assert first.config is not second.config
+    first.config.recognize_string_signals = False
+    assert second.config.recognize_string_signals
+
+    config = TaskConfig()
+    explicit = Task(config=config)
+    assert explicit.config is config
+    assert isinstance(Task(config=None).config, TaskConfig)
+
+
 def test_task_cost(test_settings: Settings):
     """Test that max_cost, max_tokens are respected by Task.run()"""
 
