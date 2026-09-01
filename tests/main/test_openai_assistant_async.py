@@ -11,6 +11,7 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
+from tests.utils import assistants_api_sunset
 
 
 class NabroskyTool(ToolMessage):
@@ -22,6 +23,7 @@ class NabroskyTool(ToolMessage):
         return str(self.num**2)
 
 
+@assistants_api_sunset
 @pytest.mark.asyncio
 async def test_openai_assistant_async(test_settings: Settings):
     set_global(test_settings)
@@ -54,6 +56,7 @@ async def test_openai_assistant_async(test_settings: Settings):
     assert "Beijing" in answer.content
 
 
+@assistants_api_sunset
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="Flaky: LLM may not always call the function")
 @pytest.mark.parametrize("fn_api", [True, False])
@@ -132,6 +135,7 @@ def test_openai_asst_batch(test_settings: Settings):
         assert any(str(e) in a.content.lower() for a in answers)
 
 
+@assistants_api_sunset
 def test_openai_asst_task_batch(test_settings: Settings):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig()

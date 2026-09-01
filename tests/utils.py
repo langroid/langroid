@@ -1,3 +1,16 @@
+import pytest
+
+# The OpenAI Assistants API beta was sunset on 2026-08-26, and every endpoint
+# (including `POST /assistants`) now returns a bare 404, so any test that talks
+# to the live API can never pass. Skip such tests until Langroid's
+# `OpenAIAssistant` is migrated to the Responses API.
+# See https://developers.openai.com/api/docs/assistants/migration
+assistants_api_sunset = pytest.mark.skip(
+    reason="OpenAI Assistants API was sunset on 2026-08-26 and returns 404; "
+    "pending migration to the Responses API"
+)
+
+
 def contains_approx_float(s: str, x: int | float, k: int = 0) -> bool:
     """
     Check if a string contains a float that is approximately equal to x.

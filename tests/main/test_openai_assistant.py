@@ -18,6 +18,7 @@ from langroid.language_models import LLMMessage, OpenAIGPTConfig, Role
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
+from tests.utils import assistants_api_sunset
 
 
 class NabroskyTool(ToolMessage):
@@ -83,6 +84,7 @@ def test_openai_assistant_normalizes_none_thread_message(
     assert added_messages == [("", Role.USER)]
 
 
+@assistants_api_sunset
 def test_openai_assistant(test_settings: Settings):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig()
@@ -115,6 +117,7 @@ def test_openai_assistant(test_settings: Settings):
     assert "Beijing" in answer.content
 
 
+@assistants_api_sunset
 def test_openai_assistant_cache(test_settings: Settings):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
@@ -160,6 +163,7 @@ def test_openai_assistant_cache(test_settings: Settings):
     assert response.metadata.cached
 
 
+@assistants_api_sunset
 @pytest.mark.xfail(
     reason="Flaky due to non-deterministic LLM tool-use behavior",
     run=True,
@@ -210,6 +214,7 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
         assert "25" in result.content
 
 
+@assistants_api_sunset
 @pytest.mark.xfail(
     reason="Flaky/Soon-To-be-deprecated API, may fail",
     run=True,
@@ -262,6 +267,7 @@ def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
         assert "25" in result.content
 
 
+@assistants_api_sunset
 @pytest.mark.parametrize("fn_api", [True, False])
 def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     """Test that special case of fn-calling: RecipientTool works,
@@ -348,6 +354,7 @@ def test_openai_assistant_retrieval(test_settings: Settings):
     assert "Lomita" in response.content
 
 
+@assistants_api_sunset
 @pytest.mark.xfail(
     reason="May fail due to unknown flakiness",
     run=True,
@@ -390,6 +397,7 @@ def test_openai_asst_code_interpreter(test_settings: Settings):
     assert str(len(text.split())) in response.content
 
 
+@assistants_api_sunset
 def test_openai_assistant_multi(test_settings: Settings):
     """
     Test task delegation with OpenAIAssistant
