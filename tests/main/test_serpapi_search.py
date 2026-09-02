@@ -32,7 +32,12 @@ def test_request_authentication(mock_get, mock_result):
 
     mock_get.assert_called_once_with(
         "https://serpapi.com/search.json",
-        params={"engine": "google", "q": "test query", "api_key": "test-key"},
+        params={
+            "engine": "google",
+            "q": "test query",
+            "num": 2,
+            "api_key": "test-key",
+        },
         timeout=30,
     )
     mock_get.return_value.raise_for_status.assert_called_once_with()
@@ -48,9 +53,63 @@ def test_parses_organic_results_and_honors_num_results(mock_get, mock_result):
 
     assert len(results) == 2
     assert mock_result.call_args_list == [
-        (("First result", "https://example.com/first", 3500, 300),),
-        (("Second result", "https://example.com/second", 3500, 300),),
+        (
+            (),
+            dict(
+                title="First result",
+                link="https://example.com/first",
+                max_content_length=3500,
+                max_summary_length=300,
+            ),
+        ),
+        (
+            (),
+            dict(
+                title="Second result",
+                link="https://example.com/second",
+                max_content_length=3500,
+                max_summary_length=300,
+            ),
+        ),
     ]
+
+
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
+@patch("langroid.parsing.web_search.WebSearchResult")
+@patch("langroid.parsing.web_search.requests.get")
+def test_skips_results_without_link(mock_get, mock_result):
+    """A result missing `link` is skipped, and does not consume a slot."""
+    mock_get.return_value = mock_search_response(
+        [
+            {"title": "No link here"},
+            {"title": "Empty link", "link": ""},
+            {"title": "First result", "link": "https://example.com/first"},
+            {"title": "Second result", "link": "https://example.com/second"},
+        ]
+    )
+
+    results = serpapi_search("test", num_results=2)
+
+    assert len(results) == 2
+    assert [call.kwargs["link"] for call in mock_result.call_args_list] == [
+        "https://example.com/first",
+        "https://example.com/second",
+    ]
+
+
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
+@patch("langroid.parsing.web_search.WebSearchResult")
+@patch("langroid.parsing.web_search.requests.get")
+def test_missing_title_defaults_to_empty_string(mock_get, mock_result):
+    """A result missing `title` is kept, with an empty title (no KeyError)."""
+    mock_get.return_value = mock_search_response(
+        [{"link": "https://example.com/untitled"}]
+    )
+
+    results = serpapi_search("test", num_results=3)
+
+    assert len(results) == 1
+    assert mock_result.call_args_list[0].kwargs["title"] == ""
 
 
 @patch("langroid.parsing.web_search.load_dotenv")

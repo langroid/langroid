@@ -131,11 +131,24 @@ def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
 
 def serpapi_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
-    """Return up to ``num_results`` organic results from the first Google page.
-
-    SerpApi's standard Google Search currently returns at most roughly 10 results
-    per page. This function does not paginate additional pages with ``start``.
     """
+    Method that makes an API call to SerpApi's Google Search endpoint, which
+    queries the top `num_results` organic results matching the query.
+    Returns a list of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+
+    Notes:
+        Results come from a single SerpApi Google results page: `num_results`
+        is passed through as the `num` parameter, and no further pages are
+        fetched via `start`, so a very large `num_results` may yield fewer
+        results than requested. Organic results without a `link` are skipped,
+        since there would be nothing to fetch content from.
+    """
+
     load_dotenv()
 
     api_key = os.getenv("SERPAPI_API_KEY")
@@ -145,17 +158,31 @@ def serpapi_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
             "Please set it to your API key and try again."
         )
 
+    params: Dict[str, str | int] = {
+        "engine": "google",
+        "q": query,
+        "num": num_results,
+        "api_key": api_key,
+    }
     response = requests.get(
         "https://serpapi.com/search.json",
-        params={"engine": "google", "q": query, "api_key": api_key},
+        params=params,
         timeout=30,
     )
     response.raise_for_status()
     raw_results = response.json().get("organic_results", [])
+    # SerpApi extracts organic-result fields opportunistically, so an entry
+    # may be missing `title` or `link`; only `link` is essential.
+    linked_results = [result for result in raw_results if result.get("link")]
 
     return [
-        WebSearchResult(result["title"], result["link"], 3500, 300)
-        for result in raw_results[:num_results]
+        WebSearchResult(
+            title=result.get("title", ""),
+            link=result["link"],
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        for result in linked_results[:num_results]
     ]
 
 

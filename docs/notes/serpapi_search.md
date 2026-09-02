@@ -18,9 +18,10 @@ agent = ChatAgent(ChatAgentConfig(name="search-agent"))
 agent.enable_message(SerpApiSearchTool)
 ```
 
-The integration returns up to `num_results` items from the first SerpApi Google
-Search page's `organic_results`. A standard page currently contains at most
-roughly 10 results; fetching more would require pagination with `start`, which
-this integration intentionally does not perform. See
+The integration returns up to `num_results` items from a single SerpApi Google
+Search page's `organic_results`: `num_results` is passed through as SerpApi's
+`num` parameter, and no further pages are fetched via `start`, so a very large
+`num_results` may yield fewer results than requested. Organic results without a
+`link` are skipped, since there would be no page to fetch content from. See
 [`examples/basic/chat-search-serpapi.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-serpapi.py)
 for a complete example.

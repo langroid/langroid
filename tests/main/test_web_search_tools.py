@@ -13,6 +13,7 @@ from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.agent.tools.exa_search_tool import ExaSearchTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
+from langroid.agent.tools.serpapi_search_tool import SerpApiSearchTool
 from langroid.agent.tools.tavily_search_tool import TavilySearchTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -43,6 +44,7 @@ agent = ChatAgent(cfg)
         GoogleSearchTool,
         DuckduckgoSearchTool,
         SeltzSearchTool,
+        SerpApiSearchTool,
     ],
 )
 @pytest.mark.parametrize("use_functions_api", [True, False])
