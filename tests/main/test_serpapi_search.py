@@ -134,9 +134,17 @@ def test_empty_or_missing_organic_results(mock_get, payload):
 @patch("langroid.parsing.web_search.requests.get")
 def test_http_error_propagates_with_redacted_key(mock_get):
     """An HTTP failure still raises HTTPError, but without the API key."""
+    leaky_url = "https://serpapi.com/search.json?engine=google&q=test&api_key=test-key"
+    # requests attaches the request/response, whose .url carries the key
+    failed_request = MagicMock()
+    failed_request.url = leaky_url
+    failed_response = MagicMock()
+    failed_response.url = leaky_url
+    failed_response.request = failed_request
     error = requests.HTTPError(
-        "403 Client Error: Forbidden for url: "
-        "https://serpapi.com/search.json?engine=google&q=test&api_key=test-key"
+        f"403 Client Error: Forbidden for url: {leaky_url}",
+        response=failed_response,
+        request=failed_request,
     )
     mock_get.return_value.raise_for_status.side_effect = error
 
@@ -149,6 +157,48 @@ def test_http_error_propagates_with_redacted_key(mock_get):
     assert "403 Client Error" in message
     # the leaking original must not be chained onto the redacted error
     assert excinfo.value.__cause__ is None
+    assert excinfo.value.__context__ is None
+    # nor reachable through the objects requests attaches, which hold the
+    # same key-bearing URL
+    assert excinfo.value.response is None
+    assert excinfo.value.request is None
+    assert "test-key" not in repr(excinfo.value)
+    assert not any("test-key" in str(arg) for arg in excinfo.value.args)
+
+
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "a+b/c key"})
+@patch("langroid.parsing.web_search.requests.get")
+def test_url_encoded_key_is_redacted(mock_get):
+    """A key that requests percent-encodes into the URL is still redacted."""
+    mock_get.side_effect = requests.ConnectionError(
+        "Failed to establish a new connection to "
+        "https://serpapi.com/search.json?api_key=a%2Bb%2Fc+key"
+    )
+
+    with pytest.raises(requests.ConnectionError) as excinfo:
+        serpapi_search("test")
+
+    message = str(excinfo.value)
+    assert "a%2Bb%2Fc+key" not in message
+    assert "a+b/c key" not in message
+    assert "***" in message
+
+
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
+@patch("langroid.parsing.web_search.requests.get")
+def test_error_subclass_without_generic_constructor(mock_get):
+    """A subclass that cannot be rebuilt falls back without leaking the key."""
+    mock_get.side_effect = requests.JSONDecodeError(
+        "boom for url https://serpapi.com/search.json?api_key=test-key",
+        "{}",
+        0,
+    )
+
+    with pytest.raises(requests.RequestException) as excinfo:
+        serpapi_search("test")
+
+    assert "test-key" not in str(excinfo.value)
+    assert "***" in str(excinfo.value)
     assert excinfo.value.__context__ is None
 
 
