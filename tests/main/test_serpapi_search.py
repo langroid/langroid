@@ -1,0 +1,118 @@
+"""Tests for SerpApi search support."""
+
+import os
+from unittest.mock import MagicMock, patch
+
+import pytest
+import requests
+
+from langroid.agent.tools.serpapi_search_tool import SerpApiSearchTool
+from langroid.parsing.web_search import WebSearchResult, serpapi_search
+
+ORGANIC_RESULTS = [
+    {"title": "First result", "link": "https://example.com/first"},
+    {"title": "Second result", "link": "https://example.com/second"},
+    {"title": "Third result", "link": "https://example.com/third"},
+]
+
+
+def mock_search_response(results=ORGANIC_RESULTS):
+    response = MagicMock()
+    response.json.return_value = {"organic_results": results}
+    return response
+
+
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
+@patch("langroid.parsing.web_search.WebSearchResult")
+@patch("langroid.parsing.web_search.requests.get")
+def test_request_authentication(mock_get, mock_result):
+    mock_get.return_value = mock_search_response()
+
+    serpapi_search("test query", num_results=2)
+
+    mock_get.assert_called_once_with(
+        "https://serpapi.com/search.json",
+        params={"engine": "google", "q": "test query", "api_key": "test-key"},
+        timeout=30,
+    )
+    mock_get.return_value.raise_for_status.assert_called_once_with()
+
+
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
+@patch("langroid.parsing.web_search.WebSearchResult")
+@patch("langroid.parsing.web_search.requests.get")
+def test_parses_organic_results_and_honors_num_results(mock_get, mock_result):
+    mock_get.return_value = mock_search_response()
+
+    results = serpapi_search("test", num_results=2)
+
+    assert len(results) == 2
+    assert mock_result.call_args_list == [
+        (("First result", "https://example.com/first", 3500, 300),),
+        (("Second result", "https://example.com/second", 3500, 300),),
+    ]
+
+
+@patch("langroid.parsing.web_search.load_dotenv")
+@patch("langroid.parsing.web_search.requests.get")
+def test_missing_api_key(mock_get, mock_load_dotenv):
+    with patch.dict(os.environ, {}, clear=True):
+        with pytest.raises(ValueError, match="SERPAPI_API_KEY"):
+            serpapi_search("test")
+    mock_load_dotenv.assert_called_once_with()
+    mock_get.assert_not_called()
+
+
+@pytest.mark.parametrize("payload", [{}, {"organic_results": []}])
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
+@patch("langroid.parsing.web_search.requests.get")
+def test_empty_or_missing_organic_results(mock_get, payload):
+    mock_get.return_value.json.return_value = payload
+    assert serpapi_search("test") == []
+
+
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
+@patch("langroid.parsing.web_search.requests.get")
+def test_http_error_propagates(mock_get):
+    error = requests.HTTPError("SerpApi failed")
+    mock_get.return_value.raise_for_status.side_effect = error
+    with pytest.raises(requests.HTTPError, match="SerpApi failed"):
+        serpapi_search("test")
+
+
+@patch("langroid.agent.tools.serpapi_search_tool.serpapi_search")
+def test_tool_handle(mock_search):
+    result = MagicMock(spec=WebSearchResult)
+    result.__str__.return_value = (
+        "Title: Result\nLink: https://example.com\nSummary: Example summary"
+    )
+    mock_search.return_value = [result]
+
+    output = SerpApiSearchTool(query="test", num_results=2).handle()
+
+    mock_search.assert_called_once_with("test", 2)
+    assert "BELOW ARE THE RESULTS FROM THE WEB SEARCH" in output
+    assert "https://example.com" in output
+
+
+def test_tool_examples():
+    examples = SerpApiSearchTool.examples()
+    assert len(examples) == 1
+    assert isinstance(examples[0], SerpApiSearchTool)
+    assert examples[0].num_results == 3
+
+
+def test_tool_name_and_request():
+    assert SerpApiSearchTool.name() == "serpapi_search"
+    tool = SerpApiSearchTool(query="test", num_results=1)
+    assert tool.request == "serpapi_search"
+
+
+@pytest.mark.skipif(
+    not os.environ.get("SERPAPI_API_KEY"),
+    reason="SERPAPI_API_KEY not set",
+)
+def test_serpapi_real_query():
+    results = serpapi_search("Python programming language", num_results=3)
+    assert 0 < len(results) <= 3
+    assert all(result.link for result in results)
