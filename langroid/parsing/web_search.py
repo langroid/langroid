@@ -130,6 +130,31 @@ def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     ]
 
 
+def serpapi_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """Return up to ``num_results`` organic results from a SerpApi Google search."""
+    load_dotenv()
+
+    api_key = os.getenv("SERPAPI_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "SERPAPI_API_KEY environment variable is not set. "
+            "Please set it to your API key and try again."
+        )
+
+    response = requests.get(
+        "https://serpapi.com/search.json",
+        params={"engine": "google", "q": query, "api_key": api_key},
+        timeout=30,
+    )
+    response.raise_for_status()
+    raw_results = response.json().get("organic_results", [])
+
+    return [
+        WebSearchResult(result["title"], result["link"], 3500, 300)
+        for result in raw_results[:num_results]
+    ]
+
+
 def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     """
     Method that makes an API call by Metaphor client that queries
