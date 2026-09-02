@@ -7,6 +7,7 @@ environment variables in your `.env` file, as explained in the
 """
 
 import os
+import warnings
 from typing import Dict, List
 
 import requests
@@ -98,7 +99,23 @@ class WebSearchResult:
         }
 
 
+GOOGLE_SEARCH_DEPRECATION = (
+    "GoogleSearchTool / google_search() are deprecated: Google's Custom Search "
+    "JSON API is closed to new customers and will be discontinued on "
+    "January 1, 2027 (https://developers.google.com/custom-search/v1/overview). "
+    "Switch to TavilySearchTool, ExaSearchTool, or DuckduckgoSearchTool."
+)
+
+
 def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """Search via Google's Custom Search JSON API.
+
+    .. deprecated::
+        The underlying API is closed to new customers and is discontinued on
+        2027-01-01. Existing credentials keep working until then; use
+        :func:`tavily_search`, :func:`exa_search`, or :func:`duckduckgo_search`.
+    """
+    warnings.warn(GOOGLE_SEARCH_DEPRECATION, DeprecationWarning, stacklevel=2)
     load_dotenv()
     api_key = os.getenv("GOOGLE_API_KEY")
     cse_id = os.getenv("GOOGLE_CSE_ID")

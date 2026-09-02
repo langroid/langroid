@@ -1,4 +1,11 @@
 """
+DEPRECATED: Google's Custom Search JSON API (which this tool relies on) is
+closed to new customers and will be discontinued on January 1, 2027
+(https://developers.google.com/custom-search/v1/overview). The tool keeps
+working for users with existing credentials until then; new users should
+use `TavilySearchTool`, `ExaSearchTool`, or `DuckduckgoSearchTool` instead.
+Using it emits a `DeprecationWarning`.
+
 A tool to trigger a Google search for a given query, and return the top results with
 their titles, links, summaries. Since the tool is stateless (i.e. does not need
 access to agent state), it can be enabled for any agent, without having to define a
