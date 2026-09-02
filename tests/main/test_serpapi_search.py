@@ -132,11 +132,40 @@ def test_empty_or_missing_organic_results(mock_get, payload):
 
 @patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
 @patch("langroid.parsing.web_search.requests.get")
-def test_http_error_propagates(mock_get):
-    error = requests.HTTPError("SerpApi failed")
+def test_http_error_propagates_with_redacted_key(mock_get):
+    """An HTTP failure still raises HTTPError, but without the API key."""
+    error = requests.HTTPError(
+        "403 Client Error: Forbidden for url: "
+        "https://serpapi.com/search.json?engine=google&q=test&api_key=test-key"
+    )
     mock_get.return_value.raise_for_status.side_effect = error
-    with pytest.raises(requests.HTTPError, match="SerpApi failed"):
+
+    with pytest.raises(requests.HTTPError) as excinfo:
         serpapi_search("test")
+
+    message = str(excinfo.value)
+    assert "test-key" not in message
+    assert "***" in message
+    assert "403 Client Error" in message
+    # the leaking original must not be chained onto the redacted error
+    assert excinfo.value.__cause__ is None
+    assert excinfo.value.__context__ is None
+
+
+@patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"})
+@patch("langroid.parsing.web_search.requests.get")
+def test_connection_error_redacts_key(mock_get):
+    """A transport-level failure is redacted too, keeping its error type."""
+    mock_get.side_effect = requests.ConnectionError(
+        "Failed to establish a new connection to "
+        "https://serpapi.com/search.json?engine=google&api_key=test-key"
+    )
+
+    with pytest.raises(requests.ConnectionError) as excinfo:
+        serpapi_search("test")
+
+    assert "test-key" not in str(excinfo.value)
+    assert "***" in str(excinfo.value)
 
 
 @patch("langroid.agent.tools.serpapi_search_tool.serpapi_search")

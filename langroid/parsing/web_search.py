@@ -147,6 +147,11 @@ def serpapi_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         fetched via `start`, so a very large `num_results` may yield fewer
         results than requested. Organic results without a `link` are skipped,
         since there would be nothing to fetch content from.
+
+        SerpApi authenticates via the `api_key` query parameter, so the request
+        URL that `requests` embeds in its error messages contains the key.
+        Request failures are re-raised with the key redacted, to keep it out of
+        logs and tracebacks.
     """
 
     load_dotenv()
@@ -164,12 +169,27 @@ def serpapi_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         "num": num_results,
         "api_key": api_key,
     }
-    response = requests.get(
-        "https://serpapi.com/search.json",
-        params=params,
-        timeout=30,
-    )
-    response.raise_for_status()
+    error: requests.RequestException | None = None
+    try:
+        response = requests.get(
+            "https://serpapi.com/search.json",
+            params=params,
+            timeout=30,
+        )
+        response.raise_for_status()
+    except requests.RequestException as e:
+        # `requests` puts the full request URL -- api_key included -- in its
+        # error messages, so rebuild the same error type without the key.
+        error = type(e)(
+            str(e).replace(api_key, "***"),
+            response=e.response,
+            request=e.request,
+        )
+    if error is not None:
+        # raised outside the `except` block so that the original, key-bearing
+        # error is not attached to it as __context__
+        raise error
+
     raw_results = response.json().get("organic_results", [])
     # SerpApi extracts organic-result fields opportunistically, so an entry
     # may be missing `title` or `link`; only `link` is essential.
