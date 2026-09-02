@@ -73,7 +73,7 @@ class ChatDocMetaData(DocMetaData):
     tainted: bool = False
     # tool_id corresponding to single tool result in ChatDocument.content
     oai_tool_id: str | None = None
-    tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
+    tool_ids: List[str] = []  # vestigial: was used by the removed OpenAIAssistant
     block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
@@ -596,7 +596,7 @@ class ChatDocument(Document):
         return [
             LLMMessage(
                 role=sender_role,
-                tool_id=tool_id,  # for OpenAI Assistant
+                tool_id=tool_id,  # vestigial: was for OpenAIAssistant
                 content=content,
                 files=message.files,
                 function_call=fun_call,

@@ -115,6 +115,7 @@ nav:
       - Tool-Origin Taint Tracking: notes/tool-origin-taint.md
       - Tool Handler Resolution: notes/tool-handler-resolution.md
       - Message Routing: notes/message-routing.md
+      - OpenAIAssistant Removal: notes/openai-assistant-removal.md
       - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
       - Azure OpenAI models: notes/azure-openai-models.md
       - Custom Azure OpenAI client: notes/custom-azure-client.md

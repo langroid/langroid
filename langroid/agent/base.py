@@ -690,7 +690,7 @@ class Agent(ABC):
             ),
         )
         if isinstance(results, ChatDocument):
-            # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+            # Preserve trail of tool_ids (vestigial: was for OpenAIAssistant)
             results.metadata.tool_ids = (
                 [] if msg is None or isinstance(msg, str) else msg.metadata.tool_ids
             )
@@ -716,7 +716,7 @@ class Agent(ABC):
                 agent_id=self.id,
                 sender_name=sender_name,
                 oai_tool_id=oai_tool_id,
-                # preserve trail of tool_ids for OpenAI Assistant fn-calls
+                # preserve trail of tool_ids (vestigial: was for OpenAIAssistant)
                 tool_ids=(
                     [] if msg is None or isinstance(msg, str) else msg.metadata.tool_ids
                 ),
@@ -1018,7 +1018,7 @@ class Agent(ABC):
                     # interactive user input is external untrusted input; SYSTEM
                     # (operator) input is trusted (#1035)
                     tainted=sender == Entity.USER,
-                    # preserve trail of tool_ids for OpenAI Assistant fn-calls
+                    # preserve trail of tool_ids (vestigial: was for OpenAIAssistant)
                     tool_ids=tool_ids,
                 ),
             )
@@ -1211,7 +1211,7 @@ class Agent(ABC):
                 print_response_stats=self.config.show_stats and not settings.quiet,
             )
         cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
-        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        # Preserve trail of tool_ids (vestigial: was for OpenAIAssistant)
         cdoc.metadata.tool_ids = (
             [] if isinstance(message, str) else message.metadata.tool_ids
         )
@@ -1285,7 +1285,7 @@ class Agent(ABC):
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
         cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
-        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        # Preserve trail of tool_ids (vestigial: was for OpenAIAssistant)
         cdoc.metadata.tool_ids = (
             [] if isinstance(message, str) else message.metadata.tool_ids
         )

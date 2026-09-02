@@ -44,7 +44,6 @@ Langroid is a framework for building LLM-powered agents that can use tools and c
    - `chat_agent.py` - Base ChatAgent that can converse and use tools
    - `task.py` - Handles execution flow for agents
    - `special/` - Domain-specific agents (doc chat, table chat, SQL chat, etc.)
-   - `openai_assistant.py` - Integration with OpenAI Assistant API
 
 2. **Tools** (`langroid/agent/tools/`):
    - Tool system for agents to interact with external systems

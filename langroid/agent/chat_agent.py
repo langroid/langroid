@@ -1741,7 +1741,7 @@ class ChatAgent(Agent):
         response.metadata.agent_id = self.id
         if isinstance(message, ChatDocument):
             self._reduce_raw_tool_results(message)
-        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        # Preserve trail of tool_ids (vestigial: was for OpenAIAssistant)
         response.metadata.tool_ids = (
             []
             if isinstance(message, str)
@@ -1829,7 +1829,7 @@ class ChatAgent(Agent):
         response.metadata.agent_id = self.id
         if isinstance(message, ChatDocument):
             self._reduce_raw_tool_results(message)
-        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        # Preserve trail of tool_ids (vestigial: was for OpenAIAssistant)
         response.metadata.tool_ids = (
             []
             if isinstance(message, str)
