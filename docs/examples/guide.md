@@ -47,7 +47,7 @@ the LLM will try its best to interpret what you want, and offer choices when con
 
     - Illustrates Agent + Tools/function-calling + web-search via Seltz
 
-- [`/examples/basic/chat-search-serpapi.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-serpapi.py) Similar to the above, but uses `SerpApiSearchTool` for Google organic search results.
+- [`/examples/basic/chat-search-serpapi.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-serpapi.py) Similar to the above, but uses `SerpApiSearchTool` for Google organic search results. Requires `SERPAPI_API_KEY`; see [SerpApi Search Tool docs](../notes/serpapi_search.md) for setup details.
 
     - Illustrates Agent + Tools/function-calling + Google organic search via SerpApi
 

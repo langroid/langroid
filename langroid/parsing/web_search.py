@@ -131,7 +131,11 @@ def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
 
 def serpapi_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
-    """Return up to ``num_results`` organic results from a SerpApi Google search."""
+    """Return up to ``num_results`` organic results from the first Google page.
+
+    SerpApi's standard Google Search currently returns at most roughly 10 results
+    per page. This function does not paginate additional pages with ``start``.
+    """
     load_dotenv()
 
     api_key = os.getenv("SERPAPI_API_KEY")
