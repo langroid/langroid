@@ -9,6 +9,7 @@ environment variables in your `.env` file, as explained in the
 import os
 import warnings
 from typing import Dict, List
+from urllib.parse import quote, quote_plus
 
 import requests
 from bs4 import BeautifulSoup
@@ -127,6 +128,105 @@ def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     return [
         WebSearchResult(result["title"], result["link"], 3500, 300)
         for result in raw_results
+    ]
+
+
+def _redacted_request_error(
+    error: requests.RequestException, secret: str
+) -> requests.RequestException:
+    """Rebuild a `requests` error with `secret` scrubbed from what it exposes.
+
+    A provider that authenticates with a query parameter puts its key in the
+    request URL, and `requests` embeds that URL in its error messages. The
+    `request` / `response` objects attached to the error hold the same URL, so
+    neither is carried over to the rebuilt error.
+
+    Args:
+        error: the original `requests` exception.
+        secret: the credential to scrub, in raw and URL-encoded forms.
+
+    Returns:
+        An error of the same type where possible, otherwise a plain
+        `requests.RequestException`, with no reference to the original.
+    """
+    message = str(error)
+    for form in (secret, quote(secret, safe=""), quote_plus(secret)):
+        message = message.replace(form, "***")
+    try:
+        # subclasses such as JSONDecodeError need extra constructor args
+        return type(error)(message)
+    except Exception:
+        return requests.RequestException(message)
+
+
+def serpapi_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call to SerpApi's Google Search endpoint, which
+    queries the top `num_results` organic results matching the query.
+    Returns a list of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+
+    Notes:
+        Results come from a single SerpApi Google results page: `num_results`
+        is passed through as the `num` parameter, and no further pages are
+        fetched via `start`, so a very large `num_results` may yield fewer
+        results than requested. Organic results without a `link` are skipped,
+        since there would be nothing to fetch content from.
+
+        SerpApi authenticates via the `api_key` query parameter, so the request
+        URL that `requests` embeds in its error messages contains the key.
+        Request failures are re-raised with the key redacted, and without the
+        `request` / `response` objects that carry the same URL, to keep the key
+        out of logs and tracebacks.
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("SERPAPI_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "SERPAPI_API_KEY environment variable is not set. "
+            "Please set it to your API key and try again."
+        )
+
+    params: Dict[str, str | int] = {
+        "engine": "google",
+        "q": query,
+        "num": num_results,
+        "api_key": api_key,
+    }
+    error: requests.RequestException | None = None
+    try:
+        response = requests.get(
+            "https://serpapi.com/search.json",
+            params=params,
+            timeout=30,
+        )
+        response.raise_for_status()
+    except requests.RequestException as e:
+        error = _redacted_request_error(e, api_key)
+    if error is not None:
+        # raised outside the `except` block so that the original, key-bearing
+        # error is not attached to it as __context__
+        raise error
+
+    raw_results = response.json().get("organic_results", [])
+    # SerpApi extracts organic-result fields opportunistically, so an entry
+    # may be missing `title` or `link`; only `link` is essential.
+    linked_results = [result for result in raw_results if result.get("link")]
+
+    return [
+        WebSearchResult(
+            title=result.get("title", ""),
+            link=result["link"],
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        for result in linked_results[:num_results]
     ]
 
 

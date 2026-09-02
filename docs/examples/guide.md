@@ -47,6 +47,10 @@ the LLM will try its best to interpret what you want, and offer choices when con
 
     - Illustrates Agent + Tools/function-calling + web-search via Seltz
 
+- [`/examples/basic/chat-search-serpapi.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-serpapi.py) Similar to the above, but uses `SerpApiSearchTool` for Google organic search results. Requires `SERPAPI_API_KEY`; see [SerpApi Search Tool docs](../notes/serpapi_search.md) for setup details.
+
+    - Illustrates Agent + Tools/function-calling + Google organic search via SerpApi
+
 - [`/examples/basic/chat-tree.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat-tree.py) is a toy example of tree-structured multi-agent
   computation, see a detailed writeup [here.](https://langroid.github.io/langroid/examples/agent-tree/)
   

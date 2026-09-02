@@ -128,6 +128,7 @@ nav:
       - Pinecone: notes/pinecone.md
       - Tavily Search Tool: notes/tavily_search.md
       - Seltz Search Tool: notes/seltz_search.md
+      - SerpApi Search Tool: notes/serpapi_search.md
       - Twitter Search via Xquik MCP: notes/twitter-search.md
       - Marker Pdf Parser: notes/marker-pdf.md
       - URLLoader : notes/url_loader.md
