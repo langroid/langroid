@@ -120,7 +120,12 @@ to use specific features (as noted below).
 - **GitHub** Personal Access Token (required for apps that need to analyze git
   repos; token-based API calls are less rate-limited). See this
   [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
-- **Google Custom Search API Credentials:** Only needed to enable an Agent to use the `GoogleSearchTool`.
+- **Google Custom Search API Credentials (DEPRECATED):** Only needed for the
+  `GoogleSearchTool`, which is deprecated: Google's Custom Search JSON API is
+  [closed to new customers and discontinued on January 1, 2027](https://developers.google.com/custom-search/v1/overview).
+  New users should use `TavilySearchTool` (`TAVILY_API_KEY`), `ExaSearchTool`
+  (`EXA_API_KEY`), or the key-free `DuckduckgoSearchTool` instead. The setup
+  below remains for users with existing credentials.
   To use Google Search as an LLM Tool/Plugin/function-call,
   you'll need to set up
   [a Google API key](https://developers.google.com/custom-search/v1/introduction#identify_your_application_to_google_with_api_key),
