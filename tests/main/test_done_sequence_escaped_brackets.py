@@ -45,3 +45,11 @@ def test_content_match_newline_can_contain_commas() -> None:
     assert sequence.events[0].event_type == EventType.CONTENT_MATCH
     assert sequence.events[0].content_pattern == "done\nthanks,again"
     assert sequence.events[1].event_type == EventType.AGENT_RESPONSE
+
+
+def test_content_match_character_class_matching_open_bracket_can_be_followed() -> None:
+    sequence = parse_done_sequence(r"C[[[]], A")
+
+    assert len(sequence.events) == 2
+    assert sequence.events[0].content_pattern == r"[[]"
+    assert sequence.events[1].event_type == EventType.AGENT_RESPONSE
