@@ -27,3 +27,12 @@ def test_content_match_escaped_closing_bracket_can_contain_commas() -> None:
     assert sequence.events[0].event_type == EventType.CONTENT_MATCH
     assert sequence.events[0].content_pattern == r"done\],thanks"
     assert sequence.events[1].event_type == EventType.AGENT_RESPONSE
+
+
+def test_content_match_unescaped_closing_bracket_can_contain_commas() -> None:
+    sequence = parse_done_sequence(r"C[]done,thanks], A")
+
+    assert len(sequence.events) == 2
+    assert sequence.events[0].event_type == EventType.CONTENT_MATCH
+    assert sequence.events[0].content_pattern == r"]done,thanks"
+    assert sequence.events[1].event_type == EventType.AGENT_RESPONSE

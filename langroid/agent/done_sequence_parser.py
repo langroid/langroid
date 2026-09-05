@@ -71,7 +71,7 @@ def _parse_string_pattern(
     current: List[str] = []
     bracket_depth = 0
     escaped = False
-    for char in pattern:
+    for index, char in enumerate(pattern):
         if escaped:
             escaped = False
         elif char == "\\":
@@ -79,7 +79,15 @@ def _parse_string_pattern(
         elif char == "[":
             bracket_depth += 1
         elif char == "]" and bracket_depth > 0:
-            bracket_depth -= 1
+            next_index = index + 1
+            while next_index < len(pattern) and pattern[next_index].isspace():
+                next_index += 1
+            if (
+                bracket_depth > 1
+                or next_index == len(pattern)
+                or pattern[next_index] == ","
+            ):
+                bracket_depth -= 1
 
         if char == "," and bracket_depth == 0:
             parts.append("".join(current).strip())
