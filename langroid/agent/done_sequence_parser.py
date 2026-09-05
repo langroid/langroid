@@ -126,7 +126,7 @@ def _parse_event_token(
         ValueError: If token is invalid
     """
     # Check for bracket notation
-    bracket_match = re.match(r"^([A-Z])\[(.+)\]$", token)
+    bracket_match = re.match(r"^([A-Z])\[(.+)\]$", token, re.DOTALL)
 
     if bracket_match:
         event_code = bracket_match.group(1)
