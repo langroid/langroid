@@ -66,8 +66,27 @@ def _parse_string_pattern(
     """
     events = []
 
-    # Split by comma and strip whitespace
-    parts = [p.strip() for p in pattern.split(",")]
+    # Commas inside bracket parameters are part of the tool name or regex.
+    parts = []
+    current: List[str] = []
+    bracket_depth = 0
+    escaped = False
+    for char in pattern:
+        if escaped:
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == "[":
+            bracket_depth += 1
+        elif char == "]" and bracket_depth > 0:
+            bracket_depth -= 1
+
+        if char == "," and bracket_depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    parts.append("".join(current).strip())
 
     for part in parts:
         if not part:
