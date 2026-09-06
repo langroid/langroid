@@ -52,7 +52,15 @@ def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
     if not json_string.strip():
         raise ValueError("Empty string is not valid JSON")
 
-    # First, try parsing with ast.literal_eval
+    # Preserve JSON escape semantics before trying Python literals or repairs.
+    try:
+        result = json.loads(json_string)
+        if isinstance(result, (dict, list)):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Accept Python literals such as single quotes, True, and None.
     try:
         result = ast.literal_eval(json_string)
         if isinstance(result, (dict, list)):

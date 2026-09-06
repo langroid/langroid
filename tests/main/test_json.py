@@ -95,6 +95,23 @@ def test_extract_top_level_json(s, expected):
         ),
         ('{"key": "value", "number": 42}', {"key": "value", "number": 42}),
         (
+            r'{"url": "https:\/\/example.org\/path"}',
+            {"url": "https://example.org/path"},
+        ),
+        (r'{"text": "\ud83d\ude00"}', {"text": "😀"}),
+        (
+            r'{"\ud83d\ude00": {"url": "https:\/\/example.org"}}',
+            {"😀": {"url": "https://example.org"}},
+        ),
+        (
+            r'["https:\/\/example.org", "\ud83d\ude00"]',
+            ["https://example.org", "😀"],
+        ),
+        (
+            r'{"path": "C:\\work\\file.txt", "literal": "\\ud83d\\ude00"}',
+            {"path": r"C:\work\file.txt", "literal": r"\ud83d\ude00"},
+        ),
+        (
             '{"key": "value", "number": 42,}',
             {"key": "value", "number": 42},
         ),  # extra comma
