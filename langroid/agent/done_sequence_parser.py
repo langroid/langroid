@@ -66,8 +66,36 @@ def _parse_string_pattern(
     """
     events = []
 
-    # Split by comma and strip whitespace
-    parts = [p.strip() for p in pattern.split(",")]
+    # Commas inside bracket parameters are part of the tool name or regex.
+    parts = []
+    current: List[str] = []
+    bracket_depth = 0
+    escaped = False
+    in_character_class = False
+    for index, char in enumerate(pattern):
+        if escaped:
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif bracket_depth == 0 and char == "[":
+            bracket_depth += 1
+        elif bracket_depth > 0 and char == "[" and not in_character_class:
+            in_character_class = True
+        elif char == "]" and in_character_class:
+            in_character_class = False
+        elif char == "]" and bracket_depth > 0:
+            next_index = index + 1
+            while next_index < len(pattern) and pattern[next_index].isspace():
+                next_index += 1
+            if next_index == len(pattern) or pattern[next_index] == ",":
+                bracket_depth -= 1
+
+        if char == "," and bracket_depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    parts.append("".join(current).strip())
 
     for part in parts:
         if not part:
@@ -99,7 +127,7 @@ def _parse_event_token(
         ValueError: If token is invalid
     """
     # Check for bracket notation
-    bracket_match = re.match(r"^([A-Z])\[([^\]]+)\]$", token)
+    bracket_match = re.match(r"^([A-Z])\[(.+)\]$", token, re.DOTALL)
 
     if bracket_match:
         event_code = bracket_match.group(1)
