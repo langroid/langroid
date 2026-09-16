@@ -170,17 +170,18 @@ async def _process_batch_async(
                     ),
                 )
 
-                if exception_handling == ExceptionHandling.RETURN_NONE:
-                    results = [
-                        None if isinstance(r, BaseException) else r
-                        for r in results_with_exceptions
-                    ]
-                else:  # ExceptionHandling.RETURN_EXCEPTION
-                    results = results_with_exceptions
         except BaseException as e:
-            results = [handle_error(e) for _ in inputs]
+            return [handle_error(e) for _ in inputs]
 
-        return [output_map(r) for r in results]
+        results = []
+        for result in results_with_exceptions:
+            try:
+                if isinstance(result, BaseException):
+                    raise result
+                results.append(output_map(result))
+            except BaseException as e:
+                results.append(handle_error(e))
+        return results
 
 
 def run_batched_tasks(
