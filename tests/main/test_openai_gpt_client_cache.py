@@ -7,7 +7,6 @@ import threading
 import time
 from typing import Any
 
-import httpx
 import pytest
 from openai import AsyncOpenAI, OpenAI
 
@@ -20,7 +19,15 @@ from langroid.language_models.client_cache import (
     get_openai_client,
     prune_cache,
 )
+from langroid.language_models.httpx_compat import (
+    HTTPX_MODULE_NAME,
+    import_httpx,
+)
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
+
+# The httpx family (httpx for openai 2.x, httpx2 for openai 3.x) that the
+# client cache actually constructs clients from; tests patch this module.
+httpx = import_httpx()
 
 
 class TestOpenAIGPTClientCache:
@@ -362,10 +369,9 @@ class TestOpenAIGPTClientCache:
     ):
         """Unimportable httpx plus http_client_config raises ValueError.
 
-        When ``from httpx import Client`` / ``from httpx import
-        AsyncClient`` fails with ImportError, the getter must raise the
-        documented ValueError, cache nothing, and construct/cache
-        normally once httpx is importable again.
+        When ``import_httpx()`` fails with ImportError, the getter must
+        raise the documented ValueError, cache nothing, and construct/cache
+        normally once the httpx family is importable again.
         """
 
         def call_getter():
@@ -374,19 +380,19 @@ class TestOpenAIGPTClientCache:
                 http_client_config={"timeout": 1.0},
             )
 
-        real_httpx = sys.modules["httpx"]
-        # Simulate an environment without httpx: a None entry in
-        # sys.modules makes ``from httpx import ...`` raise ImportError.
-        sys.modules["httpx"] = None  # type: ignore[assignment]
+        real_httpx = sys.modules[HTTPX_MODULE_NAME]
+        # Simulate an environment without the httpx family: a None entry in
+        # sys.modules makes ``import_httpx()`` raise ImportError.
+        sys.modules[HTTPX_MODULE_NAME] = None  # type: ignore[assignment]
         try:
             with pytest.raises(ValueError) as excinfo:
                 call_getter()
         finally:
-            sys.modules["httpx"] = real_httpx
+            sys.modules[HTTPX_MODULE_NAME] = real_httpx
 
         assert str(excinfo.value) == (
-            "httpx is required to use http_client_config. "
-            "Install it with: pip install httpx"
+            f"{HTTPX_MODULE_NAME} is required to use http_client_config. "
+            f"Install it with: pip install {HTTPX_MODULE_NAME}"
         )
         # The ValueError must come from the ImportError branch.
         assert isinstance(excinfo.value.__context__, ImportError)

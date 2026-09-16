@@ -11,7 +11,6 @@ import itertools
 import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import httpx
 import pytest
 
 import langroid.language_models.client_cache as client_cache_module
@@ -20,8 +19,12 @@ from langroid.language_models.client_cache import (
     get_async_openai_client,
     get_openai_client,
 )
+from langroid.language_models.httpx_compat import import_httpx
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 from langroid.utils.configuration import settings
+
+# httpx for openai 2.x, httpx2 for openai 3.x (see httpx_compat).
+httpx = import_httpx()
 
 CHAT_COMPLETION_JSON: Dict[str, Any] = {
     "id": "chatcmpl-test",
@@ -41,10 +44,10 @@ CHAT_COMPLETION_JSON: Dict[str, Any] = {
 
 def _make_mock_clients(
     seen_auth_headers: List[Optional[str]],
-) -> Tuple[httpx.Client, httpx.AsyncClient]:
+) -> Tuple[Any, Any]:
     """Return (sync, async) httpx clients that record Authorization headers."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: Any) -> Any:
         seen_auth_headers.append(request.headers.get("authorization"))
         return httpx.Response(200, json=CHAT_COMPLETION_JSON)
 

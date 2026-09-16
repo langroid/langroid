@@ -2,10 +2,10 @@ import logging
 from typing import Callable
 
 from dotenv import load_dotenv
-from httpx import Timeout
 from openai import AsyncAzureOpenAI, AzureOpenAI
 from pydantic_settings import SettingsConfigDict
 
+from langroid.language_models.httpx_compat import Timeout
 from langroid.language_models.openai_gpt import (
     OpenAIGPT,
     OpenAIGPTConfig,

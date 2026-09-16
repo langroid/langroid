@@ -2,6 +2,32 @@
 
 When using OpenAI models through Langroid in corporate environments or behind proxies, you may encounter SSL certificate verification errors. Langroid provides three flexible options to configure the HTTP client used for OpenAI API calls.
 
+## Which `httpx` family to use (openai 2.x vs 3.x)
+
+Langroid supports both `openai` 2.x and 3.x. The 2.x SDK is built on
+[`httpx`](https://www.python-httpx.org/); the 3.x SDK replaced it with
+[`httpx2`](https://httpx2.pydantic.dev/), the Pydantic-maintained successor with
+the same `Client` / `AsyncClient` / `Timeout` API. Each SDK major accepts HTTP
+clients from its own family, so when you build a client yourself (the factory
+option below, or the `httpx.Auth` recipe in
+[Rotating API Keys](rotating-api-keys.md)), import it from the family that
+matches your installed SDK. `langroid.language_models.httpx_compat` does this
+for you:
+
+```python
+from langroid.language_models.httpx_compat import import_httpx
+
+httpx = import_httpx()  # the `httpx` module on openai 2.x, `httpx2` on 3.x
+client = httpx.Client(verify=False)
+```
+
+The `http_verify_ssl` and `http_client_config` options need no change: langroid
+constructs those clients through the same shim. The examples below use `httpx`
+imports for brevity; substitute `httpx2` (or the shim) on openai 3.x.
+
+Note: `litellm` still pins `openai<3`, so installing the `litellm` extra keeps
+you on openai 2.x until that pin is lifted.
+
 ## Configuration Options
 
 ### 1. Simple SSL Verification Bypass

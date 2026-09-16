@@ -13,8 +13,13 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Union, cast
 
 from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
-from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
+
+from langroid.language_models.httpx_compat import (
+    Timeout,
+    import_httpx,
+    missing_httpx_message,
+)
 
 # Cache for client instances, keyed by hashed configuration parameters.
 # Value is a tuple of (client instance, last_used_monotonic_seconds).
@@ -174,13 +179,10 @@ def get_openai_client(
         created_http_client = None
         if http_client_config is not None:
             try:
-                from httpx import Client
+                httpx = import_httpx()
             except ImportError:
-                raise ValueError(
-                    "httpx is required to use http_client_config. "
-                    "Install it with: pip install httpx"
-                )
-            created_http_client = Client(**http_client_config)
+                raise ValueError(missing_httpx_message())
+            created_http_client = httpx.Client(**http_client_config)
 
         client = OpenAI(
             api_key=api_key,
@@ -263,13 +265,10 @@ def get_async_openai_client(
         created_http_client = None
         if http_client_config is not None:
             try:
-                from httpx import AsyncClient
+                httpx = import_httpx()
             except ImportError:
-                raise ValueError(
-                    "httpx is required to use http_client_config. "
-                    "Install it with: pip install httpx"
-                )
-            created_http_client = AsyncClient(**http_client_config)
+                raise ValueError(missing_httpx_message())
+            created_http_client = httpx.AsyncClient(**http_client_config)
 
         client = AsyncOpenAI(
             api_key=api_key_arg,
