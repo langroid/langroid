@@ -9,11 +9,12 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 import pytest
 
+from langroid.language_models.httpx_compat import import_httpx
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 
-# Check if httpx is available
+# Check if the httpx family matching the installed openai SDK is available
 try:
-    import httpx  # noqa: F401
+    import_httpx()
 
     HTTPX_AVAILABLE = True
 except ImportError:

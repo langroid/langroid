@@ -129,7 +129,10 @@ Constructing an `OpenAIGPT` with `api_key_provider` raises a `ValueError` for:
 If you need more control than a bearer token string — custom headers, request
 signing (e.g. AWS SigV4 for Bedrock-style auth), or an asynchronous token
 fetch — you can instead attach an `httpx.Auth` to a custom HTTP client. The
-auth flow then runs at the transport layer, on every request:
+auth flow then runs at the transport layer, on every request (on openai 3.x,
+which is built on `httpx2` rather than `httpx`, import the client family via
+`langroid.language_models.httpx_compat.import_httpx()` — see
+[OpenAI HTTP Client Configuration](openai-http-client.md)):
 
 ```python
 import httpx

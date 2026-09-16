@@ -9,14 +9,17 @@ retried with exponential backoff. See the type-based guard in
 
 import asyncio
 
-import httpx
 import openai
 import pytest
 
+from langroid.language_models.httpx_compat import import_httpx
 from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
     retry_with_exponential_backoff,
 )
+
+# httpx for openai 2.x, httpx2 for openai 3.x (see httpx_compat).
+httpx = import_httpx()
 
 # Backoff timing used by the event-loop responsiveness test below.
 _DELAY = 0.2

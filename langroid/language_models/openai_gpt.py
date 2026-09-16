@@ -23,7 +23,6 @@ from typing import (
 import openai
 from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
-from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -58,6 +57,11 @@ from langroid.language_models.client_cache import (
     wrap_api_key_provider_async,
 )
 from langroid.language_models.config import HFPromptFormatterConfig
+from langroid.language_models.httpx_compat import (
+    Timeout,
+    import_httpx,
+    missing_httpx_message,
+)
 from langroid.language_models.model_info import (
     DeepSeekModel,
     MiniMaxModel,
@@ -821,14 +825,12 @@ class OpenAIGPT(LanguageModel):
                 elif http_client_config_used is not None:
                     # Create http_client from config for non-cached scenario
                     try:
-                        from httpx import Client
-
-                        client_kwargs["http_client"] = Client(**http_client_config_used)
+                        httpx = import_httpx()
                     except ImportError:
-                        raise ValueError(
-                            "httpx is required to use http_client_config. "
-                            "Install it with: pip install httpx"
-                        )
+                        raise ValueError(missing_httpx_message())
+                    client_kwargs["http_client"] = httpx.Client(
+                        **http_client_config_used
+                    )
                 self.client = OpenAI(**client_kwargs)
 
                 async_client_kwargs: Dict[str, Any] = dict(
@@ -848,16 +850,12 @@ class OpenAIGPT(LanguageModel):
                 elif http_client_config_used is not None:
                     # Create async http_client from config for non-cached scenario
                     try:
-                        from httpx import AsyncClient
-
-                        async_client_kwargs["http_client"] = AsyncClient(
-                            **http_client_config_used
-                        )
+                        httpx = import_httpx()
                     except ImportError:
-                        raise ValueError(
-                            "httpx is required to use http_client_config. "
-                            "Install it with: pip install httpx"
-                        )
+                        raise ValueError(missing_httpx_message())
+                    async_client_kwargs["http_client"] = httpx.AsyncClient(
+                        **http_client_config_used
+                    )
                 self.async_client = AsyncOpenAI(**async_client_kwargs)
 
         self.cache: CacheDB | None = None
