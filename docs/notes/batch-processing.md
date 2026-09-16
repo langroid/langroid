@@ -28,6 +28,16 @@ answers = run_batch_tasks(
 
 The returned list has the same length and ordering as `items`.
 
+## Handling errors
+
+For helpers that accept `handle_exceptions`, the selected policy applies to
+both task execution and `output_map`, in sequential and concurrent batches.
+`RETURN_NONE` puts `None` in a failed item's position; `RETURN_EXCEPTION`
+puts the exception there; `RAISE` propagates it.
+
+`output_map` receives successful task results, including a successful `None`
+result. It does not receive the placeholders produced by error handling.
+
 ## Stopping at the first valid result
 
 Set `stop_on_first_result=True` for a search-style batch that should return as
