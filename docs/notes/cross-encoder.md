@@ -45,15 +45,18 @@ config = DocChatAgentConfig(
     cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
     cross_encoder_device="cuda",       # optional; None auto-selects
     use_reciprocal_rank_fusion=False,  # required for cross-encoder re-ranking
-    n_similar_chunks=15,               # candidates retrieved by each method
+    n_similar_chunks=15,               # base candidate count, see below
     n_relevant_chunks=5,               # chunks kept after re-ranking
 )
 agent = DocChatAgent(config)
 ```
 
-Re-ranking only pays off with a candidate pool larger than the final answer, so when a cross-encoder
-or RRF is active, retrieval pulls `n_similar_chunks` per method and lets the re-ranker reduce the
-list to `n_relevant_chunks`.
+Re-ranking only pays off with a candidate pool larger than the final answer, so it changes how much
+is retrieved: when a cross-encoder or RRF is active, the internal `retrieval_multiple` becomes `3`
+and each enabled retrieval method fetches `n_similar_chunks * 3` candidates (`n_similar_chunks` when
+neither re-ranker is active). The example above therefore retrieves up to 45 candidates per method,
+and the cross-encoder scores all of them before `n_relevant_chunks` are kept. That is a model call
+per candidate, so raising `n_similar_chunks` costs latency and memory proportionally.
 
 ## What the re-ranker does
 
@@ -69,11 +72,12 @@ cross-encoder order verbatim.
 
 ## Model loading and concurrency
 
-A `CrossEncoder` is instantiated once per `(model, device)` pair per process and cached, and its
-`predict` calls are serialized through a lock. Tasks that share a model and device therefore neither
-load the model repeatedly nor call it concurrently. To bound memory across differently configured
-agents, set `cross_encoder_device` explicitly - the cache key includes the device, so `None` and an
-explicit device are separate entries.
+A `CrossEncoder` is instantiated once per process for a given model and device and cached, and its
+`predict` calls are serialized through a lock, so tasks that share them neither load the model
+repeatedly nor call it concurrently. `cross_encoder_device=None` is resolved to the device that would
+be selected automatically (`cuda`, then `mps`, then `cpu`) **before** the cache key is built, so on a
+CUDA host `None` and `"cuda"` are the same cache entry rather than two, which also means they share
+one lock.
 
 ## Related
 
