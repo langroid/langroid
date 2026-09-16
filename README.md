@@ -91,7 +91,6 @@ Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent
 (RAG), SQLChatAgent, non-OpenAI local/remote LLMs, etc. Scroll down or see docs for more.
 See the Langroid Quick-Start [Colab](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
 that builds up to a 2-agent information-extraction example using the OpenAI ChatCompletion API. 
-See also this [version](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) that uses the OpenAI Assistants API instead.
 
 🔥 just released! [Example](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-multi-extract-local.py) 
 script showing how you can use Langroid multi-agents and tools
@@ -103,7 +102,7 @@ import langroid as lr
 import langroid.language_models as lm
 
 # set up LLM
-llm_cfg = lm.OpenAIGPTConfig( # or OpenAIAssistant to use Assistant API 
+llm_cfg = lm.OpenAIGPTConfig(
   # any model served via an OpenAI-compatible API
   chat_model=lm.OpenAIChatModel.GPT4o, # or, e.g., "ollama/mistral"
 )
@@ -146,6 +145,14 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Sep 2026:**
+  - **[0.68.0](https://github.com/langroid/langroid/releases/tag/0.68.0):** **Removed `OpenAIAssistant`.**
+    OpenAI [sunset the Assistants API beta on 2026-08-26](https://community.openai.com/t/assistants-api-beta-deprecation-august-26-2026-sunset/1354666);
+    every endpoint now returns HTTP 404, so the class could not function. It has been
+    removed along with its tests and examples. `OpenAIGPT` -- which nearly all Langroid
+    code uses -- is unaffected. See the
+    [migration note](https://langroid.github.io/langroid/notes/openai-assistant-removal/)
+    for equivalents to threads, `file_search`, and `code_interpreter`.
 - **Aug 2026:**
   - [0.67.0](https://github.com/langroid/langroid/releases/tag/0.67.0) Security hardening: 
     per-provider `env_prefix` for vector-store configs (env-var naming change -- see 
@@ -352,6 +359,11 @@ default handler method name in `request` field (thanks @alexagr).
     auto-select an available OpenAI model (preferring gpt-4o), simplifies defaults.
     Simpler `Task` initialization with default `ChatAgent`.
 - **Nov 2023:**
+  > **Note:** the `OpenAIAssistant` entries below are historical. The class was
+  > removed in 0.68.0 after OpenAI sunset the Assistants API; the links point at
+  > the 0.67.5 tag. See the
+  > [migration note](https://langroid.github.io/langroid/notes/openai-assistant-removal/).
+
   - **[0.1.126](https://github.com/langroid/langroid/releases/tag/0.1.126):**
      OpenAIAssistant agent: Caching Support. 
   - **0.1.117:** Support for OpenAI Assistant API tools: Function-calling, 
@@ -360,21 +372,21 @@ default handler method name in `request` field (thanks @alexagr).
     Until docs are ready, it's best to see these usage examples:
     
     - **Tests:**
-      - [test_openai_assistant.py](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant.py)
-      - [test_openai_assistant_async.py](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant_async.py)
+      - [test_openai_assistant.py](https://github.com/langroid/langroid/blob/0.67.5/tests/main/test_openai_assistant.py)
+      - [test_openai_assistant_async.py](https://github.com/langroid/langroid/blob/0.67.5/tests/main/test_openai_assistant_async.py)
 
     - **Example scripts:**
-      - [The most basic chat app](https://github.com/langroid/langroid/blob/main/examples/basic/oai-asst-chat.py)
-      - [Chat with code interpreter](https://github.com/langroid/langroid/blob/main/examples/basic/oai-code-chat.py)
-      - [Chat with retrieval (RAG)](https://github.com/langroid/langroid/blob/main/examples/docqa/oai-retrieval-assistant.py)
-      - [2-agent RAG chat](https://github.com/langroid/langroid/blob/main/examples/docqa/oai-retrieval-2.py)
-  - **0.1.112:** [`OpenAIAssistant`](https://github.com/langroid/langroid/blob/main/langroid/agent/openai_assistant.py) is a subclass of `ChatAgent` that 
+      - [The most basic chat app](https://github.com/langroid/langroid/blob/0.67.5/examples/basic/oai-asst-chat.py)
+      - [Chat with code interpreter](https://github.com/langroid/langroid/blob/0.67.5/examples/basic/oai-code-chat.py)
+      - [Chat with retrieval (RAG)](https://github.com/langroid/langroid/blob/0.67.5/examples/docqa/oai-retrieval-assistant.py)
+      - [2-agent RAG chat](https://github.com/langroid/langroid/blob/0.67.5/examples/docqa/oai-retrieval-2.py)
+  - **0.1.112:** [`OpenAIAssistant`](https://github.com/langroid/langroid/blob/0.67.5/langroid/agent/openai_assistant.py) is a subclass of `ChatAgent` that 
     leverages the new OpenAI Assistant API. It can be used as a drop-in 
     replacement for `ChatAgent`, and relies on the Assistant API to
     maintain conversation state, and leverages persistent threads and 
     assistants to reconnect to them if needed. Examples: 
-    [`test_openai_assistant.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant.py),
-    [`test_openai_assistant_async.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant_async.py)
+    [`test_openai_assistant.py`](https://github.com/langroid/langroid/blob/0.67.5/tests/main/test_openai_assistant.py),
+    [`test_openai_assistant_async.py`](https://github.com/langroid/langroid/blob/0.67.5/tests/main/test_openai_assistant_async.py)
   - **0.1.111:** Support latest OpenAI model: `GPT4_TURBO`
 (see [test_llm.py](https://github.com/langroid/langroid/blob/main/tests/main/test_llm.py) for example usage)
   - **0.1.110:** Upgrade from OpenAI v0.x to v1.1.1 (in preparation for 

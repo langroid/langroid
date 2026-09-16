@@ -282,7 +282,7 @@ class LLMMessage(BaseModel):
     role: Role
     name: Optional[str] = None
     tool_call_id: Optional[str] = None  # which OpenAI LLM tool this is a response to
-    tool_id: str = ""  # used by OpenAIAssistant
+    tool_id: str = ""  # vestigial: was used by the removed OpenAIAssistant
     # None means "no content" (the model returned only a tool/function call).
     # This is distinct from "" and is dropped from the API payload by api_dict;
     # see api_dict for how a fully-empty message is handled per-API.
@@ -298,7 +298,7 @@ class LLMMessage(BaseModel):
         """
         Convert to dictionary for API request, keeping ONLY
         the fields that are expected in an API call!
-        E.g., DROP the tool_id, since it is only for use in the Assistant API,
+        E.g., DROP the tool_id, since it was only for use in the Assistants API,
             not the completion API.
 
         Args:
@@ -399,7 +399,7 @@ class LLMResponse(BaseModel):
     # since in that case the message text never contained thought tags.
     message_with_reasoning: Optional[str] = None
     # TODO tool_id needs to generalize to multi-tool calls
-    tool_id: str = ""  # used by OpenAIAssistant
+    tool_id: str = ""  # vestigial: was used by the removed OpenAIAssistant
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
     function_call: Optional[LLMFunctionCall] = None
     usage: Optional[LLMTokenUsage] = None

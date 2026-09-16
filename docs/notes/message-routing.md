@@ -83,19 +83,6 @@ agent = ChatAgent(ChatAgentConfig(
 - `metadata.recipient` remains empty
 - Useful when you want explicit tool-based routing only
 
-### OpenAI Assistant Support
-
-The `recognize_recipient_in_content` setting is also honored by `OpenAIAssistant`:
-
-```python
-from langroid.agent.openai_assistant import OpenAIAssistant, OpenAIAssistantConfig
-
-assistant = OpenAIAssistant(OpenAIAssistantConfig(
-    name="MyAssistant",
-    recognize_recipient_in_content=False,
-))
-```
-
 ## Related: String Signals for Routing
 
 The `TaskConfig.recognize_string_signals` setting controls parsing of signals
