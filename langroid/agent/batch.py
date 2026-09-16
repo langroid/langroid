@@ -96,7 +96,9 @@ async def _process_batch_async(
     exception_handling = _convert_exception_handling(handle_exceptions)
 
     def handle_error(e: BaseException) -> Any:
-        """Handle exceptions based on exception_handling."""
+        """Handle failures without suppressing task cancellation."""
+        if isinstance(e, asyncio.CancelledError):
+            raise e
         match exception_handling:
             case ExceptionHandling.RAISE:
                 raise e
@@ -170,6 +172,8 @@ async def _process_batch_async(
                     ),
                 )
 
+        except asyncio.CancelledError:
+            raise
         except BaseException as e:
             return [handle_error(e) for _ in inputs]
 
