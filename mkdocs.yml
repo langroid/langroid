@@ -155,6 +155,7 @@ nav:
       - Batch Processing: notes/batch-processing.md
       - Attachment Token Preflight: notes/attachment-token-preflight.md
       - Vector-Store Env Prefixes: notes/vecstore-env-prefix.md
+      - Quiet Mode: notes/quiet-mode.md
 
   - Examples:
     - Guide: examples/guide.md
