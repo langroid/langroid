@@ -161,3 +161,81 @@ def test_batch_cancellation_during_first_result_cleanup(
             await asyncio.gather(batch, return_exceptions=True)
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("policy", list(ExceptionHandling))
+@pytest.mark.parametrize("mode", ["sequential", "parallel", "first_result"])
+def test_task_raised_cancelled_error_follows_policy(
+    policy: ExceptionHandling, mode: str
+) -> None:
+    """A CancelledError raised by a task's own code is a task failure."""
+
+    async def work(value: str | ChatDocument, index: int) -> str:
+        if index == 1:
+            raise asyncio.CancelledError()
+        return str(value)
+
+    async def scenario() -> list[object]:
+        return await _process_batch_async(
+            ["a", "b", "c"],
+            work,
+            sequential=mode == "sequential",
+            stop_on_first_result=mode == "first_result",
+            handle_exceptions=policy,
+        )
+
+    if policy == ExceptionHandling.RAISE:
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(scenario())
+        return
+
+    results = asyncio.run(scenario())
+    assert len(results) == 3
+    if mode == "first_result":
+        # One valid result stops the batch; the other slots are None.
+        assert "a" in results or "c" in results
+        assert results[1] is None or isinstance(results[1], asyncio.CancelledError)
+        return
+    assert results[0] == "a" and results[2] == "c"
+    if policy == ExceptionHandling.RETURN_NONE:
+        assert results[1] is None
+    else:
+        assert isinstance(results[1], asyncio.CancelledError)
+
+
+@pytest.mark.parametrize("iterable", [False, True])
+def test_parallel_raise_policy_with_iterator_input(iterable: bool) -> None:
+    """Under RAISE, a task failure propagates even when inputs is an iterator."""
+
+    async def work(value: str | ChatDocument, index: int) -> str:
+        if index == 1:
+            raise ValueError("task failed")
+        return str(value)
+
+    async def scenario() -> list[object]:
+        inputs = ["a", "b"]
+        return await _process_batch_async(
+            iter(inputs) if iterable else inputs,
+            work,
+            handle_exceptions=ExceptionHandling.RAISE,
+        )
+
+    with pytest.raises(ValueError, match="task failed"):
+        asyncio.run(scenario())
+
+
+def test_parallel_raise_policy_maps_returned_exception_object() -> None:
+    """Under RAISE, an exception object *returned* by a task is a result."""
+
+    async def work(value: str | ChatDocument, index: int) -> object:
+        return ValueError(str(value))
+
+    async def scenario() -> list[object]:
+        return await _process_batch_async(
+            ["a", "b"],
+            work,
+            handle_exceptions=ExceptionHandling.RAISE,
+            output_map=lambda r: f"mapped:{r}",
+        )
+
+    assert asyncio.run(scenario()) == ["mapped:a", "mapped:b"]

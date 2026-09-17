@@ -38,6 +38,12 @@ puts the exception there; `RAISE` propagates it.
 `output_map` receives successful task results, including a successful `None`
 result. It does not receive the placeholders produced by error handling.
 
+Cancelling the batch itself (for example, cancelling the `asyncio` task that
+runs it) is not a task failure: the `CancelledError` propagates under every
+policy, and no further items are started. A `CancelledError` raised by a
+task's own code, while the batch is not cancelled, is treated like any other
+exception and follows the policy.
+
 ## Stopping at the first valid result
 
 Set `stop_on_first_result=True` for a search-style batch that should return as

@@ -68,6 +68,20 @@ def _convert_exception_handling(
     )
 
 
+def _batch_cancelled() -> bool:
+    """Whether the task running the batch has itself been cancelled.
+
+    Uses `asyncio.Task.cancelling()` (Python 3.11+); a `CancelledError` raised
+    by a task's own code does not bump this counter, so it can be told apart
+    from external cancellation of the batch. On Python 3.10 the counter is not
+    available and this returns False, which keeps the pre-existing behavior
+    of applying the exception policy to any `CancelledError`.
+    """
+    task = asyncio.current_task()
+    cancelling = getattr(task, "cancelling", None)
+    return cancelling is not None and cancelling() > 0
+
+
 async def _process_batch_async(
     inputs: Iterable[str | ChatDocument],
     do_task: Callable[[str | ChatDocument, int], Coroutine[Any, Any, Any]],
@@ -96,8 +110,14 @@ async def _process_batch_async(
     exception_handling = _convert_exception_handling(handle_exceptions)
 
     def handle_error(e: BaseException) -> Any:
-        """Handle failures without suppressing task cancellation."""
-        if isinstance(e, asyncio.CancelledError):
+        """Handle failures based on exception_handling.
+
+        A `CancelledError` caused by cancellation of the batch itself always
+        propagates, regardless of policy. A `CancelledError` raised from
+        inside a task (with the batch not cancelled) is an ordinary task
+        failure and follows the policy.
+        """
+        if isinstance(e, asyncio.CancelledError) and _batch_cancelled():
             raise e
         match exception_handling:
             case ExceptionHandling.RAISE:
@@ -158,16 +178,16 @@ async def _process_batch_async(
 
     # Parallel execution
     else:
+        # Materialize the coroutines so the failure path below sees the batch
+        # size even when `inputs` is a one-shot iterator.
+        coros = [do_task(input, i + start_idx) for i, input in enumerate(inputs)]
         try:
             return_exceptions = exception_handling != ExceptionHandling.RAISE
             with quiet_mode(), SuppressLoggerWarnings():
                 results_with_exceptions = cast(
                     list[Optional[ChatDocument | BaseException]],
                     await asyncio.gather(
-                        *(
-                            do_task(input, i + start_idx)
-                            for i, input in enumerate(inputs)
-                        ),
+                        *coros,
                         return_exceptions=return_exceptions,
                     ),
                 )
@@ -175,12 +195,15 @@ async def _process_batch_async(
         except asyncio.CancelledError:
             raise
         except BaseException as e:
-            return [handle_error(e) for _ in inputs]
+            return [handle_error(e) for _ in coros]
 
         results = []
         for result in results_with_exceptions:
             try:
-                if isinstance(result, BaseException):
+                # With `return_exceptions`, gather stores each failed task's
+                # exception as its result; without it, an exception object
+                # here was *returned* by the task and is a normal result.
+                if return_exceptions and isinstance(result, BaseException):
                     raise result
                 results.append(output_map(result))
             except BaseException as e:
