@@ -12,7 +12,6 @@ from typing import (
     Optional,
     TypeVar,
     Union,
-    cast,
 )
 
 from dotenv import load_dotenv
@@ -68,6 +67,20 @@ def _convert_exception_handling(
     )
 
 
+def _batch_cancelled() -> bool:
+    """Whether the task running the batch has itself been cancelled.
+
+    Uses `asyncio.Task.cancelling()` (Python 3.11+); a `CancelledError` raised
+    by a task's own code does not bump this counter, so it can be told apart
+    from external cancellation of the batch. On Python 3.10 the counter is not
+    available and this returns False, which keeps the pre-existing behavior
+    of applying the exception policy to any `CancelledError`.
+    """
+    task = asyncio.current_task()
+    cancelling = getattr(task, "cancelling", None)
+    return cancelling is not None and cancelling() > 0
+
+
 async def _process_batch_async(
     inputs: Iterable[str | ChatDocument],
     do_task: Callable[[str | ChatDocument, int], Coroutine[Any, Any, Any]],
@@ -96,7 +109,15 @@ async def _process_batch_async(
     exception_handling = _convert_exception_handling(handle_exceptions)
 
     def handle_error(e: BaseException) -> Any:
-        """Handle exceptions based on exception_handling."""
+        """Handle failures based on exception_handling.
+
+        A `CancelledError` caused by cancellation of the batch itself always
+        propagates, regardless of policy. A `CancelledError` raised from
+        inside a task (with the batch not cancelled) is an ordinary task
+        failure and follows the policy.
+        """
+        if isinstance(e, asyncio.CancelledError) and _batch_cancelled():
+            raise e
         match exception_handling:
             case ExceptionHandling.RAISE:
                 raise e
@@ -156,31 +177,44 @@ async def _process_batch_async(
 
     # Parallel execution
     else:
+        capture_failures = exception_handling != ExceptionHandling.RAISE
+
+        async def run_one(input: str | ChatDocument, i: int) -> tuple[bool, Any]:
+            """Run one task, tagging the outcome as (succeeded, value).
+
+            Tagging keeps an exception object *returned* by a task distinct
+            from one it raised. Under RAISE, failures propagate so that
+            `gather` fails fast, as before.
+            """
+            try:
+                return True, await do_task(input, i)
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except BaseException as e:
+                if not capture_failures:
+                    raise
+                return False, e
+
+        # Materialize the coroutines so the failure path below sees the batch
+        # size even when `inputs` is a one-shot iterator.
+        coros = [run_one(input, i + start_idx) for i, input in enumerate(inputs)]
         try:
-            return_exceptions = exception_handling != ExceptionHandling.RAISE
             with quiet_mode(), SuppressLoggerWarnings():
-                results_with_exceptions = cast(
-                    list[Optional[ChatDocument | BaseException]],
-                    await asyncio.gather(
-                        *(
-                            do_task(input, i + start_idx)
-                            for i, input in enumerate(inputs)
-                        ),
-                        return_exceptions=return_exceptions,
-                    ),
-                )
-
-                if exception_handling == ExceptionHandling.RETURN_NONE:
-                    results = [
-                        None if isinstance(r, BaseException) else r
-                        for r in results_with_exceptions
-                    ]
-                else:  # ExceptionHandling.RETURN_EXCEPTION
-                    results = results_with_exceptions
+                outcomes = await asyncio.gather(*coros)
+        except asyncio.CancelledError:
+            raise
         except BaseException as e:
-            results = [handle_error(e) for _ in inputs]
+            return [handle_error(e) for _ in coros]
 
-        return [output_map(r) for r in results]
+        results = []
+        for succeeded, value in outcomes:
+            try:
+                if not succeeded:
+                    raise value
+                results.append(output_map(value))
+            except BaseException as e:
+                results.append(handle_error(e))
+        return results
 
 
 def run_batched_tasks(
