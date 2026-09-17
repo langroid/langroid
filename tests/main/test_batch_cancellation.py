@@ -224,8 +224,11 @@ def test_parallel_raise_policy_with_iterator_input(iterable: bool) -> None:
         asyncio.run(scenario())
 
 
-def test_parallel_raise_policy_maps_returned_exception_object() -> None:
-    """Under RAISE, an exception object *returned* by a task is a result."""
+@pytest.mark.parametrize("policy", list(ExceptionHandling))
+def test_parallel_maps_returned_exception_object(
+    policy: ExceptionHandling,
+) -> None:
+    """An exception object *returned* by a task is a result under any policy."""
 
     async def work(value: str | ChatDocument, index: int) -> object:
         return ValueError(str(value))
@@ -234,7 +237,7 @@ def test_parallel_raise_policy_maps_returned_exception_object() -> None:
         return await _process_batch_async(
             ["a", "b"],
             work,
-            handle_exceptions=ExceptionHandling.RAISE,
+            handle_exceptions=policy,
             output_map=lambda r: f"mapped:{r}",
         )
 

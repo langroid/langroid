@@ -12,7 +12,6 @@ from typing import (
     Optional,
     TypeVar,
     Union,
-    cast,
 )
 
 from dotenv import load_dotenv
@@ -178,34 +177,41 @@ async def _process_batch_async(
 
     # Parallel execution
     else:
+        capture_failures = exception_handling != ExceptionHandling.RAISE
+
+        async def run_one(input: str | ChatDocument, i: int) -> tuple[bool, Any]:
+            """Run one task, tagging the outcome as (succeeded, value).
+
+            Tagging keeps an exception object *returned* by a task distinct
+            from one it raised. Under RAISE, failures propagate so that
+            `gather` fails fast, as before.
+            """
+            try:
+                return True, await do_task(input, i)
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except BaseException as e:
+                if not capture_failures:
+                    raise
+                return False, e
+
         # Materialize the coroutines so the failure path below sees the batch
         # size even when `inputs` is a one-shot iterator.
-        coros = [do_task(input, i + start_idx) for i, input in enumerate(inputs)]
+        coros = [run_one(input, i + start_idx) for i, input in enumerate(inputs)]
         try:
-            return_exceptions = exception_handling != ExceptionHandling.RAISE
             with quiet_mode(), SuppressLoggerWarnings():
-                results_with_exceptions = cast(
-                    list[Optional[ChatDocument | BaseException]],
-                    await asyncio.gather(
-                        *coros,
-                        return_exceptions=return_exceptions,
-                    ),
-                )
-
+                outcomes = await asyncio.gather(*coros)
         except asyncio.CancelledError:
             raise
         except BaseException as e:
             return [handle_error(e) for _ in coros]
 
         results = []
-        for result in results_with_exceptions:
+        for succeeded, value in outcomes:
             try:
-                # With `return_exceptions`, gather stores each failed task's
-                # exception as its result; without it, an exception object
-                # here was *returned* by the task and is a normal result.
-                if return_exceptions and isinstance(result, BaseException):
-                    raise result
-                results.append(output_map(result))
+                if not succeeded:
+                    raise value
+                results.append(output_map(value))
             except BaseException as e:
                 results.append(handle_error(e))
         return results
