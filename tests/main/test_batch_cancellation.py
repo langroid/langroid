@@ -1,6 +1,7 @@
 """Batch cancellation must propagate independently of error policy."""
 
 import asyncio
+import sys
 
 import pytest
 
@@ -12,10 +13,20 @@ from langroid.agent.batch import (
 from langroid.agent.chat_document import ChatDocument
 
 
+def _require_cancellation_detection(policy: ExceptionHandling) -> None:
+    """Skip where a policy-handled CancelledError cannot be told from a
+    cancellation of the batch: that needs `Task.cancelling()` (Python 3.11+).
+    See docs/notes/batch-processing.md."""
+    if policy != ExceptionHandling.RAISE and sys.version_info < (3, 11):
+        pytest.skip("external batch cancellation is only detected on Python 3.11+")
+
+
 @pytest.mark.parametrize("policy", list(ExceptionHandling))
 def test_public_batch_propagates_cancellation(
     policy: ExceptionHandling,
 ) -> None:
+    _require_cancellation_detection(policy)
+
     async def work(value: str | ChatDocument, index: int) -> str:
         current = asyncio.current_task()
         assert current is not None
@@ -42,6 +53,9 @@ def test_public_batch_propagates_cancellation(
 def test_batch_propagates_cancellation(
     policy: ExceptionHandling, mode: str, iterable: bool
 ) -> None:
+    if mode == "sequential":
+        _require_cancellation_detection(policy)
+
     async def scenario() -> None:
         started: list[int] = []
         cleaned: list[int] = []
@@ -122,6 +136,8 @@ def test_batch_first_result_still_cleans_pending(
 def test_batch_cancellation_during_first_result_cleanup(
     policy: ExceptionHandling,
 ) -> None:
+    _require_cancellation_detection(policy)
+
     async def scenario() -> None:
         started = asyncio.Event()
         cleaning = asyncio.Event()
