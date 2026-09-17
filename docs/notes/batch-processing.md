@@ -44,6 +44,12 @@ policy, and no further items are started. A `CancelledError` raised by a
 task's own code, while the batch is not cancelled, is treated like any other
 exception and follows the policy.
 
+Telling the two apart relies on `asyncio.Task.cancelling()`, available from
+Python 3.11. On Python 3.10, a `CancelledError` caught in the sequential or
+`stop_on_first_result` paths always follows the policy, so under `RETURN_NONE`
+or `RETURN_EXCEPTION` an external cancellation may be recorded as a failed
+item instead of propagating.
+
 ## Stopping at the first valid result
 
 Set `stop_on_first_result=True` for a search-style batch that should return as
