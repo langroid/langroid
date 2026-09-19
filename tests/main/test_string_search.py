@@ -55,6 +55,35 @@ def test_return_correct_number_of_matches(
 
 
 @pytest.mark.parametrize(
+    "contents, query, expected_indices",
+    [
+        (["quantum mechanics", "quantum"], "quantum entanglement", [1, 0]),
+        (["quantum", "quantum"], "quantum", [0, 1]),
+    ],
+)
+@pytest.mark.parametrize("k", [1, 2])
+def test_fuzzy_matches_return_corresponding_documents(
+    contents, query, expected_indices, k
+):
+    docs = [
+        Document(
+            content=content.capitalize() + ".",
+            metadata=DocMetaData(id=str(i), source=f"source-{i}"),
+        )
+        for i, content in enumerate(contents)
+    ]
+    docs_clean = [
+        Document(content=content, metadata=doc.metadata)
+        for content, doc in zip(contents, docs)
+    ]
+
+    results = find_fuzzy_matches_in_docs(query, docs, docs_clean, k)
+
+    assert [doc for doc, _ in results] == [docs[i] for i in expected_indices[:k]]
+    assert results[0][1] == 100
+
+
+@pytest.mark.parametrize(
     "words_before, words_after, expected",
     [
         (1, 1, ["a sample blah", "another sample document"]),
