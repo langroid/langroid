@@ -88,8 +88,8 @@ def components(order: np.ndarray) -> List[List[int]]:
         else:
             # If the node is connected to multiple groups, we merge them
             main_group = min(connected_groups)
-            for j in np.nonzero(order[i, :])[0]:
-                if i2g.get(j) in connected_groups:
+            for j in i2g:
+                if i2g[j] in connected_groups:
                     i2g[j] = main_group
             i2g[i] = main_group
 
