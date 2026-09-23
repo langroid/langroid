@@ -133,6 +133,7 @@ nav:
       - Twitter Search via Xquik MCP: notes/twitter-search.md
       - Marker Pdf Parser: notes/marker-pdf.md
       - URLLoader : notes/url_loader.md
+      - Spider Cloud Crawler: notes/spider.md
       - Crawl4AI Crawler: notes/crawl4ai.md
       - LangDB AI Gateway: notes/langdb.md
       - Portkey AI Gateway: notes/portkey.md
