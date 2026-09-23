@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 import markdownify as md
 from dotenv import load_dotenv
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from langroid.exceptions import LangroidImportError
@@ -85,6 +86,29 @@ class ExaCrawlerConfig(BaseCrawlerConfig):
     api_key: str = ""
 
     model_config = SettingsConfigDict(env_prefix="EXA_")
+
+
+class SpiderConfig(BaseCrawlerConfig):
+    """Opt-in Spider Cloud settings; timeouts are in seconds.
+
+    ``limit`` caps pages per seed URL in crawl mode. The default scrape mode
+    loads only the supplied URLs. Explicit settings override SPIDER_* env vars.
+    """
+
+    api_key: str = Field(default="", repr=False)
+    mode: Literal["scrape", "crawl"] = "scrape"
+    limit: int = Field(default=1, gt=0)
+    timeout: float = Field(default=60, gt=0, allow_inf_nan=False)
+
+    model_config = SettingsConfigDict(env_prefix="SPIDER_")
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def validate_limit(cls, value: Any) -> Any:
+        """Accept integer settings and env strings, not booleans or floats."""
+        if isinstance(value, (bool, float)):
+            raise ValueError("Spider limit must be a positive integer")
+        return value
 
 
 class Crawl4aiConfig(BaseCrawlerConfig):
@@ -228,6 +252,8 @@ class CrawlerFactory:
             return FirecrawlCrawler(config)
         elif isinstance(config, ExaCrawlerConfig):
             return ExaCrawler(config)
+        elif isinstance(config, SpiderConfig):
+            return SpiderCrawler(config)
         elif isinstance(config, Crawl4aiConfig):
             return Crawl4aiCrawler(config)
         else:
@@ -406,6 +432,109 @@ class FirecrawlCrawler(BaseCrawler):
             # Save results incrementally
             docs = self._return_save_incremental_results(app, crawl_status["id"])
         return docs
+
+
+class SpiderCrawler(BaseCrawler):
+    """Load Markdown from Spider Cloud using synchronous JSON responses."""
+
+    def __init__(self, config: SpiderConfig) -> None:
+        super().__init__(config)
+        self.config: SpiderConfig = config
+
+    @property
+    def needs_parser(self) -> bool:
+        return True
+
+    def crawl(self, urls: List[str]) -> List[Document]:
+        """Load pages, retaining successful results when another page fails.
+
+        Args:
+            urls: Page URLs, or seed URLs when mode is ``crawl``.
+
+        Returns:
+            Unchunked web documents and any locally parsed document chunks.
+
+        Raises:
+            ValueError: If a nonempty load has no Spider API key.
+        """
+        import requests
+
+        if not urls:
+            return []
+        if not self.config.api_key.strip():
+            raise ValueError("SPIDER_API_KEY is required in your env or .env")
+
+        docs: List[Document] = []
+        for index, url in enumerate(urls):
+            if self._is_document_url(url):
+                docs.extend(self._process_document(url))
+                continue
+
+            payload: Dict[str, Any] = {"url": url, "return_format": "markdown"}
+            if self.config.mode == "crawl":
+                payload["limit"] = self.config.limit
+            try:
+                response = requests.post(
+                    f"https://api.spider.cloud/{self.config.mode}",
+                    headers={
+                        "Authorization": f"Bearer {self.config.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=self.config.timeout,
+                )
+                response.raise_for_status()
+                pages = response.json()
+            except (requests.RequestException, ValueError) as error:
+                # Servers and exceptions may echo credentials or response data.
+                logging.warning(
+                    "Spider request %d failed (%s); skipping.",
+                    index,
+                    type(error).__name__,
+                )
+                continue
+
+            if not isinstance(pages, list):
+                logging.warning("Spider request %d returned invalid JSON shape.", index)
+                continue
+            for page_index, page in enumerate(pages):
+                doc = self._page_to_document(page, url, index, page_index)
+                if doc is not None:
+                    docs.append(doc)
+        return docs
+
+    def _page_to_document(
+        self, page: Any, url: str, request_index: int, page_index: int
+    ) -> Optional[Document]:
+        """Validate a page without logging untrusted response values."""
+        if not isinstance(page, dict):
+            reason = "invalid page shape"
+        elif (
+            not isinstance(page.get("status"), int)
+            or not 200 <= page["status"] < 300
+            or page.get("error")
+        ):
+            reason = "failed or invalid page status"
+        elif not isinstance(page.get("content"), str):
+            reason = "invalid content"
+        elif not page["content"].strip():
+            return None
+        else:
+            source = page.get("url")
+            if self.config.mode == "scrape" and (source is None or source == ""):
+                source = url
+            if isinstance(source, str) and source.strip():
+                return Document(
+                    content=page["content"], metadata=DocMetaData(source=source)
+                )
+            reason = "missing or invalid page URL"
+        logging.warning(
+            "Spider request %d page %d: %s; skipping.",
+            request_index,
+            page_index,
+            reason,
+        )
+        return None
 
 
 class ExaCrawler(BaseCrawler):
