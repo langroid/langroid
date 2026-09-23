@@ -492,8 +492,9 @@ def run_batch_agent_method(
     agent_name = agent_cfg.name
 
     async def _do_task(input: str | ChatDocument, i: int) -> Any:
-        agent_cfg.name = f"{agent_cfg.name}-{i}"
-        agent_i = agent_cls(agent_cfg)
+        agent_i_cfg = copy.deepcopy(agent_cfg)
+        agent_i_cfg.name = f"{agent_name}-{i}"
+        agent_i = agent_cls(agent_i_cfg)
         method_i = getattr(agent_i, method_name, None)
         if method_i is None:
             raise ValueError(f"Agent {agent_name} has no method {method_name}")
