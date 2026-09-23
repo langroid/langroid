@@ -131,6 +131,7 @@ nav:
       - Seltz Search Tool: notes/seltz_search.md
       - SerpApi Search Tool: notes/serpapi_search.md
       - Twitter Search via Xquik MCP: notes/twitter-search.md
+      - Web Research via Baizhi MCP: notes/baizhi-research.md
       - Marker Pdf Parser: notes/marker-pdf.md
       - URLLoader : notes/url_loader.md
       - Crawl4AI Crawler: notes/crawl4ai.md
