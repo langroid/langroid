@@ -308,7 +308,7 @@ When done with these, commit and push to github and submit the PR. If this
 is an ongoing PR, just push to github again and the PR will be updated.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
-Read more [here](docs/development/github-cli.md).
+Read more in the [GitHub CLI manual](https://cli.github.com/manual/).
 
 ## Releasing (maintainers)
 
