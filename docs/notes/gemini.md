@@ -48,34 +48,51 @@ agent = DocChatAgent(config)
 Google Vertex AI uses project-specific URLs for its
 [OpenAI compatibility layer](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-gemini-using-openai-library),
 which differs from the fixed URL used by the standard Google AI (Gemini) API.
-To use Gemini models through Vertex AI, set the endpoint via the
-`GEMINI_API_BASE` environment variable or the `api_base` parameter in
-`OpenAIGPTConfig`.
+Langroid can construct this URL and refresh Google Application Default
+Credentials (ADC) automatically when the model uses the
+`vertexai/<publisher>/<model>` format.
 
-!!! note
-    The `OPENAI_API_BASE` environment variable (commonly used for local
-    proxies) is **not** applied to Gemini models. Use `GEMINI_API_BASE`
-    or an explicit `api_base` in the config instead.
+### First-class Vertex AI route
 
-### Setup
+Authenticate ADC and identify the Google Cloud project and location:
 
-1. Set up authentication. Vertex AI typically uses Google Cloud credentials
-   rather than a simple API key. You can generate a short-lived access token:
+```bash
+gcloud auth application-default login
+export GOOGLE_CLOUD_PROJECT=my-gcp-project
+export GOOGLE_CLOUD_LOCATION=us-central1
+```
 
-    ```bash
-    export GEMINI_API_KEY=$(gcloud auth print-access-token)
-    ```
+Then prefix the publisher-qualified model name with `vertexai/`:
 
-2. Set your Vertex AI endpoint URL, which includes your GCP project ID
-   and region:
+```python
+import langroid.language_models as lm
 
-    ```bash
-    export GEMINI_API_BASE=https://{REGION}-aiplatform.googleapis.com/v1beta1/projects/{PROJECT_ID}/locations/{REGION}/endpoints/openapi
-    ```
+config = lm.OpenAIGPTConfig(
+    chat_model="vertexai/google/gemini-2.0-flash-001",
+)
+llm = lm.OpenAIGPT(config)
+response = llm.chat("Hello from Vertex AI!")
+```
 
-### Usage
+The project and location can instead be specified directly in the config:
 
-**Option 1: Environment variable (recommended for Vertex AI)**
+```python
+config = lm.OpenAIGPTConfig(
+    chat_model="vertexai/google/gemini-2.0-flash-001",
+    vertexai_project_id="my-gcp-project",
+    vertexai_location="us-central1",
+)
+```
+
+For the `global` location, Langroid uses `aiplatform.googleapis.com`; regional
+locations use `<location>-aiplatform.googleapis.com`. An explicit `api_base`
+takes precedence over the generated endpoint. A caller-supplied
+`api_key_provider` or `api_key` also takes precedence over automatic ADC.
+
+### Manual endpoint configuration
+
+The existing manual configuration remains available. Generate a short-lived
+access token and provide the full endpoint URL:
 
 ```bash
 export GEMINI_API_KEY=$(gcloud auth print-access-token)
@@ -85,27 +102,15 @@ export GEMINI_API_BASE=https://us-central1-aiplatform.googleapis.com/v1beta1/pro
 ```python
 import langroid.language_models as lm
 
-# GEMINI_API_BASE is picked up automatically
 config = lm.OpenAIGPTConfig(chat_model="gemini/gemini-2.0-flash")
 llm = lm.OpenAIGPT(config)
 response = llm.chat("Hello from Vertex AI!")
 ```
 
-**Option 2: Explicit `api_base` in config**
-
-```python
-import langroid.language_models as lm
-
-config = lm.OpenAIGPTConfig(
-    chat_model="gemini/gemini-2.0-flash",
-    api_base=(
-        "https://us-central1-aiplatform.googleapis.com/v1beta1"
-        "/projects/my-gcp-project/locations/us-central1/endpoints/openapi"
-    ),
-)
-llm = lm.OpenAIGPT(config)
-response = llm.chat("Hello from Vertex AI!")
-```
+!!! note
+    The `OPENAI_API_BASE` environment variable (commonly used for local
+    proxies) is **not** applied to Gemini models. For the manual `gemini/`
+    route, use `GEMINI_API_BASE` or an explicit `api_base` instead.
 
 When neither `GEMINI_API_BASE` nor an explicit `api_base` is set, Langroid
 falls back to the default Google AI (Gemini) endpoint

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import warnings
 from collections import defaultdict
 from functools import cache
@@ -103,6 +104,8 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 # Provider prefixes that route to the Gemini OpenAI-compatible API.
 GEMINI_MODEL_PREFIXES = ("gemini/", "google/gemini-")
+VERTEXAI_MODEL_PREFIX = "vertexai/"
+VERTEXAI_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 OLLAMA_API_KEY = "ollama"
@@ -176,6 +179,70 @@ default_openai_completion_model = next(
 
 class AccessWarning(Warning):
     pass
+
+
+class _VertexAITokenProvider:
+    """Return fresh Google ADC access tokens for Vertex AI requests."""
+
+    def __init__(self) -> None:
+        try:
+            import google.auth
+            import google.auth.transport.requests
+        except ImportError as exc:
+            raise LangroidImportError(package="google-auth", error=str(exc)) from exc
+
+        self._credentials, _ = google.auth.default(scopes=[VERTEXAI_SCOPE])
+        self._request = google.auth.transport.requests.Request()
+        self._lock = threading.Lock()
+
+    def __call__(self) -> str:
+        with self._lock:
+            if not self._credentials.valid:
+                # google-auth does not provide a typed refresh signature.
+                self._credentials.refresh(self._request)  # type: ignore[no-untyped-call]
+            token = self._credentials.token
+            if not isinstance(token, str) or not token:
+                raise RuntimeError("Unable to obtain a Vertex AI access token")
+            return token
+
+
+def _create_vertexai_token_provider() -> Callable[[], str]:
+    """Create a callable that refreshes Google ADC credentials when needed."""
+    return _VertexAITokenProvider()
+
+
+def _vertexai_model_name(chat_model: str) -> str:
+    """Validate a Vertex AI model route and return its publisher/model name."""
+    parts = chat_model.split("/", 2)
+    if len(parts) != 3 or not parts[1] or not parts[2]:
+        raise ValueError(
+            "Vertex AI models must use vertexai/<publisher>/<model> format."
+        )
+    return f"{parts[1]}/{parts[2]}"
+
+
+def _vertexai_api_base(project_id: str, location: str) -> str:
+    """Build the Vertex AI OpenAI-compatible endpoint URL."""
+    if not project_id:
+        raise ValueError(
+            "A Google Cloud project is required for vertexai/ models; set "
+            "vertexai_project_id or GOOGLE_CLOUD_PROJECT."
+        )
+    if not location:
+        raise ValueError(
+            "A Google Cloud location is required for vertexai/ models; set "
+            "vertexai_location or GOOGLE_CLOUD_LOCATION."
+        )
+
+    host = (
+        "aiplatform.googleapis.com"
+        if location == "global"
+        else f"{location}-aiplatform.googleapis.com"
+    )
+    return (
+        f"https://{host}/v1beta1/projects/{project_id}/locations/{location}"
+        "/endpoints/openapi"
+    )
 
 
 @cache
@@ -274,6 +341,8 @@ class OpenAIGPTConfig(LLMConfig):
     api_key_provider: Optional[Callable[[], str]] = None
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
+    vertexai_project_id: str = ""
+    vertexai_location: str = ""
     litellm: bool = False  # use litellm api?
     litellm_proxy: LiteLLMProxyConfig = LiteLLMProxyConfig()
     ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
@@ -495,6 +564,11 @@ class OpenAIGPT(LanguageModel):
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
 
+        # Validate before parsing the optional `//formatter` suffix, since an
+        # empty Vertex AI publisher ("vertexai//model") resembles that syntax.
+        if self.config.chat_model.startswith(VERTEXAI_MODEL_PREFIX):
+            _vertexai_model_name(self.config.chat_model)
+
         if len(parts := self.config.chat_model.split("//")) > 1:
             # there is a formatter specified, e.g.
             # "litellm/ollama/mistral//hf" or
@@ -600,6 +674,7 @@ class OpenAIGPT(LanguageModel):
 
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
+        self.is_vertexai = self.config.chat_model.startswith(VERTEXAI_MODEL_PREFIX)
         self.is_gemini = self.is_gemini_model()
         self.is_deepseek = self.is_deepseek_model()
         self.is_minimax = self.is_minimax_model()
@@ -652,6 +727,28 @@ class OpenAIGPT(LanguageModel):
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = self.config.litellm_proxy.api_key or self.api_key
                 self.api_base = self.config.litellm_proxy.api_base or self.api_base
+            elif self.is_vertexai:
+                self.config.chat_model = _vertexai_model_name(self.config.chat_model)
+
+                explicit_api_base = (
+                    self.config.api_base if self.config._api_base_was_supplied else None
+                )
+                if explicit_api_base:
+                    self.api_base = explicit_api_base
+                else:
+                    project_id = self.config.vertexai_project_id or os.getenv(
+                        "GOOGLE_CLOUD_PROJECT", ""
+                    )
+                    location = self.config.vertexai_location or os.getenv(
+                        "GOOGLE_CLOUD_LOCATION", ""
+                    )
+                    self.api_base = _vertexai_api_base(project_id, location)
+
+                if (
+                    self.config.api_key_provider is None
+                    and self.api_key == DUMMY_API_KEY
+                ):
+                    self.config.api_key_provider = _create_vertexai_token_provider()
             elif self.is_gemini:
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
@@ -911,7 +1008,10 @@ class OpenAIGPT(LanguageModel):
 
     def is_gemini_model(self) -> bool:
         """Are we using the gemini OpenAI-compatible API?"""
-        return self.chat_model_orig.startswith(GEMINI_MODEL_PREFIXES)
+        model = self.chat_model_orig
+        if model.startswith(VERTEXAI_MODEL_PREFIX):
+            model = model.removeprefix(VERTEXAI_MODEL_PREFIX)
+        return model.startswith(GEMINI_MODEL_PREFIXES)
 
     def is_deepseek_model(self) -> bool:
         deepseek_models = [e.value for e in DeepSeekModel]
