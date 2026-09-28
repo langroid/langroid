@@ -323,7 +323,7 @@ def test_fatal_error_stops_refill_and_drains_siblings(source: str) -> None:
             owned.append(asyncio.current_task())
             try:
                 if index == 0:
-                    await ready.wait()
+                    await asyncio.wait_for(ready.wait(), SIBLING_SLEEP)
                     if source == "task":
                         raise ValueError("failed")
                     return value
@@ -400,7 +400,7 @@ def test_process_control_exception_during_sibling_cleanup(
 
         async def work(value: Any, index: int) -> Any:
             if index == 0:
-                await ready.wait()
+                await asyncio.wait_for(ready.wait(), SIBLING_SLEEP)
                 raise ValueError("ordinary failure")
             try:
                 ready.set()
