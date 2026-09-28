@@ -237,8 +237,16 @@ def test_external_cancellation_cleans_only_owned_tasks(
             await asyncio.wait_for(ready.wait(), 5)
             parent.cancel()
             await asyncio.wait_for(cleaning.wait(), 5)
-            # Repeated caller cancellation must not abandon async cleanup.
+            # Repeated caller cancellation must not abandon async cleanup, so
+            # cancel again while the children's finalizers are still blocked and
+            # check the scheduler is still waiting. Releasing cleanup before
+            # this check would let a scheduler that abandons its children (one
+            # unretried `shield`) pass: the children would finish anyway.
             parent.cancel()
+            for _ in range(10):
+                await asyncio.sleep(0)
+            assert not parent.done()
+            assert cleaned == []
             release_cleanup.set()
             with pytest.raises(asyncio.CancelledError):
                 await asyncio.wait_for(parent, 5)
