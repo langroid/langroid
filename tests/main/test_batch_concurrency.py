@@ -205,6 +205,7 @@ def test_external_cancellation_cleans_only_owned_tasks(
         started = []
         cleaned = []
         owned = []
+        ran_to_completion = []
 
         async def work(value: Any, index: int) -> Any:
             owned.append(asyncio.current_task())
@@ -212,7 +213,12 @@ def test_external_cancellation_cleans_only_owned_tasks(
             if len(started) == 2:
                 ready.set()
             try:
-                await asyncio.Event().wait()
+                # Bounded, not an unset Event: if cleanup stops cancelling
+                # children, the parent's cleanup can still finish, so this test
+                # fails on the assertions below instead of hanging in the
+                # `finally` gather.
+                await asyncio.sleep(SIBLING_SLEEP)
+                ran_to_completion.append(index)
             finally:
                 cleaning.set()
                 await release_cleanup.wait()
@@ -238,6 +244,7 @@ def test_external_cancellation_cleans_only_owned_tasks(
                 await asyncio.wait_for(parent, 5)
             assert started == [0, 1]
             assert sorted(cleaned) == [0, 1]
+            assert ran_to_completion == []
             assert all(task is not None and task.done() for task in owned)
             assert not unrelated.done()
         finally:
