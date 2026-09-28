@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import inspect
+import sys
 import warnings
 from enum import Enum
 from typing import (
@@ -321,7 +322,14 @@ async def _process_rolling_async(
                         value, (KeyboardInterrupt, SystemExit)
                     ):
                         raise value
-            if cancelled is not None:
+            if cancelled is not None and not isinstance(
+                sys.exc_info()[1], (KeyboardInterrupt, SystemExit)
+            ):
+                # A KeyboardInterrupt/SystemExit already propagating through
+                # this `finally` (raised by a task or by output_map) outranks a
+                # cancellation that merely arrived during cleanup: replacing it
+                # would break the guarantee that those always propagate. Ending
+                # the block without raising re-raises the pending one.
                 raise cancelled
     return results
 

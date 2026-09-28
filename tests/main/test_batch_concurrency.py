@@ -426,6 +426,61 @@ def test_process_control_exception_during_sibling_cleanup(
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+def test_process_control_exception_outranks_cleanup_cancellation(
+    error: type[BaseException],
+) -> None:
+    """A caller cancellation during cleanup must not replace a pending exit.
+
+    `output_map` raises the process-control exception while a sibling is still
+    in flight; the caller then cancels while that sibling's asynchronous
+    finalizer is blocked. The scheduler must still propagate the exit, not the
+    `CancelledError` it observed during cleanup.
+    """
+
+    async def scenario() -> None:
+        started = asyncio.Event()
+        cleaning = asyncio.Event()
+        release_cleanup = asyncio.Event()
+
+        async def work(value: Any, index: int) -> Any:
+            if index == 0:
+                return value
+            try:
+                started.set()
+                await asyncio.sleep(SIBLING_SLEEP)
+            finally:
+                cleaning.set()
+                await release_cleanup.wait()
+
+        def output_map(value: Any) -> Any:
+            raise error()
+
+        parent = asyncio.create_task(
+            batch._process_rolling_async(["a", "b"], work, 2, output_map=output_map)
+        )
+        try:
+            await asyncio.wait_for(started.wait(), SIBLING_SLEEP)
+            await asyncio.wait_for(cleaning.wait(), SIBLING_SLEEP)
+            parent.cancel()
+            for _ in range(10):
+                await asyncio.sleep(0)
+            release_cleanup.set()
+            with pytest.raises(error):
+                await asyncio.wait_for(parent, SIBLING_SLEEP)
+        finally:
+            release_cleanup.set()
+            parent.cancel()
+            await asyncio.gather(parent, return_exceptions=True)
+
+    # asyncio re-raises a process-control exception out of `run` itself when a
+    # task ends with one, so tolerate it surfacing either there or inside.
+    try:
+        asyncio.run(scenario())
+    except error:
+        pass
+
+
 @pytest.mark.parametrize("entry", ["common", "generator", "clones"])
 @pytest.mark.parametrize("items", [[], ["a"]])
 @pytest.mark.parametrize(
