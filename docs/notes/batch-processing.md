@@ -149,9 +149,11 @@ the selected exception policy. `run_batch_tasks` continues to use `RAISE`.
 
 With `RAISE`, an observed failure stops further scheduling and cancels and
 awaits the remaining owned tasks before propagating. External cancellation
-always propagates after cleanup, including on Python 3.10; a child's own
+propagates after cleanup, including on Python 3.10; a child's own
 `CancelledError` follows the per-item policy. `KeyboardInterrupt` and
-`SystemExit` always propagate. Repeated caller cancellation does not interrupt
+`SystemExit` always propagate, and take precedence over a cancellation that
+arrives only during cleanup — everything else in flight is still superseded by
+such a cancellation. Repeated caller cancellation does not interrupt
 the asynchronous cleanup of owned tasks; tasks must cooperate with cancellation
 for cleanup to finish. These guarantees describe the new rolling path and do
 not change the existing fixed-batch paths.
