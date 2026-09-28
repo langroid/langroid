@@ -105,6 +105,7 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GEMINI_MODEL_PREFIXES = ("gemini/", "google/gemini-")
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
+ATLASCLOUD_BASE_URL = "https://api.atlascloud.ai/v1"
 OLLAMA_API_KEY = "ollama"
 
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
@@ -604,6 +605,7 @@ class OpenAIGPT(LanguageModel):
         self.is_deepseek = self.is_deepseek_model()
         self.is_minimax = self.is_minimax_model()
         self.is_glhf = self.config.chat_model.startswith("glhf/")
+        self.is_atlascloud = self.config.chat_model.startswith("atlascloud/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
         self.is_langdb = self.config.chat_model.startswith("langdb/")
         self.is_portkey = self.config.chat_model.startswith("portkey/")
@@ -671,6 +673,16 @@ class OpenAIGPT(LanguageModel):
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
                 self.api_base = GLHF_BASE_URL
+            elif self.is_atlascloud:
+                self.config.chat_model = self.config.chat_model.replace(
+                    "atlascloud/", ""
+                )
+                if self.api_key == OPENAI_API_KEY:
+                    self.api_key = os.getenv("ATLASCLOUD_API_KEY", DUMMY_API_KEY)
+                # Honor a caller-supplied api_base (e.g. a proxy) instead of
+                # always forcing the default Atlas Cloud endpoint.
+                if not self.config._api_base_was_supplied:
+                    self.api_base = ATLASCLOUD_BASE_URL
             elif self.is_openrouter:
                 self.config.chat_model = self.config.chat_model.replace(
                     "openrouter/", ""
