@@ -227,7 +227,10 @@ def _validate_max_concurrency(
     if max_concurrency is None:
         return
     if isinstance(max_concurrency, bool) or not isinstance(max_concurrency, int):
-        raise TypeError("max_concurrency must be a positive integer, not bool")
+        raise TypeError(
+            "max_concurrency must be a positive integer, not "
+            f"{type(max_concurrency).__name__}"
+        )
     if max_concurrency <= 0:
         raise ValueError("max_concurrency must be a positive integer")
     if batch_size is not None or sequential or stop_on_first_result:

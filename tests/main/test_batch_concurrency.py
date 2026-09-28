@@ -1,6 +1,7 @@
 """Offline contracts for opt-in rolling bounded task execution."""
 
 import asyncio
+import time
 from typing import Any
 
 import pytest
@@ -270,7 +271,12 @@ def test_mapper_requested_parent_cancel_stops_refill(
 def test_same_wakeup_failures_are_drained_in_index_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Already finished sibling failures are retrieved even on early exit."""
+    """Same-wakeup failures are raised in input-index order, not completion order.
+
+    All three tasks finish before the scheduler observes any of them, and they
+    are handed back in reverse order, so the lowest input index must still be
+    the one that propagates.
+    """
     original_wait = asyncio.wait
     owned = []
 
@@ -288,6 +294,7 @@ def test_same_wakeup_failures_are_drained_in_index_order(
 
     with pytest.raises(ValueError, match="failure-0"):
         run_public(work, max_concurrency=3)
+    assert len(owned) == 3
     assert all(task is not None and task.done() for task in owned)
 
 
@@ -369,6 +376,11 @@ def test_process_control_exceptions_propagate(
 def test_process_control_exception_during_sibling_cleanup(
     error: type[BaseException],
 ) -> None:
+    # The sibling sleeps rather than waiting forever, and the call is timed, so
+    # a cleanup that fails to cancel siblings FAILS this test instead of
+    # hanging the suite: the call would then take the whole sleep.
+    sibling_sleep = 5.0
+
     async def scenario() -> None:
         ready = asyncio.Event()
 
@@ -378,12 +390,14 @@ def test_process_control_exception_during_sibling_cleanup(
                 raise ValueError("ordinary failure")
             try:
                 ready.set()
-                await asyncio.Event().wait()
+                await asyncio.sleep(sibling_sleep)
             finally:
                 raise error()
 
+        started = time.monotonic()
         with pytest.raises(error):
             await batch._process_rolling_async(["a", "b"], work, 2)
+        assert time.monotonic() - started < sibling_sleep / 2
 
     asyncio.run(scenario())
 
@@ -391,17 +405,25 @@ def test_process_control_exception_during_sibling_cleanup(
 @pytest.mark.parametrize("entry", ["common", "generator", "clones"])
 @pytest.mark.parametrize("items", [[], ["a"]])
 @pytest.mark.parametrize(
-    "options,error",
+    "options,error,match",
     [
-        ({"max_concurrency": True}, TypeError),
-        ({"max_concurrency": False}, TypeError),
-        ({"max_concurrency": 1.5}, TypeError),
-        ({"max_concurrency": "2"}, TypeError),
-        ({"max_concurrency": 0}, ValueError),
-        ({"max_concurrency": -2}, ValueError),
-        ({"max_concurrency": 2, "batch_size": 2}, ValueError),
-        ({"max_concurrency": 2, "sequential": True}, ValueError),
-        ({"max_concurrency": 2, "stop_on_first_result": True}, ValueError),
+        # `match` targets the validator's own wording rather than just the
+        # parameter name: Python's "unexpected keyword argument
+        # 'max_concurrency'" would otherwise satisfy these cases on any build
+        # that lacks the parameter, making them vacuous regression guards.
+        ({"max_concurrency": True}, TypeError, "not bool"),
+        ({"max_concurrency": False}, TypeError, "not bool"),
+        ({"max_concurrency": 1.5}, TypeError, "not float"),
+        ({"max_concurrency": "2"}, TypeError, "not str"),
+        ({"max_concurrency": 0}, ValueError, "must be a positive integer"),
+        ({"max_concurrency": -2}, ValueError, "must be a positive integer"),
+        ({"max_concurrency": 2, "batch_size": 2}, ValueError, "requires batch_size"),
+        ({"max_concurrency": 2, "sequential": True}, ValueError, "requires batch_size"),
+        (
+            {"max_concurrency": 2, "stop_on_first_result": True},
+            ValueError,
+            "requires batch_size",
+        ),
     ],
 )
 def test_validation_precedes_user_code(
@@ -409,6 +431,7 @@ def test_validation_precedes_user_code(
     items: list[str],
     options: dict[str, Any],
     error: type[Exception],
+    match: str,
 ) -> None:
     def forbidden(*args: Any, **kwargs: Any) -> Any:
         pytest.fail("user code ran before validation")
@@ -418,7 +441,7 @@ def test_validation_precedes_user_code(
         clone = forbidden
 
     options = {"sequential": False, **options}
-    with pytest.raises(error, match="max_concurrency"):
+    with pytest.raises(error, match=match):
         if entry == "common":
             run_public(forbidden, items, **options)
         elif entry == "generator":
