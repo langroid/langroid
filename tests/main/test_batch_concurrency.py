@@ -1,7 +1,6 @@
 """Offline contracts for opt-in rolling bounded task execution."""
 
 import asyncio
-import time
 from typing import Any
 
 import pytest
@@ -13,6 +12,11 @@ from langroid.agent.task import Task
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import settings
+
+# How long a sibling task sleeps when the test needs it to still be in flight.
+# It must never elapse in a passing run: correct cleanup cancels the sibling
+# first, and the tests assert the sleep did not run to completion.
+SIBLING_SLEEP = 5.0
 
 
 def run_public(work: Any, inputs: Any = None, **kwargs: Any) -> list[Any]:
@@ -305,6 +309,7 @@ def test_fatal_error_stops_refill_and_drains_siblings(source: str) -> None:
         started = []
         cleaned = []
         owned = []
+        ran_to_completion = []
 
         async def work(value: Any, index: int) -> Any:
             started.append(index)
@@ -316,7 +321,12 @@ def test_fatal_error_stops_refill_and_drains_siblings(source: str) -> None:
                         raise ValueError("failed")
                     return value
                 ready.set()
-                await asyncio.Event().wait()
+                # A bounded sleep, not an unset Event: a cleanup that stops
+                # cancelling siblings then shows up as a completed sleep (a
+                # failed assertion below) rather than hanging this test, which
+                # `wait_for` cannot rescue from the shielded cleanup loop.
+                await asyncio.sleep(SIBLING_SLEEP)
+                ran_to_completion.append(index)
             finally:
                 await asyncio.sleep(0)
                 cleaned.append(index)
@@ -336,6 +346,7 @@ def test_fatal_error_stops_refill_and_drains_siblings(source: str) -> None:
             )
         assert started == [0, 1]
         assert sorted(cleaned) == [0, 1]
+        assert ran_to_completion == []
         assert all(task is not None and task.done() for task in owned)
 
     asyncio.run(scenario())
@@ -376,13 +387,9 @@ def test_process_control_exceptions_propagate(
 def test_process_control_exception_during_sibling_cleanup(
     error: type[BaseException],
 ) -> None:
-    # The sibling sleeps rather than waiting forever, and the call is timed, so
-    # a cleanup that fails to cancel siblings FAILS this test instead of
-    # hanging the suite: the call would then take the whole sleep.
-    sibling_sleep = 5.0
-
     async def scenario() -> None:
         ready = asyncio.Event()
+        ran_to_completion = []
 
         async def work(value: Any, index: int) -> Any:
             if index == 0:
@@ -390,14 +397,16 @@ def test_process_control_exception_during_sibling_cleanup(
                 raise ValueError("ordinary failure")
             try:
                 ready.set()
-                await asyncio.sleep(sibling_sleep)
+                # Bounded, so a cleanup that stops cancelling siblings fails
+                # the assertion below instead of hanging this test.
+                await asyncio.sleep(SIBLING_SLEEP)
+                ran_to_completion.append(index)
             finally:
                 raise error()
 
-        started = time.monotonic()
         with pytest.raises(error):
             await batch._process_rolling_async(["a", "b"], work, 2)
-        assert time.monotonic() - started < sibling_sleep / 2
+        assert ran_to_completion == []
 
     asyncio.run(scenario())
 
