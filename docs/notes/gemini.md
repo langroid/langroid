@@ -68,7 +68,7 @@ Then prefix the publisher-qualified model name with `vertexai/`:
 import langroid.language_models as lm
 
 config = lm.OpenAIGPTConfig(
-    chat_model="vertexai/google/gemini-2.0-flash-001",
+    chat_model="vertexai/google/gemini-3-flash",
 )
 llm = lm.OpenAIGPT(config)
 response = llm.chat("Hello from Vertex AI!")
@@ -78,7 +78,7 @@ The project and location can instead be specified directly in the config:
 
 ```python
 config = lm.OpenAIGPTConfig(
-    chat_model="vertexai/google/gemini-2.0-flash-001",
+    chat_model="vertexai/google/gemini-3-flash",
     vertexai_project_id="my-gcp-project",
     vertexai_location="us-central1",
 )
