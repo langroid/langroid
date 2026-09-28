@@ -381,7 +381,12 @@ def test_process_control_exceptions_propagate(
         return value
 
     def output_map(value: Any) -> Any:
-        raise error()
+        # Identity for the "task" source: a mapper that always raised would
+        # satisfy `pytest.raises` even if the child's exception were swallowed
+        # into a successful result, making those cases vacuous.
+        if source == "mapper":
+            raise error()
+        return value
 
     # Await inline so pytest can catch the process-control exception before
     # it reaches the event loop's top-level task runner.
