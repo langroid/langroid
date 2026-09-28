@@ -443,6 +443,10 @@ def test_process_control_exception_outranks_cleanup_cancellation(
     `CancelledError` it observed during cleanup.
     """
 
+    # Survives an aborted `asyncio.run`, so the tolerant handler below cannot
+    # accept an exit that arrived before cancellation was ever exercised.
+    cancelled_during_cleanup = []
+
     async def scenario() -> None:
         started = asyncio.Event()
         cleaning = asyncio.Event()
@@ -470,6 +474,7 @@ def test_process_control_exception_outranks_cleanup_cancellation(
             parent.cancel()
             for _ in range(10):
                 await asyncio.sleep(0)
+            cancelled_during_cleanup.append(True)
             release_cleanup.set()
             with pytest.raises(error):
                 await asyncio.wait_for(parent, SIBLING_SLEEP)
@@ -484,6 +489,9 @@ def test_process_control_exception_outranks_cleanup_cancellation(
         asyncio.run(scenario())
     except error:
         pass
+    # A scheduler that skipped cleanup would abort the scenario before this
+    # point, and the handler above would otherwise call that a pass.
+    assert cancelled_during_cleanup == [True]
 
 
 @pytest.mark.parametrize("entry", ["common", "generator", "clones"])
