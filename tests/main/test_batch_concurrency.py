@@ -15,8 +15,10 @@ from langroid.utils.configuration import settings
 
 # How long a sibling task sleeps when the test needs it to still be in flight.
 # It must never elapse in a passing run: correct cleanup cancels the sibling
-# first, and the tests assert the sleep did not run to completion.
-SIBLING_SLEEP = 5.0
+# first, and the tests assert the sleep did not run to completion. Kept well
+# below the 5s `asyncio.wait_for` deadlines wrapping some of these calls, so a
+# regression trips the specific assertion rather than racing the timeout.
+SIBLING_SLEEP = 2.0
 
 
 def run_public(work: Any, inputs: Any = None, **kwargs: Any) -> list[Any]:
@@ -225,7 +227,10 @@ def test_external_cancellation_cleans_only_owned_tasks(
                 ran_to_completion.append(index)
             finally:
                 cleaning.set()
-                await release_cleanup.wait()
+                # Bounded too: the test's own `finally` releases this on every
+                # exit path, but an unbounded wait would leave the file
+                # hang-proof only by that invariant, not by construction.
+                await asyncio.wait_for(release_cleanup.wait(), 5)
                 cleaned.append(index)
 
         unrelated = asyncio.create_task(asyncio.Event().wait())
@@ -351,7 +356,12 @@ def test_fatal_error_stops_refill_and_drains_siblings(source: str) -> None:
                 cleaned.append(index)
 
         def output_map(value: Any) -> Any:
-            raise ValueError("failed")
+            # Identity for the "task" source, so that case cannot be satisfied
+            # by the mapper if the task's own failure were swallowed into a
+            # successful result.
+            if source == "mapper":
+                raise ValueError("failed")
+            return value
 
         with pytest.raises(ValueError, match="failed"):
             await asyncio.wait_for(
@@ -464,7 +474,7 @@ def test_process_control_exception_outranks_cleanup_cancellation(
                 await asyncio.sleep(SIBLING_SLEEP)
             finally:
                 cleaning.set()
-                await release_cleanup.wait()
+                await asyncio.wait_for(release_cleanup.wait(), 5)
 
         def output_map(value: Any) -> Any:
             raise error()
