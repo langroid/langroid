@@ -508,6 +508,50 @@ def test_process_control_exception_outranks_cleanup_cancellation(
     assert cancelled_during_cleanup == [True]
 
 
+def test_cleanup_cancellation_supersedes_ordinary_failure() -> None:
+    """The mirror of the test above: only an exit outranks the cancellation.
+
+    An ordinary in-flight failure must still be replaced by a cancellation that
+    arrived during cleanup. Without this, the `raise cancelled` in the
+    scheduler's cleanup is dead code that no test would miss.
+    """
+    cancelled_during_cleanup = []
+
+    async def scenario() -> None:
+        started = asyncio.Event()
+        cleaning = asyncio.Event()
+        release_cleanup = asyncio.Event()
+
+        async def work(value: Any, index: int) -> Any:
+            if index == 0:
+                await asyncio.wait_for(started.wait(), SIBLING_SLEEP)
+                raise ValueError("ordinary item failure")
+            try:
+                started.set()
+                await asyncio.sleep(SIBLING_SLEEP)
+            finally:
+                cleaning.set()
+                await asyncio.wait_for(release_cleanup.wait(), 5)
+
+        parent = asyncio.create_task(batch._process_rolling_async(["a", "b"], work, 2))
+        try:
+            await asyncio.wait_for(cleaning.wait(), SIBLING_SLEEP)
+            parent.cancel()
+            for _ in range(10):
+                await asyncio.sleep(0)
+            cancelled_during_cleanup.append(True)
+            release_cleanup.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(parent, SIBLING_SLEEP)
+        finally:
+            release_cleanup.set()
+            parent.cancel()
+            await asyncio.gather(parent, return_exceptions=True)
+
+    asyncio.run(scenario())
+    assert cancelled_during_cleanup == [True]
+
+
 @pytest.mark.parametrize("entry", ["common", "generator", "clones"])
 @pytest.mark.parametrize("items", [[], ["a"]])
 @pytest.mark.parametrize(

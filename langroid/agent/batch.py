@@ -1,7 +1,6 @@
 import asyncio
 import copy
 import inspect
-import sys
 import warnings
 from enum import Enum
 from typing import (
@@ -260,6 +259,7 @@ async def _process_rolling_async(
     results: List[Any] = [None] * len(inputs)
     owned: dict[asyncio.Task[tuple[bool, Any]], int] = {}
     next_index = 0
+    pending_exit: BaseException | None = None
 
     async def run_one(index: int) -> tuple[bool, Any]:
         try:
@@ -286,7 +286,13 @@ async def _process_rolling_async(
                         if not succeeded:
                             raise value
                         results[index] = output_map(value)
-                    except (KeyboardInterrupt, SystemExit):
+                    except (KeyboardInterrupt, SystemExit) as exit_error:
+                        # Recorded locally so cleanup below can tell that *this*
+                        # call is propagating an exit, without inspecting the
+                        # interpreter's exception state, which in a `finally`
+                        # with no local exception falls through to whatever the
+                        # caller happens to be handling.
+                        pending_exit = exit_error
                         raise
                     except BaseException as error:
                         if policy == ExceptionHandling.RAISE:
@@ -322,14 +328,13 @@ async def _process_rolling_async(
                         value, (KeyboardInterrupt, SystemExit)
                     ):
                         raise value
-            if cancelled is not None and not isinstance(
-                sys.exc_info()[1], (KeyboardInterrupt, SystemExit)
-            ):
+            if cancelled is not None and pending_exit is None:
                 # A KeyboardInterrupt/SystemExit already propagating through
                 # this `finally` (raised by a task or by output_map) outranks a
                 # cancellation that merely arrived during cleanup: replacing it
                 # would break the guarantee that those always propagate. Ending
-                # the block without raising re-raises the pending one.
+                # the block without raising re-raises the pending one. Any other
+                # in-flight exception IS superseded by the cancellation.
                 raise cancelled
     return results
 
