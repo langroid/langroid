@@ -286,13 +286,12 @@ async def _process_rolling_async(
                         if not succeeded:
                             raise value
                         results[index] = output_map(value)
-                    except (KeyboardInterrupt, SystemExit) as exit_error:
-                        # Recorded locally so cleanup below can tell that *this*
-                        # call is propagating an exit, without inspecting the
-                        # interpreter's exception state, which in a `finally`
-                        # with no local exception falls through to whatever the
-                        # caller happens to be handling.
-                        pending_exit = exit_error
+                    except (KeyboardInterrupt, SystemExit):
+                        # Recorded by the outer clause below, so cleanup can tell
+                        # that *this* call is propagating an exit without
+                        # inspecting the interpreter's exception state, which in a
+                        # `finally` with no local exception falls through to
+                        # whatever the caller happens to be handling.
                         raise
                     except BaseException as error:
                         if policy == ExceptionHandling.RAISE:
@@ -307,6 +306,12 @@ async def _process_rolling_async(
                 # Observe cancellation requested by a synchronous callback
                 # before creating more tasks (also works on Python 3.10).
                 await asyncio.sleep(0)
+    except (KeyboardInterrupt, SystemExit) as exit_error:
+        # Catches exits from the scheduler's own statements too, not just from a
+        # task or output_map: an exit injected at `asyncio.wait` or at the refill
+        # bookkeeping must outrank a cleanup cancellation just the same.
+        pending_exit = exit_error
+        raise
     finally:
         if owned:
             for task in owned:
