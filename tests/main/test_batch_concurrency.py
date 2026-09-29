@@ -43,8 +43,12 @@ def test_fixed_batches_wait_for_slowest() -> None:
     async def work(value: Any, index: int) -> Any:
         if index == 0:
             await asyncio.wait_for(b_finished.wait(), timeout=5)
-            # Let runnable tasks advance; A remains inside the first batch.
-            await asyncio.sleep(0)
+            # Give the scheduler ample turns to start C if it were going to.
+            # One turn is not enough: A can resume before B's completion has
+            # been processed, so the barrier would look intact under rolling
+            # scheduling too and this control test would prove nothing.
+            for _ in range(10):
+                await asyncio.sleep(0)
             observed.append(c_started.is_set())
         elif index == 1:
             b_finished.set()
