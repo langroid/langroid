@@ -443,6 +443,57 @@ def test_vertexai_global_override_discards_the_original_models_key(monkeypatch):
     assert llm.client.api_key != "sk-explicit-openai-key"
 
 
+def test_vertexai_global_override_discards_the_original_models_provider(
+    monkeypatch,
+):
+    """A token callable leaks exactly like a static key: it must not follow."""
+    _clear_vertexai_env(monkeypatch)
+    adc_provider = lambda: "adc-token"  # noqa: E731
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", lambda: adc_provider)
+
+    def openai_token_provider():
+        return "sk-THE-USERS-OPENAI-TOKEN"
+
+    config = lm.OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        api_key_provider=openai_token_provider,
+    )
+    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-flash")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.is_vertexai
+    assert "aiplatform.googleapis.com" in llm.api_base
+    # ADC replaced the OpenAI callable; the OpenAI token never reaches Google.
+    assert llm.config.api_key_provider is adc_provider
+    assert llm.config.api_key_provider() == "adc-token"
+    assert llm.api_key == lm.DUMMY_API_KEY
+
+
+def test_vertexai_override_within_vertexai_keeps_the_provider(monkeypatch):
+    """Staying on the vertexai/ route keeps a caller-supplied token callable."""
+    _clear_vertexai_env(monkeypatch)
+
+    def unexpected_provider():
+        raise AssertionError("ADC provider should not be created")
+
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", unexpected_provider)
+    vertex_provider = lambda: "caller-vertex-token"  # noqa: E731
+    config = lm.OpenAIGPTConfig(
+        chat_model="vertexai/google/gemini-3-flash",
+        api_key_provider=vertex_provider,
+        vertexai_project_id="test-project",
+        vertexai_location="us-central1",
+    )
+    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-pro")
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.config.api_key_provider is vertex_provider
+
+
 @pytest.mark.parametrize(
     "override",
     ["vertexai/google/gemini-3-flash", "vertexai/google/gemini-3-pro"],

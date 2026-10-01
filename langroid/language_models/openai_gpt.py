@@ -457,6 +457,15 @@ class OpenAIGPTConfig(LLMConfig):
         # nothing about a non-OpenAI provider's credentials. Under a custom
         # prefix from `create()`, `<PREFIX>_API_KEY` is provider-specific and
         # does count, as does a key declared as a subclass field default.
+        #
+        # The env comparison assumes every `.env` value also reaches
+        # `os.environ`, which holds because langroid loads dotenv files with
+        # `load_dotenv()` and no config here sets `env_file`. A subclass that
+        # adds `env_file` to its `model_config` would break that assumption:
+        # pydantic would load `OPENAI_API_KEY` from the file without it
+        # appearing in `os.environ`, and the key would be misclassified as
+        # caller-supplied. Such a subclass must pass `api_key` explicitly or
+        # set `api_key_provider` for non-OpenAI routes.
         api_key_was_supplied = api_key_was_supplied or (
             self.api_key != DUMMY_API_KEY
             and (env_prefix != "OPENAI_" or self.api_key != env_api_key)
@@ -611,12 +620,16 @@ class OpenAIGPT(LanguageModel):
                 VERTEXAI_MODEL_PREFIX
             ) and not self.config.chat_model.startswith(VERTEXAI_MODEL_PREFIX):
                 # The override is switching a non-Vertex config onto the
-                # vertexai/ route. A key supplied for the configured provider
-                # is not a Vertex AI credential, so drop its provenance rather
-                # than forward it to Google; ADC takes over. Staying within
-                # vertexai/ (even onto a different model) keeps the key, since
-                # it was supplied for this same endpoint.
+                # vertexai/ route. A credential supplied for the configured
+                # provider is not a Vertex AI credential, so drop it rather
+                # than forward it to Google; ADC takes over. This applies to
+                # a token callable exactly as it does to a static key -- an
+                # `api_key_provider` mints tokens for the provider it was
+                # configured for. Staying within vertexai/ (even onto a
+                # different model) keeps both, since they were supplied for
+                # this same endpoint.
                 self.config._api_key_was_supplied = False
+                self.config.api_key_provider = None
             self.config.chat_model = settings.chat_model
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
