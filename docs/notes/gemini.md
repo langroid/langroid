@@ -105,6 +105,17 @@ On a config whose `chat_model` is already a `vertexai/` route, an explicit
     credential or endpoint for Vertex AI, configure `chat_model` as a
     `vertexai/` route directly instead of relying on the override.
 
+!!! warning "The reset is one-directional: leaving `vertexai/` keeps the credential"
+    Overriding a config that *is* a `vertexai/` route onto another provider
+    (`--model gpt-4o`) does **not** discard a `api_key` or `api_key_provider`
+    you configured yourself, so a Vertex AI token would be sent to the new
+    provider's endpoint. That is langroid's long-standing behavior for every
+    provider pair -- `settings.chat_model` swaps the model, not the
+    credentials -- and changing it is a cross-provider change rather than a
+    Vertex AI one. Until then, do not combine a hand-configured Vertex AI
+    credential with the `settings.chat_model` override; configure
+    `chat_model` directly instead.
+
 !!! note
     An `OPENAI_API_KEY` in the environment is **ignored** for `vertexai/`
     models -- it is not a Vertex AI credential, so it is never sent to Google.

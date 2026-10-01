@@ -206,7 +206,9 @@ class _VertexAITokenProvider:
         with self._lock:
             if not self._credentials.valid:
                 # google-auth does not provide a typed refresh signature.
-                self._credentials.refresh(self._request)  # type: ignore[no-untyped-call]
+                self._credentials.refresh(  # type: ignore[no-untyped-call]
+                    self._request
+                )
             token = self._credentials.token
             if not isinstance(token, str) or not token:
                 raise RuntimeError("Unable to obtain a Vertex AI access token")
