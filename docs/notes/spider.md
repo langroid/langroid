@@ -28,6 +28,11 @@ entire batch or remote crawl. `limit=0` (unlimited crawling) is not supported.
 Spider Cloud requests use your account's credits. Start with the default
 single-page mode and increase the crawl limit deliberately.
 
+Raise `timeout` whenever you raise `limit`. Spider's own crawl timeout is
+longer than this client default, so a large crawl at `timeout=60` can abort
+locally while the service keeps crawling and spending credits — you would be
+billed for pages you never receive.
+
 ## Load individual pages
 
 ```python
@@ -66,7 +71,8 @@ add background jobs, streaming, automatic retries, or another-service fallback.
 - Direct `.pdf`, `.docx`, and `.doc` URLs use Langroid's existing document
   parser and `ParsingConfig`, including its download limits. Install the
   appropriate document parser extra when needed. These may return chunks;
-  empty or failed direct documents are not sent to Spider as a fallback.
+  empty or failed direct documents are logged and skipped, not sent to Spider
+  as a fallback.
   Extensionless URLs are sent to Spider without a local HEAD request.
 - Empty input or an empty response returns an empty list. Empty input does
   not require a key or make a request.
@@ -78,6 +84,10 @@ add background jobs, streaming, automatic retries, or another-service fallback.
   responded, the numeric HTTP status — so a rejected key (`HTTP 401`) is
   distinguishable from throttling (`HTTP 429`) or a service fault (`HTTP 500`).
   Logs omit response bodies, exception messages, and credentials.
+- Every skipped request and page leaves a log line, so an empty result is never
+  silent. Faults are logged at `WARNING`; outcomes that are merely empty — a
+  response with no pages, a page whose content is blank — are logged at `INFO`,
+  so enable info-level logging when a crawl returns less than you expected.
 
 See the runnable
 [example](https://github.com/langroid/langroid/blob/main/examples/docqa/spider_loader.py).

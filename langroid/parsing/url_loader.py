@@ -467,7 +467,16 @@ class SpiderCrawler(BaseCrawler):
         docs: List[Document] = []
         for index, url in enumerate(urls):
             if self._is_document_url(url):
-                docs.extend(self._process_document(url))
+                document_docs = self._process_document(url)
+                if not document_docs:
+                    # There is deliberately no Spider fallback here, so say so
+                    # rather than dropping the URL without a trace.
+                    logging.warning(
+                        "Spider request %d: document URL yielded no content; "
+                        "skipping (document URLs are not sent to Spider).",
+                        index,
+                    )
+                docs.extend(document_docs)
                 continue
 
             payload: Dict[str, Any] = {"url": url, "return_format": "markdown"}
@@ -501,6 +510,10 @@ class SpiderCrawler(BaseCrawler):
             if not isinstance(pages, list):
                 logging.warning("Spider request %d returned invalid JSON shape.", index)
                 continue
+            if not pages:
+                # Not an error, but the caller sees only an empty list, so leave
+                # a trace of which request came back with nothing.
+                logging.info("Spider request %d returned no pages.", index)
             for page_index, page in enumerate(pages):
                 doc = self._page_to_document(page, url, index, page_index)
                 if doc is not None:
@@ -522,6 +535,13 @@ class SpiderCrawler(BaseCrawler):
         elif not isinstance(page.get("content"), str):
             reason = "invalid content"
         elif not page["content"].strip():
+            # A blank page is a normal crawl outcome, not a fault, but it still
+            # has to be visible: otherwise an all-blank crawl logs nothing.
+            logging.info(
+                "Spider request %d page %d: blank content; skipping.",
+                request_index,
+                page_index,
+            )
             return None
         else:
             source = page.get("url")

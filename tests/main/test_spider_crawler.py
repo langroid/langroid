@@ -44,7 +44,10 @@ def post(monkeypatch: pytest.MonkeyPatch) -> Mock:
 
 @pytest.fixture
 def messages() -> Iterator[list[str]]:
-    """CI disables pytest logging, so use an ordinary logging handler."""
+    """CI disables pytest logging, so use an ordinary logging handler.
+
+    Captures INFO and above, since merely-empty outcomes are logged at INFO.
+    """
     result: list[str] = []
 
     class Collector(logging.Handler):
@@ -52,12 +55,17 @@ def messages() -> Iterator[list[str]]:
             result.append(record.getMessage())
 
     handler = Collector()
+    handler.setLevel(logging.INFO)
     root = logging.getLogger()
+    previous_level = root.level
     root.addHandler(handler)
+    if previous_level == logging.NOTSET or previous_level > logging.INFO:
+        root.setLevel(logging.INFO)
     try:
         yield result
     finally:
         root.removeHandler(handler)
+        root.setLevel(previous_level)
 
 
 def page(**overrides: Any) -> dict[str, Any]:
@@ -124,9 +132,12 @@ def test_spider_empty_input_needs_no_key(post: Mock) -> None:
 
 
 @pytest.mark.parametrize("result", [[], [page(content="")], [page(content=" \n")]])
-def test_spider_empty_results(post: Mock, result: Any) -> None:
+def test_spider_empty_results(post: Mock, result: Any, messages: list[str]) -> None:
     post.return_value.json.return_value = result
     assert loader().load() == []
+    # An empty result must never be silent: the caller cannot otherwise tell an
+    # empty crawl from a crawl that returned only blank pages.
+    assert messages
 
 
 @pytest.mark.parametrize("mode", ["scrape", "crawl"])
@@ -268,7 +279,11 @@ def test_spider_invalid_configuration(options: dict[str, Any]) -> None:
 @pytest.mark.parametrize("extension", ["pdf", "docx", "doc"])
 @pytest.mark.parametrize("empty", [False, True])
 def test_spider_direct_documents_do_not_reach_api(
-    monkeypatch: pytest.MonkeyPatch, post: Mock, extension: str, empty: bool
+    monkeypatch: pytest.MonkeyPatch,
+    post: Mock,
+    extension: str,
+    empty: bool,
+    messages: list[str],
 ) -> None:
     url = f"{URL}/file.{extension}"
     docs = (
@@ -288,3 +303,6 @@ def test_spider_direct_documents_do_not_reach_api(
     assert loader([url]).load() == docs
     create.assert_called_once()
     post.assert_not_called()
+    # A document URL that parses to nothing is skipped, with no Spider
+    # fallback -- say so instead of dropping the URL without a trace.
+    assert any("document URL" in message for message in messages) is empty
