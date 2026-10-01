@@ -94,6 +94,8 @@ class XMLToolMessage(ToolMessage):
                 return {}
 
             field_info = cls.model_fields.get(element.tag)
+            annotation = field_info.annotation if field_info else None
+            origin = get_origin(annotation)
             is_verbatim = (
                 field_info
                 and hasattr(field_info, "json_schema_extra")
@@ -114,12 +116,28 @@ class XMLToolMessage(ToolMessage):
                     else content
                 )
             elif len(element) == 0:
+                # 空容器的类型来自字段定义，不能当成空字符串。
+                if element is root:
+                    return {}
+                if origin in (list, dict):
+                    return origin()
                 # For non-code leaf elements, strip whitespace
                 return element.text.strip() if element.text else ""
             else:
                 # For branch elements, handle potential lists or nested structures
                 children = [parse_element(child) for child in element]
-                if all(child.tag == element[0].tag for child in element):
+                # 单条目字典及单字段模型仍是映射，不由子节点数量决定。
+                is_mapping = (
+                    element is root
+                    or origin is dict
+                    or (
+                        isinstance(annotation, type)
+                        and issubclass(annotation, BaseModel)
+                    )
+                )
+                if not is_mapping and all(
+                    child.tag == element[0].tag for child in element
+                ):
                     # If all children have the same tag, treat as a list
                     return children
                 else:
@@ -137,8 +155,8 @@ class XMLToolMessage(ToolMessage):
         result = parse_element(root)
         if not isinstance(result, dict):
             return None
-        # Filter out empty dictionaries from skipped underscore fields
-        return {k: v for k, v in result.items() if v != {}}
+        # 只排除内部字段，保留有效的空字典参数。
+        return {k: v for k, v in result.items() if not k.startswith("_")}
 
     @classmethod
     def parse(cls, formatted_string: str) -> Optional["XMLToolMessage"]:

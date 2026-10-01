@@ -2000,7 +2000,13 @@ class Agent(ABC):
                     return None
 
                 try:
-                    return tool.model_validate(maybe_tool_dict)
+                    # XML 候选必须按具体工具的字段类型重新解析。
+                    data = (
+                        tool.extract_field_values(tool_candidate_str)
+                        if not is_json and issubclass(tool, XMLToolMessage)
+                        else maybe_tool_dict
+                    )
+                    return tool.model_validate(data)
                 except ValidationError:
                     return None
 
@@ -2030,6 +2036,8 @@ class Agent(ABC):
             return None
 
         try:
+            if not is_json and issubclass(message_class, XMLToolMessage):
+                maybe_tool_dict = message_class.extract_field_values(tool_candidate_str)
             message = message_class.model_validate(maybe_tool_dict)
         except ValidationError as ve:
             self.tool_error = from_llm
