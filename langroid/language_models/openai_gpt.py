@@ -607,12 +607,15 @@ class OpenAIGPT(LanguageModel):
         # global override of chat_model,
         # to allow quick testing with other models
         if settings.chat_model != "":
-            if settings.chat_model != self.config.chat_model:
-                # Key provenance is relative to the model that was configured.
-                # A key supplied for that model is not a credential for a
-                # different one, so it must not be forwarded to the new
-                # provider's endpoint. An override to the same model changes
-                # nothing and keeps the caller's key.
+            if settings.chat_model.startswith(
+                VERTEXAI_MODEL_PREFIX
+            ) and not self.config.chat_model.startswith(VERTEXAI_MODEL_PREFIX):
+                # The override is switching a non-Vertex config onto the
+                # vertexai/ route. A key supplied for the configured provider
+                # is not a Vertex AI credential, so drop its provenance rather
+                # than forward it to Google; ADC takes over. Staying within
+                # vertexai/ (even onto a different model) keeps the key, since
+                # it was supplied for this same endpoint.
                 self.config._api_key_was_supplied = False
             self.config.chat_model = settings.chat_model
             self.chat_model_orig = settings.chat_model

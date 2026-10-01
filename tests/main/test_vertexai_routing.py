@@ -443,8 +443,14 @@ def test_vertexai_global_override_discards_the_original_models_key(monkeypatch):
     assert llm.client.api_key != "sk-explicit-openai-key"
 
 
-def test_vertexai_same_model_override_keeps_the_explicit_key(monkeypatch):
-    """An override that does not change the model must not drop the key."""
+@pytest.mark.parametrize(
+    "override",
+    ["vertexai/google/gemini-3-flash", "vertexai/google/gemini-3-pro"],
+)
+def test_vertexai_override_within_vertexai_keeps_the_explicit_key(
+    monkeypatch, override
+):
+    """Staying on the vertexai/ route keeps the key, same model or not."""
     _clear_vertexai_env(monkeypatch)
 
     def unexpected_provider():
@@ -456,7 +462,7 @@ def test_vertexai_same_model_override_keeps_the_explicit_key(monkeypatch):
         api_key="explicit-vertex-token",
         api_base="https://vertex.example/v1",
     )
-    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-flash")
+    monkeypatch.setattr(settings, "chat_model", override)
 
     llm = lm.OpenAIGPT(config)
 
