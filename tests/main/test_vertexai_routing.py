@@ -420,6 +420,27 @@ def test_vertexai_rejects_malformed_location(monkeypatch, location):
         )
 
 
+def test_vertexai_global_override_discards_the_original_models_key(monkeypatch):
+    """`settings.chat_model` switches provider; the old key must not follow."""
+    _clear_vertexai_env(monkeypatch)
+    provider = lambda: "adc-token"  # noqa: E731
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", lambda: provider)
+
+    config = lm.OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        api_key="sk-explicit-openai-key",
+        api_base="https://vertex.example/v1",
+    )
+    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-flash")
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.is_vertexai
+    assert llm.config.api_key_provider is provider
+    assert llm.api_key == lm.DUMMY_API_KEY
+    assert llm.client.api_key != "sk-explicit-openai-key"
+
+
 def test_vertexai_rejects_malformed_project_id(monkeypatch):
     """The project id lands in the URL path, so validate it too."""
     _clear_vertexai_env(monkeypatch)
