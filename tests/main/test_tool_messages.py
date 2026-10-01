@@ -2330,3 +2330,90 @@ def test_nested_tool_message_schema_is_cleaned() -> None:
         "enum": ["inner_tool"],
     }
     assert "request" in inner_schema["required"]
+
+
+class _DefaultKindsTool(ToolMessage):
+    """Covers every way a ToolMessage field can (or cannot) be omitted."""
+
+    request: str = "default_kinds"
+    purpose: str = "Exercise the required/defaults logic."
+    needed: str
+    static_default: List[str] = []
+    factory_default: List[str] = Field(default_factory=list)
+    optional_none: Optional[str] = None
+    aliased_default: int = Field(default=3, alias="alias_name")
+
+
+def test_llm_function_schema_default_factory_is_not_required() -> None:
+    """Fields with ``default_factory`` are optional and must stay out of
+    ``required``.
+
+    Regression guard for issue #1158: ``required`` used to be rebuilt by
+    testing for a JSON Schema ``default`` key, but Pydantic emits no
+    ``default`` for a ``Field(default_factory=...)`` field. Such fields were
+    therefore advertised to the LLM as required, diverging from Pydantic's own
+    schema and from what the model actually accepts.
+    """
+    params = _DefaultKindsTool.llm_function_schema(request=False).parameters
+
+    # Pydantic is the source of truth for what may be omitted.
+    pydantic_required = set(_DefaultKindsTool.model_json_schema()["required"])
+    assert pydantic_required == {"needed"}
+    assert set(params["required"]) == {"needed"}
+
+    # all fields are still offered to the LLM when defaults are included
+    assert set(params["properties"]) == {
+        "needed",
+        "static_default",
+        "factory_default",
+        "optional_none",
+        "alias_name",
+    }
+
+
+def test_llm_function_schema_defaults_false_drops_all_defaulted_fields() -> None:
+    """``defaults=False`` means "omit fields that have default values".
+
+    Same root cause as issue #1158: the old JSON-Schema-``default`` test also
+    let ``default_factory`` fields and ``x: Optional[T] = None`` fields (whose
+    emitted default is literally ``None``) survive this filter.
+    """
+    params = _DefaultKindsTool.llm_function_schema(
+        request=False, defaults=False
+    ).parameters
+
+    assert set(params["properties"]) == {"needed"}
+    assert set(params["required"]) == {"needed"}
+
+
+def test_llm_function_schema_respects_aliases() -> None:
+    """Optionality must be keyed by the property names Pydantic emitted.
+
+    `alias` and `validation_alias` make a schema property name differ from the
+    Python field name, and the two namespaces can even collide: below,
+    the property named ``value`` is the *required* ``internal`` field, while
+    the optional ``value`` field is emitted as ``other``. Deciding optionality
+    from Python field names would get both of these backwards.
+    """
+
+    class AliasTool(ToolMessage):
+        request: str = "alias_tool"
+        purpose: str = "Exercise alias handling."
+        # emitted as "input_value", optional
+        renamed: int = Field(default=3, validation_alias="input_value")
+        # emitted as "value", required
+        internal: int = Field(alias="value")
+        # emitted as "other", optional
+        value: int = Field(default=3, alias="other")
+
+    params = AliasTool.llm_function_schema(request=False).parameters
+    pydantic_required = set(AliasTool.model_json_schema()["required"])
+
+    assert pydantic_required == {"value"}
+    assert set(params["required"]) == {"value"}
+    assert set(params["properties"]) == {"input_value", "value", "other"}
+
+    # `defaults=False` keeps exactly the fields that cannot be omitted
+    lean = AliasTool.llm_function_schema(request=False, defaults=False).parameters
+    assert set(lean["properties"]) == {"value"}
+    assert set(lean["required"]) == {"value"}
