@@ -83,7 +83,12 @@ add background jobs, streaming, automatic retries, or another-service fallback.
   the warnings. A failed request logs its exception type and, when the server
   responded, the numeric HTTP status — so a rejected key (`HTTP 401`) is
   distinguishable from throttling (`HTTP 429`) or a service fault (`HTTP 500`).
-  Logs omit response bodies, exception messages, and credentials.
+  Spider's own log lines omit response bodies, exception messages, and
+  credentials. The direct-document path is the exception, and not specific to
+  Spider: it is handled by Langroid's shared document parser, whose errors are
+  logged with the full URL and the exception message, as they are for every
+  crawler. Keep credentials out of the URLs you pass if your logs are shipped
+  somewhere you do not control.
 - Every skipped request and page leaves a log line, so an empty result is never
   silent. Faults are logged at `WARNING`; outcomes that are merely empty — a
   response with no pages, a page whose content is blank — are logged at `INFO`,
