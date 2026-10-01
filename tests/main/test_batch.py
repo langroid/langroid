@@ -1,6 +1,7 @@
 import asyncio
+import threading
 import time
-from typing import Any, Optional
+from typing import Any, List, Optional, Tuple
 
 import pytest
 
@@ -602,3 +603,89 @@ def test_process_batch_async_stop_on_first_skips_exception_result() -> None:
     results = asyncio.run(run_batch())
 
     assert results == [None, None, "Processed valid", None]
+
+
+_PROBE_ITEMS = 4
+
+
+def _overlap_probe(
+    sequential: bool,
+    batch_size: Optional[int] = None,
+    wait_timeout: float = 0.5,
+) -> Tuple[List[int], int]:
+    """Run `run_batch_function` over `_PROBE_ITEMS` items, recording the peak
+    number of callbacks in flight at once.
+
+    Each callback waits until *every* item is running at once, or until a
+    short bounded timeout expires -- never unbounded, so the probe cannot
+    hang when execution turns out to be more serial than expected.
+
+    Releasing only at full width is what makes the measurement meaningful:
+    a probe that released as soon as it saw a second peer would report a peak
+    of 2 no matter how much concurrency was actually available, and so could
+    not tell `batch_size=2` apart from `batch_size` being ignored.
+
+    Args:
+        sequential: Passed through to `run_batch_function`.
+        batch_size: Passed through to `run_batch_function`.
+        wait_timeout: Per-callback upper bound on the blocking wait.
+
+    Returns:
+        The results list, and the peak number of concurrently active calls.
+    """
+    lock = threading.Lock()
+    all_running = threading.Event()
+    state = {"active": 0, "peak": 0}
+
+    def work(i: int) -> int:
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+            if state["active"] >= _PROBE_ITEMS:
+                all_running.set()
+        all_running.wait(timeout=wait_timeout)
+        with lock:
+            state["active"] -= 1
+        return i * i
+
+    results = run_batch_function(
+        work,
+        list(range(_PROBE_ITEMS)),
+        sequential=sequential,
+        batch_size=batch_size,
+    )
+    return results, state["peak"]
+
+
+def test_run_batch_function_sequential_does_not_overlap() -> None:
+    """`sequential=True` must keep exactly one callback in flight."""
+    # the event can never fire here, so every call pays `wait_timeout`;
+    # keep it small since the assertion does not depend on its size.
+    results, peak = _overlap_probe(sequential=True, wait_timeout=0.05)
+    assert results == [0, 1, 4, 9]
+    assert peak == 1
+
+
+def test_run_batch_function_concurrent_overlaps() -> None:
+    """`sequential=False` must actually overlap blocking sync callbacks.
+
+    Regression guard for issue #1157: the concurrent path wrapped `function`
+    in a coroutine that called it directly, giving `asyncio.gather` no
+    suspension point, so blocking callbacks ran back to back and
+    `sequential=False` was indistinguishable from `sequential=True`.
+    """
+    results, peak = _overlap_probe(sequential=False)
+    assert results == [0, 1, 4, 9], "results must stay in input order"
+    assert peak == _PROBE_ITEMS, f"expected all calls to overlap, saw peak {peak}"
+
+
+def test_run_batch_function_concurrent_respects_batch_size() -> None:
+    """Concurrency is confined to one batch at a time, and order is kept.
+
+    With `batch_size=2` only two of the four calls may be in flight at once,
+    so the probe's full-width event never fires and the peak must stay at the
+    batch size -- which is what distinguishes this from the unbatched case.
+    """
+    results, peak = _overlap_probe(sequential=False, batch_size=2)
+    assert results == [0, 1, 4, 9]
+    assert peak == 2
