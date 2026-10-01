@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import warnings
@@ -106,6 +107,12 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GEMINI_MODEL_PREFIXES = ("gemini/", "google/gemini-")
 VERTEXAI_MODEL_PREFIX = "vertexai/"
 VERTEXAI_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+# Vertex AI locations and project ids are lowercase alphanumeric with hyphens.
+# Enforced because both are interpolated into the endpoint URL -- a location
+# containing "/" or "@" would let an environment variable choose the host that
+# receives a freshly minted Google access token.
+VERTEXAI_NAME_RE = re.compile(r"[a-z0-9-]+")
+_VERTEXAI_PROVIDER_LOCK = threading.Lock()
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 OLLAMA_API_KEY = "ollama"
@@ -207,14 +214,22 @@ class _VertexAITokenProvider:
 
 
 @cache
+def _build_vertexai_token_provider() -> Callable[[], str]:
+    return _VertexAITokenProvider()
+
+
 def _create_vertexai_token_provider() -> Callable[[], str]:
     """Create a callable that refreshes Google ADC credentials when needed.
 
     Memoized so that repeatedly building Vertex AI models does not re-run ADC
     discovery, and so the OpenAI client cache -- which keys a rotating-key
-    provider on its identity -- can reuse a single client per endpoint.
+    provider on its identity -- can reuse a single client per endpoint. The
+    lock is held across the cache lookup because `functools.cache` calls the
+    wrapped function outside its own lock, so concurrent first builds would
+    otherwise each construct a provider and defeat both goals.
     """
-    return _VertexAITokenProvider()
+    with _VERTEXAI_PROVIDER_LOCK:
+        return _build_vertexai_token_provider()
 
 
 def _vertexai_model_name(chat_model: str) -> str:
@@ -239,6 +254,12 @@ def _vertexai_api_base(project_id: str, location: str) -> str:
             "A Google Cloud location is required for vertexai/ models; set "
             "vertexai_location or GOOGLE_CLOUD_LOCATION."
         )
+    for name, value in (("project", project_id), ("location", location)):
+        if not VERTEXAI_NAME_RE.fullmatch(value):
+            raise ValueError(
+                f"Invalid Google Cloud {name} {value!r} for a vertexai/ model: "
+                "expected only lowercase letters, digits and hyphens."
+            )
 
     host = (
         "aiplatform.googleapis.com"
@@ -417,23 +438,28 @@ class OpenAIGPTConfig(LLMConfig):
         super().__init__(**kwargs)
         env_prefix = self.model_config.get("env_prefix")
         env_api_base_name = f"{env_prefix}API_BASE"
+        env_api_key_name = f"{env_prefix}API_KEY"
         env_api_base = os.getenv(env_api_base_name)
+        env_api_key = os.getenv(env_api_key_name)
         if not self.model_config.get("case_sensitive"):
             case_insensitive_env = {
                 name.lower(): value for name, value in os.environ.items()
             }
             env_api_base = case_insensitive_env.get(env_api_base_name.lower())
+            env_api_key = case_insensitive_env.get(env_api_key_name.lower())
         api_base_was_supplied = api_base_was_supplied or (
             self.api_base is not None
             and (env_prefix != "OPENAI_" or self.api_base != env_api_base)
         )
         self._api_base_was_supplied = api_base_was_supplied
-        # A key read from the default `OPENAI_API_KEY` says nothing about a
-        # non-OpenAI provider's credentials, so it does not count as caller
-        # configuration. Under a custom prefix from `create()`, though,
-        # `<PREFIX>_API_KEY` is provider-specific and does count.
+        # Mirrors the `api_base` rule above: a key is caller configuration
+        # unless it came from the *default* `OPENAI_API_KEY`, which says
+        # nothing about a non-OpenAI provider's credentials. Under a custom
+        # prefix from `create()`, `<PREFIX>_API_KEY` is provider-specific and
+        # does count, as does a key declared as a subclass field default.
         api_key_was_supplied = api_key_was_supplied or (
-            env_prefix != "OPENAI_" and self.api_key != DUMMY_API_KEY
+            self.api_key != DUMMY_API_KEY
+            and (env_prefix != "OPENAI_" or self.api_key != env_api_key)
         )
         self._api_key_was_supplied = api_key_was_supplied
 

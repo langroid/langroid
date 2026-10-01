@@ -1,3 +1,7 @@
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 import langroid.language_models.openai_gpt as lm
@@ -325,7 +329,7 @@ def test_vertexai_token_provider_is_memoized(monkeypatch):
             return "stub-token"
 
     monkeypatch.setattr(lm, "_VertexAITokenProvider", StubTokenProvider)
-    lm._create_vertexai_token_provider.cache_clear()
+    lm._build_vertexai_token_provider.cache_clear()
     try:
         configs = [
             lm.OpenAIGPTConfig(
@@ -339,4 +343,93 @@ def test_vertexai_token_provider_is_memoized(monkeypatch):
         assert len(created) == 1
         assert providers[0] is providers[1] is created[0]
     finally:
-        lm._create_vertexai_token_provider.cache_clear()
+        lm._build_vertexai_token_provider.cache_clear()
+
+
+def test_vertexai_token_provider_is_built_once_under_threads(monkeypatch):
+    """Concurrent first builds must share one provider, not race to N."""
+    _clear_vertexai_env(monkeypatch)
+    created = []
+    barrier = threading.Barrier(8)
+
+    class StubTokenProvider:
+        def __init__(self) -> None:
+            # Maximize the window between the cache miss and the cache fill.
+            time.sleep(0.01)
+            created.append(self)
+
+        def __call__(self) -> str:
+            return "stub-token"
+
+    monkeypatch.setattr(lm, "_VertexAITokenProvider", StubTokenProvider)
+    lm._build_vertexai_token_provider.cache_clear()
+    try:
+
+        def build():
+            barrier.wait()
+            return lm._create_vertexai_token_provider()
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            providers = [f.result() for f in [pool.submit(build) for _ in range(8)]]
+
+        assert len(created) == 1
+        assert all(provider is created[0] for provider in providers)
+    finally:
+        lm._build_vertexai_token_provider.cache_clear()
+
+
+def test_vertexai_subclass_field_default_api_key_is_honored(monkeypatch):
+    """A key declared as a config-subclass field default is caller config."""
+    _clear_vertexai_env(monkeypatch)
+
+    def unexpected_provider():
+        raise AssertionError("ADC provider should not be created")
+
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", unexpected_provider)
+
+    class MyVertexConfig(lm.OpenAIGPTConfig):
+        chat_model: str = "vertexai/google/gemini-3-flash"
+        api_key: str = "my-explicit-vertex-token"
+        api_base: str = "https://vertex.example/v1"
+
+    config = MyVertexConfig()
+    assert config.api_key == "my-explicit-vertex-token"
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.api_key == "my-explicit-vertex-token"
+    assert llm.config.api_key_provider is None
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["attacker.example.com/", "us-central1@evil.example.com", "GLOBAL", "us_central1"],
+)
+def test_vertexai_rejects_malformed_location(monkeypatch, location):
+    """A location must not be able to choose the host that gets the token."""
+    _clear_vertexai_env(monkeypatch)
+
+    with pytest.raises(ValueError, match="Invalid Google Cloud location"):
+        lm.OpenAIGPT(
+            lm.OpenAIGPTConfig(
+                chat_model="vertexai/google/gemini-3-flash",
+                vertexai_project_id="test-project",
+                vertexai_location=location,
+                api_key_provider=lambda: "token",
+            )
+        )
+
+
+def test_vertexai_rejects_malformed_project_id(monkeypatch):
+    """The project id lands in the URL path, so validate it too."""
+    _clear_vertexai_env(monkeypatch)
+
+    with pytest.raises(ValueError, match="Invalid Google Cloud project"):
+        lm.OpenAIGPT(
+            lm.OpenAIGPTConfig(
+                chat_model="vertexai/google/gemini-3-flash",
+                vertexai_project_id="proj/../../other",
+                vertexai_location="us-central1",
+                api_key_provider=lambda: "token",
+            )
+        )
