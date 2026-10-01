@@ -217,6 +217,133 @@ async def _process_batch_async(
         return results
 
 
+def _validate_max_concurrency(
+    max_concurrency: int | None,
+    batch_size: int | None,
+    sequential: bool,
+    stop_on_first_result: bool,
+) -> None:
+    """Validate rolling mode before invoking any user callbacks."""
+    if max_concurrency is None:
+        return
+    if isinstance(max_concurrency, bool) or not isinstance(max_concurrency, int):
+        raise TypeError(
+            "max_concurrency must be a positive integer, not "
+            f"{type(max_concurrency).__name__}"
+        )
+    if max_concurrency <= 0:
+        raise ValueError("max_concurrency must be a positive integer")
+    if batch_size is not None or sequential or stop_on_first_result:
+        raise ValueError(
+            "max_concurrency requires batch_size=None, sequential=False, "
+            "and stop_on_first_result=False"
+        )
+
+
+async def _process_rolling_async(
+    inputs: List[str | ChatDocument],
+    do_task: Callable[[str | ChatDocument, int], Coroutine[Any, Any, Any]],
+    max_concurrency: int,
+    handle_exceptions: Union[bool, ExceptionHandling] = ExceptionHandling.RAISE,
+    output_map: Callable[[Any], Any] = lambda x: x,
+) -> List[Any]:
+    """Run a validated rolling batch with O(C) owned scheduling state.
+
+    Results use input order; successful values are mapped as tasks complete.
+    Cancellation at a scheduler await is external and always propagates.
+    Cancellation retrieved from a child is a per-item failure instead, even
+    on Python 3.10. Cleanup is shielded so repeated caller cancellation does
+    not abandon a child's asynchronous finalizer.
+    """
+    policy = _convert_exception_handling(handle_exceptions)
+    results: List[Any] = [None] * len(inputs)
+    owned: dict[asyncio.Task[tuple[bool, Any]], int] = {}
+    next_index = 0
+    pending_exit: BaseException | None = None
+
+    async def run_one(index: int) -> tuple[bool, Any]:
+        try:
+            return True, await do_task(inputs[index], index)
+        except BaseException as error:
+            # Tag failures, including process-control exceptions, so the
+            # scheduler can drain siblings before propagating them. Returned
+            # exception objects remain successful values.
+            return False, error
+
+    try:
+        with quiet_mode(), SuppressLoggerWarnings():
+            while next_index < len(inputs) or owned:
+                while next_index < len(inputs) and len(owned) < max_concurrency:
+                    task = asyncio.create_task(run_one(next_index))
+                    owned[task] = next_index
+                    next_index += 1
+
+                done, _ = await asyncio.wait(owned, return_when=asyncio.FIRST_COMPLETED)
+                for task in sorted(done, key=owned.__getitem__):
+                    index = owned[task]
+                    try:
+                        succeeded, value = task.result()
+                        if not succeeded:
+                            raise value
+                        results[index] = output_map(value)
+                    except (KeyboardInterrupt, SystemExit):
+                        # Recorded by the outer clause below, so cleanup can tell
+                        # that *this* call is propagating an exit without
+                        # inspecting the interpreter's exception state, which in a
+                        # `finally` with no local exception falls through to
+                        # whatever the caller happens to be handling.
+                        raise
+                    except BaseException as error:
+                        if policy == ExceptionHandling.RAISE:
+                            raise
+                        results[index] = (
+                            error
+                            if policy == ExceptionHandling.RETURN_EXCEPTION
+                            else None
+                        )
+                    del owned[task]
+                done.clear()
+                # Observe cancellation requested by a synchronous callback
+                # before creating more tasks (also works on Python 3.10).
+                await asyncio.sleep(0)
+    except (KeyboardInterrupt, SystemExit) as exit_error:
+        # Catches exits from the scheduler's own statements too, not just from a
+        # task or output_map: an exit injected at `asyncio.wait` or at the refill
+        # bookkeeping must outrank a cleanup cancellation just the same.
+        pending_exit = exit_error
+        raise
+    finally:
+        if owned:
+            for task in owned:
+                if not task.done():
+                    task.cancel()
+            cleanup = asyncio.gather(*owned, return_exceptions=True)
+            cancelled = None
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError as error:
+                    cancelled = error
+            for outcome in cleanup.result():
+                # A sibling may raise a process-control exception in its
+                # finalizer; draining it must not silently discard that exit.
+                if isinstance(outcome, tuple):
+                    succeeded, value = outcome
+                    if not succeeded and isinstance(
+                        value, (KeyboardInterrupt, SystemExit)
+                    ):
+                        raise value
+            if cancelled is not None and pending_exit is None:
+                # A KeyboardInterrupt/SystemExit already propagating through
+                # this `finally` (raised by a task or by output_map) outranks a
+                # cancellation that merely arrived during cleanup: replacing it
+                # would break the guarantee that those always propagate. Ending
+                # the block without raising re-raises the pending one. Any other
+                # in-flight exception IS superseded by the cancellation.
+                raise cancelled
+    return results
+
+
 def run_batched_tasks(
     inputs: List[str | ChatDocument],
     do_task: Callable[[str | ChatDocument, int], Coroutine[Any, Any, Any]],
@@ -227,6 +354,8 @@ def run_batched_tasks(
     output_map: Callable[[Any], Any],
     message_template: str,
     message: Optional[str] = None,
+    *,
+    max_concurrency: int | None = None,
 ) -> List[Any]:
     """
     Common batch processing logic for both agent methods and tasks.
@@ -245,7 +374,14 @@ def run_batched_tasks(
         output_map: Function to map results
         message_template: Template for status message
         message: Optional override for status message
+        max_concurrency: Optional positive rolling concurrency limit. Requires
+            batch_size=None, sequential=False and stop_on_first_result=False.
+            Maps successful values on completion and returns input order.
+            None preserves the existing batch behavior.
     """
+    _validate_max_concurrency(
+        max_concurrency, batch_size, sequential, stop_on_first_result
+    )
 
     async def run_all_batched_tasks(
         inputs: List[str | ChatDocument],
@@ -261,6 +397,12 @@ def run_batched_tasks(
             List[Any]: results
         """
         results: List[Any] = []
+        if max_concurrency is not None:
+            msg = message or message_template.format(total=len(inputs))
+            with status(msg), SuppressLoggerWarnings():
+                return await _process_rolling_async(
+                    inputs, do_task, max_concurrency, handle_exceptions, output_map
+                )
         if batch_size is None:
             msg = message or message_template.format(total=len(inputs))
             with status(msg), SuppressLoggerWarnings():
@@ -314,6 +456,8 @@ def run_batch_task_gen(
     handle_exceptions: Union[bool, ExceptionHandling] = ExceptionHandling.RAISE,
     max_cost: float = 0.0,
     max_tokens: int = 0,
+    *,
+    max_concurrency: int | None = None,
 ) -> list[Optional[U]]:
     """
     Generate and run copies of a task async/concurrently one per item in `items` list.
@@ -348,12 +492,19 @@ def run_batch_task_gen(
             Boolean values are deprecated and will be removed in a future version.
         max_cost: float: maximum cost to run the task (default 0.0 for unlimited)
         max_tokens: int: maximum token usage (in and out) (default 0 for unlimited)
+        max_concurrency: Optional positive rolling concurrency limit. Requires
+            batch_size=None, sequential=False and stop_on_first_result=False.
+            Maps successful values on completion and returns input order.
+            None preserves the existing batch behavior.
 
 
     Returns:
         list[Optional[U]]: list of final results. Always list[U] if
         `stop_on_first_result` is disabled
     """
+    _validate_max_concurrency(
+        max_concurrency, batch_size, sequential, stop_on_first_result
+    )
     inputs = [input_map(item) for item in items]
 
     async def _do_task(
@@ -400,6 +551,7 @@ def run_batch_task_gen(
         output_map=output_map,
         message_template="[bold green]Running {total} tasks:",
         message=message,
+        max_concurrency=max_concurrency,
     )
 
 
@@ -414,6 +566,8 @@ def run_batch_tasks(
     turns: int = -1,
     max_cost: float = 0.0,
     max_tokens: int = 0,
+    *,
+    max_concurrency: int | None = None,
 ) -> List[Optional[U]]:
     """
     Run copies of `task` async/concurrently one per item in `items` list.
@@ -439,11 +593,18 @@ def run_batch_tasks(
         turns (int): number of turns to run, -1 for infinite
         max_cost: float: maximum cost to run the task (default 0.0 for unlimited)
         max_tokens: int: maximum token usage (in and out) (default 0 for unlimited)
+        max_concurrency: Optional positive rolling concurrency limit. Requires
+            batch_size=None, sequential=False and stop_on_first_result=False.
+            Maps successful values on completion and returns input order.
+            None preserves the existing batch behavior.
 
     Returns:
         list[Optional[U]]: list of final results. Always list[U] if
         `stop_on_first_result` is disabled
     """
+    _validate_max_concurrency(
+        max_concurrency, batch_size, sequential, stop_on_first_result
+    )
     message = f"[bold green]Running {len(items)} copies of {task.name}..."
     return run_batch_task_gen(
         lambda i: task.clone(i),
@@ -457,6 +618,7 @@ def run_batch_tasks(
         message,
         max_cost=max_cost,
         max_tokens=max_tokens,
+        max_concurrency=max_concurrency,
     )
 
 
