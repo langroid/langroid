@@ -105,6 +105,18 @@ On a config whose `chat_model` is already a `vertexai/` route, an explicit
     credential or endpoint for Vertex AI, configure `chat_model` as a
     `vertexai/` route directly instead of relying on the override.
 
+    The reset covers the four places an `OpenAIGPTConfig` names a credential
+    or an endpoint: `api_key`, `api_key_provider`, `api_base` and `headers`.
+    It deliberately does **not** reach inside a transport you built
+    yourself -- `http_client_factory` or `http_client_config` -- because
+    those usually carry *environment* rather than provider configuration (a
+    corporate proxy, a CA bundle, `verify=False`), and clearing them would
+    break the Vertex AI call in exactly the environments that need them. A
+    credential embedded in your transport (an `auth=` tuple, an `x-api-key`
+    header) therefore does follow the override onto Google's endpoint, so
+    configure `chat_model` as a `vertexai/` route directly if your transport
+    carries one.
+
 !!! warning "The reset is one-directional: leaving `vertexai/` keeps the credential"
     Overriding a config that *is* a `vertexai/` route onto another provider
     (`--model gpt-4o`) does **not** discard a `api_key` or `api_key_provider`

@@ -640,6 +640,15 @@ class OpenAIGPT(LanguageModel):
                 #
                 # Staying within vertexai/ (even onto a different model)
                 # keeps all four: they were supplied for this endpoint.
+                #
+                # Scope: these four are where an OpenAIGPTConfig names a
+                # credential or an endpoint. A transport the caller built --
+                # `http_client_factory` / `http_client_config` -- is left
+                # alone even if it embeds an `auth=` or an `x-api-key`,
+                # because it usually carries environment rather than
+                # provider configuration (proxy, CA bundle, verify=False)
+                # and clearing it would break the Vertex AI call in the
+                # environments that need it. docs/notes/gemini.md says so.
                 self.config._api_key_was_supplied = False
                 self.config.api_key_provider = None
                 self.config._api_base_was_supplied = False
