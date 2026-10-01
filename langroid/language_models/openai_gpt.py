@@ -607,14 +607,16 @@ class OpenAIGPT(LanguageModel):
         # global override of chat_model,
         # to allow quick testing with other models
         if settings.chat_model != "":
+            if settings.chat_model != self.config.chat_model:
+                # Key provenance is relative to the model that was configured.
+                # A key supplied for that model is not a credential for a
+                # different one, so it must not be forwarded to the new
+                # provider's endpoint. An override to the same model changes
+                # nothing and keeps the caller's key.
+                self.config._api_key_was_supplied = False
             self.config.chat_model = settings.chat_model
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
-            # Key provenance is relative to the model that was configured. A
-            # key supplied for that model is not a credential for the one we
-            # are being switched to, so it must not be forwarded to the new
-            # provider's endpoint.
-            self.config._api_key_was_supplied = False
 
         # Validate before parsing the optional `//formatter` suffix, since an
         # empty Vertex AI publisher ("vertexai//model") resembles that syntax.

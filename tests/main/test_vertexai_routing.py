@@ -366,7 +366,9 @@ def test_vertexai_token_provider_is_built_once_under_threads(monkeypatch):
     try:
 
         def build():
-            barrier.wait()
+            # Bounded: a bare wait() would hang the suite forever if any
+            # worker died before reaching the barrier.
+            barrier.wait(timeout=30)
             return lm._create_vertexai_token_provider()
 
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -439,6 +441,27 @@ def test_vertexai_global_override_discards_the_original_models_key(monkeypatch):
     assert llm.config.api_key_provider is provider
     assert llm.api_key == lm.DUMMY_API_KEY
     assert llm.client.api_key != "sk-explicit-openai-key"
+
+
+def test_vertexai_same_model_override_keeps_the_explicit_key(monkeypatch):
+    """An override that does not change the model must not drop the key."""
+    _clear_vertexai_env(monkeypatch)
+
+    def unexpected_provider():
+        raise AssertionError("ADC provider should not be created")
+
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", unexpected_provider)
+    config = lm.OpenAIGPTConfig(
+        chat_model="vertexai/google/gemini-3-flash",
+        api_key="explicit-vertex-token",
+        api_base="https://vertex.example/v1",
+    )
+    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-flash")
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.api_key == "explicit-vertex-token"
+    assert llm.config.api_key_provider is None
 
 
 def test_vertexai_rejects_malformed_project_id(monkeypatch):
