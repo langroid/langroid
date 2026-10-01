@@ -595,18 +595,40 @@ def run_batch_function(
     sequential: bool = True,
     batch_size: Optional[int] = None,
 ) -> List[U]:
-    async def _do_task(item: T) -> U:
-        return function(item)
+    """Apply a synchronous `function` to each item, optionally concurrently.
+
+    Args:
+        function: Blocking, synchronous callable applied to each item.
+        items: The items to process.
+        sequential: If True (default), call `function` one item at a time on
+            the calling thread. If False, overlap the calls using worker
+            threads.
+        batch_size: If given, process the items in consecutive batches of this
+            size; each batch finishes before the next one starts. Defaults to
+            one batch containing all items.
+
+    Returns:
+        The results, in the same order as `items`.
+
+    Note:
+        With `sequential=False` the calls run in worker threads (via
+        `asyncio.to_thread`), so `function` must be thread-safe. The number of
+        threads is bounded by asyncio's default executor; use `batch_size` to
+        bound it further. A `function` that raises aborts the batch, but
+        already-running calls cannot be cancelled and will run to completion.
+    """
 
     async def _do_all(items: Iterable[T]) -> List[U]:
         if sequential:
-            results = []
-            for item in items:
-                result = await _do_task(item)
-                results.append(result)
-            return results
+            return [function(item) for item in items]
 
-        return await asyncio.gather(*(_do_task(item) for item in items))
+        # `function` is blocking and synchronous, so awaiting a coroutine that
+        # merely calls it gives gather() no suspension point and the calls run
+        # back to back (issue #1157). Hand each one to a worker thread so that
+        # `sequential=False` actually overlaps them.
+        return list(
+            await asyncio.gather(*(asyncio.to_thread(function, item) for item in items))
+        )
 
     results: List[U] = []
 

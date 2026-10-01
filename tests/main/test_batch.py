@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 from typing import Any, Optional
 
@@ -602,3 +603,58 @@ def test_process_batch_async_stop_on_first_skips_exception_result() -> None:
     results = asyncio.run(run_batch())
 
     assert results == [None, None, "Processed valid", None]
+
+
+def _overlap_probe(sequential: bool, batch_size: Optional[int] = None):
+    """Run `run_batch_function` over 4 items, recording peak concurrency.
+
+    Each callback blocks until it either sees a peer running or hits a short
+    bounded timeout, so the probe can detect overlap without ever hanging if
+    execution turns out to be serial.
+    """
+    lock = threading.Lock()
+    overlap = threading.Event()
+    state = {"active": 0, "peak": 0}
+
+    def work(i: int) -> int:
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+            if state["active"] >= 2:
+                overlap.set()
+        overlap.wait(timeout=0.5)
+        with lock:
+            state["active"] -= 1
+        return i * i
+
+    results = run_batch_function(
+        work, list(range(4)), sequential=sequential, batch_size=batch_size
+    )
+    return results, state["peak"]
+
+
+def test_run_batch_function_sequential_does_not_overlap():
+    """`sequential=True` must keep exactly one callback in flight."""
+    results, peak = _overlap_probe(sequential=True)
+    assert results == [0, 1, 4, 9]
+    assert peak == 1
+
+
+def test_run_batch_function_concurrent_overlaps():
+    """`sequential=False` must actually overlap blocking sync callbacks.
+
+    Regression guard for issue #1157: the concurrent path wrapped `function`
+    in a coroutine that called it directly, giving `asyncio.gather` no
+    suspension point, so blocking callbacks ran back to back and
+    `sequential=False` was indistinguishable from `sequential=True`.
+    """
+    results, peak = _overlap_probe(sequential=False)
+    assert results == [0, 1, 4, 9], "results must stay in input order"
+    assert peak > 1, f"expected overlapping calls, saw peak concurrency {peak}"
+
+
+def test_run_batch_function_concurrent_respects_batch_size():
+    """Concurrency is confined to one batch at a time, and order is kept."""
+    results, peak = _overlap_probe(sequential=False, batch_size=2)
+    assert results == [0, 1, 4, 9]
+    assert peak == 2

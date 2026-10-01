@@ -110,4 +110,22 @@ processing is used. The `stop_on_first_result` path schedules the tasks in the
 current batch concurrently so that it can return whichever valid result
 finishes first.
 
+## Synchronous callbacks
+
+`run_batch_function` takes a plain synchronous callable rather than a
+coroutine. With the default `sequential=True` it calls that function one item
+at a time on the calling thread. With `sequential=False` the calls are handed
+to worker threads so that blocking work actually overlaps, which means:
+
+- the function must be thread-safe;
+- results are still returned in input order, and `batch_size` still bounds
+  how many calls are in flight at once;
+- a raised exception aborts the batch, but calls already running in threads
+  cannot be cancelled and will run to completion.
+
+Before [GitHub issue #1157](https://github.com/langroid/langroid/issues/1157),
+`sequential=False` wrapped the callback in a coroutine that invoked it
+directly. That left `asyncio.gather` with no suspension point, so blocking
+callbacks ran back to back and the flag had no observable effect.
+
 See `tests/main/test_batch.py` for executable examples and edge-case coverage.
