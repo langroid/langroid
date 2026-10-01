@@ -74,7 +74,10 @@ add background jobs, streaming, automatic retries, or another-service fallback.
   HTTP/connection errors, invalid JSON, failed pages, and malformed results
   are logged and skipped. Successful pages from other results remain available.
   Consequently, an empty list can also mean that all requests failed; inspect
-  the warnings. Logs omit response bodies, exception messages, and credentials.
+  the warnings. A failed request logs its exception type and, when the server
+  responded, the numeric HTTP status — so a rejected key (`HTTP 401`) is
+  distinguishable from throttling (`HTTP 429`) or a service fault (`HTTP 500`).
+  Logs omit response bodies, exception messages, and credentials.
 
 See the runnable
 [example](https://github.com/langroid/langroid/blob/main/examples/docqa/spider_loader.py).

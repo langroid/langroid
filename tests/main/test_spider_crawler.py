@@ -196,6 +196,23 @@ def test_spider_failed_seed_preserves_other_results(
     assert len(docs) == 2
     assert post.call_count == 3
     assert messages
+    joined = " ".join(messages)
+    assert KEY not in joined
+    # No response was attached, so no status is invented.
+    assert ", HTTP " not in joined
+
+
+@pytest.mark.parametrize("status", [401, 429, 500])
+def test_spider_http_status_is_logged(
+    post: Mock, status: int, messages: list[str]
+) -> None:
+    """A failed request names its status, so a bad key is not read as throttling."""
+    response = requests.Response()
+    response.status_code = status
+    response.url = "https://api.spider.cloud/scrape"
+    post.return_value = response
+    assert loader().load() == []
+    assert any(f"HTTP {status}" in message for message in messages)
     assert KEY not in " ".join(messages)
 
 

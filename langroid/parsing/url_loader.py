@@ -486,11 +486,15 @@ class SpiderCrawler(BaseCrawler):
                 response.raise_for_status()
                 pages = response.json()
             except (requests.RequestException, ValueError) as error:
-                # Servers and exceptions may echo credentials or response data.
+                # Servers and exceptions may echo credentials or response data,
+                # so log only the error type and the numeric HTTP status, which
+                # is what distinguishes a bad key (401) from throttling (429).
+                status = getattr(getattr(error, "response", None), "status_code", None)
                 logging.warning(
-                    "Spider request %d failed (%s); skipping.",
+                    "Spider request %d failed (%s%s); skipping.",
                     index,
                     type(error).__name__,
+                    f", HTTP {status}" if isinstance(status, int) else "",
                 )
                 continue
 
