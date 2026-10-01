@@ -206,8 +206,14 @@ class _VertexAITokenProvider:
             return token
 
 
+@cache
 def _create_vertexai_token_provider() -> Callable[[], str]:
-    """Create a callable that refreshes Google ADC credentials when needed."""
+    """Create a callable that refreshes Google ADC credentials when needed.
+
+    Memoized so that repeatedly building Vertex AI models does not re-run ADC
+    discovery, and so the OpenAI client cache -- which keys a rotating-key
+    provider on its identity -- can reuse a single client per endpoint.
+    """
     return _VertexAITokenProvider()
 
 
@@ -381,8 +387,10 @@ class OpenAIGPTConfig(LLMConfig):
     http_verify_ssl: bool = True  # Simple flag for SSL verification
     http_client_config: Optional[Dict[str, Any]] = None  # Config dict for httpx.Client
     _api_base_was_supplied: bool = False
+    _api_key_was_supplied: bool = False
 
     def __init__(self, **kwargs) -> None:  # type: ignore
+        api_key_was_supplied = "api_key" in kwargs
         api_base_was_supplied = "api_base" in kwargs
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
@@ -420,14 +428,24 @@ class OpenAIGPTConfig(LLMConfig):
             and (env_prefix != "OPENAI_" or self.api_base != env_api_base)
         )
         self._api_base_was_supplied = api_base_was_supplied
+        # A key read from the default `OPENAI_API_KEY` says nothing about a
+        # non-OpenAI provider's credentials, so it does not count as caller
+        # configuration. Under a custom prefix from `create()`, though,
+        # `<PREFIX>_API_KEY` is provider-specific and does count.
+        api_key_was_supplied = api_key_was_supplied or (
+            env_prefix != "OPENAI_" and self.api_key != DUMMY_API_KEY
+        )
+        self._api_key_was_supplied = api_key_was_supplied
 
     model_config = SettingsConfigDict(env_prefix="OPENAI_")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Track API bases assigned after config construction."""
+        """Track API bases and keys assigned after config construction."""
         super().__setattr__(name, value)
         if name == "api_base":
             self._api_base_was_supplied = True
+        elif name == "api_key":
+            self._api_key_was_supplied = True
 
     def model_copy(
         self, *, update: Mapping[str, Any] | None = None, deep: bool = False
@@ -440,13 +458,16 @@ class OpenAIGPTConfig(LLMConfig):
         Instead, defer to Pydantic's native `model_copy`, which keeps nested
         `BaseModel` instances (and their concrete subclasses) intact.
 
-        An `api_base` supplied through `update` is caller configuration, so the
-        copy must retain that provenance for provider-specific routing.
+        An `api_base` or `api_key` supplied through `update` is caller
+        configuration, so the copy must retain that provenance for
+        provider-specific routing.
         """
         # Delegate to BaseSettings/BaseModel implementation to preserve types
         copied = super().model_copy(update=update, deep=deep)
         if update is not None and "api_base" in update:
             copied._api_base_was_supplied = True
+        if update is not None and "api_key" in update:
+            copied._api_key_was_supplied = True
         return copied  # type: ignore[return-value]
 
     def _validate_litellm(self) -> None:
@@ -744,11 +765,16 @@ class OpenAIGPT(LanguageModel):
                     )
                     self.api_base = _vertexai_api_base(project_id, location)
 
-                if (
-                    self.config.api_key_provider is None
-                    and self.api_key == DUMMY_API_KEY
-                ):
-                    self.config.api_key_provider = _create_vertexai_token_provider()
+                if not self.config._api_key_was_supplied:
+                    # A key that was not configured by the caller came from
+                    # OPENAI_API_KEY (or is the dummy default). It is not a
+                    # Vertex AI credential, so never forward it to Google --
+                    # use Application Default Credentials instead. Provenance,
+                    # not value: the env lookup is case-insensitive, and an
+                    # explicit key may coincide with the OpenAI one.
+                    self.api_key = DUMMY_API_KEY
+                    if self.config.api_key_provider is None:
+                        self.config.api_key_provider = _create_vertexai_token_provider()
             elif self.is_gemini:
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)

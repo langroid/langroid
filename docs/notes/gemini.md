@@ -89,6 +89,12 @@ locations use `<location>-aiplatform.googleapis.com`. An explicit `api_base`
 takes precedence over the generated endpoint. A caller-supplied
 `api_key_provider` or `api_key` also takes precedence over automatic ADC.
 
+!!! note
+    An `OPENAI_API_KEY` in the environment is **ignored** for `vertexai/`
+    models -- it is not a Vertex AI credential, so it is never sent to Google.
+    To use a static Vertex AI token instead of ADC, pass it explicitly as
+    `api_key` (or supply an `api_key_provider`) in `OpenAIGPTConfig`.
+
 ### Manual endpoint configuration
 
 The existing manual configuration remains available. Generate a short-lived

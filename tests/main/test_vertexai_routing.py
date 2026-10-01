@@ -11,8 +11,11 @@ def _clear_vertexai_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "GOOGLE_CLOUD_LOCATION",
         "OPENAI_API_BASE",
         "OPENAI_API_KEY",
+        "openai_api_key",
         "GEMINI_API_BASE",
         "GEMINI_API_KEY",
+        "VERTEX_API_BASE",
+        "VERTEX_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -147,3 +150,193 @@ def test_vertexai_preserves_explicit_static_api_key(monkeypatch):
 
     assert llm.api_key == "explicit-token"
     assert llm.config.api_key_provider is None
+
+
+def test_vertexai_ignores_inherited_openai_api_key(monkeypatch):
+    """An OPENAI_API_KEY in the env must not suppress ADC or reach Google."""
+    _clear_vertexai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-unrelated-openai-key")
+    provider = lambda: "adc-token"  # noqa: E731
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", lambda: provider)
+
+    llm = lm.OpenAIGPT(
+        lm.OpenAIGPTConfig(
+            chat_model="vertexai/google/gemini-3-flash",
+            api_base="https://vertex.example/v1",
+        )
+    )
+
+    assert llm.config.api_key_provider is provider
+    # The unrelated OpenAI key must not survive anywhere as the Vertex
+    # credential: without the fix, it is both kept and handed to the client.
+    assert llm.api_key == lm.DUMMY_API_KEY
+    assert llm.client.api_key != "sk-unrelated-openai-key"
+
+
+def test_vertexai_explicit_api_key_overrides_inherited_openai_key(monkeypatch):
+    """An explicitly configured key still wins over ADC and over the env."""
+    _clear_vertexai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-unrelated-openai-key")
+
+    def unexpected_provider():
+        raise AssertionError("ADC provider should not be created")
+
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", unexpected_provider)
+    llm = lm.OpenAIGPT(
+        lm.OpenAIGPTConfig(
+            chat_model="vertexai/google/gemini-3-flash",
+            api_base="https://vertex.example/v1",
+            api_key="vertex-token",
+        )
+    )
+
+    assert llm.api_key == "vertex-token"
+    assert llm.config.api_key_provider is None
+
+
+def test_vertexai_ignores_lowercase_openai_api_key_env(monkeypatch):
+    """Env keys are read case-insensitively, so provenance -- not value --
+    decides whether the key is a caller-supplied Vertex credential."""
+    _clear_vertexai_env(monkeypatch)
+    monkeypatch.setenv("openai_api_key", "sk-lowercase-openai-key")
+    provider = lambda: "adc-token"  # noqa: E731
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", lambda: provider)
+
+    config = lm.OpenAIGPTConfig(
+        chat_model="vertexai/google/gemini-3-flash",
+        api_base="https://vertex.example/v1",
+    )
+    # Guard against a vacuous test: the lowercase env var must really land in
+    # the config, else there would be no inherited key to ignore.
+    assert config.api_key == "sk-lowercase-openai-key"
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.config.api_key_provider is provider
+    assert llm.api_key == lm.DUMMY_API_KEY
+
+
+def test_vertexai_explicit_key_matching_openai_env_is_honored(monkeypatch):
+    """An explicit key is honored even when it equals the OpenAI env key."""
+    _clear_vertexai_env(monkeypatch)
+    shared = "same-token-in-both-places"
+    monkeypatch.setenv("OPENAI_API_KEY", shared)
+
+    def unexpected_provider():
+        raise AssertionError("ADC provider should not be created")
+
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", unexpected_provider)
+    llm = lm.OpenAIGPT(
+        lm.OpenAIGPTConfig(
+            chat_model="vertexai/google/gemini-3-flash",
+            api_base="https://vertex.example/v1",
+            api_key=shared,
+        )
+    )
+
+    assert llm.api_key == shared
+    assert llm.config.api_key_provider is None
+
+
+def test_vertexai_key_assigned_after_construction_is_honored(monkeypatch):
+    """Assigning api_key post-construction counts as caller configuration."""
+    _clear_vertexai_env(monkeypatch)
+
+    def unexpected_provider():
+        raise AssertionError("ADC provider should not be created")
+
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", unexpected_provider)
+    config = lm.OpenAIGPTConfig(
+        chat_model="vertexai/google/gemini-3-flash",
+        api_base="https://vertex.example/v1",
+    )
+    config.api_key = "late-token"
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.api_key == "late-token"
+    assert llm.config.api_key_provider is None
+
+
+def test_vertexai_honors_custom_prefix_api_key(monkeypatch):
+    """`<PREFIX>_API_KEY` from `create(prefix)` is provider-specific config."""
+    _clear_vertexai_env(monkeypatch)
+    monkeypatch.setenv("VERTEX_API_KEY", "vertex-specific-token")
+
+    def unexpected_provider():
+        raise AssertionError("ADC provider should not be created")
+
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", unexpected_provider)
+    config = lm.OpenAIGPTConfig.create("vertex")(
+        chat_model="vertexai/google/gemini-3-flash",
+        api_base="https://vertex.example/v1",
+    )
+    # Guard against a vacuous test: the prefixed env var must really land in
+    # the config, else there would be no provider-specific key to honor.
+    assert config.api_key == "vertex-specific-token"
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.api_key == "vertex-specific-token"
+    assert llm.config.api_key_provider is None
+
+
+def test_vertexai_custom_prefix_without_key_still_uses_adc(monkeypatch):
+    """A custom prefix with no key set must still fall back to ADC."""
+    _clear_vertexai_env(monkeypatch)
+    provider = lambda: "adc-token"  # noqa: E731
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", lambda: provider)
+
+    config = lm.OpenAIGPTConfig.create("vertex")(
+        chat_model="vertexai/google/gemini-3-flash",
+        api_base="https://vertex.example/v1",
+    )
+    assert config.api_key == lm.DUMMY_API_KEY
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.config.api_key_provider is provider
+    assert llm.api_key == lm.DUMMY_API_KEY
+
+
+def test_api_key_provenance_survives_model_copy(monkeypatch):
+    """`model_copy` must preserve, and `update` must confer, key provenance."""
+    _clear_vertexai_env(monkeypatch)
+
+    supplied = lm.OpenAIGPTConfig(
+        chat_model="vertexai/google/gemini-3-flash", api_key="explicit"
+    )
+    assert supplied.model_copy(update={"organization": "org"})._api_key_was_supplied
+
+    inherited = lm.OpenAIGPTConfig(chat_model="vertexai/google/gemini-3-flash")
+    assert not inherited._api_key_was_supplied
+    assert inherited.model_copy(update={"api_key": "explicit"})._api_key_was_supplied
+
+
+def test_vertexai_token_provider_is_memoized(monkeypatch):
+    """ADC discovery runs once per process, so clients stay cacheable."""
+    _clear_vertexai_env(monkeypatch)
+    created = []
+
+    class StubTokenProvider:
+        def __init__(self) -> None:
+            created.append(self)
+
+        def __call__(self) -> str:
+            return "stub-token"
+
+    monkeypatch.setattr(lm, "_VertexAITokenProvider", StubTokenProvider)
+    lm._create_vertexai_token_provider.cache_clear()
+    try:
+        configs = [
+            lm.OpenAIGPTConfig(
+                chat_model="vertexai/google/gemini-3-flash",
+                api_base="https://vertex.example/v1",
+            )
+            for _ in range(2)
+        ]
+        providers = [lm.OpenAIGPT(config).config.api_key_provider for config in configs]
+
+        assert len(created) == 1
+        assert providers[0] is providers[1] is created[0]
+    finally:
+        lm._create_vertexai_token_provider.cache_clear()
