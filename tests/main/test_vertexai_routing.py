@@ -525,6 +525,50 @@ def test_vertexai_global_override_discards_the_original_models_provider(
     assert llm.api_key == lm.DUMMY_API_KEY
 
 
+def test_vertexai_global_override_discards_the_original_models_headers(
+    monkeypatch,
+):
+    """A credential in `headers` crosses over exactly like one in `api_key`."""
+    _clear_vertexai_env(monkeypatch)
+    adc_provider = lambda: "ya29.google-adc-token"  # noqa: E731
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", lambda: adc_provider)
+
+    config = lm.OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        headers={"Authorization": "Bearer sk-THE-USERS-OPENAI-KEY"},
+    )
+    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-flash")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.is_vertexai
+    assert llm.config.headers == {}
+    # openai's client lets a custom Authorization header override the one it
+    # derives from the key, so the header must not survive the transition.
+    sent = llm.client.default_headers
+    assert sent.get("Authorization") != "Bearer sk-THE-USERS-OPENAI-KEY"
+    assert "sk-THE-USERS-OPENAI-KEY" not in str(dict(sent))
+
+
+def test_vertexai_override_within_vertexai_keeps_the_headers(monkeypatch):
+    """Staying on the vertexai/ route keeps caller-supplied headers."""
+    _clear_vertexai_env(monkeypatch)
+    config = lm.OpenAIGPTConfig(
+        chat_model="vertexai/google/gemini-3-flash",
+        vertexai_project_id="test-project",
+        vertexai_location="us-central1",
+        api_key_provider=lambda: "caller-vertex-token",
+        headers={"x-vertex-trace": "keep-me"},
+    )
+    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-pro")
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.config.headers == {"x-vertex-trace": "keep-me"}
+
+
 def test_vertexai_override_within_vertexai_keeps_the_provider(monkeypatch):
     """Staying on the vertexai/ route keeps a caller-supplied token callable."""
     _clear_vertexai_env(monkeypatch)

@@ -631,13 +631,19 @@ class OpenAIGPT(LanguageModel):
                 # `api_base` must go for the mirror-image reason: it points
                 # at the old provider's host, and the vertexai/ branch would
                 # otherwise honor it and send a freshly minted,
-                # cloud-platform-scoped Google ADC token to that host.
+                # cloud-platform-scoped Google ADC token to that host. The
+                # headers must go because openai's client lets a custom
+                # `Authorization` header win over the one it derives from
+                # the api_key, so a header carrying the old provider's
+                # credential would both reach Google and silently displace
+                # the ADC token.
                 #
                 # Staying within vertexai/ (even onto a different model)
-                # keeps all three: they were supplied for this endpoint.
+                # keeps all four: they were supplied for this endpoint.
                 self.config._api_key_was_supplied = False
                 self.config.api_key_provider = None
                 self.config._api_base_was_supplied = False
+                self.config.headers = {}
             self.config.chat_model = settings.chat_model
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
