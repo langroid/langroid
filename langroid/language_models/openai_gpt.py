@@ -620,16 +620,22 @@ class OpenAIGPT(LanguageModel):
                 VERTEXAI_MODEL_PREFIX
             ) and not self.config.chat_model.startswith(VERTEXAI_MODEL_PREFIX):
                 # The override is switching a non-Vertex config onto the
-                # vertexai/ route. A credential supplied for the configured
-                # provider is not a Vertex AI credential, so drop it rather
-                # than forward it to Google; ADC takes over. This applies to
-                # a token callable exactly as it does to a static key -- an
-                # `api_key_provider` mints tokens for the provider it was
-                # configured for. Staying within vertexai/ (even onto a
-                # different model) keeps both, since they were supplied for
-                # this same endpoint.
+                # vertexai/ route. Nothing the caller configured for the old
+                # provider describes Vertex AI, so drop all of it and let the
+                # vertexai/ branch rebuild from project/location + ADC.
+                #
+                # The key and the token callable must go, or the old
+                # provider's credential is forwarded to Google. The
+                # `api_base` must go for the mirror-image reason: it points
+                # at the old provider's host, and the vertexai/ branch would
+                # otherwise honor it and send a freshly minted,
+                # cloud-platform-scoped Google ADC token to that host.
+                #
+                # Staying within vertexai/ (even onto a different model)
+                # keeps all three: they were supplied for this endpoint.
                 self.config._api_key_was_supplied = False
                 self.config.api_key_provider = None
+                self.config._api_base_was_supplied = False
             self.config.chat_model = settings.chat_model
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model

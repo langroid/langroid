@@ -85,9 +85,25 @@ config = lm.OpenAIGPTConfig(
 ```
 
 For the `global` location, Langroid uses `aiplatform.googleapis.com`; regional
-locations use `<location>-aiplatform.googleapis.com`. An explicit `api_base`
-takes precedence over the generated endpoint. A caller-supplied
-`api_key_provider` or `api_key` also takes precedence over automatic ADC.
+locations use `<location>-aiplatform.googleapis.com`. The project and location
+must each match `[a-z0-9-]+`, since both are interpolated into the endpoint
+URL; note that the location is lowercase, so `GOOGLE_CLOUD_LOCATION=GLOBAL`
+is rejected rather than silently misrouted.
+
+On a config whose `chat_model` is already a `vertexai/` route, an explicit
+`api_base` takes precedence over the generated endpoint, and a caller-supplied
+`api_key_provider` or `api_key` takes precedence over automatic ADC.
+
+!!! warning "The `settings.chat_model` override discards the old provider's setup"
+    Switching onto `vertexai/` through the global `settings.chat_model`
+    override (as langroid's examples do with `--model`) is different: the
+    `api_key`, `api_key_provider` and `api_base` on the config were supplied
+    for the *previous* provider, so all three are discarded and the route is
+    rebuilt from the project/location plus ADC. Otherwise the old provider's
+    credential would be sent to Google, or -- just as bad -- a freshly minted
+    Google token would be sent to the old provider's host. To pin a
+    credential or endpoint for Vertex AI, configure `chat_model` as a
+    `vertexai/` route directly instead of relying on the override.
 
 !!! note
     An `OPENAI_API_KEY` in the environment is **ignored** for `vertexai/`
@@ -115,8 +131,9 @@ response = llm.chat("Hello from Vertex AI!")
 
 !!! note
     The `OPENAI_API_BASE` environment variable (commonly used for local
-    proxies) is **not** applied to Gemini models. For the manual `gemini/`
-    route, use `GEMINI_API_BASE` or an explicit `api_base` instead.
+    proxies) is **not** applied to Gemini models, and is likewise ignored for
+    `vertexai/` models. For the manual `gemini/` route, use `GEMINI_API_BASE`
+    or an explicit `api_base` instead.
 
 When neither `GEMINI_API_BASE` nor an explicit `api_base` is set, Langroid
 falls back to the default Google AI (Gemini) endpoint

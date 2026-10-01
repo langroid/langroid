@@ -431,9 +431,11 @@ def test_vertexai_global_override_discards_the_original_models_key(monkeypatch):
     config = lm.OpenAIGPTConfig(
         chat_model="gpt-4o",
         api_key="sk-explicit-openai-key",
-        api_base="https://vertex.example/v1",
+        api_base="https://old-provider.example/v1",
     )
     monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-flash")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
     llm = lm.OpenAIGPT(config)
 
@@ -441,6 +443,57 @@ def test_vertexai_global_override_discards_the_original_models_key(monkeypatch):
     assert llm.config.api_key_provider is provider
     assert llm.api_key == lm.DUMMY_API_KEY
     assert llm.client.api_key != "sk-explicit-openai-key"
+    # Where the ADC token goes matters as much as which token it is: the old
+    # provider's api_base must not survive to receive a Google credential.
+    assert llm.api_base == (
+        "https://us-central1-aiplatform.googleapis.com/v1beta1/"
+        "projects/test-project/locations/us-central1/endpoints/openapi"
+    )
+
+
+def test_vertexai_global_override_discards_the_original_models_api_base(
+    monkeypatch,
+):
+    """A Google ADC token must never be sent to the old provider's host."""
+    _clear_vertexai_env(monkeypatch)
+    adc_provider = lambda: "ya29.google-adc-token"  # noqa: E731
+    monkeypatch.setattr(lm, "_create_vertexai_token_provider", lambda: adc_provider)
+
+    config = lm.OpenAIGPTConfig(
+        chat_model="gpt-4o",
+        api_key="sk-openai",
+        api_base="https://my-proxy.example/v1",
+    )
+    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-flash")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "my-proj")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+    llm = lm.OpenAIGPT(config)
+
+    # The credential is Google's...
+    assert llm.config.api_key_provider is adc_provider
+    # ...so the host receiving it must be Google's, not the proxy's.
+    assert llm.api_base == (
+        "https://us-central1-aiplatform.googleapis.com/v1beta1/"
+        "projects/my-proj/locations/us-central1/endpoints/openapi"
+    )
+    assert "my-proxy.example" not in llm.api_base
+    assert "my-proxy.example" not in str(llm.client.base_url)
+
+
+def test_vertexai_override_within_vertexai_keeps_the_explicit_api_base(monkeypatch):
+    """Staying on the vertexai/ route keeps a caller-supplied endpoint."""
+    _clear_vertexai_env(monkeypatch)
+    config = lm.OpenAIGPTConfig(
+        chat_model="vertexai/google/gemini-3-flash",
+        api_key="explicit-vertex-token",
+        api_base="https://my-vertex-gateway.example/v1",
+    )
+    monkeypatch.setattr(settings, "chat_model", "vertexai/google/gemini-3-pro")
+
+    llm = lm.OpenAIGPT(config)
+
+    assert llm.api_base == "https://my-vertex-gateway.example/v1"
 
 
 def test_vertexai_global_override_discards_the_original_models_provider(
