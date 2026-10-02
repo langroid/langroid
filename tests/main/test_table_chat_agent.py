@@ -8,7 +8,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
+from langroid.agent.special.table_chat_agent import (
+    TableChatAgent,
+    TableChatAgentConfig,
+    dataframe_summary,
+)
 from langroid.agent.task import Task
 from langroid.language_models.base import (
     LLMFunctionCall,
@@ -29,6 +33,83 @@ DATA_STRING = """age,gender,income,state,,,,
 25,Male,60000,CA,,,
 19,Female,48000,TX,,,
 """
+
+
+@pytest.mark.parametrize(
+    "data, expected_text, expected_rows",
+    [
+        pytest.param(
+            pd.DataFrame({"city": ["Paris", "Rome", "Paris"]}),
+            "'city': Paris, Rome",
+            [["top", "Paris"], ["count", "3.00"], ["city", "0"]],
+            id="text-only",
+        ),
+        pytest.param(
+            pd.DataFrame({"city": ["Paris", None, "Paris"]}),
+            "'city': Paris, None",
+            [["top", "Paris"], ["freq", "2.00"], ["city", "1"]],
+            id="text-with-missing",
+        ),
+        pytest.param(
+            pd.DataFrame({"city": [None, None]}),
+            "'city': None",
+            [["count", "0.00"], ["top", "nan"], ["city", "2"]],
+            id="all-missing-text",
+        ),
+        pytest.param(
+            pd.DataFrame({"city": [f"city{i}" for i in range(10)]}),
+            "'city': 10 unique values",
+            [["count", "10.00"], ["unique", "10.00"], ["city", "0"]],
+            id="many-text-values",
+        ),
+        pytest.param(
+            pd.DataFrame({"score": [1.0, 2.0, np.nan]}),
+            "Categorical Column Summary:\n\n",
+            [["count", "2.00"], ["mean", "1.50"], ["score", "1"]],
+            id="numeric-only",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"city": ["Paris", None, "Rome"], "score": [1.0, 2.0, np.nan]}
+            ),
+            "'city': Paris, None, Rome",
+            [["mean", "1.50"], ["city", "1"], ["score", "1"]],
+            id="mixed",
+        ),
+        pytest.param(
+            pd.DataFrame({"flag": [True, False, True]}),
+            "Categorical Column Summary:\n\n",
+            [["top", "1.00"], ["freq", "2.00"], ["flag", "0"]],
+            id="boolean",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"flag": pd.Series([True, False, None, True], dtype="boolean")}
+            ),
+            "Categorical Column Summary:\n\n",
+            [["top", "1.00"], ["count", "3.00"], ["flag", "1"]],
+            id="boolean-with-missing",
+        ),
+    ],
+)
+def test_table_chat_agent_summary(
+    data: pd.DataFrame,
+    expected_text: str,
+    expected_rows: list[list[str]],
+) -> None:
+    """Summarize and initialize tables with different value types offline."""
+    agent = TableChatAgent(TableChatAgentConfig(data=data))
+    summary = dataframe_summary(data)
+    assert "COLUMN NAMES:\n" in summary
+    assert "Numerical Column Summary:\n" in summary
+    assert "Categorical Column Summary:\n" in summary
+    assert "Missing Values Column Summary:\n" in summary
+    assert expected_text in summary
+    rows = [line.split() for line in summary.splitlines()]
+    for expected_row in expected_rows:
+        assert expected_row in rows
+
+    assert summary in agent.config.system_message
 
 
 @pytest.fixture
