@@ -195,8 +195,8 @@ route ignores `OPENAI_API_BASE`, as noted above.
 
 Passing `headers={}` to the constructor does **not** prevent this:
 pydantic-settings merges the environment dict into the one you pass, so
-your keys win individually but the rest still ride along. Clear the field
-after the config is built:
+your keys win individually but the rest still ride along. Clear both fields after the
+config is built:
 
 ```python
 config = lm.OpenAIGPTConfig(
@@ -205,6 +205,7 @@ config = lm.OpenAIGPTConfig(
     api_key_provider=vertex_token,
 )
 config.headers = {}        # drop anything inherited from OPENAI_HEADERS
+config.organization = ""   # and from OPENAI_ORGANIZATION
 llm = lm.OpenAIGPT(config)
 ```
 
