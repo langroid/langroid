@@ -273,7 +273,7 @@ async def test_litellm_model_key_async():
     """
     Test that passing in explicit api_key works with `litellm/*` models
     """
-    model = "litellm/anthropic/claude-3-5-haiku-latest"
+    model = "litellm/anthropic/claude-haiku-4-5-20251001"
     # disable any chat model passed via --m arg to pytest cmd
     settings.chat_model = model
     llm_config = lm.OpenAIGPTConfig(
@@ -292,7 +292,7 @@ async def test_litellm_model_key_async():
     "model",
     [
         "portkey/openai/gpt-4o-mini",
-        "portkey/anthropic/claude-3-5-haiku-latest",
+        "portkey/anthropic/claude-haiku-4-5-20251001",
         "portkey/google/gemini-2.0-flash-lite",
     ],
 )
