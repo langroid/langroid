@@ -183,8 +183,10 @@ a guard: when the model is recognized as Gemini (a `gemini/` or
 `api_key` still holds what `OPENAI_API_KEY` put there, Langroid replaces it
 with `GEMINI_API_KEY`, or with a dummy key if that is unset — so the OpenAI
 key is not sent to Google, and a config relying on it fails to authenticate
-instead. **`headers` is not
-protected.** With `OPENAI_HEADERS` set, those headers are sent to
+instead.
+
+**`headers` has no such guard.** With `OPENAI_HEADERS` set, those headers
+are sent to
 `googleapis.com` along with your request, and if the dict contains an
 `Authorization` key it *replaces* the Gemini token, so the call both leaks
 a credential to Google and fails to authenticate. `OPENAI_ORGANIZATION`
