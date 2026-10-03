@@ -235,7 +235,9 @@ def find_urls(
 
         # Filter links based on domain matching requirement
         domain_matching_links = [
-            link for link in defragged_links if urlparse(link).netloc == base_domain
+            link
+            for link in defragged_links
+            if not match_domain or urlparse(link).netloc == base_domain
         ]
 
         # ensure url is first, since below we are taking first max_links urls
