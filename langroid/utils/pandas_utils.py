@@ -355,7 +355,7 @@ def stringify(x: Any) -> str:
     elif not isinstance(x, pd.DataFrame):
         return str(x)
     else:
-        df = x
+        df = x.copy()
 
     # Truncate long text columns to 1000 characters
     for col in df.columns:
