@@ -1,9 +1,11 @@
 import random
 import threading
 import time
+from typing import Iterator
 
 import pytest
 
+from langroid.pydantic_v1 import BaseSettings, ValidationError
 from langroid.utils.configuration import (
     Settings,
     set_global,
@@ -22,6 +24,78 @@ def test_update_global_settings():
 
     set_global(Settings(debug=False))
     assert settings.debug is False
+
+
+class DebugConfig(BaseSettings):
+    debug: str
+
+
+@pytest.fixture
+def configured_settings() -> Iterator[Settings]:
+    saved = Settings(**settings.dict())
+    initial = Settings(
+        cache=False,
+        cache_type="none",
+        chat_model="mock-model",
+        max_turns=7,
+        quiet=True,
+        stream=False,
+    )
+    set_global(initial)
+    try:
+        yield initial
+    finally:
+        set_global(saved)
+
+
+@pytest.mark.parametrize("keys", [["debug"], [], ["missing"]])
+def test_selective_update_preserves_other_settings(
+    configured_settings: Settings, keys: list[str]
+) -> None:
+    expected = configured_settings.model_dump()
+    if "debug" in keys:
+        expected["debug"] = True
+
+    update_global_settings(Settings(debug=True), keys=keys)
+
+    assert settings.dict() == expected
+
+
+def test_selective_updates_accumulate(configured_settings: Settings) -> None:
+    update_global_settings(Settings(debug=True), keys=["debug"])
+    update_global_settings(Settings(stream=True), keys=["stream"])
+
+    expected = configured_settings.model_dump()
+    expected.update(debug=True, stream=True)
+    assert settings.dict() == expected
+
+
+def test_selective_update_does_not_copy_temporary_override(
+    configured_settings: Settings,
+) -> None:
+    override = Settings(quiet=False, cache=True)
+    with temporary_settings(override):
+        update_global_settings(Settings(debug=True), keys=["debug"])
+        assert settings.dict() == override.model_dump()
+
+    expected = configured_settings.model_dump()
+    expected["debug"] = True
+    assert settings.dict() == expected
+
+
+@pytest.mark.usefixtures("configured_settings")
+@pytest.mark.parametrize("value,expected", [("true", True), ("false", False)])
+def test_selective_update_validates_selected_value(value: str, expected: bool) -> None:
+    update_global_settings(DebugConfig(debug=value), keys=["debug"])
+    assert settings.debug is expected
+
+
+def test_selective_update_rejects_invalid_value(
+    configured_settings: Settings,
+) -> None:
+    with pytest.raises(ValidationError):
+        update_global_settings(DebugConfig(debug="not-a-bool"), keys=["debug"])
+    assert settings.dict() == configured_settings.model_dump()
 
 
 # Shared list to collect exceptions
