@@ -2,7 +2,9 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
+import threading
 import warnings
 from collections import defaultdict
 from functools import cache
@@ -17,6 +19,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    cast,
     no_type_check,
 )
 
@@ -24,7 +27,7 @@ import openai
 from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
 from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.markup import escape
@@ -262,7 +265,7 @@ class OpenAIGPTConfig(LLMConfig):
     """
 
     type: str = "openai"
-    api_key: str = DUMMY_API_KEY
+    api_key: str | None = DUMMY_API_KEY
     # Callable returning a fresh API key/bearer token, for endpoints that
     # authenticate with short-lived rotating credentials (e.g. Vertex AI
     # OAuth tokens, Azure Entra ID). Resolved per-request by the OpenAI
@@ -430,6 +433,77 @@ class OpenAIGPTConfig(LLMConfig):
         return DynamicConfig
 
 
+class VertexAIConfig(OpenAIGPTConfig):
+    """
+    Clean configuration for Vertex AI OpenAI-compatible endpoint.
+    Inherits OpenAIGPTConfig fields with a Vertex AI environment prefix.
+    """
+
+    type: str = "vertexai"
+    api_key: Optional[str] = None
+    api_key_provider: Optional[Callable[[], str]] = None
+    organization: str = ""
+    api_base: str | None = None
+    headers: Dict[str, str] = {}
+    timeout: int = 20
+    project_id: Optional[str] = None
+    location: Optional[str] = None
+
+    model_config = SettingsConfigDict(env_prefix="VERTEXAI_")
+
+    @field_validator("project_id", "location")
+    @classmethod
+    def validate_safe_strings(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if not re.match(r"^[a-z0-9-]+$", v):
+            raise ValueError(
+                f"Invalid project_id/location '{v}'. "
+                "Must be lowercase alphanumeric with hyphens only."
+            )
+        if v.upper() == "GLOBAL":
+            raise ValueError("GLOBAL is not a valid regional location.")
+        return v
+
+
+_adc_lock = threading.Lock()
+_adc_provider_instance: Optional[Callable[[], str]] = None
+
+
+def _get_adc_provider() -> Callable[[], str]:
+    """Memoized ADC token provider to avoid client cache thrashing."""
+    global _adc_provider_instance
+    with _adc_lock:
+        if _adc_provider_instance is None:
+
+            def _adc_token_provider() -> str:
+                try:
+                    import google.auth
+                    import google.auth.transport.requests
+                except ImportError:
+                    raise LangroidImportError("google-auth", "google-auth")
+                try:
+                    creds, _ = google.auth.default(
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    auth_req = google.auth.transport.requests.Request()
+                    creds.refresh(auth_req)  # type: ignore[no-untyped-call]
+                    token = cast(Optional[str], creds.token)
+                    if token is None:
+                        raise RuntimeError("Google ADC returned no token")
+                    return token
+                except Exception as e:
+                    if "DefaultCredentialsError" in str(type(e)):
+                        raise RuntimeError(
+                            "Google ADC not found. Run: "
+                            "gcloud auth application-default login"
+                        ) from e
+                    raise
+
+            _adc_provider_instance = _adc_token_provider
+        return _adc_provider_instance
+
+
 class OpenAIResponse(BaseModel):
     """OpenAI response model, either completion or chat."""
 
@@ -462,6 +536,28 @@ class OpenAIGPT(LanguageModel):
     async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras | None
 
     def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig()):
+
+        # If the route is vertexai/, replace the config with a clean VertexAIConfig
+        # to drop all OPENAI_ environment inheritance.
+        if config.chat_model.startswith("vertexai/") and not isinstance(
+            config, VertexAIConfig
+        ):
+            config = VertexAIConfig(
+                chat_model=config.chat_model,
+                project_id=getattr(config, "project_id", None),
+                location=getattr(config, "location", None),
+                # Do NOT carry over api_key, api_key_provider, headers, or
+                # organization from the OpenAI config: those may have been
+                # populated from OPENAI_* env vars. Callers who need a
+                # specific Vertex token must construct VertexAIConfig
+                # directly or set VERTEXAI_API_KEY.
+                api_key=None,
+                api_key_provider=None,
+                headers={},
+                organization="",
+                timeout=config.timeout,
+            )
+
         """
         Args:
             config: configuration for openai-gpt model
@@ -494,6 +590,18 @@ class OpenAIGPT(LanguageModel):
             self.config.chat_model = settings.chat_model
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
+
+        if settings.chat_model.startswith("vertexai/") and not isinstance(
+            self.config, VertexAIConfig
+        ):
+            self.config = VertexAIConfig(
+                chat_model=settings.chat_model,
+                project_id=getattr(self.config, "project_id", None),
+                location=getattr(self.config, "location", None),
+                api_key=None,
+                api_key_provider=None,
+                headers={},
+            )
 
         if len(parts := self.config.chat_model.split("//")) > 1:
             # there is a formatter specified, e.g.
@@ -623,32 +731,78 @@ class OpenAIGPT(LanguageModel):
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
             if self.api_key == OPENAI_API_KEY:
                 self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
+            api_key = self.api_key if self.api_key is not None else DUMMY_API_KEY
             if self.config.use_cached_client:
-                self.client = get_groq_client(api_key=self.api_key)
-                self.async_client = get_async_groq_client(api_key=self.api_key)
+                self.client = get_groq_client(api_key=api_key)
+                self.async_client = get_async_groq_client(api_key=api_key)
             else:
                 # Create new clients without caching
-                self.client = Groq(api_key=self.api_key)
-                self.async_client = AsyncGroq(api_key=self.api_key)
+                self.client = Groq(api_key=api_key)
+                self.async_client = AsyncGroq(api_key=api_key)
         elif self.is_cerebras:
             # use cerebras-specific client
             self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
             if self.api_key == OPENAI_API_KEY:
                 self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
+            api_key = self.api_key if self.api_key is not None else DUMMY_API_KEY
             if self.config.use_cached_client:
-                self.client = get_cerebras_client(api_key=self.api_key)
+                self.client = get_cerebras_client(api_key=api_key)
                 # TODO there is not async client, so should we do anything here?
-                self.async_client = get_async_cerebras_client(api_key=self.api_key)
+                self.async_client = get_async_cerebras_client(api_key=api_key)
             else:
                 # Create new clients without caching
-                self.client = Cerebras(api_key=self.api_key)
-                self.async_client = AsyncCerebras(api_key=self.api_key)
+                self.client = Cerebras(api_key=api_key)
+                self.async_client = AsyncCerebras(api_key=api_key)
         else:
             # in these cases, there's no specific client: OpenAI python client suffices
+            if self.config.chat_model.startswith("vertexai/"):
+                # The config was converted to VertexAIConfig before routing.
+                vertex_config = cast(VertexAIConfig, self.config)
+
+                # Strip the prefix, keep publisher/model
+                vertex_config.chat_model = vertex_config.chat_model.replace(
+                    "vertexai/", "", 1
+                )
+
+                project_id = (
+                    vertex_config.project_id
+                    or os.getenv("GOOGLE_CLOUD_PROJECT")
+                    or os.getenv("GCP_PROJECT")
+                )
+                location = (
+                    vertex_config.location
+                    or os.getenv("GOOGLE_CLOUD_LOCATION")
+                    or "us-central1"
+                )
+                vertex_config.location = location
+
+                if not project_id:
+                    raise ValueError(
+                        "GOOGLE_CLOUD_PROJECT or GCP_PROJECT must be set for Vertex AI"
+                    )
+
+                self.api_base = (
+                    f"https://{location}-aiplatform.googleapis.com/v1beta1/"
+                    f"projects/{project_id}/locations/{location}/endpoints/openapi"
+                )
+
+                # Only use ADC if no explicit key or provider was given
+                if (
+                    vertex_config.api_key is None
+                    and vertex_config.api_key_provider is None
+                ):
+                    vertex_config.api_key_provider = _get_adc_provider()
+
+                # Ensure no OPENAI headers leak (VertexAIConfig defaults to {})
+                if not isinstance(self.config, VertexAIConfig):
+                    self.config.headers = {}
+                    self.config.organization = ""
+
             if self.is_litellm_proxy:
                 self.config.chat_model = self.config.chat_model.replace(
                     "litellm-proxy/", ""
                 )
+
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = self.config.litellm_proxy.api_key or self.api_key
                 self.api_base = self.config.litellm_proxy.api_base or self.api_base
@@ -747,7 +901,8 @@ class OpenAIGPT(LanguageModel):
 
             # Sanitize the API key: strip leading/trailing whitespace
             # (including stray newlines from .env files or CI secrets).
-            self.api_key = self.api_key.strip()
+            if self.api_key is not None:
+                self.api_key = self.api_key.strip()
 
             # Create http_client if needed - Priority order:
             # 1. http_client_factory (most flexibility, not cacheable)
@@ -789,7 +944,7 @@ class OpenAIGPT(LanguageModel):
             openai_api_key: Union[str, Callable[[], str]] = (
                 self.config.api_key_provider
                 if self.config.api_key_provider is not None
-                else self.api_key
+                else (self.api_key if self.api_key is not None else DUMMY_API_KEY)
             )
 
             if self.config.use_cached_client:
