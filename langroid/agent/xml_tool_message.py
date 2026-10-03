@@ -61,9 +61,12 @@ def _is_model(annotation: Any) -> bool:
 def _child_field(annotation: Any, tag: str) -> Any:
     """`FieldInfo` of field `tag` when `annotation` is a model declaring it.
 
-    Carries both the child's type and its metadata (notably `verbatim`), so a
-    nested element is described by its own model's field rather than by
-    whatever top-level field happens to share its tag.
+    This supplies the child's declared TYPE, so a nested element is typed by
+    its own model's field rather than by whatever top-level field happens to
+    share its tag. Note that `verbatim` is deliberately NOT taken from here:
+    it stays a top-level-only flag, matching the pre-existing behavior that
+    `test_roundtrip_complex_nested_tolerant` pins (a nested field declared
+    verbatim is still stripped).
 
     Args:
         annotation: The parent element's resolved annotation.
@@ -83,7 +86,7 @@ def _child_type(annotation: Any, is_mapping: bool) -> Any:
 
     For a list that is its item type, for a mapping its value type; `None`
     when the element's type says nothing about its children (a model's
-    children are resolved per-tag by `_field_type` instead).
+    children are resolved per-tag by `_child_field` instead).
 
     Args:
         annotation: The element's own (Optional-reduced) annotation.

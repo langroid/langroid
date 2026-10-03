@@ -1,10 +1,16 @@
 """Tests that XML tool-calls preserve the declared types of collection fields.
 
 `XMLToolMessage.extract_field_values` infers structure from the XML alone, which
-loses type information in two ways: an empty element looks like an empty string
-rather than an empty list/dict, and a single-entry dict (or single-field nested
-model) looks like a list because all its children share a tag. Both make
-otherwise valid tool-calls fail Pydantic validation.
+loses type information several ways: an empty element looks like an empty string
+rather than an empty list/dict; a single-entry dict (or a single-field nested
+model) looks like a list because all its children share a tag; and a nested
+element has no declared type at all. Each makes otherwise valid tool-calls fail
+Pydantic validation.
+
+The tests here also cover the hazard that comes with consulting declared types:
+resolving an element's type by tag name lets a nested tag -- or a dict key --
+colliding with a top-level field name borrow that field's type or `verbatim`
+flag.
 """
 
 from typing import Any, Dict, List, Optional
