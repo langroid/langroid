@@ -326,6 +326,48 @@ def test_openai_gpt_init_docstring_is_intact():
     assert doc is not None and "config" in doc
 
 
+def test_subclass_only_fields_are_reported_not_dropped_silently(
+    project_env, fake_adc, caplog
+):
+    """
+    `VertexAIConfig` has no fields of a custom `OpenAIGPTConfig` subclass, so
+    they cannot be carried over -- but the caller must be told.
+    """
+
+    class MyConfig(OpenAIGPTConfig):
+        my_custom_field: str = "keep-me"
+
+    with caplog.at_level("WARNING"):
+        llm = OpenAIGPT(MyConfig(chat_model=VERTEX_MODEL, temperature=0.5))
+
+    assert isinstance(llm.config, VertexAIConfig)
+    # the supported fields still come across
+    assert llm.config.temperature == 0.5
+    assert "my_custom_field" in caplog.text
+    assert "MyConfig" in caplog.text
+
+
+def test_vertexai_config_is_exported_from_language_models():
+    """The docs tell callers to construct it directly, so it must be public."""
+    import langroid.language_models as lm
+
+    assert lm.VertexAIConfig is VertexAIConfig
+
+
+def test_settings_override_away_from_vertexai_keeps_the_openai_key(monkeypatch):
+    """
+    Overriding `settings.chat_model` to a non-Vertex model must not leave the
+    config stripped of its OpenAI credential: the conversion is keyed on the
+    model actually in effect, so it must not fire here at all.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-real-openai-key")
+    with temporary_settings(Settings(chat_model="gpt-4o")):
+        llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+        assert not isinstance(llm.config, VertexAIConfig)
+        assert llm.api_key == "sk-real-openai-key"
+        assert llm.config.api_key_provider is None
+
+
 # ---------------------------------------------------------------------------
 # 3. Credential precedence
 # ---------------------------------------------------------------------------
@@ -384,6 +426,29 @@ def test_default_location_when_unset(project_env, fake_adc):
     assert f"https://{DEFAULT_VERTEXAI_LOCATION}-aiplatform" in (llm.api_base or "")
 
 
+def test_explicit_api_base_is_honored(monkeypatch, project_env, fake_adc):
+    """
+    An explicit `api_base` (or `VERTEXAI_API_BASE`) targets a private/PSC
+    endpoint. It can only have been set deliberately -- the conversion never
+    carries `api_base` over from an OPENAI_-prefixed config -- so it must win
+    over the constructed regional URL rather than being silently ignored.
+    """
+    private = "https://my-psc-endpoint.internal/v1beta1/projects/p/x/openapi"
+    llm = OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL, api_base=private))
+    assert llm.api_base == private
+
+    monkeypatch.setenv("VERTEXAI_API_BASE", private)
+    llm2 = OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL))
+    assert llm2.api_base == private
+
+
+def test_explicit_api_base_is_not_inherited_from_openai_env(poisoned_env, fake_adc):
+    """OPENAI_API_BASE must not become the Vertex endpoint via that door."""
+    llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    assert "malicious.openai.endpoint" not in (llm.api_base or "")
+    assert "aiplatform.googleapis.com" in (llm.api_base or "")
+
+
 def test_gcp_project_env_is_a_fallback(monkeypatch, fake_adc):
     monkeypatch.setenv("GCP_PROJECT", "proj-from-gcp-var")
     llm = OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL))
@@ -430,6 +495,18 @@ def test_valid_project_and_location_accepted():
     )
     assert cfg.project_id == "my-project-1"
     assert cfg.location == "europe-west4"
+
+
+@pytest.mark.parametrize(
+    "bad", ["us-central1\n", "\nus-central1", "us-central1 ", "-", "--", "a-", "-a"]
+)
+def test_trailing_whitespace_and_bare_hyphens_rejected(bad):
+    """
+    `re.match(r"...$")` accepts a trailing newline, so "us-central1\\n" would
+    pass straight into the URL; validation must use `fullmatch`.
+    """
+    with pytest.raises(Exception):
+        VertexAIConfig(chat_model=VERTEX_MODEL, location=bad)
 
 
 @pytest.mark.parametrize(

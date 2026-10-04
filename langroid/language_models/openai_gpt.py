@@ -435,10 +435,12 @@ class OpenAIGPTConfig(LLMConfig):
 
 VERTEXAI_PREFIX = "vertexai/"
 DEFAULT_VERTEXAI_LOCATION = "us-central1"
-# GCP project ids and regions are lowercase alphanumerics plus hyphens. Anything
-# else -- `/`, `@`, `:`, `.`, `%`, whitespace -- could change the authority or
-# the path of the endpoint URL these values are spliced into.
-_VERTEXAI_ID_RE = re.compile(r"^[a-z0-9-]+$")
+# GCP project ids and regions are lowercase alphanumerics, hyphen-separated.
+# Anything else -- `/`, `@`, `:`, `.`, `%`, whitespace -- could change the
+# authority or the path of the endpoint URL these values are spliced into.
+# Matched with `fullmatch`: `re.match(...$)` would accept a trailing newline,
+# so "us-central1\n" would pass and go straight into the URL.
+_VERTEXAI_ID_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?")
 
 
 def _validate_vertexai_id(field: str, value: str) -> str:
@@ -457,14 +459,16 @@ def _validate_vertexai_id(field: str, value: str) -> str:
         `value`, unchanged, if it is safe to interpolate into the endpoint URL.
 
     Raises:
-        ValueError: if `value` is empty or contains anything but lowercase
+        ValueError: if `value` is empty, does not begin and end with a
+            lowercase letter or digit, or contains anything but lowercase
             letters, digits and hyphens; or if it is the non-regional
             location `global`.
     """
-    if not _VERTEXAI_ID_RE.match(value):
+    if not _VERTEXAI_ID_RE.fullmatch(value):
         raise ValueError(
-            f"Invalid Vertex AI {field} {value!r}: must be non-empty and contain "
-            "only lowercase letters, digits and hyphens."
+            f"Invalid Vertex AI {field} {value!r}: must contain only lowercase "
+            "letters, digits and hyphens, and begin and end with a letter or "
+            "digit."
         )
     if field == "location" and value == "global":
         raise ValueError(
@@ -536,15 +540,25 @@ def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
     rest -- except those in `_VERTEXAI_DROPPED_FIELDS`, which are left at
     `VertexAIConfig`'s defaults.
 
-    Note: fields declared only on a custom `OpenAIGPTConfig` subclass are not
-    carried over, since `VertexAIConfig` has no such fields. Subclass
-    `VertexAIConfig` instead if you need them on a `vertexai/` route.
+    Fields declared only on a custom `OpenAIGPTConfig` subclass cannot be
+    carried over, since `VertexAIConfig` has no such fields; those are warned
+    about rather than dropped silently. Subclass `VertexAIConfig` instead if
+    you need them on a `vertexai/` route.
     """
+    source_fields = type(config).model_fields
     carried = {
         name: getattr(config, name)
-        for name in type(config).model_fields
+        for name in source_fields
         if name in VertexAIConfig.model_fields and name not in _VERTEXAI_DROPPED_FIELDS
     }
+    unsupported = sorted(set(source_fields) - set(VertexAIConfig.model_fields))
+    if unsupported:
+        logging.warning(
+            "vertexai/ route: dropping config fields %s, which exist only on "
+            "%s. Subclass VertexAIConfig to keep them.",
+            ", ".join(unsupported),
+            type(config).__name__,
+        )
     return VertexAIConfig(**carried)
 
 
@@ -927,36 +941,45 @@ class OpenAIGPT(LanguageModel):
                 vertex_config.chat_model = vertex_config.chat_model[
                     len(VERTEXAI_PREFIX) :
                 ]
-                vertex_project = (
-                    vertex_config.project_id
-                    or os.getenv("GOOGLE_CLOUD_PROJECT")
-                    or os.getenv("GCP_PROJECT")
-                )
-                if not vertex_project:
-                    raise ValueError(
-                        "A GCP project is required for a vertexai/ model: set "
-                        "VertexAIConfig(project_id=...), or VERTEXAI_PROJECT_ID, "
-                        "GOOGLE_CLOUD_PROJECT or GCP_PROJECT in the environment."
+                if vertex_config.api_base:
+                    # An explicit api_base (or VERTEXAI_API_BASE) targets a
+                    # private/PSC endpoint; honor it rather than overwriting it.
+                    # The conversion above never carries api_base over from an
+                    # OPENAI_-prefixed config, so this can only be deliberate.
+                    self.api_base = vertex_config.api_base
+                else:
+                    vertex_project = (
+                        vertex_config.project_id
+                        or os.getenv("GOOGLE_CLOUD_PROJECT")
+                        or os.getenv("GCP_PROJECT")
                     )
-                vertex_location = (
-                    vertex_config.location
-                    or os.getenv("GOOGLE_CLOUD_LOCATION")
-                    or DEFAULT_VERTEXAI_LOCATION
-                )
-                # Re-validate: the values may have come from GOOGLE_CLOUD_*/
-                # GCP_* above, which the field validators never see, and both
-                # are interpolated into the endpoint URL just below.
-                vertex_config.project_id = _validate_vertexai_id(
-                    "project_id", vertex_project
-                )
-                vertex_config.location = _validate_vertexai_id(
-                    "location", vertex_location
-                )
-                self.api_base = (
-                    f"https://{vertex_config.location}-aiplatform.googleapis.com"
-                    f"/v1beta1/projects/{vertex_config.project_id}"
-                    f"/locations/{vertex_config.location}/endpoints/openapi"
-                )
+                    if not vertex_project:
+                        raise ValueError(
+                            "A GCP project is required for a vertexai/ model: "
+                            "set VertexAIConfig(project_id=...), or "
+                            "VERTEXAI_PROJECT_ID, GOOGLE_CLOUD_PROJECT or "
+                            "GCP_PROJECT in the environment."
+                        )
+                    vertex_location = (
+                        vertex_config.location
+                        or os.getenv("GOOGLE_CLOUD_LOCATION")
+                        or DEFAULT_VERTEXAI_LOCATION
+                    )
+                    # Re-validate: the values may have come from
+                    # GOOGLE_CLOUD_*/GCP_* above, which the field validators
+                    # never see, and both are interpolated into the URL below.
+                    vertex_config.project_id = _validate_vertexai_id(
+                        "project_id", vertex_project
+                    )
+                    vertex_config.location = _validate_vertexai_id(
+                        "location", vertex_location
+                    )
+                    self.api_base = (
+                        f"https://{vertex_config.location}-aiplatform."
+                        f"googleapis.com/v1beta1"
+                        f"/projects/{vertex_config.project_id}"
+                        f"/locations/{vertex_config.location}/endpoints/openapi"
+                    )
                 no_explicit_key = vertex_config.api_key in ("", DUMMY_API_KEY)
                 if vertex_config.api_key_provider is None and no_explicit_key:
                     # No explicit Vertex credential: fall back to Google ADC,
