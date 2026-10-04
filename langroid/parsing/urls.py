@@ -216,11 +216,18 @@ def find_urls(
 
     Returns:
         set: A set of URLs found on the page, at most `max_links` of them. Only
-            `http`/`https` links are followed and returned; links with any other
-            scheme (e.g. `mailto:`, `tel:`, `javascript:`, `ftp:`) are skipped,
-            including ones on the page's own domain. The seed `url` is exempt
-            from that scheme filter, though it is not guaranteed to survive the
+            `http`/`https` links that carry a host are followed and returned;
+            links with any other scheme (e.g. `mailto:`, `tel:`, `javascript:`,
+            `ftp:`) are skipped, including ones on the page's own domain, as are
+            hostless references such as `http:foo`. The seed `url` is exempt
+            from that filtering, though it is not guaranteed to survive the
             `max_links` truncation.
+
+            These are URLs *discovered*, not necessarily URLs crawled: a page
+            that alone supplies `max_links` links returns them without
+            following any, so the result can contain links one hop beyond
+            `max_depth`. `max_depth` bounds the requests issued, not the
+            provenance of the returned set.
     """
 
     if visited is None:
@@ -246,22 +253,35 @@ def find_urls(
             set(urldefrag(link).url for link in links)  # type: ignore
         )
 
-        # Keep only web links, then apply the domain filter if requested.
+        # Keep only fetchable web links, then apply the domain filter if
+        # requested.
         #
-        # The scheme check is load-bearing in both modes. Schemes like `mailto:`,
-        # `javascript:`, `tel:` and `data:` have an empty netloc, so when
-        # `match_domain` is True the domain comparison already rejects them --
-        # but with `match_domain` False that comparison is skipped, and without
-        # the scheme check such links would be returned and would consume
-        # `max_links` budget. Conversely `ftp://`/`ws://` links to the page's own
-        # domain do match `base_domain`, so the domain comparison admits them in
-        # either mode; previously they were returned even though `requests`
-        # cannot fetch them.
+        # Both the scheme and host checks are load-bearing in both modes, and
+        # neither is implied by the domain comparison once that comparison is
+        # made conditional:
+        #
+        # - Schemes like `mailto:`, `javascript:`, `tel:` and `data:` parse to
+        #   an empty netloc, so with `match_domain` True the domain comparison
+        #   rejects them already -- but with it False that comparison is
+        #   skipped, and such links would be returned and consume `max_links`.
+        # - `ftp://`/`ws://` links to the page's own domain DO match
+        #   `base_domain`, so the domain comparison admits them in either mode;
+        #   previously they were returned even though `requests` cannot fetch
+        #   them.
+        # - Malformed references such as `http:foo` and `http:///path` have a
+        #   web scheme but no host, so only the netloc check excludes them.
+        #
+        # Anything admitted here may be requested, and `find_urls` adds a URL
+        # to `visited` before the request, so a junk entry survives the
+        # exception the broad `except` below swallows and lands in the result.
+        def is_fetchable_web_link(link: str) -> bool:
+            parsed = urlparse(link)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                return False
+            return not match_domain or parsed.netloc == base_domain
+
         domain_matching_links = [
-            link
-            for link in defragged_links
-            if urlparse(link).scheme in ("http", "https")
-            and (not match_domain or urlparse(link).netloc == base_domain)
+            link for link in defragged_links if is_fetchable_web_link(link)
         ]
 
         # ensure url is first, since below we are taking first max_links urls

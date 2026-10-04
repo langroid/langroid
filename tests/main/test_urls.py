@@ -114,6 +114,10 @@ SCHEMES_HTML = (
     # admits these, so only the scheme check excludes them -- in either mode.
     '<a href="ftp://example.test/file.zip">FTP</a>'
     '<a href="ws://example.test/socket">WS</a>'
+    # A web scheme with NO host: only the netloc check excludes these. urljoin
+    # leaves them as-is rather than resolving them against the base.
+    '<a href="http:foo">Hostless</a>'
+    '<a href="http:///path">EmptyHost</a>'
     # A real web link, so a page that was never fetched cannot be mistaken for
     # a page whose links were all filtered out.
     '<a href="https://example.test/ok">Ok</a>'
@@ -140,13 +144,15 @@ def schemes_response(url: str, timeout: int) -> Response:
 def test_find_urls_skips_non_web_schemes(match_domain: bool) -> None:
     """Only http/https links are crawled or returned, in BOTH domain modes.
 
-    The scheme check is load-bearing in both modes, for different reasons.
-    With `match_domain` False, the domain comparison is skipped, so nothing
-    else keeps `mailto:`/`javascript:`/`file:` out of the results or out of the
-    `max_links` budget. With `match_domain` True, those are rejected by the
-    domain comparison anyway (empty netloc) -- but `ftp://example.test/...` and
-    `ws://example.test/...` are not, since their netloc matches; before the
-    scheme check they were returned.
+    The scheme and host checks are load-bearing in both modes, for different
+    reasons. With `match_domain` False, the domain comparison is skipped, so
+    nothing else keeps `mailto:`/`javascript:`/`file:` out of the results or out
+    of the `max_links` budget. With `match_domain` True, those are rejected by
+    the domain comparison anyway (empty netloc) -- but `ftp://example.test/...`
+    and `ws://example.test/...` are not, since their netloc matches; before the
+    scheme check they were returned. Hostless web references (`http:foo`,
+    `http:///path`) have a web scheme and an empty netloc, so only the netloc
+    check excludes them once the domain comparison is conditional.
     """
     with patch(
         "langroid.parsing.urls.requests.get", side_effect=schemes_response
