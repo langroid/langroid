@@ -9,6 +9,8 @@ ADC-caching tests were added when that PR was taken over.
 """
 
 import sys
+import threading
+import time
 import types
 from typing import Any, Dict, List, Optional
 
@@ -170,13 +172,75 @@ def test_poisoned_env_never_appears_on_the_wire(poisoned_env, fake_adc):
     assert "malicious.openai.endpoint" not in str(req.url)
 
     joined = "\n".join(f"{k}: {v}" for k, v in req.headers.items()).lower()
+    body = req.content.decode(errors="replace").lower()
+    for leaked in (
+        FAKE_OPENAI_KEY.lower(),
+        "sk-malicious-header",
+        "org-malicious-leak",
+        "custom-openai",
+        "malicious.openai.endpoint",
+    ):
+        assert leaked not in joined, f"{leaked!r} leaked in headers"
+        assert leaked not in body, f"{leaked!r} leaked in the body"
+
+    auth = req.headers.get("authorization") or ""
+    assert FAKE_ADC_TOKEN in auth, f"Authorization was: {auth!r}"
+
+
+@pytest.mark.asyncio
+async def test_poisoned_env_never_appears_on_the_wire_async(poisoned_env, fake_adc):
+    """
+    The async client is built separately from the sync one and resolves the
+    `api_key_provider` itself, so pin the same guarantee on `achat`.
+    """
+    captured: List[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gemini-2.5-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "hi"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+            },
+        )
+
+    # the factory may return (sync, async); achat uses the async one
+    sync_client = httpx.Client(transport=httpx.MockTransport(handler))
+    async_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    llm = OpenAIGPT(
+        VertexAIConfig(
+            chat_model=VERTEX_MODEL,
+            http_client_factory=lambda: (sync_client, async_client),
+            use_cached_client=False,
+        )
+    )
+    with temporary_settings(Settings(cache=False)):
+        await llm.achat("hi")
+
+    assert captured, "No HTTP request was captured on the async path"
+    req = captured[-1]
+    assert req.url.host.endswith("aiplatform.googleapis.com")
+    joined = "\n".join(f"{k}: {v}" for k, v in req.headers.items()).lower()
     assert FAKE_OPENAI_KEY.lower() not in joined
     assert "sk-malicious-header" not in joined
     assert "org-malicious-leak" not in joined
     assert "custom-openai" not in joined
-
-    auth = req.headers.get("authorization") or ""
-    assert FAKE_ADC_TOKEN in auth, f"Authorization was: {auth!r}"
+    assert FAKE_ADC_TOKEN in (req.headers.get("authorization") or "")
 
 
 def test_settings_override_to_vertexai_does_not_leak(poisoned_env, fake_adc):
@@ -219,6 +283,157 @@ def test_vertexai_headers_env_is_honored(monkeypatch, project_env, fake_adc):
     monkeypatch.setenv("VERTEXAI_HEADERS", '{"X-Mine": "1"}')
     cfg = VertexAIConfig(chat_model=VERTEX_MODEL)
     assert cfg.headers.get("X-Mine") == "1"
+
+
+def test_openai_http_client_config_does_not_reach_the_vertex_client(
+    monkeypatch, project_env, fake_adc
+):
+    """
+    `OPENAI_HTTP_CLIENT_CONFIG` is spread into `httpx.Client(**config)`, so
+    carrying it over would attach OpenAI-intended headers to the Vertex
+    request, or proxy it (bearer token and all) through another host. This is
+    #1165 through the transport rather than the config.
+
+    Note this cannot be tested through `http_client_factory`: that takes an
+    earlier branch and structurally bypasses `http_client_config`.
+    """
+    monkeypatch.setenv(
+        "OPENAI_HTTP_CLIENT_CONFIG",
+        '{"headers": {"X-OpenAI-Only": "sk-leak-marker"},'
+        ' "proxy": "http://attacker.example:8080"}',
+    )
+    source = OpenAIGPTConfig(chat_model=VERTEX_MODEL)
+    # the env var really does populate the OpenAI-prefixed config
+    assert source.http_client_config is not None
+    assert "sk-leak-marker" in str(source.http_client_config)
+
+    llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL, use_cached_client=False))
+    assert llm.config.http_client_config is None
+    client = llm.client
+    assert client is not None
+    assert "sk-leak-marker" not in str(dict(client._client.headers))
+    assert client._client._mounts == {}, "request would be proxied"
+
+
+def test_openai_http_verify_ssl_does_not_disable_tls_to_google(
+    monkeypatch, project_env, fake_adc
+):
+    """`OPENAI_HTTP_VERIFY_SSL=false` must not travel to the Google connection."""
+    monkeypatch.setenv("OPENAI_HTTP_VERIFY_SSL", "false")
+    assert OpenAIGPTConfig(chat_model=VERTEX_MODEL).http_verify_ssl is False
+
+    llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL, use_cached_client=False))
+    assert llm.config.http_verify_ssl is True
+    client = llm.client
+    assert client is not None
+    transport = client._client._transport
+    ssl_ctx = transport._pool._ssl_context
+    assert ssl_ctx.check_hostname is True
+    assert ssl_ctx.verify_mode != 0
+
+
+def test_openai_chat_model_orig_cannot_hijack_the_route(
+    monkeypatch, project_env, fake_adc
+):
+    """
+    The provider branches key off `chat_model_orig`, and
+    `OPENAI_CHAT_MODEL_ORIG` populates it. If it were carried over, a
+    `vertexai/` model could be claimed by the Gemini branch instead: public
+    endpoint, no ADC. The route must win regardless.
+    """
+    monkeypatch.setenv("OPENAI_CHAT_MODEL_ORIG", "google/gemini-2.5-flash")
+    assert (
+        OpenAIGPTConfig(chat_model=VERTEX_MODEL).chat_model_orig
+        == "google/gemini-2.5-flash"
+    )
+
+    llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    assert llm.is_vertexai is True
+    assert llm.is_gemini is False
+    assert llm.chat_model_orig == VERTEX_MODEL
+    assert "aiplatform.googleapis.com" in (llm.api_base or "")
+    assert "generativelanguage.googleapis.com" not in (llm.api_base or "")
+    assert llm.config.api_key_provider is not None
+
+
+def test_every_openai_config_field_is_classified(project_env):
+    """
+    Guard: the conversion carries fields by default, so a new
+    `OpenAIGPTConfig` field is carried onto the Vertex route automatically.
+    If it is `OPENAI_`-env-populatable and influences the request, that is a
+    leak. Every field must therefore be either dropped or listed here as
+    reviewed-and-safe, so adding one forces the decision.
+    """
+    # Reviewed as safe to carry: none of these can redirect the request,
+    # attach anything to it, or weaken its transport.
+    carry_safe = {
+        # model / generation behavior
+        "chat_model",
+        "completion_model",
+        "temperature",
+        "max_output_tokens",
+        "min_output_tokens",
+        "chat_context_length",
+        "completion_context_length",
+        "seed",
+        "params",
+        "stream",
+        "async_stream_quiet",
+        "formatter",
+        "hf_formatter",
+        "use_chat_for_completion",
+        "use_completion_for_chat",
+        "parallel_tool_calls",
+        "supports_json_schema",
+        "supports_strict_tools",
+        "timeout",
+        "retry_params",
+        "cache_config",
+        # callables: settable only in code, never from the environment
+        "api_key_provider",
+        "http_client_factory",
+        "run_on_first_use",
+        "streamer",
+        "streamer_async",
+        # client reuse: no effect on where the request goes
+        "use_cached_client",
+        # other providers' settings, inert on a vertexai/ route
+        "litellm",
+        "litellm_proxy",
+        "ollama",
+        "langdb_params",
+        "portkey_params",
+        "thought_delimiters",
+    }
+    declared = set(OpenAIGPTConfig.model_fields)
+    unclassified = declared - carry_safe - set(openai_gpt._VERTEXAI_DROPPED_FIELDS)
+    assert not unclassified, (
+        f"New OpenAIGPTConfig field(s) {sorted(unclassified)} are carried onto "
+        "the vertexai/ route by default. Add each to "
+        "_VERTEXAI_DROPPED_FIELDS if an OPENAI_* env var could set it and it "
+        "affects the request, or to carry_safe in this test if it is inert."
+    )
+    # and nothing is classified that does not exist
+    assert set(openai_gpt._VERTEXAI_DROPPED_FIELDS) <= declared
+    assert carry_safe <= declared
+
+
+def test_vertexai_config_type_is_set(project_env, fake_adc):
+    llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    assert llm.config.type == "vertexai"
+
+
+@pytest.mark.parametrize("bad_model", ["vertexai/", "vertexai/foo"])
+def test_malformed_vertexai_model_rejected(project_env, fake_adc, bad_model):
+    """
+    The route is documented as vertexai/<publisher>/<model>; enforce it, so a
+    missing publisher cannot produce a live endpoint with an empty model id.
+
+    `vertexai//` is deliberately not covered: `//` is langroid's existing
+    `model//formatter` syntax and is consumed before this route is reached.
+    """
+    with pytest.raises(ValueError, match="expected vertexai/<publisher>/<model>"):
+        OpenAIGPT(VertexAIConfig(chat_model=bad_model))
 
 
 def test_non_vertexai_route_is_not_converted_to_vertexai_config(poisoned_env):
@@ -569,12 +784,17 @@ class _FakeCreds:
 
 
 def _install_fake_google_auth(
-    monkeypatch, counters: Dict[str, int], creds: _FakeCreds
+    monkeypatch, counters: Dict[str, int], creds: _FakeCreds, delay: float = 0.0
 ) -> None:
-    """Put a minimal fake `google.auth` on sys.modules for the test's duration."""
+    """Put a minimal fake `google.auth` on sys.modules for the test's duration.
+
+    `delay` widens the window in which concurrent callers can race.
+    """
 
     def _default(scopes: Any = None) -> Any:
         counters["default"] += 1
+        if delay:
+            time.sleep(delay)
         return creds, "fake-project"
 
     requests_mod = types.ModuleType("google.auth.transport.requests")
@@ -639,6 +859,56 @@ def test_adc_refreshes_an_expired_token(monkeypatch):
     assert openai_gpt._adc_access_token() == "tok-1"
     assert counters["refresh"] == 1
     assert counters["default"] == 1
+
+
+def test_adc_resolves_credentials_once_under_concurrent_callers(monkeypatch):
+    """
+    The provider is called per request, so several threads can enter it at
+    once. The lock must make credential resolution happen exactly once.
+
+    The no-lock control proves this test is not vacuous: without mutual
+    exclusion the same code resolves credentials once per thread.
+    """
+
+    class _NoLock:
+        def __enter__(self) -> "_NoLock":
+            return self
+
+        def __exit__(self, *exc: Any) -> bool:
+            return False
+
+    def run(lock: Any) -> Dict[str, int]:
+        counters = {"default": 0, "refresh": 0}
+        creds = _FakeCreds(counters, valid=True)
+        _install_fake_google_auth(monkeypatch, counters, creds, delay=0.02)
+        monkeypatch.setattr(openai_gpt, "_adc_lock", lock)
+        openai_gpt._adc_credentials = None
+        tokens: List[str] = []
+        errors: List[str] = []
+
+        def worker() -> None:
+            try:
+                tokens.append(openai_gpt._adc_access_token())
+            except Exception as e:  # noqa: BLE001
+                errors.append(repr(e))
+
+        threads = [threading.Thread(target=worker) for _ in range(12)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert errors == [], errors
+        assert len(tokens) == 12
+        return counters
+
+    with_lock = run(threading.Lock())
+    assert with_lock["default"] == 1, with_lock
+
+    without_lock = run(_NoLock())
+    assert without_lock["default"] > 1, (
+        "the no-lock control did not reproduce the race, so the locked case "
+        f"proves nothing: {without_lock}"
+    )
 
 
 def test_adc_missing_credentials_raises_with_guidance(monkeypatch):

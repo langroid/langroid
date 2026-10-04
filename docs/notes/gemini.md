@@ -98,9 +98,14 @@ llm = lm.OpenAIGPT(config)
     overrides the prefix to `VERTEXAI_`, so those variables are not an env
     source for it and cannot follow you to Google. A `vertexai/` route is
     rebuilt as a `VertexAIConfig` automatically; everything else you
-    configured (`temperature`, `max_output_tokens`, ...) is carried over,
-    and only `api_key`, `headers`, `organization` and `api_base` are
-    dropped. This is what makes the hazard described in
+    configured (`temperature`, `max_output_tokens`, ...) is carried over.
+    What is dropped is every field an `OPENAI_*` variable could set that
+    also changes where the request goes, what it carries or how it is
+    secured: `api_key`, `headers`, `organization`, `api_base`,
+    `http_client_config`, `http_verify_ssl` and `chat_model_orig`. Set
+    those via `VERTEXAI_*`, or on a `VertexAIConfig` you construct
+    yourself, if you need them on this route. This is what makes the hazard
+    described in
     [Headers set for OpenAI follow you to Vertex AI](#headers-set-for-openai-follow-you-to-vertex-ai)
     inapplicable to the `vertexai/` route.
 
