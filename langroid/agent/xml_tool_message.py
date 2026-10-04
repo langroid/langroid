@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
 from lxml import etree
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, RootModel
 
 from langroid.agent.tool_message import ToolMessage
 
@@ -15,6 +15,90 @@ try:
     HAS_UNION_TYPE = True
 except ImportError:
     pass
+
+
+def _unwrap_optional(annotation: Any) -> Any:
+    """Reduce `Optional[X]` (and `X | None`) to `X`, leaving anything else as is.
+
+    `format_instructions` applies the same reduction when it decides how to
+    show a field to the LLM, so parsing must apply it too: otherwise a field
+    declared `Optional[List[str]]` is advertised as a list but parsed as a
+    scalar.
+
+    Args:
+        annotation: A type annotation, possibly `None`.
+
+    Returns:
+        The single non-`None` member of an `Optional`/`Union` annotation, or
+        the annotation unchanged when it is not such a union.
+    """
+    origin = get_origin(annotation)
+    is_union = origin is Union
+    if HAS_UNION_TYPE:
+        from types import UnionType as _UnionType
+
+        is_union = is_union or origin is _UnionType
+    if not is_union:
+        return annotation
+    non_none = [arg for arg in get_args(annotation) if arg is not type(None)]
+    return non_none[0] if len(non_none) == 1 else annotation
+
+
+def _is_model(annotation: Any) -> bool:
+    """Whether `annotation` is a Pydantic model whose fields map onto tags.
+
+    `RootModel` is excluded: its content is a single unnamed value, which may
+    itself be a list, so its children are not named fields and the structural
+    heuristics must be left to decide.
+    """
+    return (
+        isinstance(annotation, type)
+        and issubclass(annotation, BaseModel)
+        and not issubclass(annotation, RootModel)
+    )
+
+
+def _child_field(annotation: Any, tag: str) -> Any:
+    """`FieldInfo` of field `tag` when `annotation` is a model declaring it.
+
+    This supplies the child's declared TYPE, so a nested element is typed by
+    its own model's field rather than by whatever top-level field happens to
+    share its tag. Note that `verbatim` is deliberately NOT taken from here:
+    it stays a top-level-only flag, matching the pre-existing behavior that
+    `test_roundtrip_complex_nested_tolerant` pins (a nested field declared
+    verbatim is still stripped).
+
+    Args:
+        annotation: The parent element's resolved annotation.
+        tag: The child element's tag.
+
+    Returns:
+        The child's `FieldInfo`, or `None` if the parent is not a model
+        declaring such a field.
+    """
+    if not _is_model(annotation):
+        return None
+    return annotation.model_fields.get(tag)
+
+
+def _child_type(annotation: Any, is_mapping: bool) -> Any:
+    """Annotation the children of an `annotation`-typed element should have.
+
+    For a list that is its item type, for a mapping its value type; `None`
+    when the element's type says nothing about its children (a model's
+    children are resolved per-tag by `_child_field` instead).
+
+    Args:
+        annotation: The element's own (Optional-reduced) annotation.
+        is_mapping: Whether the element is being parsed as a mapping.
+
+    Returns:
+        A type annotation for the children, or `None` if unknown.
+    """
+    args = get_args(annotation)
+    if is_mapping:
+        return args[1] if len(args) == 2 else None
+    return args[0] if len(args) == 1 else None
 
 
 class XMLToolMessage(ToolMessage):
@@ -88,18 +172,52 @@ class XMLToolMessage(ToolMessage):
         )
         root = etree.fromstring(formatted_string.encode("utf-8"), parser=parser)
 
-        def parse_element(element: etree._Element) -> Any:
+        def parse_element(
+            element: etree._Element, expected_field: Any = None, expected: Any = None
+        ) -> Any:
             # Skip elements starting with underscore
             if element.tag.startswith("_"):
                 return {}
 
-            field_info = cls.model_fields.get(element.tag)
+            # Resolve what this element IS by position, not by tag name. Only a
+            # direct child of the root is a top-level field, so only it may be
+            # matched to one by name; a deeper element is described solely by
+            # what its parent passes down (`expected_field` when the parent is
+            # a model and so has field metadata, `expected` for a list's items
+            # or a mapping's values). Looking deeper elements up by tag would
+            # let a nested tag -- or a dict key -- that happens to collide with
+            # a top-level field name borrow that field's type or its
+            # `verbatim` flag.
+            is_top_level = element is not root and element.getparent() is root
+            annotation: Any
+            if element is root:
+                annotation = None
+            elif is_top_level:
+                top_field = cls.model_fields.get(element.tag)
+                annotation = _unwrap_optional(
+                    top_field.annotation if top_field is not None else None
+                )
+            else:
+                annotation = _unwrap_optional(
+                    expected_field.annotation
+                    if expected_field is not None
+                    else expected
+                )
+            origin = get_origin(annotation)
+            is_list = origin is list or annotation is list
+            is_dict = origin is dict or (
+                isinstance(annotation, type) and issubclass(annotation, Mapping)
+            )
+            # `verbatim` stays a top-level-only flag, as before: nested
+            # elements were never verbatim unless their tag happened to match a
+            # top-level verbatim field, which is exactly the collision above.
+            verbatim_field = cls.model_fields.get(element.tag) if is_top_level else None
             is_verbatim = (
-                field_info
-                and hasattr(field_info, "json_schema_extra")
-                and field_info.json_schema_extra is not None
-                and isinstance(field_info.json_schema_extra, dict)
-                and field_info.json_schema_extra.get("verbatim", False)
+                verbatim_field
+                and hasattr(verbatim_field, "json_schema_extra")
+                and verbatim_field.json_schema_extra is not None
+                and isinstance(verbatim_field.json_schema_extra, dict)
+                and verbatim_field.json_schema_extra.get("verbatim", False)
             )
 
             if is_verbatim:
@@ -114,31 +232,53 @@ class XMLToolMessage(ToolMessage):
                     else content
                 )
             elif len(element) == 0:
+                # An empty container element (e.g. `<tags/>`) is an empty
+                # collection, not an empty string: take the type from the
+                # field's declared annotation rather than from the XML.
+                if element is root:
+                    return {}
+                if is_list:
+                    return []
+                if is_dict:
+                    return {}
                 # For non-code leaf elements, strip whitespace
                 return element.text.strip() if element.text else ""
             else:
                 # For branch elements, handle potential lists or nested structures
-                children = [parse_element(child) for child in element]
-                if all(child.tag == element[0].tag for child in element):
+                # The "all children share a tag" heuristic below misreads a
+                # single-entry dict or a single-field nested model as a list,
+                # so decide by declared type first where we have one.
+                is_mapping = element is root or is_dict or _is_model(annotation)
+                # Tell the children what they are expected to be, since they
+                # cannot be looked up by tag: a list's items, a mapping's
+                # values, or a nested model's same-named field.
+                child_type = _child_type(annotation, is_mapping)
+                if not is_mapping and all(
+                    child.tag == element[0].tag for child in element
+                ):
                     # If all children have the same tag, treat as a list
-                    return children
+                    return [parse_element(child, None, child_type) for child in element]
                 else:
                     # Otherwise, treat as a dictionary
-                    result = {child.tag: parse_element(child) for child in element}
-                    # Check if this corresponds to a nested Pydantic model
-                    if (
-                        field_info
-                        and isinstance(field_info.annotation, type)
-                        and issubclass(field_info.annotation, BaseModel)
-                    ):
-                        return field_info.annotation(**result)
+                    result = {
+                        child.tag: parse_element(
+                            child, _child_field(annotation, child.tag), child_type
+                        )
+                        for child in element
+                    }
+                    # A nested model is left as a plain dict for the caller's
+                    # `model_validate` to coerce. Building it here would run
+                    # its validation before the containing tool's own
+                    # `mode="before"` validators get to transform the value,
+                    # and every caller validates the result anyway.
                     return result
 
         result = parse_element(root)
         if not isinstance(result, dict):
             return None
-        # Filter out empty dictionaries from skipped underscore fields
-        return {k: v for k, v in result.items() if v != {}}
+        # Drop only the skipped underscore fields; an empty dict can now be a
+        # legitimate argument value, so it must not be filtered out by value.
+        return {k: v for k, v in result.items() if not k.startswith("_")}
 
     @classmethod
     def parse(cls, formatted_string: str) -> Optional["XMLToolMessage"]:

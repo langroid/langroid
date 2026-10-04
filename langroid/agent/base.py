@@ -1972,8 +1972,13 @@ class Agent(ABC):
             return None
 
         properties = maybe_tool_dict.get("properties")
+        # When the tool-call was nested under "properties" the raw string no
+        # longer maps 1:1 onto the tool's fields, so re-parsing it below
+        # against a concrete tool class would lose that unwrapping.
+        unwrapped_properties = isinstance(properties, dict)
         if isinstance(properties, dict):
             maybe_tool_dict = properties
+        reparse_xml = not is_json and not unwrapped_properties
         request = maybe_tool_dict.get("request")
         if request is None:
             if self.enabled_requests_for_inference is None:
@@ -2000,7 +2005,16 @@ class Agent(ABC):
                     return None
 
                 try:
-                    return tool.model_validate(maybe_tool_dict)
+                    # The dict above came from parsing XML against the BASE
+                    # XMLToolMessage, which knows no field types; re-parse
+                    # against this candidate so its collection fields are
+                    # typed correctly.
+                    data = (
+                        tool.extract_field_values(tool_candidate_str)
+                        if reparse_xml and issubclass(tool, XMLToolMessage)
+                        else maybe_tool_dict
+                    )
+                    return tool.model_validate(data)
                 except ValidationError:
                     return None
 
@@ -2030,6 +2044,10 @@ class Agent(ABC):
             return None
 
         try:
+            if reparse_xml and issubclass(message_class, XMLToolMessage):
+                # Same reason as in `maybe_parse` above: the generic parse does
+                # not know this class's field types.
+                maybe_tool_dict = message_class.extract_field_values(tool_candidate_str)
             message = message_class.model_validate(maybe_tool_dict)
         except ValidationError as ve:
             self.tool_error = from_llm
