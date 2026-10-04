@@ -551,6 +551,15 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=15.0,
         description="Claude 3 Sonnet",
     ),
+    AnthropicModel.CLAUDE_4_5_HAIKU.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_4_5_HAIKU.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=1.00,
+        output_cost_per_million=5.00,
+        description="Claude Haiku 4.5",
+    ),
     AnthropicModel.CLAUDE_3_HAIKU.value: ModelInfo(
         name=AnthropicModel.CLAUDE_3_HAIKU.value,
         provider=ModelProvider.ANTHROPIC,
@@ -818,12 +827,43 @@ def _normalize_model_names(models: List[str | ModelName]) -> List[str]:
     normalized_models: List[str] = []
     seen: set[str] = set()
     for model in models:
-        normalized_model = _normalize_gemini_model_name(_model_name(model))
-        if normalized_model is None or normalized_model in seen:
-            continue
-        seen.add(normalized_model)
-        normalized_models.append(normalized_model)
+        name = _model_name(model)
+        for normalized_model in (
+            _normalize_gemini_model_name(name),
+            _strip_dated_snapshot(name),
+        ):
+            if normalized_model is None or normalized_model in seen:
+                continue
+            seen.add(normalized_model)
+            normalized_models.append(normalized_model)
     return normalized_models
+
+
+# A dated snapshot of a model we already know: "-20251001" (Anthropic) or
+# "-2024-08-06" (OpenAI), optionally behind a provider prefix. Providers ship
+# these constantly, and a hard-coded table cannot keep up — so strip the date
+# and let the caller look up the base name.
+_DATED_SNAPSHOT_SUFFIX = re.compile(
+    r"-(?P<year>20\d{2})-?(?P<month>0[1-9]|1[0-2])-?(?P<day>0[1-9]|[12]\d|3[01])\Z"
+)
+
+
+def _strip_dated_snapshot(model: str) -> str | None:
+    """Return `model` without a trailing dated-snapshot stamp, else None.
+
+    Deliberately conservative in two ways. The regex is anchored and ASCII,
+    with month and day ranges checked, so a lookalike tail is not mistaken for
+    a date. And the result is only a CANDIDATE: `get_model_info` looks it up
+    and keeps it only if that base model is already in `MODEL_INFO`, so an
+    unknown `some-new-model-20260101` still warns rather than silently
+    inheriting another model's limits and prices.
+    """
+    base_model = model.rsplit("/", 1)[-1]
+    match = _DATED_SNAPSHOT_SUFFIX.search(base_model)
+    if match is None:
+        return None
+    candidate = base_model[: match.start()]
+    return candidate or None
 
 
 def _normalize_gemini_model_name(model: str) -> str | None:

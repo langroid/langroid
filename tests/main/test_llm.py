@@ -359,8 +359,8 @@ def test_keys():
     [
         "langdb/gpt-4o-mini",
         "langdb/openai/gpt-4o-mini",
-        "langdb/anthropic/claude-3-haiku-20240307",
-        "langdb/claude-3-haiku-20240307",
+        "langdb/anthropic/claude-haiku-4-5-20251001",
+        "langdb/claude-haiku-4-5-20251001",
         "langdb/gemini/gemini-2.0-flash-lite",
         "langdb/gemini-2.0-flash-lite",
     ],
@@ -503,7 +503,7 @@ def test_portkey_integration():
     try:
         # Test basic portkey model configuration
         config = lm.OpenAIGPTConfig(
-            chat_model="portkey/anthropic/claude-3-haiku-20240307",
+            chat_model="portkey/anthropic/claude-haiku-4-5-20251001",
             portkey_params=PortkeyParams(
                 api_key="pk-test-key",
             ),
@@ -512,7 +512,7 @@ def test_portkey_integration():
         llm = lm.OpenAIGPT(config)
 
         # Check that model was parsed correctly
-        assert llm.config.chat_model == "claude-3-haiku-20240307"
+        assert llm.config.chat_model == "claude-haiku-4-5-20251001"
         assert llm.is_portkey
         assert llm.api_base == "https://api.portkey.ai/v1"
         assert llm.config.portkey_params.provider == "anthropic"

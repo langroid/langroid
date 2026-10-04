@@ -4,7 +4,9 @@ import pytest
 
 from langroid.language_models.model_info import (
     GeminiModel,
+    ModelProvider,
     _normalize_gemini_model_name,
+    get_model_info,
 )
 
 
@@ -104,3 +106,38 @@ def test_normalize_gemini_all_canonical_names_are_stable() -> None:
         assert (
             result == member.value
         ), f"Canonical name {member.value!r} normalized to {result!r}"
+
+
+@pytest.mark.parametrize(
+    "dated,base",
+    [
+        # Anthropic: -YYYYMMDD
+        ("claude-haiku-4-5-20251001", "claude-haiku-4-5"),
+        # OpenAI: -YYYY-MM-DD
+        ("gpt-4o-2024-08-06", "gpt-4o"),
+        # behind a provider prefix
+        ("anthropic/claude-haiku-4-5-20251001", "claude-haiku-4-5"),
+    ],
+)
+def test_dated_snapshot_resolves_to_base_model(dated: str, base: str):
+    """A dated snapshot of a KNOWN model inherits that model's info.
+
+    Providers ship dated snapshots constantly; a hard-coded table cannot keep
+    up, and the old behaviour silently gave them a 16k context.
+    """
+    assert get_model_info(dated) == get_model_info(base)
+
+
+@pytest.mark.parametrize(
+    "unknown",
+    [
+        "some-new-model-20260101",  # base is not a known model
+        "gpt-4o-2024-13-45",  # not a real date
+        "claude-haiku-4-5-2025100",  # too few digits
+    ],
+)
+def test_unknown_dated_model_does_not_borrow_info(unknown: str):
+    """Stripping a date must not GUESS: an unknown base stays unknown."""
+    info = get_model_info(unknown)
+    assert info.provider == ModelProvider.UNKNOWN
+    assert info.input_cost_per_million == 0.0
