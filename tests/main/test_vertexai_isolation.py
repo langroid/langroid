@@ -550,7 +550,7 @@ def test_openai_sdk_env_still_applies_to_a_real_openai_route(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "bad_model", ["vertexai//mistral-instruct-v0.2", "vertexai//hf"]
+    "bad_model", ["vertexai//mistral-instruct-v0.2", "vertexai//hf", "vertexai//"]
 )
 def test_formatter_suffix_cannot_strip_the_route(project_env, fake_adc, bad_model):
     """
@@ -559,8 +559,24 @@ def test_formatter_suffix_cannot_strip_the_route(project_env, fake_adc, bad_mode
     routes to api.openai.com. On a VertexAIConfig that handed a
     VERTEXAI_API_KEY to OpenAI's client. The guards now run after the split.
     """
-    with pytest.raises(ValueError, match="not a vertexai/ route"):
+    with pytest.raises(ValueError, match="vertexai/"):
         OpenAIGPT(VertexAIConfig(chat_model=bad_model))
+
+
+@pytest.mark.parametrize(
+    "bad_model", ["vertexai//mistral-instruct-v0.2", "vertexai//hf"]
+)
+def test_formatter_suffix_on_a_plain_config_is_refused_too(
+    monkeypatch, project_env, fake_adc, bad_model
+):
+    """
+    Same input on a plain OpenAIGPTConfig leaks no Google credential -- there
+    is none -- but it used to route silently to api.openai.com with the OpenAI
+    key, which is never what someone typing `vertexai` meant.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-secret")
+    with pytest.raises(ValueError, match="left no model behind"):
+        OpenAIGPT(OpenAIGPTConfig(chat_model=bad_model))
 
 
 def test_formatter_suffix_on_a_real_vertex_model_still_works(project_env, fake_adc):
@@ -575,7 +591,7 @@ def test_formatter_suffix_on_a_real_vertex_model_still_works(project_env, fake_a
 def test_formatter_suffix_override_cannot_strip_the_route(project_env, fake_adc):
     """Same hole via the global override, which is how it was reachable."""
     with temporary_settings(Settings(chat_model="vertexai//hf")):
-        with pytest.raises(ValueError, match="not a vertexai/ route"):
+        with pytest.raises(ValueError, match="left no model behind"):
             OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL))
 
 

@@ -812,6 +812,10 @@ class OpenAIGPT(LanguageModel):
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
 
+        # Whether the caller asked for a vertexai/ route, recorded BEFORE the
+        # `model//formatter` split below can eat the prefix.
+        asked_for_vertexai = self.config.chat_model.startswith(VERTEXAI_PREFIX)
+
         if len(parts := self.config.chat_model.split("//")) > 1:
             # there is a formatter specified, e.g.
             # "litellm/ollama/mistral//hf" or
@@ -834,6 +838,23 @@ class OpenAIGPT(LanguageModel):
             else:
                 # e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
                 self.config.formatter = formatter
+
+        if asked_for_vertexai and not self.config.chat_model.startswith(
+            VERTEXAI_PREFIX
+        ):
+            # The `//formatter` suffix consumed the route itself, e.g.
+            # "vertexai//hf" -> the bare model "vertexai". Left alone this
+            # falls through to the generic branch and quietly talks to
+            # api.openai.com, which is never what someone typing `vertexai`
+            # meant. (On a VertexAIConfig it would also take a Google
+            # credential there -- the refusal below catches that case too, but
+            # this one fires for a plain OpenAIGPTConfig as well.)
+            raise ValueError(
+                f"chat_model {self.chat_model_orig!r} is not a usable "
+                "vertexai/ route: the //formatter suffix left no model behind. "
+                "Write vertexai/<publisher>/<model>//<formatter>, e.g. "
+                "vertexai/google/gemini-2.5-flash//hf."
+            )
 
         # A vertexai/ route must not inherit OPENAI_-prefixed settings, so
         # rebuild the config as a clean VertexAIConfig.
@@ -1235,6 +1256,7 @@ class OpenAIGPT(LanguageModel):
                         default_headers=self.config.headers,
                         http_client=http_client,
                         http_client_config=http_client_config_used,
+                        sdk_env_scrubbed=self.is_vertexai,
                     )
                     self.async_client = get_async_openai_client(
                         api_key=openai_api_key,
@@ -1244,6 +1266,7 @@ class OpenAIGPT(LanguageModel):
                         default_headers=self.config.headers,
                         http_client=async_http_client,
                         http_client_config=http_client_config_used,
+                        sdk_env_scrubbed=self.is_vertexai,
                     )
                 else:
                     # Create new clients without caching
