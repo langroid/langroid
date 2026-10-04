@@ -12,12 +12,12 @@ test_vertexai_adc.py.
 """
 
 import os
-from typing import List
+from typing import Dict, List
 
 import httpx
 import pytest
 
-from langroid.language_models import openai_gpt
+from langroid.language_models import client_cache, openai_gpt
 from langroid.language_models.openai_gpt import (
     DUMMY_API_KEY,
     OpenAICallParams,
@@ -538,6 +538,58 @@ def test_openai_sdk_env_channels_do_not_reach_google(
     # the variables are only hidden during client construction, not unset
     assert os.environ["OPENAI_PROJECT_ID"] == "proj_leaked_openai_project"
     assert "OPENAI_CUSTOM_HEADERS" in os.environ
+
+
+def test_cache_key_distinguishes_a_scrubbed_client():
+    """
+    The scrub wraps client CONSTRUCTION, so on the cached path a hit could
+    return a client built earlier without it -- with OPENAI_PROJECT_ID already
+    baked in. The cache key must therefore carry the flag.
+    """
+    common = dict(
+        api_key=("api_key_provider", 1),
+        base_url="https://us-central1-aiplatform.googleapis.com/v1beta1/x",
+        organization="",
+        timeout=20,
+        default_headers={},
+        http_client_config=None,
+    )
+    plain = client_cache._get_cache_key("openai", **common, sdk_env_scrubbed=False)
+    scrubbed = client_cache._get_cache_key("openai", **common, sdk_env_scrubbed=True)
+    assert plain != scrubbed
+    # and the flag is what differs, not the call shape
+    assert (
+        client_cache._get_cache_key("openai", **common, sdk_env_scrubbed=True)
+        == scrubbed
+    )
+
+
+def test_vertexai_route_asks_the_cache_for_a_scrubbed_client(
+    monkeypatch, project_env, fake_adc
+):
+    """
+    ...and the route must actually pass it. Asserted by watching the cache
+    key's inputs, so an unrelated difference in another input (organization
+    picked up from a .env, say) cannot make this pass vacuously.
+    """
+    seen: List[Dict[str, object]] = []
+    real_key = client_cache._get_cache_key
+
+    def spy(client_type: str, **kwargs: object) -> str:
+        seen.append({"client_type": client_type, **kwargs})
+        return real_key(client_type, **kwargs)
+
+    monkeypatch.setattr(client_cache, "_get_cache_key", spy)
+
+    OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    assert seen, "the cached-client path was not taken"
+    assert all(e["sdk_env_scrubbed"] is True for e in seen), seen
+    assert {e["client_type"] for e in seen} == {"openai", "async_openai"}
+
+    seen.clear()
+    OpenAIGPT(OpenAIGPTConfig(chat_model="gpt-4o"))
+    assert seen, "the cached-client path was not taken for the plain route"
+    assert all(e["sdk_env_scrubbed"] is False for e in seen), seen
 
 
 def test_openai_sdk_env_still_applies_to_a_real_openai_route(monkeypatch):
