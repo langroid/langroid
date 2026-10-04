@@ -561,9 +561,10 @@ _VERTEXAI_DROPPED_FIELDS = frozenset(
     }
 )
 
-# A non-default value in one of these was set deliberately by the caller, but
-# cannot be honored on the `vertexai/` route (it is indistinguishable from an
-# `OPENAI_*` env value). Dropping it silently would be the surprise; say so.
+# Dropping a non-default value in one of these is worth saying out loud: the
+# caller may have set it in code (a private api_base is the case that bites),
+# and on this route there is no way to tell that apart from an `OPENAI_*` env
+# value, so it has to go either way.
 _VERTEXAI_NOTIFY_IF_SET = ("api_base", "headers", "organization")
 
 
@@ -609,10 +610,11 @@ def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
     ]
     if deliberate:
         logging.warning(
-            "vertexai/ route: dropping config fields %s, which cannot be told "
-            "apart from an OPENAI_-prefixed environment value. Construct "
-            "VertexAIConfig directly (or use VERTEXAI_* env vars) to set them "
-            "on a vertexai/ model.",
+            "vertexai/ route: not carrying over config fields %s -- on this "
+            "route a value there cannot be told apart from an "
+            "OPENAI_-prefixed environment value. If it was meant for Vertex "
+            "AI, set it via VERTEXAI_* or on a VertexAIConfig you construct "
+            "directly.",
             ", ".join(deliberate),
         )
     params = carried.get("params")
