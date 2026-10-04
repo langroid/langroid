@@ -216,8 +216,10 @@ def find_urls(
 
     Returns:
         set: A set of URLs found on the page. Only `http`/`https` links are
-            returned; other schemes (e.g. `mailto:`, `tel:`, `javascript:`)
-            are skipped.
+            followed and returned; links with any other scheme (e.g. `mailto:`,
+            `tel:`, `javascript:`, `ftp:`) are skipped, including ones on the
+            page's own domain. `url` itself is always included, whatever its
+            scheme.
     """
 
     if visited is None:
@@ -244,10 +246,16 @@ def find_urls(
         )
 
         # Keep only web links, then apply the domain filter if requested.
-        # The scheme check is not redundant: schemes like `mailto:`, `javascript:`,
-        # `tel:` and `data:` have an empty netloc, so when `match_domain` is True
-        # the domain comparison rejects them as a side effect. With `match_domain`
-        # False that comparison is skipped, so they must be excluded explicitly.
+        #
+        # The scheme check is load-bearing in both modes. Schemes like `mailto:`,
+        # `javascript:`, `tel:` and `data:` have an empty netloc, so when
+        # `match_domain` is True the domain comparison already rejects them --
+        # but with `match_domain` False that comparison is skipped, and without
+        # the scheme check such links would be returned and would consume
+        # `max_links` budget. Conversely `ftp://`/`ws://` links to the page's own
+        # domain do match `base_domain`, so the domain comparison admits them in
+        # either mode; previously they were returned even though `requests`
+        # cannot fetch them.
         domain_matching_links = [
             link
             for link in defragged_links

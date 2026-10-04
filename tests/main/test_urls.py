@@ -1,4 +1,6 @@
+from itertools import count
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 import pytest
 from requests import Response
@@ -64,12 +66,23 @@ def test_find_urls_cross_domain_crawl_still_obeys_depth() -> None:
 
 
 SCHEMES_URL = "https://example.test/schemes"
+SCHEMES_OK_URL = "https://example.test/ok"
 SCHEMES_HTML = (
+    # Empty-netloc schemes: rejected by the domain comparison as a side effect
+    # when match_domain is True, so only the scheme check excludes them when it
+    # is False.
     '<a href="mailto:someone@example.com">Mail</a>'
     '<a href="javascript:void(0)">JS</a>'
     '<a href="tel:+15551234">Tel</a>'
     '<a href="data:text/html,hello">Data</a>'
     '<a href="file:///etc/passwd">File</a>'
+    # Non-web schemes that DO carry a matching netloc: the domain comparison
+    # admits these, so only the scheme check excludes them -- in either mode.
+    '<a href="ftp://example.test/file.zip">FTP</a>'
+    '<a href="ws://example.test/socket">WS</a>'
+    # A real web link, so a page that was never fetched cannot be mistaken for
+    # a page whose links were all filtered out.
+    '<a href="https://example.test/ok">Ok</a>'
     '<a href="https://other.test/remote">Remote</a>'
 )
 
@@ -78,6 +91,7 @@ def schemes_response(url: str, timeout: int) -> Response:
     assert timeout == 5
     pages = {
         SCHEMES_URL: SCHEMES_HTML,
+        SCHEMES_OK_URL: '<a href="https://example.test/schemes">Back</a>',
         REMOTE_URL: "<a href='https://example.test/schemes'>Back</a>",
     }
     response = Response()
@@ -92,18 +106,22 @@ def schemes_response(url: str, timeout: int) -> Response:
 def test_find_urls_skips_non_web_schemes(match_domain: bool) -> None:
     """Only http/https links are crawled or returned, in BOTH domain modes.
 
-    When `match_domain` is True the domain comparison rejects these schemes as a
-    side effect, since they all have an empty netloc. With `match_domain` False
-    that comparison is skipped, so the scheme filter is the only thing keeping
-    `mailto:`/`javascript:`/`file:` links out of the results and out of the
-    `max_links` budget.
+    The scheme check is load-bearing in both modes, for different reasons.
+    With `match_domain` False, the domain comparison is skipped, so nothing
+    else keeps `mailto:`/`javascript:`/`file:` out of the results or out of the
+    `max_links` budget. With `match_domain` True, those are rejected by the
+    domain comparison anyway (empty netloc) -- but `ftp://example.test/...` and
+    `ws://example.test/...` are not, since their netloc matches; before the
+    scheme check they were returned.
     """
     with patch(
         "langroid.parsing.urls.requests.get", side_effect=schemes_response
     ) as get:
-        found = find_urls(SCHEMES_URL, max_links=6, match_domain=match_domain)
+        found = find_urls(SCHEMES_URL, max_links=8, match_domain=match_domain)
 
-    expected = {SCHEMES_URL}
+    # SCHEMES_OK_URL can only appear if the seed page was fetched AND parsed,
+    # so this also fails if the mock never served the page.
+    expected = {SCHEMES_URL, SCHEMES_OK_URL}
     if not match_domain:
         expected.add(REMOTE_URL)
     assert found == expected
@@ -112,24 +130,27 @@ def test_find_urls_skips_non_web_schemes(match_domain: bool) -> None:
         assert url.startswith("https://"), f"non-web URL crawled or returned: {url}"
 
 
-def test_find_urls_cross_domain_fan_out_is_bounded() -> None:
-    """max_links bounds the FETCH count even when every page links new domains.
+@pytest.mark.parametrize("max_links", [5, 20])
+def test_find_urls_cross_domain_fan_out_is_bounded(max_links: int) -> None:
+    """max_links bounds the crawl even on an endlessly branching web.
 
-    With the domain filter honored, this is the only constraint left on how far
-    the crawl spreads, so it is asserted on the number of requests issued rather
-    than on the size of the returned set.
+    With the domain filter honored, `max_links` is the only thing left limiting
+    how far the crawl spreads, so this asserts on the requests actually issued
+    as well as on the returned set. Every page serves three brand-new hostnames
+    drawn from a shared counter, so the reachable set is unbounded and the crawl
+    can only stop by hitting `max_links` -- never by running out of pages, which
+    is what makes the bound the thing under test.
     """
-    max_links = 5
+    host_counter = count()
 
     def fan_out_response(url: str, timeout: int) -> Response:
         assert timeout == 5
-        # Every page links to three brand-new domains plus a cycle back home.
-        depth = url.count("-")
         body = (
             "".join(
-                f'<a href="https://host{depth}-{i}.test/page">Next</a>'
-                for i in range(3)
+                f'<a href="https://host{next(host_counter)}.test/page">Next</a>'
+                for _ in range(3)
             )
+            # ...plus a cycle back to the seed, which must not be refetched.
             + '<a href="https://seed.test/page">Home</a>'
         )
         response = Response()
@@ -149,8 +170,15 @@ def test_find_urls_cross_domain_fan_out_is_bounded() -> None:
             match_domain=False,
         )
 
-    assert len(get.call_args_list) <= max_links
-    assert len(found) <= max_links
-    # The cycle back to the seed must not cause a refetch.
     fetched = [call.args[0] for call in get.call_args_list]
+    # Requests issued are bounded, and the result lands exactly on the cap --
+    # on an infinite graph that can only be the bound stopping it, never
+    # exhaustion of the link graph.
+    assert len(fetched) <= max_links
+    assert len(found) == max_links
+    # The crawl really did leave the seed host, so the cross-domain path is
+    # what was exercised.
+    assert any(urlparse(u).netloc != "seed.test" for u in fetched)
+    assert {u for u in found if urlparse(u).netloc != "seed.test"}
+    # The cycle back to the seed must not cause a refetch.
     assert len(fetched) == len(set(fetched))
