@@ -8,11 +8,13 @@ on:
       - ".github/workflows/pytest.yml"
     branches:
       - main
-  pull_request:
-    types:
-      - ready_for_review
-    branches:
-      - main
+  # NO pull_request trigger. `ready_for_review` used to fire the whole suite,
+  # so marking a draft ready cost a full run and merging it cost another
+  # (#1169 on 2026-10-02 did exactly that). Opening a non-draft PR never
+  # triggered this workflow anyway, so the signal lost is small, and the gate
+  # that matters runs on main below — `ops ship` refuses to release on red.
+  # Run it on a branch by hand when you want it: `gh workflow run Pytest`.
+  workflow_dispatch:
 
 
 jobs:
