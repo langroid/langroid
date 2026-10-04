@@ -2,7 +2,9 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
+import threading
 import warnings
 from collections import defaultdict
 from functools import cache
@@ -17,6 +19,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    cast,
     no_type_check,
 )
 
@@ -24,7 +27,7 @@ import openai
 from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
 from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.markup import escape
@@ -430,6 +433,164 @@ class OpenAIGPTConfig(LLMConfig):
         return DynamicConfig
 
 
+VERTEXAI_PREFIX = "vertexai/"
+DEFAULT_VERTEXAI_LOCATION = "us-central1"
+# GCP project ids and regions are lowercase alphanumerics plus hyphens. Anything
+# else -- `/`, `@`, `:`, `.`, `%`, whitespace -- could change the authority or
+# the path of the endpoint URL these values are spliced into.
+_VERTEXAI_ID_RE = re.compile(r"^[a-z0-9-]+$")
+
+
+def _validate_vertexai_id(field: str, value: str) -> str:
+    """Validate a GCP project id or region before it is spliced into a URL.
+
+    Applied at every entry point -- the `VertexAIConfig` fields AND the
+    `GOOGLE_CLOUD_*`/`GCP_*` environment fallbacks, which pydantic never sees.
+    An unvalidated value here would let whoever controls it redirect the
+    request, and the ADC bearer token with it, to a host of their choosing.
+
+    Args:
+        field: name of the value being validated, for the error message.
+        value: the candidate project id or region.
+
+    Returns:
+        `value`, unchanged, if it is safe to interpolate into the endpoint URL.
+
+    Raises:
+        ValueError: if `value` is empty or contains anything but lowercase
+            letters, digits and hyphens; or if it is the non-regional
+            location `global`.
+    """
+    if not _VERTEXAI_ID_RE.match(value):
+        raise ValueError(
+            f"Invalid Vertex AI {field} {value!r}: must be non-empty and contain "
+            "only lowercase letters, digits and hyphens."
+        )
+    if field == "location" and value == "global":
+        raise ValueError(
+            "Vertex AI location 'global' has no regional OpenAI-compatible "
+            f"endpoint; use a region such as '{DEFAULT_VERTEXAI_LOCATION}'."
+        )
+    return value
+
+
+class VertexAIConfig(OpenAIGPTConfig):
+    """
+    Config for Google Vertex AI models served at its OpenAI-compatible endpoint,
+    i.e. `chat_model="vertexai/<publisher>/<model>"`.
+
+    This is a separate config class, rather than extra fields on
+    `OpenAIGPTConfig`, for one reason: `OpenAIGPTConfig` is a pydantic
+    `BaseSettings` with `env_prefix="OPENAI_"`, so a config built in a process
+    that has `OPENAI_API_KEY`, `OPENAI_HEADERS`, `OPENAI_ORGANIZATION` or
+    `OPENAI_API_BASE` set inherits every one of them -- and would then send
+    them to Google. Overriding `env_prefix` to `VERTEXAI_` means those
+    variables are not an env source for this class at all, so there is nothing
+    to inherit: the fix is structural rather than a field-by-field scrub.
+
+    Credentials, in precedence order:
+
+    - `api_key_provider`, called per request (so a rotating token never
+      goes stale);
+    - `api_key` (or `VERTEXAI_API_KEY`);
+    - otherwise Google Application Default Credentials, installed as an
+      `api_key_provider`, which requires `gcloud auth application-default
+      login` or `GOOGLE_APPLICATION_CREDENTIALS`.
+
+    See `docs/notes/gemini.md`.
+    """
+
+    type: str = "vertexai"
+    # GCP project; falls back to GOOGLE_CLOUD_PROJECT, then GCP_PROJECT
+    project_id: Optional[str] = None
+    # GCP region; falls back to GOOGLE_CLOUD_LOCATION, then us-central1
+    location: Optional[str] = None
+
+    model_config = SettingsConfigDict(env_prefix="VERTEXAI_")
+
+    @field_validator("project_id", "location")
+    @classmethod
+    def _validate_project_and_location(
+        cls, v: Optional[str], info: ValidationInfo
+    ) -> Optional[str]:
+        if v is None:
+            return v
+        return _validate_vertexai_id(info.field_name or "value", v)
+
+
+# Fields that must NOT be carried over from an `OPENAI_`-prefixed config onto
+# the `vertexai/` route: each one can be populated from an `OPENAI_*` env var,
+# so carrying it over would reintroduce exactly the leak this route exists to
+# prevent. `api_key_provider` is deliberately absent: it is a callable, so it
+# can only ever have been set explicitly in code, never by the environment.
+_VERTEXAI_DROPPED_FIELDS = frozenset(
+    {"api_key", "headers", "organization", "api_base", "type"}
+)
+
+
+def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
+    """Rebuild `config` as a clean `VertexAIConfig`.
+
+    Every field the caller set is carried over -- `temperature`,
+    `max_output_tokens`, `use_cached_client`, `http_client_factory` and the
+    rest -- except those in `_VERTEXAI_DROPPED_FIELDS`, which are left at
+    `VertexAIConfig`'s defaults.
+
+    Note: fields declared only on a custom `OpenAIGPTConfig` subclass are not
+    carried over, since `VertexAIConfig` has no such fields. Subclass
+    `VertexAIConfig` instead if you need them on a `vertexai/` route.
+    """
+    carried = {
+        name: getattr(config, name)
+        for name in type(config).model_fields
+        if name in VertexAIConfig.model_fields and name not in _VERTEXAI_DROPPED_FIELDS
+    }
+    return VertexAIConfig(**carried)
+
+
+_adc_lock = threading.Lock()
+_adc_credentials: Any = None
+
+
+def _adc_access_token() -> str:
+    """Return a valid Google ADC access token, refreshing it only when stale.
+
+    Installed as an `api_key_provider`, so it is called on every request. The
+    credentials object is therefore created once and cached at module level:
+    `google-auth` tracks the token's expiry on it, so this refreshes roughly
+    hourly instead of making a token round trip per LLM call. Being a plain
+    module-level function, its identity is stable, which keeps the OpenAI
+    client cache (keyed on the provider's identity) from churning.
+    """
+    global _adc_credentials
+    try:
+        import google.auth
+        import google.auth.transport.requests
+        from google.auth.exceptions import DefaultCredentialsError
+    except ImportError as e:
+        raise LangroidImportError("google-auth", "google-auth") from e
+    with _adc_lock:
+        if _adc_credentials is None:
+            try:
+                _adc_credentials, _ = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+            except DefaultCredentialsError as e:
+                raise ValueError(
+                    "Google Application Default Credentials not found, which a "
+                    "vertexai/ model needs: run `gcloud auth "
+                    "application-default login`, or point "
+                    "GOOGLE_APPLICATION_CREDENTIALS at a service-account key, "
+                    "or set VERTEXAI_API_KEY to supply a token directly."
+                ) from e
+        if not _adc_credentials.valid:
+            _adc_credentials.refresh(google.auth.transport.requests.Request())
+        token = _adc_credentials.token
+    if not token:
+        raise ValueError("Google ADC returned an empty access token.")
+    return str(token)
+
+
 class OpenAIResponse(BaseModel):
     """OpenAI response model, either completion or chat."""
 
@@ -495,6 +656,15 @@ class OpenAIGPT(LanguageModel):
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
 
+        # A vertexai/ route must not inherit OPENAI_-prefixed settings, so
+        # rebuild the config as a clean VertexAIConfig. Done here, after the
+        # settings.chat_model override above, so that the direct route and the
+        # override path get the same clean config.
+        if self.config.chat_model.startswith(VERTEXAI_PREFIX) and not isinstance(
+            self.config, VertexAIConfig
+        ):
+            self.config = _as_vertexai_config(self.config)
+
         if len(parts := self.config.chat_model.split("//")) > 1:
             # there is a formatter specified, e.g.
             # "litellm/ollama/mistral//hf" or
@@ -527,7 +697,10 @@ class OpenAIGPT(LanguageModel):
         self.supports_strict_tools: bool = self.config.supports_strict_tools or False
 
         OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
-        self.api_key = config.api_key
+        # read from self.config, not the `config` argument: a vertexai/ route
+        # replaced self.config above, and the original still holds the
+        # OPENAI_-prefixed key we must not use.
+        self.api_key = self.config.api_key
 
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
@@ -607,6 +780,7 @@ class OpenAIGPT(LanguageModel):
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
         self.is_langdb = self.config.chat_model.startswith("langdb/")
         self.is_portkey = self.config.chat_model.startswith("portkey/")
+        self.is_vertexai = self.config.chat_model.startswith(VERTEXAI_PREFIX)
         self.is_litellm_proxy = self.config.chat_model.startswith("litellm-proxy/")
 
         if self.config.api_key_provider is not None and (
@@ -744,6 +918,51 @@ class OpenAIGPT(LanguageModel):
 
                 # Add Portkey-specific headers
                 self.config.headers.update(self.config.portkey_params.get_headers())
+            elif self.is_vertexai:
+                # self.config was rebuilt as a VertexAIConfig above, so this
+                # branch cannot see an OPENAI_-prefixed api_key/headers.
+                vertex_config = cast(VertexAIConfig, self.config)
+                # "vertexai/google/gemini-2.5-flash" -> "google/gemini-2.5-flash",
+                # which is the model id the endpoint expects.
+                vertex_config.chat_model = vertex_config.chat_model[
+                    len(VERTEXAI_PREFIX) :
+                ]
+                vertex_project = (
+                    vertex_config.project_id
+                    or os.getenv("GOOGLE_CLOUD_PROJECT")
+                    or os.getenv("GCP_PROJECT")
+                )
+                if not vertex_project:
+                    raise ValueError(
+                        "A GCP project is required for a vertexai/ model: set "
+                        "VertexAIConfig(project_id=...), or VERTEXAI_PROJECT_ID, "
+                        "GOOGLE_CLOUD_PROJECT or GCP_PROJECT in the environment."
+                    )
+                vertex_location = (
+                    vertex_config.location
+                    or os.getenv("GOOGLE_CLOUD_LOCATION")
+                    or DEFAULT_VERTEXAI_LOCATION
+                )
+                # Re-validate: the values may have come from GOOGLE_CLOUD_*/
+                # GCP_* above, which the field validators never see, and both
+                # are interpolated into the endpoint URL just below.
+                vertex_config.project_id = _validate_vertexai_id(
+                    "project_id", vertex_project
+                )
+                vertex_config.location = _validate_vertexai_id(
+                    "location", vertex_location
+                )
+                self.api_base = (
+                    f"https://{vertex_config.location}-aiplatform.googleapis.com"
+                    f"/v1beta1/projects/{vertex_config.project_id}"
+                    f"/locations/{vertex_config.location}/endpoints/openapi"
+                )
+                no_explicit_key = vertex_config.api_key in ("", DUMMY_API_KEY)
+                if vertex_config.api_key_provider is None and no_explicit_key:
+                    # No explicit Vertex credential: fall back to Google ADC,
+                    # resolved per request so its ~1h lifetime is handled here
+                    # rather than by the caller.
+                    vertex_config.api_key_provider = _adc_access_token
 
             # Sanitize the API key: strip leading/trailing whitespace
             # (including stray newlines from .env files or CI secrets).
