@@ -75,13 +75,14 @@ The project and region can come from (in precedence order):
 - `VERTEXAI_PROJECT_ID` / `VERTEXAI_LOCATION`;
 - `GOOGLE_CLOUD_PROJECT` (or `GCP_PROJECT`) / `GOOGLE_CLOUD_LOCATION`.
 
+For a service account rather than a user login, point
+`GOOGLE_APPLICATION_CREDENTIALS` at its key file; ADC picks it up.
+
 To supply a token yourself instead of using ADC, set `VERTEXAI_API_KEY`, or
 construct the config directly:
 
 ```python
-from langroid.language_models.openai_gpt import VertexAIConfig
-
-config = VertexAIConfig(
+config = lm.VertexAIConfig(
     chat_model="vertexai/google/gemini-2.5-flash",
     project_id="my-gcp-project",
     location="europe-west4",
@@ -89,6 +90,9 @@ config = VertexAIConfig(
 )
 llm = lm.OpenAIGPT(config)
 ```
+
+An explicit `api_base` (or `VERTEXAI_API_BASE`) is honored as-is, for a
+private or PSC endpoint, instead of the constructed regional URL.
 
 !!! note "Why a separate config class"
     `OpenAIGPTConfig` is a pydantic `BaseSettings` with
@@ -103,9 +107,10 @@ llm = lm.OpenAIGPT(config)
     also changes where the request goes, what it carries or how it is
     secured: `api_key`, `headers`, `organization`, `api_base`,
     `http_client_config`, `http_verify_ssl`, `chat_model_orig` and
-    `litellm`. Set
-    those via `VERTEXAI_*`, or on a `VertexAIConfig` you construct
-    yourself, if you need them on this route. This is what makes the hazard
+    `litellm`, plus the free-form `params.extra_body`. Set those via
+    `VERTEXAI_*`, or on a `VertexAIConfig` you construct yourself, if you
+    need them on this route; a dropped value that you set deliberately is
+    logged rather than discarded in silence. This is what makes the hazard
     described in
     [Headers set for OpenAI follow you to Vertex AI](#headers-set-for-openai-follow-you-to-vertex-ai)
     inapplicable to the `vertexai/` route.
