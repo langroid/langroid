@@ -107,11 +107,13 @@ private or PSC endpoint, instead of the constructed regional URL.
     also changes where the request goes, what it carries or how it is
     secured: `api_key`, `headers`, `organization`, `api_base`,
     `http_client_config`, `http_verify_ssl`, `chat_model_orig` and
-    `litellm`, plus the free-form `params.extra_body`. Set those via
+    `litellm`, plus `params.extra_body` and `params.user`. Set those via
     `VERTEXAI_*`, or on a `VertexAIConfig` you construct yourself, if you
     need them on this route; a dropped value that you set deliberately is
-    logged rather than discarded in silence. This is what makes the hazard
-    described in
+    logged rather than discarded in silence. Conversely, a `VertexAIConfig`
+    whose model is *not* a `vertexai/` route is refused rather than sent to
+    OpenAI with a Google credential — so a global `-m <model>` override
+    cannot be applied to one. This is what makes the hazard described in
     [Headers set for OpenAI follow you to Vertex AI](#headers-set-for-openai-follow-you-to-vertex-ai)
     inapplicable to the `vertexai/` route.
 
