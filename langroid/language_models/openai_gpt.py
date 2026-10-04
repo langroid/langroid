@@ -562,10 +562,19 @@ _VERTEXAI_DROPPED_FIELDS = frozenset(
 )
 
 # Dropping a non-default value in one of these is worth saying out loud: the
-# caller may have set it in code (a private api_base is the case that bites),
-# and on this route there is no way to tell that apart from an `OPENAI_*` env
-# value, so it has to go either way.
-_VERTEXAI_NOTIFY_IF_SET = ("api_base", "headers", "organization")
+# caller may have set it in code (a private api_base, or a corporate proxy in
+# http_client_config, are the cases that bite), and on this route there is no
+# way to tell that apart from an `OPENAI_*` env value, so it has to go either
+# way. Every dropped field that a caller plausibly sets in code belongs here;
+# only `type` and `chat_model_orig` are excluded, as internal bookkeeping.
+_VERTEXAI_NOTIFY_IF_SET = (
+    "api_base",
+    "headers",
+    "organization",
+    "http_client_config",
+    "http_verify_ssl",
+    "litellm",
+)
 
 
 def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
@@ -581,12 +590,14 @@ def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
     about rather than dropped silently. Subclass `VertexAIConfig` instead if
     you need them on a `vertexai/` route.
 
-    `params.extra_body` is the one sub-field that is cleared rather than the
-    whole field: `OPENAI_PARAMS` can set it to an arbitrary dict, which goes
-    into the request body, so it is the same hazard as `OPENAI_HEADERS`. The
-    rest of `params` (`top_p`, `stop`, ...) is generation behavior and is kept
-    -- and `extra_body` is provider-specific by definition, so carrying one
-    from an OpenAI config to Google would be wrong regardless.
+    `params` is carried but with two sub-fields cleared, because
+    `OPENAI_PARAMS` sets the whole nested model and both of these travel in
+    the request body: `extra_body`, an arbitrary dict (and provider-specific
+    by definition, so carrying one from an OpenAI config to Google would be
+    wrong even with no environment involved), and `user`, an end-user
+    identifier the provider logs -- the same kind of identifier as
+    `organization`, which is dropped outright. The rest of `params`
+    (`top_p`, `stop`, ...) is generation behavior and is kept.
     """
     source_fields = type(config).model_fields
     carried = {
@@ -618,14 +629,21 @@ def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
             ", ".join(deliberate),
         )
     params = carried.get("params")
-    if params is not None and params.extra_body is not None:
-        logging.warning(
-            "vertexai/ route: clearing params.extra_body, which "
-            "OPENAI_PARAMS can set and which would be sent in the request "
-            "body to Google. Set it on a VertexAIConfig you construct "
-            "directly if it is meant for Vertex AI."
-        )
-        carried["params"] = params.model_copy(update={"extra_body": None})
+    if params is not None:
+        body_identifying = [
+            name for name in ("extra_body", "user") if getattr(params, name) is not None
+        ]
+        if body_identifying:
+            logging.warning(
+                "vertexai/ route: clearing params.%s, which OPENAI_PARAMS can "
+                "set and which would be sent in the request body to Google. "
+                "Set it on a VertexAIConfig you construct directly if it is "
+                "meant for Vertex AI.",
+                ", params.".join(body_identifying),
+            )
+            carried["params"] = params.model_copy(
+                update={name: None for name in body_identifying}
+            )
     return VertexAIConfig(**carried)
 
 
@@ -751,6 +769,23 @@ class OpenAIGPT(LanguageModel):
             # could otherwise decide which provider branch claims this
             # request), so recompute it from the model actually in effect.
             self.chat_model_orig = self.config.chat_model
+        elif isinstance(self.config, VertexAIConfig) and not (
+            self.config.chat_model.startswith(VERTEXAI_PREFIX)
+        ):
+            # The converse of the above, and the same leak running backwards: a
+            # VertexAIConfig carries a credential from VERTEXAI_API_KEY, and
+            # without the vertexai/ prefix this would fall through to the
+            # generic branch -- api_base None, i.e. api.openai.com -- and send
+            # that credential there. Reachable via the settings.chat_model
+            # override alone (`-m gpt-4o`), so refuse rather than guess.
+            raise ValueError(
+                f"chat_model {self.config.chat_model!r} is not a vertexai/ "
+                "route, but the config is a VertexAIConfig, whose credential "
+                "is meant for Google. Use an OpenAIGPTConfig for non-Vertex "
+                "models (if this came from a global chat_model override such "
+                "as `-m <model>`, that override cannot be applied to a "
+                "VertexAIConfig)."
+            )
 
         if len(parts := self.config.chat_model.split("//")) > 1:
             # there is a formatter specified, e.g.
@@ -1192,18 +1227,22 @@ class OpenAIGPT(LanguageModel):
         self.cache: CacheDB | None = None
         use_cache = self.config.cache_config is not None
         if "redis" in settings.cache_type and use_cache:
-            if config.cache_config is None or not isinstance(
-                config.cache_config,
+            # read and write self.config, not the `config` argument: a
+            # vertexai/ route replaced self.config above, and mutating the
+            # original would leave self.config.cache_config disagreeing with
+            # the cache actually built here.
+            if self.config.cache_config is None or not isinstance(
+                self.config.cache_config,
                 RedisCacheConfig,
             ):
                 # switch to fresh redis config if needed
-                config.cache_config = RedisCacheConfig(
+                self.config.cache_config = RedisCacheConfig(
                     fake="fake" in settings.cache_type
                 )
             if "fake" in settings.cache_type:
                 # force use of fake redis if global cache_type is "fakeredis"
-                config.cache_config.fake = True
-            self.cache = RedisCache(config.cache_config)
+                self.config.cache_config.fake = True
+            self.cache = RedisCache(self.config.cache_config)
         elif settings.cache_type != "none" and use_cache:
             raise ValueError(
                 f"Invalid cache type {settings.cache_type}. "

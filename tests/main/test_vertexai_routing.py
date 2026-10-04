@@ -8,11 +8,7 @@ The poisoned-environment and wire-level tests here originate with
 ADC-caching tests were added when that PR was taken over.
 """
 
-import sys
-import threading
-import time
-import types
-from typing import Any, Dict, List, Optional
+from typing import List
 
 import httpx
 import pytest
@@ -86,15 +82,16 @@ def poisoned_env(monkeypatch):
 
 @pytest.fixture
 def fake_adc(monkeypatch):
-    """Replace the ADC token provider with one returning a known token."""
-    invoked: List[bool] = []
+    """Replace the ADC token provider with one returning a known token.
+
+    Whether it was actually called is asserted on the wire, via the
+    Authorization header, rather than by recording calls here.
+    """
 
     def _provider() -> str:
-        invoked.append(True)
         return FAKE_ADC_TOKEN
 
     monkeypatch.setattr(openai_gpt, "_adc_access_token", _provider)
-    yield invoked
 
 
 @pytest.fixture
@@ -153,8 +150,12 @@ def test_poisoned_env_never_appears_on_the_wire(poisoned_env, fake_adc):
         )
 
     http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    # Deliberately a plain OpenAIGPTConfig, not a VertexAIConfig: that routes
+    # through _as_vertexai_config, so this test covers the drop-list -- the
+    # feature's central mechanism. Built from a VertexAIConfig it would stay
+    # green even if api_key/headers/organization/api_base were all carried.
     llm = OpenAIGPT(
-        VertexAIConfig(
+        OpenAIGPTConfig(
             chat_model=VERTEX_MODEL,
             http_client_factory=lambda: http_client,
             use_cached_client=False,
@@ -223,8 +224,9 @@ async def test_poisoned_env_never_appears_on_the_wire_async(poisoned_env, fake_a
     # the factory may return (sync, async); achat uses the async one
     sync_client = httpx.Client(transport=httpx.MockTransport(handler))
     async_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    # plain OpenAIGPTConfig, so this goes through the conversion too
     llm = OpenAIGPT(
-        VertexAIConfig(
+        OpenAIGPTConfig(
             chat_model=VERTEX_MODEL,
             http_client_factory=lambda: (sync_client, async_client),
             use_cached_client=False,
@@ -280,10 +282,14 @@ def test_vertexai_constructor_headers_kwarg_stays_empty_under_openai_env(
 
 
 def test_vertexai_headers_env_is_honored(monkeypatch, project_env, fake_adc):
-    """The VERTEXAI_-prefixed equivalent still works, by design."""
+    """The VERTEXAI_-prefixed equivalent still works, and reaches the client."""
     monkeypatch.setenv("VERTEXAI_HEADERS", '{"X-Mine": "1"}')
     cfg = VertexAIConfig(chat_model=VERTEX_MODEL)
     assert cfg.headers.get("X-Mine") == "1"
+    llm = OpenAIGPT(cfg)
+    assert llm.config.headers.get("X-Mine") == "1"
+    assert llm.client is not None
+    assert llm.client.default_headers.get("X-Mine") == "1"
 
 
 def test_openai_http_client_config_does_not_reach_the_vertex_client(
@@ -407,6 +413,62 @@ def test_extra_body_survives_on_a_direct_vertexai_config(project_env, fake_adc):
     )
     assert llm.config.params is not None
     assert llm.config.params.extra_body == {"mine": 1}
+
+
+def test_vertexai_config_refuses_a_non_vertex_model(monkeypatch, project_env):
+    """
+    The leak running backwards: a VertexAIConfig carries a credential meant
+    for Google, and without the `vertexai/` prefix it would fall through to
+    the generic branch -- `api_base=None`, i.e. api.openai.com -- and send it
+    there. Reachable via the settings.chat_model override alone.
+    """
+    monkeypatch.setenv("VERTEXAI_API_KEY", "vertex-secret-token")
+
+    with temporary_settings(Settings(chat_model="gpt-4o")):
+        with pytest.raises(ValueError, match="not a vertexai/ route"):
+            OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL))
+
+    # and directly, with no override involved
+    with pytest.raises(ValueError, match="not a vertexai/ route"):
+        OpenAIGPT(VertexAIConfig(chat_model="gpt-4o"))
+
+
+def test_openai_params_user_is_cleared(monkeypatch, project_env, fake_adc):
+    """
+    `params.user` is an end-user identifier the provider logs, settable from
+    OPENAI_PARAMS, and it travels in the request body -- the same class of
+    value as `organization`, which is dropped outright.
+    """
+    monkeypatch.setenv(
+        "OPENAI_PARAMS", '{"user": "victim-id", "logit_bias": {"1": 1.0}}'
+    )
+    assert OpenAIGPTConfig(chat_model=VERTEX_MODEL).params.user == "victim-id"
+
+    llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    assert llm.config.params is not None
+    assert llm.config.params.user is None
+    # generation behavior in the same env var is kept
+    assert llm.config.params.logit_bias == {1: 1.0}
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("http_client_config", {"proxy": "http://corp-proxy:3128"}),
+        ("http_verify_ssl", False),
+        ("litellm", True),
+    ],
+)
+def test_dropped_transport_fields_are_logged(
+    project_env, fake_adc, caplog, field, value
+):
+    """
+    These are dropped for good reason, but a corporate-proxy user who set one
+    in code would otherwise get an unreachable endpoint with no diagnostic.
+    """
+    with caplog.at_level("WARNING"):
+        OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL, **{field: value}))
+    assert field in caplog.text
 
 
 def test_every_openai_config_field_is_classified(project_env):
@@ -719,6 +781,90 @@ def test_explicit_api_base_is_not_inherited_from_openai_env(poisoned_env, fake_a
     assert "aiplatform.googleapis.com" in (llm.api_base or "")
 
 
+def test_project_and_location_precedence(monkeypatch, fake_adc):
+    """
+    docs/notes/gemini.md promises: explicit config > VERTEXAI_* >
+    GOOGLE_CLOUD_*. Pin all three tiers, not just the lowest.
+    """
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proj-google-env")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-west1")
+    monkeypatch.setenv("VERTEXAI_PROJECT_ID", "proj-vertexenv")
+    monkeypatch.setenv("VERTEXAI_LOCATION", "asia-northeast1")
+
+    # VERTEXAI_* beats GOOGLE_CLOUD_*
+    llm = OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL))
+    assert "/projects/proj-vertexenv/" in (llm.api_base or "")
+    assert "https://asia-northeast1-aiplatform." in (llm.api_base or "")
+
+    # explicit config beats both
+    llm2 = OpenAIGPT(
+        VertexAIConfig(
+            chat_model=VERTEX_MODEL,
+            project_id="proj-explicit",
+            location="europe-west4",
+        )
+    )
+    assert "/projects/proj-explicit/" in (llm2.api_base or "")
+    assert "https://europe-west4-aiplatform." in (llm2.api_base or "")
+
+
+def test_google_cloud_location_used_when_no_vertexai_location(monkeypatch, fake_adc):
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proj-google-env")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-west1")
+    llm = OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL))
+    assert "https://us-west1-aiplatform." in (llm.api_base or "")
+    assert "/locations/us-west1/" in (llm.api_base or "")
+
+
+def test_completion_model_also_loses_the_prefix(poisoned_env, fake_adc):
+    """
+    On the settings.chat_model override path `completion_model` is set to the
+    prefixed name; it must be stripped alongside `chat_model`, or the
+    completions endpoint is asked for a model id that does not exist.
+    """
+    with temporary_settings(Settings(chat_model=VERTEX_MODEL)):
+        llm = OpenAIGPT(OpenAIGPTConfig(chat_model="gpt-4o"))
+        assert llm.config.chat_model == "google/gemini-2.5-flash"
+        assert not llm.config.completion_model.startswith("vertexai/")
+
+
+def test_deliberately_set_dropped_field_is_logged(project_env, fake_adc, caplog):
+    """A dropped api_base/headers/organization must not vanish in silence."""
+    with caplog.at_level("WARNING"):
+        llm = OpenAIGPT(
+            OpenAIGPTConfig(
+                chat_model=VERTEX_MODEL,
+                api_base="https://my-private-psc.example/v1",
+            )
+        )
+    assert "api_base" in caplog.text
+    # and it really was dropped, not honored
+    assert "my-private-psc" not in (llm.api_base or "")
+    assert "aiplatform.googleapis.com" in (llm.api_base or "")
+
+
+def test_cached_client_path_isolates_projects(monkeypatch, fake_adc):
+    """
+    The default path is `use_cached_client=True`, which the wire tests do not
+    exercise. Two projects must not share a client, or one project's requests
+    would go to the other's endpoint.
+    """
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proj-one")
+    a = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proj-two")
+    b = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+
+    assert a.client is not None and b.client is not None
+    assert "/projects/proj-one/" in str(a.client.base_url)
+    assert "/projects/proj-two/" in str(b.client.base_url)
+    assert a.client is not b.client
+
+    # the same config reuses its cached client
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proj-one")
+    c = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    assert c.client is a.client
+
+
 def test_gcp_project_env_is_a_fallback(monkeypatch, fake_adc):
     monkeypatch.setenv("GCP_PROJECT", "proj-from-gcp-var")
     llm = OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL))
@@ -816,166 +962,3 @@ def test_vertexai_route_is_not_treated_as_a_gemini_route(project_env, fake_adc):
     assert llm.is_gemini is False
     assert "generativelanguage.googleapis.com" not in (llm.api_base or "")
     assert "aiplatform.googleapis.com" in (llm.api_base or "")
-
-
-# ---------------------------------------------------------------------------
-# 5. The ADC provider itself
-# ---------------------------------------------------------------------------
-
-
-class _FakeCreds:
-    """Stand-in for google.auth credentials, tracking refresh calls."""
-
-    def __init__(self, counters: Dict[str, int], valid: bool = True) -> None:
-        self._counters = counters
-        self.valid = valid
-        self.token: Optional[str] = "tok-initial" if valid else None
-
-    def refresh(self, request: Any) -> None:
-        self._counters["refresh"] += 1
-        self.valid = True
-        self.token = f"tok-{self._counters['refresh']}"
-
-
-def _install_fake_google_auth(
-    monkeypatch, counters: Dict[str, int], creds: _FakeCreds, delay: float = 0.0
-) -> None:
-    """Put a minimal fake `google.auth` on sys.modules for the test's duration.
-
-    `delay` widens the window in which concurrent callers can race.
-    """
-
-    def _default(scopes: Any = None) -> Any:
-        counters["default"] += 1
-        if delay:
-            time.sleep(delay)
-        return creds, "fake-project"
-
-    requests_mod = types.ModuleType("google.auth.transport.requests")
-    requests_mod.Request = lambda: object()  # type: ignore[attr-defined]
-    transport_mod = types.ModuleType("google.auth.transport")
-    transport_mod.requests = requests_mod  # type: ignore[attr-defined]
-    exceptions_mod = types.ModuleType("google.auth.exceptions")
-
-    class DefaultCredentialsError(Exception):
-        pass
-
-    exceptions_mod.DefaultCredentialsError = (  # type: ignore[attr-defined]
-        DefaultCredentialsError
-    )
-    auth_mod = types.ModuleType("google.auth")
-    auth_mod.default = _default  # type: ignore[attr-defined]
-    auth_mod.transport = transport_mod  # type: ignore[attr-defined]
-    auth_mod.exceptions = exceptions_mod  # type: ignore[attr-defined]
-    google_mod = types.ModuleType("google")
-    google_mod.auth = auth_mod  # type: ignore[attr-defined]
-
-    for name, mod in [
-        ("google", google_mod),
-        ("google.auth", auth_mod),
-        ("google.auth.transport", transport_mod),
-        ("google.auth.transport.requests", requests_mod),
-        ("google.auth.exceptions", exceptions_mod),
-    ]:
-        monkeypatch.setitem(sys.modules, name, mod)
-
-
-def test_adc_credentials_are_cached_across_calls(monkeypatch):
-    """
-    The provider is called on every request, so it must not re-resolve
-    credentials or refresh a still-valid token each time: google-auth already
-    tracks expiry on the credentials object.
-    """
-    counters = {"default": 0, "refresh": 0}
-    creds = _FakeCreds(counters, valid=True)
-    _install_fake_google_auth(monkeypatch, counters, creds)
-    openai_gpt._adc_credentials = None
-
-    tokens = [openai_gpt._adc_access_token() for _ in range(5)]
-
-    assert tokens == ["tok-initial"] * 5
-    assert counters["default"] == 1, "credentials re-resolved per call"
-    assert counters["refresh"] == 0, "a valid token was refreshed anyway"
-
-
-def test_adc_refreshes_an_expired_token(monkeypatch):
-    """When the cached token has expired, exactly one refresh happens."""
-    counters = {"default": 0, "refresh": 0}
-    creds = _FakeCreds(counters, valid=False)
-    _install_fake_google_auth(monkeypatch, counters, creds)
-    openai_gpt._adc_credentials = None
-
-    first = openai_gpt._adc_access_token()
-    assert first == "tok-1"
-    assert counters["refresh"] == 1
-
-    # token is valid now, so a second call must not refresh again
-    assert openai_gpt._adc_access_token() == "tok-1"
-    assert counters["refresh"] == 1
-    assert counters["default"] == 1
-
-
-def test_adc_resolves_credentials_once_under_concurrent_callers(monkeypatch):
-    """
-    The provider is called per request, so several threads can enter it at
-    once. The lock must make credential resolution happen exactly once.
-
-    The no-lock control proves this test is not vacuous: without mutual
-    exclusion the same code resolves credentials once per thread.
-    """
-
-    class _NoLock:
-        def __enter__(self) -> "_NoLock":
-            return self
-
-        def __exit__(self, *exc: Any) -> bool:
-            return False
-
-    def run(lock: Any) -> Dict[str, int]:
-        counters = {"default": 0, "refresh": 0}
-        creds = _FakeCreds(counters, valid=True)
-        _install_fake_google_auth(monkeypatch, counters, creds, delay=0.02)
-        monkeypatch.setattr(openai_gpt, "_adc_lock", lock)
-        openai_gpt._adc_credentials = None
-        tokens: List[str] = []
-        errors: List[str] = []
-
-        def worker() -> None:
-            try:
-                tokens.append(openai_gpt._adc_access_token())
-            except Exception as e:  # noqa: BLE001
-                errors.append(repr(e))
-
-        threads = [threading.Thread(target=worker) for _ in range(12)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        assert errors == [], errors
-        assert len(tokens) == 12
-        return counters
-
-    with_lock = run(threading.Lock())
-    assert with_lock["default"] == 1, with_lock
-
-    without_lock = run(_NoLock())
-    assert without_lock["default"] > 1, (
-        "the no-lock control did not reproduce the race, so the locked case "
-        f"proves nothing: {without_lock}"
-    )
-
-
-def test_adc_missing_credentials_raises_with_guidance(monkeypatch):
-    counters = {"default": 0, "refresh": 0}
-    creds = _FakeCreds(counters)
-    _install_fake_google_auth(monkeypatch, counters, creds)
-    openai_gpt._adc_credentials = None
-
-    exc = sys.modules["google.auth.exceptions"].DefaultCredentialsError
-
-    def _boom(scopes: Any = None) -> Any:
-        raise exc("no ADC")
-
-    monkeypatch.setattr(sys.modules["google.auth"], "default", _boom)
-    with pytest.raises(ValueError, match="application-default login"):
-        openai_gpt._adc_access_token()
