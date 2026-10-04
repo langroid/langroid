@@ -167,7 +167,11 @@ def test_find_urls_skips_non_web_schemes(match_domain: bool) -> None:
     assert found == expected
 
     for url in found | {call.args[0] for call in get.call_args_list}:
-        assert url.startswith("https://"), f"non-web URL crawled or returned: {url}"
+        assert urlparse(url).scheme in (
+            "http",
+            "https",
+        ), f"non-web URL crawled or returned: {url}"
+        assert urlparse(url).netloc, f"hostless URL crawled or returned: {url}"
 
 
 @pytest.mark.parametrize("max_links", [5, 20])
@@ -222,3 +226,50 @@ def test_find_urls_cross_domain_fan_out_is_bounded(max_links: int) -> None:
     assert {u for u in found if urlparse(u).netloc != "seed.test"}
     # The cycle back to the seed must not cause a refetch.
     assert len(fetched) == len(set(fetched))
+
+
+@pytest.mark.parametrize(
+    "seed", ["ftp://example.test/file.zip", "http:foo", "mailto:a@b.test"]
+)
+def test_find_urls_seed_is_exempt_from_the_scheme_filter(seed: str) -> None:
+    """The seed `url` is returned whatever its scheme, as the docstring says.
+
+    The filter applies to links *discovered on* a page, not to the seed, which
+    is prepended after filtering. `requests` has no adapter for these schemes,
+    so the fetch fails and `find_urls` swallows it -- but the seed was already
+    added to `visited`, so it still comes back.
+    """
+    with patch("langroid.parsing.urls.requests.get", side_effect=OSError("nope")):
+        found = find_urls(seed, max_links=4)
+
+    assert found == {seed}
+
+
+def test_find_urls_returns_links_discovered_beyond_max_depth() -> None:
+    """Returned links are ones *discovered*, not ones crawled.
+
+    A page that alone supplies `max_links` links hits the early-return branch,
+    so its links come back without being followed -- which means the result can
+    contain links one hop past `max_depth`. `max_depth` bounds the requests
+    issued, not the provenance of the returned set. Pins the docstring claim.
+    """
+    seed = "https://example.test/start"
+    links = [f"https://example.test/p{i}" for i in range(3)]
+
+    def resp(url: str, timeout: int) -> Response:
+        assert timeout == 5
+        assert url == seed, f"should not have fetched beyond the seed: {url}"
+        body = "".join(f'<a href="{link}">L</a>' for link in links)
+        response = Response()
+        response.status_code = 200
+        response.url = url
+        response._content = body.encode("utf-8")
+        response.encoding = "utf-8"
+        return response
+
+    with patch("langroid.parsing.urls.requests.get", side_effect=resp) as get:
+        found = find_urls(seed, max_links=4, max_depth=0)
+
+    # Exactly one request, yet links a hop beyond the depth limit are returned.
+    assert [call.args[0] for call in get.call_args_list] == [seed]
+    assert found == {seed, *links}
