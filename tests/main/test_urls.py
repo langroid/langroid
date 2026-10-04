@@ -235,9 +235,12 @@ def test_find_urls_seed_is_exempt_from_the_scheme_filter(seed: str) -> None:
     """The seed `url` is returned whatever its scheme, as the docstring says.
 
     The filter applies to links *discovered on* a page, not to the seed, which
-    is prepended after filtering. `requests` has no adapter for these schemes,
-    so the fetch fails and `find_urls` swallows it -- but the seed was already
-    added to `visited`, so it still comes back.
+    is prepended after filtering. `requests` cannot fetch any of these, so the
+    fetch raises and `find_urls` swallows it -- but the seed was already added
+    to `visited`, so it still comes back. (`ftp:` and `mailto:` raise
+    `InvalidSchema`, `http:foo` raises `InvalidURL` on the missing host; both
+    are `RequestException` and `OSError` subclasses, so the mock below is a
+    faithful stand-in.)
     """
     with patch("langroid.parsing.urls.requests.get", side_effect=OSError("nope")):
         found = find_urls(seed, max_links=4)
