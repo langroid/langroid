@@ -7,12 +7,14 @@ import sys
 import threading
 import warnings
 from collections import defaultdict
+from contextlib import contextmanager, nullcontext
 from functools import cache
 from itertools import chain
 from typing import (
     Any,
     Callable,
     Dict,
+    Iterator,
     List,
     Mapping,
     Optional,
@@ -565,9 +567,13 @@ _VERTEXAI_DROPPED_FIELDS = frozenset(
 # caller may have set it in code (a private api_base, or a corporate proxy in
 # http_client_config, are the cases that bite), and on this route there is no
 # way to tell that apart from an `OPENAI_*` env value, so it has to go either
-# way. Every dropped field that a caller plausibly sets in code belongs here;
-# only `type` and `chat_model_orig` are excluded, as internal bookkeeping.
+# way. Every dropped field that a caller plausibly sets in code belongs here --
+# `api_key` most of all, since dropping a token the caller passed in code and
+# then falling back to ADC is otherwise indistinguishable from a bug. Only
+# `type` and `chat_model_orig` are excluded, as internal bookkeeping. Only the
+# field NAME is ever logged, never its value.
 _VERTEXAI_NOTIFY_IF_SET = (
+    "api_key",
     "api_base",
     "headers",
     "organization",
@@ -645,6 +651,55 @@ def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
                 update={name: None for name in body_identifying}
             )
     return VertexAIConfig(**carried)
+
+
+# Environment variables the `openai` SDK itself reads inside `OpenAI.__init__`,
+# for arguments langroid does not pass. Swapping `VertexAIConfig`'s env prefix
+# cannot close these: the SDK reads them from the environment directly, not
+# from our config, so they bypass the clean-config mechanism entirely.
+#
+#   OPENAI_PROJECT_ID     -> sent as an `OpenAI-Project` header on every request
+#   OPENAI_CUSTOM_HEADERS -> parsed into ARBITRARY headers and merged into
+#                            default_headers: the OPENAI_HEADERS hazard again,
+#                            one layer down, and there is no argument to
+#                            override it with
+#   OPENAI_ADMIN_KEY      -> stored on the client
+#   OPENAI_WEBHOOK_SECRET -> stored on the client
+#
+# `OPENAI_API_KEY`, `OPENAI_ORG_ID` and `OPENAI_BASE_URL` are already closed,
+# because langroid always passes `api_key`, `organization` and `base_url`
+# explicitly, and the SDK only consults the environment when the argument is
+# absent.
+_OPENAI_SDK_ENV_VARS = (
+    "OPENAI_PROJECT_ID",
+    "OPENAI_CUSTOM_HEADERS",
+    "OPENAI_ADMIN_KEY",
+    "OPENAI_WEBHOOK_SECRET",
+)
+
+
+@contextmanager
+def _without_openai_sdk_env() -> Iterator[None]:
+    """Hide the SDK's own `OPENAI_*` channels while a Vertex client is built.
+
+    Removing the variables is the only way to close them: they have no
+    constructor argument to override (`OPENAI_CUSTOM_HEADERS`) or one langroid
+    does not pass (`OPENAI_PROJECT_ID`). Enumerating them in a deny-list of
+    config fields cannot work, since they are never config fields.
+
+    Caveat, stated rather than hidden: `os.environ` is process-global, so this
+    is not thread-safe against another thread constructing a client for a
+    genuinely-OpenAI route in the same instant. The window is a single client
+    construction; the alternative is sending those values to Google, so the
+    trade is deliberate.
+    """
+    saved = {k: os.environ[k] for k in _OPENAI_SDK_ENV_VARS if k in os.environ}
+    for k in saved:
+        del os.environ[k]
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
 
 
 _adc_lock = threading.Lock()
@@ -757,36 +812,6 @@ class OpenAIGPT(LanguageModel):
             self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
 
-        # A vertexai/ route must not inherit OPENAI_-prefixed settings, so
-        # rebuild the config as a clean VertexAIConfig. Done here, after the
-        # settings.chat_model override above, so that the direct route and the
-        # override path get the same clean config.
-        if self.config.chat_model.startswith(VERTEXAI_PREFIX) and not isinstance(
-            self.config, VertexAIConfig
-        ):
-            self.config = _as_vertexai_config(self.config)
-            # The conversion drops chat_model_orig (OPENAI_CHAT_MODEL_ORIG
-            # could otherwise decide which provider branch claims this
-            # request), so recompute it from the model actually in effect.
-            self.chat_model_orig = self.config.chat_model
-        elif isinstance(self.config, VertexAIConfig) and not (
-            self.config.chat_model.startswith(VERTEXAI_PREFIX)
-        ):
-            # The converse of the above, and the same leak running backwards: a
-            # VertexAIConfig carries a credential from VERTEXAI_API_KEY, and
-            # without the vertexai/ prefix this would fall through to the
-            # generic branch -- api_base None, i.e. api.openai.com -- and send
-            # that credential there. Reachable via the settings.chat_model
-            # override alone (`-m gpt-4o`), so refuse rather than guess.
-            raise ValueError(
-                f"chat_model {self.config.chat_model!r} is not a vertexai/ "
-                "route, but the config is a VertexAIConfig, whose credential "
-                "is meant for Google. Use an OpenAIGPTConfig for non-Vertex "
-                "models (if this came from a global chat_model override such "
-                "as `-m <model>`, that override cannot be applied to a "
-                "VertexAIConfig)."
-            )
-
         if len(parts := self.config.chat_model.split("//")) > 1:
             # there is a formatter specified, e.g.
             # "litellm/ollama/mistral//hf" or
@@ -809,6 +834,44 @@ class OpenAIGPT(LanguageModel):
             else:
                 # e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
                 self.config.formatter = formatter
+
+        # A vertexai/ route must not inherit OPENAI_-prefixed settings, so
+        # rebuild the config as a clean VertexAIConfig.
+        #
+        # Placed here deliberately, and the position is load-bearing twice
+        # over: AFTER the settings.chat_model override above, so the direct
+        # route and the override path get the same clean config; and AFTER the
+        # `model//formatter` split just above, so both branches below see the
+        # final chat_model. Before the split, "vertexai//hf" still carried the
+        # prefix and slipped past both branches -- then the split turned it
+        # into the bare model "vertexai", which routes to api.openai.com,
+        # taking a VERTEXAI_API_KEY with it.
+        if self.config.chat_model.startswith(VERTEXAI_PREFIX) and not isinstance(
+            self.config, VertexAIConfig
+        ):
+            self.config = _as_vertexai_config(self.config)
+            # The conversion drops chat_model_orig (OPENAI_CHAT_MODEL_ORIG
+            # could otherwise decide which provider branch claims this
+            # request), so recompute it from the model actually in effect.
+            self.chat_model_orig = self.config.chat_model
+        elif isinstance(self.config, VertexAIConfig) and not (
+            self.config.chat_model.startswith(VERTEXAI_PREFIX)
+        ):
+            # The converse of the above, and the same leak running backwards: a
+            # VertexAIConfig carries a credential from VERTEXAI_API_KEY, and
+            # without the vertexai/ prefix this would fall through to the
+            # generic branch -- api_base None, i.e. api.openai.com -- and send
+            # that credential there. Reachable via the settings.chat_model
+            # override alone (`-m gpt-4o`), so refuse rather than guess.
+            raise ValueError(
+                f"chat_model {self.config.chat_model!r} is not a vertexai/ "
+                "route, but the config is a VertexAIConfig, whose credential "
+                "is meant for Google. Use an OpenAIGPTConfig for non-Vertex "
+                "models. (If this came from a global chat_model override such "
+                "as `-m <model>`, that override cannot be applied to a "
+                "VertexAIConfig. If you passed an existing llm.config back in, "
+                "note that its vertexai/ prefix was already stripped.)"
+            )
 
         if self.config.formatter is not None:
             self.config.hf_formatter = HFFormatter(
@@ -1158,71 +1221,76 @@ class OpenAIGPT(LanguageModel):
                 else self.api_key
             )
 
-            if self.config.use_cached_client:
-                self.client = get_openai_client(
-                    api_key=openai_api_key,
-                    base_url=self.api_base,
-                    organization=self.config.organization,
-                    timeout=Timeout(self.config.timeout),
-                    default_headers=self.config.headers,
-                    http_client=http_client,
-                    http_client_config=http_client_config_used,
-                )
-                self.async_client = get_async_openai_client(
-                    api_key=openai_api_key,
-                    base_url=self.api_base,
-                    organization=self.config.organization,
-                    timeout=Timeout(self.config.timeout),
-                    default_headers=self.config.headers,
-                    http_client=async_http_client,
-                    http_client_config=http_client_config_used,
-                )
-            else:
-                # Create new clients without caching
-                client_kwargs: Dict[str, Any] = dict(
-                    api_key=openai_api_key,
-                    base_url=self.api_base,
-                    organization=self.config.organization,
-                    timeout=Timeout(self.config.timeout),
-                    default_headers=self.config.headers,
-                )
-                if http_client is not None:
-                    client_kwargs["http_client"] = http_client
-                elif http_client_config_used is not None:
-                    # Create http_client from config for non-cached scenario
-                    try:
-                        httpx = import_httpx()
-                    except ImportError:
-                        raise ValueError(missing_httpx_message())
-                    client_kwargs["http_client"] = httpx.Client(
-                        **http_client_config_used
+            # On a vertexai/ route, hide the SDK's own OPENAI_* channels
+            # for the duration of client construction -- see
+            # _without_openai_sdk_env. A nullcontext elsewhere, so no
+            # other route changes behaviour.
+            with _without_openai_sdk_env() if self.is_vertexai else nullcontext():
+                if self.config.use_cached_client:
+                    self.client = get_openai_client(
+                        api_key=openai_api_key,
+                        base_url=self.api_base,
+                        organization=self.config.organization,
+                        timeout=Timeout(self.config.timeout),
+                        default_headers=self.config.headers,
+                        http_client=http_client,
+                        http_client_config=http_client_config_used,
                     )
-                self.client = OpenAI(**client_kwargs)
+                    self.async_client = get_async_openai_client(
+                        api_key=openai_api_key,
+                        base_url=self.api_base,
+                        organization=self.config.organization,
+                        timeout=Timeout(self.config.timeout),
+                        default_headers=self.config.headers,
+                        http_client=async_http_client,
+                        http_client_config=http_client_config_used,
+                    )
+                else:
+                    # Create new clients without caching
+                    client_kwargs: Dict[str, Any] = dict(
+                        api_key=openai_api_key,
+                        base_url=self.api_base,
+                        organization=self.config.organization,
+                        timeout=Timeout(self.config.timeout),
+                        default_headers=self.config.headers,
+                    )
+                    if http_client is not None:
+                        client_kwargs["http_client"] = http_client
+                    elif http_client_config_used is not None:
+                        # Create http_client from config for non-cached scenario
+                        try:
+                            httpx = import_httpx()
+                        except ImportError:
+                            raise ValueError(missing_httpx_message())
+                        client_kwargs["http_client"] = httpx.Client(
+                            **http_client_config_used
+                        )
+                    self.client = OpenAI(**client_kwargs)
 
-                async_client_kwargs: Dict[str, Any] = dict(
-                    api_key=(
-                        # AsyncOpenAI awaits its api_key callable
-                        wrap_api_key_provider_async(openai_api_key)
-                        if callable(openai_api_key)
-                        else openai_api_key
-                    ),
-                    base_url=self.api_base,
-                    organization=self.config.organization,
-                    timeout=Timeout(self.config.timeout),
-                    default_headers=self.config.headers,
-                )
-                if async_http_client is not None:
-                    async_client_kwargs["http_client"] = async_http_client
-                elif http_client_config_used is not None:
-                    # Create async http_client from config for non-cached scenario
-                    try:
-                        httpx = import_httpx()
-                    except ImportError:
-                        raise ValueError(missing_httpx_message())
-                    async_client_kwargs["http_client"] = httpx.AsyncClient(
-                        **http_client_config_used
+                    async_client_kwargs: Dict[str, Any] = dict(
+                        api_key=(
+                            # AsyncOpenAI awaits its api_key callable
+                            wrap_api_key_provider_async(openai_api_key)
+                            if callable(openai_api_key)
+                            else openai_api_key
+                        ),
+                        base_url=self.api_base,
+                        organization=self.config.organization,
+                        timeout=Timeout(self.config.timeout),
+                        default_headers=self.config.headers,
                     )
-                self.async_client = AsyncOpenAI(**async_client_kwargs)
+                    if async_http_client is not None:
+                        async_client_kwargs["http_client"] = async_http_client
+                    elif http_client_config_used is not None:
+                        # Create async http_client from config for non-cached scenario
+                        try:
+                            httpx = import_httpx()
+                        except ImportError:
+                            raise ValueError(missing_httpx_message())
+                        async_client_kwargs["http_client"] = httpx.AsyncClient(
+                            **http_client_config_used
+                        )
+                    self.async_client = AsyncOpenAI(**async_client_kwargs)
 
         self.cache: CacheDB | None = None
         use_cache = self.config.cache_config is not None
