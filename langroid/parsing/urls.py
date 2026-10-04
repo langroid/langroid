@@ -215,11 +215,12 @@ def find_urls(
             bound the crawl in both modes.
 
     Returns:
-        set: A set of URLs found on the page. Only `http`/`https` links are
-            followed and returned; links with any other scheme (e.g. `mailto:`,
-            `tel:`, `javascript:`, `ftp:`) are skipped, including ones on the
-            page's own domain. `url` itself is always included, whatever its
-            scheme.
+        set: A set of URLs found on the page, at most `max_links` of them. Only
+            `http`/`https` links are followed and returned; links with any other
+            scheme (e.g. `mailto:`, `tel:`, `javascript:`, `ftp:`) are skipped,
+            including ones on the page's own domain. The seed `url` is exempt
+            from that scheme filter, though it is not guaranteed to survive the
+            `max_links` truncation.
     """
 
     if visited is None:

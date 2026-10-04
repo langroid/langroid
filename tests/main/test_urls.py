@@ -57,12 +57,46 @@ def test_find_urls_stays_on_domain_by_default() -> None:
     assert found == {START_URL, LOCAL_URL}
 
 
-def test_find_urls_cross_domain_crawl_still_obeys_depth() -> None:
-    with patch("langroid.parsing.urls.requests.get", side_effect=page_response) as get:
-        found = find_urls(START_URL, max_links=4, max_depth=0, match_domain=False)
+CHAIN = [
+    "https://a.test/page",
+    "https://b.test/page",
+    "https://c.test/page",
+    "https://d.test/page",
+]
 
-    assert found == {START_URL}
-    get.assert_called_once_with(START_URL, timeout=5)
+
+def chain_response(url: str, timeout: int) -> Response:
+    """Serve a cross-domain chain a -> b -> c -> d, one link per page."""
+    assert timeout == 5
+    nxt = CHAIN[CHAIN.index(url) + 1]
+    response = Response()
+    response.status_code = 200
+    response.url = url
+    response._content = f'<a href="{nxt}">Next</a>'.encode("utf-8")
+    response.encoding = "utf-8"
+    return response
+
+
+@pytest.mark.parametrize("max_depth", [0, 1, 2])
+def test_find_urls_cross_domain_crawl_still_obeys_depth(max_depth: int) -> None:
+    """max_depth bounds a cross-domain crawl at each depth, not just depth 0.
+
+    Each page lives on its own domain and links only to the next, so with
+    `match_domain` False the chain is followed exactly `max_depth` hops and the
+    page one hop beyond must never be fetched. A depth-0-only version of this
+    test would be vacuous: nothing past the seed is fetched either way, so it
+    would pass even if every request failed.
+    """
+    with patch("langroid.parsing.urls.requests.get", side_effect=chain_response) as get:
+        found = find_urls(
+            CHAIN[0], max_links=10, max_depth=max_depth, match_domain=False
+        )
+
+    expected = set(CHAIN[: max_depth + 1])
+    assert found == expected
+    fetched = [call.args[0] for call in get.call_args_list]
+    assert sorted(fetched) == sorted(expected)
+    assert CHAIN[max_depth + 1] not in fetched
 
 
 SCHEMES_URL = "https://example.test/schemes"
