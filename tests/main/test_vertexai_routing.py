@@ -24,6 +24,7 @@ from langroid.language_models.openai_gpt import (
     VertexAIConfig,
 )
 from langroid.language_models.provider_params import LangDBParams
+from langroid.pydantic_v1 import ValidationError
 from langroid.utils.configuration import (
     Settings,
     _global_settings,
@@ -316,7 +317,7 @@ def test_openai_gpt_config_api_key_remains_a_required_str():
     caller annotated `str`.
     """
     assert OpenAIGPTConfig.model_fields["api_key"].annotation is str
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError, match="api_key"):
         OpenAIGPTConfig(api_key=None)
 
 
@@ -476,7 +477,7 @@ def test_missing_project_raises_with_guidance(fake_adc):
     ],
 )
 def test_invalid_project_id_rejected(bad):
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError, match="Invalid Vertex AI project_id"):
         VertexAIConfig(chat_model=VERTEX_MODEL, project_id=bad)
 
 
@@ -485,7 +486,7 @@ def test_invalid_project_id_rejected(bad):
     ["attacker.com/", "user@host", "GLOBAL", "global", "has spaces", "a.b"],
 )
 def test_invalid_location_rejected(bad):
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError, match="Vertex AI location"):
         VertexAIConfig(chat_model=VERTEX_MODEL, location=bad)
 
 
@@ -505,7 +506,7 @@ def test_trailing_whitespace_and_bare_hyphens_rejected(bad):
     `re.match(r"...$")` accepts a trailing newline, so "us-central1\\n" would
     pass straight into the URL; validation must use `fullmatch`.
     """
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError, match="Invalid Vertex AI location"):
         VertexAIConfig(chat_model=VERTEX_MODEL, location=bad)
 
 
