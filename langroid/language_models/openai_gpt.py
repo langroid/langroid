@@ -579,6 +579,13 @@ def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
     carried over, since `VertexAIConfig` has no such fields; those are warned
     about rather than dropped silently. Subclass `VertexAIConfig` instead if
     you need them on a `vertexai/` route.
+
+    `params.extra_body` is the one sub-field that is cleared rather than the
+    whole field: `OPENAI_PARAMS` can set it to an arbitrary dict, which goes
+    into the request body, so it is the same hazard as `OPENAI_HEADERS`. The
+    rest of `params` (`top_p`, `stop`, ...) is generation behavior and is kept
+    -- and `extra_body` is provider-specific by definition, so carrying one
+    from an OpenAI config to Google would be wrong regardless.
     """
     source_fields = type(config).model_fields
     carried = {
@@ -608,6 +615,15 @@ def _as_vertexai_config(config: OpenAIGPTConfig) -> VertexAIConfig:
             "on a vertexai/ model.",
             ", ".join(deliberate),
         )
+    params = carried.get("params")
+    if params is not None and params.extra_body is not None:
+        logging.warning(
+            "vertexai/ route: clearing params.extra_body, which "
+            "OPENAI_PARAMS can set and which would be sent in the request "
+            "body to Google. Set it on a VertexAIConfig you construct "
+            "directly if it is meant for Vertex AI."
+        )
+        carried["params"] = params.model_copy(update={"extra_body": None})
     return VertexAIConfig(**carried)
 
 

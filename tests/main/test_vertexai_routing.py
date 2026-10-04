@@ -21,6 +21,7 @@ from langroid.language_models import openai_gpt
 from langroid.language_models.openai_gpt import (
     DEFAULT_VERTEXAI_LOCATION,
     DUMMY_API_KEY,
+    OpenAICallParams,
     OpenAIGPT,
     OpenAIGPTConfig,
     VertexAIConfig,
@@ -373,6 +374,39 @@ def test_openai_litellm_flag_cannot_hijack_the_route(
     assert llm.is_vertexai is True
     assert "aiplatform.googleapis.com" in (llm.api_base or "")
     assert llm.config.api_key_provider is not None
+
+
+def test_openai_params_extra_body_is_cleared(monkeypatch, project_env, fake_adc):
+    """
+    `OPENAI_PARAMS` can set `params.extra_body` to an arbitrary dict, which is
+    sent in the request body to Google -- the same hazard as OPENAI_HEADERS.
+    The rest of `params` is generation behavior and must survive.
+    """
+    monkeypatch.setenv(
+        "OPENAI_PARAMS",
+        '{"extra_body": {"x_secret": "sk-from-openai-params"}, "top_p": 0.5}',
+    )
+    source = OpenAIGPTConfig(chat_model=VERTEX_MODEL)
+    assert source.params is not None
+    assert source.params.extra_body == {"x_secret": "sk-from-openai-params"}
+
+    llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    assert llm.config.params is not None
+    assert llm.config.params.extra_body is None
+    # the legitimate generation settings are kept
+    assert llm.config.params.top_p == 0.5
+
+
+def test_extra_body_survives_on_a_direct_vertexai_config(project_env, fake_adc):
+    """An extra_body set on a VertexAIConfig is meant for Vertex; keep it."""
+    llm = OpenAIGPT(
+        VertexAIConfig(
+            chat_model=VERTEX_MODEL,
+            params=OpenAICallParams(extra_body={"mine": 1}),
+        )
+    )
+    assert llm.config.params is not None
+    assert llm.config.params.extra_body == {"mine": 1}
 
 
 def test_every_openai_config_field_is_classified(project_env):
