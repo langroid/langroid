@@ -418,7 +418,9 @@ def test_every_openai_config_field_is_classified(project_env):
     reviewed-and-safe, so adding one forces the decision.
     """
     # Reviewed as safe to carry: none of these can redirect the request,
-    # attach anything to it, or weaken its transport.
+    # attach anything to it, or weaken its transport. `params` is the one
+    # partial case -- it is carried, but its free-form `extra_body` sub-field
+    # is cleared (see test_openai_params_extra_body_is_cleared).
     carry_safe = {
         # model / generation behavior
         "chat_model",
