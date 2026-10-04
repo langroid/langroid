@@ -110,7 +110,13 @@ private or PSC endpoint, instead of the constructed regional URL.
     `litellm`, plus `params.extra_body` and `params.user`. Set those via
     `VERTEXAI_*`, or on a `VertexAIConfig` you construct yourself, if you
     need them on this route; a dropped value that you set deliberately is
-    logged rather than discarded in silence. Conversely, a `VertexAIConfig`
+    logged rather than discarded in silence.
+
+    Separately, the `openai` client reads a few `OPENAI_*` variables itself,
+    for arguments langroid does not pass — `OPENAI_PROJECT_ID` and
+    `OPENAI_CUSTOM_HEADERS` among them. Those are never config fields, so the
+    env prefix cannot close them; they are removed for the duration of client
+    construction on this route instead. Conversely, a `VertexAIConfig`
     whose model is *not* a `vertexai/` route is refused rather than sent to
     OpenAI with a Google credential — so a global `-m <model>` override
     cannot be applied to one. This is what makes the hazard described in
