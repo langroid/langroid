@@ -74,12 +74,15 @@ def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
         from langroid.utils.configuration import settings
         if settings.debug: ...
 
-    This updates the global default.
+    This updates only the selected keys in the global default, preserving
+    all other settings.
     """
     config_dict = cfg.model_dump()
     filtered_config = {key: config_dict[key] for key in keys if key in config_dict}
     new_settings = Settings(**filtered_config)
-    _global_settings.__dict__.update(new_settings.__dict__)
+    _global_settings.__dict__.update(
+        new_settings.model_dump(include=set(filtered_config))
+    )
 
 
 def set_global(key_vals: Settings) -> None:

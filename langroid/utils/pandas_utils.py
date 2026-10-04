@@ -351,11 +351,11 @@ def safe_eval_globals(local_vars: Dict[str, Any]) -> Dict[str, Any]:
 def stringify(x: Any) -> str:
     # Convert x to DataFrame if it is not one already
     if isinstance(x, pd.Series):
-        df = x.to_frame()
+        df = x.head(10).to_frame().copy()
     elif not isinstance(x, pd.DataFrame):
         return str(x)
     else:
-        df = x
+        df = x.head(10).copy()
 
     # Truncate long text columns to 1000 characters
     for position in range(df.shape[1]):
@@ -371,9 +371,6 @@ def stringify(x: Any) -> str:
                     )
                 ),
             )
-
-    # Limit to 10 rows
-    df = df.head(10)
 
     # Convert to string
     return df.to_string(index=False)  # type: ignore

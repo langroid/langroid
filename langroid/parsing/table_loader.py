@@ -1,4 +1,4 @@
-from csv import Sniffer
+from csv import Sniffer, reader
 from typing import List
 
 import pandas as pd
@@ -32,9 +32,15 @@ def read_tabular_data(path_or_url: str, sep: None | str = None) -> pd.DataFrame:
 
         # get non-blank column names
         with pd.io.common.get_handle(path_or_url, "r") as f:
-            header_line = f.handle.readline().strip()
-            valid_cols = [col for col in header_line.split(sep) if col]
-            valid_cols = [c.replace('"', "").replace("'", "") for c in valid_cols]
+            if len(sep) == 1:
+                valid_cols = [
+                    col for col in next(reader(f.handle, delimiter=sep)) if col
+                ]
+            else:
+                # Preserve the existing multi-character separator handling.
+                header_line = f.handle.readline().strip()
+                valid_cols = [col for col in header_line.split(sep) if col]
+                valid_cols = [c.replace('"', "").replace("'", "") for c in valid_cols]
             if hasattr(f.handle, "seek"):
                 f.handle.seek(0)
 
