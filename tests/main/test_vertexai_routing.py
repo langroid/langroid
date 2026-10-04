@@ -281,3 +281,40 @@ def test_vertexai_endpoint_built_correctly(monkeypatch, fake_adc):
         "https://asia-northeast1-aiplatform.googleapis.com/v1beta1/"
         "projects/proj-abc/locations/asia-northeast1/endpoints/openapi"
     )
+
+
+def test_vertexai_constructor_headers_kwarg_stays_empty_under_openai_env(
+    poisoned_env,
+):
+    """
+    Reproduce the #1165 trap directly on VertexAIConfig: OPENAI_HEADERS
+    is set in the environment, and headers={} is passed explicitly to
+    the constructor. The explicit empty dict must survive — pydantic-
+    settings must not merge an OPENAI_-prefixed value into a field
+    passed via the constructor on a class whose env_prefix is VERTEXAI_.
+    """
+    cfg = VertexAIConfig(
+        chat_model="vertexai/google/gemini-2.5-flash",
+        headers={},
+    )
+    assert cfg.headers == {}
+    assert "Authorization" not in cfg.headers
+    assert "Custom-OpenAI" not in cfg.headers
+    assert "org-malicious-leak" not in str(cfg.headers)
+
+
+def test_non_vertexai_route_is_not_converted_to_vertexai_config(poisoned_env):
+    """
+    The clean-config conversion is gated on settings.chat_model (or
+    config.chat_model) starting with 'vertexai/'. Other routes — notably
+    langdb/ and portkey/, which write into config.headers themselves —
+    must remain OpenAIGPTConfig instances, so their headers are never
+    touched by the vertexai/ conversion.
+    """
+    cfg = OpenAIGPTConfig(chat_model="openrouter/anthropic/claude-3-5-haiku")
+    llm = OpenAIGPT(cfg)
+
+    # Not replaced by the vertexai/ conversion
+    assert not isinstance(llm.config, VertexAIConfig)
+    # Route reaches the openrouter base URL, not the OpenAI one
+    assert "openrouter.ai" in (llm.api_base or "")
