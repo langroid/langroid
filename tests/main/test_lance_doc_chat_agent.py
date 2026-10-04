@@ -5,7 +5,16 @@ from pydantic import Field
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
-from langroid.agent.special.lance_tools import AnswerTool, QueryPlan, QueryPlanTool
+from langroid.agent.special.lance_rag.query_planner_agent import (
+    LanceQueryPlanAgent,
+    LanceQueryPlanAgentConfig,
+)
+from langroid.agent.special.lance_tools import (
+    AnswerTool,
+    QueryPlan,
+    QueryPlanAnswerTool,
+    QueryPlanTool,
+)
 from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
@@ -362,3 +371,36 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
     )
     # check there is non-empty response content
     assert result is not None and len(result.content) > 10
+
+
+def test_answer_tool_addresses_the_critic():
+    """The planner must ADDRESS its QueryPlanAnswerTool to the Critic.
+
+    Returned without a recipient, the tool reaches `Task.step` unaddressed and
+    the planner's own LLM is offered the turn ahead of the Critic sub-task.
+    That reply is accepted when non-null, and because `llm_response` sets
+    `expecting_query_plan` unconditionally the LLM just emits another
+    `query_plan`: the Critic never gets the answer, `query_plan_feedback`
+    never fires, and the task spins to the inf-loop guard or max_turns, where
+    `Task.result()` is None. No LLM is needed to pin the routing.
+    """
+    config = LanceQueryPlanAgentConfig(
+        critic_name="QueryPlanCritic",
+        doc_agent_name="LanceRAG",
+        doc_schema="",
+    )
+    agent = LanceQueryPlanAgent(config)
+    agent.curr_query_plan = QueryPlan(
+        original_query="which 2023 issues mention JSON?",
+        query="2023 issues mentioning JSON",
+    )
+
+    response = agent.answer_tool(AnswerTool(answer="Issue #42 mentions JSON."))
+
+    assert response.metadata.recipient == config.critic_name
+    tools = response.tool_messages
+    assert len(tools) == 1 and isinstance(tools[0], QueryPlanAnswerTool)
+    assert tools[0].answer == "Issue #42 mentions JSON."
+    # bookkeeping the feedback round depends on
+    assert agent.result == "Issue #42 mentions JSON."
+    assert agent.curr_query_plan is None
