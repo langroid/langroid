@@ -204,10 +204,20 @@ def find_urls(
         visited (set): A set of URLs that have already been visited.
         depth (int): The current depth of the recursion.
         max_depth (int): The maximum depth of the recursion.
-        match_domain (bool): Whether to only return URLs that are on the same domain.
+        match_domain (bool): Whether to restrict the crawl to `url`'s own domain.
+            When True (the default), only same-domain links are followed and
+            returned. When False, links to other domains are followed as well,
+            so the crawl will issue requests to hosts named by the pages it
+            reads -- which may include untrusted external hosts, and internal
+            or link-local addresses. `find_urls` does not consult robots.txt and
+            does not delay between requests, so disable this only for domains
+            you control or otherwise trust. `max_links` and `max_depth` still
+            bound the crawl in both modes.
 
     Returns:
-        set: A set of URLs found on the page.
+        set: A set of URLs found on the page. Only `http`/`https` links are
+            returned; other schemes (e.g. `mailto:`, `tel:`, `javascript:`)
+            are skipped.
     """
 
     if visited is None:
@@ -233,9 +243,16 @@ def find_urls(
             set(urldefrag(link).url for link in links)  # type: ignore
         )
 
-        # Filter links based on domain matching requirement
+        # Keep only web links, then apply the domain filter if requested.
+        # The scheme check is not redundant: schemes like `mailto:`, `javascript:`,
+        # `tel:` and `data:` have an empty netloc, so when `match_domain` is True
+        # the domain comparison rejects them as a side effect. With `match_domain`
+        # False that comparison is skipped, so they must be excluded explicitly.
         domain_matching_links = [
-            link for link in defragged_links if urlparse(link).netloc == base_domain
+            link
+            for link in defragged_links
+            if urlparse(link).scheme in ("http", "https")
+            and (not match_domain or urlparse(link).netloc == base_domain)
         ]
 
         # ensure url is first, since below we are taking first max_links urls
