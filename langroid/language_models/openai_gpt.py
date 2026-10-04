@@ -536,6 +536,10 @@ class VertexAIConfig(OpenAIGPTConfig):
 # `is_vertexai` first in the provider chain, plus recomputing
 # `self.chat_model_orig` after the conversion. Dropping it here just stops a
 # route-deciding value from living on a config that claims to be clean.)
+# `OPENAI_LITELLM=true` is the same hazard by a different door: `litellm` is
+# consulted as `startswith("litellm/") or config.litellm`, so it diverts the
+# route to the litellm adapter -- which also sidesteps the guard that forbids
+# `api_key_provider` there, leaving ADC silently unused.
 #
 # `api_key_provider` and `http_client_factory` are deliberately absent: both
 # are callables, so they can only ever have been set explicitly in code, never
@@ -553,6 +557,7 @@ _VERTEXAI_DROPPED_FIELDS = frozenset(
         "http_client_config",
         "http_verify_ssl",
         "chat_model_orig",
+        "litellm",
     }
 )
 

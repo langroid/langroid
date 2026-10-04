@@ -356,6 +356,25 @@ def test_openai_chat_model_orig_cannot_hijack_the_route(
     assert llm.config.api_key_provider is not None
 
 
+def test_openai_litellm_flag_cannot_hijack_the_route(
+    monkeypatch, project_env, fake_adc
+):
+    """
+    `litellm` is consulted as `startswith("litellm/") or config.litellm`, so
+    `OPENAI_LITELLM=true` would divert a `vertexai/` model to the litellm
+    adapter -- which also sidesteps the guard forbidding `api_key_provider`
+    there, so ADC would be set and then silently unused.
+    """
+    monkeypatch.setenv("OPENAI_LITELLM", "true")
+    assert OpenAIGPTConfig(chat_model=VERTEX_MODEL).litellm is True
+
+    llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL))
+    assert llm.config.litellm is False
+    assert llm.is_vertexai is True
+    assert "aiplatform.googleapis.com" in (llm.api_base or "")
+    assert llm.config.api_key_provider is not None
+
+
 def test_every_openai_config_field_is_classified(project_env):
     """
     Guard: the conversion carries fields by default, so a new
@@ -398,7 +417,6 @@ def test_every_openai_config_field_is_classified(project_env):
         # client reuse: no effect on where the request goes
         "use_cached_client",
         # other providers' settings, inert on a vertexai/ route
-        "litellm",
         "litellm_proxy",
         "ollama",
         "langdb_params",

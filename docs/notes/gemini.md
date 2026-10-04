@@ -102,7 +102,8 @@ llm = lm.OpenAIGPT(config)
     What is dropped is every field an `OPENAI_*` variable could set that
     also changes where the request goes, what it carries or how it is
     secured: `api_key`, `headers`, `organization`, `api_base`,
-    `http_client_config`, `http_verify_ssl` and `chat_model_orig`. Set
+    `http_client_config`, `http_verify_ssl`, `chat_model_orig` and
+    `litellm`. Set
     those via `VERTEXAI_*`, or on a `VertexAIConfig` you construct
     yourself, if you need them on this route. This is what makes the hazard
     described in
