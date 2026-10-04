@@ -103,7 +103,7 @@ class CodeParser:
         """
         chunked_docs = [
             [
-                Document(content=chunk, metadata=d.metadata)
+                Document(content=chunk, metadata=d.metadata.model_copy())
                 for chunk in chunk_code(
                     d.content,
                     d.metadata.language,  # type: ignore
