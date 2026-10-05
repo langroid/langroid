@@ -231,9 +231,21 @@ class LanceQueryPlanAgent(ChatAgent):
         SUGGESTED FIX: {suggested}
         """
 
-    def answer_tool(self, msg: AnswerTool) -> QueryPlanAnswerTool:
+    def answer_tool(self, msg: AnswerTool) -> ChatDocument:
         """Handle AnswerTool received from LanceRagAgent:
-        Construct a QueryPlanAnswerTool with the answer"""
+        Construct a QueryPlanAnswerTool with the answer, addressed to the Critic.
+
+        The recipient is explicit on purpose. Returning the tool bare leaves it
+        with no addressee, and `Task.step` then offers the turn to THIS agent's
+        own LLM before the Critic sub-task. That reply is accepted when it is
+        non-null, and since `llm_response` above sets `expecting_query_plan`
+        unconditionally, the LLM is told to produce a query plan again: it
+        emits a duplicate `query_plan`, the Critic never receives the answer,
+        `query_plan_feedback` never arrives, and the task spins until the
+        inf-loop guard or max_turns (`Task.result()` then returns None).
+        Naming the Critic makes `_recipient_mismatch` skip our own LLM, so the
+        handoff is deterministic on any model.
+        """
         self.result = msg.answer  # save answer to interpret feedback later
         assert self.curr_query_plan is not None
         query_plan_answer_tool = QueryPlanAnswerTool(
@@ -241,7 +253,10 @@ class LanceQueryPlanAgent(ChatAgent):
             answer=msg.answer,
         )
         self.curr_query_plan = None  # reset
-        return query_plan_answer_tool
+        return self.create_agent_response(
+            recipient=self.config.critic_name,
+            tool_messages=[query_plan_answer_tool],
+        )
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
