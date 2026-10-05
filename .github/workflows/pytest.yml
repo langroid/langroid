@@ -13,7 +13,9 @@ on:
   # (#1169 on 2026-10-02 did exactly that). Opening a non-draft PR never
   # triggered this workflow anyway, so the signal lost is small, and the gate
   # that matters runs on main below — `ops ship` refuses to release on red.
-  # Run it on a branch by hand when you want it: `gh workflow run Pytest`.
+  # Run it on a branch by hand when you want it:
+  #   gh workflow run Pytest --ref <branch>
+  # (without --ref, gh dispatches against the remote default branch).
   workflow_dispatch:
 
 
@@ -244,7 +246,7 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        uv run pytest --cov langroid --cov-append --cov-config .coveragerc \
+        uv run pytest --m gpt-4o --cov langroid --cov-append --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
@@ -264,7 +266,7 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        uv run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
+        uv run pytest --m gpt-4o --nc --cov langroid --cov-append --cov-config .coveragerc \
           --junitxml=test-results.xml \
           -rf --show-capture=no --timeout=300 -n auto \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
