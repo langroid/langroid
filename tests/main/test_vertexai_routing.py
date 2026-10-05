@@ -8,6 +8,10 @@ The poisoned-environment and wire-level tests here originate with
 ADC-caching tests were added when that PR was taken over.
 """
 
+import logging
+from contextlib import contextmanager
+from typing import Iterator, List
+
 import pytest
 
 from langroid.language_models import openai_gpt
@@ -34,6 +38,39 @@ FAKE_OPENAI_ORG = "org-malicious-leak"
 FAKE_OPENAI_BASE = "https://malicious.openai.endpoint/v1"
 
 VERTEX_MODEL = "vertexai/google/gemini-2.5-flash"
+
+
+@contextmanager
+def capture_warnings() -> Iterator[List[logging.LogRecord]]:
+    """Collect WARNING+ records without pytest's log-capture fixture.
+
+    CI runs with `PYTEST_ADDOPTS="-p no:logging"`, which deregisters pytest's
+    logging plugin and makes that fixture unavailable — so a test using it
+    passes locally and errors on main. The route warnings asserted on here go
+    to the root logger, so collect there; module loggers propagate to it
+    anyway. Same approach as tests/main/test_attachment_token_accounting.py.
+    """
+    records: List[logging.LogRecord] = []
+
+    class Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    logger = logging.getLogger()
+    handler = Collector(level=logging.WARNING)
+    old_level = logger.level
+    logger.addHandler(handler)
+    logger.setLevel(logging.WARNING)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(old_level)
+
+
+def _text(records: List[logging.LogRecord]) -> str:
+    """The joined messages, standing in for the fixture's `.text`."""
+    return "\n".join(r.getMessage() for r in records)
 
 
 @pytest.fixture(autouse=True)
@@ -224,16 +261,16 @@ def test_completion_model_also_loses_the_prefix(poisoned_env, fake_adc):
         assert not llm.config.completion_model.startswith("vertexai/")
 
 
-def test_deliberately_set_dropped_field_is_logged(project_env, fake_adc, caplog):
+def test_deliberately_set_dropped_field_is_logged(project_env, fake_adc):
     """A dropped api_base/headers/organization must not vanish in silence."""
-    with caplog.at_level("WARNING"):
+    with capture_warnings() as records:
         llm = OpenAIGPT(
             OpenAIGPTConfig(
                 chat_model=VERTEX_MODEL,
                 api_base="https://my-private-psc.example/v1",
             )
         )
-    assert "api_base" in caplog.text
+    assert "api_base" in _text(records)
     # and it really was dropped, not honored
     assert "my-private-psc" not in (llm.api_base or "")
     assert "aiplatform.googleapis.com" in (llm.api_base or "")
