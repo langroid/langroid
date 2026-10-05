@@ -69,8 +69,7 @@ positive nor non-positive.
 ### 2. Single Round Mode
 ```python
 # Task completes after one exchange
-config = TaskConfig(single_round=True)
-task = Task(agent, config=config)
+task = Task(agent, single_round=True)
 ```
 
 ### 3. Done If Tool
@@ -83,7 +82,8 @@ task = Task(agent, config=config)
 ### 4. Done If Response/No Response
 ```python
 # Task completes based on response from specific entities
-config = TaskConfig(
+task = Task(
+    agent,
     done_if_response=[Entity.LLM],      # Done if LLM responds
     done_if_no_response=[Entity.USER]   # Done if USER doesn't respond
 )
