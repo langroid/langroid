@@ -3,8 +3,12 @@
 import pytest
 
 from langroid.language_models.model_info import (
+    AnthropicModel,
     GeminiModel,
+    ModelProvider,
     _normalize_gemini_model_name,
+    _strip_dated_snapshot,
+    get_model_info,
 )
 
 
@@ -104,3 +108,92 @@ def test_normalize_gemini_all_canonical_names_are_stable() -> None:
         assert (
             result == member.value
         ), f"Canonical name {member.value!r} normalized to {result!r}"
+
+
+@pytest.mark.parametrize(
+    "dated,base",
+    [
+        # Anthropic: -YYYYMMDD
+        ("claude-haiku-4-5-20251001", "claude-haiku-4-5"),
+        # OpenAI: -YYYY-MM-DD
+        ("gpt-4o-2024-08-06", "gpt-4o"),
+        # behind a provider prefix
+        ("anthropic/claude-haiku-4-5-20251001", "claude-haiku-4-5"),
+    ],
+)
+def test_dated_snapshot_resolves_to_base_model(dated: str, base: str):
+    """A dated snapshot of a KNOWN model inherits that model's info.
+
+    Providers ship dated snapshots constantly; a hard-coded table cannot keep
+    up, and the old behaviour silently gave them a 16k context.
+    """
+    base_info = get_model_info(base)
+    # Anchor the comparison: two UNKNOWN names both resolve to the same
+    # default ModelInfo, so comparing them alone would pass vacuously if the
+    # base entry were removed or renamed.
+    assert base_info.provider != ModelProvider.UNKNOWN
+    assert base_info.name == base
+    assert get_model_info(dated) == base_info
+
+
+@pytest.mark.parametrize(
+    "unknown",
+    [
+        "some-new-model-20260101",  # base is not a known model
+        "gpt-4o-2024-13-45",  # not a real date
+        "claude-haiku-4-5-2025100",  # too few digits
+        # Unicode digit lookalikes: Python's \d matches these, so a naive
+        # regex would strip "-20２4-08-06" and hand this ID gpt-4o's limits
+        # and prices. The digit classes are ASCII-only to prevent that.
+        "gpt-4o-20２４-08-06",  # fullwidth TWO, FOUR in the year
+        "gpt-4o-2024-08-1０",  # fullwidth ZERO in the day
+        # Shaped like a date but impossible, so not a snapshot of anything.
+        "gpt-4o-2024-02-31",  # February has no 31st
+        "gpt-4o-2023-02-29",  # 2023 is not a leap year
+        "gpt-4o-20240230",  # same, in the compact form
+        # Mixed separators: no provider ships these, so treating them as
+        # dates would only let malformed IDs inherit real prices.
+        "gpt-4o-2024-0806",
+        "gpt-4o-202408-06",
+    ],
+)
+def test_unknown_dated_model_does_not_borrow_info(unknown: str):
+    """Stripping a date must not GUESS: an unknown base stays unknown."""
+    info = get_model_info(unknown)
+    assert info.provider == ModelProvider.UNKNOWN
+    assert info.input_cost_per_million == 0.0
+
+
+def test_leap_day_snapshot_still_resolves():
+    """The calendar check must not reject a date that is real."""
+    assert get_model_info("gpt-4o-20240229") == get_model_info("gpt-4o")
+
+
+def test_dated_gemini_name_keeps_the_gemini_policy():
+    """The generic stripper must not override the Gemini normalizer.
+
+    `_normalize_gemini_model_name` deliberately refuses to guess a bare-dated
+    name (`gemini-2.5-pro-03-25` must not become `gemini-2.5-pro`). A generic
+    date-stripper that resolved `gemini-2.5-pro-2025-03-25` would reverse that
+    ruling by the back door -- and silently, since it also flips the model to
+    "known", which turns on `rename_params` and extra-body filtering.
+    """
+    assert _strip_dated_snapshot("gemini-2.5-pro-2025-03-25") is None
+    info = get_model_info("gemini-2.5-pro-2025-03-25")
+    assert info.provider == ModelProvider.UNKNOWN
+    # the canonical name is of course still resolved
+    assert get_model_info("gemini-2.5-pro").provider == ModelProvider.GOOGLE
+
+
+def test_haiku_4_5_cached_price_is_discounted():
+    """A cached read must not be billed at the full input rate.
+
+    `OpenAIGPT.chat_cost()` treats a zero `cached_cost_per_million` as
+    "missing" and falls back to `input_cost_per_million`, so leaving it unset
+    would overstate the cached portion of every Haiku 4.5 request by 10x.
+    """
+    info = get_model_info(AnthropicModel.CLAUDE_4_5_HAIKU)
+    assert info.input_cost_per_million == 1.00
+    assert info.cached_cost_per_million == 0.10
+    # and a dated snapshot inherits the discount
+    assert get_model_info("claude-haiku-4-5-20251001").cached_cost_per_million == 0.10

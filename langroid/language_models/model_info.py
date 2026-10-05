@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import date
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -551,6 +552,16 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         output_cost_per_million=15.0,
         description="Claude 3 Sonnet",
     ),
+    AnthropicModel.CLAUDE_4_5_HAIKU.value: ModelInfo(
+        name=AnthropicModel.CLAUDE_4_5_HAIKU.value,
+        provider=ModelProvider.ANTHROPIC,
+        context_length=200_000,
+        max_output_tokens=64_000,
+        input_cost_per_million=1.00,
+        cached_cost_per_million=0.10,
+        output_cost_per_million=5.00,
+        description="Claude Haiku 4.5",
+    ),
     AnthropicModel.CLAUDE_3_HAIKU.value: ModelInfo(
         name=AnthropicModel.CLAUDE_3_HAIKU.value,
         provider=ModelProvider.ANTHROPIC,
@@ -818,12 +829,66 @@ def _normalize_model_names(models: List[str | ModelName]) -> List[str]:
     normalized_models: List[str] = []
     seen: set[str] = set()
     for model in models:
-        normalized_model = _normalize_gemini_model_name(_model_name(model))
-        if normalized_model is None or normalized_model in seen:
-            continue
-        seen.add(normalized_model)
-        normalized_models.append(normalized_model)
+        name = _model_name(model)
+        for normalized_model in (
+            _normalize_gemini_model_name(name),
+            _strip_dated_snapshot(name),
+        ):
+            if normalized_model is None or normalized_model in seen:
+                continue
+            seen.add(normalized_model)
+            normalized_models.append(normalized_model)
     return normalized_models
+
+
+# A dated snapshot of a model we already know: "-20251001" (Anthropic) or
+# "-2024-08-06" (OpenAI), optionally behind a provider prefix. Providers ship
+# these constantly, and a hard-coded table cannot keep up — so strip the date
+# and let the caller look up the base name.
+#
+# `(?P=sep)` makes the two separators agree, so only those two real shapes
+# match; mixed forms like "-2024-0806" are not dates anyone ships.
+_DATED_SNAPSHOT_SUFFIX = re.compile(
+    r"-(?P<year>20[0-9]{2})(?P<sep>-?)(?P<month>[0-9]{2})(?P=sep)(?P<day>[0-9]{2})\Z"
+)
+
+
+def _strip_dated_snapshot(model: str) -> str | None:
+    """Return `model` without a trailing dated-snapshot stamp, else None.
+
+    Deliberately conservative in three ways. The pattern is anchored and
+    ASCII-only, both separators must agree, and the result must be a real
+    calendar date, so a lookalike tail is not mistaken for a date. Gemini
+    names are left alone: `_normalize_gemini_model_name` owns them and
+    deliberately refuses to guess a bare-dated name, and this helper must not
+    reverse that policy by the back door. And the result is only a CANDIDATE:
+    `get_model_info` looks it up and keeps it only if that base model is
+    already in `MODEL_INFO`, so an unknown `some-new-model-20260101` still
+    warns rather than silently inheriting another model's limits and prices.
+
+    Caveat, deliberately accepted: a snapshot inherits the metadata of the
+    BASE ALIAS, which is exact for context length and provider but only
+    approximate for the price and output cap of an OLD snapshot that the alias
+    has since moved past (`gpt-4o-2024-05-13` gets today's `gpt-4o` prices).
+    That is still strictly better than the unknown-model fallback it replaces,
+    which gave every snapshot a 16k context and zero cost.
+    """
+    base_model = model.rsplit("/", 1)[-1]
+    if base_model.startswith("gemini-"):
+        return None
+    match = _DATED_SNAPSHOT_SUFFIX.search(base_model)
+    if match is None:
+        return None
+    try:
+        date(
+            int(match.group("year")),
+            int(match.group("month")),
+            int(match.group("day")),
+        )
+    except ValueError:
+        return None  # e.g. "-2024-02-31": shaped like a date, is not one
+    candidate = base_model[: match.start()]
+    return candidate or None
 
 
 def _normalize_gemini_model_name(model: str) -> str | None:

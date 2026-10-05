@@ -120,7 +120,7 @@ Configure automatic retries for better reliability:
 
 ```python
 config = lm.OpenAIGPTConfig(
-    chat_model="portkey/anthropic/claude-3-haiku-20240307",
+    chat_model="portkey/anthropic/claude-haiku-4-5-20251001",
     portkey_params=PortkeyParams(
         retry={
             "max_retries": 3,
@@ -211,7 +211,7 @@ Portkey supports 200+ models from various providers. Common ones include:
 
 # Anthropic
 "portkey/anthropic/claude-3-5-sonnet-20241022"
-"portkey/anthropic/claude-3-haiku-20240307"
+"portkey/anthropic/claude-haiku-4-5-20251001"
 
 # Google
 "portkey/google/gemini-2.0-flash-lite"
@@ -263,7 +263,7 @@ Use multiple providers for reliability:
 ```python
 providers = [
     ("openai", "gpt-4o-mini"),
-    ("anthropic", "claude-3-haiku-20240307"),
+    ("anthropic", "claude-haiku-4-5-20251001"),
     ("google", "gemini-2.0-flash-lite")
 ]
 

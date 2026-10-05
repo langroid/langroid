@@ -123,7 +123,7 @@ def demonstrate_fallback_strategy(portkey_api_key: str):
     # Define providers in order of preference
     fallback_providers = [
         ("openai", "gpt-4o-mini", "OPENAI_API_KEY"),
-        ("anthropic", "claude-3-haiku-20240307", "ANTHROPIC_API_KEY"),
+        ("anthropic", "claude-haiku-4-5-20251001", "ANTHROPIC_API_KEY"),
         ("google", "gemini-2.0-flash-lite", "GOOGLE_API_KEY"),
     ]
 
@@ -177,7 +177,7 @@ def main():
     if os.getenv("ANTHROPIC_API_KEY"):
         try:
             llm, name = create_provider_llm(
-                "anthropic", "claude-3-haiku-20240307", portkey_api_key
+                "anthropic", "claude-haiku-4-5-20251001", portkey_api_key
             )
             providers.append((llm, name))
             print("✅ Anthropic provider ready")
