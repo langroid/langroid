@@ -11,8 +11,10 @@ precedence and id validation stay there, and the ADC provider itself is in
 test_vertexai_adc.py.
 """
 
+import logging
 import os
-from typing import Dict, List
+from contextlib import contextmanager
+from typing import Dict, Iterator, List
 
 import httpx
 import pytest
@@ -42,6 +44,39 @@ FAKE_OPENAI_ORG = "org-malicious-leak"
 FAKE_OPENAI_BASE = "https://malicious.openai.endpoint/v1"
 
 VERTEX_MODEL = "vertexai/google/gemini-2.5-flash"
+
+
+@contextmanager
+def capture_warnings() -> Iterator[List[logging.LogRecord]]:
+    """Collect WARNING+ records without pytest's log-capture fixture.
+
+    CI runs with `PYTEST_ADDOPTS="-p no:logging"`, which deregisters pytest's
+    logging plugin and makes that fixture unavailable — so a test using it
+    passes locally and errors on main. The route warnings asserted on here go
+    to the root logger, so collect there; module loggers propagate to it
+    anyway. Same approach as tests/main/test_attachment_token_accounting.py.
+    """
+    records: List[logging.LogRecord] = []
+
+    class Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    logger = logging.getLogger()
+    handler = Collector(level=logging.WARNING)
+    old_level = logger.level
+    logger.addHandler(handler)
+    logger.setLevel(logging.WARNING)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(old_level)
+
+
+def _text(records: List[logging.LogRecord]) -> str:
+    """The joined messages, standing in for the fixture's `.text`."""
+    return "\n".join(r.getMessage() for r in records)
 
 
 @pytest.fixture(autouse=True)
@@ -462,16 +497,14 @@ def test_openai_params_user_is_cleared(monkeypatch, project_env, fake_adc):
         ("litellm", True),
     ],
 )
-def test_dropped_transport_fields_are_logged(
-    project_env, fake_adc, caplog, field, value
-):
+def test_dropped_transport_fields_are_logged(project_env, fake_adc, field, value):
     """
     These are dropped for good reason, but a corporate-proxy user who set one
     in code would otherwise get an unreachable endpoint with no diagnostic.
     """
-    with caplog.at_level("WARNING"):
+    with capture_warnings() as records:
         OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL, **{field: value}))
-    assert field in caplog.text
+    assert field in _text(records)
 
 
 def test_openai_sdk_env_channels_do_not_reach_google(
@@ -647,15 +680,15 @@ def test_formatter_suffix_override_cannot_strip_the_route(project_env, fake_adc)
             OpenAIGPT(VertexAIConfig(chat_model=VERTEX_MODEL))
 
 
-def test_dropped_api_key_set_in_code_is_logged(project_env, fake_adc, caplog):
+def test_dropped_api_key_set_in_code_is_logged(project_env, fake_adc):
     """
     Dropping a token the caller passed in code, then silently falling back to
     ADC, is indistinguishable from a bug. Log the field name (never the value).
     """
-    with caplog.at_level("WARNING"):
+    with capture_warnings() as records:
         llm = OpenAIGPT(OpenAIGPTConfig(chat_model=VERTEX_MODEL, api_key="sk-my-token"))
-    assert "api_key" in caplog.text
-    assert "sk-my-token" not in caplog.text
+    assert "api_key" in _text(records)
+    assert "sk-my-token" not in _text(records)
     assert llm.config.api_key == DUMMY_API_KEY
     assert llm.config.api_key_provider is not None
 
@@ -856,9 +889,7 @@ def test_openai_gpt_init_docstring_is_intact():
     assert doc is not None and "config" in doc
 
 
-def test_subclass_only_fields_are_reported_not_dropped_silently(
-    project_env, fake_adc, caplog
-):
+def test_subclass_only_fields_are_reported_not_dropped_silently(project_env, fake_adc):
     """
     `VertexAIConfig` has no fields of a custom `OpenAIGPTConfig` subclass, so
     they cannot be carried over -- but the caller must be told.
@@ -867,14 +898,14 @@ def test_subclass_only_fields_are_reported_not_dropped_silently(
     class MyConfig(OpenAIGPTConfig):
         my_custom_field: str = "keep-me"
 
-    with caplog.at_level("WARNING"):
+    with capture_warnings() as records:
         llm = OpenAIGPT(MyConfig(chat_model=VERTEX_MODEL, temperature=0.5))
 
     assert isinstance(llm.config, VertexAIConfig)
     # the supported fields still come across
     assert llm.config.temperature == 0.5
-    assert "my_custom_field" in caplog.text
-    assert "MyConfig" in caplog.text
+    assert "my_custom_field" in _text(records)
+    assert "MyConfig" in _text(records)
 
 
 def test_vertexai_config_is_exported_from_language_models():
