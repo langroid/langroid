@@ -441,3 +441,98 @@ def seltz_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         results.append(result)
 
     return results
+
+
+def firecrawl_search(
+    query: str, num_results: int = 5, scrape: bool = False
+) -> List[WebSearchResult]:
+    """
+    Method that makes an API call to Firecrawl's search endpoint, which
+    queries the top `num_results` web results for the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab (Firecrawl returns at most 100).
+        scrape (bool): Also scrape each result in the same call and use its
+            page as markdown for `full_content`. Each scraped page costs
+            extra Firecrawl credits and adds time.
+
+    Notes:
+        By default the query-relevant description Firecrawl returns for each
+        result fills `summary` and `full_content`, so no extra HTTP fetch is
+        made. A result without content (or whose scrape failed) keeps its link
+        and falls back to the usual fetch of that link.
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("FIRECRAWL_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "FIRECRAWL_API_KEY environment variable is not set. "
+            "Please set it to your API key and try again."
+        )
+    if num_results < 1:
+        return []
+
+    try:
+        from firecrawl import Firecrawl
+        from firecrawl.v2.types import Document, ScrapeOptions
+    except ImportError:
+        raise LangroidImportError("firecrawl-py", "firecrawl")
+
+    client = Firecrawl(api_key=api_key, origin="langroid", timeout=60)
+    response = client.search(
+        query,
+        limit=min(num_results, 100),
+        scrape_options=ScrapeOptions(formats=["markdown"]) if scrape else None,
+    )
+
+    results = []
+    for item in (response.web or [])[:num_results]:
+        content = None
+        if isinstance(item, Document):
+            # a scraped page: markdown plus the page's metadata
+            metadata = item.metadata_typed
+            link = metadata.source_url or metadata.url
+            title = metadata.title
+            description = metadata.description
+            failed = (metadata.status_code or 200) >= 400 or bool(metadata.error)
+            if not failed and item.markdown and item.markdown.strip():
+                content = item.markdown
+        else:
+            link = item.url
+            title = item.title
+            description = item.description
+            content = description
+        if not link:
+            continue
+        # one line each: blank lines would split a result when printed
+        title = " ".join((title or "").split()) or link
+        description = " ".join((description or "").split())
+
+        if not content:
+            result = WebSearchResult(
+                title=title,
+                link=link,
+                max_content_length=3500,
+                max_summary_length=300,
+            )
+            if description:
+                result.summary = description[:300]
+            results.append(result)
+            continue
+        result = WebSearchResult(
+            title=title,
+            link=None,  # skip HTTP fetch; Firecrawl already provides content
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        result.link = link
+        result.full_content = content[:3500]
+        result.summary = (description or " ".join(content.split()))[:300]
+        results.append(result)
+
+    return results
