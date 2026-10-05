@@ -70,10 +70,31 @@ jobs:
             --extra fastembed \
             --extra crawl4ai
           
+      # This job deliberately has NO API keys: a gate standing in front of a
+      # paid suite should be hermetic. But --collect-only executes
+      # module-level code, and two modules need real credentials at import,
+      # so they cannot be collected keyless and are skipped here by name:
+      #   test_retriever_agent.py:100      agent.ingest() over 101 docs
+      #   test_tool_messages_azure.py:82   builds an Azure agent
+      # Feeding this job real credentials instead is the worse trade. It needs
+      # OPENAI_KEY *and* Azure credentials present -- azure_openai.py:102-113
+      # raises on an empty AZURE_OPENAI_API_KEY / AZURE_OPENAI_API_BASE, and
+      # is reached only after the OpenAI client is built, so OPENAI_KEY alone
+      # would not even fix collection. And it buys that coverage by making the
+      # cheap gate embed those 101 docs for real: one batched request at the
+      # default batch_size of 512. That puts the OpenAI API on the release
+      # path, where a 401 or an outage would block releases for reasons that
+      # have nothing to do with the tree. (The Azure keys are only read, not
+      # called, at import -- it is the embedding request that goes out.)
+      # Cost of the skip: the 21 parametrized cases in these two files get
+      # their imports checked by the paid job minutes later, not here.
       - name: Collect every test (catches import and collection errors)
         env:
           PYTEST_ADDOPTS: "-p no:logging"
-        run: uv run pytest tests/main --collect-only -q --ct fakeredis
+        run: |
+          uv run pytest tests/main --collect-only -q --ct fakeredis \
+            --ignore=tests/main/test_retriever_agent.py \
+            --ignore=tests/main/test_tool_messages_azure.py
       - name: Run the tests that need no LLM
         env:
           PYTEST_ADDOPTS: "-p no:logging"
