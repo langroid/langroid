@@ -153,8 +153,9 @@ gathering content from multiple pages, including subdomains, while bypassing blo
 
 ### Parameters
 
-Obtain a Firecrawl API key from [Firecrawl](https://firecrawl.dev/) and set it in 
-your environment variables, e.g. in your `.env` file as
+Obtain a Firecrawl API key from
+[Firecrawl](https://www.firecrawl.dev/app/api-keys?utm_source=langroid&utm_medium=integration)
+and set it in your environment variables, e.g. in your `.env` file as
 ```env
 FIRECRAWL_API_KEY=your_api_key_here
 ```
@@ -162,11 +163,17 @@ FIRECRAWL_API_KEY=your_api_key_here
 *   **config (FirecrawlConfig)**:  A `FirecrawlConfig` object.
 
     *   **timeout (int, optional)**: Time in milliseconds (ms) to wait for a response. 
-        Default is `30000ms` (30 seconds). In crawl mode, this applies per URL.
-    *   **limit (int, optional)**: Maximum number of pages to scrape in crawl mode. Helps control API usage.
-    *   **params (dict, optional)**: Additional parameters to customize the request. 
-        See the [scrape API](https://docs.firecrawl.dev/api-reference/endpoint/scrape) and 
-        [crawl API](https://docs.firecrawl.dev/api-reference/endpoint/crawl-post) for details.
+        If unset, Firecrawl's default applies. In crawl mode, this applies per page.
+    *   **api_url (str, optional)**: Base URL of a self-hosted Firecrawl instance,
+        also read from `FIRECRAWL_API_URL`. Defaults to Firecrawl's cloud API.
+    *   **params (dict, optional)**: Additional options passed to the Firecrawl
+        Python SDK, e.g. `{"only_main_content": True}` in scrape mode, or
+        `{"limit": 5}` (maximum number of pages) in crawl mode.
+        camelCase keys from the v1 API (`onlyMainContent`, `waitFor`, ...)
+        are converted to snake_case; options renamed in v2 (e.g. `maxDepth`,
+        now `max_discovery_depth`) need the new name.
+        See the [scrape API](https://docs.firecrawl.dev/api-reference/endpoint/scrape?utm_source=langroid&utm_medium=integration) and 
+        [crawl API](https://docs.firecrawl.dev/api-reference/endpoint/crawl-post?utm_source=langroid&utm_medium=integration) for details.
 
 ### Usage
 
@@ -176,7 +183,6 @@ Fetch content from multiple URLs:
 
 ```python
 from langroid.parsing.url_loader import URLLoader, FirecrawlConfig
-from langroid.parsing.document_parser import 
 
 # create a FirecrawlConfig object
 firecrawl_config = FirecrawlConfig(
@@ -211,7 +217,7 @@ from langroid.parsing.url_loader import URLLoader, FirecrawlConfig
 
 # create a FirecrawlConfig object
 firecrawl_config = FirecrawlConfig(
-    timeout=30000,  # 10 sec per page
+    timeout=30000,  # 30 sec per page
     mode="crawl",
     params={
         "limit": 5,
