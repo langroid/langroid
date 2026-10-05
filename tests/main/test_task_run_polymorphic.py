@@ -208,7 +208,15 @@ def test_task_in_out_types(
         assert result == 6
 
         # check handling of invalid return type:
-        # receive None when strict recovery is disabled
+        # receive None when strict recovery is disabled.
+        # NOTE: under MockLM these two `disable_strict` assignments are inert:
+        # Task's final strict-decoding step also needs
+        # `ChatAgent._json_schema_available()`, which is False for any
+        # non-OpenAIGPT LLM. So this asserts the plain
+        # "unparseable into return_type -> None" path, and no longer covers
+        # "disable_strict=True suppresses the strict step" -- which, as of this
+        # change, no test covers (see issue #494). The assignments are kept so
+        # the intent, and the behavior under a real LLM, stay documented.
         agent.disable_strict = True
         result = task[Pair].run(msg)
         assert result is None
