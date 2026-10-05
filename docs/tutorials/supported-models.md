@@ -53,6 +53,7 @@ and which environment variable to set for the API key.
 | Groq          | `groq/llama3.3-70b-versatile`                            | `GROQ_API_KEY` |
 | Cerebras      | `cerebras/llama-3.3-70b`                                 | `CEREBRAS_API_KEY` |
 | Gemini        | `gemini/gemini-2.0-flash`                                | `GEMINI_API_KEY` |
+| Vertex AI     | `vertexai/google/gemini-2.5-flash`                       | Google ADC (`gcloud auth application-default login`), or `VERTEXAI_API_KEY` |
 | DeepSeek      | `deepseek/deepseek-reasoner`                             | `DEEPSEEK_API_KEY` |
 | MiniMax       | `minimax/MiniMax-M2.7`                                   | `MINIMAX_API_KEY` |
 | GLHF          | `glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct`                | `GLHF_API_KEY` |
