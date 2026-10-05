@@ -358,14 +358,18 @@ def stringify(x: Any) -> str:
         df = x.head(10).copy()
 
     # Truncate long text columns to 1000 characters
-    for col in df.columns:
-        if df[col].dtype == object:
-            df[col] = df[col].apply(
-                lambda item: (
-                    (item[:1000] + "...")
-                    if isinstance(item, str) and len(item) > 1000
-                    else item
-                )
+    for position in range(df.shape[1]):
+        column = df.iloc[:, position]
+        if column.dtype == object:
+            df.isetitem(
+                position,
+                column.apply(
+                    lambda item: (
+                        (item[:1000] + "...")
+                        if isinstance(item, str) and len(item) > 1000
+                        else item
+                    )
+                ),
             )
 
     # Convert to string
