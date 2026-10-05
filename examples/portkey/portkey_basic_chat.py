@@ -81,7 +81,9 @@ def main():
         print("✅ OpenAI API key found")
 
     if os.getenv("ANTHROPIC_API_KEY"):
-        providers_to_test.append(("Anthropic", "anthropic", "claude-haiku-4-5-20251001"))
+        providers_to_test.append(
+            ("Anthropic", "anthropic", "claude-haiku-4-5-20251001")
+        )
         print("✅ Anthropic API key found")
 
     if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
