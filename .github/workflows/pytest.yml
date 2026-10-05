@@ -6,9 +6,14 @@ on:
   # three full runs in two days on 2026-10-04/05, one per ship, when one per
   # RELEASE is what is actually needed. `ops ship` now dispatches this
   # workflow explicitly and waits for it, so the release gate is unchanged.
-  # A nightly run keeps main honest between releases.
+  # A WEEKLY run keeps main honest between releases. Deliberately not daily:
+  # main is unchanged on roughly three days in four (23 distinct commit-days
+  # in the last 90), so a daily cron would fire ~90 paid runs per 90 days
+  # against a mostly-unchanged tree -- MORE than the ~28 the push trigger
+  # produced, i.e. the opposite of this change's purpose. Every release
+  # dispatches a run anyway, so this cron is a backstop, not the main signal.
   schedule:
-    - cron: "17 9 * * *"  # 09:17 UTC daily
+    - cron: "17 9 * * 1"  # 09:17 UTC Mondays
   # NO pull_request trigger. `ready_for_review` used to fire the whole suite,
   # so marking a draft ready cost a full run and merging it cost another
   # (#1169 on 2026-10-02 did exactly that). Opening a non-draft PR never
