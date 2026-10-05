@@ -53,6 +53,13 @@ valid, and refresh only when needed.
 
 ## Example: Google Vertex AI
 
+!!! tip "You probably do not need to do this by hand"
+    `chat_model="vertexai/<publisher>/<model>"` sets all of this up for you —
+    the regional endpoint, and an ADC token provider that refreshes itself.
+    See [Vertex AI Support](gemini.md#the-vertexai-route-recommended). The
+    manual recipe below is still the pattern to copy for *other* endpoints
+    with short-lived credentials, such as Azure OpenAI with Entra ID.
+
 The canonical use case. Point `api_base` at Vertex AI's OpenAI-compatible
 endpoint, and use `google-auth` to mint and refresh the ADC token:
 

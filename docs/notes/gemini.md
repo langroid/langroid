@@ -45,6 +45,86 @@ agent = DocChatAgent(config)
 
 ## Vertex AI Support
 
+### The `vertexai/` route (recommended)
+
+Set `chat_model="vertexai/<publisher>/<model>"` and Langroid builds the
+regional Vertex AI endpoint for you, and authenticates with Google
+[Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials):
+
+```bash
+gcloud auth application-default login
+export GOOGLE_CLOUD_PROJECT=my-gcp-project
+export GOOGLE_CLOUD_LOCATION=us-central1   # optional; us-central1 is the default
+```
+
+```python
+import langroid.language_models as lm
+
+config = lm.OpenAIGPTConfig(chat_model="vertexai/google/gemini-2.5-flash")
+llm = lm.OpenAIGPT(config)
+response = llm.chat("Hello from Vertex AI!")
+```
+
+The ADC token is refreshed automatically as it expires, so a long-running
+agent does not start failing after an hour — there is no need for the manual
+`api_key_provider` described below.
+
+The project and region can come from (in precedence order):
+
+- `VertexAIConfig(project_id=..., location=...)`;
+- `VERTEXAI_PROJECT_ID` / `VERTEXAI_LOCATION`;
+- `GOOGLE_CLOUD_PROJECT` (or `GCP_PROJECT`) / `GOOGLE_CLOUD_LOCATION`.
+
+For a service account rather than a user login, point
+`GOOGLE_APPLICATION_CREDENTIALS` at its key file; ADC picks it up.
+
+To supply a token yourself instead of using ADC, set `VERTEXAI_API_KEY`, or
+construct the config directly:
+
+```python
+config = lm.VertexAIConfig(
+    chat_model="vertexai/google/gemini-2.5-flash",
+    project_id="my-gcp-project",
+    location="europe-west4",
+    api_key_provider=my_token_callable,   # called per request
+)
+llm = lm.OpenAIGPT(config)
+```
+
+An explicit `api_base` (or `VERTEXAI_API_BASE`) is honored as-is, for a
+private or PSC endpoint, instead of the constructed regional URL.
+
+!!! note "Why a separate config class"
+    `OpenAIGPTConfig` is a pydantic `BaseSettings` with
+    `env_prefix="OPENAI_"`, so a config built in a process that has
+    `OPENAI_API_KEY`, `OPENAI_HEADERS`, `OPENAI_ORGANIZATION` or
+    `OPENAI_API_BASE` set inherits **every** one of them. `VertexAIConfig`
+    overrides the prefix to `VERTEXAI_`, so those variables are not an env
+    source for it and cannot follow you to Google. A `vertexai/` route is
+    rebuilt as a `VertexAIConfig` automatically; everything else you
+    configured (`temperature`, `max_output_tokens`, ...) is carried over.
+    What is dropped is every field an `OPENAI_*` variable could set that
+    also changes where the request goes, what it carries or how it is
+    secured: `api_key`, `headers`, `organization`, `api_base`,
+    `http_client_config`, `http_verify_ssl`, `chat_model_orig` and
+    `litellm`, plus `params.extra_body` and `params.user`. Set those via
+    `VERTEXAI_*`, or on a `VertexAIConfig` you construct yourself, if you
+    need them on this route; a dropped value that you set deliberately is
+    logged rather than discarded in silence.
+
+    Separately, the `openai` client reads a few `OPENAI_*` variables itself,
+    for arguments langroid does not pass — `OPENAI_PROJECT_ID` and
+    `OPENAI_CUSTOM_HEADERS` among them. Those are never config fields, so the
+    env prefix cannot close them; they are removed for the duration of client
+    construction on this route instead. Conversely, a `VertexAIConfig`
+    whose model is *not* a `vertexai/` route is refused rather than sent to
+    OpenAI with a Google credential — so a global `-m <model>` override
+    cannot be applied to one. This is what makes the hazard described in
+    [Headers set for OpenAI follow you to Vertex AI](#headers-set-for-openai-follow-you-to-vertex-ai)
+    inapplicable to the `vertexai/` route.
+
+### Manual endpoint configuration
+
 Google Vertex AI uses project-specific URLs for its
 [OpenAI compatibility layer](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-gemini-using-openai-library),
 which differs from the fixed URL used by the standard Google AI (Gemini) API.
@@ -174,6 +254,10 @@ credential libraries cache the token and refresh it only once it has actually
 expired.
 
 ### Headers set for OpenAI follow you to Vertex AI
+
+This applies to the manual `gemini/` + `api_base` route below. The
+[`vertexai/` route](#the-vertexai-route-recommended) is not affected: it
+builds a `VertexAIConfig`, whose env prefix is `VERTEXAI_`.
 
 `OpenAIGPTConfig` is a pydantic `BaseSettings` whose env prefix is
 `OPENAI_`, so matching environment variables populate the corresponding

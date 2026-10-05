@@ -126,6 +126,7 @@ def get_openai_client(
     default_headers: Optional[Dict[str, str]] = None,
     http_client: Optional[Any] = None,
     http_client_config: Optional[Dict[str, Any]] = None,
+    sdk_env_scrubbed: bool = False,
 ) -> OpenAI:
     """
     Get or create a singleton OpenAI client with the given configuration.
@@ -169,6 +170,11 @@ def get_openai_client(
         timeout=timeout,
         default_headers=default_headers,
         http_client_config=http_client_config,  # Include config in cache key
+        # Whether the caller built this client with the openai SDK's own
+        # OPENAI_* environment channels hidden (the vertexai/ route does).
+        # A client built WITHOUT that scrub has those values baked in, so the
+        # two must never share a cache entry even if every other input matches.
+        sdk_env_scrubbed=sdk_env_scrubbed,
     )
 
     with _client_cache_lock:
@@ -205,6 +211,7 @@ def get_async_openai_client(
     default_headers: Optional[Dict[str, str]] = None,
     http_client: Optional[Any] = None,
     http_client_config: Optional[Dict[str, Any]] = None,
+    sdk_env_scrubbed: bool = False,
 ) -> AsyncOpenAI:
     """
     Get or create a singleton AsyncOpenAI client with the given configuration.
@@ -255,6 +262,11 @@ def get_async_openai_client(
         timeout=timeout,
         default_headers=default_headers,
         http_client_config=http_client_config,  # Include config in cache key
+        # Whether the caller built this client with the openai SDK's own
+        # OPENAI_* environment channels hidden (the vertexai/ route does).
+        # A client built WITHOUT that scrub has those values baked in, so the
+        # two must never share a cache entry even if every other input matches.
+        sdk_env_scrubbed=sdk_env_scrubbed,
     )
 
     with _client_cache_lock:
