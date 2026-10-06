@@ -489,3 +489,119 @@ def test_firecrawl_self_hosted_api_url(firecrawl_offline: dict[str, Mock]) -> No
     url = firecrawl_offline["post"].call_args.args[0]
     assert url == "http://localhost:3002/v2/scrape"
     assert [d.content for d in docs] == ["# A"]
+
+
+def test_firecrawl_nested_keys_are_left_alone(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """camelCase conversion stops at the top level, and must keep doing so.
+
+    A nested dict is as likely to hold user data as option names, so the
+    keys of a JSON extraction schema and of a `headers` map have to reach
+    Firecrawl exactly as written. Converting them -- an obvious-looking
+    extension of the v1 back-compat shim -- would silently rewrite a
+    user's schema properties.
+    """
+    firecrawl_offline["post"].return_value = _fc_scraped("https://a.com", "# A")
+    schema = {
+        "type": "object",
+        "properties": {"firstName": {"type": "string"}},
+        "additionalProperties": False,
+    }
+    config = FirecrawlConfig(
+        api_key="fc-test",
+        params={
+            "headers": {"X-My-Header": "keepMe"},
+            "formats": [{"type": "json", "schema": schema}],
+        },
+    )
+
+    URLLoader(urls=["https://a.com"], crawler_config=config).load()
+
+    payload = firecrawl_offline["post"].call_args.kwargs["json"]
+    assert payload["headers"] == {"X-My-Header": "keepMe"}
+    sent = next(
+        f for f in payload["formats"] if isinstance(f, dict) and f.get("type") == "json"
+    )
+    assert sent["schema"] == schema
+
+
+def test_firecrawl_scrape_skips_empty_markdown(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """A 200 with no markdown is skipped, not turned into a blank doc."""
+    firecrawl_offline["post"].side_effect = [
+        _fc_response(
+            200,
+            {
+                "success": True,
+                "data": {"metadata": {"url": "https://a.com", "statusCode": 200}},
+            },
+        ),
+        _fc_scraped("https://b.com", "# B"),
+    ]
+
+    docs = URLLoader(
+        urls=["https://a.com", "https://b.com"],
+        crawler_config=FirecrawlConfig(api_key="fc-test"),
+    ).load()
+
+    assert [d.content for d in docs] == ["# B"]
+
+
+def test_firecrawl_crawl_rejects_unknown_scrape_option(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """A typo inside `scrape_options` is reported, not silently dropped.
+
+    `ScrapeOptions` does not forbid extra fields, so an unknown key would
+    otherwise be dropped on construction.
+    """
+    with pytest.raises(ValueError, match="bogus_option"):
+        URLLoader(
+            urls=["https://site.com"],
+            crawler_config=FirecrawlConfig(
+                api_key="fc-test",
+                mode="crawl",
+                params={"scrape_options": {"bogusOption": 1}},
+            ),
+        ).load()
+    firecrawl_offline["post"].assert_not_called()
+
+
+def test_firecrawl_with_markdown_keeps_a_lone_format_object() -> None:
+    """A single format *object* is wrapped, not iterated into key/value pairs.
+
+    Pydantic models iterate as `(field, value)` tuples, so a bare format
+    object used to be shredded into nonsense entries.
+    """
+    pytest.importorskip("firecrawl")
+    from firecrawl.v2.types import JsonFormat
+
+    from langroid.parsing.url_loader import _with_markdown
+
+    fmt = JsonFormat(prompt="extract")
+    assert _with_markdown(fmt) == ["markdown", fmt]
+
+
+def test_firecrawl_scrape_formats_container(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """The SDK's `ScrapeFormats` container gets markdown flipped on.
+
+    It holds one boolean per format rather than a `type`, so appending to
+    it as if it were a list of formats produced a payload the SDK
+    rejected -- and scrape mode turned that into zero documents.
+    """
+    from firecrawl.v2.types import ScrapeFormats
+
+    firecrawl_offline["post"].return_value = _fc_scraped("https://a.com", "# A")
+    config = FirecrawlConfig(
+        api_key="fc-test", params={"formats": ScrapeFormats(html=True)}
+    )
+
+    docs = URLLoader(urls=["https://a.com"], crawler_config=config).load()
+
+    payload = firecrawl_offline["post"].call_args.kwargs["json"]
+    assert sorted(payload["formats"]) == ["html", "markdown"]
+    assert [d.content for d in docs] == ["# A"]

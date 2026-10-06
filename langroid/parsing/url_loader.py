@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 import markdownify as md
 from dotenv import load_dotenv
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from langroid.exceptions import LangroidImportError
@@ -83,6 +83,11 @@ class FirecrawlConfig(BaseCrawlerConfig):
             `start_crawl`). camelCase keys from the v1 API, such as
             `onlyMainContent` or `waitFor`, are converted to snake_case.
             Options renamed in v2 (e.g. `maxDepth`) need their v2 name.
+            Conversion applies to top-level names only: names nested
+            inside an option, such as an `actions` entry, need their v2
+            spelling, since a nested dict may instead be user data (a
+            JSON extraction schema, a `headers` map) whose keys must
+            reach Firecrawl unchanged.
         timeout: Per-page timeout in milliseconds.
         api_url: Base URL of a self-hosted Firecrawl instance, read from
             `FIRECRAWL_API_URL` if not set. Defaults to Firecrawl's cloud API.
@@ -331,15 +336,41 @@ class TrafilaturaCrawler(BaseCrawler):
 
 
 def _snake_case_keys(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert camelCase keys (v1 Firecrawl API style) to snake_case."""
+    """Convert camelCase keys (v1 Firecrawl API style) to snake_case.
+
+    Top-level option names only. Names nested inside an option -- an entry
+    of `actions`, a `formats` entry -- must already use their v2 spelling:
+    a nested dict is as likely to be user data (a JSON extraction schema,
+    a `headers` map) as a set of option names, and renaming keys there
+    would corrupt the request.
+    """
     return {
         re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", k).lower(): v for k, v in params.items()
     }
 
 
-def _with_markdown(formats: Any) -> List[Any]:
+def _is_format_container(formats: Any) -> bool:
+    """Whether `formats` is the SDK's set of format flags, not one format.
+
+    A single format carries a `type` (`{"type": "json"}`, `JsonFormat`);
+    the `ScrapeFormats` container instead has one boolean per format. The
+    SDK accepts either, so both have to be recognised.
+    """
+    if isinstance(formats, BaseModel):
+        return "type" not in type(formats).model_fields
+    return isinstance(formats, dict) and "type" not in formats
+
+
+def _with_markdown(formats: Any) -> Any:
     """Make sure `markdown` is among the requested Firecrawl formats."""
-    if isinstance(formats, (str, dict)):
+    if _is_format_container(formats):
+        # flip markdown on in place of appending to a list of formats
+        if isinstance(formats, BaseModel):
+            return formats.model_copy(update={"markdown": True})
+        return {**formats, "markdown": True}
+    if isinstance(formats, (str, dict, BaseModel)):
+        # a single format, not an iterable of them: pydantic models iterate
+        # as (field, value) pairs, so wrapping has to come first
         formats = [formats]
     formats = list(formats or [])
     has_markdown = any(
@@ -428,7 +459,10 @@ class FirecrawlCrawler(BaseCrawler):
     @staticmethod
     def _check_options(params: Dict[str, Any], method: Any, name: str) -> None:
         """Reject options the Firecrawl SDK method does not accept."""
-        # url is positional; alexandria / request_id change what scrape returns
+        # url is positional; alexandria / request_id change what scrape returns.
+        # Neither method takes **kwargs as of 4.x, which the extra is pinned to;
+        # if one ever did, "kwargs" would land in `allowed` and a passthrough
+        # option would still be rejected -- failing closed, not open.
         allowed = set(inspect.signature(method).parameters) - {
             "url",
             "alexandria",
@@ -443,13 +477,18 @@ class FirecrawlCrawler(BaseCrawler):
     def crawl(self, urls: List[str]) -> List[Document]:
         try:
             from firecrawl import Firecrawl
-            from firecrawl.v2.types import ScrapeOptions
-            from firecrawl.v2.utils.error_handler import (
-                PaymentRequiredError,
-                UnauthorizedError,
-            )
         except ImportError:
             raise LangroidImportError("firecrawl", "firecrawl")
+
+        # The SDK exports no public alias for these, so the private paths are
+        # the only way in. They stay outside the LangroidImportError above: if
+        # 4.x moves them, the user should see the real ImportError and not be
+        # told to install a package they already have.
+        from firecrawl.v2.types import ScrapeOptions
+        from firecrawl.v2.utils.error_handler import (
+            PaymentRequiredError,
+            UnauthorizedError,
+        )
 
         client_kwargs: Dict[str, Any] = {"origin": "langroid"}
         if self.config.api_url:
@@ -484,9 +523,18 @@ class FirecrawlCrawler(BaseCrawler):
                         "Skipping but continuing."
                     )
                     continue
+                content = result.markdown or ""
+                if not content:
+                    # a 200 with no markdown used to raise KeyError and be
+                    # skipped; don't let blank docs through to the parser
+                    logging.warning(
+                        f"Firecrawl returned no markdown for {url}. "
+                        "Skipping but continuing."
+                    )
+                    continue
                 docs.append(
                     Document(
-                        content=result.markdown or "",
+                        content=content,
                         metadata=DocMetaData(
                             source=url,
                             title=metadata.title or "Unknown Title",
@@ -511,6 +559,13 @@ class FirecrawlCrawler(BaseCrawler):
             if self.config.timeout is not None:
                 options["timeout"] = self.config.timeout
             options["formats"] = _with_markdown(options.get("formats"))
+            # ScrapeOptions does not forbid extras, so an unknown key here
+            # would be dropped silently rather than reported
+            unknown = set(options) - set(ScrapeOptions.model_fields)
+            if unknown:
+                raise ValueError(
+                    f"Unsupported Firecrawl scrape_options: {sorted(unknown)}"
+                )
             self._check_options(params, app.start_crawl, "crawl")
             scrape_options = ScrapeOptions(**options)
 

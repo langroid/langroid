@@ -154,7 +154,7 @@ gathering content from multiple pages, including subdomains, while bypassing blo
 ### Parameters
 
 Obtain a Firecrawl API key from
-[Firecrawl](https://www.firecrawl.dev/app/api-keys?utm_source=langroid&utm_medium=integration)
+[Firecrawl](https://www.firecrawl.dev/app/api-keys)
 and set it in your environment variables, e.g. in your `.env` file as
 ```env
 FIRECRAWL_API_KEY=your_api_key_here
@@ -171,9 +171,16 @@ FIRECRAWL_API_KEY=your_api_key_here
         `{"limit": 5}` (maximum number of pages) in crawl mode.
         camelCase keys from the v1 API (`onlyMainContent`, `waitFor`, ...)
         are converted to snake_case; options renamed in v2 (e.g. `maxDepth`,
-        now `max_discovery_depth`) need the new name.
-        See the [scrape API](https://docs.firecrawl.dev/api-reference/endpoint/scrape?utm_source=langroid&utm_medium=integration) and 
-        [crawl API](https://docs.firecrawl.dev/api-reference/endpoint/crawl-post?utm_source=langroid&utm_medium=integration) for details.
+        now `max_discovery_depth`) need the new name. Only top-level names
+        are converted: a name nested inside an option (an `actions` entry,
+        say) needs its v2 spelling, because a nested dict may instead be
+        your own data -- a JSON extraction schema, a `headers` map -- and
+        its keys are passed through untouched.
+        See the
+        [scrape API](https://docs.firecrawl.dev/api-reference/endpoint/scrape)
+        and
+        [crawl API](https://docs.firecrawl.dev/api-reference/endpoint/crawl-post)
+        for details.
 
 ### Usage
 
