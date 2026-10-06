@@ -234,9 +234,10 @@ class TableChatAgent(ChatAgent):
         # Evaluate the last line and get the result;
         # SECURITY MITIGATION: Eval input is sanitized by default to prevent most
         # common code injection attack vectors. Additionally, the globals dict
-        # restricts ``__builtins__`` so that even with ``full_eval=True`` the
-        # expression cannot reach ``__import__``/``eval``/``exec`` via Python's
-        # implicit builtin injection (GHSA-q9p7-wqxg-mrhc).
+        # restricts ``__builtins__`` so bare ``__import__``/``eval``/``exec``
+        # names do not resolve (GHSA-q9p7-wqxg-mrhc). That is defence in depth,
+        # not a sandbox: with ``full_eval=True`` there is no validation and the
+        # expression must be treated as arbitrary code. See SECURITY.md.
         try:
             if not self.config.full_eval:
                 exprn = sanitize_command(exprn)

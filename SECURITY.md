@@ -61,9 +61,10 @@ If you expose any of the code- or query-executing agents to untrusted input:
   data you are unwilling to expose to the LLM.
 - **Treat `allow_dangerous_operations=True` and `full_eval=True` as
   "I am providing my own sandbox."** The first permits dangerous database
-  operations. The second disables pandas AST validation while retaining the
-  restricted globals from `safe_eval_globals()`. Both are documented as
-  trusted-environment-only.
+  operations. The second disables pandas AST validation; the restricted
+  globals from `safe_eval_globals()` remain, but they are not a sandbox on
+  their own, so treat the expression as arbitrary code. Both are documented
+  as trusted-environment-only.
 
 ## Reporting a vulnerability
 

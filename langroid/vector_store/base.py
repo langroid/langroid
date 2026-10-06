@@ -294,12 +294,13 @@ class VectorStore(ABC):
         df = pd.DataFrame(dicts)
 
         try:
-            # SECURITY MITIGATION: Eval input is sanitized to prevent most common
-            # code injection attack vectors when full_eval is False. The globals
-            # dict also restricts ``__builtins__`` so that even with
-            # ``full_eval=True`` the expression cannot reach
-            # ``__import__``/``eval``/``exec`` via Python's implicit builtin
-            # injection (GHSA-q9p7-wqxg-mrhc).
+            # SECURITY MITIGATION: when full_eval is False (the default) the
+            # expression is validated by sanitize_command(). The globals dict
+            # also restricts ``__builtins__`` so bare ``__import__``/``eval``/
+            # ``exec`` names do not resolve (GHSA-q9p7-wqxg-mrhc). That is
+            # defence in depth, not a sandbox: with ``full_eval=True`` there is
+            # no validation and the expression must be treated as arbitrary
+            # code. See SECURITY.md.
             vars = {"df": df}
             if not self.config.full_eval:
                 calc = sanitize_command(calc)
