@@ -251,8 +251,9 @@ class LanceDB(VectorStore):
                     data=batch,
                     mode="create",
                 )
-                # ... and add the rest
-                tbl.add(batch_gen)
+                # ... and add the rest, if any (adding an empty iterator raises)
+                if len(ids) > b:
+                    tbl.add(batch_gen)
         except Exception as e:
             logger.error(
                 f"""
@@ -261,6 +262,7 @@ class LanceDB(VectorStore):
                 {self.config.storage_path} and try again.
                 """
             )
+            raise
 
     def add_dataframe(
         self,
