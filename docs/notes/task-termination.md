@@ -396,7 +396,17 @@ Events must occur consecutively without intervening messages:
    ```
 
    A turn limit is a `run()` argument, not a `TaskConfig` field. To cap turns
-   globally instead, use `set_global(Settings(max_turns=10))`.
+   globally instead, update just that setting:
+
+   ```python
+   from langroid.utils.configuration import Settings, update_global_settings
+
+   update_global_settings(Settings(max_turns=10), keys=["max_turns"])
+   ```
+
+   Prefer this over `set_global(Settings(max_turns=10))` (same module), which
+   replaces the whole settings object and so resets every other global —
+   `cache`, `stream`, `quiet` and the rest — back to its default.
 
 ## Reference
 
