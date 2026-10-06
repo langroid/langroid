@@ -3,10 +3,12 @@ import logging
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Iterator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+import requests
 
 from langroid.parsing.parser import ParsingConfig
 from langroid.parsing.url_loader import (
@@ -232,3 +234,258 @@ def test_url_loader_document_fetch_honors_max_size(
     assert _CrawlHandler.served_bytes < _OVERSIZED_BODY // 2
     # The size rejection must tell the user which config field to raise.
     assert any("url_max_size" in msg for msg in root_log_messages)
+
+
+def _fc_response(status_code: int, body: dict[str, Any]) -> Mock:
+    response = Mock(spec=requests.Response)
+    response.status_code = status_code
+    response.ok = status_code < 400
+    response.json.return_value = body
+    response.text = str(body)
+    response.headers = {}
+    return response
+
+
+def _fc_page(url: str, markdown: str, status_code: int = 200) -> dict[str, Any]:
+    metadata = dict(url=url, sourceURL=url, title=f"Title {url}")
+    return dict(markdown=markdown, metadata=metadata | {"statusCode": status_code})
+
+
+def _fc_scraped(url: str, markdown: str, status_code: int = 200) -> Mock:
+    return _fc_response(
+        200, {"success": True, "data": _fc_page(url, markdown, status_code)}
+    )
+
+
+@pytest.fixture
+def firecrawl_offline(monkeypatch: pytest.MonkeyPatch) -> dict[str, Mock]:
+    """Run the real Firecrawl SDK client against mocked HTTP calls.
+
+    The SDK sends requests via `requests.post` / `requests.get`; anything
+    else that reaches the network fails the test.
+    """
+    pytest.importorskip("firecrawl")
+    for name in ("API_KEY", "API_URL", "MODE", "PARAMS", "TIMEOUT"):
+        monkeypatch.delenv(f"FIRECRAWL_{name}", raising=False)
+    monkeypatch.setattr(
+        requests.sessions.Session,
+        "request",
+        Mock(side_effect=AssertionError("Unexpected network request")),
+    )
+    mocks = {"post": Mock(), "get": Mock()}
+    monkeypatch.setattr(requests, "post", mocks["post"])
+    monkeypatch.setattr(requests, "get", mocks["get"])
+    monkeypatch.setattr(time, "sleep", Mock())
+    return mocks
+
+
+def test_firecrawl_scrape(firecrawl_offline: dict[str, Mock]) -> None:
+    """Scrape mode sends a v2 scrape request and maps the response.
+
+    Regression test: the crawler passed the v1 `params=` keyword, which
+    firecrawl-py v4 rejects with a TypeError that was logged and swallowed,
+    so every URL returned no documents.
+    """
+    post = firecrawl_offline["post"]
+    post.side_effect = [
+        _fc_scraped("https://a.com", "# A"),
+        _fc_scraped("https://b.com", "not found", status_code=404),
+    ]
+    config = FirecrawlConfig(
+        api_key="fc-test", params={"onlyMainContent": False}, timeout=60000
+    )
+
+    docs = URLLoader(
+        urls=["https://a.com", "https://b.com"], crawler_config=config
+    ).load()
+
+    payload = post.call_args_list[0].kwargs["json"]
+    assert post.call_args_list[0].args[0].endswith("/v2/scrape")
+    assert payload["url"] == "https://a.com"
+    assert payload["formats"] == ["markdown"]
+    assert payload["onlyMainContent"] is False
+    assert payload["timeout"] == 60000
+    assert payload["origin"] == "langroid"
+    # the 404 page is dropped
+    assert len(docs) == 1
+    assert docs[0].content == "# A"
+    assert docs[0].metadata.source == "https://a.com"
+    assert docs[0].metadata.title == "Title https://a.com"
+
+
+def test_firecrawl_scrape_skips_failed_url(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """An API error on one URL is logged and skipped."""
+    firecrawl_offline["post"].side_effect = [
+        _fc_response(400, {"success": False, "error": "bad url"}),
+        _fc_scraped("https://b.com", "# B"),
+    ]
+    docs = URLLoader(
+        urls=["https://a.com", "https://b.com"],
+        crawler_config=FirecrawlConfig(api_key="fc-test"),
+    ).load()
+    assert [d.content for d in docs] == ["# B"]
+
+
+def test_firecrawl_scrape_raises_on_bad_key(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """A rejected key fails loudly instead of returning no documents."""
+    from firecrawl.v2.utils.error_handler import UnauthorizedError
+
+    firecrawl_offline["post"].return_value = _fc_response(
+        401, {"success": False, "error": "Unauthorized: Invalid token"}
+    )
+    with pytest.raises(UnauthorizedError):
+        URLLoader(
+            urls=["https://a.com", "https://b.com"],
+            crawler_config=FirecrawlConfig(api_key="fc-bad"),
+        ).load()
+    assert firecrawl_offline["post"].call_count == 1
+
+
+def test_firecrawl_scrape_rejects_unknown_option(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """An option the SDK does not accept is reported before any request."""
+    with pytest.raises(ValueError, match="bogus_option"):
+        URLLoader(
+            urls=["https://a.com"],
+            crawler_config=FirecrawlConfig(
+                api_key="fc-test", params={"bogusOption": 1}
+            ),
+        ).load()
+    firecrawl_offline["post"].assert_not_called()
+
+
+def test_firecrawl_crawl(
+    firecrawl_offline: dict[str, Mock],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Crawl mode sends scrape options and polls until the crawl completes.
+
+    `timeout` and other page options must reach `scrapeOptions`: the SDK
+    ignores flat scrape options once `scrape_options` is set.
+    """
+    monkeypatch.chdir(tmp_path)
+    home = _fc_page("https://site.com", "# Home")
+    about = _fc_page("https://site.com/about", "# About")
+    firecrawl_offline["post"].return_value = _fc_response(
+        200, {"success": True, "id": "job-1", "url": "https://x"}
+    )
+    firecrawl_offline["get"].side_effect = [
+        _fc_response(200, {"success": True, "status": "scraping", "data": [home]}),
+        _fc_response(
+            200, {"success": True, "status": "completed", "data": [home, about]}
+        ),
+    ]
+    config = FirecrawlConfig(
+        api_key="fc-test",
+        mode="crawl",
+        params={"limit": 5, "onlyMainContent": False},
+        timeout=30000,
+    )
+
+    docs = URLLoader(urls=["https://site.com"], crawler_config=config).load()
+
+    post = firecrawl_offline["post"]
+    payload = post.call_args.kwargs["json"]
+    assert post.call_args.args[0].endswith("/v2/crawl")
+    assert payload["url"] == "https://site.com"
+    assert payload["limit"] == 5
+    assert payload["origin"] == "langroid"
+    assert payload["scrapeOptions"]["formats"] == ["markdown"]
+    assert payload["scrapeOptions"]["timeout"] == 30000
+    assert payload["scrapeOptions"]["onlyMainContent"] is False
+    assert firecrawl_offline["get"].call_args.args[0].endswith("/v2/crawl/job-1")
+    assert [d.content for d in docs] == ["# Home", "# About"]
+    assert [d.metadata.source for d in docs] == [
+        "https://site.com",
+        "https://site.com/about",
+    ]
+    assert (tmp_path / "firecrawl_output" / "full_results.json").exists()
+
+
+def test_firecrawl_crawl_failed(
+    firecrawl_offline: dict[str, Mock],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed crawl stops polling and returns the pages it saved."""
+    monkeypatch.chdir(tmp_path)
+    firecrawl_offline["post"].return_value = _fc_response(
+        200, {"success": True, "id": "job-2", "url": "https://x"}
+    )
+    firecrawl_offline["get"].return_value = _fc_response(
+        200,
+        {
+            "success": True,
+            "status": "failed",
+            "data": [_fc_page("https://site.com", "# Home")],
+        },
+    )
+
+    docs = URLLoader(
+        urls=["https://site.com"],
+        crawler_config=FirecrawlConfig(api_key="fc-test", mode="crawl"),
+    ).load()
+
+    assert [d.content for d in docs] == ["# Home"]
+    assert firecrawl_offline["get"].call_count == 1
+
+
+def test_firecrawl_crawl_scrape_options_object(
+    firecrawl_offline: dict[str, Mock],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `ScrapeOptions` object in params keeps markdown and the timeout."""
+    from firecrawl.v2.types import ScrapeOptions
+
+    monkeypatch.chdir(tmp_path)
+    firecrawl_offline["post"].return_value = _fc_response(
+        200, {"success": True, "id": "job-3", "url": "https://x"}
+    )
+    firecrawl_offline["get"].return_value = _fc_response(
+        200, {"success": True, "status": "completed", "data": []}
+    )
+    config = FirecrawlConfig(
+        api_key="fc-test",
+        mode="crawl",
+        params={"scrape_options": ScrapeOptions(formats=["html"])},
+        timeout=30000,
+    )
+
+    URLLoader(urls=["https://site.com"], crawler_config=config).load()
+
+    scrape_options = firecrawl_offline["post"].call_args.kwargs["json"]["scrapeOptions"]
+    assert scrape_options["formats"] == ["markdown", "html"]
+    assert scrape_options["timeout"] == 30000
+
+
+def test_firecrawl_crawl_rejects_unknown_option(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """A v1 crawl option renamed in v2 is reported before any request."""
+    with pytest.raises(ValueError, match="max_depth"):
+        URLLoader(
+            urls=["https://site.com"],
+            crawler_config=FirecrawlConfig(
+                api_key="fc-test", mode="crawl", params={"maxDepth": 2}
+            ),
+        ).load()
+    firecrawl_offline["post"].assert_not_called()
+
+
+def test_firecrawl_self_hosted_api_url(firecrawl_offline: dict[str, Mock]) -> None:
+    """`api_url` points the client at a self-hosted Firecrawl instance."""
+    firecrawl_offline["post"].return_value = _fc_scraped("https://a.com", "# A")
+    config = FirecrawlConfig(api_key="fc-test", api_url="http://localhost:3002")
+
+    docs = URLLoader(urls=["https://a.com"], crawler_config=config).load()
+
+    url = firecrawl_offline["post"].call_args.args[0]
+    assert url == "http://localhost:3002/v2/scrape"
+    assert [d.content for d in docs] == ["# A"]

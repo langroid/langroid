@@ -2302,7 +2302,7 @@ wheels = [
 
 [[package]]
 name = "firecrawl-py"
-version = "4.32.1"
+version = "4.46.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2313,9 +2313,9 @@ dependencies = [
     { name = "requests" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/28/53/d90f58eb6f6e950d9780b6c38eae2bccf3bdc73b0cfeb5f30a41f1a6db1b/firecrawl_py-4.32.1.tar.gz", hash = "sha256:a0a15f4a82b903d9054f0cf82693c9286d40b53477545debc7bd6157b9399eff", size = 202276 }
+sdist = { url = "https://files.pythonhosted.org/packages/52/92/1ff1de286a7e98ddfa21fbdf6b6dd80db908ffb6e619444c1e3f6a4e02f8/firecrawl_py-4.46.2.tar.gz", hash = "sha256:9d504036139b86ca5cd28acdc5cb958e956de1684c371d02a26f85273e509554", size = 259717 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/4e/3c6016fa8ef0cf79af55947849f30a470fe2070cc3df4cc3cae6218e4ae9/firecrawl_py-4.32.1-py3-none-any.whl", hash = "sha256:0af21278537422c5ecce6159f45aed88aa75046a029cbd0ba8e4a38d8067b2b2", size = 252262 },
+    { url = "https://files.pythonhosted.org/packages/ca/a5/384b4501a8f4c3ad8d4f5651d3ceafb1e235995b629771ddb466bbef45af/firecrawl_py-4.46.2-py3-none-any.whl", hash = "sha256:fba90cb07878cb466380623dfafc10ef8f158740cdca1206205c88f0bebbfbac", size = 318324 },
 ]
 
 [[package]]
@@ -4065,7 +4065,7 @@ requires-dist = [
     { name = "fastembed", marker = "extra == 'fastembed'", specifier = ">=0.3.1,<0.4.0" },
     { name = "fastmcp", specifier = ">=2.2.5" },
     { name = "fire", specifier = ">=0.5.0,<1.0.0" },
-    { name = "firecrawl-py", marker = "extra == 'firecrawl'", specifier = ">=1.13.5" },
+    { name = "firecrawl-py", marker = "extra == 'firecrawl'", specifier = ">=4.46.0,<5.0.0" },
     { name = "gitpython", specifier = ">=3.1.43,<4.0.0" },
     { name = "google-api-python-client", specifier = ">=2.95.0,<3.0.0" },
     { name = "google-genai", specifier = ">=1.0.0" },
