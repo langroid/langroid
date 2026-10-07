@@ -286,8 +286,16 @@ class RateLimiter:
         return interval
 
     def _has_usable_rate_locked(self) -> bool:
-        """Did the provider's headers yield a rate we can actually pace to?"""
-        return self._request_rate is not None or self._token_rate is not None
+        """Did the provider's headers yield a rate we can actually pace to?
+
+        Deliberately mirrors what `_interval_locked` can use: a token rate is
+        no use on its own, since pacing to it also needs a per-request token
+        estimate. Claiming it as usable would switch off the warmup AND the
+        AIMD fallback while supplying no pacing in their place.
+        """
+        if self._request_rate is not None:
+            return True
+        return self._token_rate is not None and bool(self._avg_tokens)
 
     def _reserve(self) -> float:
         """Claim a send slot off the shared queue; return the wait in seconds.

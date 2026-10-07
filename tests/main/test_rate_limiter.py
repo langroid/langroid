@@ -228,6 +228,33 @@ def test_token_budget_paces_once_usage_is_known():
 # --------------------------------------------------------------------------- #
 
 
+def test_token_only_headers_keep_warmup_and_fallback():
+    """A token rate alone is not something we can pace to.
+
+    Pacing to a token budget also needs a per-request token estimate, so until
+    one exists a token-only provider must keep the warmup interval and the
+    AIMD fallback -- otherwise it gets no pacing at all.
+    """
+    limiter = RateLimiter(
+        RateLimitConfig(enabled=True, warmup_interval=0.05, error_interval=0.2)
+    )
+    limiter.observe_response(
+        headers={
+            "x-ratelimit-limit-tokens": "1000",
+            "x-ratelimit-remaining-tokens": "900",
+            "x-ratelimit-reset-tokens": "1s",
+        }
+    )
+    stats = limiter.stats()
+    assert stats["token_rate"] == pytest.approx(100.0), stats
+    assert stats["avg_tokens"] is None, stats
+    assert stats["interval"] == pytest.approx(0.05), stats  # warmup still on
+
+    limiter.observe_rate_limit_error()  # 429 with no headers
+    assert limiter.stats()["fallback_interval"] == pytest.approx(0.2)
+    assert limiter.stats()["interval"] >= 0.2
+
+
 def test_headerless_fallback_backs_off_and_recovers():
     cfg = RateLimitConfig(
         enabled=True,
