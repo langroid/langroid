@@ -249,10 +249,10 @@ def test_headerless_fallback_backs_off_and_recovers():
     assert limiter.stats()["rate_limit_errors"] == 2
 
     # recovers on success
-    limiter.observe_response()
+    limiter.observe_success()
     assert limiter.stats()["fallback_interval"] == pytest.approx(0.05)
     for _ in range(10):
-        limiter.observe_response()
+        limiter.observe_success()
     assert limiter.stats()["fallback_interval"] == 0.0
 
 
@@ -282,6 +282,28 @@ def test_partial_headers_do_not_disable_warmup():
     stats = limiter.stats()
     assert stats["request_rate"] is None, stats
     assert stats["interval"] == pytest.approx(0.05), stats
+
+
+def test_one_request_recovers_the_rate_exactly_once():
+    """Only `observe_success` decays the AIMD interval.
+
+    A single request reports to the limiter more than once -- headers when the
+    response opens, token usage later (for a stream, much later) -- so applying
+    the recovery on every report would strip the backoff several times over for
+    one success, which is how a headerless endpoint ends up back in a 429 loop.
+    """
+    limiter = RateLimiter(
+        RateLimitConfig(enabled=True, warmup_interval=0.0, recovery_factor=0.5)
+    )
+    limiter.observe_rate_limit_error()
+    assert limiter.stats()["fallback_interval"] == pytest.approx(0.05)
+
+    # everything one request reports, in the order openai_gpt reports it
+    limiter.observe_response(headers={})  # response opened, no usable headers
+    limiter.observe_success(tokens_used=None)  # the single success signal
+    limiter.observe_response(tokens_used=12)  # stream usage, arriving later
+    assert limiter.stats()["fallback_interval"] == pytest.approx(0.025)
+    assert limiter.stats()["avg_tokens"] == pytest.approx(12.0)
 
 
 def test_headerless_fallback_respects_max_interval():

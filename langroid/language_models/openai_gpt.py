@@ -2744,7 +2744,7 @@ class OpenAIGPT(LanguageModel):
                         limiter.observe_rate_limit_error(headers)
                 raise
             if limiter is not None:
-                limiter.observe_response(tokens_used=self._response_tokens(result))
+                limiter.observe_success(tokens_used=self._response_tokens(result))
 
             if self.get_stream():
                 # If streaming, cannot cache result
@@ -2841,7 +2841,7 @@ class OpenAIGPT(LanguageModel):
                         limiter.observe_rate_limit_error(headers)
                 raise
             if limiter is not None:
-                limiter.observe_response(tokens_used=self._response_tokens(result))
+                limiter.observe_success(tokens_used=self._response_tokens(result))
             if self.get_stream():
                 try:
                     # Try to peek at the first chunk to immediately catch any errors

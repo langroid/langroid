@@ -418,7 +418,12 @@ class RateLimiter:
         headers: Optional[Mapping[str, Any]] = None,
         tokens_used: Optional[int] = None,
     ) -> None:
-        """Learn from a successful response: its headers and its token usage.
+        """Take in what a response reveals about the budget.
+
+        Information only: callers may call this more than once per request (the
+        headers arrive with the response, a streaming request's token usage
+        only later), so it must NOT be where the AIMD recovery is applied --
+        see `observe_success`, which is called exactly once per request.
 
         Args:
             headers: Response headers, if the provider/transport exposes them.
@@ -436,8 +441,17 @@ class RateLimiter:
                     self._avg_tokens = float(tokens_used)
                 else:
                     self._avg_tokens = 0.7 * self._avg_tokens + 0.3 * tokens_used
+
+    def observe_success(self, tokens_used: Optional[int] = None) -> None:
+        """Record that one request was accepted; recover the send rate.
+
+        Call this EXACTLY once per request that the provider accepted. It is
+        the only place the header-free AIMD interval decays, so calling it
+        twice for one request would halve the backoff twice over.
+        """
+        self.observe_response(tokens_used=tokens_used)
+        with self._lock:
             if self._fallback_interval > 0:
-                # Recover the send rate on every success.
                 decayed = self._fallback_interval * self.config.recovery_factor
                 self._fallback_interval = 0.0 if decayed < 1e-3 else decayed
 
