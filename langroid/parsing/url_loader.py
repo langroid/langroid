@@ -425,6 +425,15 @@ class FirecrawlCrawler(BaseCrawler):
                     url = metadata.url or metadata.source_url
                     if url and url not in processed_urls:
                         content = page.markdown or ""
+                        if not content:
+                            # same filter scrape mode applies; left
+                            # unprocessed so a later poll can still pick it
+                            # up if the content arrives
+                            logging.warning(
+                                f"Firecrawl returned no markdown for {url}. "
+                                "Skipping but continuing."
+                            )
+                            continue
                         filename = f"{output_dir}/{len(processed_urls)}.md"
                         with open(filename, "w") as f:
                             f.write(content)
@@ -484,7 +493,7 @@ class FirecrawlCrawler(BaseCrawler):
         # the only way in. They stay outside the LangroidImportError above: if
         # 4.x moves them, the user should see the real ImportError and not be
         # told to install a package they already have.
-        from firecrawl.v2.types import ScrapeOptions
+        from firecrawl.v2.types import CrawlRequest, ScrapeOptions
         from firecrawl.v2.utils.error_handler import (
             PaymentRequiredError,
             UnauthorizedError,
@@ -549,12 +558,22 @@ class FirecrawlCrawler(BaseCrawler):
 
             options = params.pop("scrape_options", None) or {}
             if isinstance(options, ScrapeOptions):
-                options = options.model_dump(exclude_unset=True)
+                # not exclude_unset: `type` is defaulted rather than set on
+                # every format model, and Dict[str, Any] is the first member
+                # of the formats union, so dropping it leaves a typeless dict
+                # that is absorbed as-is instead of coerced back into the
+                # model -- silently untyping a JSON extraction request. Every
+                # ScrapeOptions field defaults to None, so at the top level
+                # this omits exactly what exclude_unset did.
+                options = options.model_dump(exclude_none=True)
             options = _snake_case_keys(options)
             # start_crawl ignores flat scrape options (timeout, formats, ...)
-            # once scrape_options is set, so move them in here
+            # once scrape_options is set, so move them in here -- except the
+            # ones CrawlRequest also takes at the top level, which the SDK
+            # reads only from there for a crawl (`integration`, as of 4.x).
+            page_only = set(ScrapeOptions.model_fields) - set(CrawlRequest.model_fields)
             for key in list(params):
-                if key in ScrapeOptions.model_fields:
+                if key in page_only:
                     options.setdefault(key, params.pop(key))
             if self.config.timeout is not None:
                 options["timeout"] = self.config.timeout

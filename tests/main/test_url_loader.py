@@ -605,3 +605,109 @@ def test_firecrawl_scrape_formats_container(
     payload = firecrawl_offline["post"].call_args.kwargs["json"]
     assert sorted(payload["formats"]) == ["html", "markdown"]
     assert [d.content for d in docs] == ["# A"]
+
+
+def test_firecrawl_crawl_scrape_options_object_keeps_format_type(
+    firecrawl_offline: dict[str, Mock],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A format model inside `ScrapeOptions` keeps its `type` on the wire.
+
+    `type` is defaulted rather than required on every format model, so
+    `model_dump(exclude_unset=True)` dropped it; `Dict[str, Any]` is the
+    first member of the `formats` union, so the typeless leftover was
+    absorbed as a raw dict instead of being coerced back into the model.
+    A user's JSON-extraction request silently became a typeless object.
+    """
+    from firecrawl.v2.types import JsonFormat, ScrapeOptions
+
+    monkeypatch.chdir(tmp_path)
+    firecrawl_offline["post"].return_value = _fc_response(
+        200, {"success": True, "id": "job-4", "url": "https://x"}
+    )
+    firecrawl_offline["get"].return_value = _fc_response(
+        200, {"success": True, "status": "completed", "data": []}
+    )
+    config = FirecrawlConfig(
+        api_key="fc-test",
+        mode="crawl",
+        params={
+            "scrape_options": ScrapeOptions(
+                formats=[JsonFormat(prompt="extract the titles")]
+            )
+        },
+    )
+
+    URLLoader(urls=["https://site.com"], crawler_config=config).load()
+
+    formats = firecrawl_offline["post"].call_args.kwargs["json"]["scrapeOptions"][
+        "formats"
+    ]
+    sent = next(f for f in formats if isinstance(f, dict))
+    assert sent.get("type") == "json"
+    assert sent["prompt"] == "extract the titles"
+
+
+def test_firecrawl_crawl_skips_empty_markdown(
+    firecrawl_offline: dict[str, Mock],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A crawled page with no markdown is skipped, not a blank doc.
+
+    Scrape mode filters these out; the crawl poller appended
+    `page.markdown or ""` unconditionally, so blank Documents still
+    reached the parser.
+    """
+    monkeypatch.chdir(tmp_path)
+    blank = _fc_page("https://site.com/blank", "")
+    blank.pop("markdown")
+    firecrawl_offline["post"].return_value = _fc_response(
+        200, {"success": True, "id": "job-5", "url": "https://x"}
+    )
+    firecrawl_offline["get"].return_value = _fc_response(
+        200,
+        {
+            "success": True,
+            "status": "completed",
+            "data": [blank, _fc_page("https://site.com", "# Home")],
+        },
+    )
+
+    docs = URLLoader(
+        urls=["https://site.com"],
+        crawler_config=FirecrawlConfig(api_key="fc-test", mode="crawl"),
+    ).load()
+
+    assert [d.content for d in docs] == ["# Home"]
+    assert [d.metadata.source for d in docs] == ["https://site.com"]
+
+
+def test_firecrawl_crawl_keeps_integration_top_level(
+    firecrawl_offline: dict[str, Mock],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`integration` stays a top-level crawl field, not a scrape option.
+
+    It is a field of both `ScrapeOptions` and `CrawlRequest`, so the loop
+    that moves flat page options into `scrape_options` relocated it; the
+    SDK reads it at the top level for crawl, leaving it `None` there.
+    """
+    monkeypatch.chdir(tmp_path)
+    firecrawl_offline["post"].return_value = _fc_response(
+        200, {"success": True, "id": "job-6", "url": "https://x"}
+    )
+    firecrawl_offline["get"].return_value = _fc_response(
+        200, {"success": True, "status": "completed", "data": []}
+    )
+    config = FirecrawlConfig(
+        api_key="fc-test", mode="crawl", params={"integration": "my-app"}
+    )
+
+    URLLoader(urls=["https://site.com"], crawler_config=config).load()
+
+    payload = firecrawl_offline["post"].call_args.kwargs["json"]
+    assert payload["integration"] == "my-app"
+    assert "integration" not in payload["scrapeOptions"]
