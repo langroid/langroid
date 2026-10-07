@@ -40,7 +40,7 @@ import threading
 import time
 from typing import Any, Dict, Iterator, Mapping, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -200,11 +200,13 @@ class RateLimitConfig(BaseSettings):
     # Off by default: with this False the request path is unchanged.
     enabled: bool = False
     # Fraction of the discovered budget to leave unused, as a safety margin.
-    headroom: float = 0.1
+    # Must be < 1: at 1 the paced rate would be zero.
+    headroom: float = Field(default=0.1, ge=0.0, lt=1.0)
     # Safety valve: never sleep longer than this for a single request. If the
     # cap binds, the request is sent anyway and reactive retry/backoff handles
-    # any 429 that results.
-    max_wait: float = 60.0
+    # any 429 that results. Note that a backlog of capped callers is then
+    # released together rather than spaced.
+    max_wait: float = Field(default=60.0, ge=0.0)
     # Keep this many requests/tokens of the budget in reserve; when the
     # provider reports less than this remaining, stall until it refills.
     min_remaining_requests: int = 1
@@ -212,12 +214,14 @@ class RateLimitConfig(BaseSettings):
     # Interval used before any rate-limit header has been seen. Without this,
     # the first wave of a concurrent batch would all be sent at once, since
     # there is nothing yet to pace against; set to 0.0 to send it unpaced.
-    warmup_interval: float = 0.05
+    warmup_interval: float = Field(default=0.05, ge=0.0)
     # Header-free fallback (AIMD on the inter-send interval).
-    backoff_factor: float = 2.0  # interval multiplier on a rate-limit error
-    recovery_factor: float = 0.9  # interval multiplier on a success
-    error_interval: float = 0.05  # interval floor once a 429 has been seen
-    max_interval: float = 10.0  # interval ceiling
+    # interval multiplier on a rate-limit error; must be > 1 to be a back-off
+    backoff_factor: float = Field(default=2.0, gt=1.0)
+    # interval multiplier on a success; must be < 1 to be a recovery
+    recovery_factor: float = Field(default=0.9, gt=0.0, lt=1.0)
+    error_interval: float = Field(default=0.05, gt=0.0)  # floor once a 429 seen
+    max_interval: float = Field(default=10.0, gt=0.0)  # interval ceiling
     # Override the process-wide limiter-sharing key; by default limiters are
     # shared per (api_base, model).
     share_key: Optional[str] = None
@@ -388,37 +392,47 @@ class RateLimiter:
             self._token_rate = token_rate
 
         # Budget already below our reserve: stall until it has refilled.
-        if (
-            snap.remaining_requests is not None
-            and snap.remaining_requests <= self.config.min_remaining_requests
-        ):
-            self._stall_locked(self._refill_wait(snap, tokens=False))
-        if (
-            snap.remaining_tokens is not None
-            and snap.remaining_tokens <= self.config.min_remaining_tokens
-        ):
-            self._stall_locked(self._refill_wait(snap, tokens=True))
+        # `_refill_wait` returns 0 when there is no deficit, so no condition is
+        # needed here -- and it is the ONLY place a hold is derived, so the
+        # request and token budgets cannot disagree about how long to wait.
+        self._stall_locked(self._refill_wait(snap, tokens=False))
+        self._stall_locked(self._refill_wait(snap, tokens=True))
 
     def _refill_wait(self, snap: RateLimitSnapshot, tokens: bool) -> float:
-        """Seconds until the budget is back above our reserve."""
+        """Seconds until the budget is back above our reserve, 0 if it is.
+
+        Derived from the refill rate, NOT from `reset`: `reset` is the time
+        until the bucket is *full*, which on a large budget is orders of
+        magnitude longer than the time to free up the one slot we need. It is
+        used only as a last resort, when no rate can be derived.
+        """
         if tokens:
             remaining = snap.remaining_tokens
             reserve = self.config.min_remaining_tokens
             rate = snap.token_refill_rate or self._token_rate
             reset = snap.reset_tokens
+            # A request costs many tokens, so the unit we must free up is a
+            # whole request's worth; without an estimate we cannot say.
+            need = int(self._avg_tokens) if self._avg_tokens else None
         else:
             remaining = snap.remaining_requests
             reserve = self.config.min_remaining_requests
             rate = snap.request_refill_rate or self._request_rate
             reset = snap.reset_requests
+            need = 1
         if remaining is None:
             return 0.0
-        deficit = reserve + 1 - remaining
+        if need is None:
+            if remaining > reserve:
+                return 0.0
+            # Unknown per-request cost and nothing left: the provider's own
+            # reset estimate is all we have.
+            return min(reset or 0.0, self.config.max_wait)
+        deficit = reserve + need - remaining
         if deficit <= 0:
             return 0.0
         if rate and rate > 0:
             return min(deficit / rate, self.config.max_wait)
-        # No rate known: the provider's own reset estimate is the best we have.
         return min(reset or 0.0, self.config.max_wait)
 
     def observe_response(
@@ -470,12 +484,19 @@ class RateLimiter:
         snap = RateLimitSnapshot.from_headers(headers) if headers is not None else None
         with self._lock:
             self._rate_limit_errors += 1
+            hold = 0.0
             if snap is not None:
                 self._apply_snapshot_locked(snap)
-            if not self._has_usable_rate_locked():
-                # Nothing to pace against -- the provider sent no headers, or
-                # sent too few to derive a rate from. Multiplicatively reduce
-                # the send rate instead, and recover it on success.
+                hold = max(
+                    snap.retry_after or 0.0,
+                    self._refill_wait(snap, tokens=False),
+                    self._refill_wait(snap, tokens=True),
+                )
+            if hold <= 0:
+                # The response says nothing actionable: no headers, too few to
+                # derive a rate from, or a 429 whose budgets both read healthy.
+                # Multiplicatively reduce the send rate instead, and recover it
+                # on each success.
                 self._fallback_interval = min(
                     self.config.max_interval,
                     max(
@@ -483,9 +504,6 @@ class RateLimiter:
                         self._fallback_interval * self.config.backoff_factor,
                     ),
                 )
-            hold = 0.0
-            if snap is not None:
-                hold = snap.retry_after or snap.reset_requests or 0.0
             self._stall_locked(
                 min(max(hold, self._fallback_interval), self.config.max_wait)
             )

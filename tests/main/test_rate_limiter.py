@@ -365,6 +365,81 @@ def test_rate_limit_error_headers_classification():
     assert rate_limit_error_headers(WithHeaders()) == {"retry-after": "3s"}
 
 
+def test_rpm_429_holds_only_as_long_as_the_deficit_needs():
+    """A 429 must not be answered with the time-to-FULL-refill.
+
+    A realistic tier-4 429 reports `reset-requests: 60s` -- the time until the
+    whole 10k bucket is full again -- while the limiter only needs one slot
+    freed, about 12ms at that rate. Holding for 60s would cost more throughput
+    than the 429 it is reacting to.
+    """
+    limiter = RateLimiter(
+        RateLimitConfig(enabled=True, warmup_interval=0.0, max_wait=60.0)
+    )
+    limiter.observe_rate_limit_error(
+        {
+            "x-ratelimit-limit-requests": "10000",
+            "x-ratelimit-remaining-requests": "0",
+            "x-ratelimit-reset-requests": "60s",
+        }
+    )
+    stats = limiter.stats()
+    assert stats["request_rate"] == pytest.approx(10000 / 60, rel=1e-3), stats
+    # ~2 slots at 166.7/s, not 60s
+    assert stats["gate_remaining"] <= 0.5, stats
+    assert stats["gate_remaining"] > 0.0, stats
+
+
+def test_tpm_429_holds_long_enough_for_one_request():
+    """A token-limit 429 must hold for a request's worth of tokens.
+
+    This is the limit that actually binds on most OpenAI accounts. Holding for
+    a single token's refill (or not holding at all, as happens when only the
+    request budget is consulted) leaves the sender straight back in a 429 loop.
+    """
+    limiter = RateLimiter(
+        RateLimitConfig(enabled=True, warmup_interval=0.0, max_wait=60.0)
+    )
+    # learn that a request costs ~1500 tokens
+    limiter.observe_success(tokens_used=1500)
+    limiter.observe_rate_limit_error(
+        {
+            # request budget is healthy; the TOKEN budget is what ran out
+            "x-ratelimit-limit-requests": "10000",
+            "x-ratelimit-remaining-requests": "9999",
+            "x-ratelimit-reset-requests": "6ms",
+            "x-ratelimit-limit-tokens": "30000",
+            "x-ratelimit-remaining-tokens": "0",
+            "x-ratelimit-reset-tokens": "45s",
+        }
+    )
+    stats = limiter.stats()
+    assert stats["token_rate"] == pytest.approx(30000 / 45, rel=1e-3), stats
+    # 1500 tokens at 666.7 tokens/s -> ~2.25s, NOT the 6ms of the request bucket
+    assert stats["gate_remaining"] >= 1.5, stats
+    assert stats["gate_remaining"] <= 5.0, stats
+
+
+def test_429_with_healthy_budgets_still_backs_off():
+    """If the headers say nothing actionable, fall back to AIMD.
+
+    A 429 whose reported budgets both read healthy (a daily cap, a shared
+    account) must still slow the sender down rather than be shrugged off.
+    """
+    limiter = RateLimiter(
+        RateLimitConfig(enabled=True, warmup_interval=0.0, error_interval=0.1)
+    )
+    healthy = {
+        "x-ratelimit-limit-requests": "10000",
+        "x-ratelimit-remaining-requests": "9000",
+        "x-ratelimit-reset-requests": "6s",
+    }
+    limiter.observe_rate_limit_error(healthy)
+    stats = limiter.stats()
+    assert stats["fallback_interval"] == pytest.approx(0.1), stats
+    assert stats["interval"] >= 0.1, stats
+
+
 def test_retry_after_header_stalls_the_limiter():
     limiter = RateLimiter(RateLimitConfig(enabled=True, warmup_interval=0.0))
     limiter.observe_rate_limit_error({"retry-after": "150ms"})

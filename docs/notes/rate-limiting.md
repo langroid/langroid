@@ -90,7 +90,7 @@ actually calls the API.
 | field | default | meaning |
 |---|---|---|
 | `enabled` | `False` | master switch; `False` leaves the request path as-is |
-| `headroom` | `0.1` | fraction of the discovered budget left unused |
+| `headroom` | `0.1` | fraction of the discovered budget left unused (< 1) |
 | `max_wait` | `60.0` | safety valve: never sleep longer than this for one request |
 | `warmup_interval` | `0.05` | interval used before the first header is seen |
 | `min_remaining_requests` | `1` | stall below this many requests remaining |
@@ -117,7 +117,20 @@ actually calls the API.
   size can still overshoot the token budget, which is what the retry/backoff
   fallback is for.
 - If `max_wait` binds, the request is sent anyway rather than held further, and
-  any resulting `429` is handled reactively.
+  any resulting `429` is handled reactively. A whole backlog of callers past
+  the cap is therefore released together rather than spaced — the valve prefers
+  sending to holding, by design.
+- Only the chat-completion calls are paced. The legacy completions endpoint
+  (`use_completion_for_chat`) and embedding calls are not, so `enabled=True`
+  does nothing on those paths.
+- The discovered rate is replaced wholesale by each response and is not
+  smoothed or bounded, so one anomalous `reset` from a gateway can leave
+  `stats()["request_rate"]` reporting a number not worth trusting until the
+  next response. The effect is to stop pacing, i.e. to fall back to the
+  pre-existing reactive behaviour.
+- The OpenAI SDK retries a `429` internally (twice, by default) before langroid
+  ever sees it, and those retries do not go through the limiter. Pass
+  `max_retries=0` to your own client if you want every attempt paced.
 
 ## Diagnostics
 
