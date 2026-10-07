@@ -239,3 +239,69 @@ def test_add_window_ids_mixed_batch_keeps_existing_windows() -> None:
     assert [list(c.metadata.window_ids) for c in done] == windows_before
     assert fresh.metadata.window_ids == [fresh.id()]
     assert fresh.metadata.is_chunk
+
+
+def test_code_parser_single_chunk_resplit_gets_a_fresh_id(
+    code_documents: List[Document],
+) -> None:
+    """A re-split that yields ONE chunk per source still re-ids it.
+
+    This is the shape that reaches the no-op guard, which only fires on a
+    group of size 1: if the chunk inherited its parent's `window_ids`,
+    that window contains the parent's id -- which is also the chunk's
+    inherited id -- so the guard would take it for already-windowed and
+    leave it sharing the parent's id.
+    """
+    huge = CodeParsingConfig(chunk_size=10_000)
+    first = CodeParser(huge).split(code_documents)
+    assert len(first) == len(code_documents)  # one chunk per source
+    assert all(len(c.metadata.window_ids) > 0 for c in first)
+
+    second = CodeParser(huge).split(first)
+
+    assert len(second) == len(first)  # still one chunk per source
+    parent_ids = {c.id() for c in first}
+    assert all(c.id() not in parent_ids for c in second)
+    assert len({c.id() for c in second}) == len(second)
+    # each chunk's window is its own, naming itself rather than its parent
+    for chunk in second:
+        assert chunk.metadata.window_ids == [chunk.id()]
+
+
+def test_parser_single_chunk_resplit_gets_a_fresh_id() -> None:
+    """Same shape through `Parser.split_simple`, which shares the guard.
+
+    `Parser.split` filters already-chunked docs out before splitting, so
+    this is reachable only by calling a `split_*` method directly -- but
+    it is the same defect, and the splitters inherit the same guard.
+    """
+    parser = Parser(ParsingConfig(n_neighbor_ids=1, separators=["\n"]))
+    doc = Document(content="one line", metadata=DocMetaData(source="a.txt"))
+    first = parser.split_simple([doc])
+    assert len(first) == 1
+    assert first[0].metadata.window_ids == [first[0].id()]
+
+    second = parser.split_simple(first)
+
+    assert len(second) == 1
+    assert second[0].id() != first[0].id()
+    assert second[0].metadata.window_ids == [second[0].id()]
+
+
+def test_add_window_ids_sets_is_chunk_even_when_it_skips() -> None:
+    """The guard still marks a chunk, as this function always has.
+
+    It returns early for an already-windowed chunk, but `is_chunk` is a
+    claim about the document, not about the window, and every caller used
+    to be able to rely on `add_window_ids` setting it.
+    """
+    metadata = DocMetaData(source="a.py", language="py")
+    metadata.window_ids = [metadata.id]
+    chunk = Document(content="value = 1", metadata=metadata)
+    assert not chunk.metadata.is_chunk
+
+    Parser(ParsingConfig(n_neighbor_ids=1)).add_window_ids([chunk])
+
+    assert chunk.metadata.is_chunk
+    # and its window was left alone
+    assert chunk.metadata.window_ids == [chunk.id()]

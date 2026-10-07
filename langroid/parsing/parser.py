@@ -186,7 +186,10 @@ def add_window_ids(chunks: List[Document], n_neighbor_ids: int) -> None:
     for orig_id, group in orig_id_to_chunks.items():
         if len(group) == 1 and orig_id in group[0].metadata.window_ids:
             # already windowed by an earlier call; re-running would replace
-            # its window with a singleton rather than refine it
+            # its window with a singleton rather than refine it. is_chunk is
+            # still set, since this function has always set it on everything
+            # it was handed.
+            group[0].metadata.is_chunk = True
             continue
         # The original metadata.id is ignored since it is the same for all
         # chunks of a doc and is useless. We want a distinct id for each.
@@ -221,7 +224,12 @@ class Parser:
 
     def add_window_ids(self, chunks: List[Document]) -> None:
         """Chunks may belong to multiple docs, but for each doc,
-        they appear consecutively. Add window_ids in metadata"""
+        they appear consecutively. Add window_ids in metadata.
+
+        Chunks this has already windowed are left as they are, so calling
+        it twice does not replace their neighbors with a singleton. See
+        the module-level `add_window_ids` for the details.
+        """
         add_window_ids(chunks, self.config.n_neighbor_ids)
 
     def split_simple(self, docs: List[Document]) -> List[Document]:
@@ -240,7 +248,11 @@ class Parser:
             chunk_docs = [
                 Document(
                     content=c,
-                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
+                    metadata=d.metadata.model_copy(
+                        # window_ids cleared, not inherited: a chunk's
+                        # window names its own siblings
+                        update=dict(is_chunk=True, window_ids=[])
+                    ),
                 )
                 for c in chunks
                 if c.strip() != ""
@@ -293,7 +305,11 @@ class Parser:
             chunk_docs = [
                 Document(
                     content=c,
-                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
+                    metadata=d.metadata.model_copy(
+                        # window_ids cleared, not inherited: a chunk's
+                        # window names its own siblings
+                        update=dict(is_chunk=True, window_ids=[])
+                    ),
                 )
                 for c in chunks
                 if c.strip() != ""
@@ -326,7 +342,11 @@ class Parser:
             chunk_docs = [
                 Document(
                     content=c,
-                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
+                    metadata=d.metadata.model_copy(
+                        # window_ids cleared, not inherited: a chunk's
+                        # window names its own siblings
+                        update=dict(is_chunk=True, window_ids=[])
+                    ),
                 )
                 for c in chunks
                 if c.strip() != ""
