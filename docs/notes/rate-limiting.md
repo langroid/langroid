@@ -89,8 +89,8 @@ actually calls the API.
 | `headroom` | `0.1` | fraction of the discovered budget left unused |
 | `max_wait` | `60.0` | safety valve: never sleep longer than this for one request |
 | `warmup_interval` | `0.05` | interval used before the first header is seen |
-| `min_remaining_requests` | `1` | stall when the provider reports this few requests left |
-| `min_remaining_tokens` | `0` | stall when the provider reports this few tokens left |
+| `min_remaining_requests` | `1` | stall below this many requests remaining |
+| `min_remaining_tokens` | `0` | stall below this many tokens remaining |
 | `backoff_factor` | `2.0` | header-free mode: interval multiplier on a `429` |
 | `recovery_factor` | `0.9` | header-free mode: interval multiplier on a success |
 | `error_interval` | `0.05` | header-free mode: interval floor once a `429` is seen |
