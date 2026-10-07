@@ -71,6 +71,10 @@ There the limiter needs no prior knowledge of any limit either: it reduces the
 send rate multiplicatively after a `429` and recovers it on every success
 (AIMD on the inter-send interval).
 
+The same applies to a provider that sends *some* of the headers but not enough
+to derive a rate from — a `remaining` with no `limit` or `reset`, say. Having
+seen a header is not the test; having a rate to pace to is.
+
 ## Batch jobs share one limiter
 
 Limiters are shared process-wide, keyed by `(api_base, chat_model)`, so the

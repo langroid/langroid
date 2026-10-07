@@ -256,6 +256,34 @@ def test_headerless_fallback_backs_off_and_recovers():
     assert limiter.stats()["fallback_interval"] == 0.0
 
 
+def test_partial_headers_still_fall_back_to_aimd():
+    """A `remaining` with no `limit`/`reset` yields no rate: still back off.
+
+    Such a response is "rate-limit info" but not a budget we can pace to, so
+    treating it as discovery would leave repeated 429s completely unpaced.
+    """
+    limiter = RateLimiter(
+        RateLimitConfig(enabled=True, error_interval=0.05, backoff_factor=2.0)
+    )
+    partial = {"x-ratelimit-remaining-requests": "0"}
+    for _ in range(3):
+        limiter.observe_rate_limit_error(partial)
+    stats = limiter.stats()
+    assert stats["rate_limit_errors"] == 3
+    assert stats["request_rate"] is None, stats
+    assert stats["fallback_interval"] == pytest.approx(0.2), stats
+    assert stats["interval"] >= 0.2, stats
+
+
+def test_partial_headers_do_not_disable_warmup():
+    """Partial headers must not switch the warmup interval off either."""
+    limiter = RateLimiter(RateLimitConfig(enabled=True, warmup_interval=0.05))
+    limiter.observe_response(headers={"x-ratelimit-remaining-requests": "17"})
+    stats = limiter.stats()
+    assert stats["request_rate"] is None, stats
+    assert stats["interval"] == pytest.approx(0.05), stats
+
+
 def test_headerless_fallback_respects_max_interval():
     limiter = RateLimiter(
         RateLimitConfig(enabled=True, error_interval=0.5, max_interval=1.0)
@@ -323,6 +351,35 @@ def test_cloned_llms_share_one_limiter():
     llm1 = OpenAIGPT(cfg)
     llm2 = OpenAIGPT(cfg.model_copy(deep=True))
     assert llm1._rate_limiter() is llm2._rate_limiter()
+
+
+def test_sharing_key_distinguishes_providers():
+    """Two providers serving the same model name must not share a budget.
+
+    `OpenAIGPT.__init__` strips the provider prefix off `config.chat_model` and
+    resolves the endpoint into `self.api_base`, so keying on the config fields
+    would collapse these two onto one limiter.
+    """
+
+    def limiter_for(model: str) -> RateLimiter:
+        # chat_model="" switches off the test harness's global `--m` model
+        # override, which would otherwise replace both model names with one.
+        with temporary_settings(Settings(chat_model="")):
+            llm = OpenAIGPT(
+                OpenAIGPTConfig(
+                    chat_model=model,
+                    api_key="test",
+                    rate_limit=RateLimitConfig(enabled=True),
+                )
+            )
+        limiter = llm._rate_limiter()
+        assert limiter is not None
+        return limiter
+
+    groq = limiter_for("groq/llama-3.3-70b-versatile")
+    vllm = limiter_for("vllm/llama-3.3-70b-versatile")
+    assert groq is not vllm, groq.name
+    assert groq.name != vllm.name
 
 
 def test_limiter_is_off_by_default():

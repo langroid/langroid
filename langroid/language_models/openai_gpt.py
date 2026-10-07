@@ -2633,10 +2633,16 @@ class OpenAIGPT(LanguageModel):
         cfg: Optional[RateLimitConfig] = getattr(self.config, "rate_limit", None)
         if cfg is None or not cfg.enabled:
             return None
-        key = cfg.share_key or (
-            f"{self.config.api_base or 'default'}::{self.config.chat_model}"
-        )
-        return get_rate_limiter(key, cfg)
+        if cfg.share_key:
+            return get_rate_limiter(cfg.share_key, cfg)
+        # Key on the RESOLVED endpoint and the ORIGINAL model name: __init__
+        # rewrites `config.api_base` into `self.api_base` for prefixed models
+        # and strips the provider prefix off `config.chat_model`, so keying on
+        # the config fields would make e.g. `groq/llama-3.3-70b-versatile` and
+        # `vllm/llama-3.3-70b-versatile` share one budget.
+        base = getattr(self, "api_base", None) or self.config.api_base or "default"
+        model = self.chat_model_orig or self.config.chat_model
+        return get_rate_limiter(f"{base}::{model}", cfg)
 
     @staticmethod
     def _response_tokens(result: Any) -> Optional[int]:

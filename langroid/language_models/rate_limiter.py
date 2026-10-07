@@ -272,7 +272,10 @@ class RateLimiter:
         one of them is non-zero.
         """
         interval = self._fallback_interval
-        if not self._seen_headers:
+        if not self._has_usable_rate_locked():
+            # Nothing to pace against yet -- not even a provider that answers
+            # with partial headers (a `remaining` with no `limit` or `reset`,
+            # say) may switch the warmup off.
             interval = max(interval, self.config.warmup_interval)
         if self._request_rate is not None:
             interval = max(interval, 1.0 / self._effective(self._request_rate))
@@ -281,6 +284,10 @@ class RateLimiter:
                 interval, self._avg_tokens / self._effective(self._token_rate)
             )
         return interval
+
+    def _has_usable_rate_locked(self) -> bool:
+        """Did the provider's headers yield a rate we can actually pace to?"""
+        return self._request_rate is not None or self._token_rate is not None
 
     def _reserve(self) -> float:
         """Claim a send slot off the shared queue; return the wait in seconds.
@@ -441,16 +448,12 @@ class RateLimiter:
         snap = RateLimitSnapshot.from_headers(headers) if headers is not None else None
         with self._lock:
             self._rate_limit_errors += 1
-            if snap is not None and snap.has_rate_limit_info:
+            if snap is not None:
                 self._apply_snapshot_locked(snap)
-                self._stall_locked(
-                    min(
-                        snap.retry_after or snap.reset_requests or 0.0,
-                        self.config.max_wait,
-                    )
-                )
-            else:
-                # No usable headers: multiplicatively reduce the send rate.
+            if not self._has_usable_rate_locked():
+                # Nothing to pace against -- the provider sent no headers, or
+                # sent too few to derive a rate from. Multiplicatively reduce
+                # the send rate instead, and recover it on success.
                 self._fallback_interval = min(
                     self.config.max_interval,
                     max(
@@ -458,10 +461,12 @@ class RateLimiter:
                         self._fallback_interval * self.config.backoff_factor,
                     ),
                 )
-                if snap is not None and snap.retry_after:
-                    self._stall_locked(min(snap.retry_after, self.config.max_wait))
-                else:
-                    self._stall_locked(self._fallback_interval)
+            hold = 0.0
+            if snap is not None:
+                hold = snap.retry_after or snap.reset_requests or 0.0
+            self._stall_locked(
+                min(max(hold, self._fallback_interval), self.config.max_wait)
+            )
             logger.debug(
                 "rate limiter %s: 429 observed, interval now %.4fs",
                 self.name,
