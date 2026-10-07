@@ -711,3 +711,61 @@ def test_firecrawl_crawl_keeps_integration_top_level(
     payload = firecrawl_offline["post"].call_args.kwargs["json"]
     assert payload["integration"] == "my-app"
     assert "integration" not in payload["scrapeOptions"]
+
+
+def test_firecrawl_crawl_warns_on_page_with_no_url(
+    firecrawl_offline: dict[str, Mock],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    root_log_messages: list[str],
+) -> None:
+    """A crawled page with no usable URL is reported, not dropped silently.
+
+    On the v1 code this raised `KeyError`; hoisting the response mapping
+    out of the `try` turned the crash into a silent `continue`, in the one
+    method this work set out to remove silent drops from.
+    """
+    monkeypatch.chdir(tmp_path)
+    firecrawl_offline["post"].return_value = _fc_response(
+        200, {"success": True, "id": "job-7", "url": "https://x"}
+    )
+    firecrawl_offline["get"].return_value = _fc_response(
+        200,
+        {
+            "success": True,
+            "status": "completed",
+            "data": [
+                {"markdown": "# Orphan", "metadata": {"statusCode": 200}},
+                _fc_page("https://site.com", "# Home"),
+            ],
+        },
+    )
+
+    docs = URLLoader(
+        urls=["https://site.com"],
+        crawler_config=FirecrawlConfig(api_key="fc-test", mode="crawl"),
+    ).load()
+
+    assert [d.content for d in docs] == ["# Home"]
+    assert any("no URL in its metadata" in msg for msg in root_log_messages)
+
+
+def test_firecrawl_markdown_format_model_not_duplicated(
+    firecrawl_offline: dict[str, Mock],
+) -> None:
+    """`markdown` asked for as a format model is not also added as a string.
+
+    `_with_markdown` recognised `"markdown"` and `{"type": "markdown"}`
+    but not the model form, so it appended a second entry.
+    """
+    from firecrawl.v2.types import Format
+
+    firecrawl_offline["post"].return_value = _fc_scraped("https://a.com", "# A")
+    config = FirecrawlConfig(
+        api_key="fc-test", params={"formats": [Format(type="markdown")]}
+    )
+
+    docs = URLLoader(urls=["https://a.com"], crawler_config=config).load()
+
+    assert firecrawl_offline["post"].call_args.kwargs["json"]["formats"] == ["markdown"]
+    assert [d.content for d in docs] == ["# A"]

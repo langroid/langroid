@@ -375,6 +375,9 @@ def _with_markdown(formats: Any) -> Any:
     formats = list(formats or [])
     has_markdown = any(
         f == "markdown" or (isinstance(f, dict) and f.get("type") == "markdown")
+        # a format model, e.g. Format(type="markdown"), which would
+        # otherwise be sent alongside a duplicate bare "markdown"
+        or getattr(f, "type", None) == "markdown"
         for f in formats
     )
     return formats if has_markdown else ["markdown", *formats]
@@ -420,10 +423,17 @@ class FirecrawlCrawler(BaseCrawler):
                 # Save new pages
                 for page in status.data:
                     metadata = page.metadata
-                    if metadata is None:
+                    url = (metadata.url or metadata.source_url) if metadata else None
+                    if not url:
+                        # a page with no metadata, or none naming its URL,
+                        # used to raise KeyError here; report it rather than
+                        # turning that crash into a silent drop
+                        logging.warning(
+                            "Firecrawl returned a crawled page with no URL in "
+                            "its metadata. Skipping but continuing."
+                        )
                         continue
-                    url = metadata.url or metadata.source_url
-                    if url and url not in processed_urls:
+                    if url not in processed_urls:
                         content = page.markdown or ""
                         if not content:
                             # same filter scrape mode applies; left
