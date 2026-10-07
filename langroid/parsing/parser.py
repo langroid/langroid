@@ -148,6 +148,60 @@ class ParsingConfig(BaseSettings):
     xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
 
 
+def add_window_ids(chunks: List[Document], n_neighbor_ids: int) -> None:
+    """Give each chunk a distinct id and the ids of its neighbors.
+
+    Chunks may belong to multiple docs, but for each doc they appear
+    consecutively, and all chunks of one doc share a `metadata.id` -- which
+    is how they are grouped here, so a window never crosses a document.
+
+    Already-windowed input is left completely alone. Grouping by a shared
+    `metadata.id` is what makes this non-idempotent: after one call every
+    chunk has its own id, so a second call would see each chunk as a
+    single-chunk document and collapse every window to a singleton,
+    silently discarding the neighbors from the first call.
+
+    Args:
+        chunks: chunks to window, modified in place.
+        n_neighbor_ids: how many neighbors to keep on each side.
+    """
+    # discard empty chunks
+    chunks = [c for c in chunks if c.content.strip() != ""]
+    if len(chunks) == 0:
+        return
+    if all(len(c.metadata.window_ids) > 0 for c in chunks):
+        # every chunk already carries a window, so this is a second call;
+        # re-running would destroy those windows rather than refine them
+        return
+    # The original metadata.id (if any) is ignored since it will be same for all
+    # chunks and is useless. We want a distinct id for each chunk.
+    # ASSUMPTION: all chunks c of a doc have same c.metadata.id !
+    orig_ids = [c.metadata.id for c in chunks]
+    ids = [ObjectRegistry.new_id() for c in chunks]
+    id2chunk = {id: c for id, c in zip(ids, chunks)}
+
+    # group the ids by orig_id
+    # (each distinct orig_id refers to a different document)
+    orig_id_to_ids: Dict[str, List[str]] = {}
+    for orig_id, id in zip(orig_ids, ids):
+        if orig_id not in orig_id_to_ids:
+            orig_id_to_ids[orig_id] = []
+        orig_id_to_ids[orig_id].append(id)
+
+    # now each orig_id maps to a sequence of ids within a single doc
+
+    k = n_neighbor_ids
+    for orig, ids in orig_id_to_ids.items():
+        # ids are consecutive chunks in a single doc
+        n = len(ids)
+        window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
+        for i, _ in enumerate(ids):
+            c = id2chunk[ids[i]]
+            c.metadata.window_ids = window_ids[i]
+            c.metadata.id = ids[i]
+            c.metadata.is_chunk = True
+
+
 class Parser:
     def __init__(self, config: ParsingConfig):
         self.config = config
@@ -171,38 +225,7 @@ class Parser:
     def add_window_ids(self, chunks: List[Document]) -> None:
         """Chunks may belong to multiple docs, but for each doc,
         they appear consecutively. Add window_ids in metadata"""
-
-        # discard empty chunks
-        chunks = [c for c in chunks if c.content.strip() != ""]
-        if len(chunks) == 0:
-            return
-        # The original metadata.id (if any) is ignored since it will be same for all
-        # chunks and is useless. We want a distinct id for each chunk.
-        # ASSUMPTION: all chunks c of a doc have same c.metadata.id !
-        orig_ids = [c.metadata.id for c in chunks]
-        ids = [ObjectRegistry.new_id() for c in chunks]
-        id2chunk = {id: c for id, c in zip(ids, chunks)}
-
-        # group the ids by orig_id
-        # (each distinct orig_id refers to a different document)
-        orig_id_to_ids: Dict[str, List[str]] = {}
-        for orig_id, id in zip(orig_ids, ids):
-            if orig_id not in orig_id_to_ids:
-                orig_id_to_ids[orig_id] = []
-            orig_id_to_ids[orig_id].append(id)
-
-        # now each orig_id maps to a sequence of ids within a single doc
-
-        k = self.config.n_neighbor_ids
-        for orig, ids in orig_id_to_ids.items():
-            # ids are consecutive chunks in a single doc
-            n = len(ids)
-            window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
-            for i, _ in enumerate(ids):
-                c = id2chunk[ids[i]]
-                c.metadata.window_ids = window_ids[i]
-                c.metadata.id = ids[i]
-                c.metadata.is_chunk = True
+        add_window_ids(chunks, self.config.n_neighbor_ids)
 
     def split_simple(self, docs: List[Document]) -> List[Document]:
         if len(self.config.separators) == 0:

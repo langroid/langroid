@@ -98,7 +98,13 @@ def test_code_parser_metadata(code_documents: List[Document]) -> None:
         assert len(group) > 1
         assert "".join(c.content for c in group).strip() == doc.content.strip()
         assert all(c.metadata is not doc.metadata for c in group)
-        assert all(c.metadata == doc.metadata for c in group)
+        # everything describing the ORIGIN is inherited; what identifies the
+        # chunk itself (id, is_chunk, window_ids) is deliberately its own
+        inherited = doc.metadata.model_dump(exclude={"id", "is_chunk", "window_ids"})
+        assert all(
+            c.metadata.model_dump(exclude={"id", "is_chunk", "window_ids"}) == inherited
+            for c in group
+        )
 
     # Nested values retain the existing shallow-copy semantics.
     assert chunks[0].metadata.attributes is code_documents[0].metadata.attributes
@@ -111,13 +117,16 @@ def test_code_parser_metadata(code_documents: List[Document]) -> None:
 def test_code_parser_window_ids(
     code_documents: List[Document], n_neighbor_ids: int
 ) -> None:
-    """Assign distinct IDs and keep each neighbor window within its source."""
+    """`split` alone assigns distinct ids and source-local neighbor windows.
+
+    The caller does not have to call `add_window_ids`: every other splitter
+    does it internally, and a user who did not know to call it got chunks
+    that all shared one id and overwrote each other on upsert.
+    """
     original = [doc.model_dump() for doc in code_documents]
-    chunks = CodeParser(CodeParsingConfig(chunk_size=MAX_CHUNK_SIZE)).split(
-        code_documents
-    )
-    parser = Parser(ParsingConfig(n_neighbor_ids=n_neighbor_ids))
-    parser.add_window_ids(chunks)
+    chunks = CodeParser(
+        CodeParsingConfig(chunk_size=MAX_CHUNK_SIZE, n_neighbor_ids=n_neighbor_ids)
+    ).split(code_documents)
 
     assert len({chunk.id() for chunk in chunks}) == len(chunks)
     assert all(chunk.metadata.is_chunk for chunk in chunks)
@@ -132,3 +141,52 @@ def test_code_parser_window_ids(
                 == ids[max(0, i - n_neighbor_ids) : i + n_neighbor_ids + 1]
             )
     assert [doc.model_dump() for doc in code_documents] == original
+
+
+@pytest.mark.parametrize("n_neighbor_ids", [0, 1, 3])
+def test_code_parser_add_window_ids_again_is_a_no_op(
+    code_documents: List[Document], n_neighbor_ids: int
+) -> None:
+    """A user who still calls `add_window_ids` keeps their windows.
+
+    `add_window_ids` groups chunks by a shared `metadata.id`, so on
+    already-windowed input it would see each chunk as its own single-chunk
+    document and collapse every window to a singleton -- silently losing
+    the neighbors that `split` just assigned.
+    """
+    chunks = CodeParser(
+        CodeParsingConfig(chunk_size=MAX_CHUNK_SIZE, n_neighbor_ids=n_neighbor_ids)
+    ).split(code_documents)
+    before = [(c.id(), list(c.metadata.window_ids)) for c in chunks]
+    assert all(len(w) > 0 for _, w in before)
+
+    # a different n_neighbor_ids, to catch a re-window that silently "works"
+    Parser(ParsingConfig(n_neighbor_ids=n_neighbor_ids + 2)).add_window_ids(chunks)
+
+    assert [(c.id(), list(c.metadata.window_ids)) for c in chunks] == before
+
+
+def test_add_window_ids_still_windows_unchunked_input() -> None:
+    """The no-op guard must not stop the first, real windowing pass.
+
+    Counterpart to the guard above: fresh chunks share one id and carry no
+    window, and those must still get distinct ids and neighbors.
+    """
+    source = DocMetaData(source="a.py", language="py")
+    chunks = [
+        Document(content=f"value_{i} = {i}", metadata=source.model_copy())
+        for i in range(4)
+    ]
+    assert len({c.id() for c in chunks}) == 1
+
+    Parser(ParsingConfig(n_neighbor_ids=1)).add_window_ids(chunks)
+
+    ids = [c.id() for c in chunks]
+    assert len(set(ids)) == 4
+    assert all(c.metadata.is_chunk for c in chunks)
+    assert [list(c.metadata.window_ids) for c in chunks] == [
+        ids[0:2],
+        ids[0:3],
+        ids[1:4],
+        ids[2:4],
+    ]
