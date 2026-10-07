@@ -786,6 +786,88 @@ def test_streaming_responses_feed_the_token_estimate():
 
 
 # --------------------------------------------------------------------------- #
+# a stream that fails lazily is not a success
+# --------------------------------------------------------------------------- #
+
+
+class _FakeRateLimitError(Exception):
+    """Shaped like a provider 429 that surfaces only on first iteration."""
+
+    status_code = 429
+
+    class _Response:
+        status_code = 429
+        headers: Dict[str, str] = {}
+
+    response = _Response()
+
+
+class _LazyFailingStream:
+    """A stream object that looks fine until you pull the first chunk.
+
+    This is the litellm/proxy behaviour the existing first-chunk peek in
+    `_chat_completions_with_backoff_body` exists to catch.
+    """
+
+    def __iter__(self) -> "_LazyFailingStream":
+        return self
+
+    def __next__(self) -> Any:
+        raise _FakeRateLimitError("rate limit")
+
+
+class _LazyFailingClient:
+    """Minimal stand-in for an OpenAI-compatible client."""
+
+    class chat:
+        class completions:
+            @staticmethod
+            def create(**kwargs: Any) -> _LazyFailingStream:
+                return _LazyFailingStream()
+
+
+def test_lazy_stream_failure_is_not_counted_as_a_success():
+    """A stream that 429s on first chunk must back off, not recover.
+
+    The success signal used to fire as soon as the API call returned, which for
+    a lazily-failing stream cancelled out the very backoff the 429 then asked
+    for: the AIMD interval stayed flat across repeated rejections.
+    """
+    with temporary_settings(Settings(cache=False, cache_type="none")):
+        llm = OpenAIGPT(
+            OpenAIGPTConfig(
+                chat_model="gpt-4o-mini",
+                api_key="test",
+                stream=True,
+                rate_limit=RateLimitConfig(
+                    enabled=True,
+                    share_key="lazy-stream",
+                    warmup_interval=0.0,
+                    error_interval=0.05,
+                    backoff_factor=2.0,
+                    recovery_factor=0.5,
+                ),
+            )
+        )
+        llm.client = _LazyFailingClient  # type: ignore[assignment]
+        assert llm.get_stream() is True
+        intervals = []
+        for _ in range(3):
+            with pytest.raises(_FakeRateLimitError):
+                llm._chat_completions_with_backoff_body(model="m", messages=[])
+            intervals.append(get_rate_limiter("lazy-stream").stats()["interval"])
+
+    stats = get_rate_limiter("lazy-stream").stats()
+    assert stats["rate_limit_errors"] == 3, stats
+    # backoff must actually grow: 0.05 -> 0.10 -> 0.20
+    assert intervals == [
+        pytest.approx(0.05),
+        pytest.approx(0.10),
+        pytest.approx(0.20),
+    ], intervals
+
+
+# --------------------------------------------------------------------------- #
 # cooldowns must reach callers that are already queued
 # --------------------------------------------------------------------------- #
 

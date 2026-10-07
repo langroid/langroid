@@ -2746,9 +2746,6 @@ class OpenAIGPT(LanguageModel):
                     if headers is not None:
                         limiter.observe_rate_limit_error(headers)
                 raise
-            if limiter is not None:
-                limiter.observe_success(tokens_used=self._response_tokens(result))
-
             if self.get_stream():
                 # If streaming, cannot cache result
                 # since it is a generator. Instead,
@@ -2781,7 +2778,13 @@ class OpenAIGPT(LanguageModel):
                         if headers is not None:
                             limiter.observe_rate_limit_error(headers)
                     raise e
+                # Only now is the request known to have been accepted: some
+                # providers hand back a stream object that raises above.
+                if limiter is not None:
+                    limiter.observe_success()
             else:
+                if limiter is not None:
+                    limiter.observe_success(tokens_used=self._response_tokens(result))
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
@@ -2843,8 +2846,6 @@ class OpenAIGPT(LanguageModel):
                     if headers is not None:
                         limiter.observe_rate_limit_error(headers)
                 raise
-            if limiter is not None:
-                limiter.observe_success(tokens_used=self._response_tokens(result))
             if self.get_stream():
                 try:
                     # Try to peek at the first chunk to immediately catch any errors
@@ -2881,7 +2882,13 @@ class OpenAIGPT(LanguageModel):
                         if headers is not None:
                             limiter.observe_rate_limit_error(headers)
                     raise e
+                # Only now is the request known to have been accepted: some
+                # providers hand back a stream object that raises above.
+                if limiter is not None:
+                    limiter.observe_success()
             else:
+                if limiter is not None:
+                    limiter.observe_success(tokens_used=self._response_tokens(result))
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
