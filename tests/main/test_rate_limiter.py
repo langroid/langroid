@@ -397,8 +397,17 @@ _CHUNKS = [
         "created": 1,
         "model": "stub",
         "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-        # langroid asks for stream_options={"include_usage": True}, so a real
-        # provider reports usage in a trailing chunk like this one.
+    },
+    # langroid asks for stream_options={"include_usage": True}, and OpenAI then
+    # reports usage in a SEPARATE trailing chunk with empty choices, after the
+    # stop chunk. langroid's stream consumer breaks out of its loop on this
+    # chunk, so anything that wants the usage must read it as it passes.
+    {
+        "id": "chatcmpl-stub",
+        "object": "chat.completion.chunk",
+        "created": 1,
+        "model": "stub",
+        "choices": [],
         "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
     },
 ]
@@ -692,6 +701,10 @@ def test_cooldown_holds_back_already_queued_callers():
     held = [t for t in sent_at if t >= 0.01]
     assert len(held) >= n - 1, sent_at
     assert min(held) >= 0.35, f"cooldown bypassed by a queued caller: {sent_at}"
+    # and they must come out SPACED, not as one burst the instant the cooldown
+    # lifts -- that would just earn another 429.
+    spread = max(held) - min(held)
+    assert spread >= 0.05, f"cooldown released a simultaneous burst: {sent_at}"
     assert limiter.stats()["rate_limit_errors"] == 1
 
 

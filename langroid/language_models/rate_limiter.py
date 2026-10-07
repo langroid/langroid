@@ -38,7 +38,7 @@ import asyncio
 import logging
 import threading
 import time
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Iterator, Mapping, Optional
 
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -283,7 +283,11 @@ class RateLimiter:
         return interval
 
     def _reserve(self) -> float:
-        """Claim the next send slot; return how long the caller should wait."""
+        """Claim a send slot off the shared queue; return the wait in seconds.
+
+        Does not count a send: one `acquire()` may reserve more than once (see
+        `_wait_steps`).
+        """
         with self._lock:
             now = time.monotonic()
             interval = self._interval_locked()
@@ -291,63 +295,59 @@ class RateLimiter:
             # Advance the queue by the true interval even if this caller's own
             # wait gets clamped below, so clamping never rewinds the schedule.
             self._next_send_at = reserved_at + interval
-            self._sends += 1
-            return self._account_wait_locked(reserved_at - now)
+            return reserved_at - now
 
-    def _account_wait_locked(self, wait: float) -> float:
-        """Clamp a wait to `max_wait` and record it in the counters."""
-        if wait > self.config.max_wait:
-            self._capped_waits += 1
-            wait = self.config.max_wait
-        if wait > 0:
-            self._waits += 1
-            self._total_wait += wait
-        return wait
-
-    def _gate_wait(self, budget: float) -> float:
-        """Seconds a woken caller must still hold for the cooldown gate.
-
-        A reservation is handed out before the limiter knows what the response
-        will say, so a 429 (or an exhausted budget) discovered while a caller
-        is already asleep must still hold it back: everyone re-checks this gate
-        after waking. `budget` is what is left of this caller's `max_wait`.
-        """
-        if budget <= 0:
-            return 0.0
+    def _gate_active(self) -> bool:
         with self._lock:
-            remaining = self._gate_until - time.monotonic()
-            if remaining <= 0:
-                return 0.0
-            if remaining > budget:
-                self._capped_waits += 1
-                remaining = budget
-            self._waits += 1
-            self._total_wait += remaining
-            return remaining
+            return self._gate_until > time.monotonic()
+
+    def _wait_steps(self) -> Iterator[float]:
+        """Yield the sleeps a caller must perform before it may send.
+
+        A generator so the sync and async `acquire` paths share one policy and
+        differ only in how they sleep.
+
+        A slot is reserved before the limiter knows what the response will say,
+        so a cooldown raised while a caller is asleep (by a 429, or by a budget
+        the provider reports as nearly exhausted) invalidates that slot: the
+        caller re-reserves *after* the cooldown rather than firing the moment it
+        lifts, so a woken wave re-spaces instead of bursting. Total waiting per
+        caller is bounded by `max_wait`, which also rules out a livelock on a
+        cooldown that keeps being extended.
+        """
+        with self._lock:
+            self._sends += 1
+        budget = self.config.max_wait
+        while True:
+            wait = self._reserve()
+            if wait > budget:
+                with self._lock:
+                    self._capped_waits += 1
+                wait = budget
+            if wait > 0:
+                with self._lock:
+                    self._waits += 1
+                    self._total_wait += wait
+                budget -= wait
+                yield wait
+            if budget <= 0 or not self._gate_active():
+                return
 
     def acquire(self) -> float:
         """Block until it is this caller's turn to send. Returns seconds waited."""
-        waited = self._reserve()
-        if waited > 0:
-            time.sleep(waited)
-        while True:
-            extra = self._gate_wait(self.config.max_wait - waited)
-            if extra <= 0:
-                return waited
-            time.sleep(extra)
-            waited += extra
+        waited = 0.0
+        for wait in self._wait_steps():
+            time.sleep(wait)
+            waited += wait
+        return waited
 
     async def acquire_async(self) -> float:
         """Async variant of `acquire`. Returns seconds waited."""
-        waited = self._reserve()
-        if waited > 0:
-            await asyncio.sleep(waited)
-        while True:
-            extra = self._gate_wait(self.config.max_wait - waited)
-            if extra <= 0:
-                return waited
-            await asyncio.sleep(extra)
-            waited += extra
+        waited = 0.0
+        for wait in self._wait_steps():
+            await asyncio.sleep(wait)
+            waited += wait
+        return waited
 
     # ------------------------------------------------------------------ #
     # observation

@@ -2646,24 +2646,34 @@ class OpenAIGPT(LanguageModel):
         return total if isinstance(total, int) else None
 
     @staticmethod
+    def _chunk_tokens(chunk: Any) -> Optional[int]:
+        """Total tokens reported by a streaming chunk, if it carries usage."""
+        usage = getattr(chunk, "usage", None)
+        tokens = getattr(usage, "total_tokens", None)
+        return tokens if isinstance(tokens, int) and tokens > 0 else None
+
+    @staticmethod
     def _observe_stream_tokens(limiter: RateLimiter, stream: Any) -> Any:
         """Pass a stream through, reporting its token usage to `limiter`.
 
         A streaming response carries `usage` in a trailing chunk, not on the
         object we get back from the API call, so the limiter would otherwise
         never learn the per-request token cost of a streaming workload.
+
+        The report happens BEFORE that chunk is yielded, because the consumer
+        breaks out of its loop on the usage chunk: anything after the final
+        `yield` would never run.
         """
 
         def gen() -> Iterator[Any]:
-            total = None
+            reported = False
             for chunk in stream:
-                usage = getattr(chunk, "usage", None)
-                tokens = getattr(usage, "total_tokens", None)
-                if isinstance(tokens, int):
-                    total = tokens
+                if not reported:
+                    tokens = OpenAIGPT._chunk_tokens(chunk)
+                    if tokens is not None:
+                        limiter.observe_response(tokens_used=tokens)
+                        reported = True
                 yield chunk
-            if total is not None:
-                limiter.observe_response(tokens_used=total)
 
         return gen()
 
@@ -2672,15 +2682,14 @@ class OpenAIGPT(LanguageModel):
         """Async variant of `_observe_stream_tokens`."""
 
         async def gen() -> AsyncIterator[Any]:
-            total = None
+            reported = False
             async for chunk in stream:
-                usage = getattr(chunk, "usage", None)
-                tokens = getattr(usage, "total_tokens", None)
-                if isinstance(tokens, int):
-                    total = tokens
+                if not reported:
+                    tokens = OpenAIGPT._chunk_tokens(chunk)
+                    if tokens is not None:
+                        limiter.observe_response(tokens_used=tokens)
+                        reported = True
                 yield chunk
-            if total is not None:
-                limiter.observe_response(tokens_used=total)
 
         return gen()
 
