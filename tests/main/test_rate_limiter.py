@@ -437,6 +437,24 @@ def test_limiter_is_off_by_default():
     assert OpenAIGPT(cfg)._rate_limiter() is None
 
 
+def test_env_var_enables_the_limiter_after_import(monkeypatch):
+    """The config must read LANGROID_RATE_LIMIT_* when it is constructed.
+
+    A class-level `RateLimitConfig()` default would freeze the environment as
+    it stood at import time, so setting the var in an app's startup code would
+    silently do nothing.
+    """
+    assert OpenAIGPTConfig(chat_model="gpt-4o-mini").rate_limit.enabled is False
+    monkeypatch.setenv("LANGROID_RATE_LIMIT_ENABLED", "1")
+    monkeypatch.setenv("LANGROID_RATE_LIMIT_HEADROOM", "0.25")
+    cfg = OpenAIGPTConfig(chat_model="gpt-4o-mini")
+    assert cfg.rate_limit.enabled is True
+    assert cfg.rate_limit.headroom == pytest.approx(0.25)
+    # and each config gets its own instance, not one shared mutable default
+    other = OpenAIGPTConfig(chat_model="gpt-4o-mini")
+    assert other.rate_limit is not cfg.rate_limit
+
+
 # --------------------------------------------------------------------------- #
 # integration against a stub server that really enforces a rate limit
 # --------------------------------------------------------------------------- #

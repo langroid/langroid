@@ -30,7 +30,7 @@ import openai
 from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
 from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel, ValidationInfo, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich import print
 from rich.markup import escape
@@ -298,7 +298,10 @@ class OpenAIGPTConfig(LLMConfig):
     # Pro-active rate limiting, paced from the provider's own rate-limit
     # headers. OFF by default; with `enabled=False` the request path is
     # unchanged. See docs/notes/rate-limiting.md.
-    rate_limit: RateLimitConfig = RateLimitConfig()
+    # default_factory, not a shared instance: RateLimitConfig reads
+    # LANGROID_RATE_LIMIT_* env vars, and a class-level instance would freeze
+    # whatever those were at import time.
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     use_cached_client: bool = (
         True  # Whether to reuse cached clients (prevents resource exhaustion)
     )
