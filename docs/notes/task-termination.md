@@ -69,8 +69,7 @@ positive nor non-positive.
 ### 2. Single Round Mode
 ```python
 # Task completes after one exchange
-config = TaskConfig(single_round=True)
-task = Task(agent, config=config)
+task = Task(agent, single_round=True)
 ```
 
 ### 3. Done If Tool
@@ -83,7 +82,8 @@ task = Task(agent, config=config)
 ### 4. Done If Response/No Response
 ```python
 # Task completes based on response from specific entities
-config = TaskConfig(
+task = Task(
+    agent,
     done_if_response=[Entity.LLM],      # Done if LLM responds
     done_if_no_response=[Entity.USER]   # Done if USER doesn't respond
 )
@@ -390,9 +390,23 @@ Events must occur consecutively without intervening messages:
    config = TaskConfig(
        done_if_tool=True,      # Quick exit on any tool
        done_sequences=["L, L, L"],  # Or after 3 LLM responses
-       max_turns=10,           # Hard limit
    )
+   task = Task(agent, config=config)
+   result = task.run("Start", turns=10)  # Hard limit, per run
    ```
+
+    A turn limit is a `run()` argument, not a `TaskConfig` field. To cap
+    turns globally instead, update just that setting:
+
+    ```python
+    from langroid.utils.configuration import Settings, update_global_settings
+
+    update_global_settings(Settings(max_turns=10), keys=["max_turns"])
+    ```
+
+    Prefer this over `set_global(Settings(max_turns=10))` (same module),
+    which replaces the whole settings object and so resets every other
+    global — `cache`, `stream`, `quiet` and the rest — back to its default.
 
 ## Reference
 
