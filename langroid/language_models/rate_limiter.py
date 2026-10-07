@@ -243,6 +243,9 @@ class RateLimiter:
         self.name = name
         self._lock = threading.Lock()
         self._next_send_at = 0.0  # monotonic time of the next free slot
+        # Hard cooldown floor: no caller may send before this, including one
+        # that is already asleep on an earlier reservation.
+        self._gate_until = 0.0
         self._request_rate: Optional[float] = None  # requests/sec, from headers
         self._token_rate: Optional[float] = None  # tokens/sec, from headers
         self._avg_tokens: Optional[float] = None  # EWMA tokens per request
@@ -284,43 +287,79 @@ class RateLimiter:
         with self._lock:
             now = time.monotonic()
             interval = self._interval_locked()
-            reserved_at = max(now, self._next_send_at)
+            reserved_at = max(now, self._next_send_at, self._gate_until)
             # Advance the queue by the true interval even if this caller's own
             # wait gets clamped below, so clamping never rewinds the schedule.
             self._next_send_at = reserved_at + interval
             self._sends += 1
-            wait = reserved_at - now
-            if wait > self.config.max_wait:
+            return self._account_wait_locked(reserved_at - now)
+
+    def _account_wait_locked(self, wait: float) -> float:
+        """Clamp a wait to `max_wait` and record it in the counters."""
+        if wait > self.config.max_wait:
+            self._capped_waits += 1
+            wait = self.config.max_wait
+        if wait > 0:
+            self._waits += 1
+            self._total_wait += wait
+        return wait
+
+    def _gate_wait(self, budget: float) -> float:
+        """Seconds a woken caller must still hold for the cooldown gate.
+
+        A reservation is handed out before the limiter knows what the response
+        will say, so a 429 (or an exhausted budget) discovered while a caller
+        is already asleep must still hold it back: everyone re-checks this gate
+        after waking. `budget` is what is left of this caller's `max_wait`.
+        """
+        if budget <= 0:
+            return 0.0
+        with self._lock:
+            remaining = self._gate_until - time.monotonic()
+            if remaining <= 0:
+                return 0.0
+            if remaining > budget:
                 self._capped_waits += 1
-                wait = self.config.max_wait
-            if wait > 0:
-                self._waits += 1
-                self._total_wait += wait
-            return wait
+                remaining = budget
+            self._waits += 1
+            self._total_wait += remaining
+            return remaining
 
     def acquire(self) -> float:
         """Block until it is this caller's turn to send. Returns seconds waited."""
-        wait = self._reserve()
-        if wait > 0:
-            time.sleep(wait)
-        return wait
+        waited = self._reserve()
+        if waited > 0:
+            time.sleep(waited)
+        while True:
+            extra = self._gate_wait(self.config.max_wait - waited)
+            if extra <= 0:
+                return waited
+            time.sleep(extra)
+            waited += extra
 
     async def acquire_async(self) -> float:
         """Async variant of `acquire`. Returns seconds waited."""
-        wait = self._reserve()
-        if wait > 0:
-            await asyncio.sleep(wait)
-        return wait
+        waited = self._reserve()
+        if waited > 0:
+            await asyncio.sleep(waited)
+        while True:
+            extra = self._gate_wait(self.config.max_wait - waited)
+            if extra <= 0:
+                return waited
+            await asyncio.sleep(extra)
+            waited += extra
 
     # ------------------------------------------------------------------ #
     # observation
     # ------------------------------------------------------------------ #
 
     def _stall_locked(self, seconds: float) -> None:
+        """Hold back every caller for `seconds`, queued ones included."""
         if seconds <= 0:
             return
         now = time.monotonic()
-        self._next_send_at = max(self._next_send_at, now + seconds)
+        self._gate_until = max(self._gate_until, now + seconds)
+        self._next_send_at = max(self._next_send_at, self._gate_until)
 
     def _apply_snapshot_locked(self, snap: RateLimitSnapshot) -> None:
         if not snap.has_rate_limit_info:
@@ -454,6 +493,7 @@ class RateLimiter:
                 avg_tokens=self._avg_tokens,
                 fallback_interval=self._fallback_interval,
                 interval=self._interval_locked(),
+                gate_remaining=max(0.0, self._gate_until - time.monotonic()),
             )
 
 

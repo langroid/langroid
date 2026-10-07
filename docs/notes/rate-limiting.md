@@ -60,7 +60,9 @@ parsed-body form discards headers. Streaming is unaffected.
 Token budgets are paced the same way, using an exponentially-weighted average
 of the `usage.total_tokens` actually billed per request as the per-request
 estimate. That is an **estimate**, not a guarantee of provider quota
-compliance.
+compliance. For streaming responses the usage arrives in a trailing chunk
+rather than on the response object, so it is picked up as the chunks flow past
+the consumer — i.e. it informs the *next* request.
 
 ## Providers that report nothing
 
@@ -101,6 +103,12 @@ actually calls the API.
   limit independently, so they will together overshoot it.
 - Until the first response arrives there are no headers to learn from, so the
   opening burst of a concurrent batch is paced only by `warmup_interval`.
+- A send slot is reserved before the limiter knows what the response will say.
+  A `429`, or a budget the provider reports as nearly exhausted, raises a
+  cooldown gate that every caller re-checks on waking, so those do reach
+  callers that are already queued. A merely *slower* newly-discovered rate
+  applies from the next reservation onwards, so a wave already in the queue can
+  still drain at the previous pace.
 - Token pacing rests on an average of past requests; a sudden jump in prompt
   size can still overshoot the token budget, which is what the retry/backoff
   fallback is for.

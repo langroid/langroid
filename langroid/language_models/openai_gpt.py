@@ -12,6 +12,7 @@ from functools import cache
 from itertools import chain
 from typing import (
     Any,
+    AsyncIterator,
     Callable,
     Dict,
     Iterator,
@@ -2644,6 +2645,45 @@ class OpenAIGPT(LanguageModel):
         total = getattr(usage, "total_tokens", None)
         return total if isinstance(total, int) else None
 
+    @staticmethod
+    def _observe_stream_tokens(limiter: RateLimiter, stream: Any) -> Any:
+        """Pass a stream through, reporting its token usage to `limiter`.
+
+        A streaming response carries `usage` in a trailing chunk, not on the
+        object we get back from the API call, so the limiter would otherwise
+        never learn the per-request token cost of a streaming workload.
+        """
+
+        def gen() -> Iterator[Any]:
+            total = None
+            for chunk in stream:
+                usage = getattr(chunk, "usage", None)
+                tokens = getattr(usage, "total_tokens", None)
+                if isinstance(tokens, int):
+                    total = tokens
+                yield chunk
+            if total is not None:
+                limiter.observe_response(tokens_used=total)
+
+        return gen()
+
+    @staticmethod
+    def _aobserve_stream_tokens(limiter: RateLimiter, stream: Any) -> Any:
+        """Async variant of `_observe_stream_tokens`."""
+
+        async def gen() -> AsyncIterator[Any]:
+            total = None
+            async for chunk in stream:
+                usage = getattr(chunk, "usage", None)
+                tokens = getattr(usage, "total_tokens", None)
+                if isinstance(tokens, int):
+                    total = tokens
+                yield chunk
+            if total is not None:
+                limiter.observe_response(tokens_used=total)
+
+        return gen()
+
     def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)
@@ -2709,6 +2749,10 @@ class OpenAIGPT(LanguageModel):
                     first_chunk = next(test_iter)
                     # If we get here without error, recreate the stream
                     result = chain([first_chunk], test_iter)
+                    if limiter is not None:
+                        # usage arrives in a trailing chunk, not on the
+                        # stream object, so observe it as chunks flow by
+                        result = self._observe_stream_tokens(limiter, result)
                 except StopIteration:
                     # Empty stream is fine
                     pass
@@ -2805,6 +2849,10 @@ class OpenAIGPT(LanguageModel):
                                 yield chunk
 
                         result = combined_stream()  # type: ignore
+                        if limiter is not None:
+                            # usage arrives in a trailing chunk, not on the
+                            # stream object, so observe it as chunks flow by
+                            result = self._aobserve_stream_tokens(limiter, result)
                     except StopAsyncIteration:
                         # Empty stream is normal - nothing to do
                         pass

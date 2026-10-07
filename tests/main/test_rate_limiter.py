@@ -397,15 +397,28 @@ _CHUNKS = [
         "created": 1,
         "model": "stub",
         "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        # langroid asks for stream_options={"include_usage": True}, so a real
+        # provider reports usage in a trailing chunk like this one.
+        "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
     },
 ]
+
+# token budget the stub reports alongside the request budget, when asked
+_TOKEN_HEADERS = {
+    "x-ratelimit-limit-tokens": "1000",
+    "x-ratelimit-remaining-tokens": "900",
+    "x-ratelimit-reset-tokens": "1s",  # 100 tokens/s
+}
 
 
 class _StubServer:
     """Local OpenAI-compatible endpoint with a real, enforced rate limit."""
 
-    def __init__(self, limit: int, refill_per_sec: float) -> None:
+    def __init__(
+        self, limit: int, refill_per_sec: float, token_headers: bool = False
+    ) -> None:
         self.bucket = _LeakyBucket(limit, refill_per_sec)
+        self.token_headers = token_headers
         self.ok_count = 0
         self.rejected_count = 0
         self._count_lock = threading.Lock()
@@ -432,6 +445,8 @@ class _StubServer:
                 length = int(self.headers.get("content-length", 0))
                 body = json.loads(self.rfile.read(length) or b"{}")
                 allowed, rl_headers = server.bucket.take()
+                if server.token_headers:
+                    rl_headers = {**rl_headers, **_TOKEN_HEADERS}
                 if not allowed:
                     with server._count_lock:
                         server.rejected_count += 1
@@ -601,3 +616,94 @@ def test_async_concurrent_calls_respect_the_rate_limit():
     assert stats["seen_headers"] is True, stats
     assert not errors, f"{len(errors)} async calls failed: {errors[:2]}"
     assert server.rejected_count == 0, "concurrent batch exceeded the budget"
+
+
+def test_streaming_responses_feed_the_token_estimate():
+    """Usage arrives in a trailing chunk; the limiter must still learn it.
+
+    Without this, a streaming workload -- which is langroid's default -- would
+    never engage token-budget pacing, since the stream object itself carries no
+    `usage`.
+    """
+    server = _StubServer(limit=50, refill_per_sec=100.0, token_headers=True)
+    try:
+        with temporary_settings(Settings(cache=False, cache_type="none")):
+            llm = OpenAIGPT(
+                OpenAIGPTConfig(
+                    chat_model="gpt-4o-mini",
+                    api_base=server.api_base,
+                    api_key="test",
+                    stream=True,
+                    timeout=30,
+                    rate_limit=RateLimitConfig(
+                        enabled=True, share_key="stub-stream-tokens", headroom=0.0
+                    ),
+                )
+            )
+            response = llm.chat("say ok", max_tokens=5)
+    finally:
+        server.close()
+
+    assert "ok" in response.message
+    stats = get_rate_limiter("stub-stream-tokens").stats()
+    assert stats["token_rate"] == pytest.approx(100.0), stats
+    assert stats["avg_tokens"] == pytest.approx(12.0), stats
+    # 12 tokens/request against 100 tokens/s -> 0.12s between sends
+    assert stats["interval"] == pytest.approx(0.12, rel=1e-3), stats
+
+
+# --------------------------------------------------------------------------- #
+# cooldowns must reach callers that are already queued
+# --------------------------------------------------------------------------- #
+
+
+def test_cooldown_holds_back_already_queued_callers():
+    """A 429 discovered mid-flight must stall callers already asleep.
+
+    Reservations are handed out before the limiter knows what the response will
+    say. If a queued caller only honours its original reservation, a whole
+    concurrent wave sails straight through the cooldown.
+    """
+    limiter = RateLimiter(
+        RateLimitConfig(enabled=True, warmup_interval=0.02, max_wait=5.0)
+    )
+    n = 6
+    sent_at: List[float] = []
+    lock = threading.Lock()
+    t0 = time.monotonic()
+
+    def worker() -> None:
+        limiter.acquire()
+        with lock:
+            sent_at.append(time.monotonic() - t0)
+
+    threads = [threading.Thread(target=worker) for _ in range(n)]
+    for t in threads:
+        t.start()
+    time.sleep(0.01)
+    limiter.observe_rate_limit_error({"retry-after": "0.4s"})
+    for t in threads:
+        t.join(timeout=10)
+    assert all(not t.is_alive() for t in threads)
+
+    assert len(sent_at) == n
+    # the first caller may already have gone before the 429 was observed;
+    # everyone still queued at that moment must wait out the cooldown
+    held = [t for t in sent_at if t >= 0.01]
+    assert len(held) >= n - 1, sent_at
+    assert min(held) >= 0.35, f"cooldown bypassed by a queued caller: {sent_at}"
+    assert limiter.stats()["rate_limit_errors"] == 1
+
+
+def test_cooldown_wait_is_bounded_by_max_wait():
+    """The gate must not turn into an unbounded hang."""
+    limiter = RateLimiter(
+        RateLimitConfig(enabled=True, warmup_interval=0.0, max_wait=0.1)
+    )
+    limiter.observe_rate_limit_error({"retry-after": "30s"})
+    t0 = time.monotonic()
+    limiter.acquire()
+    waited = time.monotonic() - t0
+    # max_wait is 0.1s: a 30s retry-after must not become a 30s hold
+    assert waited <= 0.5, waited
+    assert limiter.stats()["rate_limit_errors"] == 1
