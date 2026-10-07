@@ -87,6 +87,12 @@ from langroid.language_models.provider_params import (
     LangDBParams,
     PortkeyParams,
 )
+from langroid.language_models.rate_limiter import (
+    RateLimitConfig,
+    RateLimiter,
+    get_rate_limiter,
+    rate_limit_error_headers,
+)
 from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
     retry_with_exponential_backoff,
@@ -288,6 +294,10 @@ class OpenAIGPTConfig(LLMConfig):
     temperature: float = 0.2
     seed: int | None = 42
     params: OpenAICallParams | None = None
+    # Pro-active rate limiting, paced from the provider's own rate-limit
+    # headers. OFF by default; with `enabled=False` the request path is
+    # unchanged. See docs/notes/rate-limiting.md.
+    rate_limit: RateLimitConfig = RateLimitConfig()
     use_cached_client: bool = (
         True  # Whether to reuse cached clients (prevents resource exhaustion)
     )
@@ -2613,6 +2623,27 @@ class OpenAIGPT(LanguageModel):
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
             raise
 
+    def _rate_limiter(self) -> Optional[RateLimiter]:
+        """The shared rate limiter for this model, or None when disabled.
+
+        Returns None unless `config.rate_limit.enabled` is set, so that the
+        request path is untouched by default.
+        """
+        cfg: Optional[RateLimitConfig] = getattr(self.config, "rate_limit", None)
+        if cfg is None or not cfg.enabled:
+            return None
+        key = cfg.share_key or (
+            f"{self.config.api_base or 'default'}::{self.config.chat_model}"
+        )
+        return get_rate_limiter(key, cfg)
+
+    @staticmethod
+    def _response_tokens(result: Any) -> Optional[int]:
+        """Total tokens billed for a chat-completion response, if reported."""
+        usage = getattr(result, "usage", None)
+        total = getattr(usage, "total_tokens", None)
+        return total if isinstance(total, int) else None
+
     def _chat_completions_with_backoff_body(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)
@@ -2622,6 +2653,8 @@ class OpenAIGPT(LanguageModel):
                 print("[grey37]CACHED[/grey37]")
         else:
             # If it's not in the cache, call the API
+            limiter = self._rate_limiter()
+            raw_call = None
             if self.config.litellm:
                 from litellm import completion as litellm_completion
 
@@ -2633,9 +2666,30 @@ class OpenAIGPT(LanguageModel):
                 if self.client is None:
                     raise ValueError("OpenAI/equivalent chat-completion client not set")
                 completion_call = self.client.chat.completions.create
+                if limiter is not None and isinstance(self.client, OpenAI):
+                    # Use the raw-response form so we keep the rate-limit
+                    # headers, which the parsed-body form discards.
+                    raw_call = self.client.chat.completions.with_raw_response.create
             if self.config.litellm and settings.debug:
                 kwargs["logger_fn"] = litellm_logging_fn
-            result = completion_call(**kwargs)
+            if limiter is not None:
+                limiter.acquire()
+            try:
+                if raw_call is not None:
+                    raw_response = raw_call(**kwargs)
+                    assert limiter is not None
+                    limiter.observe_response(headers=raw_response.headers)
+                    result = raw_response.parse()
+                else:
+                    result = completion_call(**kwargs)
+            except Exception as e:
+                if limiter is not None:
+                    headers = rate_limit_error_headers(e)
+                    if headers is not None:
+                        limiter.observe_rate_limit_error(headers)
+                raise
+            if limiter is not None:
+                limiter.observe_response(tokens_used=self._response_tokens(result))
 
             if self.get_stream():
                 # If streaming, cannot cache result
@@ -2660,6 +2714,10 @@ class OpenAIGPT(LanguageModel):
                     pass
                 except Exception as e:
                     # Propagate any errors in the stream
+                    if limiter is not None:
+                        headers = rate_limit_error_headers(e)
+                        if headers is not None:
+                            limiter.observe_rate_limit_error(headers)
                     raise e
             else:
                 self._cache_store(hashed_key, result.model_dump())
@@ -2683,6 +2741,8 @@ class OpenAIGPT(LanguageModel):
             if settings.debug:
                 print("[grey37]CACHED[/grey37]")
         else:
+            limiter = self._rate_limiter()
+            raw_call = None
             if self.config.litellm:
                 from litellm import acompletion as litellm_acompletion
 
@@ -2696,10 +2756,33 @@ class OpenAIGPT(LanguageModel):
                         "OpenAI/equivalent async chat-completion client not set"
                     )
                 acompletion_call = self.async_client.chat.completions.create
+                if limiter is not None and isinstance(self.async_client, AsyncOpenAI):
+                    # Use the raw-response form so we keep the rate-limit
+                    # headers, which the parsed-body form discards.
+                    raw_call = (
+                        self.async_client.chat.completions.with_raw_response.create
+                    )
             if self.config.litellm and settings.debug:
                 kwargs["logger_fn"] = litellm_logging_fn
             # If it's not in the cache, call the API
-            result = await acompletion_call(**kwargs)
+            if limiter is not None:
+                await limiter.acquire_async()
+            try:
+                if raw_call is not None:
+                    raw_response = await raw_call(**kwargs)
+                    assert limiter is not None
+                    limiter.observe_response(headers=raw_response.headers)
+                    result = raw_response.parse()
+                else:
+                    result = await acompletion_call(**kwargs)
+            except Exception as e:
+                if limiter is not None:
+                    headers = rate_limit_error_headers(e)
+                    if headers is not None:
+                        limiter.observe_rate_limit_error(headers)
+                raise
+            if limiter is not None:
+                limiter.observe_response(tokens_used=self._response_tokens(result))
             if self.get_stream():
                 try:
                     # Try to peek at the first chunk to immediately catch any errors
@@ -2727,6 +2810,10 @@ class OpenAIGPT(LanguageModel):
                         pass
                 except Exception as e:
                     # Any exception here should be raised to trigger the retry mechanism
+                    if limiter is not None:
+                        headers = rate_limit_error_headers(e)
+                        if headers is not None:
+                            limiter.observe_rate_limit_error(headers)
                     raise e
             else:
                 self._cache_store(hashed_key, result.model_dump())
