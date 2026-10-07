@@ -190,3 +190,52 @@ def test_add_window_ids_still_windows_unchunked_input() -> None:
         ids[1:4],
         ids[2:4],
     ]
+
+
+def test_code_parser_resplit_still_gets_distinct_ids(
+    code_documents: List[Document],
+) -> None:
+    """Splitting already-split chunks again still gives each a distinct id.
+
+    The chunks of one source share an id, and if they also inherited that
+    source's `window_ids` they would look already-windowed -- so the no-op
+    guard would skip them and they would go back to sharing one id, which
+    is the very bug this issue is about.
+    """
+    cfg = CodeParsingConfig(chunk_size=MAX_CHUNK_SIZE)
+    big = CodeParser(CodeParsingConfig(chunk_size=10_000)).split(code_documents)
+    assert len(big) == len(code_documents)  # one chunk per source
+
+    small = CodeParser(cfg).split(big)
+
+    assert len(small) > len(big)
+    assert len({chunk.id() for chunk in small}) == len(small)
+    assert all(len(c.metadata.window_ids) > 0 for c in small)
+    # no chunk kept its parent's window
+    assert all(c.metadata.window_ids != big[0].metadata.window_ids for c in small)
+
+
+def test_add_window_ids_mixed_batch_keeps_existing_windows() -> None:
+    """Windowed and fresh chunks in one call: only the fresh ones change.
+
+    The guard is per group, not per call. A single un-windowed chunk in the
+    batch must not force a re-window of everything, which would collapse
+    the already-assigned windows to singletons.
+    """
+    shared = DocMetaData(source="a.py", language="py")
+    done = [
+        Document(content=f"value_{i} = {i}", metadata=shared.model_copy())
+        for i in range(3)
+    ]
+    Parser(ParsingConfig(n_neighbor_ids=1)).add_window_ids(done)
+    ids_before = [c.id() for c in done]
+    windows_before = [list(c.metadata.window_ids) for c in done]
+    assert [len(w) for w in windows_before] == [2, 3, 2]
+
+    fresh = Document(content="echo hi", metadata=DocMetaData(source="b.sh"))
+    Parser(ParsingConfig(n_neighbor_ids=1)).add_window_ids(done + [fresh])
+
+    assert [c.id() for c in done] == ids_before
+    assert [list(c.metadata.window_ids) for c in done] == windows_before
+    assert fresh.metadata.window_ids == [fresh.id()]
+    assert fresh.metadata.is_chunk

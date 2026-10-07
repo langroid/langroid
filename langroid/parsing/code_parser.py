@@ -112,7 +112,13 @@ class CodeParser:
             [
                 Document(
                     content=chunk,
-                    metadata=d.metadata.model_copy(update=dict(is_chunk=True)),
+                    # window_ids is cleared, not inherited: a chunk's window
+                    # names its own siblings, so carrying over the window of
+                    # an already-chunked input would both be wrong and make
+                    # these look already-windowed to add_window_ids
+                    metadata=d.metadata.model_copy(
+                        update=dict(is_chunk=True, window_ids=[])
+                    ),
                 )
                 for chunk in chunk_code(
                     d.content,
