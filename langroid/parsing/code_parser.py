@@ -8,6 +8,7 @@ from pygments.lexers import get_lexer_by_name
 from pygments.token import Token
 
 from langroid.mytypes import Document
+from langroid.parsing.parser import add_window_ids
 
 
 def chunk_code(
@@ -67,6 +68,7 @@ class CodeParsingConfig(BaseSettings):
     chunk_size: int = 500  # tokens
     token_encoding_model: str = "text-embedding-3-small"
     n_similar_docs: int = 4
+    n_neighbor_ids: int = 5  # window size to store around each chunk
 
 
 class CodeParser:
@@ -99,11 +101,25 @@ class CodeParser:
         Returns:
             list of documents, where each document is a chunk; the metadata of the
             original document is duplicated for each chunk, so that when we retrieve a
-            chunk, we immediately know info about the original document.
+            chunk, we immediately know info about the original document. Each chunk
+            gets `is_chunk=True`, a distinct id, and the ids of its neighbors within
+            the same source document -- so the result can be given straight to a
+            vector store, as with the splitters on `Parser`. Calling
+            `Parser.add_window_ids` on the result afterwards is a no-op and is no
+            longer needed.
         """
         chunked_docs = [
             [
-                Document(content=chunk, metadata=d.metadata.model_copy())
+                Document(
+                    content=chunk,
+                    # window_ids is cleared, not inherited: a chunk's window
+                    # names its own siblings, so carrying over the window of
+                    # an already-chunked input would both be wrong and make
+                    # these look already-windowed to add_window_ids
+                    metadata=d.metadata.model_copy(
+                        update=dict(is_chunk=True, window_ids=[])
+                    ),
+                )
                 for chunk in chunk_code(
                     d.content,
                     d.metadata.language,  # type: ignore
@@ -117,5 +133,10 @@ class CodeParser:
         ]
         if len(chunked_docs) == 0:
             return []
+        # per source doc, as in Parser.split_simple: without distinct ids the
+        # chunks of one doc overwrite each other on a vector-store upsert,
+        # since those are keyed on the id
+        for group in chunked_docs:
+            add_window_ids(group, self.config.n_neighbor_ids)
         # collapse the list of lists into a single list
         return reduce(lambda x, y: x + y, chunked_docs)
