@@ -334,9 +334,13 @@ _SAFE_BUILTINS: Dict[str, Any] = {
 
 def safe_eval_globals(local_vars: Dict[str, Any]) -> Dict[str, Any]:
     """Return a globals dict for :func:`eval` with ``__builtins__`` restricted
-    to a safe read-only set, so that LLM-generated expressions cannot reach
-    ``__import__``, ``eval``, ``exec``, ``open``, etc. via Python's implicit
+    to a safe read-only set, so that bare names such as ``__import__``,
+    ``eval``, ``exec`` and ``open`` do not resolve via Python's implicit
     builtin injection.
+
+    This is defence in depth for expressions that have already passed
+    :func:`sanitize_command`. It is not a sandbox on its own and does not make
+    an unvalidated (``full_eval=True``) expression safe; see SECURITY.md.
 
     Args:
         local_vars: User-provided variables to expose to the eval'd
