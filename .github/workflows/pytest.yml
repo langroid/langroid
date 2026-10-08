@@ -104,7 +104,9 @@ jobs:
             tests/main/test_vertexai_isolation.py \
             tests/main/test_vertexai_routing.py \
             tests/main/test_global_settings.py \
-            tests/main/test_graph.py
+            tests/main/test_graph.py \
+            "tests/main/test_task.py::test_task_empty_response" \
+            "tests/main/test_task_run_polymorphic.py::test_task_in_out_types"
 
   cancel:
     if: "contains(github.event.head_commit.message, 'notest') == false"
