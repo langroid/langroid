@@ -736,6 +736,9 @@ def test_every_openai_config_field_is_classified(project_env):
         "supports_strict_tools",
         "timeout",
         "retry_params",
+        # pacing only: cannot change the host, attach a credential, or weaken
+        # transport. LANGROID_RATE_LIMIT_* (not OPENAI_*) configures it.
+        "rate_limit",
         "cache_config",
         # callables: settable only in code, never from the environment
         "api_key_provider",

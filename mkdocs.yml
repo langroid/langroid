@@ -148,6 +148,7 @@ nav:
       - OpenAI HTTP Client Configuration: notes/openai-http-client.md
       - OpenAI Client Caching: notes/openai-client-caching.md
       - Rotating API Keys: notes/rotating-api-keys.md
+      - Pro-active Rate Limiting: notes/rate-limiting.md
       - Cross-Encoder Reranking: notes/cross-encoder.md
       - Task Logs: notes/html-logger.md
       - Pydantic v2 Migration: notes/pydantic-v2-migration.md
