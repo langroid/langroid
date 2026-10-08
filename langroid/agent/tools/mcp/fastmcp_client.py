@@ -101,6 +101,10 @@ def _schema_allows_null(schema: Any, defs: Dict[str, Any]) -> bool:
     Returns:
         True if a ``null`` for this parameter is valid under `schema`.
     """
+    # JSON Schema allows a boolean in place of a schema object: `true` accepts
+    # every value, `false` rejects every value, null included.
+    if isinstance(schema, bool):
+        return schema
     if not isinstance(schema, dict):
         return True
     # `$ref` targets are written relative to the document root (e.g.

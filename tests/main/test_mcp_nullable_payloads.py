@@ -39,6 +39,10 @@ from langroid.agent.tools.mcp import FastMCPClient
         ({"enum": ["a", "b"]}, False),
         ({"const": None}, True),
         ({"const": "a"}, False),
+        # A boolean in place of a schema: `true` accepts anything,
+        # `false` rejects everything, null included.
+        (True, True),
+        (False, False),
         # No constraint at all maps to `Any`, which accepts null.
         ({}, True),
         ("not-a-schema", True),
@@ -148,6 +152,11 @@ async def test_null_for_non_nullable_optional_uses_the_default() -> None:
     `format_schema_for_strict` removes every default and marks every property
     required -- so the model's only way to say "use the default" is to emit
     `null`. Forwarding that null makes the server reject the call.
+
+    This is the behavior `exclude_none=True` already had, so it passes with
+    and without the fix: it is a no-regression guard, not evidence for the
+    fix. Its value is that the obvious "preserve every explicit null" fix
+    breaks it.
     """
     server = FastMCP("NonNullableOptional")
 
@@ -193,6 +202,10 @@ async def test_null_for_non_nullable_nested_field_uses_the_default() -> None:
 
 @pytest.mark.asyncio
 async def test_mcp_tool_subclass_keeps_non_null_default() -> None:
+    """A subclass that overrides a default still sends that default.
+
+    Another no-regression guard: it passes with and without the fix.
+    """
     server = FastMCP("CustomDefaults")
 
     @server.tool()
