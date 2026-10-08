@@ -25,6 +25,11 @@ from langroid.agent.tools.mcp import FastMCPClient
         ({"type": "object", "properties": {}}, False),
         # An explicit `type` must hold whatever else the node says.
         ({"type": "integer", "anyOf": [{"type": "null"}]}, False),
+        # Sibling keywords all have to hold: a null branch in the union does
+        # not help when the enum alongside it excludes null.
+        ({"anyOf": [{"type": "integer"}, {"type": "null"}], "enum": [1, 2]}, False),
+        # `oneOf` means EXACTLY one branch may match; null matches both here.
+        ({"oneOf": [{}, {"type": "null"}]}, False),
         # `allOf` requires every branch to hold, at any branch count.
         ({"allOf": [{"type": ["integer", "null"]}, {}]}, True),
         ({"allOf": [{"type": ["integer", "null"]}, {"type": "integer"}]}, False),

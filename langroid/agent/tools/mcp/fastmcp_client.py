@@ -10,7 +10,6 @@ from typing import (
     Any,
     Callable,
     Dict,
-    FrozenSet,
     List,
     Literal,
     Optional,
@@ -39,6 +38,7 @@ except Exception:  # pragma: no cover - optional
     UvxStdioTransport = tuple()  # type: ignore
 from anyio import ClosedResourceError
 from fastmcp.server import FastMCP
+from jsonschema import Draft202012Validator
 from mcp.client.session import (
     LoggingFnT,
     MessageHandlerFnT,
@@ -74,11 +74,7 @@ FastMCPServerSpec: TypeAlias = (
 _REF_IN_PROGRESS = object()
 
 
-def _schema_allows_null(
-    schema: Any,
-    defs: Dict[str, Any],
-    seen: Optional[FrozenSet[str]] = None,
-) -> bool:
+def _schema_allows_null(schema: Any, defs: Dict[str, Any]) -> bool:
     """Whether one parameter's MCP input schema accepts a JSON ``null``.
 
     This is a question about the SERVER's schema, not about the Langroid model
@@ -86,52 +82,38 @@ def _schema_allows_null(
     `Optional[...]` regardless of nullability, so the generated annotation
     cannot answer it.
 
-    A parameter with no type constraint at all maps to `Any`, which accepts
-    null, so it counts as nullable.
+    The question is answered by actually validating ``null`` against the
+    schema, rather than by inspecting keywords: null's validity depends on
+    every sibling keyword at once (an ``anyOf`` with a null branch is still
+    not nullable next to ``"enum": [1, 2]``), on ``oneOf`` matching exactly
+    one branch, and on ``$ref`` resolution -- an approximation of those rules
+    gets each of them wrong in a different way. ``jsonschema`` is always
+    importable here: ``mcp``, which ``fastmcp`` requires, depends on it.
+
+    A schema that constrains nothing, or that cannot be evaluated at all
+    (malformed, dangling ``$ref``, reference cycle), counts as nullable:
+    `_schema_to_field` degrades exactly those to `Any`, which accepts null.
 
     Args:
         schema: The JSON-Schema node for a single parameter.
         defs: The enclosing schema's ``$defs`` registry, for ``$ref`` nodes.
-        seen: ``$defs`` names already being resolved, to break cycles.
 
     Returns:
         True if a ``null`` for this parameter is valid under `schema`.
     """
     if not isinstance(schema, dict):
-        # Unknown shape; `_schema_to_field` degrades it to `Any`.
         return True
-    ref = schema.get("$ref")
-    if isinstance(ref, str):
-        def_name = ref.rsplit("/", 1)[-1]
-        seen = seen or frozenset()
-        if def_name in seen:
-            # A reference cycle also degrades to `Any`.
-            return True
-        return _schema_allows_null(defs.get(def_name), defs, seen | {def_name})
-    # An explicit `type` is decisive: it must hold whatever else the node says,
-    # so a non-null type rules null out even alongside an `anyOf`.
-    schema_type = schema.get("type")
-    if isinstance(schema_type, str):
-        return schema_type == "null"
-    if isinstance(schema_type, list):
-        return "null" in schema_type
-    # `allOf` means every branch must hold, so null must be valid under all of
-    # them; `anyOf` / `oneOf` need only one branch to admit it. Either way a
-    # composition constrains the type, so never fall through to the `Any` case
-    # below -- `{"anyOf": [{"type": "integer"}, {"type": "string"}]}` is a
-    # perfectly type-constrained schema that does not accept null.
-    all_of = schema.get("allOf")
-    if isinstance(all_of, list) and all_of:
-        return all(_schema_allows_null(branch, defs, seen) for branch in all_of)
-    for key in ("anyOf", "oneOf"):
-        branches = schema.get(key)
-        if isinstance(branches, list) and branches:
-            return any(_schema_allows_null(branch, defs, seen) for branch in branches)
-    enum_values = schema.get("enum", [schema["const"]] if "const" in schema else None)
-    if isinstance(enum_values, list):
-        return any(value is None for value in enum_values)
-    # No type, no enum, no composition: maps to `Any`.
-    return True
+    # `$ref` targets are written relative to the document root (e.g.
+    # "#/$defs/Entry"), so hand the validator a root that carries `$defs`.
+    rooted: Dict[str, Any] = dict(schema)
+    if defs and "$defs" not in rooted:
+        rooted["$defs"] = defs
+    try:
+        return bool(Draft202012Validator(rooted).is_valid(None))
+    except Exception:
+        # Includes RecursionError from a self-referential $ref chain and an
+        # unresolvable reference. Both degrade to `Any` in `_schema_to_field`.
+        return True
 
 
 def _nullable_field_names(properties: Dict[str, Any], defs: Dict[str, Any]) -> Set[str]:
