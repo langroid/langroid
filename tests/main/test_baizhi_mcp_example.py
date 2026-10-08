@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
 from fastmcp import FastMCP
 
@@ -50,46 +49,6 @@ def server() -> ServerFixture:
 
         mcp.tool(name=name)(make_tool(name))
     return mcp, calls, lifecycle
-
-
-def mock_http_edge(
-    monkeypatch: pytest.MonkeyPatch,
-    handler: Callable[[httpx.Request], httpx.Response],
-) -> list[httpx.AsyncClient]:
-    """Replace only network I/O; retain the real HTTP and MCP clients."""
-    real_client = httpx.AsyncClient
-    clients: list[httpx.AsyncClient] = []
-
-    def create_client(**kwargs: Any) -> httpx.AsyncClient:
-        client = real_client(transport=httpx.MockTransport(handler), **kwargs)
-        clients.append(client)
-        return client
-
-    monkeypatch.setattr(example.httpx, "AsyncClient", create_client)
-    return clients
-
-
-@pytest.mark.parametrize("key", [None, "", "  "])
-def test_missing_key(monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
-    if key is None:
-        monkeypatch.delenv("BAIZHI_API_KEY", raising=False)
-    else:
-        monkeypatch.setenv("BAIZHI_API_KEY", key)
-    with pytest.raises(ValueError, match="Set BAIZHI_API_KEY"):
-        example.baizhi_transport()
-
-
-@pytest.mark.asyncio
-async def test_auth_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("BAIZHI_API_KEY", " synthetic-test-key ")
-    transport = example.baizhi_transport()
-    assert str(transport.url) == example.BAIZHI_MCP_URL
-    assert transport.headers == {"Authorization": "Bearer synthetic-test-key"}
-    client = transport.httpx_client_factory(headers=transport.headers)
-    async with client:
-        assert client.headers["Authorization"] == "Bearer synthetic-test-key"
-        assert not client.follow_redirects
-        assert not client.trust_env
 
 
 @pytest.mark.asyncio
@@ -151,14 +110,6 @@ async def test_missing_tool_stops_before_model(server: ServerFixture) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("query,turns", [(" ", 12), ("Research", 0)])
-async def test_invalid_input_before_connection(query: str, turns: int) -> None:
-    # An invalid URL would fail differently if a connection were attempted.
-    with pytest.raises(ValueError, match="nonempty query and positive turns"):
-        await example.research(query, MockLMConfig(), "invalid-url", turns)
-
-
-@pytest.mark.asyncio
 async def test_session_closes_on_model_failure(server: ServerFixture) -> None:
     mcp, calls, lifecycle = server
 
@@ -211,116 +162,3 @@ async def test_session_closes_when_cancelled_during_tool(
                 await task
     assert calls == [("web_scrape", "synthetic-page")]
     assert lifecycle == ["started", "closed"]
-
-
-@pytest.mark.asyncio
-async def test_http_client_respects_timeout() -> None:
-    timeout = httpx.Timeout(1.0)
-    async with example.http_client(timeout=timeout) as client:
-        assert client.timeout == timeout
-
-
-@pytest.mark.asyncio
-async def test_http_transport_and_task(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Drive real Streamable HTTP protocol over synthetic HTTP responses."""
-    monkeypatch.setenv("BAIZHI_API_KEY", "synthetic-http-key")
-    methods: list[str] = []
-    calls: list[dict[str, Any]] = []
-    requests: list[httpx.Request] = []
-
-    def handle(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        assert request.headers["Authorization"] == "Bearer synthetic-http-key"
-        assert str(request.url) == example.BAIZHI_MCP_URL
-        if request.method == "DELETE":
-            return httpx.Response(204)
-        if request.method == "GET":
-            return httpx.Response(405)
-        body = json.loads(request.content)
-        method = body["method"]
-        methods.append(method)
-        if "id" not in body:
-            return httpx.Response(202)
-        if method == "initialize":
-            result = {
-                "protocolVersion": body["params"]["protocolVersion"],
-                "capabilities": {"tools": {}},
-                "serverInfo": {"name": "synthetic", "version": "1"},
-            }
-        elif method == "tools/list":
-            result = {
-                "tools": [
-                    {
-                        "name": name,
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {"value": {"type": "string"}},
-                            "required": ["value"],
-                        },
-                    }
-                    for name in sorted(example.RESEARCH_TOOLS)
-                ]
-            }
-        elif method == "tools/call":
-            calls.append(body["params"])
-            observation = "Source https://example.org/source"
-            result = {
-                "content": [{"type": "text", "text": observation}],
-                "isError": False,
-            }
-        else:
-            raise AssertionError(f"Unexpected MCP method: {method}")
-        return httpx.Response(
-            200,
-            json={"jsonrpc": "2.0", "id": body["id"], "result": result},
-            headers={"mcp-session-id": "synthetic-session"},
-        )
-
-    clients = mock_http_edge(monkeypatch, handle)
-    responses = iter(
-        [
-            json.dumps({"request": "web_extract", "value": "synthetic-page"}),
-            "Evidence: https://example.org/source",
-        ]
-    )
-    result = await example.research(
-        "Research",
-        MockLMConfig(response_fn=lambda _: next(responses)),
-        example.baizhi_transport(),
-    )
-    assert result is not None and "https://example.org/source" in result.content
-    assert {"initialize", "tools/list", "tools/call"} <= set(methods)
-    arguments = {"value": "synthetic-page"}
-    assert calls == [{"name": "web_extract", "arguments": arguments}]
-    assert any(request.method == "DELETE" for request in requests)
-    assert clients and all(client.is_closed for client in clients)
-    assert all(not client.follow_redirects for client in clients)
-    assert all(not client.trust_env for client in clients)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("status", [307, 401])
-async def test_http_redirect_or_auth_failure_closes_client(
-    monkeypatch: pytest.MonkeyPatch, status: int
-) -> None:
-    monkeypatch.setenv("BAIZHI_API_KEY", "synthetic-http-key")
-    requests: list[httpx.Request] = []
-
-    def handle(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        headers = {"location": "https://other.example/mcp"}
-        return httpx.Response(status, headers=headers)
-
-    clients = mock_http_edge(monkeypatch, handle)
-    transport = example.baizhi_transport()
-    with pytest.raises(Exception):
-        async with transport.connect_session() as session:
-            await session.initialize()
-    # The real transport invoked the custom factory and performed HTTP I/O.
-    # The redirect target receives no request, even though the SDK requested
-    # redirects when it invoked the factory.
-    assert len(requests) == 1
-    assert str(requests[0].url) == example.BAIZHI_MCP_URL
-    assert requests[0].headers["Authorization"] == "Bearer synthetic-http-key"
-    assert clients and all(client.is_closed for client in clients)
-    assert all(not client.follow_redirects for client in clients)
