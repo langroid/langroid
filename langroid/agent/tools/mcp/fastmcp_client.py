@@ -10,9 +10,11 @@ from typing import (
     Any,
     Callable,
     Dict,
+    FrozenSet,
     List,
     Literal,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeAlias,
@@ -70,6 +72,121 @@ FastMCPServerSpec: TypeAlias = (
 # Sentinel marking a $defs entry that is currently being resolved into a model,
 # used to break reference cycles when converting JSON-Schema $ref nodes.
 _REF_IN_PROGRESS = object()
+
+
+def _schema_allows_null(
+    schema: Any,
+    defs: Dict[str, Any],
+    seen: Optional[FrozenSet[str]] = None,
+) -> bool:
+    """Whether one parameter's MCP input schema accepts a JSON ``null``.
+
+    This is a question about the SERVER's schema, not about the Langroid model
+    built from it: `_schema_to_field` wraps every non-required parameter in
+    `Optional[...]` regardless of nullability, so the generated annotation
+    cannot answer it.
+
+    A parameter with no type constraint at all maps to `Any`, which accepts
+    null, so it counts as nullable.
+
+    Args:
+        schema: The JSON-Schema node for a single parameter.
+        defs: The enclosing schema's ``$defs`` registry, for ``$ref`` nodes.
+        seen: ``$defs`` names already being resolved, to break cycles.
+
+    Returns:
+        True if a ``null`` for this parameter is valid under `schema`.
+    """
+    if not isinstance(schema, dict):
+        # Unknown shape; `_schema_to_field` degrades it to `Any`.
+        return True
+    ref = schema.get("$ref")
+    if isinstance(ref, str):
+        def_name = ref.rsplit("/", 1)[-1]
+        seen = seen or frozenset()
+        if def_name in seen:
+            # A reference cycle also degrades to `Any`.
+            return True
+        return _schema_allows_null(defs.get(def_name), defs, seen | {def_name})
+    schema_type = schema.get("type")
+    if schema_type == "null":
+        return True
+    if isinstance(schema_type, list) and "null" in schema_type:
+        return True
+    for key in ("anyOf", "oneOf"):
+        branches = schema.get(key)
+        if isinstance(branches, list) and any(
+            _schema_allows_null(branch, defs, seen) for branch in branches
+        ):
+            return True
+    all_of = schema.get("allOf")
+    if isinstance(all_of, list) and len(all_of) == 1:
+        return _schema_allows_null(all_of[0], defs, seen)
+    enum_values = schema.get("enum", [schema["const"]] if "const" in schema else None)
+    if isinstance(enum_values, list):
+        return any(value is None for value in enum_values)
+    if schema_type is None and not all_of:
+        # No type, no enum, no composition: maps to `Any`.
+        return True
+    return False
+
+
+def _nullable_field_names(properties: Dict[str, Any], defs: Dict[str, Any]) -> Set[str]:
+    """Names of the properties in `properties` whose schema accepts null."""
+    return {
+        name for name, schema in properties.items() if _schema_allows_null(schema, defs)
+    }
+
+
+def _none_exclusions(value: Any) -> Dict[Any, Any]:
+    """Build a `model_dump` exclusion map for `None` values not to be sent.
+
+    A `None` is dropped when either:
+
+    - the field was never set, so the `None` is just the Optional placeholder
+      `_schema_to_field` gives every non-required parameter; or
+    - the field WAS set, but the MCP server's schema for it does not accept
+      null. Under strict tool calling (the default for OpenAI models)
+      `format_schema_for_strict` removes every default and marks every property
+      required, so the model has no way to say "use the default" except to emit
+      `null`. Forwarding those nulls makes the server reject the call.
+
+    An explicitly supplied `None` for a parameter the server declares nullable
+    is preserved: that is a real argument, and dropping it silently substituted
+    the default. Recurses through nested models and containers so the same rule
+    applies at every depth, since `format_schema_for_strict` rewrites nested
+    objects too.
+
+    Args:
+        value: A model, container, or scalar from the tool-message tree.
+
+    Returns:
+        A pydantic `exclude` map (nested dicts for nested models/containers).
+    """
+    exclusions: Dict[Any, Any] = {}
+    if isinstance(value, BaseModel):
+        nullable: Optional[Set[str]] = getattr(
+            type(value), "_mcp_nullable_fields", None
+        )
+        for name, item in value:
+            if item is None:
+                unset = name not in value.model_fields_set
+                # When nullability is unknown, keep an explicitly set None:
+                # that is the argument the caller actually supplied.
+                not_nullable = nullable is not None and name not in nullable
+                if unset or not_nullable:
+                    exclusions[name] = True
+                continue
+            nested = _none_exclusions(item)
+            if nested:
+                exclusions[name] = nested
+    elif isinstance(value, (list, tuple, dict)):
+        items = value.items() if isinstance(value, dict) else enumerate(value)
+        for key, item in items:
+            nested = _none_exclusions(item)
+            if nested:
+                exclusions[key] = nested
+    return exclusions
 
 
 class FastMCPClient:
@@ -395,6 +512,12 @@ class FastMCPClient:
                 __base__=BaseModel,
                 **sub_fields,
             )
+            # Record which of this nested object's properties the server
+            # declares nullable, so the payload builder can tell an explicit
+            # null argument from a strict-mode "use the default" null.
+            submodel._mcp_nullable_fields = _nullable_field_names(  # type: ignore
+                nested_properties, defs
+            )
             # Wrap in Optional if not required
             model_type = submodel if is_required else Optional[submodel]
             return model_type, Field(default=default, description=desc)  # type: ignore
@@ -597,6 +720,12 @@ class FastMCPClient:
 
         tool_model._client_config = client_config  # type: ignore [attr-defined]
         tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
+        # Nullability is keyed by the model's field names, so apply the same
+        # reserved-name renaming the fields went through above.
+        nullable_props = _nullable_field_names(props, defs)
+        tool_model._mcp_nullable_fields = {  # type: ignore[attr-defined]
+            renamed.get(name, name) for name in nullable_props
+        }
         tool_model._mcp_tool_name = mcp_tool_name  # type: ignore[attr-defined]
 
         # 2) define an arg-free call_tool_async()
@@ -621,8 +750,13 @@ class FastMCPClient:
             # Add standard excluded fields
             exclude_fields.update(["request", "purpose"])
 
-            # Exclude None values - MCP servers don't expect None for optional params
-            payload = itself.model_dump(exclude=exclude_fields, exclude_none=True)
+            # Drop the None values the server cannot accept (unset Optional
+            # placeholders, and strict-mode nulls for non-nullable params), but
+            # forward an explicit null for a parameter the server declares
+            # nullable -- that is a real argument, not a missing one.
+            exclusions = _none_exclusions(itself)
+            exclusions.update({name: True for name in exclude_fields})
+            payload = itself.model_dump(exclude=exclusions)
 
             # restore any renamed fields
             for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
