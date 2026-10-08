@@ -74,7 +74,7 @@ FastMCPServerSpec: TypeAlias = (
 _REF_IN_PROGRESS = object()
 
 
-def _schema_allows_null(schema: Any, defs: Dict[str, Any]) -> bool:
+def _schema_allows_null(schema: Any, root: Dict[str, Any]) -> bool:
     """Whether one parameter's MCP input schema accepts a JSON ``null``.
 
     This is a question about the SERVER's schema, not about the Langroid model
@@ -90,13 +90,18 @@ def _schema_allows_null(schema: Any, defs: Dict[str, Any]) -> bool:
     gets each of them wrong in a different way. ``jsonschema`` is always
     importable here: ``mcp``, which ``fastmcp`` requires, depends on it.
 
-    A schema that constrains nothing, or that cannot be evaluated at all
-    (malformed, dangling ``$ref``, reference cycle), counts as nullable:
-    `_schema_to_field` degrades exactly those to `Any`, which accepts null.
+    `root` is the document ``$ref`` pointers are written against, so a
+    reference anywhere into it resolves -- not only into its ``$defs``.
+
+    A schema that cannot be evaluated at all -- malformed, dangling ``$ref``,
+    reference cycle -- counts as NOT nullable. That is the conservative answer:
+    the null is then dropped, exactly as the previous `exclude_none=True`
+    behavior did, so a schema we cannot read can never turn a working call into
+    a rejected one.
 
     Args:
         schema: The JSON-Schema node for a single parameter.
-        defs: The enclosing schema's ``$defs`` registry, for ``$ref`` nodes.
+        root: The enclosing document, for resolving ``$ref`` pointers.
 
     Returns:
         True if a ``null`` for this parameter is valid under `schema`.
@@ -106,24 +111,22 @@ def _schema_allows_null(schema: Any, defs: Dict[str, Any]) -> bool:
     if isinstance(schema, bool):
         return schema
     if not isinstance(schema, dict):
-        return True
-    # `$ref` targets are written relative to the document root (e.g.
-    # "#/$defs/Entry"), so hand the validator a root that carries `$defs`.
-    rooted: Dict[str, Any] = dict(schema)
-    if defs and "$defs" not in rooted:
-        rooted["$defs"] = defs
+        return False
     try:
-        return bool(Draft202012Validator(rooted).is_valid(None))
+        # `evolve` keeps the validator's resolution context anchored at `root`
+        # while validating the parameter's own node.
+        validator = Draft202012Validator(root).evolve(schema=schema)
+        return bool(validator.is_valid(None))
     except Exception:
-        # Includes RecursionError from a self-referential $ref chain and an
-        # unresolvable reference. Both degrade to `Any` in `_schema_to_field`.
-        return True
+        # Unresolvable reference, or RecursionError from a self-referential
+        # $ref chain. Fall back to the old drop-the-null behavior.
+        return False
 
 
-def _nullable_field_names(properties: Dict[str, Any], defs: Dict[str, Any]) -> Set[str]:
+def _nullable_field_names(properties: Dict[str, Any], root: Dict[str, Any]) -> Set[str]:
     """Names of the properties in `properties` whose schema accepts null."""
     return {
-        name for name, schema in properties.items() if _schema_allows_null(schema, defs)
+        name for name, schema in properties.items() if _schema_allows_null(schema, root)
     }
 
 
@@ -504,8 +507,12 @@ class FastMCPClient:
             # Record which of this nested object's properties the server
             # declares nullable, so the payload builder can tell an explicit
             # null argument from a strict-mode "use the default" null.
+            # `$defs` is the only part of the enclosing document reachable from
+            # here, so a nested `$ref` that points elsewhere into it cannot be
+            # resolved and its property is treated as non-nullable -- which is
+            # the pre-existing drop-the-null behavior, so it is safe.
             submodel._mcp_nullable_fields = _nullable_field_names(  # type: ignore
-                nested_properties, defs
+                nested_properties, {"$defs": defs}
             )
             # Wrap in Optional if not required
             model_type = submodel if is_required else Optional[submodel]
@@ -628,6 +635,10 @@ class FastMCPClient:
 
         input_schema = getattr(target, "inputSchema", None)
         schema = input_schema if isinstance(input_schema, dict) else {}
+        # The whole input schema, kept because the loop below shadows
+        # `schema` with each property and because `$ref` pointers are
+        # written against this document, not just against its `$defs`.
+        root_schema: Dict[str, Any] = schema
         props = schema.get("properties") or {}
         if not isinstance(props, dict):
             props = {}
@@ -711,7 +722,7 @@ class FastMCPClient:
         tool_model._renamed_fields = renamed  # type: ignore[attr-defined]
         # Nullability is keyed by the model's field names, so apply the same
         # reserved-name renaming the fields went through above.
-        nullable_props = _nullable_field_names(props, defs)
+        nullable_props = _nullable_field_names(props, root_schema)
         tool_model._mcp_nullable_fields = {  # type: ignore[attr-defined]
             renamed.get(name, name) for name in nullable_props
         }

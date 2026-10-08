@@ -43,9 +43,12 @@ from langroid.agent.tools.mcp import FastMCPClient
         # `false` rejects everything, null included.
         (True, True),
         (False, False),
-        # No constraint at all maps to `Any`, which accepts null.
+        # No constraint at all accepts null.
         ({}, True),
-        ("not-a-schema", True),
+        # A schema we cannot read at all falls back to dropping the
+        # null, which is what `exclude_none=True` always did.
+        ("not-a-schema", False),
+        (None, False),
     ],
 )
 def test_schema_allows_null(schema: object, expected: bool) -> None:
@@ -58,20 +61,44 @@ def test_schema_allows_null(schema: object, expected: bool) -> None:
     assert _schema_allows_null(schema, {}) is expected
 
 
+def test_schema_allows_null_resolves_refs_anywhere_in_the_document() -> None:
+    """A $ref may point anywhere into the document, not only into $defs."""
+    from langroid.agent.tools.mcp.fastmcp_client import _schema_allows_null
+
+    root = {
+        "type": "object",
+        "properties": {
+            "config": {"$defs": {"Count": {"type": "integer"}}},
+            "n": {"$ref": "#/properties/config/$defs/Count"},
+            "m": {
+                "anyOf": [
+                    {"$ref": "#/properties/config/$defs/Count"},
+                    {"type": "null"},
+                ]
+            },
+        },
+    }
+    props = root["properties"]
+    assert _schema_allows_null(props["n"], root) is False
+    assert _schema_allows_null(props["m"], root) is True
+
+
 def test_schema_allows_null_follows_refs_and_breaks_cycles() -> None:
     from langroid.agent.tools.mcp.fastmcp_client import _schema_allows_null
 
-    defs = {
-        "Nullable": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
-        "Plain": {"type": "integer"},
-        "Loop": {"$ref": "#/$defs/Loop"},
+    root = {
+        "$defs": {
+            "Nullable": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+            "Plain": {"type": "integer"},
+            "Loop": {"$ref": "#/$defs/Loop"},
+        }
     }
-    assert _schema_allows_null({"$ref": "#/$defs/Nullable"}, defs) is True
-    assert _schema_allows_null({"$ref": "#/$defs/Plain"}, defs) is False
-    # A cycle degrades to `Any` rather than recursing forever.
-    assert _schema_allows_null({"$ref": "#/$defs/Loop"}, defs) is True
-    # A dangling $ref also degrades to `Any`.
-    assert _schema_allows_null({"$ref": "#/$defs/Missing"}, defs) is True
+    assert _schema_allows_null({"$ref": "#/$defs/Nullable"}, root) is True
+    assert _schema_allows_null({"$ref": "#/$defs/Plain"}, root) is False
+    # A cycle and a dangling $ref both fall back to dropping the null,
+    # rather than recursing forever or guessing that null is allowed.
+    assert _schema_allows_null({"$ref": "#/$defs/Loop"}, root) is False
+    assert _schema_allows_null({"$ref": "#/$defs/Missing"}, root) is False
 
 
 @pytest.mark.asyncio
