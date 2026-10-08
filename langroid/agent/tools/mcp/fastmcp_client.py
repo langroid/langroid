@@ -72,6 +72,30 @@ FastMCPServerSpec: TypeAlias = (
 _REF_IN_PROGRESS = object()
 
 
+def _implicit_none_exclusions(value: Any) -> Dict[Any, Any]:
+    """Build a dump exclusion map for unset model fields with None defaults.
+
+    Explicit nulls and non-None defaults must reach the MCP server. Recurse
+    through containers so the same rule applies to nested model parameters.
+    """
+    exclusions: Dict[Any, Any] = {}
+    if isinstance(value, BaseModel):
+        for name, item in value:
+            if item is None and name not in value.model_fields_set:
+                exclusions[name] = True
+            else:
+                nested = _implicit_none_exclusions(item)
+                if nested:
+                    exclusions[name] = nested
+    elif isinstance(value, (list, tuple, dict)):
+        items = value.items() if isinstance(value, dict) else enumerate(value)
+        for key, item in items:
+            nested = _implicit_none_exclusions(item)
+            if nested:
+                exclusions[key] = nested
+    return exclusions
+
+
 class FastMCPClient:
     """A client for interacting with a FastMCP server.
 
@@ -621,8 +645,10 @@ class FastMCPClient:
             # Add standard excluded fields
             exclude_fields.update(["request", "purpose"])
 
-            # Exclude None values - MCP servers don't expect None for optional params
-            payload = itself.model_dump(exclude=exclude_fields, exclude_none=True)
+            # Omit unset None placeholders, but preserve explicitly supplied nulls.
+            exclusions = _implicit_none_exclusions(itself)
+            exclusions.update({name: True for name in exclude_fields})
+            payload = itself.model_dump(exclude=exclusions)
 
             # restore any renamed fields
             for orig, new in itself.__class__._renamed_fields.items():  # type: ignore
