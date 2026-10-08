@@ -40,9 +40,18 @@ def extract_postgresql_descriptions(
                 else:
                     table_name = f"{schema}.{table}"
 
+                # Bind the table name rather than interpolating it: these
+                # names come from the database catalog, and a catalog name
+                # can contain a quote (PostgreSQL allows any character in a
+                # double-quoted identifier), which would otherwise close the
+                # string literal and run whatever follows. The MySQL
+                # extractor below has always bound its parameters.
+                # CAST(... AS regclass), not `:tbl::regclass`: SQLAlchemy
+                # reads the latter's parameter name as "tb".
                 table_comment = (
                     conn.execute(
-                        text(f"SELECT obj_description('{table_name}'::regclass)")
+                        text("SELECT obj_description(CAST(:tbl AS regclass))"),
+                        {"tbl": table_name},
                     ).scalar()
                     or ""
                 )
@@ -53,9 +62,10 @@ def extract_postgresql_descriptions(
                     col_comment = (
                         conn.execute(
                             text(
-                                f"SELECT col_description('{table_name}'::regclass, "
-                                f"{idx})"
-                            )
+                                "SELECT col_description("
+                                "CAST(:tbl AS regclass), :idx)"
+                            ),
+                            {"tbl": table_name, "idx": idx},
                         ).scalar()
                         or ""
                     )

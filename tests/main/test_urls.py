@@ -1,0 +1,278 @@
+from itertools import count
+from unittest.mock import patch
+from urllib.parse import urlparse
+
+import pytest
+from requests import Response
+
+from langroid.parsing.urls import find_urls
+
+START_URL = "https://example.test/start"
+LOCAL_URL = "https://example.test/local"
+REMOTE_URL = "https://other.test/remote"
+
+
+def page_response(url: str, timeout: int) -> Response:
+    assert timeout == 5
+    pages = {
+        START_URL: (
+            '<a href="/local#section">Local</a>'
+            '<a href="https://other.test/remote#section">Remote</a>'
+        ),
+        LOCAL_URL: '<a href="/start">Back</a>',
+        REMOTE_URL: '<a href="https://example.test/start">Back</a>',
+    }
+    response = Response()
+    response.status_code = 200
+    response.url = url
+    response._content = pages[url].encode("utf-8")
+    response.encoding = "utf-8"
+    return response
+
+
+@pytest.mark.parametrize("max_links", [3, 4])
+@pytest.mark.parametrize("match_domain", [True, False])
+def test_find_urls_domain_option(match_domain: bool, max_links: int) -> None:
+    with patch("langroid.parsing.urls.requests.get", side_effect=page_response) as get:
+        found = find_urls(START_URL, max_links=max_links, match_domain=match_domain)
+
+    expected = {START_URL, LOCAL_URL}
+    if not match_domain:
+        expected.add(REMOTE_URL)
+    assert found == expected
+
+    # The fetch set, not just the result set, must respect the domain option:
+    # `find_urls` swallows every request exception, so a stray fetch would
+    # otherwise be invisible here.
+    fetched = {call.args[0] for call in get.call_args_list}
+    assert fetched <= expected
+    if match_domain:
+        assert REMOTE_URL not in fetched
+
+
+def test_find_urls_stays_on_domain_by_default() -> None:
+    with patch("langroid.parsing.urls.requests.get", side_effect=page_response):
+        found = find_urls(START_URL, max_links=4)
+
+    assert found == {START_URL, LOCAL_URL}
+
+
+CHAIN = [
+    "https://a.test/page",
+    "https://b.test/page",
+    "https://c.test/page",
+    "https://d.test/page",
+]
+
+
+def chain_response(url: str, timeout: int) -> Response:
+    """Serve a cross-domain chain a -> b -> c -> d, one link per page."""
+    assert timeout == 5
+    nxt = CHAIN[CHAIN.index(url) + 1]
+    response = Response()
+    response.status_code = 200
+    response.url = url
+    response._content = f'<a href="{nxt}">Next</a>'.encode("utf-8")
+    response.encoding = "utf-8"
+    return response
+
+
+@pytest.mark.parametrize("max_depth", [0, 1, 2])
+def test_find_urls_cross_domain_crawl_still_obeys_depth(max_depth: int) -> None:
+    """max_depth bounds a cross-domain crawl at each depth, not just depth 0.
+
+    Each page lives on its own domain and links only to the next, so with
+    `match_domain` False the chain is followed exactly `max_depth` hops and the
+    page one hop beyond must never be fetched. A depth-0-only version of this
+    test would be vacuous: nothing past the seed is fetched either way, so it
+    would pass even if every request failed.
+    """
+    with patch("langroid.parsing.urls.requests.get", side_effect=chain_response) as get:
+        found = find_urls(
+            CHAIN[0], max_links=10, max_depth=max_depth, match_domain=False
+        )
+
+    expected = set(CHAIN[: max_depth + 1])
+    assert found == expected
+    fetched = [call.args[0] for call in get.call_args_list]
+    assert sorted(fetched) == sorted(expected)
+    assert CHAIN[max_depth + 1] not in fetched
+
+
+SCHEMES_URL = "https://example.test/schemes"
+SCHEMES_OK_URL = "https://example.test/ok"
+SCHEMES_HTML = (
+    # Empty-netloc schemes: rejected by the domain comparison as a side effect
+    # when match_domain is True, so only the scheme check excludes them when it
+    # is False.
+    '<a href="mailto:someone@example.com">Mail</a>'
+    '<a href="javascript:void(0)">JS</a>'
+    '<a href="tel:+15551234">Tel</a>'
+    '<a href="data:text/html,hello">Data</a>'
+    '<a href="file:///etc/passwd">File</a>'
+    # Non-web schemes that DO carry a matching netloc: the domain comparison
+    # admits these, so only the scheme check excludes them -- in either mode.
+    '<a href="ftp://example.test/file.zip">FTP</a>'
+    '<a href="ws://example.test/socket">WS</a>'
+    # A web scheme with NO host: only the netloc check excludes these. urljoin
+    # leaves them as-is rather than resolving them against the base.
+    '<a href="http:foo">Hostless</a>'
+    '<a href="http:///path">EmptyHost</a>'
+    # A real web link, so a page that was never fetched cannot be mistaken for
+    # a page whose links were all filtered out.
+    '<a href="https://example.test/ok">Ok</a>'
+    '<a href="https://other.test/remote">Remote</a>'
+)
+
+
+def schemes_response(url: str, timeout: int) -> Response:
+    assert timeout == 5
+    pages = {
+        SCHEMES_URL: SCHEMES_HTML,
+        SCHEMES_OK_URL: '<a href="https://example.test/schemes">Back</a>',
+        REMOTE_URL: "<a href='https://example.test/schemes'>Back</a>",
+    }
+    response = Response()
+    response.status_code = 200
+    response.url = url
+    response._content = pages[url].encode("utf-8")
+    response.encoding = "utf-8"
+    return response
+
+
+@pytest.mark.parametrize("match_domain", [True, False])
+def test_find_urls_skips_non_web_schemes(match_domain: bool) -> None:
+    """Only http/https links are crawled or returned, in BOTH domain modes.
+
+    The scheme and host checks are load-bearing in both modes, for different
+    reasons. With `match_domain` False, the domain comparison is skipped, so
+    nothing else keeps `mailto:`/`javascript:`/`file:` out of the results or out
+    of the `max_links` budget. With `match_domain` True, those are rejected by
+    the domain comparison anyway (empty netloc) -- but `ftp://example.test/...`
+    and `ws://example.test/...` are not, since their netloc matches; before the
+    scheme check they were returned. Hostless web references (`http:foo`,
+    `http:///path`) have a web scheme and an empty netloc, so only the netloc
+    check excludes them once the domain comparison is conditional.
+    """
+    with patch(
+        "langroid.parsing.urls.requests.get", side_effect=schemes_response
+    ) as get:
+        found = find_urls(SCHEMES_URL, max_links=8, match_domain=match_domain)
+
+    # SCHEMES_OK_URL can only appear if the seed page was fetched AND parsed,
+    # so this also fails if the mock never served the page.
+    expected = {SCHEMES_URL, SCHEMES_OK_URL}
+    if not match_domain:
+        expected.add(REMOTE_URL)
+    assert found == expected
+
+    for url in found | {call.args[0] for call in get.call_args_list}:
+        assert urlparse(url).scheme in (
+            "http",
+            "https",
+        ), f"non-web URL crawled or returned: {url}"
+        assert urlparse(url).netloc, f"hostless URL crawled or returned: {url}"
+
+
+@pytest.mark.parametrize("max_links", [5, 20])
+def test_find_urls_cross_domain_fan_out_is_bounded(max_links: int) -> None:
+    """max_links bounds the crawl even on an endlessly branching web.
+
+    With the domain filter honored, `max_links` is the only thing left limiting
+    how far the crawl spreads, so this asserts on the requests actually issued
+    as well as on the returned set. Every page serves three brand-new hostnames
+    drawn from a shared counter, so the reachable set is unbounded and the crawl
+    can only stop by hitting `max_links` -- never by running out of pages, which
+    is what makes the bound the thing under test.
+    """
+    host_counter = count()
+
+    def fan_out_response(url: str, timeout: int) -> Response:
+        assert timeout == 5
+        body = (
+            "".join(
+                f'<a href="https://host{next(host_counter)}.test/page">Next</a>'
+                for _ in range(3)
+            )
+            # ...plus a cycle back to the seed, which must not be refetched.
+            + '<a href="https://seed.test/page">Home</a>'
+        )
+        response = Response()
+        response.status_code = 200
+        response.url = url
+        response._content = body.encode("utf-8")
+        response.encoding = "utf-8"
+        return response
+
+    with patch(
+        "langroid.parsing.urls.requests.get", side_effect=fan_out_response
+    ) as get:
+        found = find_urls(
+            "https://seed.test/page",
+            max_links=max_links,
+            max_depth=10,
+            match_domain=False,
+        )
+
+    fetched = [call.args[0] for call in get.call_args_list]
+    # Requests issued are bounded, and the result lands exactly on the cap --
+    # on an infinite graph that can only be the bound stopping it, never
+    # exhaustion of the link graph.
+    assert len(fetched) <= max_links
+    assert len(found) == max_links
+    # The crawl really did leave the seed host, so the cross-domain path is
+    # what was exercised.
+    assert any(urlparse(u).netloc != "seed.test" for u in fetched)
+    assert {u for u in found if urlparse(u).netloc != "seed.test"}
+    # The cycle back to the seed must not cause a refetch.
+    assert len(fetched) == len(set(fetched))
+
+
+@pytest.mark.parametrize(
+    "seed", ["ftp://example.test/file.zip", "http:foo", "mailto:a@b.test"]
+)
+def test_find_urls_seed_is_exempt_from_the_scheme_filter(seed: str) -> None:
+    """The seed `url` is returned whatever its scheme, as the docstring says.
+
+    The filter applies to links *discovered on* a page, not to the seed, which
+    is prepended after filtering. `requests` cannot fetch any of these, so the
+    fetch raises and `find_urls` swallows it -- but the seed was already added
+    to `visited`, so it still comes back. (`ftp:` and `mailto:` raise
+    `InvalidSchema`, `http:foo` raises `InvalidURL` on the missing host; both
+    are `RequestException` and `OSError` subclasses, so the mock below is a
+    faithful stand-in.)
+    """
+    with patch("langroid.parsing.urls.requests.get", side_effect=OSError("nope")):
+        found = find_urls(seed, max_links=4)
+
+    assert found == {seed}
+
+
+def test_find_urls_returns_links_discovered_beyond_max_depth() -> None:
+    """Returned links are ones *discovered*, not ones crawled.
+
+    A page that alone supplies `max_links` links hits the early-return branch,
+    so its links come back without being followed -- which means the result can
+    contain links one hop past `max_depth`. `max_depth` bounds the requests
+    issued, not the provenance of the returned set. Pins the docstring claim.
+    """
+    seed = "https://example.test/start"
+    links = [f"https://example.test/p{i}" for i in range(3)]
+
+    def resp(url: str, timeout: int) -> Response:
+        assert timeout == 5
+        assert url == seed, f"should not have fetched beyond the seed: {url}"
+        body = "".join(f'<a href="{link}">L</a>' for link in links)
+        response = Response()
+        response.status_code = 200
+        response.url = url
+        response._content = body.encode("utf-8")
+        response.encoding = "utf-8"
+        return response
+
+    with patch("langroid.parsing.urls.requests.get", side_effect=resp) as get:
+        found = find_urls(seed, max_links=4, max_depth=0)
+
+    # Exactly one request, yet links a hop beyond the depth limit are returned.
+    assert [call.args[0] for call in get.call_args_list] == [seed]
+    assert found == {seed, *links}

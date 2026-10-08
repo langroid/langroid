@@ -150,7 +150,17 @@ async def test_task_kill(test_settings: Settings):
 
 def test_task_empty_response(test_settings: Settings):
     set_global(test_settings)
-    agent = ChatAgent(ChatAgentConfig(name="Test"))
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="Test",
+            # Stand-in for the LLM following the system message below: repeat an
+            # EVEN number, return an empty string for an ODD one. This has to be
+            # a response_dict rather than a response_fn: MockLM treats a falsy
+            # response_fn result as "no response" and substitutes
+            # default_response, so an empty response is only expressible here.
+            llm=MockLMConfig(response_dict={"4": "4", "3": ""}),
+        )
+    )
     task = Task(
         agent,
         interactive=False,

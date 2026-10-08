@@ -28,6 +28,28 @@ answers = run_batch_tasks(
 
 The returned list has the same length and ordering as `items`.
 
+## Handling errors
+
+For helpers that accept `handle_exceptions`, the selected policy applies to
+both task execution and `output_map`, in sequential and concurrent batches.
+`RETURN_NONE` puts `None` in a failed item's position; `RETURN_EXCEPTION`
+puts the exception there; `RAISE` propagates it.
+
+`output_map` receives successful task results, including a successful `None`
+result. It does not receive the placeholders produced by error handling.
+
+Cancelling the batch itself (for example, cancelling the `asyncio` task that
+runs it) is not a task failure: the `CancelledError` propagates under every
+policy, and no further items are started. A `CancelledError` raised by a
+task's own code, while the batch is not cancelled, is treated like any other
+exception and follows the policy.
+
+Telling the two apart relies on `asyncio.Task.cancelling()`, available from
+Python 3.11. On Python 3.10, a `CancelledError` caught in the sequential or
+`stop_on_first_result` paths always follows the policy, so under `RETURN_NONE`
+or `RETURN_EXCEPTION` an external cancellation may be recorded as a failed
+item instead of propagating.
+
 ## Stopping at the first valid result
 
 Set `stop_on_first_result=True` for a search-style batch that should return as
@@ -88,4 +110,97 @@ processing is used. The `stop_on_first_result` path schedules the tasks in the
 current batch concurrently so that it can return whichever valid result
 finishes first.
 
+## Synchronous callbacks
+
+`run_batch_function` takes a plain synchronous callable rather than a
+coroutine. With the default `sequential=True` it calls that function one item
+at a time on the calling thread. With `sequential=False` the calls are handed
+to worker threads so that blocking work actually overlaps, which means:
+
+- the function must be thread-safe;
+- results are still returned in input order, and `batch_size` still bounds
+  how many calls are in flight at once;
+- a raised exception aborts the batch, but calls already running in threads
+  cannot be cancelled and will run to completion.
+
+Before [GitHub issue #1157](https://github.com/langroid/langroid/issues/1157),
+`sequential=False` wrapped the callback in a coroutine that invoked it
+directly. That left `asyncio.gather` with no suspension point, so blocking
+callbacks ran back to back and the flag had no observable effect.
+
 See `tests/main/test_batch.py` for executable examples and edge-case coverage.
+
+## Rolling bounded concurrency
+
+For variable-latency tasks, set `max_concurrency` on `run_batch_tasks` or
+`run_batch_task_gen`. Unlike fixed batches, a free slot is filled without
+waiting for the slowest task in the previous group:
+
+```python
+answers = run_batch_tasks(
+    task,
+    items,
+    sequential=False,
+    max_concurrency=10,
+    output_map=lambda result: None if result is None else result.content,
+)
+```
+
+The keyword-only parameter defaults to `None`, preserving existing behavior.
+It must be a positive integer (not a boolean); wrong types raise `TypeError`
+and nonpositive values raise `ValueError`. Rolling mode requires
+`batch_size=None`, `sequential=False`, and `stop_on_first_result=False`;
+conflicting options raise `ValueError` before input mapping or task creation,
+even with an empty input list. Remember to specify `sequential=False`, since
+the Task helpers default to sequential execution.
+
+The common `run_batched_tasks` entry point also accepts the parameter. Agent
+method helpers and `run_batch_function` do not expose it in this version.
+
+Results retain input order. Successful results are mapped once, as tasks
+complete, so `output_map` invocation order may differ from input order.
+Within one observed group of completed tasks, mapping follows input index
+order. Use a mapper that does not depend on earlier items having been mapped.
+Successful `None` values and returned exception objects still reach the mapper;
+failed items' error placeholders do not. Execution and mapping failures follow
+the selected exception policy. `run_batch_tasks` continues to use `RAISE`.
+
+With `RAISE`, an observed failure stops further scheduling and cancels and
+awaits the remaining owned tasks before propagating. External cancellation
+propagates after cleanup, including on Python 3.10; a child's own
+`CancelledError` follows the per-item policy. `KeyboardInterrupt` and
+`SystemExit` always propagate, and take precedence over a cancellation that
+arrives only during cleanup — everything else in flight is still superseded by
+such a cancellation. Repeated caller cancellation does not interrupt
+the asynchronous cleanup of owned tasks; tasks must cooperate with cancellation
+for cleanup to finish. These guarantees describe the new rolling path and do
+not change the existing fixed-batch paths.
+
+At most `min(max_concurrency, len(items))` business tasks are in flight. Task
+generation/cloning is deferred until a slot is available. Scheduler state is
+O(C), where C is the concurrency limit; input and result lists remain O(N).
+This is a concurrency limit, not a requests-per-second rate limiter, and it
+does not make synchronous blocking tools asynchronous.
+
+### Offline example and benchmark
+
+Run a real Task/MockLM example without API keys or model requests:
+
+```bash
+uv run python examples/basic/batch-concurrency.py
+```
+
+Compare fixed batches with rolling execution at the same concurrency limit:
+
+```bash
+uv run python examples/basic/batch-concurrency.py --benchmark --output-dir results
+```
+
+The deterministic benchmark uses 100 coroutine tasks and a limit of 10, with
+uniform and long-tail workloads. After a warmup for each mode, it alternates
+the two modes for five repetitions. JSON retains per-item queue and end-to-end
+latencies and environment details; CSV retains per-run summary metrics. Memory
+is measured in separate runs with `tracemalloc` (Python allocations including
+measurement instrumentation, not process RSS). Uniform workloads may show
+little benefit or overhead. These synthetic results do not predict a specific
+LLM service's latency or throughput.

@@ -373,16 +373,26 @@ class ToolMessage(ABC, BaseModel):
         excludes = cls._get_excluded_fields().copy()
         if not request:
             excludes = excludes.union({"request"})
+        # Which fields may be omitted when constructing the model? Pydantic
+        # already answered that in `schema["required"]`, so narrow that list
+        # rather than recomputing it. The previous recomputation tested each
+        # property for a JSON Schema "default" key, but Pydantic emits no
+        # "default" for a `Field(default_factory=...)` field, so those fields
+        # were advertised as required (issue #1158). Reusing Pydantic's list
+        # also keeps us keyed by the exact property names it emitted, which
+        # aliases (`alias`, `validation_alias`) can make differ from the
+        # Python field names.
+        required_properties = set(parameters.get("required", []))
         # exclude 'excludes' from parameters["properties"]:
         parameters["properties"] = {
             field: details
             for field, details in parameters["properties"].items()
-            if field not in excludes and (defaults or details.get("default") is None)
+            if field not in excludes and (defaults or field in required_properties)
         }
         parameters["required"] = sorted(
             k
-            for k, v in parameters["properties"].items()
-            if ("default" not in v and k not in excludes)
+            for k in parameters["properties"]
+            if (k in required_properties and k not in excludes)
         )
         if request:
             parameters["required"].append("request")

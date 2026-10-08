@@ -334,9 +334,13 @@ _SAFE_BUILTINS: Dict[str, Any] = {
 
 def safe_eval_globals(local_vars: Dict[str, Any]) -> Dict[str, Any]:
     """Return a globals dict for :func:`eval` with ``__builtins__`` restricted
-    to a safe read-only set, so that LLM-generated expressions cannot reach
-    ``__import__``, ``eval``, ``exec``, ``open``, etc. via Python's implicit
+    to a safe read-only set, so that bare names such as ``__import__``,
+    ``eval``, ``exec`` and ``open`` do not resolve via Python's implicit
     builtin injection.
+
+    This is defence in depth for expressions that have already passed
+    :func:`sanitize_command`. It is not a sandbox on its own and does not make
+    an unvalidated (``full_eval=True``) expression safe; see SECURITY.md.
 
     Args:
         local_vars: User-provided variables to expose to the eval'd
@@ -351,25 +355,26 @@ def safe_eval_globals(local_vars: Dict[str, Any]) -> Dict[str, Any]:
 def stringify(x: Any) -> str:
     # Convert x to DataFrame if it is not one already
     if isinstance(x, pd.Series):
-        df = x.to_frame()
+        df = x.head(10).to_frame().copy()
     elif not isinstance(x, pd.DataFrame):
         return str(x)
     else:
-        df = x
+        df = x.head(10).copy()
 
     # Truncate long text columns to 1000 characters
-    for col in df.columns:
-        if df[col].dtype == object:
-            df[col] = df[col].apply(
-                lambda item: (
-                    (item[:1000] + "...")
-                    if isinstance(item, str) and len(item) > 1000
-                    else item
-                )
+    for position in range(df.shape[1]):
+        column = df.iloc[:, position]
+        if column.dtype == object:
+            df.isetitem(
+                position,
+                column.apply(
+                    lambda item: (
+                        (item[:1000] + "...")
+                        if isinstance(item, str) and len(item) > 1000
+                        else item
+                    )
+                ),
             )
-
-    # Limit to 10 rows
-    df = df.head(10)
 
     # Convert to string
     return df.to_string(index=False)  # type: ignore

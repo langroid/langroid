@@ -2,6 +2,7 @@
 Other tests for Task are in test_chat_agent.py
 """
 
+import re
 from typing import Any
 
 import pytest
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 import langroid as lr
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import AgentDoneTool, ResultTool
+from langroid.language_models.mock_lm import MockLMConfig
 from langroid.utils.constants import DONE
 
 
@@ -97,9 +99,27 @@ def test_task_in_out_types(
 
     gen_pair_tool_name = GenPairTool.default_value("request")
 
+    def mock_llm_response(msg: str) -> str:
+        """
+        Stand-in for the LLM: this test is about `task.run()`'s input/output
+        type handling, not about model reasoning, so all the LLM has to do is
+        follow the system message, i.e. pick a tool based on how many numbers
+        it was handed. Numbers are extracted from the incoming message
+        regardless of how it was rendered (plain str, JSON list/dict, or a
+        Pydantic model's JSON).
+        """
+        nums = [int(n) for n in re.findall(r"-?\d+", msg)]
+        assert nums, f"mock LLM got a message with no numbers in it: {msg!r}"
+        if len(nums) == 1:
+            # SINGLE number -> ask for a pair to be generated from it
+            return GenPairTool(x=nums[0]).model_dump_json()
+        # PAIR of numbers -> ask for the Cool Transform of the pair
+        return CoolTool(pair=Pair(x=nums[0], y=nums[1])).model_dump_json()
+
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
             name="MyAgent",
+            llm=MockLMConfig(response_fn=mock_llm_response),
             system_message=f"""
             When you receive a PAIR of numbers, request the Cool Transform of the pair,
             using the TOOL: `{cool_tool_name}`
@@ -188,7 +208,15 @@ def test_task_in_out_types(
         assert result == 6
 
         # check handling of invalid return type:
-        # receive None when strict recovery is disabled
+        # receive None when strict recovery is disabled.
+        # NOTE: under MockLM these two `disable_strict` assignments are inert:
+        # Task's final strict-decoding step also needs
+        # `ChatAgent._json_schema_available()`, which is False for any
+        # non-OpenAIGPT LLM. So this asserts the plain
+        # "unparseable into return_type -> None" path, and no longer covers
+        # "disable_strict=True suppresses the strict step" -- which, as of this
+        # change, no test covers (see issue #494). The assignments are kept so
+        # the intent, and the behavior under a real LLM, stay documented.
         agent.disable_strict = True
         result = task[Pair].run(msg)
         assert result is None

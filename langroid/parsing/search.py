@@ -65,19 +65,15 @@ def find_fuzzy_matches_in_docs(
         return []
     best_matches = process.extract(
         query,
-        [d.content for d in docs_clean],
+        {i: d.content for i, d in enumerate(docs_clean)},
         limit=k,
         scorer=fuzz.partial_ratio,
     )
 
-    real_matches = [(m, score) for m, score in best_matches if score > threshold]
-    # find the original docs that corresponding to the matches
-    orig_doc_matches = []
-    for i, (m, s) in enumerate(real_matches):
-        for j, doc_clean in enumerate(docs_clean):
-            if m in doc_clean.content:
-                orig_doc_matches.append((docs[j], s))
-                break
+    # Preserve document identity when cleaned texts overlap or are identical.
+    orig_doc_matches = [
+        (docs[i], score) for _, score, i in best_matches if score > threshold
+    ]
     if words_after is None and words_before is None:
         return orig_doc_matches
     if len(orig_doc_matches) == 0:

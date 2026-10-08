@@ -1,21 +1,111 @@
 name: Pytest
 
 on:
-  push:
-    paths:
-      - "langroid/**"
-      - "tests/**"
-      - ".github/workflows/pytest.yml"
-    branches:
-      - main
-  pull_request:
-    types:
-      - ready_for_review
-    branches:
-      - main
+  # NO push trigger. Pass 1 runs the WHOLE suite against a real LLM for ~50
+  # minutes and bills Prasad's own key, and it fired on every merge to main:
+  # three full runs in two days on 2026-10-04/05, one per ship, when one per
+  # RELEASE is what is actually needed. `ops ship` now dispatches this
+  # workflow explicitly and waits for it, so the release gate is unchanged.
+  # A WEEKLY run keeps main honest between releases. Deliberately not daily:
+  # main is unchanged on roughly three days in four (23 distinct commit-days
+  # in the last 90), so a daily cron would fire ~90 paid runs per 90 days
+  # against a mostly-unchanged tree -- MORE than the ~28 the push trigger
+  # produced, i.e. the opposite of this change's purpose. Every release
+  # dispatches a run anyway, so this cron is a backstop, not the main signal.
+  schedule:
+    - cron: "17 9 * * 1"  # 09:17 UTC Mondays
+  # NO pull_request trigger. `ready_for_review` used to fire the whole suite,
+  # so marking a draft ready cost a full run and merging it cost another
+  # (#1169 on 2026-10-02 did exactly that). Opening a non-draft PR never
+  # triggered this workflow anyway, so the signal lost is small, and the gate
+  # that matters runs on main below — `ops ship` refuses to release on red.
+  # Run it on a branch by hand when you want it:
+  #   gh workflow run Pytest --ref <branch>
+  # (without --ref, gh dispatches against the remote default branch).
+  workflow_dispatch:
 
 
 jobs:
+  # Two-minute gate in front of the paid suite. On 2026-10-05 a run spent the
+  # full 50 minutes and then failed on six MOCKED tests -- a collection error
+  # or a broken no-LLM test should never cost an LLM suite to discover.
+  quick:
+    if: "contains(github.event.head_commit.message, 'notest') == false"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      # Same extras as the paid job: with core-only deps, collection fails on
+      # missing optional imports (fitz, sqlalchemy, neo4j, arango) and the gate
+      # would cry wolf. Installing costs Actions minutes, not LLM calls.
+      - name: Install project dependencies with uv
+        run: |
+          uv sync --dev \
+            --extra neo4j \
+            --extra arango \
+            --extra lancedb \
+            --extra meilisearch \
+            --extra chromadb \
+            --extra docling \
+            --extra litellm \
+            --extra pymupdf4llm \
+            --extra weaviate \
+            --extra pinecone \
+            --extra milvus \
+            --extra postgres\
+            --extra hf-embeddings \
+            --extra unstructured \
+            --extra pdf-parsers \
+            --extra docx \
+            --extra sql \
+            --extra exa \
+            --extra tavily \
+            --extra firecrawl \
+            --extra fastembed \
+            --extra crawl4ai
+          
+      # This job deliberately has NO API keys: a gate standing in front of a
+      # paid suite should be hermetic. But --collect-only executes
+      # module-level code, and two modules need real credentials at import,
+      # so they cannot be collected keyless and are skipped here by name:
+      #   test_retriever_agent.py:100      agent.ingest() over 101 docs
+      #   test_tool_messages_azure.py:82   builds an Azure agent
+      # Feeding this job real credentials instead is the worse trade. It needs
+      # OPENAI_KEY *and* Azure credentials present -- azure_openai.py:102-113
+      # raises on an empty AZURE_OPENAI_API_KEY / AZURE_OPENAI_API_BASE, and
+      # is reached only after the OpenAI client is built, so OPENAI_KEY alone
+      # would not even fix collection. And it buys that coverage by making the
+      # cheap gate embed those 101 docs for real: one batched request at the
+      # default batch_size of 512. That puts the OpenAI API on the release
+      # path, where a 401 or an outage would block releases for reasons that
+      # have nothing to do with the tree. (The Azure keys are only read, not
+      # called, at import -- it is the embedding request that goes out.)
+      # Cost of the skip: the 21 parametrized cases in these two files get
+      # their imports checked by the paid job minutes later, not here.
+      - name: Collect every test (catches import and collection errors)
+        env:
+          PYTEST_ADDOPTS: "-p no:logging"
+        run: |
+          uv run pytest tests/main --collect-only -q --ct fakeredis \
+            --ignore=tests/main/test_retriever_agent.py \
+            --ignore=tests/main/test_tool_messages_azure.py
+      - name: Run the tests that need no LLM
+        env:
+          PYTEST_ADDOPTS: "-p no:logging"
+        run: |
+          uv run pytest -q --ct fakeredis \
+            tests/main/test_model_info.py \
+            tests/main/test_vertexai_isolation.py \
+            tests/main/test_vertexai_routing.py \
+            tests/main/test_global_settings.py \
+            tests/main/test_graph.py
+
   cancel:
     if: "contains(github.event.head_commit.message, 'notest') == false"
     name: Cancel Previous Runs
@@ -27,7 +117,8 @@ jobs:
         with:
           access_token: ${{ github.token }}
   pytest:
-    if: "contains(github.event.head_commit.message, 'notest') == false"    
+    needs: quick
+    if: "contains(github.event.head_commit.message, 'notest') == false"
     runs-on: ubuntu-latest
     services:
       meilisearch:
@@ -242,7 +333,7 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        uv run pytest --cov langroid --cov-append --cov-config .coveragerc \
+        uv run pytest --m gpt-4o --cov langroid --cov-append --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
@@ -262,7 +353,7 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        uv run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
+        uv run pytest --m gpt-4o --nc --cov langroid --cov-append --cov-config .coveragerc \
           --junitxml=test-results.xml \
           -rf --show-capture=no --timeout=300 -n auto \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \

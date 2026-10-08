@@ -22,7 +22,12 @@ from .model_info import (
     MiniMaxModel,
     OpenAICompletionModel,
 )
-from .openai_gpt import OpenAIGPTConfig, OpenAIGPT, OpenAICallParams
+from .openai_gpt import (
+    OpenAIGPTConfig,
+    OpenAIGPT,
+    OpenAICallParams,
+    VertexAIConfig,
+)
 from .mock_lm import MockLM, MockLMConfig
 from .azure_openai import AzureConfig, AzureGPT
 
@@ -49,6 +54,7 @@ __all__ = [
     "MiniMaxModel",
     "OpenAICompletionModel",
     "OpenAIGPTConfig",
+    "VertexAIConfig",
     "OpenAIGPT",
     "OpenAICallParams",
     "AzureConfig",

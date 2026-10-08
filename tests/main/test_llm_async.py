@@ -129,8 +129,8 @@ async def test_llm_async_concurrent(test_settings: Settings):
     [
         "langdb/gpt-4o-mini",
         "langdb/openai/gpt-4o-mini",
-        "langdb/anthropic/claude-3-haiku-20240307",
-        "langdb/claude-3-haiku-20240307",
+        "langdb/anthropic/claude-haiku-4-5-20251001",
+        "langdb/claude-haiku-4-5-20251001",
         "langdb/gemini/gemini-2.0-flash-lite",
         "langdb/gemini-2.0-flash-lite",
     ],
@@ -273,7 +273,7 @@ async def test_litellm_model_key_async():
     """
     Test that passing in explicit api_key works with `litellm/*` models
     """
-    model = "litellm/anthropic/claude-3-5-haiku-latest"
+    model = "litellm/anthropic/claude-haiku-4-5-20251001"
     # disable any chat model passed via --m arg to pytest cmd
     settings.chat_model = model
     llm_config = lm.OpenAIGPTConfig(
@@ -292,7 +292,7 @@ async def test_litellm_model_key_async():
     "model",
     [
         "portkey/openai/gpt-4o-mini",
-        "portkey/anthropic/claude-3-5-haiku-latest",
+        "portkey/anthropic/claude-haiku-4-5-20251001",
         "portkey/google/gemini-2.0-flash-lite",
     ],
 )
@@ -390,7 +390,7 @@ async def test_portkey_integration_async():
     try:
         # Test basic portkey model configuration
         config = lm.OpenAIGPTConfig(
-            chat_model="portkey/anthropic/claude-3-haiku-20240307",
+            chat_model="portkey/anthropic/claude-haiku-4-5-20251001",
             portkey_params=PortkeyParams(
                 api_key="pk-test-key",
             ),
@@ -399,7 +399,7 @@ async def test_portkey_integration_async():
         llm = lm.OpenAIGPT(config)
 
         # Check that model was parsed correctly
-        assert llm.config.chat_model == "claude-3-haiku-20240307"
+        assert llm.config.chat_model == "claude-haiku-4-5-20251001"
         assert llm.is_portkey
         assert llm.api_base == "https://api.portkey.ai/v1"
         assert llm.config.portkey_params.provider == "anthropic"

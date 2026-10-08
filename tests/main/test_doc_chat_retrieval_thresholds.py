@@ -278,6 +278,17 @@ def test_fuzzy_score_threshold_on_reciprocal_rank_fusion_path():
     assert chunks == []
 
 
+def test_fuzzy_retrieval_keeps_documents_with_overlapping_content():
+    agent = _make_fuzzy_agent(None, use_reciprocal_rank_fusion=True)
+    docs = _mk_docs({"long": "quantum mechanics", "short": "quantum"})
+    agent.chunked_docs = docs
+    agent.chunked_docs_clean = docs
+
+    chunks = agent.get_relevant_chunks("quantum entanglement")
+
+    assert [doc.metadata.id for doc in chunks] == ["short", "long"]
+
+
 # values that are not finite numbers: invalid for BOTH thresholds
 _NON_FINITE_THRESHOLDS: List[Any] = [
     None,

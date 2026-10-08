@@ -1,12 +1,15 @@
 import asyncio
+import inspect
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 import markdownify as md
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from langroid.exceptions import LangroidImportError
@@ -16,7 +19,7 @@ from langroid.parsing.document_url import fetch_configured_url
 from langroid.parsing.parser import Parser, ParsingConfig
 
 if TYPE_CHECKING:
-    from firecrawl import FirecrawlApp
+    from firecrawl import Firecrawl
 
     try:
         from crawl4ai import CrawlResult
@@ -71,12 +74,30 @@ class TrafilaturaConfig(BaseCrawlerConfig):
 
 
 class FirecrawlConfig(BaseCrawlerConfig):
-    """Configuration for Firecrawl crawler."""
+    """Configuration for Firecrawl crawler.
+
+    Attributes:
+        api_key: Firecrawl API key, read from `FIRECRAWL_API_KEY` if not set.
+        mode: `scrape` (scrape each URL) or `crawl` (crawl from one URL).
+        params: Extra options passed to the Firecrawl SDK (`scrape` or
+            `start_crawl`). camelCase keys from the v1 API, such as
+            `onlyMainContent` or `waitFor`, are converted to snake_case.
+            Options renamed in v2 (e.g. `maxDepth`) need their v2 name.
+            Conversion applies to top-level names only: names nested
+            inside an option, such as an `actions` entry, need their v2
+            spelling, since a nested dict may instead be user data (a
+            JSON extraction schema, a `headers` map) whose keys must
+            reach Firecrawl unchanged.
+        timeout: Per-page timeout in milliseconds.
+        api_url: Base URL of a self-hosted Firecrawl instance, read from
+            `FIRECRAWL_API_URL` if not set. Defaults to Firecrawl's cloud API.
+    """
 
     api_key: str = ""
     mode: str = "scrape"
     params: Dict[str, Any] = {}
     timeout: Optional[int] = None
+    api_url: Optional[str] = None
 
     model_config = SettingsConfigDict(env_prefix="FIRECRAWL_")
 
@@ -85,6 +106,29 @@ class ExaCrawlerConfig(BaseCrawlerConfig):
     api_key: str = ""
 
     model_config = SettingsConfigDict(env_prefix="EXA_")
+
+
+class SpiderConfig(BaseCrawlerConfig):
+    """Opt-in Spider Cloud settings; timeouts are in seconds.
+
+    ``limit`` caps pages per seed URL in crawl mode. The default scrape mode
+    loads only the supplied URLs. Explicit settings override SPIDER_* env vars.
+    """
+
+    api_key: str = Field(default="", repr=False)
+    mode: Literal["scrape", "crawl"] = "scrape"
+    limit: int = Field(default=1, gt=0)
+    timeout: float = Field(default=60, gt=0, allow_inf_nan=False)
+
+    model_config = SettingsConfigDict(env_prefix="SPIDER_")
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def validate_limit(cls, value: Any) -> Any:
+        """Accept integer settings and env strings, not booleans or floats."""
+        if isinstance(value, (bool, float)):
+            raise ValueError("Spider limit must be a positive integer")
+        return value
 
 
 class Crawl4aiConfig(BaseCrawlerConfig):
@@ -228,6 +272,8 @@ class CrawlerFactory:
             return FirecrawlCrawler(config)
         elif isinstance(config, ExaCrawlerConfig):
             return ExaCrawler(config)
+        elif isinstance(config, SpiderConfig):
+            return SpiderCrawler(config)
         elif isinstance(config, Crawl4aiConfig):
             return Crawl4aiCrawler(config)
         else:
@@ -289,6 +335,54 @@ class TrafilaturaCrawler(BaseCrawler):
         return docs
 
 
+def _snake_case_keys(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert camelCase keys (v1 Firecrawl API style) to snake_case.
+
+    Top-level option names only. Names nested inside an option -- an entry
+    of `actions`, a `formats` entry -- must already use their v2 spelling:
+    a nested dict is as likely to be user data (a JSON extraction schema,
+    a `headers` map) as a set of option names, and renaming keys there
+    would corrupt the request.
+    """
+    return {
+        re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", k).lower(): v for k, v in params.items()
+    }
+
+
+def _is_format_container(formats: Any) -> bool:
+    """Whether `formats` is the SDK's set of format flags, not one format.
+
+    A single format carries a `type` (`{"type": "json"}`, `JsonFormat`);
+    the `ScrapeFormats` container instead has one boolean per format. The
+    SDK accepts either, so both have to be recognised.
+    """
+    if isinstance(formats, BaseModel):
+        return "type" not in type(formats).model_fields
+    return isinstance(formats, dict) and "type" not in formats
+
+
+def _with_markdown(formats: Any) -> Any:
+    """Make sure `markdown` is among the requested Firecrawl formats."""
+    if _is_format_container(formats):
+        # flip markdown on in place of appending to a list of formats
+        if isinstance(formats, BaseModel):
+            return formats.model_copy(update={"markdown": True})
+        return {**formats, "markdown": True}
+    if isinstance(formats, (str, dict, BaseModel)):
+        # a single format, not an iterable of them: pydantic models iterate
+        # as (field, value) pairs, so wrapping has to come first
+        formats = [formats]
+    formats = list(formats or [])
+    has_markdown = any(
+        f == "markdown" or (isinstance(f, dict) and f.get("type") == "markdown")
+        # a format model, e.g. Format(type="markdown"), which would
+        # otherwise be sent alongside a duplicate bare "markdown"
+        or getattr(f, "type", None) == "markdown"
+        for f in formats
+    )
+    return formats if has_markdown else ["markdown", *formats]
+
+
 class FirecrawlCrawler(BaseCrawler):
     """Crawler implementation using Firecrawl."""
 
@@ -306,7 +400,7 @@ class FirecrawlCrawler(BaseCrawler):
         return False
 
     def _return_save_incremental_results(
-        self, app: "FirecrawlApp", crawl_id: str, output_dir: str = "firecrawl_output"
+        self, app: "Firecrawl", crawl_id: str, output_dir: str = "firecrawl_output"
     ) -> List[Document]:
         # Code used verbatim from firecrawl blog with few modifications
         # https://www.firecrawl.dev/blog/mastering-the-crawl-endpoint-in-firecrawl
@@ -316,96 +410,327 @@ class FirecrawlCrawler(BaseCrawler):
 
         from tqdm import tqdm
 
-        pbar = tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         processed_urls: set[str] = set()
         docs = []
 
-        while True:
-            # Check current status
-            status = app.check_crawl_status(crawl_id)
-            new_pages = 0
+        with tqdm(desc="Pages saved", unit=" pages", dynamic_ncols=True) as pbar:
+            while True:
+                # Check current status
+                status = app.get_crawl_status(crawl_id)
+                new_pages = 0
 
-            # Save new pages
-            for page in status["data"]:
-                url = page["metadata"]["url"]
-                if url not in processed_urls:
-                    content = page.get("markdown", "")
-                    filename = f"{output_dir}/{len(processed_urls)}.md"
-                    with open(filename, "w") as f:
-                        f.write(content)
-                    docs.append(
-                        Document(
-                            content=content,
-                            metadata=DocMetaData(
-                                source=url,
-                                title=page["metadata"].get("title", "Unknown Title"),
-                            ),
+                # Save new pages
+                for page in status.data:
+                    metadata = page.metadata
+                    url = (metadata.url or metadata.source_url) if metadata else None
+                    if not url:
+                        # a page with no metadata, or none naming its URL,
+                        # used to raise KeyError here; report it rather than
+                        # turning that crash into a silent drop
+                        logging.warning(
+                            "Firecrawl returned a crawled page with no URL in "
+                            "its metadata. Skipping but continuing."
                         )
-                    )
-                    processed_urls.add(url)
-                    new_pages += 1
-            pbar.model_copy(update=new_pages)  # Update progress bar with new pages
+                        continue
+                    if url not in processed_urls:
+                        content = page.markdown or ""
+                        if not content:
+                            # same filter scrape mode applies; left
+                            # unprocessed so a later poll can still pick it
+                            # up if the content arrives
+                            logging.warning(
+                                f"Firecrawl returned no markdown for {url}. "
+                                "Skipping but continuing."
+                            )
+                            continue
+                        filename = f"{output_dir}/{len(processed_urls)}.md"
+                        with open(filename, "w") as f:
+                            f.write(content)
+                        docs.append(
+                            Document(
+                                content=content,
+                                metadata=DocMetaData(
+                                    source=url,
+                                    title=metadata.title or "Unknown Title",
+                                ),
+                            )
+                        )
+                        processed_urls.add(url)
+                        new_pages += 1
+                pbar.update(new_pages)  # Update progress bar with new pages
 
-            # Break if crawl is complete
-            if status["status"] == "completed":
-                print(f"Saved {len(processed_urls)} pages.")
-                with open(f"{output_dir}/full_results.json", "w") as f:
-                    json.dump(status, f, indent=2)
-                break
+                if status.status in ("completed", "failed", "cancelled"):
+                    break
+                time.sleep(5)  # Wait before checking again
 
-            time.sleep(5)  # Wait before checking again
+        if status.status == "completed":
+            print(f"Saved {len(processed_urls)} pages.")
+        else:
+            logging.warning(
+                f"Firecrawl crawl {crawl_id} ended with status "
+                f"'{status.status}'; returning the {len(docs)} pages saved."
+            )
+        with open(f"{output_dir}/full_results.json", "w") as f:
+            json.dump(status.model_dump(mode="json"), f, indent=2)
         return docs
+
+    @staticmethod
+    def _check_options(params: Dict[str, Any], method: Any, name: str) -> None:
+        """Reject options the Firecrawl SDK method does not accept."""
+        # url is positional; alexandria / request_id change what scrape returns.
+        # Neither method takes **kwargs as of 4.x, which the extra is pinned to;
+        # if one ever did, "kwargs" would land in `allowed` and a passthrough
+        # option would still be rejected -- failing closed, not open.
+        allowed = set(inspect.signature(method).parameters) - {
+            "url",
+            "alexandria",
+            "request_id",
+        }
+        unknown = set(params) - allowed
+        if unknown:
+            raise ValueError(
+                f"Unsupported Firecrawl {name} option(s): {sorted(unknown)}"
+            )
 
     def crawl(self, urls: List[str]) -> List[Document]:
         try:
-            from firecrawl import FirecrawlApp
+            from firecrawl import Firecrawl
         except ImportError:
             raise LangroidImportError("firecrawl", "firecrawl")
 
-        app = FirecrawlApp(api_key=self.config.api_key)
+        # The SDK exports no public alias for these, so the private paths are
+        # the only way in. They stay outside the LangroidImportError above: if
+        # 4.x moves them, the user should see the real ImportError and not be
+        # told to install a package they already have.
+        from firecrawl.v2.types import CrawlRequest, ScrapeOptions
+        from firecrawl.v2.utils.error_handler import (
+            PaymentRequiredError,
+            UnauthorizedError,
+        )
+
+        client_kwargs: Dict[str, Any] = {"origin": "langroid"}
+        if self.config.api_url:
+            client_kwargs["api_url"] = self.config.api_url
+        app = Firecrawl(api_key=self.config.api_key or None, **client_kwargs)
         docs = []
-        params = self.config.params.copy()  # Create a copy of the existing params
+        params = _snake_case_keys(self.config.params)
 
         if self.config.timeout is not None:
             params["timeout"] = self.config.timeout  # Add/override timeout in params
 
         if self.config.mode == "scrape":
+            self._check_options(params, app.scrape, "scrape")
+            formats = _with_markdown(params.pop("formats", None))
             for url in urls:
                 try:
-                    result = app.scrape_url(url, params=params)
-                    metadata = result.get(
-                        "metadata", {}
-                    )  # Default to empty dict if missing
-                    status_code = metadata.get("statusCode")
-
-                    if status_code == 200:
-                        docs.append(
-                            Document(
-                                content=result["markdown"],
-                                metadata=DocMetaData(
-                                    source=url,
-                                    title=metadata.get("title", "Unknown Title"),
-                                ),
-                            )
-                        )
+                    result = app.scrape(url, formats=formats, **params)
+                except (UnauthorizedError, PaymentRequiredError):
+                    # a bad key or no credits fails every URL: raise it
+                    raise
                 except Exception as e:
                     logging.warning(
                         f"Firecrawl encountered an error for {url}: {e}. "
                         "Skipping but continuing."
                     )
+                    continue
+                metadata = result.metadata
+                status_code = metadata.status_code if metadata else None
+                if metadata is None or status_code != 200:
+                    logging.warning(
+                        f"Firecrawl returned status {status_code} for {url}. "
+                        "Skipping but continuing."
+                    )
+                    continue
+                content = result.markdown or ""
+                if not content:
+                    # a 200 with no markdown used to raise KeyError and be
+                    # skipped; don't let blank docs through to the parser
+                    logging.warning(
+                        f"Firecrawl returned no markdown for {url}. "
+                        "Skipping but continuing."
+                    )
+                    continue
+                docs.append(
+                    Document(
+                        content=content,
+                        metadata=DocMetaData(
+                            source=url,
+                            title=metadata.title or "Unknown Title",
+                        ),
+                    )
+                )
         elif self.config.mode == "crawl":
             if not isinstance(urls, list) or len(urls) != 1:
                 raise ValueError(
                     "Crawl mode expects 'urls' to be a list containing a single URL."
                 )
 
+            options = params.pop("scrape_options", None) or {}
+            if isinstance(options, ScrapeOptions):
+                # not exclude_unset: `type` is defaulted rather than set on
+                # every format model, and Dict[str, Any] is the first member
+                # of the formats union, so dropping it leaves a typeless dict
+                # that is absorbed as-is instead of coerced back into the
+                # model -- silently untyping a JSON extraction request. Every
+                # ScrapeOptions field defaults to None, so at the top level
+                # this omits exactly what exclude_unset did.
+                options = options.model_dump(exclude_none=True)
+            options = _snake_case_keys(options)
+            # start_crawl ignores flat scrape options (timeout, formats, ...)
+            # once scrape_options is set, so move them in here -- except the
+            # ones CrawlRequest also takes at the top level, which the SDK
+            # reads only from there for a crawl (`integration`, as of 4.x).
+            page_only = set(ScrapeOptions.model_fields) - set(CrawlRequest.model_fields)
+            for key in list(params):
+                if key in page_only:
+                    options.setdefault(key, params.pop(key))
+            if self.config.timeout is not None:
+                options["timeout"] = self.config.timeout
+            options["formats"] = _with_markdown(options.get("formats"))
+            # ScrapeOptions does not forbid extras, so an unknown key here
+            # would be dropped silently rather than reported
+            unknown = set(options) - set(ScrapeOptions.model_fields)
+            if unknown:
+                raise ValueError(
+                    f"Unsupported Firecrawl scrape_options: {sorted(unknown)}"
+                )
+            self._check_options(params, app.start_crawl, "crawl")
+            scrape_options = ScrapeOptions(**options)
+
             # Start the crawl
-            crawl_status = app.async_crawl_url(url=urls[0], params=params)
+            job = app.start_crawl(urls[0], scrape_options=scrape_options, **params)
 
             # Save results incrementally
-            docs = self._return_save_incremental_results(app, crawl_status["id"])
+            docs = self._return_save_incremental_results(app, job.id)
         return docs
+
+
+class SpiderCrawler(BaseCrawler):
+    """Load Markdown from Spider Cloud using synchronous JSON responses."""
+
+    def __init__(self, config: SpiderConfig) -> None:
+        super().__init__(config)
+        self.config: SpiderConfig = config
+
+    @property
+    def needs_parser(self) -> bool:
+        return True
+
+    def crawl(self, urls: List[str]) -> List[Document]:
+        """Load pages, retaining successful results when another page fails.
+
+        Args:
+            urls: Page URLs, or seed URLs when mode is ``crawl``.
+
+        Returns:
+            Unchunked web documents and any locally parsed document chunks.
+
+        Raises:
+            ValueError: If a nonempty load has no Spider API key.
+        """
+        import requests
+
+        if not urls:
+            return []
+        if not self.config.api_key.strip():
+            raise ValueError("SPIDER_API_KEY is required in your env or .env")
+
+        docs: List[Document] = []
+        for index, url in enumerate(urls):
+            if self._is_document_url(url):
+                document_docs = self._process_document(url)
+                if not document_docs:
+                    # There is deliberately no Spider fallback here, so say so
+                    # rather than dropping the URL without a trace.
+                    logging.warning(
+                        "Spider request %d: document URL yielded no content; "
+                        "skipping (document URLs are not sent to Spider).",
+                        index,
+                    )
+                docs.extend(document_docs)
+                continue
+
+            payload: Dict[str, Any] = {"url": url, "return_format": "markdown"}
+            if self.config.mode == "crawl":
+                payload["limit"] = self.config.limit
+            try:
+                response = requests.post(
+                    f"https://api.spider.cloud/{self.config.mode}",
+                    headers={
+                        "Authorization": f"Bearer {self.config.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=self.config.timeout,
+                )
+                response.raise_for_status()
+                pages = response.json()
+            except (requests.RequestException, ValueError) as error:
+                # Servers and exceptions may echo credentials or response data,
+                # so log only the error type and the numeric HTTP status, which
+                # is what distinguishes a bad key (401) from throttling (429).
+                status = getattr(getattr(error, "response", None), "status_code", None)
+                logging.warning(
+                    "Spider request %d failed (%s%s); skipping.",
+                    index,
+                    type(error).__name__,
+                    f", HTTP {status}" if isinstance(status, int) else "",
+                )
+                continue
+
+            if not isinstance(pages, list):
+                logging.warning("Spider request %d returned invalid JSON shape.", index)
+                continue
+            if not pages:
+                # Not an error, but the caller sees only an empty list, so leave
+                # a trace of which request came back with nothing.
+                logging.info("Spider request %d returned no pages.", index)
+            for page_index, page in enumerate(pages):
+                doc = self._page_to_document(page, url, index, page_index)
+                if doc is not None:
+                    docs.append(doc)
+        return docs
+
+    def _page_to_document(
+        self, page: Any, url: str, request_index: int, page_index: int
+    ) -> Optional[Document]:
+        """Validate a page without logging untrusted response values."""
+        if not isinstance(page, dict):
+            reason = "invalid page shape"
+        elif (
+            not isinstance(page.get("status"), int)
+            or not 200 <= page["status"] < 300
+            or page.get("error")
+        ):
+            reason = "failed or invalid page status"
+        elif not isinstance(page.get("content"), str):
+            reason = "invalid content"
+        elif not page["content"].strip():
+            # A blank page is a normal crawl outcome, not a fault, but it still
+            # has to be visible: otherwise an all-blank crawl logs nothing.
+            logging.info(
+                "Spider request %d page %d: blank content; skipping.",
+                request_index,
+                page_index,
+            )
+            return None
+        else:
+            source = page.get("url")
+            if self.config.mode == "scrape" and (source is None or source == ""):
+                source = url
+            if isinstance(source, str) and source.strip():
+                return Document(
+                    content=page["content"], metadata=DocMetaData(source=source)
+                )
+            reason = "missing or invalid page URL"
+        logging.warning(
+            "Spider request %d page %d: %s; skipping.",
+            request_index,
+            page_index,
+            reason,
+        )
+        return None
 
 
 class ExaCrawler(BaseCrawler):

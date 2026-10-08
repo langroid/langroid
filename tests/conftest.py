@@ -40,7 +40,14 @@ def pytest_addoption(parser) -> None:
     parser.addoption("--ct", default="redis", help="redis, fakeredis")
     parser.addoption(
         "--m",
-        default=OpenAIChatModel.GPT4o,
+        # Cheap by default: every local or agent-driven `pytest` run bills a
+        # real key, and this suite drives multi-agent pipelines with many
+        # calls per test. An investigation on 2026-10-04 ran one file ~8 times
+        # on the old gpt-4o default and was a visible share of a $45 / 3-day
+        # OpenAI bill. CI's bulk pass passes `--m` explicitly anyway; pass
+        # `--m gpt-4o` (or any model) when a test genuinely needs a stronger
+        # one.
+        default=OpenAIChatModel.GPT4o_MINI,
         help="""
         language model name, e.g. litellm/ollama/llama2, or 
         local or localhost:8000 or localhost:8000/v1

@@ -69,6 +69,9 @@ class LanceRAGTaskCreator:
         critic_agent = QueryPlanCritic(critic_config)
         critic_task = Task(
             critic_agent,
+            # the planner addresses its QueryPlanAnswerTool to this name, so
+            # the task name and `critic_name` must agree
+            name=critic_name,
             interactive=False,
         )
         rag_task = Task(

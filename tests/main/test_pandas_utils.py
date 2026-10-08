@@ -5,6 +5,7 @@ from langroid.utils.pandas_utils import (
     UnsafeCommandError,
     safe_eval_globals,
     sanitize_command,
+    stringify,
 )
 
 SAFE = [
@@ -177,3 +178,48 @@ def test_dangerous_payloads_blocked_via_safe_eval_globals(payload):
 def test_benign_expressions_still_work_via_safe_eval_globals(expr, expected):
     """The restricted builtins must not break legitimate pandas expressions."""
     assert _eval_via_safe_globals(expr) == expected
+
+
+@pytest.mark.parametrize(
+    "values, expected",
+    [
+        ([["long" * 251, "right"]], "long" * 250 + "..."),
+        ([["left", 7]], "left"),
+    ],
+    ids=["truncates_duplicate_text_columns", "preserves_duplicate_mixed_columns"],
+)
+def test_stringify_handles_duplicate_column_names(values, expected):
+    """Stringify each column by position so duplicate labels stay valid."""
+    frame = pd.DataFrame(values, columns=["duplicate", "duplicate"])
+
+    result = stringify(frame)
+
+    assert expected in result
+
+
+@pytest.mark.parametrize("copy_on_write", [False, True])
+@pytest.mark.parametrize("as_series", [False, True])
+def test_stringify_preserves_tabular_input(
+    copy_on_write: bool, as_series: bool
+) -> None:
+    """Display truncation must preserve every row of the caller's data."""
+    values = ["x" * 1001, None, 7] + [f"row {i}" for i in range(3, 11)]
+    values.append("y" * 1001)  # The final row is not displayed.
+    series = pd.Series(values, name="text", dtype=object)
+    original = series if as_series else series.to_frame()
+    before = original.copy(deep=True)
+    expected = pd.DataFrame({"text": ["x" * 1000 + "..."] + values[1:10]})
+
+    with pd.option_context("mode.copy_on_write", copy_on_write):
+        rendered = stringify(original)
+
+    if isinstance(original, pd.Series):
+        pd.testing.assert_series_equal(original, before)
+    else:
+        pd.testing.assert_frame_equal(original, before)
+    assert rendered == expected.to_string(index=False)
+
+
+@pytest.mark.parametrize("value", ["plain text", 42, [1, 2]])
+def test_stringify_non_tabular_input(value: object) -> None:
+    assert stringify(value) == str(value)

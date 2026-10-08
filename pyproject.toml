@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.68.0"
+version = "0.68.8"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -293,7 +293,9 @@ asyncio = [
     "asyncio>=3.4.3",
 ]
 firecrawl = [
-    "firecrawl-py>=1.13.5",
+    # 4.x is the unified v2 client FirecrawlCrawler targets; 4.46.0 is the
+    # first release whose Firecrawl() client accepts `origin`.
+    "firecrawl-py>=4.46.0,<5.0.0",
 ]
 crawl4ai = [
     "crawl4ai>=0.6.3",
