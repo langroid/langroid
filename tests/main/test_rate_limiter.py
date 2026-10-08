@@ -723,26 +723,53 @@ def _sequential_calls(llm: OpenAIGPT, n: int) -> int:
     return ok
 
 
-@pytest.mark.parametrize("refill", [20.0, 60.0])
-def test_limiter_respects_a_real_enforced_rate_limit(refill):
+def _natural_rate(n: int = 6) -> float:
+    """Unpaced sequential send rate this machine reaches against the stub.
+
+    The two tests below only mean something if the stub's budget sits well
+    BELOW this rate: otherwise an unpaced sender never exceeds the budget, the
+    limiter has nothing to do, and "no 429s" passes for free. A fixed budget
+    (20/s) did exactly that on a loaded CI runner on 2026-10-08 -- each call
+    took long enough that the bucket refilled faster than it drained. So the
+    budget is derived from the measured rate instead of hard-coded.
+    """
+    server = _StubServer(limit=10_000, refill_per_sec=10_000.0)
+    try:
+        with temporary_settings(Settings(cache=False, cache_type="none")):
+            llm = _llm(server, enabled=False, key="stub-calibrate")
+            _sequential_calls(llm, 1)  # warm-up: connection setup, first import
+            t0 = time.monotonic()
+            ok = _sequential_calls(llm, n)
+            elapsed = time.monotonic() - t0
+    finally:
+        server.close()
+    assert ok == n, "calibration calls failed against a non-limiting stub"
+    return n / elapsed
+
+
+@pytest.mark.parametrize("divisor", [3.0, 6.0])
+def test_limiter_respects_a_real_enforced_rate_limit(divisor):
     """With the limiter ON the stub never has to reject a request.
 
     And the achieved send rate tracks the stub's (discovered) budget: see
     `test_limiter_disabled_trips_the_rate_limit` for the counter-verification
-    that the same workload DOES get rejected with the limiter off.
+    that the same workload DOES get rejected with the limiter off. The budget
+    is `divisor` times slower than this machine's unpaced rate, so pacing is
+    always required, on a fast laptop or a loaded CI runner alike.
     """
+    refill = _natural_rate() / divisor
     server = _StubServer(limit=8, refill_per_sec=refill)
     n = 24
     try:
         with temporary_settings(Settings(cache=False, cache_type="none")):
-            llm = _llm(server, enabled=True, key=f"stub-on-{refill}")
+            llm = _llm(server, enabled=True, key=f"stub-on-{divisor}")
             t0 = time.monotonic()
             ok = _sequential_calls(llm, n)
             elapsed = time.monotonic() - t0
     finally:
         server.close()
 
-    limiter = get_rate_limiter(f"stub-on-{refill}")
+    limiter = get_rate_limiter(f"stub-on-{divisor}")
     stats = limiter.stats()
     # (a) did it run?
     assert stats["sends"] == n, stats
@@ -762,7 +789,10 @@ def test_limiter_disabled_trips_the_rate_limit():
     This is what makes the test above non-vacuous -- it shows the stub really
     does enforce a limit that an unpaced sender blows through.
     """
-    server = _StubServer(limit=8, refill_per_sec=20.0)
+    # Same budget as the faster case above: a third of this machine's unpaced
+    # rate. 24 calls against 8 tokens plus ~8 refilled leaves no way to serve
+    # them all, even if the run is half again slower than calibration.
+    server = _StubServer(limit=8, refill_per_sec=_natural_rate() / 3.0)
     try:
         with temporary_settings(Settings(cache=False, cache_type="none")):
             llm = _llm(server, enabled=False, key="stub-off")
