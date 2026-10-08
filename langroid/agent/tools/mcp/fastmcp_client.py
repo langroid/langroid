@@ -108,27 +108,30 @@ def _schema_allows_null(
             # A reference cycle also degrades to `Any`.
             return True
         return _schema_allows_null(defs.get(def_name), defs, seen | {def_name})
+    # An explicit `type` is decisive: it must hold whatever else the node says,
+    # so a non-null type rules null out even alongside an `anyOf`.
     schema_type = schema.get("type")
-    if schema_type == "null":
-        return True
-    if isinstance(schema_type, list) and "null" in schema_type:
-        return True
+    if isinstance(schema_type, str):
+        return schema_type == "null"
+    if isinstance(schema_type, list):
+        return "null" in schema_type
+    # `allOf` means every branch must hold, so null must be valid under all of
+    # them; `anyOf` / `oneOf` need only one branch to admit it. Either way a
+    # composition constrains the type, so never fall through to the `Any` case
+    # below -- `{"anyOf": [{"type": "integer"}, {"type": "string"}]}` is a
+    # perfectly type-constrained schema that does not accept null.
+    all_of = schema.get("allOf")
+    if isinstance(all_of, list) and all_of:
+        return all(_schema_allows_null(branch, defs, seen) for branch in all_of)
     for key in ("anyOf", "oneOf"):
         branches = schema.get(key)
-        if isinstance(branches, list) and any(
-            _schema_allows_null(branch, defs, seen) for branch in branches
-        ):
-            return True
-    all_of = schema.get("allOf")
-    if isinstance(all_of, list) and len(all_of) == 1:
-        return _schema_allows_null(all_of[0], defs, seen)
+        if isinstance(branches, list) and branches:
+            return any(_schema_allows_null(branch, defs, seen) for branch in branches)
     enum_values = schema.get("enum", [schema["const"]] if "const" in schema else None)
     if isinstance(enum_values, list):
         return any(value is None for value in enum_values)
-    if schema_type is None and not all_of:
-        # No type, no enum, no composition: maps to `Any`.
-        return True
-    return False
+    # No type, no enum, no composition: maps to `Any`.
+    return True
 
 
 def _nullable_field_names(properties: Dict[str, Any], defs: Dict[str, Any]) -> Set[str]:

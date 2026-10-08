@@ -9,6 +9,62 @@ from pydantic import BaseModel
 from langroid.agent.tools.mcp import FastMCPClient
 
 
+@pytest.mark.parametrize(
+    "schema, expected",
+    [
+        # A null branch in a union, the shape fastmcp emits for `int | None`.
+        ({"anyOf": [{"type": "integer"}, {"type": "null"}]}, True),
+        ({"oneOf": [{"type": "integer"}, {"type": "null"}]}, True),
+        # A union with no null branch is still fully type-constrained.
+        ({"anyOf": [{"type": "integer"}, {"type": "string"}]}, False),
+        # `type` as a list.
+        ({"type": ["integer", "null"]}, True),
+        ({"type": ["integer", "string"]}, False),
+        ({"type": "null"}, True),
+        ({"type": "integer"}, False),
+        ({"type": "object", "properties": {}}, False),
+        # An explicit `type` must hold whatever else the node says.
+        ({"type": "integer", "anyOf": [{"type": "null"}]}, False),
+        # `allOf` requires every branch to hold, at any branch count.
+        ({"allOf": [{"type": ["integer", "null"]}, {}]}, True),
+        ({"allOf": [{"type": ["integer", "null"]}, {"type": "integer"}]}, False),
+        ({"allOf": [{"type": "null"}]}, True),
+        # enum / const.
+        ({"enum": ["a", None]}, True),
+        ({"enum": ["a", "b"]}, False),
+        ({"const": None}, True),
+        ({"const": "a"}, False),
+        # No constraint at all maps to `Any`, which accepts null.
+        ({}, True),
+        ("not-a-schema", True),
+    ],
+)
+def test_schema_allows_null(schema: object, expected: bool) -> None:
+    """Nullability is read from the server's schema, shape by shape."""
+    # Imported here, not at module scope: a module-scope import of a private
+    # helper turns the whole file into one collection error on a tree without
+    # the fix, which would make counter-verification vacuous.
+    from langroid.agent.tools.mcp.fastmcp_client import _schema_allows_null
+
+    assert _schema_allows_null(schema, {}) is expected
+
+
+def test_schema_allows_null_follows_refs_and_breaks_cycles() -> None:
+    from langroid.agent.tools.mcp.fastmcp_client import _schema_allows_null
+
+    defs = {
+        "Nullable": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+        "Plain": {"type": "integer"},
+        "Loop": {"$ref": "#/$defs/Loop"},
+    }
+    assert _schema_allows_null({"$ref": "#/$defs/Nullable"}, defs) is True
+    assert _schema_allows_null({"$ref": "#/$defs/Plain"}, defs) is False
+    # A cycle degrades to `Any` rather than recursing forever.
+    assert _schema_allows_null({"$ref": "#/$defs/Loop"}, defs) is True
+    # A dangling $ref also degrades to `Any`.
+    assert _schema_allows_null({"$ref": "#/$defs/Missing"}, defs) is True
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("persist_connection", [False, True])
 @pytest.mark.parametrize("tool_name", ["required_value", "optional_value"])
