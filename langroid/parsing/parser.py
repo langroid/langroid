@@ -119,6 +119,12 @@ class ParsingConfig(BaseSettings):
     url_connect_timeout: float = 10.0
     url_read_timeout: float = 30.0
     url_max_size: int = 10 * 1024 * 1024
+    # Cap on the total number of bytes a ZIP-based document (DOCX, XLSX, PPTX)
+    # may expand to. `url_max_size` bounds only the *compressed* bytes fetched
+    # over HTTP, and local paths / raw bytes are not bounded at all, so without
+    # this a small archive can expand into an arbitrary amount of parsing work.
+    # Set to 0 to disable the check.
+    zip_max_expanded_size: int = 100 * 1024 * 1024
 
     @field_validator("chunk_size", mode="before")
     @classmethod

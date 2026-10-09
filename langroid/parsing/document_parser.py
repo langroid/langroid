@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import tempfile
+import zipfile
 from enum import Enum
 from io import BytesIO
 from itertools import accumulate
@@ -52,6 +53,103 @@ class DocumentType(str, Enum):
     PPTX = "pptx"
     MD = "md"
     HTML = "html"
+
+
+_ZIP_READ_BLOCK = 64 * 1024
+# Only these two methods can be read in bounded steps: for them `zipfile`
+# passes the requested length to the zlib decompressor as a max output length.
+# The LZMA and bzip2 decompressors take no such bound, so a single
+# `read(_ZIP_READ_BLOCK)` can materialize a whole member internally -- the
+# guard below would allocate the bomb before its own counter noticed. Real
+# OOXML documents are always stored or deflated; Office cannot open anything
+# else.
+_ZIP_BOUNDED_COMPRESSION = (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
+
+
+def _enforce_zip_expansion_limit(buf: BytesIO, config: ParsingConfig) -> None:
+    """Reject a ZIP-based document that expands beyond the configured budget.
+
+    DOCX, XLSX and PPTX are ZIP archives, and the parsers for them hand the
+    whole archive to a third-party library that expands it without any size
+    budget. `ParsingConfig.url_max_size` bounds only the compressed bytes of
+    an HTTP download, and local paths and raw bytes are not bounded at all, so
+    a small archive can cost an unbounded amount of CPU and memory once
+    expanded.
+
+    The expanded size is measured by actually decompressing each member --
+    never from the ZIP metadata, which the document's author controls and can
+    understate. Only one absolute byte budget is applied, deliberately: a
+    compression-RATIO limit rejects legitimate documents, since ordinary
+    repetitive OOXML (e.g. thousands of similar paragraphs or table rows)
+    compresses several hundred to one.
+
+    Non-ZIP input (e.g. a PDF) and unreadable archives are left alone: the
+    parser for the real type reports its own error. Whether the input is a ZIP
+    is decided by `zipfile` itself rather than by sniffing a magic number at
+    offset 0, because `zipfile` locates the central directory from the end of
+    the file and so reads archives that have arbitrary leading bytes.
+
+    `buf` is rewound to the start before returning, so the caller can parse it
+    as usual.
+
+    Args:
+        buf: Buffer holding the raw document bytes.
+        config: Parsing config supplying `zip_max_expanded_size`.
+
+    Raises:
+        ValueError: If the archive expands past the configured byte budget.
+    """
+    max_expanded = config.zip_max_expanded_size
+    if max_expanded <= 0:
+        return
+    buf.seek(0)
+    try:
+        archive = zipfile.ZipFile(buf)
+    except (zipfile.BadZipFile, OSError):
+        buf.seek(0)
+        return
+    total = 0
+    try:
+        for info in archive.infolist():
+            # Every entry is measured, including one whose name ends in "/".
+            # `is_dir()` only inspects the name, and a consumer that reads the
+            # part named by the document's own manifest (openpyxl does) will
+            # read such an entry's data regardless, so skipping it would leave
+            # a hole in the budget.
+            if info.compress_type not in _ZIP_BOUNDED_COMPRESSION:
+                raise ValueError(
+                    f"Document REJECTED: archive member {info.filename!r} uses "
+                    f"ZIP compression method {info.compress_type}, whose "
+                    f"expansion cannot be bounded incrementally. Real DOCX, "
+                    f"XLSX and PPTX files are stored or deflated."
+                )
+            try:
+                with archive.open(info) as member:
+                    while True:
+                        block = member.read(_ZIP_READ_BLOCK)
+                        if not block:
+                            break
+                        total += len(block)
+                        if total > max_expanded:
+                            raise ValueError(
+                                f"Document REJECTED: its archive members expand "
+                                f"to more than {max_expanded} bytes "
+                                f"(ParsingConfig.zip_max_expanded_size). Raise "
+                                f"that limit if you trust this document."
+                            )
+            except zipfile.BadZipFile as e:
+                # Raised mid-member when the recorded size or CRC disagrees
+                # with the actual data -- i.e. metadata crafted to understate
+                # how much the member expands. Reject rather than parse on.
+                raise ValueError(
+                    f"Document REJECTED: archive member {info.filename!r} is "
+                    f"corrupt or its recorded size is inconsistent with its "
+                    f"contents ({e}). Its expanded size cannot be bounded."
+                ) from e
+    finally:
+        # Closing the ZipFile does not close `buf`, which ZipFile did not open.
+        archive.close()
+        buf.seek(0)
 
 
 def find_last_full_char(possible_unicode: bytes) -> int:
@@ -280,6 +378,7 @@ class DocumentParser(Parser):
         else:
             self.source = source
             self.doc_bytes = self._load_doc_as_bytesio()
+        _enforce_zip_expansion_limit(self.doc_bytes, self.config)
 
     @staticmethod
     def _document_type(
@@ -547,6 +646,13 @@ class DocumentParser(Parser):
         # metadata.id to be shared by ALL chunks of this document
         common_id = ObjectRegistry.new_id()
         n_chunks = 0  # how many chunk so far
+        # `max_chunks` is a documented hard cap, and `Parser`'s generic text
+        # splitter already honors it; this path did not, so a single page that
+        # expands to millions of tokens drove unbounded tokenization, chunk
+        # construction and memory use. Clamp to >= 1 so the "always emit at
+        # least one chunk" behavior below is preserved.
+        max_chunks = max(1, self.config.max_chunks)
+        truncated = False  # stopped early because `max_chunks` was reached
         for i, page in self.iterate_pages():
             # not used but could be useful, esp to blend the
             # metadata from the pages into the chunks
@@ -558,6 +664,9 @@ class DocumentParser(Parser):
             # into multiple chunks. Or it could be so short
             # that it needs to be combined with the next chunk.
             while len(split) > self.config.chunk_size:
+                if n_chunks >= max_chunks:
+                    truncated = True
+                    break
                 # pretty formatting of pages (e.g. 1-3, 4, 5-7)
                 p_0 = int(pages[0]) - self.config.page_number_offset
                 p_n = int(pages[-1]) - self.config.page_number_offset
@@ -576,11 +685,25 @@ class DocumentParser(Parser):
                 n_chunks += 1
                 split = split[self.config.chunk_size - self.config.overlap :]
                 pages = [str(i + 1)]
+            if truncated:
+                logger.warning(
+                    f"Document {self.source!r} hit the configured "
+                    f"max_chunks={self.config.max_chunks}; "
+                    f"the remainder was not chunked."
+                )
+                break
         # there may be a last split remaining:
         # if it's shorter than the overlap, we shouldn't make a chunk for it
         # since it's already included in the prior chunk;
         # the only exception is if there have been no chunks so far.
-        if len(split) > self.config.overlap or n_chunks == 0:
+        # `n_chunks < max_chunks` matters even when the loop was not truncated:
+        # the loop exits as soon as the remainder is shorter than one chunk, so
+        # without this the trailing chunk could push the total one past the cap.
+        if (
+            not truncated
+            and n_chunks < max_chunks
+            and (len(split) > self.config.overlap or n_chunks == 0)
+        ):
             p_0 = int(pages[0]) - self.config.page_number_offset
             p_n = int(pages[-1]) - self.config.page_number_offset
             page_str = f"pages {p_0}-{p_n}" if p_0 != p_n else f"page {p_0}"
