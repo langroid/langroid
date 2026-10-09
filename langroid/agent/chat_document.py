@@ -323,11 +323,15 @@ class ChatDocument(Document):
         # (a) the `name` is set, as well as `arguments.request` is set,
         #  and in langroid we use the `request` value as the `name`.
         #  In this case we override the `name` with the `request` value.
-        # (b) the `name` looks like "functions blah" or just "functions"
-        #   In this case we strip the "functions" part.
+        # (b) the `name` looks like "functions blah".
+        #   Strip only the separate prefix, preserving valid tool names
+        #   such as "list_functions", "functions_lookup", or "functions".
         if fc is None:
             return
-        fc.name = fc.name.replace("functions", "").strip()
+        fc.name = fc.name.strip()
+        name_parts = fc.name.split(maxsplit=1)
+        if len(name_parts) == 2 and name_parts[0] == "functions":
+            fc.name = name_parts[1]
         if fc.arguments is not None:
             request = fc.arguments.get("request")
             if request is not None and request != "":
