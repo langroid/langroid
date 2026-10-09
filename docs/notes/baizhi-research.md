@@ -50,9 +50,9 @@ uv run pytest tests/main/test_baizhi_mcp_example.py -q --nc --ns
 ```
 
 The tests exercise Langroid's task and tool dispatch with an in-memory FastMCP
-server and a simulated language model. A separate path exercises the real
-Streamable HTTP transport with synthetic HTTP responses, including authentication
-failure and redirects. Session cleanup is checked on success, model failure, and
-cancellation during a tool call. The tests require no service or model keys and
-make no production calls. They do not establish live service availability,
+server and a simulated language model. Session cleanup is checked on success,
+model failure, and cancellation during a tool call. The tests require no service
+or model keys and make no production calls. They cover Langroid-facing behavior
+only: the Streamable HTTP transport, authentication and redirect handling are
+not exercised, so the tests do not establish live service availability,
 production authentication, billing, or model answer quality.
