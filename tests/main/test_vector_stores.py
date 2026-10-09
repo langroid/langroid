@@ -1,4 +1,6 @@
+import hashlib
 import json
+import logging
 import os
 from types import SimpleNamespace
 from typing import List
@@ -10,9 +12,11 @@ from sqlalchemy.exc import OperationalError
 from langroid.agent.batch import run_batch_tasks
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
+from langroid.embedding_models.base import EmbeddingModel
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import DocMetaData, Document
+from langroid.language_models.mock_lm import MockLMConfig
+from langroid.mytypes import DocMetaData, Document, Embeddings
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
@@ -660,6 +664,150 @@ def test_lance_metadata():
 
     all_docs = vecdb.get_all_documents()
     assert len(all_docs) == 3
+
+
+class HashEmbeddingModel(EmbeddingModel):
+    """Deterministic 8-dim embeddings, so the LanceDB tests below need no API key."""
+
+    @property
+    def embedding_dims(self) -> int:
+        return 8
+
+    def embedding_fn(self):
+        def embed(texts: List[str]) -> Embeddings:
+            return [
+                [b / 255.0 for b in hashlib.sha256(t.encode()).digest()[:8]]
+                for t in texts
+            ]
+
+        return embed
+
+
+def _lance(path, batch_size: int = 512) -> LanceDB:
+    return LanceDB(
+        LanceDBConfig(
+            storage_path=str(path),
+            collection_name="test-add-documents",
+            embedding_model=HashEmbeddingModel(),
+            batch_size=batch_size,
+        )
+    )
+
+
+def _lance_rows(ldb: LanceDB) -> int:
+    return ldb.client.open_table("test-add-documents").count_rows()
+
+
+class _ErrorRecords(logging.Handler):
+    """Collects ERROR records without pytest's log-capture fixture,
+    which CI disables with `-p no:logging`."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.ERROR)
+        self.records: List[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def test_lance_add_documents_new_metadata_field_raises(tmp_path):
+    """
+    LanceDB fixes the table schema from the first write, so a later document
+    whose metadata has a field the table lacks is rejected. That rejection
+    must reach the caller, not be logged and reported as stored.
+    """
+    ldb = _lance(tmp_path)
+    ldb.add_documents([Document(content="alpha", metadata=DocMetaData(source="a"))])
+    with pytest.raises(Exception, match="category"):
+        ldb.add_documents(
+            [
+                Document(
+                    content="beta",
+                    metadata=DocMetaData(source="b", category="x"),
+                )
+            ]
+        )
+    assert _lance_rows(ldb) == 1
+
+
+def test_lance_add_documents_fewer_metadata_fields_ok(tmp_path):
+    """The reverse order (rich metadata first, plainer doc later) is accepted."""
+    ldb = _lance(tmp_path)
+    ldb.add_documents(
+        [Document(content="r1", metadata=DocMetaData(source="a", category="x"))]
+    )
+    ldb.add_documents([Document(content="p1", metadata=DocMetaData(source="b"))])
+    assert _lance_rows(ldb) == 2
+
+
+@pytest.mark.parametrize("n_docs", [1, 2, 3, 4, 5])
+def test_lance_add_documents_batches(tmp_path, n_docs: int):
+    """
+    With batch_size=2: one partial batch, exactly one batch, a batch plus a
+    remainder, an exact multiple, and several batches. Every document is
+    stored, a same-schema append works, and nothing is logged at ERROR
+    (a first write that fits in one batch used to log a spurious
+    "empty iterator" error).
+    """
+    from langroid.vector_store import lancedb as lancedb_module
+
+    handler = _ErrorRecords()
+    lancedb_module.logger.addHandler(handler)
+    try:
+        ldb = _lance(tmp_path, batch_size=2)
+        ldb.add_documents(
+            [
+                Document(content=f"d{i}", metadata=DocMetaData(source="s"))
+                for i in range(n_docs)
+            ]
+        )
+        assert _lance_rows(ldb) == n_docs
+        ldb.add_documents(
+            [
+                Document(content=f"e{i}", metadata=DocMetaData(source="s"))
+                for i in range(n_docs)
+            ]
+        )
+        assert _lance_rows(ldb) == 2 * n_docs
+    finally:
+        lancedb_module.logger.removeHandler(handler)
+    assert [r.getMessage() for r in handler.records] == []
+
+
+def test_lance_doc_chat_ingest_rejected_metadata_raises(tmp_path):
+    """
+    DocChatAgent.ingest_docs(..., metadata=...) adds a metadata field to every
+    doc. Into a collection first filled without it, LanceDB rejects the write;
+    ingest_docs must not return a count of chunks that were never stored.
+    """
+
+    def agent() -> DocChatAgent:
+        return DocChatAgent(
+            DocChatAgentConfig(
+                llm=MockLMConfig(),
+                cross_encoder_reranking_model="",
+                vecdb=LanceDBConfig(
+                    storage_path=str(tmp_path),
+                    collection_name="test-doc-chat",
+                    embedding_model=HashEmbeddingModel(),
+                ),
+            )
+        )
+
+    first = agent()
+    n = first.ingest_docs(
+        [Document(content="Ops notes.", metadata=DocMetaData(source="ops.txt"))],
+        split=False,
+    )
+    assert n == 1
+    with pytest.raises(Exception, match="category"):
+        first.ingest_docs(
+            [Document(content="Plan notes.", metadata=DocMetaData(source="p.txt"))],
+            split=False,
+            metadata={"category": "plans"},
+        )
+    # a later session on the same store sees exactly what was stored
+    assert [d.content for d in agent().chunked_docs] == ["Ops notes."]
 
 
 @pytest.mark.parametrize(
