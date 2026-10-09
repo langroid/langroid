@@ -80,6 +80,27 @@ def test_extract_top_level_json(s, expected):
     assert top_level_jsons == expected
 
 
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("braces", ["{", "}", "{}"])
+def test_extract_top_level_json_preserves_multiline_string_braces(
+    quote: str, braces: str
+) -> None:
+    value = f"first line\n{braces}\nlast line"
+    tool_call = (
+        f"{{{quote}request{quote}: {quote}test_tool{quote}, "
+        f"{quote}value{quote}: {quote}{value}{quote}}}"
+    )
+    following_call = '{"request": "next_tool", "value": "complete"}'
+    response = f"Tool calls:\n{tool_call}\n{following_call}\nPlease execute."
+
+    extracted = extract_top_level_json(response)
+
+    assert [json.loads(candidate) for candidate in extracted] == [
+        {"request": "test_tool", "value": value},
+        {"request": "next_tool", "value": "complete"},
+    ]
+
+
 @pytest.mark.parametrize(
     "input_json,expected_output",
     [
