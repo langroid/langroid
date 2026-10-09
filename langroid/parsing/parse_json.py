@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterator, List, Union
 
 import yaml
 from json_repair import repair_json
-from pyparsing import nested_expr, original_text_for
+from pyparsing import QuotedString, nested_expr, original_text_for
 
 
 def is_valid_json(json_str: str) -> bool:
@@ -36,8 +36,11 @@ def flatten(nested_list) -> Iterator[str]:  # type: ignore
 
 def get_json_candidates(s: str) -> List[str]:
     """Get top-level JSON candidates, i.e. strings between curly braces."""
-    # Define the grammar for matching curly braces
-    curly_braces = original_text_for(nested_expr("{", "}"))
+    # LLM output can contain unescaped newlines inside quoted strings.
+    quoted_strings = QuotedString(
+        '"', esc_char="\\", multiline=True, unquote_results=False
+    ) | QuotedString("'", esc_char="\\", multiline=True, unquote_results=False)
+    curly_braces = original_text_for(nested_expr("{", "}", ignore_expr=quoted_strings))
 
     # Parse the string
     try:
