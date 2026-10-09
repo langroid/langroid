@@ -103,9 +103,19 @@ async def test_unrelated_tool_not_dispatched(server: ServerFixture) -> None:
 async def test_missing_tool_stops_before_model(server: ServerFixture) -> None:
     mcp, calls, lifecycle = server
     mcp.remove_tool("web_extract")
+    prompts: list[str] = []
+
+    def record(prompt: str) -> str:
+        prompts.append(prompt)
+        return "the model should never be consulted here"
+
     with pytest.raises(ValueError, match="Expected one of each"):
-        await example.research("Research", MockLMConfig(), mcp)
+        await example.research("Research", MockLMConfig(response_fn=record), mcp)
     assert calls == []
+    # The "before model" half of this test's name: a recording model, so that
+    # consulting the model before raising cannot satisfy the assertions.
+    # `MockLMConfig()` alone would have passed either way.
+    assert prompts == []
     assert lifecycle == ["started", "closed"]
 
 
