@@ -5,7 +5,14 @@ from typing import Any, Dict, Iterator, List, Union
 
 import yaml
 from json_repair import repair_json
-from pyparsing import nested_expr, original_text_for
+from pyparsing import (
+    FollowedBy,
+    QuotedString,
+    nested_expr,
+    one_of,
+    original_text_for,
+    quoted_string,
+)
 
 
 def is_valid_json(json_str: str) -> bool:
@@ -34,10 +41,74 @@ def flatten(nested_list) -> Iterator[str]:  # type: ignore
             yield item
 
 
+def _is_complete_json_object(candidate: str, source: str, loc: int) -> bool:
+    """Validate multiline boundaries without repairing or changing the candidate."""
+    try:
+        return isinstance(json.loads(candidate), dict)
+    except ValueError:
+        pass
+
+    # A brace inside a following single-line value must not end this object,
+    # even if the swallowed prefix happens to be valid after normalization.
+    end = loc + len(candidate) - 1
+    line_start = max(loc, source.rfind("\n", 0, end) + 1)
+    line_end = source.find("\n", end)
+    line = source[line_start : line_end if line_end >= 0 else len(source)]
+    for _, start, stop in quoted_string.scan_string(line):
+        if start >= end - line_start:
+            break
+        if start < end - line_start < stop and line[:start].rstrip().endswith(":"):
+            return False
+
+    try:
+        return isinstance(json.loads(candidate, strict=False), dict)
+    except ValueError:
+        pass
+
+    # Normalize quoted tokens only for validation, accepting single quotes and
+    # raw newlines. The original text is still returned for the existing repair.
+    normalized = _NORMALIZED_QUOTED_STRINGS.transform_string(candidate)
+    try:
+        return isinstance(json.loads(normalized), dict)
+    except ValueError:
+        pass
+    try:
+        return isinstance(ast.literal_eval(normalized), dict)
+    except (ValueError, SyntaxError):
+        return False
+
+
+_QUOTED_STRINGS = QuotedString(
+    '"', esc_char="\\", multiline=True, unquote_results=False
+) | QuotedString("'", esc_char="\\", multiline=True, unquote_results=False)
+_NORMALIZED_QUOTED_STRINGS = _QUOTED_STRINGS.copy().set_parse_action(
+    lambda tokens: json.dumps(tokens[0][1:-1])
+)
+_MULTILINE_CURLY_BRACES = original_text_for(
+    nested_expr(
+        "{",
+        "}",
+        ignore_expr=(_QUOTED_STRINGS + FollowedBy(one_of(": , } ]"))) | quoted_string,
+    )
+).add_condition(
+    lambda source, loc, tokens: _is_complete_json_object(tokens[0], source, loc)
+)
+_SINGLE_LINE_CURLY_BRACES = original_text_for(nested_expr("{", "}"))
+_CURLY_BRACES = _MULTILINE_CURLY_BRACES | _SINGLE_LINE_CURLY_BRACES
+# Bound speculative multiline scans on malformed, large or quote-dense output.
+# Outside this budget, retain the original single-line extraction behavior.
+_MAX_MULTILINE_INPUT_CHARS = 64 * 1024
+_MAX_MULTILINE_QUOTES = 512
+
+
 def get_json_candidates(s: str) -> List[str]:
     """Get top-level JSON candidates, i.e. strings between curly braces."""
-    # Define the grammar for matching curly braces
-    curly_braces = original_text_for(nested_expr("{", "}"))
+    curly_braces = (
+        _CURLY_BRACES
+        if len(s) <= _MAX_MULTILINE_INPUT_CHARS
+        and s.count('"') + s.count("'") <= _MAX_MULTILINE_QUOTES
+        else _SINGLE_LINE_CURLY_BRACES
+    )
 
     # Parse the string
     try:
