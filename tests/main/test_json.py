@@ -147,6 +147,73 @@ def test_extract_top_level_json_preserves_multiline_array_string(quote: str) -> 
     ]
 
 
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("separator", ["\n", " "])
+@pytest.mark.parametrize("suffix", [", John", ": note", "} text", "] text"])
+def test_extract_top_level_json_keeps_mixed_quote_calls_separate(
+    quote: str, separator: str, suffix: str
+) -> None:
+    other_quote = "'" if quote == '"' else '"'
+    malformed_call = (
+        f"{{{quote}request{quote}:{quote}bad{quote},"
+        f"{quote}value{quote}:{quote}oops\n}}"
+    )
+    value = f"James{quote}{suffix}"
+    following_call = (
+        f"{{{other_quote}request{other_quote}:{other_quote}good{other_quote},"
+        f"{other_quote}value{other_quote}:{other_quote}{value}{other_quote}}}"
+    )
+    response = malformed_call + separator + following_call
+
+    assert get_json_candidates(response) == [malformed_call, following_call]
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "bad", "value": "oops"},
+        {"request": "good", "value": value},
+    ]
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_extract_top_level_json_preserves_multiline_opposite_quotes(
+    quote: str,
+) -> None:
+    other_quote = "'" if quote == '"' else '"'
+    value = (
+        f"first line\nJames{other_quote}, John\n}}\n"
+        f"{{{other_quote}request{other_quote}:"
+        f"{other_quote}literal{other_quote}}}\nlast line"
+    )
+    tool_call = (
+        f"{{{quote}request{quote}:{quote}test_tool{quote},"
+        f"{quote}value{quote}:{quote}{value}{quote}}}"
+    )
+    following_call = '{"request":"next_tool","value":"complete"}'
+
+    assert get_json_candidates(tool_call + "\n" + following_call) == [
+        tool_call,
+        following_call,
+    ]
+    assert [
+        json.loads(candidate)
+        for candidate in extract_top_level_json(tool_call + "\n" + following_call)
+    ] == [
+        {"request": "test_tool", "value": value},
+        {"request": "next_tool", "value": "complete"},
+    ]
+
+
+@pytest.mark.parametrize("n", [2000, 4000, 8000, 16000])
+def test_get_json_candidates_repeated_escaped_quotes(n: int) -> None:
+    malformed_call = "{" + ('\\"' + "\n") * n + "}"
+    following_call = '{"request":"good","value":"complete"}'
+
+    assert get_json_candidates(malformed_call + "\n" + following_call) == [
+        malformed_call,
+        following_call,
+    ]
+
+
 @pytest.mark.parametrize(
     "input_json,expected_output",
     [
