@@ -213,10 +213,11 @@ def test_task_in_out_types(
         # Task's final strict-decoding step also needs
         # `ChatAgent._json_schema_available()`, which is False for any
         # non-OpenAIGPT LLM. So this asserts the plain
-        # "unparseable into return_type -> None" path, and no longer covers
-        # "disable_strict=True suppresses the strict step" -- which, as of this
-        # change, no test covers (see issue #494). The assignments are kept so
-        # the intent, and the behavior under a real LLM, stay documented.
+        # "unparseable into return_type -> None" path, and does not cover
+        # "disable_strict=True suppresses the strict step" -- that case is
+        # covered by tests/main/test_task_strict_recovery_disabled.py (issue
+        # #494). The assignments are kept so the intent, and the behavior
+        # under a real LLM, stay documented.
         agent.disable_strict = True
         result = task[Pair].run(msg)
         assert result is None
