@@ -100,6 +100,7 @@ jobs:
           PYTEST_ADDOPTS: "-p no:logging"
         run: |
           uv run pytest -q --ct fakeredis \
+            tests/main/test_function_call_names.py \
             tests/main/test_model_info.py \
             tests/main/test_vertexai_isolation.py \
             tests/main/test_vertexai_routing.py \
