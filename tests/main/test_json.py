@@ -4,6 +4,7 @@ import pytest
 
 from langroid.parsing.parse_json import (
     extract_top_level_json,
+    get_json_candidates,
     parse_imperfect_json,
     top_level_json_field,
 )
@@ -97,6 +98,51 @@ def test_extract_top_level_json_preserves_multiline_string_braces(
 
     assert [json.loads(candidate) for candidate in extracted] == [
         {"request": "test_tool", "value": value},
+        {"request": "next_tool", "value": "complete"},
+    ]
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("separator", ["\n", " "])
+def test_extract_top_level_json_keeps_unterminated_call_separate(
+    quote: str, separator: str
+) -> None:
+    malformed_call = (
+        f"{{{quote}request{quote}:{quote}bad{quote},"
+        f"{quote}value{quote}:{quote}oops\n}}"
+    )
+    following_call = (
+        f"{{{quote}request{quote}:{quote}good{quote},"
+        f"{quote}value{quote}:{quote}ok{quote}}}"
+    )
+    response = malformed_call + separator + following_call
+
+    assert get_json_candidates(response) == [malformed_call, following_call]
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "bad", "value": "oops"},
+        {"request": "good", "value": "ok"},
+    ]
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_extract_top_level_json_preserves_multiline_array_string(quote: str) -> None:
+    value = f"first line\n{quote}quoted{quote} {{nested}}\\path\nlast line"
+    escaped_value = value.replace("\\", "\\\\").replace(quote, "\\" + quote)
+    tool_call = (
+        f"{{{quote}request{quote}:{quote}test_tool{quote},"
+        f"{quote}values{quote}:[{quote}{escaped_value}{quote}],"
+        f"{quote}flag{quote}:true}}"
+    )
+    following_call = '{"request":"next_tool","value":"complete"}'
+    response = tool_call + "\n" + following_call
+
+    assert get_json_candidates(response) == [tool_call, following_call]
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "test_tool", "values": [value], "flag": True},
         {"request": "next_tool", "value": "complete"},
     ]
 

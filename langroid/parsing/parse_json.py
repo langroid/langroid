@@ -5,7 +5,14 @@ from typing import Any, Dict, Iterator, List, Union
 
 import yaml
 from json_repair import repair_json
-from pyparsing import QuotedString, nested_expr, original_text_for
+from pyparsing import (
+    FollowedBy,
+    QuotedString,
+    nested_expr,
+    one_of,
+    original_text_for,
+    quoted_string,
+)
 
 
 def is_valid_json(json_str: str) -> bool:
@@ -40,6 +47,10 @@ def get_json_candidates(s: str) -> List[str]:
     quoted_strings = QuotedString(
         '"', esc_char="\\", multiline=True, unquote_results=False
     ) | QuotedString("'", esc_char="\\", multiline=True, unquote_results=False)
+    # A closing quote must precede JSON punctuation; otherwise an unclosed
+    # value can consume the opening quote of a following object. Keep the
+    # default single-line matcher for malformed strings it already handles.
+    quoted_strings = (quoted_strings + FollowedBy(one_of(": , } ]"))) | quoted_string
     curly_braces = original_text_for(nested_expr("{", "}", ignore_expr=quoted_strings))
 
     # Parse the string
