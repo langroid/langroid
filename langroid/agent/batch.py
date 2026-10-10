@@ -132,6 +132,7 @@ async def _process_batch_async(
     if stop_on_first_result:
         results: List[Optional[ChatDocument] | BaseException] = []
         pending: set[asyncio.Task[Any]] = set()
+        pending_exit: BaseException | None = None
         # Create task-to-index mapping
         task_indices: dict[asyncio.Task[Any], int] = {}
         try:
@@ -159,11 +160,18 @@ async def _process_batch_async(
 
                 if any(r is not None for r in results):
                     return results
+        except (KeyboardInterrupt, SystemExit) as exit_error:
+            pending_exit = exit_error
+            raise
         finally:
             for task in pending:
                 task.cancel()
             try:
                 await asyncio.gather(*pending, return_exceptions=True)
+            except asyncio.CancelledError as e:
+                # Cleanup cancellation must not replace an active process exit.
+                if pending_exit is None:
+                    handle_error(e)
             except BaseException as e:
                 handle_error(e)
         return results

@@ -37,6 +37,8 @@ puts the exception there; `RAISE` propagates it.
 
 `KeyboardInterrupt` and `SystemExit` always propagate, including when raised
 by `output_map`. They stop the batch instead of becoming per-item results.
+In first-result mode, a process exit also takes precedence over cancellation
+that arrives while pending tasks are being cleaned up.
 
 `output_map` receives successful task results, including a successful `None`
 result. It does not receive the placeholders produced by error handling.
