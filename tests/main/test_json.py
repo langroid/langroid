@@ -427,3 +427,36 @@ def test_top_level_json_field_never_crashes():
         # Should never crash, just return empty string or found value
         result = top_level_json_field(malformed, "recipient")
         assert isinstance(result, (str, int, float, bool, type(None)))
+
+
+@pytest.mark.parametrize(
+    "following_call",
+    [
+        # the swallowed brace sits in an array element (after `[`)
+        '{"request":"good","values":["James\'} text"]}',
+        # ...in a later array element (after `,`)
+        '{"request":"good","values":["ok","James\'} text"]}',
+        # ...in a later object value (after `,` rather than `:`)
+        '{"request":"good","value":"ok","note":"James\'} text"}',
+    ],
+)
+def test_malformed_call_never_swallows_a_following_call(following_call: str) -> None:
+    """A truncated call must not consume the next valid call's argument.
+
+    Running a tool with another call's argument is worse than dropping the
+    truncated one: dropping fails closed, so the agent hits
+    `handle_llm_no_tool` and retries. The boundary guard therefore has to
+    cover every context a quoted value can appear in, not just object values
+    introduced by `:`.
+    """
+    malformed_call = "{'request':'bad','value':'oops\n}"
+    response = malformed_call + "\n" + following_call
+
+    assert get_json_candidates(response) == [malformed_call, following_call]
+    extracted = [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ]
+    assert extracted == [
+        {"request": "bad", "value": "oops"},
+        json.loads(following_call),
+    ]

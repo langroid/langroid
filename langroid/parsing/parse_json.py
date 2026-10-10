@@ -50,6 +50,15 @@ def _is_complete_json_object(candidate: str, source: str, loc: int) -> bool:
 
     # A brace inside a following single-line value must not end this object,
     # even if the swallowed prefix happens to be valid after normalization.
+    #
+    # The quoted string the brace falls inside may be an object value (after
+    # `:`), an array element (after `[`) or any later item in either (after
+    # `,`). Checking only `:` let an array element swallow the whole following
+    # call: for `{'request':'bad','value':'oops\n}` followed by
+    # `{"request":"good","values":["James'} text"]}`, the candidate ended at
+    # `James'}` and the valid `good` call disappeared. Over-rejecting here only
+    # costs multiline recovery -- the candidate falls back to the single-line
+    # grammar -- whereas under-rejecting runs one call with another's argument.
     end = loc + len(candidate) - 1
     line_start = max(loc, source.rfind("\n", 0, end) + 1)
     line_end = source.find("\n", end)
@@ -57,7 +66,9 @@ def _is_complete_json_object(candidate: str, source: str, loc: int) -> bool:
     for _, start, stop in quoted_string.scan_string(line):
         if start >= end - line_start:
             break
-        if start < end - line_start < stop and line[:start].rstrip().endswith(":"):
+        if start < end - line_start < stop and line[:start].rstrip().endswith(
+            (":", ",", "[")
+        ):
             return False
 
     try:
