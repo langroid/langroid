@@ -105,21 +105,49 @@ def test_missing_value_normalization_skipped_when_nothing_is_missing(monkeypatch
 
     monkeypatch.setattr(pd.Series, "astype", counting_astype, raising=True)
 
+    rows = 50
     columns = {
-        "content": [f"text {i}" for i in range(4)],
-        "num": list(range(4)),
-        "score": [float(i) for i in range(4)],
-        "tag": [f"s{i}" for i in range(4)],
+        "content": [f"text {i}" for i in range(rows)],
+        "num": list(range(rows)),
+        "score": [float(i) for i in range(rows)],
+        "tag": [f"s{i}" for i in range(rows)],
     }
 
     clean = pd.DataFrame(columns)
-    docs = dataframe_to_documents(clean, content="content", metadata=[])
-    assert [doc.content for doc in docs] == ["text 0", "text 1", "text 2", "text 3"]
-    assert calls == [], f"normalization ran on rows with nothing missing: {calls}"
+    documents = dataframe_to_documents(clean, content="content", metadata=[])
+    assert [doc.content for doc in documents] == columns["content"]
+    # The assertion is that the work is bounded by COLUMNS, not rows -- that
+    # is the property, and it does not pin how the normalization is split
+    # between the frame and individual rows. Rewriting per row would be ~50
+    # calls here rather than at most 4.
+    assert len(calls) <= len(columns), f"normalization scales with rows: {calls}"
 
     with_missing = pd.DataFrame(dict(columns))
     with_missing.loc[with_missing.index % 2 == 0, "tag"] = None
-    docs = dataframe_to_documents(with_missing, content="content", metadata=[])
-    assert [doc.tag for doc in docs] == [None, "s1", None, "s3"]
-    # One `astype(object)` per row that actually has a missing value.
-    assert calls.count(object) == 2, calls
+    calls.clear()
+    documents = dataframe_to_documents(with_missing, content="content", metadata=[])
+    assert [doc.tag for doc in documents[:4]] == [None, "s1", None, "s3"]
+    # A frame that does have missing values is still normalized, so this
+    # cannot pass by never normalizing at all.
+    assert calls.count(object) > 0, calls
+
+
+@pytest.mark.parametrize("dtype", ["Int64", "int64"])
+@pytest.mark.parametrize("value", [2**53 + 1, 2**63 - 1])
+def test_large_integers_are_not_degraded_by_normalization(dtype, value):
+    """Integers past 2**53 must survive ingestion exactly.
+
+    `dataframe_to_documents` normalizes to `object` before handing values to
+    Pydantic, which yields Python ints. Reaching Pydantic as `numpy.int64`
+    instead silently rounds 2**53 + 1 down to 2**53, and fails validation
+    outright at 2**63 - 1 -- so skipping the conversion to save work is only
+    safe while these still hold.
+    """
+    frame = pd.DataFrame(
+        {"content": ["t"], "big": pd.Series([value], dtype=dtype)},
+    )
+
+    documents = dataframe_to_documents(frame, content="content", metadata=[])
+
+    assert documents[0].big == value
+    assert isinstance(documents[0].big, int)

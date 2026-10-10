@@ -521,12 +521,20 @@ def dataframe_to_document_model(
         # Extension dtypes use pd.NA, and numeric columns use NaN. Optional
         # Pydantic fields accept None rather than pandas' missing sentinels.
         #
-        # `dataframe_to_documents` calls this once per row, so normalizing
-        # unconditionally would build two throwaway Series per row (~4x slower
-        # over a 20k-row frame). Rows with no missing value need no rewrite,
-        # which is the common case.
-        not_na = row.notna()
-        if not not_na.all():
+        # `dataframe_to_documents` calls this once per row, so rewriting
+        # unconditionally built two throwaway Series per row (~4x slower over
+        # a 20k-row frame). Detect first, with a plain scan rather than
+        # `row.notna()`, which allocates a Series of its own. `is`-comparisons
+        # and the `float` guard keep this safe for container-valued cells: a
+        # list or ndarray is neither sentinel and is not a float, so it is
+        # left alone rather than compared elementwise.
+        if any(
+            value is None
+            or value is pd.NA
+            or (isinstance(value, float) and value != value)
+            for value in row.array
+        ):
+            not_na = row.notna()
             row = row.astype(object).where(not_na, None)
         content_val = row[content] if (content and content in row) else ""
         metadata_values = (
@@ -564,9 +572,36 @@ def dataframe_to_documents(
         List[Document]: The list of Document objects.
     """
     Model = doc_cls or dataframe_to_document_model(df, content, metadata)
+    # Normalize missing values once for the whole frame rather than per row.
+    # `from_df_row` can do it alone (it has to, for direct callers), but there
+    # it costs two throwaway Series per row -- 0.85s to 3.73s over a 20k-row
+    # frame -- against ~3ms here. Converting to `object` up front also hands
+    # Pydantic Python scalars rather than numpy ones, which matters beyond
+    # speed: an `Int64` column holding 2**53 + 1 loses precision through
+    # `numpy.int64`, and 2**63 - 1 fails validation outright.
+    # Only the columns that need it: converting the whole frame to `object`
+    # would also slow `iterrows` and validation for columns that were fine.
+    # A column needs it if it has missing values, if it is an extension dtype
+    # (`Int64`, `boolean`, `string`, ...), or if it is an integer column --
+    # integers are where handing Pydantic a numpy scalar actually corrupts
+    # data, since `numpy.int64` coerces through a lossy path: 2**53 + 1
+    # becomes 2**53, and 2**63 - 1 fails validation outright.
+    frame = df
+    rewrite = [
+        column
+        for column, dtype in df.dtypes.items()
+        if not isinstance(dtype, np.dtype)
+        or np.issubdtype(dtype, np.integer)
+        or df[column].isna().any()
+    ]
+    if rewrite:
+        frame = df.copy()
+        for column in rewrite:
+            values = df[column]
+            frame[column] = values.astype(object).where(values.notna(), None)
     docs = [
         Model.from_df_row(row, content, metadata)  # type: ignore
-        for _, row in df.iterrows()
+        for _, row in frame.iterrows()
     ]
     return [m for m in docs if m is not None]
 
