@@ -66,10 +66,12 @@ def _is_complete_json_object(candidate: str, source: str, loc: int) -> bool:
     for _, start, stop in quoted_string.scan_string(line):
         if start >= end - line_start:
             break
-        if start < end - line_start < stop and line[:start].rstrip().endswith(
-            (":", ",", "[")
-        ):
-            return False
+        if start < end - line_start < stop:
+            # Take the prefix from `source`, not `line`: a value may sit on the
+            # line after its `:`, leaving `line[:start]` all whitespace and the
+            # introducing punctuation on the previous line.
+            if source[: line_start + start].rstrip().endswith((":", ",", "[")):
+                return False
 
     try:
         return isinstance(json.loads(candidate, strict=False), dict)
