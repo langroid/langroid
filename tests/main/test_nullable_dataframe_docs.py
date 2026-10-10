@@ -1,5 +1,3 @@
-import time
-
 import pandas as pd
 import pytest
 
@@ -84,40 +82,44 @@ def test_model_from_all_missing_columns_accepts_values_from_later_batches(dtype,
     assert later_docs[0].score == value
 
 
-def test_missing_value_normalization_skipped_when_nothing_is_missing():
+def test_missing_value_normalization_skipped_when_nothing_is_missing(monkeypatch):
     """Rows with no missing value must not pay for the NA normalization.
 
     `dataframe_to_documents` calls `from_df_row` once per row, so normalizing
-    unconditionally rebuilds two Series per row and dominates ingestion of a
-    large frame. Comparing a frame with no missing values against an otherwise
-    identical frame that has them keeps this independent of machine speed:
-    when the normalization is unconditional both frames cost the same (ratio
-    ~1.0), and when it is skipped the clean frame is markedly cheaper.
+    unconditionally rebuilds two Series per row, which dominated ingestion of
+    a large frame (0.85s -> 3.73s on 20k x 4 rows).
+
+    Counting `Series.astype` rather than timing the two paths: a wall-clock
+    comparison is the obvious test here, but it reads as a ratio between the
+    clean and missing-value paths, and those converge on a loaded worker or
+    wherever Pydantic validation is a larger share of the runtime -- so it can
+    fail with the optimization perfectly intact. The counter is exact. It
+    wraps the real method and calls through, so behavior is unchanged.
     """
-    rows = 5000
+    calls = []
+    real_astype = pd.Series.astype
+
+    def counting_astype(self, *args, **kwargs):
+        calls.append(args[0] if args else kwargs.get("dtype"))
+        return real_astype(self, *args, **kwargs)
+
+    monkeypatch.setattr(pd.Series, "astype", counting_astype, raising=True)
+
     columns = {
-        "content": [f"text {i}" for i in range(rows)],
-        "num": list(range(rows)),
-        "score": [float(i) for i in range(rows)],
-        "tag": [f"s{i}" for i in range(rows)],
+        "content": [f"text {i}" for i in range(4)],
+        "num": list(range(4)),
+        "score": [float(i) for i in range(4)],
+        "tag": [f"s{i}" for i in range(4)],
     }
+
     clean = pd.DataFrame(columns)
+    docs = dataframe_to_documents(clean, content="content", metadata=[])
+    assert [doc.content for doc in docs] == ["text 0", "text 1", "text 2", "text 3"]
+    assert calls == [], f"normalization ran on rows with nothing missing: {calls}"
+
     with_missing = pd.DataFrame(dict(columns))
     with_missing.loc[with_missing.index % 2 == 0, "tag"] = None
-
-    def elapsed(frame):
-        start = time.perf_counter()
-        dataframe_to_documents(frame, content="content", metadata=[])
-        return time.perf_counter() - start
-
-    # Discard a first run of each so one-time model construction isn't counted.
-    elapsed(clean)
-    elapsed(with_missing)
-    missing_cost = min(elapsed(with_missing) for _ in range(3))
-    clean_cost = min(elapsed(clean) for _ in range(3))
-
-    assert missing_cost > 0
-    assert clean_cost < 0.8 * missing_cost, (
-        f"clean frame cost {clean_cost:.3f}s vs {missing_cost:.3f}s for the "
-        "same frame with missing values; NA normalization is not being skipped"
-    )
+    docs = dataframe_to_documents(with_missing, content="content", metadata=[])
+    assert [doc.tag for doc in docs] == [None, "s1", None, "s3"]
+    # One `astype(object)` per row that actually has a missing value.
+    assert calls.count(object) == 2, calls
