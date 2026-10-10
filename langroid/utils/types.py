@@ -41,7 +41,7 @@ def is_instance_of(obj: Any, type_hint: Type[T] | Any) -> bool:
                     for item, item_type in zip(obj, args)
                 )
             if args:
-                if isinstance(obj, (list, set)):
+                if isinstance(obj, (list, tuple, set)):
                     return all(is_instance_of(item, args[0]) for item in obj)
                 if isinstance(obj, dict):
                     return all(
