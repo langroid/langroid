@@ -67,10 +67,16 @@ def _is_complete_json_object(candidate: str, source: str, loc: int) -> bool:
         if start >= end - line_start:
             break
         if start < end - line_start < stop:
+            # These four are every position a JSON string can open in: an
+            # object key (after `{` or `,`), an object value (after `:`), or an
+            # array element (after `[` or `,`). Enumerating them exhaustively
+            # rather than case by case is deliberate -- each delimiter missed
+            # here is another way for a truncated call to swallow the next one.
+            #
             # Take the prefix from `source`, not `line`: a value may sit on the
-            # line after its `:`, leaving `line[:start]` all whitespace and the
-            # introducing punctuation on the previous line.
-            if source[: line_start + start].rstrip().endswith((":", ",", "[")):
+            # line after its delimiter, leaving `line[:start]` all whitespace
+            # and the punctuation on the previous line.
+            if source[: line_start + start].rstrip().endswith((":", ",", "[", "{")):
                 return False
 
     try:

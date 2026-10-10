@@ -440,6 +440,8 @@ def test_top_level_json_field_never_crashes():
         '{"request":"good","value":"ok","note":"James\'} text"}',
         # ...in a value sitting on the line AFTER its `:`
         '{"request":"good","value":\n"James\'} text"}',
+        # ...in the first KEY of a nested object (after `{`)
+        '{"request":"good","value":{"James\'} text":"ok"}}',
     ],
 )
 def test_malformed_call_never_swallows_a_following_call(following_call: str) -> None:
