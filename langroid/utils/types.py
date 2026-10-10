@@ -1,7 +1,8 @@
 import json
 import logging
 from inspect import signature
-from typing import Any, Optional, Type, TypeVar, Union, get_args, get_origin
+from types import UnionType
+from typing import Any, Optional, Tuple, Type, TypeVar, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -24,14 +25,23 @@ def is_instance_of(obj: Any, type_hint: Type[T] | Any) -> bool:
     origin = get_origin(type_hint)
     args = get_args(type_hint)
 
-    if origin is Union:
+    if origin in (Union, UnionType):
         return any(is_instance_of(obj, arg) for arg in args)
 
     if origin:  # e.g. List, Dict, Tuple, Set
         if isinstance(obj, origin):
             # check if all items in obj are of the required types
+            if origin is tuple:
+                if not args:
+                    return type_hint is Tuple or len(obj) == 0
+                if len(args) == 2 and args[1] is Ellipsis:
+                    return all(is_instance_of(item, args[0]) for item in obj)
+                return len(obj) == len(args) and all(
+                    is_instance_of(item, item_type)
+                    for item, item_type in zip(obj, args)
+                )
             if args:
-                if isinstance(obj, (list, tuple, set)):
+                if isinstance(obj, (list, set)):
                     return all(is_instance_of(item, args[0]) for item in obj)
                 if isinstance(obj, dict):
                     return all(
