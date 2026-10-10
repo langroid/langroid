@@ -131,6 +131,21 @@ _MAX_MULTILINE_INPUT_CHARS = 8 * 1024
 _MAX_MULTILINE_QUOTES = 512
 
 
+def _is_self_contained_object(candidate: str) -> bool:
+    """Whether `candidate` is already a whole object, needing no repair.
+
+    Deliberately broader than `is_valid_json`: extraction accepts
+    single-quoted objects too (via `repair_json`), so a swallow check keyed on
+    strict JSON would leave a single-quoted call unprotected.
+    """
+    if is_valid_json(candidate):
+        return True
+    try:
+        return isinstance(ast.literal_eval(candidate), dict)
+    except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
+        return False
+
+
 def _scan(expr: Any, s: str) -> List[Tuple[str, int, int]]:
     """Matches as (text, start, end), so spans can be compared."""
     try:
@@ -170,15 +185,26 @@ def get_json_candidates(s: str) -> List[str]:
     # `_is_complete_json_object`'s line-local check stays as an early reject,
     # but it cannot see every such way.
     single_line = _scan(_SINGLE_LINE_CURLY_BRACES, s)
-    swallowed = any(
-        start < end_m < end
-        for text, start, end in single_line
-        if is_valid_json(text)
-        for _, _, end_m in matches
-    )
-    if swallowed:
-        return [text for text, _, _ in single_line]
-    return candidates
+    intact = [m for m in single_line if _is_self_contained_object(m[0])]
+
+    # Fall back per candidate, not for the whole response: a legitimate
+    # multiline recovery earlier in the reply must survive a swallow later in
+    # it. For a candidate that cut a call, emit the single-line reading of its
+    # span instead, and skip anything that reading already covered.
+    result: List[str] = []
+    position = 0
+    for text, start, end in matches:
+        if end <= position:
+            continue
+        if any(start_i < end < end_i for _, start_i, end_i in intact):
+            for text_i, start_i, end_i in single_line:
+                if start <= start_i < end and end_i > position:
+                    result.append(text_i)
+                    position = end_i
+        else:
+            result.append(text)
+            position = end
+    return result
 
 
 def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
