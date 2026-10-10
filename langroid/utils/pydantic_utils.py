@@ -429,7 +429,7 @@ def dataframe_to_pydantic_objects(df: pd.DataFrame) -> List[BaseModel]:
 def first_non_null(series: pd.Series) -> Any | None:
     """Find the first non-null item in a pandas Series."""
     for item in series:
-        if item is not None:
+        if not pd.api.types.is_scalar(item) or not pd.isna(item):
             return item
     return None
 
@@ -501,6 +501,9 @@ def dataframe_to_document_model(
         content: str = "content",
         metadata: List[str] = [],
     ) -> BaseModel | None:
+        # Extension dtypes use pd.NA, and numeric columns use NaN. Optional
+        # Pydantic fields accept None rather than pandas' missing sentinels.
+        row = row.astype(object).where(row.notna(), None)
         content_val = row[content] if (content and content in row) else ""
         metadata_values = (
             {col: row[col] for col in metadata if col in row} if metadata else {}
