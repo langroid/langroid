@@ -102,6 +102,7 @@ jobs:
           uv run pytest -q --ct fakeredis \
             tests/main/test_function_call_names.py \
             tests/main/test_model_info.py \
+            tests/main/test_pydantic_utils.py \
             tests/main/test_vertexai_isolation.py \
             tests/main/test_vertexai_routing.py \
             tests/main/test_global_settings.py \
