@@ -71,6 +71,110 @@ class _AsyncEvents(AsyncIterator[dict[str, Any]]):
             raise StopAsyncIteration from None
 
 
+def _content_filter_events(
+    filter_names: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build the Azure OpenAI stream shape from issue #658.
+
+    The first chunk has an empty `choices` list, the second a null `content`,
+    and the third a null `content` with `finish_reason == "content_filter"`.
+    """
+    return [
+        {"choices": []},
+        {"choices": [{"delta": {"content": None}, "finish_reason": None}]},
+        {
+            "choices": [
+                {
+                    "delta": {"content": None},
+                    "finish_reason": "content_filter",
+                    "content_filter_results": filter_names,
+                }
+            ]
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("filter_names", "expected"),
+    [
+        ({"hate": {"filtered": True}}, "Cannot respond due to content filters [hate]"),
+        (
+            {"hate": {"filtered": True}, "jailbreak": {"filtered": True}},
+            "Cannot respond due to content filters [hate, jailbreak]",
+        ),
+        (
+            {"hate": {"filtered": False}, "jailbreak": {"filtered": False}},
+            "Cannot respond due to content filters []",
+        ),
+    ],
+    ids=["one-filter", "two-filters", "none-reported-filtered"],
+)
+def test_sync_content_filter_stream_yields_nonempty_message(
+    filter_names: dict[str, dict[str, Any]],
+    expected: str,
+) -> None:
+    """A content-filtered stream still produces a non-empty message."""
+    model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    response, _ = model._stream_response(
+        _content_filter_events(filter_names),
+        chat=True,
+    )
+
+    assert response.message == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filter_names", "expected"),
+    [
+        ({"hate": {"filtered": True}}, "Cannot respond due to content filters [hate]"),
+        (
+            {"hate": {"filtered": True}, "jailbreak": {"filtered": True}},
+            "Cannot respond due to content filters [hate, jailbreak]",
+        ),
+        (
+            {"hate": {"filtered": False}, "jailbreak": {"filtered": False}},
+            "Cannot respond due to content filters []",
+        ),
+    ],
+    ids=["one-filter", "two-filters", "none-reported-filtered"],
+)
+async def test_async_content_filter_stream_yields_nonempty_message(
+    filter_names: dict[str, dict[str, Any]],
+    expected: str,
+) -> None:
+    """The async twin of the sync test above: same guarantee, same wording.
+
+    Regression test for the async path losing the content-filter handling that
+    the sync path already had (issue #658).
+    """
+    model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    response, _ = await model._stream_response_async(
+        _AsyncEvents(_content_filter_events(filter_names)),
+        chat=True,
+    )
+
+    assert response.message == expected
+
+
+@pytest.mark.asyncio
+async def test_async_content_filter_message_matches_sync_twin() -> None:
+    """Both stream paths must agree on the content-filtered message."""
+    events = _content_filter_events({"hate": {"filtered": True}})
+
+    sync_model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    sync_response, _ = sync_model._stream_response(events, chat=True)
+
+    async_model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    async_response, _ = await async_model._stream_response_async(
+        _AsyncEvents(events),
+        chat=True,
+    )
+
+    assert async_response.message == sync_response.message
+    assert async_response.message is not None
+
+
 @pytest.mark.parametrize(
     "event_factory",
     [_tool_call_events, _function_call_events],
