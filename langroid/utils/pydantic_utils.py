@@ -434,6 +434,23 @@ def first_non_null(series: pd.Series) -> Any | None:
     return None
 
 
+def _dataframe_column_type(series: pd.Series) -> Any:
+    value = first_non_null(series)
+    if value is not None:
+        return numpy_to_python_type(type(value))
+    # A model inferred from an all-missing batch may be reused for later batches.
+    # Keep the declared dtype, and leave untyped object columns unconstrained.
+    if pd.api.types.is_bool_dtype(series.dtype):
+        return bool
+    if pd.api.types.is_integer_dtype(series.dtype):
+        return int
+    if pd.api.types.is_float_dtype(series.dtype):
+        return float
+    if isinstance(series.dtype, pd.StringDtype):
+        return str
+    return Any
+
+
 def dataframe_to_document_model(
     df: pd.DataFrame,
     content: str = "content",
@@ -464,8 +481,8 @@ def dataframe_to_document_model(
         # Define fields for the dynamic subclass of DocMetaData
         metadata_fields = {
             col: (
-                Optional[numpy_to_python_type(type(first_non_null(df[col])))],
-                None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
+                Optional[_dataframe_column_type(df[col])],
+                None,
             )
             for col in metadata
         }
@@ -479,8 +496,8 @@ def dataframe_to_document_model(
     # Define additional top-level fields for DynamicDocument
     additional_fields = {
         col: (
-            Optional[numpy_to_python_type(type(first_non_null(df[col])))],
-            None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
+            Optional[_dataframe_column_type(df[col])],
+            None,
         )
         for col in df.columns
         if col not in metadata and col != content
