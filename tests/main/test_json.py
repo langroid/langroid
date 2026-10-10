@@ -1,8 +1,11 @@
 import json
+import time
 
 import pytest
 
 from langroid.parsing.parse_json import (
+    _MAX_MULTILINE_INPUT_CHARS,
+    _MAX_MULTILINE_QUOTES,
     extract_top_level_json,
     get_json_candidates,
     parse_imperfect_json,
@@ -212,6 +215,72 @@ def test_get_json_candidates_repeated_escaped_quotes(n: int) -> None:
         malformed_call,
         following_call,
     ]
+
+
+def _truncated_reply(target_chars: int) -> str:
+    """A reply cut off mid-string: unterminated quote, no closing brace.
+
+    This is the shape that makes `nested_expr` scan to end of input without
+    closing, which is where the multiline grammar's per-position `ignore_expr`
+    retries become expensive.
+    """
+    unit = "the quick brown fox jumps over the lazy dog. "
+    prefix = '{"request": "write_file", "content": "'
+    return prefix + unit * (max(target_chars - len(prefix), 0) // len(unit) + 1)
+
+
+def test_multiline_recovery_is_bounded_by_input_size() -> None:
+    """The multiline budget is in force, so large input keeps main's behavior.
+
+    A quoted value holding a raw newline and a brace is only recovered while the
+    response stays within `_MAX_MULTILINE_INPUT_CHARS`. Past it, extraction
+    falls back to the original single-line grammar, which splits on the brace
+    inside the value. Pinning both sides keeps the bound from being quietly
+    raised back to a size where extraction stalls (see the timing test below).
+    """
+    value = "first line\n{\nlast line"
+    call = f'{{"request": "test_tool", "value": "{value}"}}'
+
+    assert get_json_candidates(call) == [call]
+
+    padding = "x" * (_MAX_MULTILINE_INPUT_CHARS + 1 - len(call))
+    oversize = call + "\n" + padding
+    assert get_json_candidates(oversize) != [call]
+
+
+def test_multiline_scan_not_meaningfully_slower_than_single_line() -> None:
+    """A large truncated reply must not cost much more than the fallback path.
+
+    Both inputs below are the same size and shape; only the quote count
+    differs, so one is eligible for the speculative multiline scan and the
+    other exceeds `_MAX_MULTILINE_QUOTES` and takes the original single-line
+    path. Comparing the two in the same process makes this independent of
+    machine speed. Before the input-size bound was tightened, the eligible
+    input ran ~2.5x the fallback (1.9s -> 4.9s on a 63 KB reply); with the
+    bound in force both take the same path and the ratio sits near 1.
+    """
+    eligible = _truncated_reply(48 * 1024)
+    # Same length, but quote-dense enough to exceed the quote budget.
+    dense = eligible[: -2 * _MAX_MULTILINE_QUOTES] + '\\"' * _MAX_MULTILINE_QUOTES
+    assert len(dense) == len(eligible)
+    assert dense.count('"') + dense.count("'") > _MAX_MULTILINE_QUOTES
+
+    def elapsed(s: str) -> float:
+        start = time.perf_counter()
+        get_json_candidates(s)
+        return time.perf_counter() - start
+
+    # Discard a first run of each so import-time lazy setup isn't attributed.
+    elapsed(eligible)
+    elapsed(dense)
+    fallback = min(elapsed(dense) for _ in range(3))
+    speculative = min(elapsed(eligible) for _ in range(3))
+
+    assert fallback > 0
+    assert speculative < 2.0 * fallback, (
+        f"speculative multiline scan took {speculative:.3f}s vs "
+        f"{fallback:.3f}s for the single-line fallback on the same input size"
+    )
 
 
 @pytest.mark.parametrize(

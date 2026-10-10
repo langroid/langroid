@@ -97,7 +97,18 @@ _SINGLE_LINE_CURLY_BRACES = original_text_for(nested_expr("{", "}"))
 _CURLY_BRACES = _MULTILINE_CURLY_BRACES | _SINGLE_LINE_CURLY_BRACES
 # Bound speculative multiline scans on malformed, large or quote-dense output.
 # Outside this budget, retain the original single-line extraction behavior.
-_MAX_MULTILINE_INPUT_CHARS = 64 * 1024
+#
+# The multiline grammar's `ignore_expr` is retried at every character position,
+# so on input where `nested_expr` scans a long span without closing (a reply
+# truncated mid-string, say) it costs a ~2.6x constant factor over the
+# single-line grammar. That factor is unavoidable within this approach, so the
+# length bound is what keeps the absolute cost small: 8 KiB caps the extra work
+# at a few hundred ms, where 64 KiB allowed ~3s on a 63 KB truncated reply.
+# Well-formed input of any size is unaffected — it closes immediately and never
+# enters the slow scan. Multiline recovery is therefore best-effort, and applies
+# to tool calls up to 8 KiB; larger ones keep the original (truncating)
+# behavior rather than stalling extraction.
+_MAX_MULTILINE_INPUT_CHARS = 8 * 1024
 _MAX_MULTILINE_QUOTES = 512
 
 
