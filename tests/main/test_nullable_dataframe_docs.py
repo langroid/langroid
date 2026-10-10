@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 import pytest
 
@@ -80,3 +82,42 @@ def test_model_from_all_missing_columns_accepts_values_from_later_batches(dtype,
     )
     assert later_docs[0].metadata.tag == value
     assert later_docs[0].score == value
+
+
+def test_missing_value_normalization_skipped_when_nothing_is_missing():
+    """Rows with no missing value must not pay for the NA normalization.
+
+    `dataframe_to_documents` calls `from_df_row` once per row, so normalizing
+    unconditionally rebuilds two Series per row and dominates ingestion of a
+    large frame. Comparing a frame with no missing values against an otherwise
+    identical frame that has them keeps this independent of machine speed:
+    when the normalization is unconditional both frames cost the same (ratio
+    ~1.0), and when it is skipped the clean frame is markedly cheaper.
+    """
+    rows = 5000
+    columns = {
+        "content": [f"text {i}" for i in range(rows)],
+        "num": list(range(rows)),
+        "score": [float(i) for i in range(rows)],
+        "tag": [f"s{i}" for i in range(rows)],
+    }
+    clean = pd.DataFrame(columns)
+    with_missing = pd.DataFrame(dict(columns))
+    with_missing.loc[with_missing.index % 2 == 0, "tag"] = None
+
+    def elapsed(frame):
+        start = time.perf_counter()
+        dataframe_to_documents(frame, content="content", metadata=[])
+        return time.perf_counter() - start
+
+    # Discard a first run of each so one-time model construction isn't counted.
+    elapsed(clean)
+    elapsed(with_missing)
+    missing_cost = min(elapsed(with_missing) for _ in range(3))
+    clean_cost = min(elapsed(clean) for _ in range(3))
+
+    assert missing_cost > 0
+    assert clean_cost < 0.8 * missing_cost, (
+        f"clean frame cost {clean_cost:.3f}s vs {missing_cost:.3f}s for the "
+        "same frame with missing values; NA normalization is not being skipped"
+    )
