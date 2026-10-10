@@ -3,7 +3,10 @@ import json
 import pytest
 
 from langroid.parsing.parse_json import (
+    _MAX_MULTILINE_INPUT_CHARS,
+    _MAX_MULTILINE_QUOTES,
     extract_top_level_json,
+    get_json_candidates,
     parse_imperfect_json,
     top_level_json_field,
 )
@@ -78,6 +81,186 @@ def test_extract_top_level_json(s, expected):
     expected = [json.loads(s.replace("'", '"')) for s in expected]
     assert len(top_level_jsons) == len(expected)
     assert top_level_jsons == expected
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("braces", ["{", "}", "{}"])
+def test_extract_top_level_json_preserves_multiline_string_braces(
+    quote: str, braces: str
+) -> None:
+    value = f"first line\n{braces}\nlast line"
+    tool_call = (
+        f"{{{quote}request{quote}: {quote}test_tool{quote}, "
+        f"{quote}value{quote}: {quote}{value}{quote}}}"
+    )
+    following_call = '{"request": "next_tool", "value": "complete"}'
+    response = f"Tool calls:\n{tool_call}\n{following_call}\nPlease execute."
+
+    extracted = extract_top_level_json(response)
+
+    assert [json.loads(candidate) for candidate in extracted] == [
+        {"request": "test_tool", "value": value},
+        {"request": "next_tool", "value": "complete"},
+    ]
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("separator", ["\n", " "])
+def test_extract_top_level_json_keeps_unterminated_call_separate(
+    quote: str, separator: str
+) -> None:
+    malformed_call = (
+        f"{{{quote}request{quote}:{quote}bad{quote},"
+        f"{quote}value{quote}:{quote}oops\n}}"
+    )
+    following_call = (
+        f"{{{quote}request{quote}:{quote}good{quote},"
+        f"{quote}value{quote}:{quote}ok{quote}}}"
+    )
+    response = malformed_call + separator + following_call
+
+    assert get_json_candidates(response) == [malformed_call, following_call]
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "bad", "value": "oops"},
+        {"request": "good", "value": "ok"},
+    ]
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_extract_top_level_json_preserves_multiline_array_string(quote: str) -> None:
+    value = f"first line\n{quote}quoted{quote} {{nested}}\\path\nlast line"
+    escaped_value = value.replace("\\", "\\\\").replace(quote, "\\" + quote)
+    tool_call = (
+        f"{{{quote}request{quote}:{quote}test_tool{quote},"
+        f"{quote}values{quote}:[{quote}{escaped_value}{quote}],"
+        f"{quote}flag{quote}:true}}"
+    )
+    following_call = '{"request":"next_tool","value":"complete"}'
+    response = tool_call + "\n" + following_call
+
+    assert get_json_candidates(response) == [tool_call, following_call]
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "test_tool", "values": [value], "flag": True},
+        {"request": "next_tool", "value": "complete"},
+    ]
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("separator", ["\n", " "])
+@pytest.mark.parametrize("suffix", [", John", ": note", "} text", "] text"])
+def test_extract_top_level_json_keeps_mixed_quote_calls_separate(
+    quote: str, separator: str, suffix: str
+) -> None:
+    other_quote = "'" if quote == '"' else '"'
+    malformed_call = (
+        f"{{{quote}request{quote}:{quote}bad{quote},"
+        f"{quote}value{quote}:{quote}oops\n}}"
+    )
+    value = f"James{quote}{suffix}"
+    following_call = (
+        f"{{{other_quote}request{other_quote}:{other_quote}good{other_quote},"
+        f"{other_quote}value{other_quote}:{other_quote}{value}{other_quote}}}"
+    )
+    response = malformed_call + separator + following_call
+
+    assert get_json_candidates(response) == [malformed_call, following_call]
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "bad", "value": "oops"},
+        {"request": "good", "value": value},
+    ]
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_extract_top_level_json_preserves_multiline_opposite_quotes(
+    quote: str,
+) -> None:
+    other_quote = "'" if quote == '"' else '"'
+    value = (
+        f"first line\nJames{other_quote}, John\n}}\n"
+        f"{{{other_quote}request{other_quote}:"
+        f"{other_quote}literal{other_quote}}}\nlast line"
+    )
+    tool_call = (
+        f"{{{quote}request{quote}:{quote}test_tool{quote},"
+        f"{quote}value{quote}:{quote}{value}{quote}}}"
+    )
+    following_call = '{"request":"next_tool","value":"complete"}'
+
+    assert get_json_candidates(tool_call + "\n" + following_call) == [
+        tool_call,
+        following_call,
+    ]
+    assert [
+        json.loads(candidate)
+        for candidate in extract_top_level_json(tool_call + "\n" + following_call)
+    ] == [
+        {"request": "test_tool", "value": value},
+        {"request": "next_tool", "value": "complete"},
+    ]
+
+
+@pytest.mark.parametrize("n", [2000, 4000, 8000, 16000])
+def test_get_json_candidates_repeated_escaped_quotes(n: int) -> None:
+    malformed_call = "{" + ('\\"' + "\n") * n + "}"
+    following_call = '{"request":"good","value":"complete"}'
+
+    assert get_json_candidates(malformed_call + "\n" + following_call) == [
+        malformed_call,
+        following_call,
+    ]
+
+
+def _multiline_call(total_chars: int) -> str:
+    """One tool call whose value holds a raw newline and a bare brace.
+
+    This is the shape #1203 recovers: the brace inside the value makes the
+    single-line grammar treat it as structure and truncate the call. Padding
+    goes inside the value, so the whole response is one candidate of the
+    requested length and the quote count stays well under the quote budget.
+    """
+    prefix = '{"request": "write_file", "content": "first line\n{\n'
+    suffix = '"}'
+    pad = max(total_chars - len(prefix) - len(suffix), 0)
+    return prefix + "x" * pad + suffix
+
+
+# The speculative multiline scan costs a ~2.6x constant factor over the
+# single-line grammar on input where `nested_expr` scans a long span without
+# closing, so the absolute cost is held down by the input-size bound alone.
+# These sizes are deliberately LITERAL rather than derived from
+# `_MAX_MULTILINE_INPUT_CHARS`: a case that sizes itself from the constant
+# moves with it and would stay green if the bound were raised back into the
+# range where a truncated reply takes seconds (8 KiB -> 32 KiB took a 30 KB
+# reply from 0.79s to 2.02s).
+@pytest.mark.parametrize(
+    "total_chars, recovered",
+    [(8000, True), (9000, False)],
+)
+def test_multiline_recovery_is_bounded_by_input_size(
+    total_chars: int, recovered: bool
+) -> None:
+    call = _multiline_call(total_chars)
+    assert call.count('"') + call.count("'") <= _MAX_MULTILINE_QUOTES
+
+    assert (get_json_candidates(call) == [call]) is recovered
+
+
+def test_multiline_bounds_match_the_sizes_pinned_above() -> None:
+    """Guards the literal sizes in the parametrization above.
+
+    Those sizes only straddle the real boundary while the bound sits at
+    8 KiB. If it is changed deliberately, this fails and points at the cases
+    that need re-picking, rather than letting them silently stop testing the
+    boundary.
+    """
+    assert _MAX_MULTILINE_INPUT_CHARS == 8 * 1024
+    assert _MAX_MULTILINE_QUOTES == 512
 
 
 @pytest.mark.parametrize(
@@ -244,3 +427,61 @@ def test_top_level_json_field_never_crashes():
         # Should never crash, just return empty string or found value
         result = top_level_json_field(malformed, "recipient")
         assert isinstance(result, (str, int, float, bool, type(None)))
+
+
+@pytest.mark.parametrize(
+    "following_call",
+    [
+        # the swallowed brace sits in an array element (after `[`)
+        '{"request":"good","values":["James\'} text"]}',
+        # ...in a later array element (after `,`)
+        '{"request":"good","values":["ok","James\'} text"]}',
+        # ...in a later object value (after `,` rather than `:`)
+        '{"request":"good","value":"ok","note":"James\'} text"}',
+        # ...in a value sitting on the line AFTER its `:`
+        '{"request":"good","value":\n"James\'} text"}',
+        # ...in the first KEY of a nested object (after `{`)
+        '{"request":"good","value":{"James\'} text":"ok"}}',
+    ],
+)
+def test_malformed_call_never_swallows_a_following_call(following_call: str) -> None:
+    """A truncated call must not consume the next valid call's argument.
+
+    Running a tool with another call's argument is worse than dropping the
+    truncated one: dropping fails closed, so the agent hits
+    `handle_llm_no_tool` and retries. The boundary guard therefore has to
+    cover every context a quoted value can appear in, not just object values
+    introduced by `:`.
+    """
+    malformed_call = "{'request':'bad','value':'oops\n}"
+    response = malformed_call + "\n" + following_call
+
+    assert get_json_candidates(response) == [malformed_call, following_call]
+    extracted = [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ]
+    assert extracted == [
+        {"request": "bad", "value": "oops"},
+        json.loads(following_call),
+    ]
+
+
+@pytest.mark.parametrize("separator", [' " ', " '  ", ' text " ', ' "" " '])
+def test_stray_quote_between_calls_does_not_swallow(separator: str) -> None:
+    """A stray quote between two calls must not cost the second one.
+
+    The line-local boundary check reasons about quote positions by scanning
+    the candidate's last line, so an unbalanced quote ahead of the following
+    call shifts every boundary it computes and the check stops firing. The
+    span comparison in `get_json_candidates` is what covers this: it asks
+    whether the accepted candidate ends part-way through a call that is valid
+    on its own, which does not depend on quote alignment at all.
+    """
+    malformed_call = "{'request':'bad','value':'oops\n}"
+    following_call = '{"request":"good","value":"James\'} text"}'
+    response = malformed_call + separator + following_call
+
+    extracted = [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ]
+    assert {"request": "good", "value": "James'} text"} in extracted

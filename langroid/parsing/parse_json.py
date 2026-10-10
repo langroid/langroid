@@ -1,11 +1,18 @@
 import ast
 import json
 from datetime import datetime
-from typing import Any, Dict, Iterator, List, Union
+from typing import Any, Dict, Iterator, List, Tuple, Union
 
 import yaml
 from json_repair import repair_json
-from pyparsing import nested_expr, original_text_for
+from pyparsing import (
+    FollowedBy,
+    QuotedString,
+    nested_expr,
+    one_of,
+    original_text_for,
+    quoted_string,
+)
 
 
 def is_valid_json(json_str: str) -> bool:
@@ -34,18 +41,170 @@ def flatten(nested_list) -> Iterator[str]:  # type: ignore
             yield item
 
 
-def get_json_candidates(s: str) -> List[str]:
-    """Get top-level JSON candidates, i.e. strings between curly braces."""
-    # Define the grammar for matching curly braces
-    curly_braces = original_text_for(nested_expr("{", "}"))
-
-    # Parse the string
+def _is_complete_json_object(candidate: str, source: str, loc: int) -> bool:
+    """Validate multiline boundaries without repairing or changing the candidate."""
     try:
-        results = curly_braces.search_string(s)
+        return isinstance(json.loads(candidate), dict)
+    except ValueError:
+        pass
+
+    # A brace inside a following single-line value must not end this object,
+    # even if the swallowed prefix happens to be valid after normalization.
+    #
+    # The quoted string the brace falls inside may be an object value (after
+    # `:`), an array element (after `[`) or any later item in either (after
+    # `,`). Checking only `:` let an array element swallow the whole following
+    # call: for `{'request':'bad','value':'oops\n}` followed by
+    # `{"request":"good","values":["James'} text"]}`, the candidate ended at
+    # `James'}` and the valid `good` call disappeared. Over-rejecting here only
+    # costs multiline recovery -- the candidate falls back to the single-line
+    # grammar -- whereas under-rejecting runs one call with another's argument.
+    end = loc + len(candidate) - 1
+    line_start = max(loc, source.rfind("\n", 0, end) + 1)
+    line_end = source.find("\n", end)
+    line = source[line_start : line_end if line_end >= 0 else len(source)]
+    for _, start, stop in quoted_string.scan_string(line):
+        if start >= end - line_start:
+            break
+        if start < end - line_start < stop:
+            # These four are every position a JSON string can open in: an
+            # object key (after `{` or `,`), an object value (after `:`), or an
+            # array element (after `[` or `,`). Enumerating them exhaustively
+            # rather than case by case is deliberate -- each delimiter missed
+            # here is another way for a truncated call to swallow the next one.
+            #
+            # Take the prefix from `source`, not `line`: a value may sit on the
+            # line after its delimiter, leaving `line[:start]` all whitespace
+            # and the punctuation on the previous line.
+            if source[: line_start + start].rstrip().endswith((":", ",", "[", "{")):
+                return False
+
+    try:
+        return isinstance(json.loads(candidate, strict=False), dict)
+    except ValueError:
+        pass
+
+    # Normalize quoted tokens only for validation, accepting single quotes and
+    # raw newlines. The original text is still returned for the existing repair.
+    normalized = _NORMALIZED_QUOTED_STRINGS.transform_string(candidate)
+    try:
+        return isinstance(json.loads(normalized), dict)
+    except ValueError:
+        pass
+    try:
+        return isinstance(ast.literal_eval(normalized), dict)
+    except (ValueError, SyntaxError):
+        return False
+
+
+_QUOTED_STRINGS = QuotedString(
+    '"', esc_char="\\", multiline=True, unquote_results=False
+) | QuotedString("'", esc_char="\\", multiline=True, unquote_results=False)
+_NORMALIZED_QUOTED_STRINGS = _QUOTED_STRINGS.copy().set_parse_action(
+    lambda tokens: json.dumps(tokens[0][1:-1])
+)
+_MULTILINE_CURLY_BRACES = original_text_for(
+    nested_expr(
+        "{",
+        "}",
+        ignore_expr=(_QUOTED_STRINGS + FollowedBy(one_of(": , } ]"))) | quoted_string,
+    )
+).add_condition(
+    lambda source, loc, tokens: _is_complete_json_object(tokens[0], source, loc)
+)
+_SINGLE_LINE_CURLY_BRACES = original_text_for(nested_expr("{", "}"))
+_CURLY_BRACES = _MULTILINE_CURLY_BRACES | _SINGLE_LINE_CURLY_BRACES
+# Bound speculative multiline scans on malformed, large or quote-dense output.
+# Outside this budget, retain the original single-line extraction behavior.
+#
+# The multiline grammar's `ignore_expr` is retried at every character position,
+# so on input where `nested_expr` scans a long span without closing (a reply
+# truncated mid-string, say) it costs a ~2.6x constant factor over the
+# single-line grammar. That factor is unavoidable within this approach, so the
+# length bound is what keeps the absolute cost small: 8 KiB caps the extra work
+# at a few hundred ms, where 64 KiB allowed ~3s on a 63 KB truncated reply.
+# Well-formed input of any size is unaffected — it closes immediately and never
+# enters the slow scan. Multiline recovery is therefore best-effort, and applies
+# to tool calls up to 8 KiB; larger ones keep the original (truncating)
+# behavior rather than stalling extraction.
+_MAX_MULTILINE_INPUT_CHARS = 8 * 1024
+_MAX_MULTILINE_QUOTES = 512
+
+
+def _is_self_contained_object(candidate: str) -> bool:
+    """Whether `candidate` is already a whole object, needing no repair.
+
+    Deliberately broader than `is_valid_json`: extraction accepts
+    single-quoted objects too (via `repair_json`), so a swallow check keyed on
+    strict JSON would leave a single-quoted call unprotected.
+    """
+    if is_valid_json(candidate):
+        return True
+    try:
+        return isinstance(ast.literal_eval(candidate), dict)
+    except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
+        return False
+
+
+def _scan(expr: Any, s: str) -> List[Tuple[str, int, int]]:
+    """Matches as (text, start, end), so spans can be compared."""
+    try:
         # Properly convert nested lists to strings
-        return [r[0] for r in results]
+        return [(tokens[0], start, end) for tokens, start, end in expr.scan_string(s)]
     except Exception:
         return []
+
+
+def get_json_candidates(s: str) -> List[str]:
+    """Get top-level JSON candidates, i.e. strings between curly braces."""
+    if (
+        len(s) > _MAX_MULTILINE_INPUT_CHARS
+        or s.count('"') + s.count("'") > _MAX_MULTILINE_QUOTES
+    ):
+        return [text for text, _, _ in _scan(_SINGLE_LINE_CURLY_BRACES, s)]
+
+    matches = _scan(_CURLY_BRACES, s)
+    candidates = [text for text, _, _ in matches]
+    if all(is_valid_json(text) for text in candidates):
+        # Nothing was recovered speculatively, so there is nothing to second-
+        # guess, and the common case pays for no extra scan.
+        return candidates
+
+    # A speculative multiline candidate covers text the single-line grammar
+    # would have split. That is the point when a quoted value holds a raw
+    # newline -- but it is wrong when the candidate ENDS part-way through a
+    # call that is valid on its own, because then a tool runs with another
+    # call's argument. Dropping a truncated call instead fails closed: the
+    # agent hits `handle_llm_no_tool` and retries.
+    #
+    # Straddling is the test, not mere overlap: a valid object wholly INSIDE
+    # a multiline candidate is a legitimate recovery (a tool argument whose
+    # string value contains JSON), whereas one the candidate's end cuts
+    # through has been swallowed. Comparing spans this way is an invariant
+    # over the result, so it holds however quote alignment was lost --
+    # `_is_complete_json_object`'s line-local check stays as an early reject,
+    # but it cannot see every such way.
+    single_line = _scan(_SINGLE_LINE_CURLY_BRACES, s)
+    intact = [m for m in single_line if _is_self_contained_object(m[0])]
+
+    # Fall back per candidate, not for the whole response: a legitimate
+    # multiline recovery earlier in the reply must survive a swallow later in
+    # it. For a candidate that cut a call, emit the single-line reading of its
+    # span instead, and skip anything that reading already covered.
+    result: List[str] = []
+    position = 0
+    for text, start, end in matches:
+        if end <= position:
+            continue
+        if any(start_i < end < end_i for _, start_i, end_i in intact):
+            for text_i, start_i, end_i in single_line:
+                if start <= start_i < end and end_i > position:
+                    result.append(text_i)
+                    position = end_i
+        else:
+            result.append(text)
+            position = end
+    return result
 
 
 def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
