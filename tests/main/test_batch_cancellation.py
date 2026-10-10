@@ -13,6 +13,77 @@ from langroid.agent.batch import (
 from langroid.agent.chat_document import ChatDocument
 
 
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize(
+    "policy",
+    [ExceptionHandling.RETURN_NONE, ExceptionHandling.RETURN_EXCEPTION],
+)
+def test_sequential_batch_propagates_process_exit(
+    error: type[BaseException], policy: ExceptionHandling
+) -> None:
+    started: list[int] = []
+
+    async def work(value: str | ChatDocument, index: int) -> str:
+        started.append(index)
+        raise error("stop batch")
+
+    with pytest.raises(error, match="stop batch"):
+        run_batched_tasks(
+            inputs=["a", "b"],
+            do_task=work,
+            batch_size=None,
+            stop_on_first_result=False,
+            sequential=True,
+            handle_exceptions=policy,
+            output_map=lambda value: value,
+            message_template="Testing process exit",
+        )
+
+    assert started == [0]
+
+
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize(
+    "policy",
+    [ExceptionHandling.RETURN_NONE, ExceptionHandling.RETURN_EXCEPTION],
+)
+@pytest.mark.parametrize("mode", ["sequential", "parallel", "first_result"])
+def test_batch_propagates_process_exit_from_output_map(
+    error: type[BaseException], policy: ExceptionHandling, mode: str
+) -> None:
+    mapped: list[str] = []
+    cleaned: list[int] = []
+    release = asyncio.Event()
+
+    async def work(value: str | ChatDocument, index: int) -> str:
+        try:
+            if mode == "first_result" and index == 1:
+                await release.wait()
+            return str(value)
+        finally:
+            cleaned.append(index)
+
+    def output_map(value: str) -> str:
+        mapped.append(value)
+        release.set()
+        raise error("stop mapping")
+
+    with pytest.raises(error, match="stop mapping"):
+        run_batched_tasks(
+            inputs=["a", "b"],
+            do_task=work,
+            batch_size=None,
+            stop_on_first_result=mode == "first_result",
+            sequential=mode == "sequential",
+            handle_exceptions=policy,
+            output_map=output_map,
+            message_template="Testing process exit",
+        )
+
+    assert mapped == ["a"]
+    assert sorted(cleaned) == ([0] if mode == "sequential" else [0, 1])
+
+
 def _require_cancellation_detection(policy: ExceptionHandling) -> None:
     """Skip where a policy-handled CancelledError cannot be told from a
     cancellation of the batch: that needs `Task.cancelling()` (Python 3.11+).

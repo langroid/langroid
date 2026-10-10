@@ -111,11 +111,14 @@ async def _process_batch_async(
     def handle_error(e: BaseException) -> Any:
         """Handle failures based on exception_handling.
 
+        KeyboardInterrupt and SystemExit always propagate.
         A `CancelledError` caused by cancellation of the batch itself always
         propagates, regardless of policy. A `CancelledError` raised from
         inside a task (with the batch not cancelled) is an ordinary task
         failure and follows the policy.
         """
+        if isinstance(e, (KeyboardInterrupt, SystemExit)):
+            raise e
         if isinstance(e, asyncio.CancelledError) and _batch_cancelled():
             raise e
         match exception_handling:
