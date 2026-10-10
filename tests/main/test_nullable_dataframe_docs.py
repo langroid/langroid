@@ -1,7 +1,12 @@
+import numpy as np
 import pandas as pd
 import pytest
 
-from langroid.utils.pydantic_utils import dataframe_to_documents, first_non_null
+from langroid.utils.pydantic_utils import (
+    dataframe_to_document_model,
+    dataframe_to_documents,
+    first_non_null,
+)
 
 
 @pytest.mark.parametrize(
@@ -151,3 +156,42 @@ def test_large_integers_are_not_degraded_by_normalization(dtype, value):
 
     assert documents[0].big == value
     assert isinstance(documents[0].big, int)
+
+
+@pytest.mark.parametrize(
+    "sentinel",
+    [pd.NA, pd.NaT, float("nan"), np.float32("nan"), np.float64("nan")],
+)
+def test_from_df_row_normalizes_every_pandas_sentinel(sentinel):
+    """Direct `from_df_row` callers must get None for any missing sentinel.
+
+    `langroid/vector_store/lancedb.py` converts every query result through
+    this classmethod, so it cannot rely on `dataframe_to_documents` having
+    normalized the frame first. An earlier scan here tested only `pd.NA` and
+    Python floats, which let `NaT` and `numpy.float32` NaN through as-is.
+    """
+    model = dataframe_to_document_model(
+        pd.DataFrame({"content": ["a"], "x": [None]}),
+        content="content",
+        metadata=[],
+    )
+    row = pd.Series({"content": "a", "x": sentinel})
+
+    document = model.from_df_row(row, "content", [])
+
+    assert document.x is None
+
+
+def test_from_df_row_leaves_container_cells_alone():
+    """The sentinel scan must not compare container cells elementwise."""
+    model = dataframe_to_document_model(
+        pd.DataFrame({"content": ["a"], "x": [[1, 2]]}),
+        content="content",
+        metadata=[],
+    )
+
+    document = model.from_df_row(
+        pd.Series({"content": "a", "x": [1, 2]}), "content", []
+    )
+
+    assert document.x == [1, 2]

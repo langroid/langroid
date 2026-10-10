@@ -518,24 +518,18 @@ def dataframe_to_document_model(
         content: str = "content",
         metadata: List[str] = [],
     ) -> BaseModel | None:
-        # Extension dtypes use pd.NA, and numeric columns use NaN. Optional
-        # Pydantic fields accept None rather than pandas' missing sentinels.
+        # Extension dtypes use pd.NA, numeric columns use NaN and datetimes
+        # use NaT. Optional Pydantic fields accept None rather than any of
+        # pandas' missing sentinels.
         #
         # `dataframe_to_documents` calls this once per row, so rewriting
         # unconditionally built two throwaway Series per row (~4x slower over
         # a 20k-row frame). Detect first, with a plain scan rather than
-        # `row.notna()`, which allocates a Series of its own. `is`-comparisons
-        # and the `float` guard keep this safe for container-valued cells: a
-        # list or ndarray is neither sentinel and is not a float, so it is
-        # left alone rather than compared elementwise.
-        if any(
-            value is None
-            or value is pd.NA
-            or (isinstance(value, float) and value != value)
-            for value in row.array
-        ):
-            not_na = row.notna()
-            row = row.astype(object).where(not_na, None)
+        # `row.notna()`, which allocates a Series of its own. Note `None` is
+        # the form being converted TO, so it does not count: a row already
+        # normalized needs no second pass.
+        if any(_is_missing_scalar(value) for value in row.array):
+            row = row.astype(object).where(row.notna(), None)
         content_val = row[content] if (content and content in row) else ""
         metadata_values = (
             {col: row[col] for col in metadata if col in row} if metadata else {}
@@ -550,6 +544,26 @@ def dataframe_to_document_model(
     DynamicDocument.from_df_row = classmethod(from_df_row)  # type: ignore
 
     return DynamicDocument  # type: ignore
+
+
+def _is_missing_scalar(value: Any) -> bool:
+    """Whether `value` is one of pandas' missing sentinels.
+
+    `pd.isna` is the only check that covers all of them -- `pd.NA`, `NaN` of
+    any width, `NaT` -- but on a container it answers elementwise, so the
+    result is narrowed to a true scalar boolean before being believed. A list
+    or ndarray cell therefore reads as not-missing and is left alone.
+
+    `None` is excluded on purpose: it is the form missing values are converted
+    TO, so a row already normalized is not normalized again.
+    """
+    if value is None:
+        return False
+    try:
+        missing = pd.isna(value)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(missing, (bool, np.bool_)) and bool(missing)
 
 
 def dataframe_to_documents(
