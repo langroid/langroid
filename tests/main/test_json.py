@@ -464,3 +464,24 @@ def test_malformed_call_never_swallows_a_following_call(following_call: str) -> 
         {"request": "bad", "value": "oops"},
         json.loads(following_call),
     ]
+
+
+@pytest.mark.parametrize("separator", [' " ', " '  ", ' text " ', ' "" " '])
+def test_stray_quote_between_calls_does_not_swallow(separator: str) -> None:
+    """A stray quote between two calls must not cost the second one.
+
+    The line-local boundary check reasons about quote positions by scanning
+    the candidate's last line, so an unbalanced quote ahead of the following
+    call shifts every boundary it computes and the check stops firing. The
+    span comparison in `get_json_candidates` is what covers this: it asks
+    whether the accepted candidate ends part-way through a call that is valid
+    on its own, which does not depend on quote alignment at all.
+    """
+    malformed_call = "{'request':'bad','value':'oops\n}"
+    following_call = '{"request":"good","value":"James\'} text"}'
+    response = malformed_call + separator + following_call
+
+    extracted = [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ]
+    assert {"request": "good", "value": "James'} text"} in extracted

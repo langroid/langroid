@@ -1,7 +1,7 @@
 import ast
 import json
 from datetime import datetime
-from typing import Any, Dict, Iterator, List, Union
+from typing import Any, Dict, Iterator, List, Tuple, Union
 
 import yaml
 from json_repair import repair_json
@@ -131,22 +131,54 @@ _MAX_MULTILINE_INPUT_CHARS = 8 * 1024
 _MAX_MULTILINE_QUOTES = 512
 
 
-def get_json_candidates(s: str) -> List[str]:
-    """Get top-level JSON candidates, i.e. strings between curly braces."""
-    curly_braces = (
-        _CURLY_BRACES
-        if len(s) <= _MAX_MULTILINE_INPUT_CHARS
-        and s.count('"') + s.count("'") <= _MAX_MULTILINE_QUOTES
-        else _SINGLE_LINE_CURLY_BRACES
-    )
-
-    # Parse the string
+def _scan(expr: Any, s: str) -> List[Tuple[str, int, int]]:
+    """Matches as (text, start, end), so spans can be compared."""
     try:
-        results = curly_braces.search_string(s)
         # Properly convert nested lists to strings
-        return [r[0] for r in results]
+        return [(tokens[0], start, end) for tokens, start, end in expr.scan_string(s)]
     except Exception:
         return []
+
+
+def get_json_candidates(s: str) -> List[str]:
+    """Get top-level JSON candidates, i.e. strings between curly braces."""
+    if (
+        len(s) > _MAX_MULTILINE_INPUT_CHARS
+        or s.count('"') + s.count("'") > _MAX_MULTILINE_QUOTES
+    ):
+        return [text for text, _, _ in _scan(_SINGLE_LINE_CURLY_BRACES, s)]
+
+    matches = _scan(_CURLY_BRACES, s)
+    candidates = [text for text, _, _ in matches]
+    if all(is_valid_json(text) for text in candidates):
+        # Nothing was recovered speculatively, so there is nothing to second-
+        # guess, and the common case pays for no extra scan.
+        return candidates
+
+    # A speculative multiline candidate covers text the single-line grammar
+    # would have split. That is the point when a quoted value holds a raw
+    # newline -- but it is wrong when the candidate ENDS part-way through a
+    # call that is valid on its own, because then a tool runs with another
+    # call's argument. Dropping a truncated call instead fails closed: the
+    # agent hits `handle_llm_no_tool` and retries.
+    #
+    # Straddling is the test, not mere overlap: a valid object wholly INSIDE
+    # a multiline candidate is a legitimate recovery (a tool argument whose
+    # string value contains JSON), whereas one the candidate's end cuts
+    # through has been swallowed. Comparing spans this way is an invariant
+    # over the result, so it holds however quote alignment was lost --
+    # `_is_complete_json_object`'s line-local check stays as an early reject,
+    # but it cannot see every such way.
+    single_line = _scan(_SINGLE_LINE_CURLY_BRACES, s)
+    swallowed = any(
+        start < end_m < end
+        for text, start, end in single_line
+        if is_valid_json(text)
+        for _, _, end_m in matches
+    )
+    if swallowed:
+        return [text for text, _, _ in single_line]
+    return candidates
 
 
 def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
