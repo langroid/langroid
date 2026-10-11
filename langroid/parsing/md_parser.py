@@ -373,8 +373,11 @@ def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]:
     # Only generate a chunk for the node if it has non-header content,
     # or if it’s header-only AND has no children (i.e., it's a leaf header).
     if node.content.strip() and (not is_header_only or not node.children):
+        # For a header-only leaf, the content IS the last path element, so the
+        # header context must exclude it to avoid repeating the heading.
+        prefix_path = node.path[:-1] if is_header_only else node.path
         header_prefix = (
-            config.header_context_sep.join(node.path) + "\n\n" if node.path else ""
+            config.header_context_sep.join(prefix_path) + "\n\n" if prefix_path else ""
         )
         content_chunks = recursive_chunk(node.content, config)
         for chunk_text in content_chunks:
@@ -521,6 +524,17 @@ def rollup_chunk_node(
                         token_count=count_words(block_with_prefix),
                     )
                 )
+        elif node_content:
+            # Heading-only leaf whose prefix + heading exceeds the chunk size:
+            # emit it as one (oversized) chunk rather than dropping it.
+            heading_with_prefix = prefix + node_content
+            chunks.append(
+                Chunk(
+                    text=heading_with_prefix,
+                    path=node.path,
+                    token_count=count_words(heading_with_prefix),
+                )
+            )
 
         # Now recurse on children, passing the same prefix so they get it too
         for child in node.children:
