@@ -205,8 +205,10 @@ def get_context(
     Args:
     query (str): The string to search for.
     text (str): The body of text in which to search.
-    b (int): The number of words before the query to return.
-    a (int): The number of words after the query to return.
+    words_before (int|None): Number of words before the query to return.
+        None includes all preceding words; 0 adds no preceding words.
+    words_after (int|None): Number of words after the query to return.
+        None includes all following words; 0 adds no following words.
 
     Returns:
     str: A string containing b words before, the match, and a words after
@@ -244,8 +246,8 @@ def get_context(
     start_segment_pos = len(text[: match.a].split())
 
     # Calculate word window boundaries
-    words_before = words_before or n_segs
-    words_after = words_after or n_segs
+    words_before = n_segs if words_before is None else words_before
+    words_after = n_segs if words_after is None else words_after
     start_pos = max(0, start_segment_pos - words_before)
     end_pos = min(len(segments), start_segment_pos + words_after + len(query.split()))
 
@@ -254,9 +256,7 @@ def get_context(
 
     # Convert word positions to character positions
     start_char = word_positions[start_pos] if start_pos < len(word_positions) else 0
-    end_char = word_positions[min(end_pos, len(word_positions) - 1)] + len(
-        text.split()[min(end_pos - 1, len(word_positions) - 1)]
-    )
+    end_char = word_positions[end_pos - 1] + len(segments[end_pos - 1])
 
     # return exact substring with original formatting
     return text[start_char:end_char], start_pos, end_pos

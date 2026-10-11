@@ -252,3 +252,37 @@ def test_get_context(query, text, before, after, expected, not_expected):
     not_expected = not_expected.split(",")
     assert all(word in result for word in expected)
     assert all(word not in result for word in not_expected)
+
+
+@pytest.mark.parametrize(
+    "text, before, after, expected",
+    [
+        ("left needle right beyond", 1, 1, ("left needle right", 0, 3)),
+        ("left needle right beyond", 0, 0, ("needle", 1, 2)),
+        ("left needle right beyond", 0, 1, ("needle right", 1, 3)),
+        ("left needle right beyond", 1, 0, ("left needle", 0, 2)),
+        ("left needle right beyond", None, 1, ("left needle right", 0, 3)),
+        ("left needle right beyond", 0, None, ("needle right beyond", 1, 4)),
+        ("left needle right beyond", None, None, ("left needle right beyond", 0, 0)),
+        ("left\tneedle \n right  beyond", 1, 1, ("left\tneedle \n right", 0, 3)),
+        ("needle right beyond", 1, 1, ("needle right", 0, 2)),
+        ("left right needle", 1, 1, ("right needle", 1, 3)),
+    ],
+)
+def test_get_context_respects_word_boundaries(text, before, after, expected):
+    assert get_context("needle", text, before, after) == expected
+
+
+def test_fuzzy_match_with_zero_neighbor_words():
+    doc = Document(
+        content="left needle right needle tail", metadata=DocMetaData(id="match")
+    )
+
+    results = find_fuzzy_matches_in_docs(
+        "needle", [doc], [doc], k=1, words_before=0, words_after=0
+    )
+
+    assert len(results) == 1
+    assert results[0][0].content == "needle ... needle"
+    assert results[0][0].metadata == doc.metadata
+    assert results[0][1] == 100
