@@ -138,6 +138,51 @@ def test_empty_document():
     assert tree == []
 
 
+@pytest.mark.parametrize(
+    "preamble",
+    [
+        "Important introduction.\n\n",
+        "Summary paragraph.\n\nMore details.\n\n",
+        "```python\n# Not a heading\nprint('hello')\n```\n\n",
+    ],
+)
+def test_parse_markdown_preserves_content_before_first_heading(preamble: str) -> None:
+    tree = parse_markdown_headings(preamble + "# Section\nSection body.")
+
+    assert len(tree) == 2
+    assert tree[0].content == preamble.rstrip("\n")
+    assert tree[0].path == []
+    assert tree[0].children == []
+    assert tree[1].content == "# Section"
+    assert tree[1].path == ["# Section"]
+    assert tree[1].children[0].content == "Section body."
+
+
+@pytest.mark.parametrize("rollup", [True, False])
+@pytest.mark.parametrize("chunk_size", [4, 200])
+def test_chunk_markdown_preserves_content_before_first_heading(
+    rollup: bool, chunk_size: int
+) -> None:
+    markdown = "Important introduction.\n\n# Section\nSection body."
+    config = MarkdownChunkConfig(rollup=rollup, chunk_size=chunk_size, overlap_tokens=0)
+
+    chunks = chunk_markdown(markdown, config)
+
+    combined = "\n".join(chunks)
+    assert combined.count("Important introduction.") == 1
+    assert combined.index("Important introduction.") < combined.index("# Section")
+    assert combined.count("Section body.") == 1
+    assert chunks[0].startswith("Important introduction.")
+
+
+def test_parse_markdown_ignores_whitespace_before_first_heading() -> None:
+    tree = parse_markdown_headings("\n \n\t\n# Section\nSection body.")
+
+    assert len(tree) == 1
+    assert tree[0].content == "# Section"
+    assert tree[0].path == ["# Section"]
+
+
 def test_no_headers_only_paragraphs():
     md = """This is just a paragraph.
     

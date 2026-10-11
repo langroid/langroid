@@ -125,6 +125,9 @@ def parse_markdown_headings(md_text: str) -> List[Node]:
 
     # We'll now convert heading_blocks into a tree using a stack-based approach
     root_nodes: List[Node] = []
+    preamble = "".join(lines[: headings[0][2]]).rstrip("\n")
+    if preamble.strip():
+        root_nodes.append(Node(content=preamble, path=[], children=[]))
     stack: List[Node] = []
     header_path: List[str] = []
 
