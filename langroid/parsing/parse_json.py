@@ -131,17 +131,54 @@ _MAX_MULTILINE_INPUT_CHARS = 8 * 1024
 _MAX_MULTILINE_QUOTES = 512
 
 
+_JSON_NAME_CONSTANTS: Dict[str, Any] = {"true": True, "false": False, "null": None}
+
+
+class _JsonNameConstants(ast.NodeTransformer):
+    """Rewrites bare `true`/`false`/`null` to their Python equivalents."""
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        if node.id in _JSON_NAME_CONSTANTS:
+            return ast.copy_location(
+                ast.Constant(value=_JSON_NAME_CONSTANTS[node.id]), node
+            )
+        return node
+
+
 def _is_self_contained_object(candidate: str) -> bool:
     """Whether `candidate` is already a whole object, needing no repair.
 
     Deliberately broader than `is_valid_json`: extraction accepts
     single-quoted objects too (via `repair_json`), so a swallow check keyed on
-    strict JSON would leave a single-quoted call unprotected.
+    strict JSON would leave a single-quoted call unprotected. A call this
+    function fails to recognize is a call the swallow guard cannot protect,
+    and the two spellings fall between the obvious loaders: `json.loads`
+    wants double quotes with `true`/`false`/`null`, `ast.literal_eval` wants
+    `True`/`False`/`None`, so a single-quoted object holding `true` satisfies
+    NEITHER. Hence the third attempt, which parses as a Python literal after
+    rewriting just those three names.
+
+    The rewrite is done on the AST, not the text, so a `true` appearing
+    INSIDE a string value is untouched. `yaml.safe_load` would accept both
+    spellings in one call and looks like the shorter answer, but it is far
+    too permissive here: it reads `{\\nlast line"}` -- a fragment of a
+    legitimately recovered multiline value -- as the mapping
+    `{'last line"': None}`, which would mark that fragment intact and defeat
+    the recovery this module exists to perform.
+
+    What matters as much as what is accepted: none of these accepts
+    unterminated text, which is what keeps a genuinely truncated candidate
+    out of the `intact` set.
     """
     if is_valid_json(candidate):
         return True
     try:
         return isinstance(ast.literal_eval(candidate), dict)
+    except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
+        pass
+    try:
+        tree = _JsonNameConstants().visit(ast.parse(candidate, mode="eval"))
+        return isinstance(ast.literal_eval(tree), dict)
     except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
         return False
 

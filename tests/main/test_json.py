@@ -257,6 +257,33 @@ def test_get_json_candidates_rejects_wholly_contained_call() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "literal, parsed", [("true", True), ("false", False), ("null", None)]
+)
+def test_get_json_candidates_protects_single_quoted_json_literals(
+    literal: str,
+    parsed: object,
+) -> None:
+    """A single-quoted contained call holding true/false/null is protected.
+
+    The swallow guard can only protect a call it recognizes as whole, and
+    these spellings fall between the loaders: `json.loads` rejects the single
+    quotes, `ast.literal_eval` rejects the lowercase literals. Before
+    `_is_self_contained_object` also tried YAML, such a call was missing from
+    the `intact` set and was still swallowed -- `bad` ran with `good`'s
+    arguments.
+    """
+    inner = "{'request':'good','value':'ok','flag':" + literal + "}"
+    response = '{"request":"bad","value":"oops\n' "}\n" + inner + '\n"}'
+
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "bad", "value": "oops"},
+        {"request": "good", "value": "ok", "flag": parsed},
+    ]
+
+
 @pytest.mark.parametrize("n", [2000, 4000, 8000, 16000])
 def test_get_json_candidates_repeated_escaped_quotes(n: int) -> None:
     malformed_call = "{" + ('\\"' + "\n") * n + "}"
