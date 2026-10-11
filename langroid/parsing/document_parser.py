@@ -737,7 +737,7 @@ class FitzPDFParser(DocumentParser):
         try:
             import fitz
         except ImportError:
-            LangroidImportError("fitz", "doc-chat")
+            raise LangroidImportError("fitz", "doc-chat")
         doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
         for i, page in enumerate(doc):
             yield i, page
@@ -1222,7 +1222,7 @@ class MarkitdownDocxParser(DocumentParser):
         try:
             from markitdown import MarkItDown
         except ImportError:
-            LangroidImportError("markitdown", ["markitdown", "doc-parsers"])
+            raise LangroidImportError("markitdown", ["markitdown", "doc-parsers"])
         md = MarkItDown()
         self.doc_bytes.seek(0)  # Reset to start
 
@@ -1260,7 +1260,7 @@ class MarkitdownXLSXParser(DocumentParser):
         try:
             from markitdown import MarkItDown
         except ImportError:
-            LangroidImportError("markitdown", "doc-parsers")
+            raise LangroidImportError("markitdown", "doc-parsers")
         md = MarkItDown()
         self.doc_bytes.seek(0)  # Reset to start
 
@@ -1299,7 +1299,7 @@ class MarkitdownPPTXParser(DocumentParser):
         try:
             from markitdown import MarkItDown
         except ImportError:
-            LangroidImportError("markitdown", "doc-parsers")
+            raise LangroidImportError("markitdown", "doc-parsers")
 
         md = MarkItDown()
         self.doc_bytes.seek(0)
