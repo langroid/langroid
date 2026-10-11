@@ -177,9 +177,24 @@ def test_extract_top_level_json_keeps_mixed_quote_calls_separate(
 
 
 @pytest.mark.parametrize("quote", ['"', "'"])
-def test_extract_top_level_json_preserves_multiline_opposite_quotes(
+def test_extract_top_level_json_multiline_opposite_quotes_fails_closed(
     quote: str,
 ) -> None:
+    """A value that quotes a whole object is read as separate calls.
+
+    The multiline scan *could* reassemble this into one call whose `value`
+    holds the inner object as text, and an earlier version of this test
+    asserted exactly that. But the same input shape -- one candidate fully
+    containing another self-contained call -- is how a malformed call swallows
+    the next valid one and runs with its argument. Both readings of the text
+    are legitimate, so extraction takes the safe one: separate calls, matching
+    `main`'s behavior. The cost is that a tool argument which genuinely quotes
+    a JSON object is no longer reassembled; that is the deliberate trade.
+
+    What is still checked, as before: the opposite-quote value does not
+    desynchronize the scan, each `}` inside the value is attributed to the
+    right call, and the following well-formed call always survives intact.
+    """
     other_quote = "'" if quote == '"' else '"'
     value = (
         f"first line\nJames{other_quote}, John\n}}\n"
@@ -190,18 +205,55 @@ def test_extract_top_level_json_preserves_multiline_opposite_quotes(
         f"{{{quote}request{quote}:{quote}test_tool{quote},"
         f"{quote}value{quote}:{quote}{value}{quote}}}"
     )
+    inner_call = (
+        f"{{{other_quote}request{other_quote}:" f"{other_quote}literal{other_quote}}}"
+    )
     following_call = '{"request":"next_tool","value":"complete"}'
+    truncated_first_call = (
+        f"{{{quote}request{quote}:{quote}test_tool{quote},"
+        f"{quote}value{quote}:{quote}first line\n"
+        f"James{other_quote}, John\n}}"
+    )
 
     assert get_json_candidates(tool_call + "\n" + following_call) == [
-        tool_call,
+        truncated_first_call,
+        inner_call,
         following_call,
     ]
     assert [
         json.loads(candidate)
         for candidate in extract_top_level_json(tool_call + "\n" + following_call)
     ] == [
-        {"request": "test_tool", "value": value},
+        {"request": "test_tool", "value": f"first line\nJames{other_quote}, John"},
+        {"request": "literal"},
         {"request": "next_tool", "value": "complete"},
+    ]
+
+
+def test_get_json_candidates_rejects_wholly_contained_call() -> None:
+    """A valid call entirely inside a malformed one is not swallowed.
+
+    The malformed call's unterminated single-quoted value spans past a
+    complete double-quoted call. Reading it as one call would hand `bad` the
+    argument belonging to `good`; `bad` must keep its own truncated value and
+    `good` must survive as its own call.
+    """
+    response = (
+        "{'request':'bad','value':'oops\n"
+        "}\n"
+        '{"request":"good","value":"ok"}\n'
+        "'}"
+    )
+
+    assert get_json_candidates(response) == [
+        "{'request':'bad','value':'oops\n}",
+        '{"request":"good","value":"ok"}',
+    ]
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "bad", "value": "oops"},
+        {"request": "good", "value": "ok"},
     ]
 
 

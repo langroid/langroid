@@ -177,13 +177,20 @@ def get_json_candidates(s: str) -> List[str]:
     # call's argument. Dropping a truncated call instead fails closed: the
     # agent hits `handle_llm_no_tool` and retries.
     #
-    # Straddling is the test, not mere overlap: a valid object wholly INSIDE
-    # a multiline candidate is a legitimate recovery (a tool argument whose
-    # string value contains JSON), whereas one the candidate's end cuts
-    # through has been swallowed. Comparing spans this way is an invariant
-    # over the result, so it holds however quote alignment was lost --
-    # `_is_complete_json_object`'s line-local check stays as an early reject,
-    # but it cannot see every such way.
+    # Containment is the test, not just straddling. A self-contained call the
+    # candidate's end cuts through has plainly been swallowed, but so has one
+    # that sits wholly INSIDE the candidate: the two readings of such text --
+    # one call whose argument happens to contain JSON, or two calls of which
+    # the first is truncated -- are both legitimate, and we take the second,
+    # so a tool can never run with another call's argument. That costs some
+    # genuine recoveries (a tool argument that really does quote a whole JSON
+    # object is no longer reassembled) and is the deliberate trade.
+    #
+    # Comparing spans this way is an invariant over the result, so it holds
+    # however quote alignment was lost -- `_is_complete_json_object`'s
+    # line-local check stays as an early reject, but it cannot see every such
+    # way. A candidate that IS the intact match (identical span) is of course
+    # not swallowing itself.
     single_line = _scan(_SINGLE_LINE_CURLY_BRACES, s)
     intact = [m for m in single_line if _is_self_contained_object(m[0])]
 
@@ -196,7 +203,11 @@ def get_json_candidates(s: str) -> List[str]:
     for text, start, end in matches:
         if end <= position:
             continue
-        if any(start_i < end < end_i for _, start_i, end_i in intact):
+        if any(
+            start_i < end < end_i  # the candidate's end cuts an intact call
+            or (start < start_i and end_i <= end)  # intact call wholly inside
+            for _, start_i, end_i in intact
+        ):
             for text_i, start_i, end_i in single_line:
                 if start <= start_i < end and end_i > position:
                     result.append(text_i)
