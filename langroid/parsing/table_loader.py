@@ -30,17 +30,22 @@ def read_tabular_data(path_or_url: str, sep: None | str = None) -> pd.DataFrame:
 
         # Read the data
 
-        # get non-blank column names
+        # Select non-blank columns by position, since pandas renames duplicates.
         with pd.io.common.get_handle(path_or_url, "r") as f:
             if len(sep) == 1:
                 valid_cols = [
-                    col for col in next(reader(f.handle, delimiter=sep)) if col
+                    i
+                    for i, col in enumerate(next(reader(f.handle, delimiter=sep)))
+                    if col
                 ]
             else:
                 # Preserve the existing multi-character separator handling.
                 header_line = f.handle.readline().strip()
-                valid_cols = [col for col in header_line.split(sep) if col]
-                valid_cols = [c.replace('"', "").replace("'", "") for c in valid_cols]
+                valid_cols = [
+                    i
+                    for i, col in enumerate(header_line.split(sep))
+                    if col.replace('"', "").replace("'", "")
+                ]
             if hasattr(f.handle, "seek"):
                 f.handle.seek(0)
 
