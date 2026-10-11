@@ -244,7 +244,7 @@ def find_urls(
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         links = [
-            urljoin(url, a["href"])  # type: ignore
+            urljoin(response.url, a["href"])  # type: ignore
             for a in soup.find_all("a", href=True)
         ]
 
@@ -284,8 +284,16 @@ def find_urls(
             link for link in defragged_links if is_fetchable_web_link(link)
         ]
 
-        # ensure url is first, since below we are taking first max_links urls
-        domain_matching_links = [url] + [x for x in domain_matching_links if x != url]
+        # Drop self-links under either identity of the page just fetched: the
+        # requested `url` and, after a redirect, `response.url`. Links now
+        # resolve against `response.url`, so a same-document anchor such as
+        # `<a href="#section">` defrags to the redirect target; left in, it
+        # would consume a `max_links` slot and be fetched a second time.
+        # Ensure `url` is first, since below we take the first max_links urls.
+        self_links = {url, urldefrag(response.url).url}
+        domain_matching_links = [url] + [
+            x for x in domain_matching_links if x not in self_links
+        ]
 
         # If found links exceed max_links, return immediately
         if len(domain_matching_links) >= max_links:
