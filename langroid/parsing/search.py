@@ -6,6 +6,7 @@ large schema).
 See tests for examples: tests/main/test_string_search.py
 """
 
+import bisect
 import difflib
 import math
 import re
@@ -240,19 +241,22 @@ def get_context(
     if match.size == 0:
         return "", 0, 0
 
-    # Count words before match point
+    # Find character positions where words start
     segments = text.split()
     n_segs = len(segments)
-    start_segment_pos = len(text[: match.a].split())
+    word_positions = [m.start() for m in re.finditer(r"\S+", text)]
+
+    # Locate the word CONTAINING the match start. Counting the words in
+    # text[:match.a] would be off by one whenever the match begins mid-word
+    # (e.g. after a leading "(" or at a case difference), since the partial
+    # prefix is counted as a whole word.
+    start_segment_pos = max(0, bisect.bisect_right(word_positions, match.a) - 1)
 
     # Calculate word window boundaries
     words_before = n_segs if words_before is None else words_before
     words_after = n_segs if words_after is None else words_after
     start_pos = max(0, start_segment_pos - words_before)
     end_pos = min(len(segments), start_segment_pos + words_after + len(query.split()))
-
-    # Find character positions where words start
-    word_positions = [m.start() for m in re.finditer(r"\S+", text)]
 
     # Convert word positions to character positions
     start_char = word_positions[start_pos] if start_pos < len(word_positions) else 0

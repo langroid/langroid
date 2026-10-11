@@ -286,3 +286,37 @@ def test_fuzzy_match_with_zero_neighbor_words():
     assert results[0][0].content == "needle ... needle"
     assert results[0][0].metadata == doc.metadata
     assert results[0][1] == 100
+
+
+@pytest.mark.parametrize(
+    "text, before, after, expected",
+    [
+        # fuzzy match starts after a leading "(" => mid-word match start
+        ("left (needle) right beyond", 0, 0, ("(needle)", 1, 2)),
+        ("left (needle) right beyond", 1, 1, ("left (needle) right", 0, 3)),
+        ("left 'needle', right beyond", 0, None, ("'needle', right beyond", 1, 4)),
+        # fuzzy match starts after a case difference => mid-word match start
+        ("left Needle right beyond", 0, 0, ("Needle", 1, 2)),
+        ("left Needle right beyond", 1, 0, ("left Needle", 0, 2)),
+        # mid-word match start inside the very first word
+        ("(needle) tail", 0, 0, ("(needle)", 0, 1)),
+    ],
+)
+def test_get_context_midword_match_start(
+    text: str,
+    before: int | None,
+    after: int | None,
+    expected: tuple[str, int, int],
+) -> None:
+    """A match starting mid-word must still include the matched word.
+
+    When the best fuzzy match begins inside a word (after punctuation, or at a
+    case difference), the returned window must contain that word, and the
+    returned start index must be a valid index into ``text.split()``.
+    """
+    result, start_pos, end_pos = get_context("needle", text, before, after)
+    assert (result, start_pos, end_pos) == expected
+    segments = text.split()
+    assert 0 <= start_pos < len(segments)
+    assert start_pos < end_pos <= len(segments)
+    assert "needle" in result.lower()
