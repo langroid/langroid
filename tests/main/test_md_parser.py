@@ -376,6 +376,55 @@ Paragraph B.
     assert tree[1].children[0].content.strip() == "Paragraph B."
 
 
+@pytest.mark.parametrize("level", [2, 3, 4, 6])
+def test_same_level_headers_without_h1_are_siblings(level: int) -> None:
+    first = "#" * level + " First"
+    second = "#" * level + " Second"
+    tree = parse_markdown_headings(f"{first}\nFirst body.\n{second}\nSecond body.")
+
+    assert [node.content for node in tree] == [first, second]
+    assert [node.path for node in tree] == [[first], [second]]
+    assert tree[1].children[0].path == [second]
+
+
+@pytest.mark.parametrize("level", [3, 4, 6])
+def test_same_level_headers_after_skipping_levels_are_siblings(level: int) -> None:
+    first = "#" * level + " First"
+    second = "#" * level + " Second"
+    tree = parse_markdown_headings(
+        f"# Root\n{first}\nFirst body.\n{second}\nSecond body."
+    )
+
+    assert len(tree) == 1
+    children = tree[0].children
+    assert [node.content for node in children] == [first, second]
+    assert children[1].path == ["# Root", second]
+    assert children[1].children[0].path == ["# Root", second]
+
+
+def test_lower_heading_level_after_gap_returns_to_parent() -> None:
+    tree = parse_markdown_headings(
+        "# Root\n##### Deep\nDeep body.\n### Next\nNext body."
+    )
+
+    assert [node.content for node in tree[0].children] == ["##### Deep", "### Next"]
+    assert tree[0].children[1].path == ["# Root", "### Next"]
+
+
+def test_chunk_markdown_does_not_inherit_a_skipped_level_sibling() -> None:
+    chunks = chunk_markdown(
+        "# Root\n### First\nFirst body.\n### Second\nSecond body.",
+        MarkdownChunkConfig(rollup=False),
+    )
+
+    assert len(chunks) == 2
+    assert "First body." in chunks[0]
+    assert "Second body." in chunks[1]
+    assert "# Root" in chunks[1]
+    assert "### Second" in chunks[1]
+    assert "### First" not in chunks[1]
+
+
 def test_header_skipping_levels():
     md = """# H1
 ### H3
