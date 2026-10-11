@@ -1,6 +1,6 @@
 """Typed tool results remain available through the agent's public conversion API."""
 
-from typing import Any, Collection, Iterable, List, Sequence, Tuple, Union
+from typing import Any, Collection, Iterable, List, Literal, Sequence, Tuple, Union
 
 import pytest
 
@@ -109,3 +109,57 @@ def test_union_type_check_accepts_none(output_type: Any) -> None:
 @pytest.mark.parametrize("output_type", [tuple, Tuple, tuple[int, ...]])
 def test_unrestricted_or_variadic_tuple_accepts_empty(output_type: Any) -> None:
     assert is_instance_of((), output_type)
+
+
+@pytest.mark.parametrize(
+    "value, output_type, expected",
+    [
+        ("ready", Literal["ready", "done"], True),
+        ("done", Literal["ready", "done"], True),
+        ("other", Literal["ready", "done"], False),
+        (1, Literal[1], True),
+        (True, Literal[1], False),
+        (False, Literal[0], False),
+        (1, Literal[True], False),
+        (0, Literal[False], False),
+        (True, Literal[True], True),
+        (False, Literal[False], True),
+        (None, Literal[None], True),
+        ("None", Literal[None], False),
+        (["ready", "done"], list[Literal["ready", "done"]], True),
+        (["ready", "other"], list[Literal["ready", "done"]], False),
+        (("ready", 1), tuple[Literal["ready"], int], True),
+        (("other", 1), tuple[Literal["ready"], int], False),
+        ("ready", Literal["ready"] | int, True),
+        (1, Literal["ready"] | int, True),
+        ("other", Literal["ready"] | int, False),
+    ],
+)
+def test_literal_type_match(value: Any, output_type: Any, expected: bool) -> None:
+    assert is_instance_of(value, output_type) is expected
+
+
+@pytest.mark.parametrize("source", ["content", "tool"])
+@pytest.mark.parametrize(
+    "value, output_type, expected",
+    [
+        ("ready", Literal["ready", "done"], "ready"),
+        ("other", Literal["ready", "done"], None),
+        (1, Literal[1], 1),
+        (True, Literal[1], None),
+        (["ready", "done"], list[Literal["ready", "done"]], ["ready", "done"]),
+        (["ready", "other"], list[Literal["ready", "done"]], None),
+    ],
+)
+def test_agent_extracts_literal_output(
+    source: str, value: Any, output_type: Any, expected: Any
+) -> None:
+    agent = ChatAgent(ChatAgentConfig(llm=None))
+    agent.enable_message(ValueTool)
+    document = ChatDocument(
+        content="",
+        content_any=value if source == "content" else None,
+        tool_messages=[ValueTool(value=value)] if source == "tool" else [],
+        metadata=ChatDocMetaData(sender=Entity.AGENT),
+    )
+    assert agent.from_ChatDocument(document, output_type) == expected
