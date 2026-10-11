@@ -246,11 +246,17 @@ def get_context(
     n_segs = len(segments)
     word_positions = [m.start() for m in re.finditer(r"\S+", text)]
 
-    # Locate the word CONTAINING the match start. Counting the words in
+    # Locate the word CONTAINING the match start; if the match starts in
+    # whitespace, use the word that follows it. Counting the words in
     # text[:match.a] would be off by one whenever the match begins mid-word
     # (e.g. after a leading "(" or at a case difference), since the partial
     # prefix is counted as a whole word.
-    start_segment_pos = max(0, bisect.bisect_right(word_positions, match.a) - 1)
+    start_segment_pos = bisect.bisect_right(word_positions, match.a) - 1
+    if start_segment_pos < 0 or match.a >= (
+        word_positions[start_segment_pos] + len(segments[start_segment_pos])
+    ):
+        # match.a lies in whitespace: advance to the next word
+        start_segment_pos = min(start_segment_pos + 1, n_segs - 1)
 
     # Calculate word window boundaries
     words_before = n_segs if words_before is None else words_before
