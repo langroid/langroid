@@ -1284,7 +1284,7 @@ class DocChatAgent(ChatAgent):
             # sentence-transformers >=5 types `CrossEncoder.predict` as taking a
             # single pair or a flat list, but a list of (query, passage) pairs is
             # the documented batch form and works at runtime; keep the element
-            # type loose so both the 2.x and 5.x signatures type-check.
+            # type loose so the 5.x signature type-checks.
             pair_inputs: List[Any] = [(query, p.content) for p in passages]
             with entry.lock:
                 scores = entry.model.predict(pair_inputs, show_progress_bar=False)
