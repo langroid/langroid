@@ -158,6 +158,11 @@ def _is_self_contained_object(candidate: str) -> bool:
     direction -- under-recognizing is what lets one call run with another
     call's argument.
 
+    Only braces are counted, not brackets: a stray unbalanced `[` in an
+    otherwise complete call (`{"request":"good","value":1 # [`, newline,
+    `}`) is repaired by extraction and must stay protected, so letting it
+    offset the depth would reopen exactly the hole this check closes.
+
     An unterminated quote or an unclosed brace is never self-contained,
     which is what keeps a genuinely truncated candidate out of the `intact`
     set.
@@ -178,9 +183,9 @@ def _is_self_contained_object(candidate: str) -> bool:
             continue
         if char in "\"'":
             quote = char
-        elif char in "{[":
+        elif char == "{":
             depth += 1
-        elif char in "}]":
+        elif char == "}":
             depth -= 1
             if depth <= 0:
                 # Closing the outermost brace anywhere but at the very end
@@ -207,6 +212,16 @@ def get_json_candidates(s: str) -> List[str]:
         return [text for text, _, _ in _scan(_SINGLE_LINE_CURLY_BRACES, s)]
 
     matches = _scan(_CURLY_BRACES, s)
+    if not matches:
+        # The grammars are recursive, and the multiline one spends more stack
+        # per position, so deeply nested input can exhaust it where the
+        # single-line one copes. `_scan` reports that as no matches at all,
+        # which would silently drop every call in an otherwise fine reply
+        # (80 levels of nesting in 527 characters, well inside both bounds).
+        # A failed speculative scan must never cost what the plain grammar
+        # would have found.
+        return [text for text, _, _ in _scan(_SINGLE_LINE_CURLY_BRACES, s)]
+
     candidates = [text for text, _, _ in matches]
     if all(is_valid_json(text) for text in candidates):
         # Nothing was recovered speculatively, so there is nothing to second-

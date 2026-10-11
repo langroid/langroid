@@ -1,10 +1,14 @@
 import json
+from typing import Any, Iterator
 
 import pytest
 
+from langroid.parsing import parse_json
 from langroid.parsing.parse_json import (
     _MAX_MULTILINE_INPUT_CHARS,
     _MAX_MULTILINE_QUOTES,
+    _SINGLE_LINE_CURLY_BRACES,
+    _scan,
     extract_top_level_json,
     get_json_candidates,
     parse_imperfect_json,
@@ -282,6 +286,60 @@ def test_get_json_candidates_protects_single_quoted_json_literals(
         {"request": "bad", "value": "oops"},
         {"request": "good", "value": "ok", "flag": parsed},
     ]
+
+
+def test_get_json_candidates_protects_contained_call_with_stray_bracket() -> None:
+    """An unbalanced bracket does not cost a contained call its protection.
+
+    Extraction repairs the `good` call, so the swallow guard has to see it as
+    whole. Counting brackets as well as braces left its depth never
+    returning to zero, which put it back in reach of the malformed call.
+    """
+    response = (
+        "{'request':'bad','value':'oops\n"
+        "}\n"
+        '{"request":"good","value":1 # [\n'
+        "}\n"
+        "'}"
+    )
+
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "bad", "value": "oops"},
+        {"request": "good", "value": 1},
+    ]
+
+
+def test_get_json_candidates_falls_back_when_multiline_scan_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed multiline scan costs nothing the plain grammar would find.
+
+    Both grammars are recursive and the multiline one spends more stack per
+    position, so deeply nested input can exhaust it where the single-line one
+    copes -- and `_scan` reports that as no matches at all, which dropped
+    every call in a 527-character reply well inside both recovery bounds.
+
+    The trigger is how much stack is left, which a test cannot control: the
+    depth window moves with the caller, and under pytest both grammars
+    happen to fail together, so a depth-based test would assert nothing here
+    and break elsewhere. Hence the narrowest possible substitute -- the
+    multiline grammar itself is replaced by one that raises -- so the
+    fallback is exercised deterministically on every machine.
+    """
+    response = '{"request":"good","value":"a\nb"}\n{"request":"next"}'
+    single_line_reading = [
+        text for text, _, _ in _scan(_SINGLE_LINE_CURLY_BRACES, response)
+    ]
+    assert single_line_reading, "fixture must be matchable by the plain grammar"
+
+    class _Exhausted:
+        def scan_string(self, _: str) -> Iterator[Any]:
+            raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(parse_json, "_CURLY_BRACES", _Exhausted())
+    assert parse_json.get_json_candidates(response) == single_line_reading
 
 
 @pytest.mark.parametrize("inner_quote", ['"', "'"])
