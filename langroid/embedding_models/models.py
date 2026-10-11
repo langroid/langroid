@@ -198,7 +198,9 @@ class OpenAIEmbeddings(EmbeddingModel):
         if not self.config.api_key:
             self.config.api_key = os.getenv("OPENAI_API_KEY", "")
 
-        self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
+        self.config.organization = self.config.organization or os.getenv(
+            "OPENAI_ORGANIZATION", ""
+        )
 
         if self.config.api_key == "":
             if self.is_langdb:
