@@ -834,6 +834,46 @@ def test_recursive_chunk(chunk_size, overlap_tokens, variation_percent):
         )
 
 
+@pytest.mark.parametrize("overlap_tokens", [0, 1, 2])
+@pytest.mark.parametrize("entry_point", ["recursive", "rollup", "no_rollup"])
+def test_recursive_chunk_respects_zero_overlap(
+    overlap_tokens: int, entry_point: str
+) -> None:
+    paragraphs = [
+        "one two three four",
+        "five six seven eight",
+        "nine ten eleven twelve",
+    ]
+    config = MarkdownChunkConfig(
+        chunk_size=4,
+        overlap_tokens=overlap_tokens,
+        variation_percent=0,
+        rollup=entry_point == "rollup",
+    )
+    text = "\n\n".join(paragraphs)
+
+    chunks = (
+        recursive_chunk(text, config)
+        if entry_point == "recursive"
+        else chunk_markdown(text, config)
+    )
+
+    expected = {
+        0: paragraphs,
+        1: [
+            paragraphs[0],
+            "four five six seven eight",
+            "eight nine ten eleven twelve",
+        ],
+        2: [
+            paragraphs[0],
+            "three four five six seven eight",
+            "seven eight nine ten eleven twelve",
+        ],
+    }
+    assert chunks == expected[overlap_tokens]
+
+
 def test_recursive_chunk_enhanced():
     config = MarkdownChunkConfig(
         chunk_size=8,

@@ -332,7 +332,9 @@ def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
                 flush_chunk()
                 # Overlap from old_chunk
                 overlap_tokens_list = (
-                    old_chunk.split()[-config.overlap_tokens :] if old_chunk else []
+                    old_chunk.split()[-config.overlap_tokens :]
+                    if old_chunk and config.overlap_tokens != 0
+                    else []
                 )
                 overlap_str = (
                     " ".join(overlap_tokens_list) if overlap_tokens_list else ""
