@@ -1,7 +1,11 @@
 import pytest
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from langroid.utils.pydantic_utils import extract_fields, flatten_dict
+from langroid.utils.pydantic_utils import (
+    extract_fields,
+    flatten_dict,
+    flatten_pydantic_model,
+)
 
 
 class DetailsModel(BaseModel):
@@ -74,3 +78,48 @@ def test_flatten_dict(input_dict, expected_output):
 )
 def test_flatten_dict_custom_separator(input_dict, separator, expected_output):
     assert flatten_dict(input_dict, sep=separator) == expected_output
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_flatten_model_preserves_default_factories(nested):
+    class Defaults(BaseModel):
+        tags: list[str] = Field(default_factory=list)
+        label: str = Field(default_factory=lambda: "agent")
+
+    class Nested(BaseModel):
+        details: Defaults
+
+    flattened = flatten_pydantic_model(Nested if nested else Defaults)
+    prefix = "details__" if nested else ""
+    first = flattened()
+    second = flattened()
+
+    assert getattr(first, prefix + "tags") == []
+    assert getattr(first, prefix + "label") == "agent"
+    getattr(first, prefix + "tags").append("tool")
+    assert getattr(second, prefix + "tags") == []
+    assert flattened.model_fields[prefix + "tags"].default_factory is list
+
+
+def test_flatten_model_defers_factories_and_honors_explicit_values():
+    calls = []
+
+    def make_label():
+        calls.append("called")
+        return "default"
+
+    class Model(BaseModel):
+        label: str = Field(default_factory=make_label)
+        required: int
+        constant: str = "value"
+
+    flattened = flatten_pydantic_model(Model)
+    assert calls == []
+    assert flattened(required=1, label="explicit").label == "explicit"
+    assert calls == []
+    instance = flattened(required=2)
+    assert instance.label == "default"
+    assert instance.constant == "value"
+    assert calls == ["called"]
+    with pytest.raises(ValidationError):
+        flattened()

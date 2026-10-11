@@ -64,7 +64,7 @@ from langroid.utils.constants import (
 )
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
-from langroid.utils.types import from_string, to_string
+from langroid.utils.types import from_string, is_instance_of, to_string
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
@@ -2158,14 +2158,16 @@ class Agent(ABC):
         if output_type is str and content != "":
             return cast(T, content)
         content_any = msg.content_any
-        if content_any is not None and isinstance(content_any, output_type):
+        if content_any is not None and is_instance_of(content_any, output_type):
             return cast(T, content_any)
 
         tools = self.try_get_tool_messages(msg, all_tools=True)
 
-        if get_origin(output_type) is list:
+        if get_origin(output_type) is list and get_args(output_type):
             list_element_type = get_args(output_type)[0]
-            if issubclass(list_element_type, ToolMessage):
+            if isinstance(list_element_type, type) and issubclass(
+                list_element_type, ToolMessage
+            ):
                 # list_element_type is a subclass of ToolMessage:
                 # We output a list of objects derived from list_element_type
                 return cast(

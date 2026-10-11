@@ -58,7 +58,7 @@ LangDB can be used for both chat completions and embeddings:
 ```python
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig, LangDBParams
-from langroid.vector_store.qdrant import QdrantDBConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 import os
 import uuid
 
