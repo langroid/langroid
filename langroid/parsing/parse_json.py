@@ -131,66 +131,62 @@ _MAX_MULTILINE_INPUT_CHARS = 8 * 1024
 _MAX_MULTILINE_QUOTES = 512
 
 
-_JSON_NAME_CONSTANTS: Dict[str, Any] = {"true": True, "false": False, "null": None}
-
-
-class _JsonNameConstants(ast.NodeTransformer):
-    """Rewrites bare `true`/`false`/`null` to their Python equivalents."""
-
-    def visit_Name(self, node: ast.Name) -> ast.AST:
-        if node.id in _JSON_NAME_CONSTANTS:
-            return ast.copy_location(
-                ast.Constant(value=_JSON_NAME_CONSTANTS[node.id]), node
-            )
-        return node
-
-
 def _is_self_contained_object(candidate: str) -> bool:
-    """Whether `candidate` is already a whole object, needing no repair.
+    """Whether `candidate` is a whole object, standing on its own.
 
-    Deliberately broader than `is_valid_json`: extraction accepts
-    single-quoted objects too (via `repair_json`), so a swallow check keyed on
-    strict JSON would leave a single-quoted call unprotected. A call this
-    function fails to recognize is a call the swallow guard cannot protect,
-    and the two spellings fall between the obvious loaders: `json.loads`
-    wants double quotes with `true`/`false`/`null`, `ast.literal_eval` wants
-    `True`/`False`/`None`, so a single-quoted object holding `true` satisfies
-    NEITHER. Hence the third attempt, which parses as a Python literal after
-    rewriting just those three names.
+    This is a STRUCTURAL question -- does the text open a brace, close it,
+    and end there, with every quote closed -- not a question of which parser
+    happens to accept the spelling. Three successive attempts to answer it by
+    trying loaders in turn each left a hole, because the spellings an LLM
+    emits fall between them, and every hole is a call the swallow guard
+    cannot protect:
 
-    The rewrite is done on the AST, not the text, so a `true` appearing
-    INSIDE a string value is untouched. `yaml.safe_load` would accept both
-    spellings in one call and looks like the shorter answer, but it is far
-    too permissive here: it reads `{\\nlast line"}` -- a fragment of a
-    legitimately recovered multiline value -- as the mapping
-    `{'last line"': None}`, which would mark that fragment intact and defeat
-    the recovery this module exists to perform.
+    - `json.loads` wants double quotes with `true`/`false`/`null`, and even
+      with `strict=False` rejects the single-quoted form entirely;
+    - `ast.literal_eval` wants `True`/`False`/`None`, and Python forbids a
+      raw newline inside a single-quoted string, so it rejects the very
+      values this module exists to recover;
+    - `yaml.safe_load` accepts both spellings but is far too permissive: it
+      reads `{\\nlast line"}` -- a fragment of a legitimately recovered
+      multiline value -- as the mapping `{'last line"': None}`, marking that
+      fragment intact and defeating the recovery.
 
-    `strict=False` on the JSON attempt matters for the same reason: a raw
-    newline inside a quoted value is precisely what this module recovers, so
-    a complete DOUBLE-quoted call containing one must still be recognized.
-    Strict JSON rejects it as an unescaped control character, and so did this
-    check until a cold review found `{"request":"good","value":"ok<newline>
-    next"}` being swallowed whole by a preceding malformed call.
+    Scanning for balance answers the question directly and is blind to quote
+    style, to `true` vs `True`, and to raw newlines in values. It is
+    deliberately permissive about CONTENT: `{not json at all}` counts as
+    self-contained. That only costs multiline recovery, which is the safe
+    direction -- under-recognizing is what lets one call run with another
+    call's argument.
 
-    What matters as much as what is accepted: none of these accepts
-    unterminated text, which is what keeps a genuinely truncated candidate
-    out of the `intact` set.
+    An unterminated quote or an unclosed brace is never self-contained,
+    which is what keeps a genuinely truncated candidate out of the `intact`
+    set.
     """
-    try:
-        if isinstance(json.loads(candidate, strict=False), dict):
-            return True
-    except ValueError:
-        pass
-    try:
-        return isinstance(ast.literal_eval(candidate), dict)
-    except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
-        pass
-    try:
-        tree = _JsonNameConstants().visit(ast.parse(candidate, mode="eval"))
-        return isinstance(ast.literal_eval(tree), dict)
-    except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
+    if not candidate.startswith("{"):
         return False
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index, char in enumerate(candidate):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in "\"'":
+            quote = char
+        elif char in "{[":
+            depth += 1
+        elif char in "}]":
+            depth -= 1
+            if depth <= 0:
+                # Closing the outermost brace anywhere but at the very end
+                # means the text continues past the object.
+                return depth == 0 and index == len(candidate) - 1
+    return False
 
 
 def _scan(expr: Any, s: str) -> List[Tuple[str, int, int]]:

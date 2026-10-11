@@ -284,16 +284,27 @@ def test_get_json_candidates_protects_single_quoted_json_literals(
     ]
 
 
-def test_get_json_candidates_protects_contained_call_with_raw_newline() -> None:
+@pytest.mark.parametrize("inner_quote", ['"', "'"])
+@pytest.mark.parametrize("outer_quote", ['"', "'"])
+def test_get_json_candidates_protects_contained_call_with_raw_newline(
+    outer_quote: str, inner_quote: str
+) -> None:
     """A contained call whose own value holds a raw newline is protected.
 
     A raw newline in a quoted value is exactly what this module recovers, so
-    a complete call containing one must still count as self-contained.
-    Strict JSON rejects it as an unescaped control character, which left this
-    call out of the `intact` set and let the malformed one swallow it whole.
+    a complete call containing one must still count as self-contained. All
+    four quote pairings are pinned because the loader-by-loader versions of
+    `_is_self_contained_object` passed some and failed others: strict JSON
+    rejected the raw newline, `strict=False` JSON still rejected single
+    quotes, and Python forbids a raw newline inside a single-quoted string,
+    so each spelling had to be found separately by review. The structural
+    check is blind to the pairing, and this test is what holds it that way.
     """
-    inner = '{"request":"good","value":"ok\nnext"}'
-    response = "{'request':'bad','value':'oops\n" "}\n" + inner + "\n'}"
+    iq, oq = inner_quote, outer_quote
+    inner = f"{{{iq}request{iq}:{iq}good{iq},{iq}value{iq}:{iq}ok\nnext{iq}}}"
+    response = (
+        f"{{{oq}request{oq}:{oq}bad{oq},{oq}value{oq}:{oq}oops\n" f"}}\n{inner}\n{oq}}}"
+    )
 
     assert [
         json.loads(candidate) for candidate in extract_top_level_json(response)
