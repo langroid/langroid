@@ -325,7 +325,6 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         # this is an "extra" optional dependency, so we import it here
         try:
             from sentence_transformers import SentenceTransformer
-            from transformers import AutoTokenizer
         except ImportError:
             raise ImportError(
                 """
@@ -350,9 +349,7 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
                 lambda: SentenceTransformer.stop_multi_process_pool(self.pool)
             )
 
-        self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
-            self.config.model_name
-        )
+        self.tokenizer = self.model.tokenizer
         self.config.context_length = self.tokenizer.model_max_length
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:

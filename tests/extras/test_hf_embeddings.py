@@ -13,10 +13,14 @@ from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
 from langroid.embedding_models.remote_embeds import RemoteEmbeddingsConfig
 
 
-def test_embeddings():
+@pytest.mark.parametrize(
+    "model_name",
+    ["all-MiniLM-L6-v2", "sentence-transformers/all-MiniLM-L6-v2"],
+)
+def test_embeddings(model_name: str):
     sentence_cfg = SentenceTransformerEmbeddingsConfig(
         model_type="sentence-transformer",
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_name=model_name,
     )
 
     sentence_model = EmbeddingModel.create(sentence_cfg)
