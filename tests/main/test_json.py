@@ -284,6 +284,25 @@ def test_get_json_candidates_protects_single_quoted_json_literals(
     ]
 
 
+def test_get_json_candidates_protects_contained_call_with_raw_newline() -> None:
+    """A contained call whose own value holds a raw newline is protected.
+
+    A raw newline in a quoted value is exactly what this module recovers, so
+    a complete call containing one must still count as self-contained.
+    Strict JSON rejects it as an unescaped control character, which left this
+    call out of the `intact` set and let the malformed one swallow it whole.
+    """
+    inner = '{"request":"good","value":"ok\nnext"}'
+    response = "{'request':'bad','value':'oops\n" "}\n" + inner + "\n'}"
+
+    assert [
+        json.loads(candidate) for candidate in extract_top_level_json(response)
+    ] == [
+        {"request": "bad", "value": "oops"},
+        {"request": "good", "value": "ok\nnext"},
+    ]
+
+
 @pytest.mark.parametrize("n", [2000, 4000, 8000, 16000])
 def test_get_json_candidates_repeated_escaped_quotes(n: int) -> None:
     malformed_call = "{" + ('\\"' + "\n") * n + "}"

@@ -166,12 +166,22 @@ def _is_self_contained_object(candidate: str) -> bool:
     `{'last line"': None}`, which would mark that fragment intact and defeat
     the recovery this module exists to perform.
 
+    `strict=False` on the JSON attempt matters for the same reason: a raw
+    newline inside a quoted value is precisely what this module recovers, so
+    a complete DOUBLE-quoted call containing one must still be recognized.
+    Strict JSON rejects it as an unescaped control character, and so did this
+    check until a cold review found `{"request":"good","value":"ok<newline>
+    next"}` being swallowed whole by a preceding malformed call.
+
     What matters as much as what is accepted: none of these accepts
     unterminated text, which is what keeps a genuinely truncated candidate
     out of the `intact` set.
     """
-    if is_valid_json(candidate):
-        return True
+    try:
+        if isinstance(json.loads(candidate, strict=False), dict):
+            return True
+    except ValueError:
+        pass
     try:
         return isinstance(ast.literal_eval(candidate), dict)
     except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
