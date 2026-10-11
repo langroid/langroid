@@ -367,8 +367,9 @@ def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
 def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]:
     chunks: List[Chunk] = []
 
-    # Check if this is a header-only node.
-    is_header_only = node.path and node.content.strip() == node.path[-1]
+    # Check if this is a header-only node. Strip both operands so that headings
+    # from CRLF-formatted Markdown (e.g. path element "# Section\r") still match.
+    is_header_only = node.path and node.content.strip() == node.path[-1].strip()
 
     # Only generate a chunk for the node if it has non-header content,
     # or if it’s header-only AND has no children (i.e., it's a leaf header).

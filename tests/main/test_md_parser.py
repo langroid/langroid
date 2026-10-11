@@ -183,11 +183,12 @@ def test_parse_markdown_ignores_whitespace_before_first_heading() -> None:
     assert tree[0].path == ["# Section"]
 
 
-def test_chunk_markdown_no_duplicate_lone_trailing_heading() -> None:
+@pytest.mark.parametrize("nl", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_chunk_markdown_no_duplicate_lone_trailing_heading(nl: str) -> None:
     """A trailing heading with no body text must be emitted exactly once."""
     config = MarkdownChunkConfig(rollup=False, chunk_size=200, overlap_tokens=1)
 
-    chunks = chunk_markdown("Introduction.\n\n# Section", config)
+    chunks = chunk_markdown(f"Introduction.{nl}{nl}# Section{nl}", config)
 
     combined = "\n".join(chunks)
     assert combined.count("Introduction.") == 1
