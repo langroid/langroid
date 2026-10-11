@@ -223,7 +223,7 @@ class Parser:
         return len(tokens)
 
     def truncate_tokens(self, text: str, max_tokens: int) -> str:
-        tokens = self.tokenizer.encode(text)
+        tokens = self.tokenizer.encode(text, disallowed_special=())
         if len(tokens) <= max_tokens:
             return text
         return self.tokenizer.decode(tokens[:max_tokens])

@@ -178,3 +178,19 @@ vegetables
     assert original_lines == result_lines
     assert len(original_lines) == 6  # Verify all lines are present
     assert all(line.startswith("- ") for line in original_lines if "-" in line)
+
+
+def test_truncate_tokens_allows_special_token_literals():
+    """truncate_tokens must not crash on text containing tiktoken special-token
+    literals such as  — code/config content can contain them. num_tokens
+    already allows  explicitly and chunk_tokens uses disallowed_special=(),
+    so truncate_tokens should be at least as permissive.
+    """
+    cfg = ParsingConfig(token_encoding_model="text-embedding-3-small")
+    parser = Parser(cfg)
+    # long text so truncation actually kicks in
+    text = "def f(): return '<|endoftext|>' # boundary token in code\n" * 30
+    assert parser.num_tokens(text) > 20
+    # must not raise; result is a prefix of the token stream
+    truncated = parser.truncate_tokens(text, 20)
+    assert truncated and text.startswith(truncated[: min(5, len(truncated))])
