@@ -244,7 +244,7 @@ def find_urls(
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         links = [
-            urljoin(url, a["href"])  # type: ignore
+            urljoin(response.url, a["href"])  # type: ignore
             for a in soup.find_all("a", href=True)
         ]
 
