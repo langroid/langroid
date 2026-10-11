@@ -83,7 +83,7 @@ doc-chat = [
 ]
 
 hf-transformers = [
-    "sentence-transformers<3.0.0,>=2.2.2",
+    "sentence-transformers<6.0.0,>=5.6.0",
     "torch<3.0.0,>=2.0.0",
     "transformers<5.0.0,>=4.40.1",
     "huggingface-hub<1.0.0,>=0.21.2",
@@ -120,7 +120,7 @@ all = [
     "psycopg2<3.0.0,>=2.9.7",
     "pymysql<2.0.0,>=1.1.0",
     "sqlglot>=23.0.0",
-    "sentence-transformers<3.0.0,>=2.2.2",
+    "sentence-transformers<6.0.0,>=5.6.0",
     "torch<3.0.0,>=2.0.0",
     "transformers<5.0.0,>=4.40.1",
     "huggingface-hub<1.0.0,>=0.21.2",
@@ -189,7 +189,7 @@ scrapy = [
 ]
 
 hf-embeddings = [
-    "sentence-transformers<3.0.0,>=2.2.2",
+    "sentence-transformers<6.0.0,>=5.6.0",
     "torch<3.0.0,>=2.0.0",
 ]
 
