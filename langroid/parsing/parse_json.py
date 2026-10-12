@@ -406,6 +406,21 @@ def try_repair_json_yaml(s: str) -> str | None:
     NOTE - replacing \n with space will result in format loss,
     which may matter in generated code (e.g. python, toml, etc)
     """
+    # Nothing that already parses should be handed to a repairer. `strict=False`
+    # is what admits the raw newline inside a string that multiline recovery
+    # exists to preserve, and `repair_json` silently rewrites exactly that
+    # content: on `{"request":"write_file","content":"first\n{\n"}` it drops the
+    # trailing newline, and on config-like values it can read a line as another
+    # field. Since the point of recovering such a call is to dispatch it with
+    # the argument the model actually wrote, the parse result is serialized
+    # directly and the repair path is left for text that genuinely needs it.
+    try:
+        parsed = json.loads(s, strict=False)
+        if isinstance(parsed, (dict, list)):
+            return json.dumps(parsed)
+    except ValueError:
+        pass
+
     s_repaired_obj = repair_json(s, return_objects=True)
     if isinstance(s_repaired_obj, list):
         if len(s_repaired_obj) > 0:

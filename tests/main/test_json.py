@@ -88,6 +88,38 @@ def test_extract_top_level_json(s, expected):
     assert top_level_jsons == expected
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "first\n{\n",  # trailing newline after a bare brace
+        "x = 1\nif x:\n    y = {}\n",  # generated code, trailing newline
+        "a\n\nb\n",  # blank line and trailing newline
+        "key: value\nother: 1\n",  # config-like lines
+    ],
+)
+def test_extract_top_level_json_recovers_the_value_verbatim(value: str) -> None:
+    """A recovered call carries the argument the model actually wrote.
+
+    The candidate is extracted whole, but it used to be handed straight to
+    `repair_json`, which rewrites the very content multiline recovery exists to
+    preserve -- it drops a trailing newline, and can read a config-like line as
+    another field. Since the call parses under `json.loads(strict=False)` once
+    the raw newline is allowed, that result is used verbatim instead.
+
+    `main` extracts nothing usable from these inputs at all, so there is no
+    regression here to compare against; the point is that what this branch
+    recovers is byte-faithful rather than approximately right.
+    """
+    response = json.dumps({"request": "write_file", "content": value})
+    # Put the raw newlines back: a reply whose value is properly escaped was
+    # never the broken case.
+    response = response.replace("\\n", "\n")
+
+    assert [json.loads(c) for c in extract_top_level_json(response)] == [
+        {"request": "write_file", "content": value}
+    ]
+
+
 @pytest.mark.parametrize("quote", ['"', "'"])
 @pytest.mark.parametrize("braces", ["{", "}", "{}"])
 def test_extract_top_level_json_preserves_multiline_string_braces(
