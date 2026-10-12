@@ -194,8 +194,8 @@ def _is_self_contained_object(candidate: str) -> bool:
     return False
 
 
-def _distinct_calls(candidates: List[str]) -> int:
-    """Count the distinct tool calls that one reading of a span would dispatch.
+def _dispatchable_calls(candidates: List[str]) -> int:
+    """Count the tool calls that one reading of a span would dispatch.
 
     Each candidate is repaired exactly as extraction would repair it, and is
     counted only if it yields an object with a string `request` field -- the
@@ -203,28 +203,28 @@ def _distinct_calls(candidates: List[str]) -> int:
     anything, and counting them would let ordinary JSON sitting inside a value
     inflate the single-line reading and switch multiline recovery off.
 
-    A call's identity is the WHOLE repaired object, not just its `request`.
-    Keying on the name alone collapses two calls to the same tool, and a reply
-    that calls one tool twice is exactly where a swallow is most likely:
+    Nothing is deduplicated. Two readings of the same text tie because each
+    yields ONE call, not because equal calls collapse, so collapsing buys the
+    comparison nothing -- and it costs, twice over. Keyed on the `request`
+    name it loses a second call to the same tool; keyed on the whole repaired
+    object it still loses an identical repeat, as in
 
         {'request':'write_file','value':'oops
         }
-        {"request":"write_file","value":"ok}
+        {"request":"write_file","value":"oops}
         '}
 
-    Both readings name `write_file` once, so a name-keyed count ties at 1 and
-    the swallow survives -- `write_file` runs with `ok` and the `oops` call
-    disappears. Keyed on the whole object the counts are 2 against 1, and the
-    swallow is caught. Identity still has to collapse something, or a reading
-    could never tie with itself; the object is the narrowest thing that does.
+    where `main` dispatches `write_file` twice. A tool whose effect is
+    cumulative runs once instead of twice, so a repeat is a call like any
+    other and has to be counted like one.
 
     Args:
         candidates: The candidate object texts making up one reading of a span.
 
     Returns:
-        The number of distinct calls that reading dispatches.
+        The number of calls that reading dispatches.
     """
-    calls: set[str] = set()
+    calls = 0
     for candidate in candidates:
         repaired = try_repair_json_yaml(candidate)
         if repaired is None:
@@ -234,8 +234,8 @@ def _distinct_calls(candidates: List[str]) -> int:
         except ValueError:
             continue
         if isinstance(obj, dict) and isinstance(obj.get("request"), str):
-            calls.add(json.dumps(obj, sort_keys=True))
-    return len(calls)
+            calls += 1
+    return calls
 
 
 def _scan(expr: Any, s: str) -> List[Tuple[str, int, int]]:
@@ -333,14 +333,13 @@ def get_json_candidates(s: str) -> List[str]:
             any(_is_self_contained_object(m[0]) for m in contained)
             # Otherwise compare yields: read the candidate's span both ways,
             # repair each piece, and prefer the single-line reading only when
-            # it dispatches strictly MORE distinct calls. A swallow shows up
-            # as 2 against 1, because the swallowed call is lost entirely.
-            # A tie keeps the multiline recovery, which is what a genuine
-            # recovery looks like -- one call read either way -- so recovery
-            # survives. Being a comparison of outcomes and not of spellings,
-            # it is blind to however the swallowed call happens to be
-            # malformed.
-            or _distinct_calls(span_reading) > _distinct_calls([text])
+            # it dispatches strictly MORE calls. A swallow shows up as 2
+            # against 1, because the swallowed call is lost entirely. A tie
+            # keeps the multiline recovery, which is what a genuine recovery
+            # looks like -- one call read either way -- so recovery survives.
+            # Being a comparison of outcomes and not of spellings, it is blind
+            # to however the swallowed call happens to be malformed.
+            or _dispatchable_calls(span_reading) > _dispatchable_calls([text])
         ):
             for text_i, start_i, end_i in single_line:
                 if start <= start_i < end and end_i > position:

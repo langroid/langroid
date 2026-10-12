@@ -8,7 +8,7 @@ from langroid.parsing.parse_json import (
     _MAX_MULTILINE_INPUT_CHARS,
     _MAX_MULTILINE_QUOTES,
     _SINGLE_LINE_CURLY_BRACES,
-    _distinct_calls,
+    _dispatchable_calls,
     _scan,
     extract_top_level_json,
     get_json_candidates,
@@ -299,8 +299,8 @@ def test_get_json_candidates_higher_yield_reading_ignores_the_tool_name() -> Non
     A reply that calls one tool twice is where a swallow is most likely, and it
     is invisible to a count keyed on the tool name: both readings name
     `write_file` once, so such a count ties at 1 and the swallow survives --
-    `write_file` would run with `ok` and the `oops` call would disappear.
-    Identity is the whole repaired call, so the counts are 2 against 1 here.
+    `write_file` would run with `ok` and the `oops` call would disappear. Calls
+    are counted, not names, so the counts are 2 against 1 here.
     """
     response = (
         "{'request':'write_file','value':'oops\n"
@@ -317,23 +317,41 @@ def test_get_json_candidates_higher_yield_reading_ignores_the_tool_name() -> Non
     ]
 
 
-def test_distinct_calls_counts_dispatchable_calls_only() -> None:
-    """The yield comparison counts dispatchable calls, keyed on the whole call.
+def test_get_json_candidates_higher_yield_reading_counts_repeats() -> None:
+    """The same case again, with the two calls IDENTICAL.
+
+    Deduplicating the count -- by name or by whole repaired object -- ties at 1
+    here and lets the swallow through, dropping one of two `write_file`
+    invocations. A tool whose effect is cumulative would run once instead of
+    twice, so a repeat is a call like any other and is counted like one.
+    """
+    response = (
+        "{'request':'write_file','value':'oops\n"
+        "}\n"
+        '{"request":"write_file","value":"oops}\n'
+        "'}"
+    )
+
+    # Byte-identical to `main`: both invocations survive.
+    assert extract_top_level_json(response) == [
+        '{"request": "write_file", "value": "oops"}',
+        '{"request": "write_file", "value": "oops"}',
+    ]
+
+
+def test_dispatchable_calls_counts_dispatchable_calls_only() -> None:
+    """The yield comparison counts every dispatchable call, and nothing else.
 
     Only an object that repairs to a dict with a string `request` can dispatch
     a tool: without that restriction, ordinary JSON sitting inside a value
-    would inflate the single-line reading and switch recovery off. And two
-    calls to the same tool with different arguments are two calls, so the name
-    alone cannot be the identity.
+    would inflate the single-line reading and switch recovery off. Repeats are
+    counted, since two calls to the same tool are two calls however alike.
     """
-    assert _distinct_calls(['{"request": "a"}', '{"request": "b"}']) == 2
-    assert (
-        _distinct_calls(['{"request": "a", "x": 1}', '{"request": "a", "x": 2}']) == 2
-    )
-    assert _distinct_calls(['{"request": "a"}', '{"request": "a"}']) == 1
-    assert _distinct_calls(['{"x": 1}', "{not json at all}"]) == 0
-    assert _distinct_calls(['{"request": 7}']) == 0
-    assert _distinct_calls([]) == 0
+    assert _dispatchable_calls(['{"request": "a"}', '{"request": "b"}']) == 2
+    assert _dispatchable_calls(['{"request": "a"}', '{"request": "a"}']) == 2
+    assert _dispatchable_calls(['{"x": 1}', "{not json at all}"]) == 0
+    assert _dispatchable_calls(['{"request": 7}']) == 0
+    assert _dispatchable_calls([]) == 0
 
 
 @pytest.mark.parametrize(
