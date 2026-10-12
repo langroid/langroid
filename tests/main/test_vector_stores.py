@@ -853,3 +853,72 @@ def test_postgres_where_clause(vecdb: PostgresDB):
     assert len(all_docs) == 3
 
     vecdb.delete_collection("test_get_all_documents_where")
+
+
+class _RejectedUpsert(Exception):
+    """Stand-in for ``pinecone.PineconeApiException`` (the SDK is not installed)."""
+
+
+class _FakePineconeIndex:
+    """Records the size of every upsert, and optionally rejects them."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.upserted: List[int] = []
+        self._error = error
+
+    def upsert(self, vectors=None, namespace=None) -> None:
+        self.upserted.append(len(vectors or []))
+        if self._error is not None:
+            raise self._error
+
+
+def _pinecone(
+    monkeypatch, batch_size: int = 2, error: Exception | None = None
+) -> tuple[PineconeDB, _FakePineconeIndex]:
+    """A PineconeDB with a stubbed client: no API key, no SDK, no network."""
+    from langroid.vector_store import pineconedb as pinecone_module
+
+    index = _FakePineconeIndex(error=error)
+    monkeypatch.setenv("PINECONE_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(pinecone_module, "has_pinecone", True)
+    monkeypatch.setattr(pinecone_module, "PineconeApiException", _RejectedUpsert)
+    monkeypatch.setattr(
+        pinecone_module,
+        "Pinecone",
+        lambda api_key=None: SimpleNamespace(Index=lambda name: index),
+    )
+    monkeypatch.setattr(PineconeDB, "create_collection", lambda self, *a, **k: None)
+    cfg = PineconeDBConfig(
+        collection_name="test-add-documents",
+        embedding_model=HashEmbeddingModel(),
+        batch_size=batch_size,
+    )
+    monkeypatch.setattr(
+        PineconeDB, "list_collections", lambda self, empty=False: [cfg.collection_name]
+    )
+    return PineconeDB(cfg), index
+
+
+def test_pinecone_add_documents_upsert_failure_raises(monkeypatch):
+    """
+    An upsert Pinecone rejects must reach the caller, not be logged and reported
+    as stored -- the same fix LanceDB.add_documents got in #1201.
+    """
+    db, _ = _pinecone(
+        monkeypatch, batch_size=2, error=_RejectedUpsert("quota exceeded")
+    )
+    docs = [
+        Document(content=f"d{i}", metadata=DocMetaData(source="s")) for i in range(3)
+    ]
+    with pytest.raises(_RejectedUpsert):
+        db.add_documents(docs)
+
+
+def test_pinecone_add_documents_batches(monkeypatch):
+    """Control: an accepted upsert still sends every batch and raises nothing."""
+    db, index = _pinecone(monkeypatch, batch_size=2)
+    docs = [
+        Document(content=f"d{i}", metadata=DocMetaData(source="s")) for i in range(5)
+    ]
+    db.add_documents(docs)
+    assert index.upserted == [2, 2, 1]
