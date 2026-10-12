@@ -1022,7 +1022,13 @@ class DocChatAgent(ChatAgent):
                 )
             return response
         if query_str == "":
-            return None
+            return ChatDocument(
+                content=NO_ANSWER + " since query was empty",
+                metadata=ChatDocMetaData(
+                    source="No query provided",
+                    sender=Entity.LLM,
+                ),
+            )
         elif query_str == "?" and self.response is not None:
             return self.justify_response()
         elif (query_str.startswith(("summar", "?")) and self.response is None) or (
