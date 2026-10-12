@@ -125,6 +125,9 @@ def parse_markdown_headings(md_text: str) -> List[Node]:
 
     # We'll now convert heading_blocks into a tree using a stack-based approach
     root_nodes: List[Node] = []
+    preamble = "".join(lines[: headings[0][2]]).rstrip("\n")
+    if preamble.strip():
+        root_nodes.append(Node(content=preamble, path=[], children=[]))
     stack: List[tuple[int, Node]] = []
     header_path: List[str] = []
 
@@ -366,16 +369,29 @@ def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
 def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]:
     chunks: List[Chunk] = []
 
-    # Check if this is a header-only node.
-    is_header_only = node.path and node.content.strip() == node.path[-1]
+    # Check if this is a header-only node. Only trailing whitespace is
+    # normalized, so headings from CRLF-formatted Markdown (e.g. path element
+    # "# Section\r") still match, while indented body text that merely looks
+    # like its own heading (e.g. a "    # Section" code line) does not.
+    is_header_only = node.path and node.content.rstrip() == node.path[-1].rstrip()
 
     # Only generate a chunk for the node if it has non-header content,
     # or if it’s header-only AND has no children (i.e., it's a leaf header).
     if node.content.strip() and (not is_header_only or not node.children):
+        # For a header-only leaf, the content IS the last path element, so the
+        # header context must exclude it to avoid repeating the heading.
+        prefix_path = node.path[:-1] if is_header_only else node.path
         header_prefix = (
-            config.header_context_sep.join(node.path) + "\n\n" if node.path else ""
+            config.header_context_sep.join(prefix_path) + "\n\n" if prefix_path else ""
         )
-        content_chunks = recursive_chunk(node.content, config)
+        # A header-only leaf's content is a single heading line: keep it intact
+        # even when oversized, rather than fragmenting it across chunks (the
+        # rollup path treats this case the same way).
+        content_chunks = (
+            [node.content.strip()]
+            if is_header_only
+            else recursive_chunk(node.content, config)
+        )
         for chunk_text in content_chunks:
             full_text = header_prefix + chunk_text
             chunks.append(
@@ -520,6 +536,17 @@ def rollup_chunk_node(
                         token_count=count_words(block_with_prefix),
                     )
                 )
+        elif node_content:
+            # Heading-only leaf whose prefix + heading exceeds the chunk size:
+            # emit it as one (oversized) chunk rather than dropping it.
+            heading_with_prefix = prefix + node_content
+            chunks.append(
+                Chunk(
+                    text=heading_with_prefix,
+                    path=node.path,
+                    token_count=count_words(heading_with_prefix),
+                )
+            )
 
         # Now recurse on children, passing the same prefix so they get it too
         for child in node.children:

@@ -138,6 +138,138 @@ def test_empty_document():
     assert tree == []
 
 
+@pytest.mark.parametrize(
+    "preamble",
+    [
+        "Important introduction.\n\n",
+        "Summary paragraph.\n\nMore details.\n\n",
+        "```python\n# Not a heading\nprint('hello')\n```\n\n",
+    ],
+)
+def test_parse_markdown_preserves_content_before_first_heading(preamble: str) -> None:
+    tree = parse_markdown_headings(preamble + "# Section\nSection body.")
+
+    assert len(tree) == 2
+    assert tree[0].content == preamble.rstrip("\n")
+    assert tree[0].path == []
+    assert tree[0].children == []
+    assert tree[1].content == "# Section"
+    assert tree[1].path == ["# Section"]
+    assert tree[1].children[0].content == "Section body."
+
+
+@pytest.mark.parametrize("rollup", [True, False])
+@pytest.mark.parametrize("chunk_size", [4, 200])
+def test_chunk_markdown_preserves_content_before_first_heading(
+    rollup: bool, chunk_size: int
+) -> None:
+    markdown = "Important introduction.\n\n# Section\nSection body."
+    config = MarkdownChunkConfig(rollup=rollup, chunk_size=chunk_size, overlap_tokens=0)
+
+    chunks = chunk_markdown(markdown, config)
+
+    combined = "\n".join(chunks)
+    assert combined.count("Important introduction.") == 1
+    assert combined.index("Important introduction.") < combined.index("# Section")
+    assert combined.count("Section body.") == 1
+    assert chunks[0].startswith("Important introduction.")
+
+
+def test_parse_markdown_ignores_whitespace_before_first_heading() -> None:
+    tree = parse_markdown_headings("\n \n\t\n# Section\nSection body.")
+
+    assert len(tree) == 1
+    assert tree[0].content == "# Section"
+    assert tree[0].path == ["# Section"]
+
+
+@pytest.mark.parametrize("nl", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_chunk_markdown_no_duplicate_lone_trailing_heading(nl: str) -> None:
+    """A trailing heading with no body text must be emitted exactly once."""
+    config = MarkdownChunkConfig(rollup=False, chunk_size=200, overlap_tokens=1)
+
+    chunks = chunk_markdown(f"Introduction.{nl}{nl}# Section{nl}", config)
+
+    combined = "\n".join(chunks)
+    assert combined.count("Introduction.") == 1
+    assert combined.count("# Section") == 1
+
+
+def test_chunk_markdown_no_duplicate_nested_heading_only_leaf() -> None:
+    """A nested heading-only leaf keeps ancestor context without repeating itself."""
+    config = MarkdownChunkConfig(rollup=False, chunk_size=200, overlap_tokens=1)
+
+    chunks = chunk_markdown("Intro.\n\n# A\nbody\n\n## B", config)
+
+    assert chunks[-1] == "# A\n\n## B"
+    assert "\n".join(chunks).count("## B") == 1
+
+
+def test_chunk_markdown_indented_heading_lookalike_keeps_header_context() -> None:
+    """Body text that merely looks like its heading is not a heading-only leaf.
+
+    An indented code line identical to the section heading is real content, so
+    it must still be prefixed with the section's header context.
+    """
+    config = MarkdownChunkConfig(rollup=False, chunk_size=200, overlap_tokens=1)
+
+    chunks = chunk_markdown("# Example\n    # Example", config)
+
+    assert chunks == ["# Example\n\n# Example"]
+
+
+@pytest.mark.parametrize("rollup", [True, False])
+def test_chunk_markdown_retains_oversized_lone_heading(rollup: bool) -> None:
+    """An oversized heading-only leaf is neither dropped nor fragmented.
+
+    Under rollup it must not be skipped; without rollup it must not be split
+    across chunks, since a heading is only useful intact.
+    """
+    heading = "# This is a long heading with several words"
+    config = MarkdownChunkConfig(rollup=rollup, chunk_size=4, overlap_tokens=1)
+
+    chunks = chunk_markdown(f"Introduction.\n\n{heading}", config)
+
+    combined = "\n".join(chunks)
+    assert combined.count("Introduction.") == 1
+    assert heading in combined
+
+
+@pytest.mark.parametrize("rollup", [True, False])
+def test_chunk_markdown_preamble_sweep_no_loss_or_duplication(rollup: bool) -> None:
+    """Each body marker survives exactly once across many chunk sizes.
+
+    Markers appear only in body text (never in headings), since headings are
+    legitimately repeated as header context on descendant chunks.
+    """
+    markers = ["MK_PRE", "MK_ONE", "MK_TWO", "MK_THREE", "MK_FOUR"]
+    markdown = (
+        "MK_PRE intro paragraph before any heading at all.\n\n"
+        "# Alpha\n"
+        "MK_ONE body of alpha section with some filler words here.\n\n"
+        "## Alpha Sub\n"
+        "MK_TWO body of the alpha subsection with more filler words.\n\n"
+        "# Beta\n"
+        "MK_THREE body of beta section, also with filler words present.\n\n"
+        "# Gamma\n"
+        "MK_FOUR final body text for the gamma section of this document.\n\n"
+        "# Delta\n"
+    )
+
+    for chunk_size in range(2, 61):
+        config = MarkdownChunkConfig(
+            chunk_size=chunk_size, rollup=rollup, overlap_tokens=1
+        )
+        combined = "\n".join(chunk_markdown(markdown, config))
+        # "# Delta" is a body-less leaf heading with no descendants, so it is
+        # never a header-context prefix and must occur exactly once too.
+        for marker in markers + ["# Delta"]:
+            assert combined.count(marker) == 1, (
+                f"{marker!r} appears {combined.count(marker)} times with "
+                f"chunk_size={chunk_size}, rollup={rollup}"
+            )
+
+
 def test_no_headers_only_paragraphs():
     md = """This is just a paragraph.
     
