@@ -8,7 +8,7 @@ from langroid.parsing.parse_json import (
     _MAX_MULTILINE_INPUT_CHARS,
     _MAX_MULTILINE_QUOTES,
     _SINGLE_LINE_CURLY_BRACES,
-    _distinct_requests,
+    _distinct_calls,
     _scan,
     extract_top_level_json,
     get_json_candidates,
@@ -272,10 +272,10 @@ def test_get_json_candidates_prefers_the_higher_yield_reading() -> None:
     any truncated fragment repairs into something.
 
     Yield is what separates them: reading this span as single-line calls
-    dispatches two distinct `request` values (`bad` and `good`) where reading
-    it as one multiline call dispatches one, so the two-call reading wins. On
-    a genuine multiline recovery the count is one either way, and the tie
-    keeps the recovery.
+    dispatches two distinct calls (`bad` and `good`) where reading it as one
+    multiline call dispatches one, so the two-call reading wins. On a genuine
+    multiline recovery the count is one either way, and the tie keeps the
+    recovery.
     """
     response = (
         "{'request':'bad','value':'oops\n" "}\n" '{"request":"good","value":"ok}\n' "'}"
@@ -293,20 +293,47 @@ def test_get_json_candidates_prefers_the_higher_yield_reading() -> None:
     ]
 
 
-def test_distinct_requests_counts_dispatchable_calls_only() -> None:
-    """The yield comparison counts calls, not objects.
+def test_get_json_candidates_higher_yield_reading_ignores_the_tool_name() -> None:
+    """The same case, with both calls naming the SAME tool.
+
+    A reply that calls one tool twice is where a swallow is most likely, and it
+    is invisible to a count keyed on the tool name: both readings name
+    `write_file` once, so such a count ties at 1 and the swallow survives --
+    `write_file` would run with `ok` and the `oops` call would disappear.
+    Identity is the whole repaired call, so the counts are 2 against 1 here.
+    """
+    response = (
+        "{'request':'write_file','value':'oops\n"
+        "}\n"
+        '{"request":"write_file","value":"ok}\n'
+        "'}"
+    )
+
+    # Byte-identical to `main`: both invocations survive, each with its own
+    # argument.
+    assert extract_top_level_json(response) == [
+        '{"request": "write_file", "value": "oops"}',
+        '{"request": "write_file", "value": "ok"}',
+    ]
+
+
+def test_distinct_calls_counts_dispatchable_calls_only() -> None:
+    """The yield comparison counts dispatchable calls, keyed on the whole call.
 
     Only an object that repairs to a dict with a string `request` can dispatch
-    a tool, and two readings naming the same tool have not lost a call. Both
-    properties matter: without the first, ordinary JSON in a value would
-    inflate the single-line reading and switch recovery off; without the
-    second, a repeated `request` would do the same.
+    a tool: without that restriction, ordinary JSON sitting inside a value
+    would inflate the single-line reading and switch recovery off. And two
+    calls to the same tool with different arguments are two calls, so the name
+    alone cannot be the identity.
     """
-    assert _distinct_requests(['{"request": "a"}', '{"request": "b"}']) == 2
-    assert _distinct_requests(['{"request": "a"}', '{"request": "a", "x": 1}']) == 1
-    assert _distinct_requests(['{"x": 1}', "{not json at all}"]) == 0
-    assert _distinct_requests(['{"request": 7}']) == 0
-    assert _distinct_requests([]) == 0
+    assert _distinct_calls(['{"request": "a"}', '{"request": "b"}']) == 2
+    assert (
+        _distinct_calls(['{"request": "a", "x": 1}', '{"request": "a", "x": 2}']) == 2
+    )
+    assert _distinct_calls(['{"request": "a"}', '{"request": "a"}']) == 1
+    assert _distinct_calls(['{"x": 1}', "{not json at all}"]) == 0
+    assert _distinct_calls(['{"request": 7}']) == 0
+    assert _distinct_calls([]) == 0
 
 
 @pytest.mark.parametrize(

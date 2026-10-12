@@ -194,22 +194,37 @@ def _is_self_contained_object(candidate: str) -> bool:
     return False
 
 
-def _distinct_requests(candidates: List[str]) -> int:
+def _distinct_calls(candidates: List[str]) -> int:
     """Count the distinct tool calls that one reading of a span would dispatch.
 
     Each candidate is repaired exactly as extraction would repair it, and is
     counted only if it yields an object with a string `request` field -- the
-    field that actually dispatches a tool. Equal `request` values collapse,
-    because the question this answers is whether a reading loses a CALL, and
-    two readings of the same text that name the same tool have not.
+    field that actually dispatches a tool. Objects without one cannot dispatch
+    anything, and counting them would let ordinary JSON sitting inside a value
+    inflate the single-line reading and switch multiline recovery off.
+
+    A call's identity is the WHOLE repaired object, not just its `request`.
+    Keying on the name alone collapses two calls to the same tool, and a reply
+    that calls one tool twice is exactly where a swallow is most likely:
+
+        {'request':'write_file','value':'oops
+        }
+        {"request":"write_file","value":"ok}
+        '}
+
+    Both readings name `write_file` once, so a name-keyed count ties at 1 and
+    the swallow survives -- `write_file` runs with `ok` and the `oops` call
+    disappears. Keyed on the whole object the counts are 2 against 1, and the
+    swallow is caught. Identity still has to collapse something, or a reading
+    could never tie with itself; the object is the narrowest thing that does.
 
     Args:
         candidates: The candidate object texts making up one reading of a span.
 
     Returns:
-        The number of distinct `request` values that reading dispatches.
+        The number of distinct calls that reading dispatches.
     """
-    requests: set[str] = set()
+    calls: set[str] = set()
     for candidate in candidates:
         repaired = try_repair_json_yaml(candidate)
         if repaired is None:
@@ -219,8 +234,8 @@ def _distinct_requests(candidates: List[str]) -> int:
         except ValueError:
             continue
         if isinstance(obj, dict) and isinstance(obj.get("request"), str):
-            requests.add(obj["request"])
-    return len(requests)
+            calls.add(json.dumps(obj, sort_keys=True))
+    return len(calls)
 
 
 def _scan(expr: Any, s: str) -> List[Tuple[str, int, int]]:
@@ -318,14 +333,14 @@ def get_json_candidates(s: str) -> List[str]:
             any(_is_self_contained_object(m[0]) for m in contained)
             # Otherwise compare yields: read the candidate's span both ways,
             # repair each piece, and prefer the single-line reading only when
-            # it dispatches strictly MORE distinct tools. A swallow shows up
-            # as 2 against 1, because the swallowed call's `request` is lost.
+            # it dispatches strictly MORE distinct calls. A swallow shows up
+            # as 2 against 1, because the swallowed call is lost entirely.
             # A tie keeps the multiline recovery, which is what a genuine
             # recovery looks like -- one call read either way -- so recovery
             # survives. Being a comparison of outcomes and not of spellings,
             # it is blind to however the swallowed call happens to be
             # malformed.
-            or _distinct_requests(span_reading) > _distinct_requests([text])
+            or _distinct_calls(span_reading) > _distinct_calls([text])
         ):
             for text_i, start_i, end_i in single_line:
                 if start <= start_i < end and end_i > position:
