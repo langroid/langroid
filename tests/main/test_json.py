@@ -97,26 +97,60 @@ def test_extract_top_level_json(s, expected):
         "key: value\nother: 1\n",  # config-like lines
     ],
 )
-def test_extract_top_level_json_recovers_the_value_verbatim(value: str) -> None:
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_extract_top_level_json_recovers_the_value_verbatim(
+    quote: str, value: str
+) -> None:
     """A recovered call carries the argument the model actually wrote.
 
     The candidate is extracted whole, but it used to be handed straight to
     `repair_json`, which rewrites the very content multiline recovery exists to
     preserve -- it drops a trailing newline, and can read a config-like line as
-    another field. Since the call parses under `json.loads(strict=False)` once
-    the raw newline is allowed, that result is used verbatim instead.
+    another field. The call is used verbatim instead: under
+    `json.loads(strict=False)` for the double-quoted spelling, and after
+    re-encoding the quoted tokens for the single-quoted one, which `json.loads`
+    rejects however lax `strict` is.
+
+    Both spellings are covered because fixing only the double-quoted one left
+    exactly the same silent truncation behind for the other.
 
     `main` extracts nothing usable from these inputs at all, so there is no
     regression here to compare against; the point is that what this branch
     recovers is byte-faithful rather than approximately right.
     """
-    response = json.dumps({"request": "write_file", "content": value})
-    # Put the raw newlines back: a reply whose value is properly escaped was
-    # never the broken case.
-    response = response.replace("\\n", "\n")
+    # Hand-built rather than via json.dumps: the value's newlines must stay RAW
+    # (a properly escaped reply was never the broken case), and the quote style
+    # is the thing under test.
+    assert quote not in value
+    response = (
+        f"{{{quote}request{quote}:{quote}write_file{quote},"
+        f"{quote}content{quote}:{quote}{value}{quote}}}"
+    )
 
     assert [json.loads(c) for c in extract_top_level_json(response)] == [
         {"request": "write_file", "content": value}
+    ]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "{'request':'w','content':'it\\'s here'}",
+        '{"request":"w","content":"a\\\\b"}',
+        '{"request":"w","content":"tab\\there"}',
+    ],
+)
+def test_extract_top_level_json_leaves_escapes_to_the_repairer(response: str) -> None:
+    """Re-encoding quoted tokens is skipped when the text carries a backslash.
+
+    The normalizer reads the bytes between the quotes literally, so on `\\'` it
+    would emit an escaped backslash followed by a quote rather than the
+    apostrophe the model meant. Guarding on the absence of any backslash keeps
+    escaped content on the repair path, where its handling is unchanged -- so
+    these stay byte-identical to `main`.
+    """
+    assert extract_top_level_json(response) == [
+        json.dumps(parse_imperfect_json(response))
     ]
 
 

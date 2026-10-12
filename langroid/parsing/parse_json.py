@@ -7,6 +7,7 @@ import yaml
 from json_repair import repair_json
 from pyparsing import (
     FollowedBy,
+    ParseException,
     QuotedString,
     nested_expr,
     one_of,
@@ -427,6 +428,24 @@ def try_repair_json_yaml(s: str) -> str | None:
             return json.dumps(parsed)
     except ValueError:
         pass
+
+    # The same argument for the single-quoted spelling, which `json.loads`
+    # rejects outright however lax `strict` is. `_NORMALIZED_QUOTED_STRINGS`
+    # re-encodes each quoted token with `json.dumps`, which turns a raw newline
+    # into `\n` and the quotes into double quotes.
+    #
+    # Only when the text carries no backslash at all, though: the normalizer
+    # reads the bytes between the quotes literally, so it would re-encode `\'`
+    # as an escaped backslash followed by a quote rather than as the apostrophe
+    # the model meant. Where escapes are in play this falls through to the
+    # repair path, which is where it was before.
+    if "\\" not in s:
+        try:
+            parsed = json.loads(_NORMALIZED_QUOTED_STRINGS.transform_string(s))
+            if isinstance(parsed, (dict, list)):
+                return json.dumps(parsed)
+        except (ValueError, ParseException):
+            pass
 
     s_repaired_obj = repair_json(s, return_objects=True)
     if isinstance(s_repaired_obj, list):
