@@ -1,3 +1,4 @@
+import re
 from csv import Sniffer, reader
 from typing import List
 
@@ -51,8 +52,13 @@ def read_tabular_data(path_or_url: str, sep: None | str = None) -> pd.DataFrame:
             if hasattr(f.handle, "seek"):
                 f.handle.seek(0)
 
+        # Positions above come from splitting the header on the literal `sep`,
+        # but pandas treats a multi-char `sep` as a regex, so escape it to keep
+        # read_csv's field positions aligned with ours.
+        csv_sep = sep if len(sep) == 1 else re.escape(sep)
+
         # use only those columns
-        data = pd.read_csv(path_or_url, sep=sep, usecols=valid_cols)
+        data = pd.read_csv(path_or_url, sep=csv_sep, usecols=valid_cols)
         data.columns = data.columns.str.strip()  # e.g. "  column 1  " -> "column 1"
 
         return data

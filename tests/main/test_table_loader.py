@@ -134,6 +134,19 @@ def test_read_tabular_data_preserves_duplicate_multichar_headers(
     )
 
 
+def test_read_tabular_data_multichar_regex_metachar_separator(tmp_path: Path) -> None:
+    """A multi-char separator is a literal delimiter, not a regex."""
+    path = tmp_path / "table.csv"
+    path.write_text("price||price||qty\n10||20||3\n", encoding="utf-8")
+
+    result = read_tabular_data(str(path), "||")
+
+    pd.testing.assert_frame_equal(
+        result,
+        pd.DataFrame({"price": [10], "price.1": [20], "qty": [3]}),
+    )
+
+
 def test_read_tabular_data_preserves_existing_suffix_header(tmp_path: Path) -> None:
     path = tmp_path / "table.csv"
     path.write_text("price,price.1,price\n10,20,30\n", encoding="utf-8")
