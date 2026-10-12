@@ -216,14 +216,36 @@ class Parser:
         except Exception:
             self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
 
+    def _encode(self, text: str) -> List[int]:
+        """Encode `text`, tolerating tiktoken special-token literals.
+
+        Callers size a budget with `num_tokens` and then slice with
+        `truncate_tokens`, so both must apply the SAME special-token policy or
+        the budget means different things in the two methods. `<|endoftext|>`
+        counts as one token; every other special-token literal (`<|fim_prefix|>`,
+        `<|endofprompt|>`, ...) is encoded as ordinary text rather than making
+        tiktoken raise -- code, config and prompt content legitimately contain
+        these strings.
+
+        Args:
+            text: The text to encode.
+
+        Returns:
+            The list of token ids.
+        """
+        return self.tokenizer.encode(
+            text,
+            allowed_special={"<|endoftext|>"},
+            disallowed_special=(),
+        )
+
     def num_tokens(self, text: str) -> int:
         if self.config.splitter == Splitter.MARKDOWN:
             return count_words(text)  # simple count based on whitespace-split
-        tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
-        return len(tokens)
+        return len(self._encode(text))
 
     def truncate_tokens(self, text: str, max_tokens: int) -> str:
-        tokens = self.tokenizer.encode(text)
+        tokens = self._encode(text)
         if len(tokens) <= max_tokens:
             return text
         return self.tokenizer.decode(tokens[:max_tokens])
