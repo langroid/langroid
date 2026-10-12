@@ -1,5 +1,6 @@
 import ast
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -144,3 +145,63 @@ def test_repo_loader() -> None:
     # list all names to depth 2
     listing = repo_loader.ls(tree, depth=2)
     assert len(listing) > 0
+
+
+class _CloneFailed(subprocess.CalledProcessError):
+    pass
+
+
+def _loader(monkeypatch, tmp_path, url="https://github.com/nonexistent-org/nope"):
+    """A RepoLoader that never touches GitHub: only the clone step is exercised."""
+    from langroid.parsing import repo_loader as repo_loader_module
+    from langroid.parsing.repo_loader import RepoLoader
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(RepoLoader, "_get_repo_with_retry", lambda *a, **k: None)
+    loader = RepoLoader(url)
+    loader.clone_path = None
+    return loader, repo_loader_module
+
+
+def test_clone_returns_none_when_git_clone_fails(monkeypatch, tmp_path):
+    """
+    `clone` is typed `Optional[str]` and `load()` guards on `path is None`, so a
+    failed clone must report None -- not the path it never cloned into.
+    """
+    loader, module = _loader(monkeypatch, tmp_path)
+
+    def fail(*a, **k):
+        raise _CloneFailed(1, ["git", "clone"])
+
+    monkeypatch.setattr(module.subprocess, "run", fail)
+    assert loader.clone(str(tmp_path / "repo")) is None
+    assert loader.clone_path is None
+
+
+def test_load_reports_unclonable_repo(monkeypatch, tmp_path):
+    """`load()` must raise its own 'Unable to clone repo' instead of loading nothing."""
+    loader, module = _loader(monkeypatch, tmp_path)
+
+    def fail(*a, **k):
+        raise _CloneFailed(1, ["git", "clone"])
+
+    monkeypatch.setattr(module.subprocess, "run", fail)
+    with pytest.raises(ValueError, match="Unable to clone repo"):
+        loader.load()
+
+
+def test_clone_returns_path_on_success(monkeypatch, tmp_path):
+    """Control: a clone that succeeds still returns the path and records it."""
+    loader, module = _loader(monkeypatch, tmp_path)
+
+    def ok(cmd, *a, **k):
+        # `git clone <url> <path>` -- create the destination so `_has_files` agrees
+        dest = Path(cmd[-1])
+        (dest / "sub").mkdir(parents=True, exist_ok=True)
+        (dest / "README.md").write_text("hi\n")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(module.subprocess, "run", ok)
+    path = str(tmp_path / "repo")
+    assert loader.clone(path) == path
+    assert loader.clone_path == path

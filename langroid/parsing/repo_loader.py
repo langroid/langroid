@@ -323,8 +323,11 @@ class RepoLoader:
             logger.error(f"Git clone failed: {e}")
         except Exception as e:
             logger.error(f"An error occurred while trying to clone the repository:{e}")
-
-        return self.clone_path
+        # Nothing was cloned: report that the way the Optional return type and
+        # `load()`'s `if path is None: raise ValueError("Unable to clone repo")`
+        # guard both expect, instead of handing back a path with no repo in it.
+        self.clone_path = None
+        return None
 
     def load_tree_from_github(
         self, depth: int, lines: int = 0
