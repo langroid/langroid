@@ -223,7 +223,15 @@ class Parser:
         return len(tokens)
 
     def truncate_tokens(self, text: str, max_tokens: int) -> str:
-        tokens = self.tokenizer.encode(text, disallowed_special=())
+        # Mirror `num_tokens`' special-token policy so that the budget here
+        # means the same thing as the count callers computed with it:
+        # `<|endoftext|>` is one token, and every other special-token literal
+        # is encoded as ordinary text instead of raising.
+        tokens = self.tokenizer.encode(
+            text,
+            allowed_special={"<|endoftext|>"},
+            disallowed_special=(),
+        )
         if len(tokens) <= max_tokens:
             return text
         return self.tokenizer.decode(tokens[:max_tokens])

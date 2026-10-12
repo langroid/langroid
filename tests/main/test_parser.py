@@ -182,15 +182,30 @@ vegetables
 
 def test_truncate_tokens_allows_special_token_literals():
     """truncate_tokens must not crash on text containing tiktoken special-token
-    literals such as  — code/config content can contain them. num_tokens
-    already allows  explicitly and chunk_tokens uses disallowed_special=(),
-    so truncate_tokens should be at least as permissive.
+    literals such as `<|endoftext|>` -- code/config content can contain them.
+    num_tokens already allows `<|endoftext|>` explicitly, so truncate_tokens
+    must be at least as permissive AND must count tokens the same way, since
+    callers (e.g. Agent._maybe_truncate_result) decide the budget with
+    num_tokens and then hand it to truncate_tokens.
     """
-    cfg = ParsingConfig(token_encoding_model="text-embedding-3-small")
+    cfg = ParsingConfig(
+        splitter=Splitter.TOKENS,
+        token_encoding_model="text-embedding-3-small",
+    )
     parser = Parser(cfg)
     # long text so truncation actually kicks in
     text = "def f(): return '<|endoftext|>' # boundary token in code\n" * 30
     assert parser.num_tokens(text) > 20
-    # must not raise; result is a prefix of the token stream
+    # must not raise, and must be a genuine prefix of the input
     truncated = parser.truncate_tokens(text, 20)
-    assert truncated and text.startswith(truncated[: min(5, len(truncated))])
+    assert truncated
+    assert text.startswith(truncated)
+    # the budget must mean the same thing in both methods: a 20-token budget
+    # yields 20 num_tokens, not a silently smaller slice because the two
+    # methods disagree on how to encode `<|endoftext|>`
+    assert parser.num_tokens(truncated) == 20
+
+    # other special-token literals must not raise either (num_tokens is not
+    # consulted here, since it still rejects non-<|endoftext|> specials)
+    other = "prefix <|fim_prefix|> body <|endofprompt|> tail\n" * 30
+    assert parser.truncate_tokens(other, 20)
