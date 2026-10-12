@@ -331,16 +331,26 @@ def extract_numbered_segments(s: str, specs: str) -> str:
     paragraphs = split_paragraphs(s)
 
     extracted_paragraphs = []
+    current_segment = None
 
     for paragraph in paragraphs:
-        segments_with_numbers = segment_pattern.findall(paragraph)
+        segments_with_numbers = list(segment_pattern.finditer(paragraph))
+        # Text before the next marker continues the preceding segment, even
+        # when that segment started in an earlier paragraph.
+        prefix_end = (
+            segments_with_numbers[0].start()
+            if segments_with_numbers
+            else len(paragraph)
+        )
+        extracted_segments = []
+        if current_segment in spec_indices and prefix_end > 0:
+            extracted_segments.append(paragraph[:prefix_end])
 
         # Extract the desired segments from this paragraph
-        extracted_segments = [
-            segment
-            for num, segment in segments_with_numbers
-            if int(num) in spec_indices
-        ]
+        for match in segments_with_numbers:
+            current_segment = int(match.group(1))
+            if current_segment in spec_indices:
+                extracted_segments.append(match.group(2))
 
         # If we extracted any segments from this paragraph,
         # join them with ellipsis (...) and append to results.

@@ -127,8 +127,10 @@ class RedisCache(CacheDB):
         Delete the keys from the cache.
 
         Args:
-            keys (List[str]): The keys to delete.
+            keys (List[str]): The keys to delete. An empty list is a no-op.
         """
+        if not keys:
+            return
         with self.redis_client() as client:  # type: ignore
             try:
                 client.delete(*keys)

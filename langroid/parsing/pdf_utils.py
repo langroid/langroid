@@ -62,8 +62,8 @@ def pdf_split_pages(
             paths.append(output)
     else:
         # Split according to specified page ranges
-        # Make sure the splits list is sorted and includes all valid splits
-        splits = sorted([s for s in splits if 1 <= s <= total_pages])
+        # Sort unique valid boundaries to avoid empty or reversed page ranges.
+        splits = sorted({s for s in splits if 1 <= s <= total_pages})
 
         # Create the ranges to process
         ranges = []

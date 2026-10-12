@@ -1746,6 +1746,20 @@ class OpenAIGPT(LanguageModel):
             event_text = choices[0]["text"]
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
 
+        finish_reason = choices[0].get("finish_reason", "")
+        if not event_text and finish_reason == "content_filter":
+            filter_names = [
+                n
+                for n, r in choices[0].get("content_filter_results", {}).items()
+                if r.get("filtered")
+            ]
+            event_text = (
+                "Cannot respond due to content filters ["
+                + ", ".join(filter_names)
+                + "]"
+            )
+            logging.warning("LLM API returned content filter error: " + event_text)
+
         event_text_tokens, event_reasoning_tokens, in_reasoning = (
             self._split_inline_reasoning(
                 event_text,
@@ -1811,7 +1825,7 @@ class OpenAIGPT(LanguageModel):
                     )
 
         # show this delta in the stream
-        is_break = choices[0].get("finish_reason", "") in [
+        is_break = finish_reason in [
             "stop",
             "function_call",
             "tool_calls",

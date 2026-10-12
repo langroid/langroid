@@ -21,7 +21,9 @@ def read_tabular_data(path_or_url: str, sep: None | str = None) -> pd.DataFrame:
     try:
         if sep is None:
             # Read the first few lines to guess the separator
-            with pd.io.common.get_handle(path_or_url, "r") as file_handler:
+            with pd.io.common.get_handle(
+                path_or_url, "r", encoding="utf-8-sig"
+            ) as file_handler:
                 first_lines = "".join(file_handler.handle.readlines(5))
                 sep = Sniffer().sniff(first_lines).delimiter
                 # If it's a local file, reset to the beginning
@@ -31,7 +33,7 @@ def read_tabular_data(path_or_url: str, sep: None | str = None) -> pd.DataFrame:
         # Read the data
 
         # Select non-blank columns by position, since pandas renames duplicates.
-        with pd.io.common.get_handle(path_or_url, "r") as f:
+        with pd.io.common.get_handle(path_or_url, "r", encoding="utf-8-sig") as f:
             if len(sep) == 1:
                 valid_cols = [
                     i

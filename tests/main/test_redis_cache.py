@@ -54,3 +54,25 @@ def test_key_deletion(real_redis_cache):
     result = real_redis_cache.delete_keys_pattern("_test_key_*")
     assert result is None
     assert real_redis_cache.retrieve(keys[0]) is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("populated", [False, True])
+def test_delete_empty_keys_is_noop(populated):
+    cache = RedisCache(RedisCacheConfig(fake=True))
+    if populated:
+        cache.store("keep", {"value": "unchanged"})
+    assert cache.delete_keys([]) is None
+    assert cache.retrieve("keep") == ({"value": "unchanged"} if populated else None)
+
+
+@pytest.mark.unit
+def test_delete_keys_removes_only_requested_entries():
+    cache = RedisCache(RedisCacheConfig(fake=True))
+    cache.store("remove", {"value": 1})
+    cache.store("keep", {"value": 2})
+    assert cache.delete_keys(["remove", "missing"]) is None
+    assert cache.retrieve("remove") is None
+    assert cache.retrieve("keep") == {"value": 2}
+    assert cache.delete_keys(["remove", "missing"]) is None
+    assert cache.retrieve("keep") == {"value": 2}
