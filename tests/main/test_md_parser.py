@@ -376,6 +376,55 @@ Paragraph B.
     assert tree[1].children[0].content.strip() == "Paragraph B."
 
 
+@pytest.mark.parametrize("level", [2, 3, 4, 6])
+def test_same_level_headers_without_h1_are_siblings(level: int) -> None:
+    first = "#" * level + " First"
+    second = "#" * level + " Second"
+    tree = parse_markdown_headings(f"{first}\nFirst body.\n{second}\nSecond body.")
+
+    assert [node.content for node in tree] == [first, second]
+    assert [node.path for node in tree] == [[first], [second]]
+    assert tree[1].children[0].path == [second]
+
+
+@pytest.mark.parametrize("level", [3, 4, 6])
+def test_same_level_headers_after_skipping_levels_are_siblings(level: int) -> None:
+    first = "#" * level + " First"
+    second = "#" * level + " Second"
+    tree = parse_markdown_headings(
+        f"# Root\n{first}\nFirst body.\n{second}\nSecond body."
+    )
+
+    assert len(tree) == 1
+    children = tree[0].children
+    assert [node.content for node in children] == [first, second]
+    assert children[1].path == ["# Root", second]
+    assert children[1].children[0].path == ["# Root", second]
+
+
+def test_lower_heading_level_after_gap_returns_to_parent() -> None:
+    tree = parse_markdown_headings(
+        "# Root\n##### Deep\nDeep body.\n### Next\nNext body."
+    )
+
+    assert [node.content for node in tree[0].children] == ["##### Deep", "### Next"]
+    assert tree[0].children[1].path == ["# Root", "### Next"]
+
+
+def test_chunk_markdown_does_not_inherit_a_skipped_level_sibling() -> None:
+    chunks = chunk_markdown(
+        "# Root\n### First\nFirst body.\n### Second\nSecond body.",
+        MarkdownChunkConfig(rollup=False),
+    )
+
+    assert len(chunks) == 2
+    assert "First body." in chunks[0]
+    assert "Second body." in chunks[1]
+    assert "# Root" in chunks[1]
+    assert "### Second" in chunks[1]
+    assert "### First" not in chunks[1]
+
+
 def test_header_skipping_levels():
     md = """# H1
 ### H3
@@ -783,6 +832,46 @@ def test_recursive_chunk(chunk_size, overlap_tokens, variation_percent):
             "Expected a single chunk since the text is short enough, "
             f"but got {len(chunks)} chunks."
         )
+
+
+@pytest.mark.parametrize("overlap_tokens", [0, 1, 2])
+@pytest.mark.parametrize("entry_point", ["recursive", "rollup", "no_rollup"])
+def test_recursive_chunk_respects_zero_overlap(
+    overlap_tokens: int, entry_point: str
+) -> None:
+    paragraphs = [
+        "one two three four",
+        "five six seven eight",
+        "nine ten eleven twelve",
+    ]
+    config = MarkdownChunkConfig(
+        chunk_size=4,
+        overlap_tokens=overlap_tokens,
+        variation_percent=0,
+        rollup=entry_point == "rollup",
+    )
+    text = "\n\n".join(paragraphs)
+
+    chunks = (
+        recursive_chunk(text, config)
+        if entry_point == "recursive"
+        else chunk_markdown(text, config)
+    )
+
+    expected = {
+        0: paragraphs,
+        1: [
+            paragraphs[0],
+            "four five six seven eight",
+            "eight nine ten eleven twelve",
+        ],
+        2: [
+            paragraphs[0],
+            "three four five six seven eight",
+            "seven eight nine ten eleven twelve",
+        ],
+    }
+    assert chunks == expected[overlap_tokens]
 
 
 def test_recursive_chunk_enhanced():

@@ -125,7 +125,7 @@ def parse_markdown_headings(md_text: str) -> List[Node]:
 
     # We'll now convert heading_blocks into a tree using a stack-based approach
     root_nodes: List[Node] = []
-    stack: List[Node] = []
+    stack: List[tuple[int, Node]] = []
     header_path: List[str] = []
 
     for hb in heading_blocks:
@@ -134,7 +134,7 @@ def parse_markdown_headings(md_text: str) -> List[Node]:
         content_txt = hb["content"]
 
         # --- Pop stack first! ---
-        while stack and len(stack[-1].path) >= level:
+        while stack and stack[-1][0] >= level:
             stack.pop()
             header_path.pop()
 
@@ -153,11 +153,11 @@ def parse_markdown_headings(md_text: str) -> List[Node]:
 
         # Attach heading_node to the stack top or as a root
         if stack:
-            stack[-1].children.append(heading_node)
+            stack[-1][1].children.append(heading_node)
         else:
             root_nodes.append(heading_node)
 
-        stack.append(heading_node)
+        stack.append((level, heading_node))
         header_path.append(heading_txt)  # type: ignore
 
     return root_nodes
@@ -332,7 +332,9 @@ def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
                 flush_chunk()
                 # Overlap from old_chunk
                 overlap_tokens_list = (
-                    old_chunk.split()[-config.overlap_tokens :] if old_chunk else []
+                    old_chunk.split()[-config.overlap_tokens :]
+                    if old_chunk and config.overlap_tokens != 0
+                    else []
                 )
                 overlap_str = (
                     " ".join(overlap_tokens_list) if overlap_tokens_list else ""

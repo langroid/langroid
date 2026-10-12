@@ -536,7 +536,7 @@ class DocumentParser(Parser):
                     content = _decode_utf8_text(source)
                 if lines is not None:
                     file_lines = content.splitlines()[:lines]
-                    content = "\n".join(line.strip() for line in file_lines)
+                    content = "\n".join(line.rstrip("\r\n") for line in file_lines)
             elif is_http_url(source):
                 # Fetch URL-based plain text rather than opening it as a path.
                 url_content, headers = fetch_configured_url(source, parser.config)
@@ -547,19 +547,21 @@ class DocumentParser(Parser):
                 )
                 if lines is not None:
                     file_lines = content.splitlines()[:lines]
-                    content = "\n".join(line.strip() for line in file_lines)
+                    content = "\n".join(line.rstrip("\r\n") for line in file_lines)
             else:
                 if dtype == DocumentType.HTML:
                     with open(source, "rb") as f:
                         content = decode_document_text(f.read(), html=True)
                     if lines is not None:
                         file_lines = content.splitlines()[:lines]
-                        content = "\n".join(line.strip() for line in file_lines)
+                        content = "\n".join(line.rstrip("\r\n") for line in file_lines)
                 else:
                     with open(source, "r") as f:
                         if lines is not None:
                             file_lines = list(itertools.islice(f, lines))
-                            content = "\n".join(line.strip() for line in file_lines)
+                            content = "\n".join(
+                                line.rstrip("\r\n") for line in file_lines
+                            )
                         else:
                             content = f.read()
 
@@ -737,7 +739,7 @@ class FitzPDFParser(DocumentParser):
         try:
             import fitz
         except ImportError:
-            LangroidImportError("fitz", "doc-chat")
+            raise LangroidImportError("fitz", "doc-chat")
         doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
         for i, page in enumerate(doc):
             yield i, page
@@ -1222,7 +1224,7 @@ class MarkitdownDocxParser(DocumentParser):
         try:
             from markitdown import MarkItDown
         except ImportError:
-            LangroidImportError("markitdown", ["markitdown", "doc-parsers"])
+            raise LangroidImportError("markitdown", ["markitdown", "doc-parsers"])
         md = MarkItDown()
         self.doc_bytes.seek(0)  # Reset to start
 
@@ -1260,7 +1262,7 @@ class MarkitdownXLSXParser(DocumentParser):
         try:
             from markitdown import MarkItDown
         except ImportError:
-            LangroidImportError("markitdown", "doc-parsers")
+            raise LangroidImportError("markitdown", "doc-parsers")
         md = MarkItDown()
         self.doc_bytes.seek(0)  # Reset to start
 
@@ -1299,7 +1301,7 @@ class MarkitdownPPTXParser(DocumentParser):
         try:
             from markitdown import MarkItDown
         except ImportError:
-            LangroidImportError("markitdown", "doc-parsers")
+            raise LangroidImportError("markitdown", "doc-parsers")
 
         md = MarkItDown()
         self.doc_bytes.seek(0)

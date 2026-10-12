@@ -515,8 +515,8 @@ class RepoLoader:
                     # Add the file to the current dictionary
                     with open(item_path, "r") as f:
                         file_lines = list(itertools.islice(f, lines))
-                    file_content = "\n".join(line.strip() for line in file_lines)
-                    if file_content == "":
+                    file_content = "\n".join(line.rstrip("\r\n") for line in file_lines)
+                    if not file_content.strip():
                         continue
 
                     file_dict = {
