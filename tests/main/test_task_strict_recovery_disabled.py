@@ -20,6 +20,8 @@ is genuinely True and no API key or LLM call is needed.
 
 from typing import Dict, List, Optional, Union
 
+import pytest
+
 import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.language_models.base import (
@@ -136,3 +138,65 @@ def test_disable_strict_suppresses_task_strict_recovery() -> None:
     # itself set `disable_strict` on a strict validation error, so this is
     # asserted on a fresh agent's state only after the behavior check above.
     assert not agent._json_schema_available()
+
+
+class _LocalTool(lr.ToolMessage):
+    """A tool that exists so it can be excluded from strict recovery."""
+
+    request: str = "local_tool"
+    purpose: str = "Do something locally."
+    x: int
+
+    def handle(self) -> str:
+        return "handled"
+
+
+def _agent_with_no_strict_tool() -> ChatAgent:
+    """An agent that wants strict recovery but has no tool to recover into.
+
+    `ChatAgent.llm_response()` retries a failed tool call in strict JSON mode by
+    wrapping every *usable* tool in an `AnyTool` schema. `AnyTool` is None when
+    strict recovery has been disabled for all of them, which is a state the
+    agents themselves create (see `disable_strict_tools_set`).
+    """
+    agent = _agent_with_local_llm("anything")
+    agent.enable_message(_LocalTool)
+    agent.disable_strict_tools_set = {"local_tool"}
+    agent.tool_error = True  # the last tool call failed validation
+    return agent
+
+
+def test_no_usable_tool_suppresses_strict_recovery() -> None:
+    """With no tool to recover into, the sync path declines to respond."""
+    agent = _agent_with_no_strict_tool()
+    llm = agent.llm
+    assert isinstance(llm, LocalOpenAIGPT)
+    assert agent._get_any_tool_message() is None, (
+        "precondition failed: this agent must have no tool for strict recovery"
+    )
+    assert agent._json_schema_available()
+
+    assert agent.llm_response("hi") is None
+    assert llm.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_no_usable_tool_suppresses_strict_recovery_async() -> None:
+    """Async twin of the test above: it must not issue a recovery LLM call.
+
+    Without the `AnyTool is None` guard the async path keeps going: it calls
+    `set_output_format(None, ...)` (which resets the saved tool settings),
+    builds recovery instructions with the tool schema left out, appends them to
+    the user message and calls the LLM again -- so a state the sync path treats
+    as "cannot answer" costs an extra request carrying unusable instructions.
+    """
+    agent = _agent_with_no_strict_tool()
+    llm = agent.llm
+    assert isinstance(llm, LocalOpenAIGPT)
+    assert agent._get_any_tool_message() is None
+
+    assert await agent.llm_response_async("hi") is None
+    assert llm.prompts == [], (
+        "no usable tool means no strict recovery, so no LLM call should be "
+        f"made; recorded prompts: {llm.prompts}"
+    )
