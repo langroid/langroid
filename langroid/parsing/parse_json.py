@@ -119,14 +119,21 @@ _CURLY_BRACES = _MULTILINE_CURLY_BRACES | _SINGLE_LINE_CURLY_BRACES
 #
 # The multiline grammar's `ignore_expr` is retried at every character position,
 # so on input where `nested_expr` scans a long span without closing (a reply
-# truncated mid-string, say) it costs a ~2.6x constant factor over the
+# truncated mid-string, say) it costs a 2-4x constant factor over the
 # single-line grammar. That factor is unavoidable within this approach, so the
-# length bound is what keeps the absolute cost small: 8 KiB caps the extra work
-# at a few hundred ms, where 64 KiB allowed ~3s on a 63 KB truncated reply.
+# length bound is all that keeps the absolute cost finite, and at 8 KiB the cost
+# is NOT small: measured at the bound on a reply truncated mid-string, this
+# module takes 960 ms-1.1 s against the single-line grammar's 260-570 ms, so the
+# extra work is on the order of 550-700 ms. 64 KiB allowed ~3s on a 63 KB reply.
+# That cost is paid per call site, and `extract_top_level_json` is called from
+# several uncached places per turn, so the bound is a ceiling on a real
+# regression rather than a formality -- lower it before raising it.
+#
 # Well-formed input of any size is unaffected — it closes immediately and never
-# enters the slow scan. Multiline recovery is therefore best-effort, and applies
-# to tool calls up to 8 KiB; larger ones keep the original (truncating)
-# behavior rather than stalling extraction.
+# enters the slow scan, and a reply truncated mid-string is the shape that pays.
+# Multiline recovery is therefore best-effort, and applies to tool calls up to
+# 8 KiB; larger ones keep the original (truncating) behavior rather than
+# stalling extraction.
 _MAX_MULTILINE_INPUT_CHARS = 8 * 1024
 _MAX_MULTILINE_QUOTES = 512
 
