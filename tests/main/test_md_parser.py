@@ -218,10 +218,15 @@ def test_chunk_markdown_indented_heading_lookalike_keeps_header_context() -> Non
     assert chunks == ["# Example\n\n# Example"]
 
 
-def test_chunk_markdown_retains_oversized_lone_heading_under_rollup() -> None:
-    """An oversized heading-only leaf must not be dropped by the rollup path."""
+@pytest.mark.parametrize("rollup", [True, False])
+def test_chunk_markdown_retains_oversized_lone_heading(rollup: bool) -> None:
+    """An oversized heading-only leaf is neither dropped nor fragmented.
+
+    Under rollup it must not be skipped; without rollup it must not be split
+    across chunks, since a heading is only useful intact.
+    """
     heading = "# This is a long heading with several words"
-    config = MarkdownChunkConfig(rollup=True, chunk_size=4, overlap_tokens=1)
+    config = MarkdownChunkConfig(rollup=rollup, chunk_size=4, overlap_tokens=1)
 
     chunks = chunk_markdown(f"Introduction.\n\n{heading}", config)
 

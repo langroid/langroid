@@ -384,7 +384,14 @@ def chunk_node(node: Node, config: MarkdownChunkConfig) -> List[Chunk]:
         header_prefix = (
             config.header_context_sep.join(prefix_path) + "\n\n" if prefix_path else ""
         )
-        content_chunks = recursive_chunk(node.content, config)
+        # A header-only leaf's content is a single heading line: keep it intact
+        # even when oversized, rather than fragmenting it across chunks (the
+        # rollup path treats this case the same way).
+        content_chunks = (
+            [node.content.strip()]
+            if is_header_only
+            else recursive_chunk(node.content, config)
+        )
         for chunk_text in content_chunks:
             full_text = header_prefix + chunk_text
             chunks.append(
