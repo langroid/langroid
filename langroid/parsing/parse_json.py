@@ -198,10 +198,21 @@ def _dispatchable_calls(candidates: List[str]) -> int:
     """Count the tool calls that one reading of a span would dispatch.
 
     Each candidate is repaired exactly as extraction would repair it, and is
-    counted only if it yields an object with a string `request` field -- the
-    field that actually dispatches a tool. Objects without one cannot dispatch
-    anything, and counting them would let ordinary JSON sitting inside a value
-    inflate the single-line reading and switch multiline recovery off.
+    counted if it yields an object at all. A missing `request` does NOT make
+    an object undispatchable: `Agent._get_one_tool_message` infers the request
+    when exactly one enabled tool matches the fields present, so requiring the
+    field undercounts the single-line reading and lets a swallow through --
+
+        {'request':'write_file','value':'oops
+        }
+        {"value":"ok}
+        '}
+
+    where the second object's text ended up inside `write_file`'s argument and
+    `main` returns the two objects separately. Counting every repaired object
+    was measured not to cost any recovery: over the 6000-case differential
+    fuzz the number of replies this module recovers more calls from than
+    `main` is identical either way.
 
     Nothing is deduplicated. Two readings of the same text tie because each
     yields ONE call, not because equal calls collapse, so collapsing buys the
@@ -233,7 +244,7 @@ def _dispatchable_calls(candidates: List[str]) -> int:
             obj = json.loads(repaired)
         except ValueError:
             continue
-        if isinstance(obj, dict) and isinstance(obj.get("request"), str):
+        if isinstance(obj, dict):
             calls += 1
     return calls
 

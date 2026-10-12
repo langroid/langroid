@@ -339,18 +339,36 @@ def test_get_json_candidates_higher_yield_reading_counts_repeats() -> None:
     ]
 
 
-def test_dispatchable_calls_counts_dispatchable_calls_only() -> None:
-    """The yield comparison counts every dispatchable call, and nothing else.
+def test_get_json_candidates_higher_yield_reading_counts_requestless_calls() -> None:
+    """A contained call relying on INFERENCE of its `request` is protected too.
 
-    Only an object that repairs to a dict with a string `request` can dispatch
-    a tool: without that restriction, ordinary JSON sitting inside a value
-    would inflate the single-line reading and switch recovery off. Repeats are
-    counted, since two calls to the same tool are two calls however alike.
+    `Agent._get_one_tool_message` infers the request when exactly one enabled
+    tool matches the fields present, so an object without one still dispatches.
+    Counting only objects that carry `request` undercounts the single-line
+    reading at 1 against 1, and the swallow survives -- the second object's
+    text ends up inside `write_file`'s argument.
+    """
+    response = "{'request':'write_file','value':'oops\n" "}\n" '{"value":"ok}\n' "'}"
+
+    # Byte-identical to `main`: the two objects stay separate.
+    assert extract_top_level_json(response) == [
+        '{"request": "write_file", "value": "oops"}',
+        '{"value": "ok"}',
+    ]
+
+
+def test_dispatchable_calls_counts_every_repaired_object() -> None:
+    """The yield comparison counts anything that repairs to an object.
+
+    `request` is not required -- it can be inferred from the fields present --
+    so an object lacking it still counts. Repeats count too, since two calls to
+    the same tool are two calls however alike. Text that repairs to no object
+    at all counts for nothing, which is what keeps prose from inflating the
+    single-line reading.
     """
     assert _dispatchable_calls(['{"request": "a"}', '{"request": "b"}']) == 2
     assert _dispatchable_calls(['{"request": "a"}', '{"request": "a"}']) == 2
-    assert _dispatchable_calls(['{"x": 1}', "{not json at all}"]) == 0
-    assert _dispatchable_calls(['{"request": 7}']) == 0
+    assert _dispatchable_calls(['{"x": 1}', '{"request": 7}']) == 2
     assert _dispatchable_calls([]) == 0
 
 
