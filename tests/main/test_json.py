@@ -133,31 +133,77 @@ def test_extract_top_level_json_recovers_the_value_verbatim(
 
 
 @pytest.mark.parametrize(
-    "escaped, decoded",
+    "response",
     [
-        ("it\\'s", "it's"),  # an escaped apostrophe, ordinary in such a call
-        ("a\\\\b", "a\\b"),  # an escaped backslash stays one backslash
-        ("a\\tb", "a\tb"),  # a tab escape decodes to a tab
-        ("café", "café"),  # non-ASCII survives the round trip
+        "{'request':'w','content':'it\\'s here'}",
+        '{"request":"w","content":"a\\\\b"}',
+        '{"request":"w","content":"tab\\there"}',
     ],
 )
-def test_extract_top_level_json_decodes_escapes_in_recovered_values(
-    escaped: str, decoded: str
-) -> None:
-    """A single-quoted multiline value keeps its escapes' MEANING.
+def test_extract_top_level_json_leaves_escapes_to_the_repairer(response: str) -> None:
+    """Re-encoding quoted tokens is skipped when the text carries a backslash.
 
-    Re-encoding the quoted tokens is what rescues the single-quoted spelling,
-    but it has to decode what the model wrote rather than double it: `\\'` is
-    an apostrophe, not a backslash and a quote. An earlier attempt skipped the
-    whole path whenever a backslash appeared, which left exactly this silent
-    truncation in place for values containing an escaped apostrophe -- and that
-    is a common thing for a tool argument to contain.
+    The normalizer reads the bytes between the quotes literally, so on `\\'` it
+    would emit an escaped backslash followed by a quote rather than the
+    apostrophe the model meant. Guarding on the absence of any backslash keeps
+    escaped content on the repair path, where its handling is unchanged -- so
+    these stay byte-identical to `main`.
+
+    The guard is deliberately this blunt. An attempt to be cleverer -- decode
+    the escapes with `ast.literal_eval`, which accepts the single-quoted
+    spelling and so would have extended the lossless path to escaped values --
+    silently CORRUPTED tool payloads, because Python's escape set is not JSON's:
+    `'C:\\var\\app'` came back as `C:\\x0bar\\x07pp` (`\\v` is a vertical tab and
+    `\\a` a bell in Python, and `\\012` is octal), where the repair path returns
+    the path intact. A Windows path and generated code are exactly what a
+    `write_file` argument contains, so that trade was far worse than the
+    trailing-whitespace fidelity it bought. The last three cases pin it.
+
+    Closing the remaining gap therefore needs a decoder for the JSON escape set
+    ONLY -- not Python's -- which is a bigger change than this PR should carry.
     """
-    response = "{'request':'w','content':'" + escaped + "\n{\n'}"
-
-    assert [json.loads(c) for c in extract_top_level_json(response)] == [
-        {"request": "w", "content": decoded + "\n{\n"}
+    assert extract_top_level_json(response) == [
+        json.dumps(parse_imperfect_json(response))
     ]
+
+
+@pytest.mark.parametrize(
+    "response, expected",
+    [
+        (
+            r"{'request':'write_file','path':'C:\var\app'}",
+            {"request": "write_file", "path": r"C:\var\app"},
+        ),
+        (
+            r"{'request':'write_file','path':'C:\alpha\beta'}",
+            {"request": "write_file", "path": "C:\\alpha\b" + "eta"},
+        ),
+        (
+            r"{'request':'py','code':'print(1)\012'}",
+            {"request": "py", "code": r"print(1)\012"},
+        ),
+    ],
+)
+def test_extract_top_level_json_does_not_apply_python_escapes(
+    response: str, expected: dict[str, str]
+) -> None:
+    """A backslash sequence Python knows and JSON does not is not decoded.
+
+    This pins the reason the backslash guard above is as blunt as it is. An
+    attempt to be cleverer -- decode the escapes with `ast.literal_eval`, which
+    accepts the single-quoted spelling and so would have extended the lossless
+    path to escaped values -- silently CORRUPTED tool payloads, because
+    Python's escape set is not JSON's. `'C:\\var\\app'` came back as
+    `C:\\x0bar\\x07pp` (`\\v` is a vertical tab in Python and `\\a` a bell), and
+    `\\012` was read as octal. A Windows path and generated code are exactly
+    what a `write_file` argument holds, so that trade was far worse than the
+    trailing-whitespace fidelity it bought.
+
+    These expectations match `main` byte for byte. (`\\b` IS a JSON escape, so
+    the second case keeps the backspace both before and after -- it is here to
+    show the guard is not quietly special-casing drive letters.)
+    """
+    assert [json.loads(c) for c in extract_top_level_json(response)] == [expected]
 
 
 @pytest.mark.parametrize("quote", ['"', "'"])

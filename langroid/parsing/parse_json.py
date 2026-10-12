@@ -104,36 +104,6 @@ _QUOTED_STRINGS = QuotedString(
 _NORMALIZED_QUOTED_STRINGS = _QUOTED_STRINGS.copy().set_parse_action(
     lambda tokens: json.dumps(tokens[0][1:-1])
 )
-
-
-def _as_json_string(token: str) -> str:
-    """Re-encode one quoted token as a JSON string with its value intact.
-
-    `_NORMALIZED_QUOTED_STRINGS` above is for VALIDATION, so it can afford to
-    read the bytes between the quotes literally. Here the value is kept, so the
-    escapes the model wrote have to be decoded rather than doubled: `\\'` is an
-    apostrophe, not a backslash and a quote.
-
-    `ast.literal_eval` decodes them exactly as Python would, and accepts the
-    single-quoted spelling that `json.loads` refuses outright. The one thing it
-    will not accept is the raw newline this module exists to recover, since
-    Python forbids one inside a short string literal -- so those are escaped
-    first, which is value-preserving because an escaped newline and a raw one
-    denote the same character.
-
-    Args:
-        token: One quoted token, including its surrounding quotes.
-
-    Returns:
-        The token re-encoded as a JSON string literal.
-    """
-    escaped = token.replace("\n", "\\n").replace("\r", "\\r")
-    return json.dumps(ast.literal_eval(escaped))
-
-
-_FAITHFUL_QUOTED_STRINGS = _QUOTED_STRINGS.copy().set_parse_action(
-    lambda tokens: _as_json_string(tokens[0])
-)
 _MULTILINE_CURLY_BRACES = original_text_for(
     nested_expr(
         "{",
@@ -460,17 +430,22 @@ def try_repair_json_yaml(s: str) -> str | None:
         pass
 
     # The same argument for the single-quoted spelling, which `json.loads`
-    # rejects outright however lax `strict` is. Re-encode each quoted token
-    # faithfully (see `_as_json_string`) and parse that, so a single-quoted
-    # multiline argument survives whether or not it carries escapes -- an
-    # escaped apostrophe is ordinary in such a call, and guarding escapes away
-    # instead would leave exactly this truncation in place for them.
-    try:
-        parsed = json.loads(_FAITHFUL_QUOTED_STRINGS.transform_string(s))
-        if isinstance(parsed, (dict, list)):
-            return json.dumps(parsed)
-    except (ValueError, SyntaxError, ParseException, MemoryError, RecursionError):
-        pass
+    # rejects outright however lax `strict` is. `_NORMALIZED_QUOTED_STRINGS`
+    # re-encodes each quoted token with `json.dumps`, which turns a raw newline
+    # into `\n` and the quotes into double quotes.
+    #
+    # Only when the text carries no backslash at all, though: the normalizer
+    # reads the bytes between the quotes literally, so it would re-encode `\'`
+    # as an escaped backslash followed by a quote rather than as the apostrophe
+    # the model meant. Where escapes are in play this falls through to the
+    # repair path, which is where it was before.
+    if "\\" not in s:
+        try:
+            parsed = json.loads(_NORMALIZED_QUOTED_STRINGS.transform_string(s))
+            if isinstance(parsed, (dict, list)):
+                return json.dumps(parsed)
+        except (ValueError, ParseException):
+            pass
 
     s_repaired_obj = repair_json(s, return_objects=True)
     if isinstance(s_repaired_obj, list):
