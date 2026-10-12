@@ -205,7 +205,11 @@ def test_truncate_tokens_allows_special_token_literals():
     # methods disagree on how to encode `<|endoftext|>`
     assert parser.num_tokens(truncated) == 20
 
-    # other special-token literals must not raise either (num_tokens is not
-    # consulted here, since it still rejects non-<|endoftext|> specials)
+    # other registered special-token literals must not raise in EITHER method.
+    # _maybe_truncate_result calls num_tokens first, so a counter that still
+    # rejects these would kill the turn before truncate_tokens ever runs.
     other = "prefix <|fim_prefix|> body <|endofprompt|> tail\n" * 30
-    assert parser.truncate_tokens(other, 20)
+    assert parser.num_tokens(other) > 20
+    other_truncated = parser.truncate_tokens(other, 20)
+    assert other.startswith(other_truncated)
+    assert parser.num_tokens(other_truncated) == 20
