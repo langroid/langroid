@@ -1706,7 +1706,7 @@ class OpenAIGPT(LanguageModel):
 
         usage = event.get("usage", {}) or {}
         choices = event.get("choices", [{}])
-        if len(choices) == 0:
+        if choices is None or len(choices) == 0:
             choices = [{}]
         if len(usage) > 0 and len(choices[0]) == 0:
             # we got usage chunk, and empty choices, so we're done
