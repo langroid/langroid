@@ -205,6 +205,19 @@ def test_chunk_markdown_no_duplicate_nested_heading_only_leaf() -> None:
     assert "\n".join(chunks).count("## B") == 1
 
 
+def test_chunk_markdown_indented_heading_lookalike_keeps_header_context() -> None:
+    """Body text that merely looks like its heading is not a heading-only leaf.
+
+    An indented code line identical to the section heading is real content, so
+    it must still be prefixed with the section's header context.
+    """
+    config = MarkdownChunkConfig(rollup=False, chunk_size=200, overlap_tokens=1)
+
+    chunks = chunk_markdown("# Example\n    # Example", config)
+
+    assert chunks == ["# Example\n\n# Example"]
+
+
 def test_chunk_markdown_retains_oversized_lone_heading_under_rollup() -> None:
     """An oversized heading-only leaf must not be dropped by the rollup path."""
     heading = "# This is a long heading with several words"
