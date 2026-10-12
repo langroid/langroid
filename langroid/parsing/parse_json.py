@@ -194,6 +194,35 @@ def _is_self_contained_object(candidate: str) -> bool:
     return False
 
 
+def _distinct_requests(candidates: List[str]) -> int:
+    """Count the distinct tool calls that one reading of a span would dispatch.
+
+    Each candidate is repaired exactly as extraction would repair it, and is
+    counted only if it yields an object with a string `request` field -- the
+    field that actually dispatches a tool. Equal `request` values collapse,
+    because the question this answers is whether a reading loses a CALL, and
+    two readings of the same text that name the same tool have not.
+
+    Args:
+        candidates: The candidate object texts making up one reading of a span.
+
+    Returns:
+        The number of distinct `request` values that reading dispatches.
+    """
+    requests: set[str] = set()
+    for candidate in candidates:
+        repaired = try_repair_json_yaml(candidate)
+        if repaired is None:
+            continue
+        try:
+            obj = json.loads(repaired)
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("request"), str):
+            requests.add(obj["request"])
+    return len(requests)
+
+
 def _scan(expr: Any, s: str) -> List[Tuple[str, int, int]]:
     """Matches as (text, start, end), so spans can be compared."""
     try:
@@ -249,8 +278,23 @@ def get_json_candidates(s: str) -> List[str]:
     # line-local check stays as an early reject, but it cannot see every such
     # way. A candidate that IS the intact match (identical span) is of course
     # not swallowing itself.
+    #
+    # Structure alone is not enough, though, because a contained call can be
+    # swallowed while being malformed itself -- `good` below is missing its
+    # closing quote, so it is not structurally self-contained, yet extraction
+    # repairs it happily and the single-line reading recovers both calls:
+    #
+    #     {'request':'bad','value':'oops
+    #     }
+    #     {"request":"good","value":"ok}
+    #     '}
+    #
+    # Being merely REPAIRABLE is far too weak a signal to admit into the
+    # protected set -- almost any truncated fragment repairs into something,
+    # so treating repairable text as a call to protect would switch multiline
+    # recovery off in general. What separates the two is YIELD, so that is
+    # what decides this weaker case; see the condition below.
     single_line = _scan(_SINGLE_LINE_CURLY_BRACES, s)
-    intact = [m for m in single_line if _is_self_contained_object(m[0])]
 
     # Fall back per candidate, not for the whole response: a legitimate
     # multiline recovery earlier in the reply must survive a swallow later in
@@ -261,10 +305,27 @@ def get_json_candidates(s: str) -> List[str]:
     for text, start, end in matches:
         if end <= position:
             continue
-        if any(
-            start_i < end < end_i  # the candidate's end cuts an intact call
-            or (start < start_i and end_i <= end)  # intact call wholly inside
-            for _, start_i, end_i in intact
+        contained = [
+            m
+            for m in single_line
+            if m[1] < end < m[2]  # the candidate's end cuts this call
+            or (start < m[1] and m[2] <= end)  # this call sits wholly inside
+        ]
+        span_reading = [m[0] for m in single_line if start <= m[1] < end]
+        if contained and (
+            # A contained call that stands on its own has plainly been
+            # swallowed: take the two-call reading unconditionally.
+            any(_is_self_contained_object(m[0]) for m in contained)
+            # Otherwise compare yields: read the candidate's span both ways,
+            # repair each piece, and prefer the single-line reading only when
+            # it dispatches strictly MORE distinct tools. A swallow shows up
+            # as 2 against 1, because the swallowed call's `request` is lost.
+            # A tie keeps the multiline recovery, which is what a genuine
+            # recovery looks like -- one call read either way -- so recovery
+            # survives. Being a comparison of outcomes and not of spellings,
+            # it is blind to however the swallowed call happens to be
+            # malformed.
+            or _distinct_requests(span_reading) > _distinct_requests([text])
         ):
             for text_i, start_i, end_i in single_line:
                 if start <= start_i < end and end_i > position:

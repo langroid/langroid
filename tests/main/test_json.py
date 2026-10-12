@@ -8,6 +8,7 @@ from langroid.parsing.parse_json import (
     _MAX_MULTILINE_INPUT_CHARS,
     _MAX_MULTILINE_QUOTES,
     _SINGLE_LINE_CURLY_BRACES,
+    _distinct_requests,
     _scan,
     extract_top_level_json,
     get_json_candidates,
@@ -259,6 +260,53 @@ def test_get_json_candidates_rejects_wholly_contained_call() -> None:
         {"request": "bad", "value": "oops"},
         {"request": "good", "value": "ok"},
     ]
+
+
+def test_get_json_candidates_prefers_the_higher_yield_reading() -> None:
+    """A contained call that is itself MALFORMED is not swallowed either.
+
+    Identical to the wholly-contained case above except that `good` is missing
+    its closing quote. Extraction repairs that happily, but it is not
+    structurally self-contained, so the structural guard cannot see it -- and
+    being merely repairable is too weak a signal to protect on, since almost
+    any truncated fragment repairs into something.
+
+    Yield is what separates them: reading this span as single-line calls
+    dispatches two distinct `request` values (`bad` and `good`) where reading
+    it as one multiline call dispatches one, so the two-call reading wins. On
+    a genuine multiline recovery the count is one either way, and the tie
+    keeps the recovery.
+    """
+    response = (
+        "{'request':'bad','value':'oops\n" "}\n" '{"request":"good","value":"ok}\n' "'}"
+    )
+
+    assert get_json_candidates(response) == [
+        "{'request':'bad','value':'oops\n}",
+        '{"request":"good","value":"ok}',
+    ]
+    # Byte-identical to `main`: no regression that runs a tool with another
+    # call's argument.
+    assert extract_top_level_json(response) == [
+        '{"request": "bad", "value": "oops"}',
+        '{"request": "good", "value": "ok"}',
+    ]
+
+
+def test_distinct_requests_counts_dispatchable_calls_only() -> None:
+    """The yield comparison counts calls, not objects.
+
+    Only an object that repairs to a dict with a string `request` can dispatch
+    a tool, and two readings naming the same tool have not lost a call. Both
+    properties matter: without the first, ordinary JSON in a value would
+    inflate the single-line reading and switch recovery off; without the
+    second, a repeated `request` would do the same.
+    """
+    assert _distinct_requests(['{"request": "a"}', '{"request": "b"}']) == 2
+    assert _distinct_requests(['{"request": "a"}', '{"request": "a", "x": 1}']) == 1
+    assert _distinct_requests(['{"x": 1}', "{not json at all}"]) == 0
+    assert _distinct_requests(['{"request": 7}']) == 0
+    assert _distinct_requests([]) == 0
 
 
 @pytest.mark.parametrize(
