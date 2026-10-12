@@ -94,3 +94,65 @@ def test_read_tabular_data_multichar_separator(tmp_path: Path) -> None:
     pd.testing.assert_frame_equal(
         result, pd.DataFrame({"name": ["Alice"], "amount": [10]})
     )
+
+
+@pytest.mark.parametrize("explicit_sep", [False, True])
+@pytest.mark.parametrize("separator", [",", ";", "\t"])
+@pytest.mark.parametrize("blank_headers", [False, True])
+def test_read_tabular_data_preserves_duplicate_headers(
+    tmp_path: Path, explicit_sep: bool, separator: str, blank_headers: bool
+) -> None:
+    path = tmp_path / "table.csv"
+    headers = ["price", "price", "quantity"]
+    rows = [[10, 20, 3], [30, 40, 5]]
+    if blank_headers:
+        headers = ["", "price", "", "price", "quantity", ""]
+        rows = [[99, 10, 98, 20, 3, 97], [99, 30, 98, 40, 5, 97]]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, delimiter=separator)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+    result = read_tabular_data(str(path), separator if explicit_sep else None)
+
+    pd.testing.assert_frame_equal(
+        result,
+        pd.DataFrame({"price": [10, 30], "price.1": [20, 40], "quantity": [3, 5]}),
+    )
+
+
+def test_read_tabular_data_preserves_duplicate_multichar_headers(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "table.csv"
+    path.write_text("price::::price::quantity\n10::99::20::3\n", encoding="utf-8")
+
+    result = read_tabular_data(str(path), "::")
+
+    pd.testing.assert_frame_equal(
+        result, pd.DataFrame({"price": [10], "price.1": [20], "quantity": [3]})
+    )
+
+
+def test_read_tabular_data_multichar_regex_metachar_separator(tmp_path: Path) -> None:
+    """A multi-char separator is a literal delimiter, not a regex."""
+    path = tmp_path / "table.csv"
+    path.write_text("price||price||qty\n10||20||3\n", encoding="utf-8")
+
+    result = read_tabular_data(str(path), "||")
+
+    pd.testing.assert_frame_equal(
+        result,
+        pd.DataFrame({"price": [10], "price.1": [20], "qty": [3]}),
+    )
+
+
+def test_read_tabular_data_preserves_existing_suffix_header(tmp_path: Path) -> None:
+    path = tmp_path / "table.csv"
+    path.write_text("price,price.1,price\n10,20,30\n", encoding="utf-8")
+
+    result = read_tabular_data(str(path), ",")
+
+    pd.testing.assert_frame_equal(
+        result, pd.DataFrame({"price": [10], "price.1": [20], "price.2": [30]})
+    )
