@@ -1281,7 +1281,11 @@ class DocChatAgent(ChatAgent):
             entry = _get_cross_encoder_entry(
                 self.config.cross_encoder_reranking_model, device
             )
-            pair_inputs = [(query, p.content) for p in passages]
+            # sentence-transformers >=5 types `CrossEncoder.predict` as taking a
+            # single pair or a flat list, but a list of (query, passage) pairs is
+            # the documented batch form and works at runtime; keep the element
+            # type loose so the 5.x signature type-checks.
+            pair_inputs: List[Any] = [(query, p.content) for p in passages]
             with entry.lock:
                 scores = entry.model.predict(pair_inputs, show_progress_bar=False)
             # Convert to [0,1] so we might could use a cutoff later.

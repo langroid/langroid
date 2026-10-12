@@ -1,6 +1,6 @@
 from itertools import count
 from unittest.mock import patch
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import pytest
 from requests import Response
@@ -10,6 +10,80 @@ from langroid.parsing.urls import find_urls
 START_URL = "https://example.test/start"
 LOCAL_URL = "https://example.test/local"
 REMOTE_URL = "https://other.test/remote"
+
+
+@pytest.mark.parametrize("redirected", [False, True])
+@pytest.mark.parametrize("final_path", ["/docs/", "/docs/index.html"])
+@pytest.mark.parametrize("max_links", [2, 5])
+@pytest.mark.parametrize("match_domain", [True, False])
+def test_find_urls_resolves_links_from_response_url(
+    redirected: bool, final_path: str, max_links: int, match_domain: bool
+) -> None:
+    final_url = "https://example.test" + final_path if redirected else START_URL
+    child_url = urljoin(final_url, "child")
+
+    def response_for(url: str, timeout: int) -> Response:
+        assert timeout == 5
+        assert url in {START_URL, child_url}
+        response = Response()
+        response.status_code = 200
+        response.url = final_url if url == START_URL else url
+        body = (
+            '<a href="child#section">Child</a>'
+            if url == START_URL
+            else f'<a href="{START_URL}">Back</a>'
+        )
+        response._content = body.encode("utf-8")
+        response.encoding = "utf-8"
+        return response
+
+    with patch("langroid.parsing.urls.requests.get", side_effect=response_for) as get:
+        found = find_urls(START_URL, max_links=max_links, match_domain=match_domain)
+
+    assert found == {START_URL, child_url}
+    fetched = [call.args[0] for call in get.call_args_list]
+    assert fetched == ([START_URL] if max_links == 2 else [START_URL, child_url])
+
+
+REDIRECT_URL = "https://example.test/docs/"
+REDIRECT_CHILD_URL = "https://example.test/docs/child"
+
+
+@pytest.mark.parametrize("max_links", [3, 5])
+@pytest.mark.parametrize("match_domain", [True, False])
+def test_find_urls_drops_self_anchor_on_redirected_page(
+    max_links: int, match_domain: bool
+) -> None:
+    """A same-document anchor must not resurface as the redirect target.
+
+    `/start` redirects to `/docs/`, whose HTML holds `<a href="#section">`.
+    That anchor resolves against the response URL and defrags to `/docs/`
+    itself, so unless the redirect target is filtered as a self-link it is
+    returned as a discovered URL -- taking a `max_links` slot away from the
+    real link (``max_links=3``, which then hits the early-return threshold)
+    and being fetched a second time (``max_links=5``, which recurses).
+    """
+    pages = {
+        REDIRECT_URL: '<a href="#section">Top</a><a href="child">Child</a>',
+        REDIRECT_CHILD_URL: f'<a href="{START_URL}">Back</a>',
+    }
+
+    def response_for(url: str, timeout: int) -> Response:
+        assert timeout == 5
+        final_url = REDIRECT_URL if url == START_URL else url
+        response = Response()
+        response.status_code = 200
+        response.url = final_url
+        response._content = pages[final_url].encode("utf-8")
+        response.encoding = "utf-8"
+        return response
+
+    with patch("langroid.parsing.urls.requests.get", side_effect=response_for) as get:
+        found = find_urls(START_URL, max_links=max_links, match_domain=match_domain)
+
+    assert found == {START_URL, REDIRECT_CHILD_URL}
+    fetched = [call.args[0] for call in get.call_args_list]
+    assert fetched == [START_URL, REDIRECT_CHILD_URL]
 
 
 def page_response(url: str, timeout: int) -> Response:

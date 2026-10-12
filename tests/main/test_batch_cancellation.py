@@ -13,6 +13,134 @@ from langroid.agent.batch import (
 from langroid.agent.chat_document import ChatDocument
 
 
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize(
+    "policy",
+    [ExceptionHandling.RETURN_NONE, ExceptionHandling.RETURN_EXCEPTION],
+)
+def test_sequential_batch_propagates_process_exit(
+    error: type[BaseException], policy: ExceptionHandling
+) -> None:
+    started: list[int] = []
+
+    async def work(value: str | ChatDocument, index: int) -> str:
+        started.append(index)
+        raise error("stop batch")
+
+    with pytest.raises(error, match="stop batch"):
+        run_batched_tasks(
+            inputs=["a", "b"],
+            do_task=work,
+            batch_size=None,
+            stop_on_first_result=False,
+            sequential=True,
+            handle_exceptions=policy,
+            output_map=lambda value: value,
+            message_template="Testing process exit",
+        )
+
+    assert started == [0]
+
+
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize(
+    "policy",
+    [ExceptionHandling.RETURN_NONE, ExceptionHandling.RETURN_EXCEPTION],
+)
+@pytest.mark.parametrize("mode", ["sequential", "parallel", "first_result"])
+def test_batch_propagates_process_exit_from_output_map(
+    error: type[BaseException], policy: ExceptionHandling, mode: str
+) -> None:
+    mapped: list[str] = []
+    cleaned: list[int] = []
+    release = asyncio.Event()
+
+    async def work(value: str | ChatDocument, index: int) -> str:
+        try:
+            if mode == "first_result" and index == 1:
+                await release.wait()
+            return str(value)
+        finally:
+            cleaned.append(index)
+
+    def output_map(value: str) -> str:
+        mapped.append(value)
+        release.set()
+        raise error("stop mapping")
+
+    with pytest.raises(error, match="stop mapping"):
+        run_batched_tasks(
+            inputs=["a", "b"],
+            do_task=work,
+            batch_size=None,
+            stop_on_first_result=mode == "first_result",
+            sequential=mode == "sequential",
+            handle_exceptions=policy,
+            output_map=output_map,
+            message_template="Testing process exit",
+        )
+
+    assert mapped == ["a"]
+    assert sorted(cleaned) == ([0] if mode == "sequential" else [0, 1])
+
+
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize("policy", list(ExceptionHandling))
+def test_first_result_process_exit_survives_cleanup_cancellation(
+    error: type[BaseException], policy: ExceptionHandling
+) -> None:
+    async def scenario() -> None:
+        started = asyncio.Event()
+        cleaning = asyncio.Event()
+        cleaned = asyncio.Event()
+        exit_error = error("stop mapping")
+
+        async def work(value: str | ChatDocument, index: int) -> str:
+            if index == 0:
+                await started.wait()
+                return "winner"
+            try:
+                started.set()
+                await asyncio.Event().wait()
+                return "unused"
+            finally:
+                cleaning.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cleaned.set()
+
+        def output_map(value: str) -> str:
+            raise exit_error
+
+        async def capture_batch_exit() -> BaseException:
+            # Catch process exits inside the task so asyncio's runner stays alive.
+            try:
+                await _process_batch_async(
+                    ["a", "b"],
+                    work,
+                    stop_on_first_result=True,
+                    handle_exceptions=policy,
+                    output_map=output_map,
+                )
+            except BaseException as actual:
+                return actual
+            raise AssertionError("The batch should propagate an exception")
+
+        batch = asyncio.create_task(capture_batch_exit())
+        try:
+            await asyncio.wait_for(cleaning.wait(), timeout=2)
+            batch.cancel()
+            actual = await asyncio.wait_for(batch, timeout=2)
+            assert actual is exit_error
+            assert cleaned.is_set()
+        finally:
+            batch.cancel()
+            await asyncio.gather(batch, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
 def _require_cancellation_detection(policy: ExceptionHandling) -> None:
     """Skip where a policy-handled CancelledError cannot be told from a
     cancellation of the batch: that needs `Task.cancelling()` (Python 3.11+).

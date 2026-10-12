@@ -1,7 +1,65 @@
+import ast
 import json
 from pathlib import Path
 
+import pytest
+
 from langroid.parsing.repo_loader import RepoLoader, RepoLoaderConfig
+
+
+@pytest.mark.parametrize(
+    "filename, content",
+    [
+        ("example.py", 'def greet():\n    return "hello"\n'),
+        ("example.py", 'def greet():\n\treturn "hello"\n'),
+        ("example.md", "First line  \nSecond line\n"),
+        ("example.txt", "  indented text\n\nlast line  \n"),
+    ],
+)
+def test_load_from_folder_preserves_line_whitespace(
+    tmp_path: Path, filename: str, content: str
+) -> None:
+    (tmp_path / filename).write_text(content, encoding="utf-8")
+
+    tree, docs = RepoLoader.load_from_folder(str(tmp_path), lines=100)
+
+    expected = content.rstrip("\n")
+    assert tree["files"][0]["content"] == expected
+    assert len(docs) == 1
+    assert docs[0].content == expected
+    assert docs[0].metadata.filename == filename
+    if filename.endswith(".py"):
+        ast.parse(docs[0].content)
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_load_from_folder_preserves_whitespace_with_line_limit(
+    tmp_path: Path, newline: str
+) -> None:
+    content = newline.join(["  first line  ", "\tsecond line", "third line", ""])
+    (tmp_path / "example.txt").write_bytes(content.encode("utf-8"))
+
+    tree, docs = RepoLoader.load_from_folder(str(tmp_path), lines=2)
+
+    expected = "  first line  \n\tsecond line"
+    assert tree["files"][0]["content"] == expected
+    assert docs[0].content == expected
+
+
+@pytest.mark.parametrize("content", ["", " \t\n", "plain text\n"])
+def test_load_from_folder_retains_empty_file_filter(
+    tmp_path: Path, content: str
+) -> None:
+    (tmp_path / "example.txt").write_text(content, encoding="utf-8")
+
+    tree, docs = RepoLoader.load_from_folder(str(tmp_path), lines=100)
+
+    if content.strip():
+        assert tree["files"][0]["content"] == "plain text"
+        assert docs[0].content == "plain text"
+    else:
+        assert tree["files"] == []
+        assert docs == []
 
 
 def test_repo_loader() -> None:

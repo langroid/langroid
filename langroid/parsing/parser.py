@@ -377,6 +377,7 @@ class Parser:
         Returns:
             A list of text chunks, each of which is a string of tokens
             roughly self.config.chunk_size tokens long.
+            A chunk may exceed that size to finish a UTF-8 character.
         """
         # Return an empty list if the text is empty or whitespace
         if not text or text.isspace():
@@ -396,8 +397,17 @@ class Parser:
             # Take the first chunk_size tokens as a chunk
             chunk = tokens[: self.config.chunk_size]
 
-            # Decode the chunk into text
-            chunk_text = self.tokenizer.decode(chunk)
+            # BPE tokens can end inside a UTF-8 character. Complete it before
+            # decoding so replacement characters do not corrupt the content.
+            while True:
+                try:
+                    chunk_text = self.tokenizer.decode(chunk, errors="strict")
+                    break
+                except UnicodeDecodeError:
+                    if len(chunk) == len(tokens):
+                        raise
+                    chunk = tokens[: len(chunk) + 1]
+            remaining_tokens = tokens[len(chunk) :]
 
             # Skip the chunk if it is empty or whitespace
             if not chunk_text or chunk_text.isspace():
@@ -421,6 +431,12 @@ class Parser:
                 last_punctuation != -1
                 and last_punctuation > self.config.min_chunk_chars
             ):
+                remaining_tokens = (
+                    self.tokenizer.encode(
+                        chunk_text[last_punctuation + 1 :], disallowed_special=()
+                    )
+                    + remaining_tokens
+                )
                 # Truncate the chunk text at the punctuation mark
                 chunk_text = chunk_text[: last_punctuation + 1]
 
@@ -434,11 +450,9 @@ class Parser:
                 # Append the chunk text to the list of chunks
                 chunks.append(chunk_text_to_append)
 
-            # Remove the tokens corresponding to the chunk text
-            # from the remaining tokens
-            tokens = tokens[
-                len(self.tokenizer.encode(chunk_text, disallowed_special=())) :
-            ]
+            # Advance by the original tokens, not a re-encoded prefix whose
+            # BPE boundaries may differ. Retain any text after a punctuation cut.
+            tokens = remaining_tokens
 
             # Increment the number of chunks
             num_chunks += 1

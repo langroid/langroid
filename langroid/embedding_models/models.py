@@ -50,6 +50,26 @@ class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
 
 
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
+    """Config for sentence-transformers embeddings.
+
+    Note:
+        `model_name` is passed straight to `SentenceTransformer`, and
+        sentence-transformers 5.4 changed how it treats a checkpoint that
+        ships no sentence-transformers config of its own (no `modules.json`)
+        -- i.e. a RAW transformers checkpoint. Such checkpoints used to be
+        wrapped in mean pooling; from 5.4 the CausalLM architectures among
+        them (Llama, Qwen, Mistral, ...) are wrapped in LAST-TOKEN pooling
+        instead, which upstream considers the more correct default
+        ([migration guide](https://www.sbert.net/docs/migration_guide.html#default-pooling-for-causallm-models)).
+
+        The dimensions are unchanged, so nothing errors: the embedding space
+        simply changes. If you embedded a collection with a raw CausalLM
+        checkpoint under an earlier langroid, RE-EMBED it -- otherwise old
+        vectors and new queries silently live in different spaces. Models
+        that ship their own sentence-transformers config, including langroid's
+        default (`BAAI/bge-large-en-v1.5`), are unaffected.
+    """
+
     model_type: str = "sentence-transformer"
     model_name: str = "BAAI/bge-large-en-v1.5"
     context_length: int = 512
@@ -198,7 +218,9 @@ class OpenAIEmbeddings(EmbeddingModel):
         if not self.config.api_key:
             self.config.api_key = os.getenv("OPENAI_API_KEY", "")
 
-        self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
+        self.config.organization = self.config.organization or os.getenv(
+            "OPENAI_ORGANIZATION", ""
+        )
 
         if self.config.api_key == "":
             if self.is_langdb:
