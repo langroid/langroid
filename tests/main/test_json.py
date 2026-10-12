@@ -133,24 +133,30 @@ def test_extract_top_level_json_recovers_the_value_verbatim(
 
 
 @pytest.mark.parametrize(
-    "response",
+    "escaped, decoded",
     [
-        "{'request':'w','content':'it\\'s here'}",
-        '{"request":"w","content":"a\\\\b"}',
-        '{"request":"w","content":"tab\\there"}',
+        ("it\\'s", "it's"),  # an escaped apostrophe, ordinary in such a call
+        ("a\\\\b", "a\\b"),  # an escaped backslash stays one backslash
+        ("a\\tb", "a\tb"),  # a tab escape decodes to a tab
+        ("café", "café"),  # non-ASCII survives the round trip
     ],
 )
-def test_extract_top_level_json_leaves_escapes_to_the_repairer(response: str) -> None:
-    """Re-encoding quoted tokens is skipped when the text carries a backslash.
+def test_extract_top_level_json_decodes_escapes_in_recovered_values(
+    escaped: str, decoded: str
+) -> None:
+    """A single-quoted multiline value keeps its escapes' MEANING.
 
-    The normalizer reads the bytes between the quotes literally, so on `\\'` it
-    would emit an escaped backslash followed by a quote rather than the
-    apostrophe the model meant. Guarding on the absence of any backslash keeps
-    escaped content on the repair path, where its handling is unchanged -- so
-    these stay byte-identical to `main`.
+    Re-encoding the quoted tokens is what rescues the single-quoted spelling,
+    but it has to decode what the model wrote rather than double it: `\\'` is
+    an apostrophe, not a backslash and a quote. An earlier attempt skipped the
+    whole path whenever a backslash appeared, which left exactly this silent
+    truncation in place for values containing an escaped apostrophe -- and that
+    is a common thing for a tool argument to contain.
     """
-    assert extract_top_level_json(response) == [
-        json.dumps(parse_imperfect_json(response))
+    response = "{'request':'w','content':'" + escaped + "\n{\n'}"
+
+    assert [json.loads(c) for c in extract_top_level_json(response)] == [
+        {"request": "w", "content": decoded + "\n{\n"}
     ]
 
 
