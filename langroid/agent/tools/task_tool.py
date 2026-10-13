@@ -117,7 +117,28 @@ class TaskTool(ToolMessage):
 
         # Create chat agent config with system message if provided
         if self.model is None and agent.config.llm is not None:
-            llm_config = agent.config.llm.model_copy(deep=True)
+            # Inherit the parent's config so the sub-agent reaches the same
+            # provider and endpoint. The `api_key_provider` must NOT be
+            # deep-copied, for the two reasons `OpenAIGPT.__init__` gives
+            # where it does the same dance: the client cache is keyed on the
+            # callable's identity, so a copy silently defeats cache sharing;
+            # and the callable may hold non-copyable state (a `threading.Lock`
+            # in a refreshing credential provider, say), which makes
+            # `deepcopy` raise outright. Clear it in a shallow copy first,
+            # then put the original callable back on the copy.
+            parent_llm_config = agent.config.llm
+            api_key_provider = getattr(parent_llm_config, "api_key_provider", None)
+            if api_key_provider is not None:
+                parent_llm_config = parent_llm_config.model_copy(
+                    update={"api_key_provider": None}
+                )
+            llm_config = parent_llm_config.model_copy(deep=True)
+            if api_key_provider is not None:
+                # `getattr`/`setattr` rather than attribute syntax because
+                # `llm_config` is typed as the base `LLMConfig`, which does
+                # not declare the field -- only the OpenAI-family configs do,
+                # and those are exactly the ones where it is not None.
+                setattr(llm_config, "api_key_provider", api_key_provider)
         else:
             llm_config = lm.OpenAIGPTConfig(
                 chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,

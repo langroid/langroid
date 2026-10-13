@@ -1,3 +1,5 @@
+import threading
+
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -64,6 +66,57 @@ def test_task_tool_copies_parent_provider_config(parent_agent: ChatAgent) -> Non
     assert child.llm.config.temperature == 0.7
     child.llm.config.temperature = 0.1
     assert provider_parent.llm.config.temperature == 0.7
+
+
+class _LockedKeyProvider:
+    """A rotating-credential provider of the shape the docs invite.
+
+    `docs/notes/rotating-api-keys.md` tells users the provider is responsible
+    for caching and refreshing its own token, which in practice means a
+    mutex-protected object. A `threading.Lock` cannot be deep-copied, so this
+    is the smallest faithful stand-in for a real one.
+    """
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+
+    def __call__(self) -> str:
+        with self.lock:
+            return "rotated-key"
+
+
+def test_task_tool_inherits_uncopyable_api_key_provider() -> None:
+    """A parent whose key provider holds a lock must not break delegation.
+
+    `OpenAIGPT.__init__` deliberately keeps `api_key_provider` out of its deep
+    copy, because deep-copying it both raises on non-copyable state and
+    defeats the client cache, which is keyed on the callable's identity. The
+    inheritance path has to do the same, or a parent that constructs fine
+    cannot delegate at all.
+    """
+    provider = _LockedKeyProvider()
+    parent = ChatAgent(
+        ChatAgentConfig(
+            llm=OpenAIGPTConfig(
+                chat_model="custom-model",
+                api_base="http://localhost:8000/v1",
+                api_key_provider=provider,
+            )
+        )
+    )
+    tool = TaskTool(
+        system_message="Complete the task", prompt="Delegate", tools=["NONE"]
+    )
+
+    child = tool._set_up_task(parent).agent
+
+    assert isinstance(child.llm, OpenAIGPT)
+    assert isinstance(parent.llm, OpenAIGPT)
+    # Identity, not equality: a copied provider is a different cache key, so
+    # every sub-agent would build its own client.
+    assert child.llm.config.api_key_provider is provider
+    assert parent.llm.config.api_key_provider is provider
+    assert child.llm.config.api_base == "http://localhost:8000/v1"
 
 
 def test_task_tool_explicit_model_overrides_parent(parent_agent: ChatAgent) -> None:
