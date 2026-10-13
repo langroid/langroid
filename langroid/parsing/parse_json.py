@@ -139,69 +139,6 @@ _MAX_MULTILINE_INPUT_CHARS = 8 * 1024
 _MAX_MULTILINE_QUOTES = 512
 
 
-def _is_self_contained_object(candidate: str) -> bool:
-    """Whether `candidate` is a whole object, standing on its own.
-
-    This is a STRUCTURAL question -- does the text open a brace, close it,
-    and end there, with every quote closed -- not a question of which parser
-    happens to accept the spelling. Three successive attempts to answer it by
-    trying loaders in turn each left a hole, because the spellings an LLM
-    emits fall between them, and every hole is a call the swallow guard
-    cannot protect:
-
-    - `json.loads` wants double quotes with `true`/`false`/`null`, and even
-      with `strict=False` rejects the single-quoted form entirely;
-    - `ast.literal_eval` wants `True`/`False`/`None`, and Python forbids a
-      raw newline inside a single-quoted string, so it rejects the very
-      values this module exists to recover;
-    - `yaml.safe_load` accepts both spellings but is far too permissive: it
-      reads `{\\nlast line"}` -- a fragment of a legitimately recovered
-      multiline value -- as the mapping `{'last line"': None}`, marking that
-      fragment intact and defeating the recovery.
-
-    Scanning for balance answers the question directly and is blind to quote
-    style, to `true` vs `True`, and to raw newlines in values. It is
-    deliberately permissive about CONTENT: `{not json at all}` counts as
-    self-contained. That only costs multiline recovery, which is the safe
-    direction -- under-recognizing is what lets one call run with another
-    call's argument.
-
-    Only braces are counted, not brackets: a stray unbalanced `[` in an
-    otherwise complete call (`{"request":"good","value":1 # [`, newline,
-    `}`) is repaired by extraction and must stay protected, so letting it
-    offset the depth would reopen exactly the hole this check closes.
-
-    An unterminated quote or an unclosed brace is never self-contained,
-    which is what keeps a genuinely truncated candidate out of the `intact`
-    set.
-    """
-    if not candidate.startswith("{"):
-        return False
-    depth = 0
-    quote: str | None = None
-    escaped = False
-    for index, char in enumerate(candidate):
-        if quote is not None:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == quote:
-                quote = None
-            continue
-        if char in "\"'":
-            quote = char
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth <= 0:
-                # Closing the outermost brace anywhere but at the very end
-                # means the text continues past the object.
-                return depth == 0 and index == len(candidate) - 1
-    return False
-
-
 def _dispatchable_calls(candidates: List[str]) -> int:
     """Count the tool calls that one reading of a span would dispatch.
 
@@ -313,9 +250,10 @@ def get_json_candidates(s: str) -> List[str]:
     # way. A candidate that IS the intact match (identical span) is of course
     # not swallowing itself.
     #
-    # Structure alone is not enough, though, because a contained call can be
+    # Which reading wins is decided by YIELD alone, and not by any structural
+    # property of the contained text, because a contained call can be
     # swallowed while being malformed itself -- `good` below is missing its
-    # closing quote, so it is not structurally self-contained, yet extraction
+    # closing quote, so it is not a structurally whole object, yet extraction
     # repairs it happily and the single-line reading recovers both calls:
     #
     #     {'request':'bad','value':'oops
@@ -324,10 +262,10 @@ def get_json_candidates(s: str) -> List[str]:
     #     '}
     #
     # Being merely REPAIRABLE is far too weak a signal to admit into the
-    # protected set -- almost any truncated fragment repairs into something,
-    # so treating repairable text as a call to protect would switch multiline
-    # recovery off in general. What separates the two is YIELD, so that is
-    # what decides this weaker case; see the condition below.
+    # protected set on its own -- almost any truncated fragment repairs into
+    # something, so treating repairable text as a call to protect would switch
+    # multiline recovery off in general. What separates the two is yield; see
+    # the condition below.
     single_line = _scan(_SINGLE_LINE_CURLY_BRACES, s)
 
     # Fall back per candidate, not for the whole response: a legitimate
@@ -346,19 +284,16 @@ def get_json_candidates(s: str) -> List[str]:
             or (start < m[1] and m[2] <= end)  # this call sits wholly inside
         ]
         span_reading = [m[0] for m in single_line if start <= m[1] < end]
-        if contained and (
-            # A contained call that stands on its own has plainly been
-            # swallowed: take the two-call reading unconditionally.
-            any(_is_self_contained_object(m[0]) for m in contained)
-            # Otherwise compare yields: read the candidate's span both ways,
-            # repair each piece, and prefer the single-line reading only when
-            # it dispatches strictly MORE calls. A swallow shows up as 2
-            # against 1, because the swallowed call is lost entirely. A tie
-            # keeps the multiline recovery, which is what a genuine recovery
-            # looks like -- one call read either way -- so recovery survives.
-            # Being a comparison of outcomes and not of spellings, it is blind
-            # to however the swallowed call happens to be malformed.
-            or _dispatchable_calls(span_reading) > _dispatchable_calls([text])
+        # Compare yields: read the candidate's span both ways, repair each
+        # piece, and prefer the single-line reading only when it dispatches
+        # strictly MORE calls. A swallow shows up as 2 against 1, because the
+        # swallowed call is lost entirely. A tie keeps the multiline recovery,
+        # which is what a genuine recovery looks like -- one call read either
+        # way -- so recovery survives. Being a comparison of outcomes and not
+        # of spellings, it is blind to however the swallowed call happens to
+        # be malformed.
+        if contained and _dispatchable_calls(span_reading) > _dispatchable_calls(
+            [text]
         ):
             for text_i, start_i, end_i in single_line:
                 if start <= start_i < end and end_i > position:
