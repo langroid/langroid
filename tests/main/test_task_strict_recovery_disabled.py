@@ -171,9 +171,9 @@ def test_no_usable_tool_suppresses_strict_recovery() -> None:
     agent = _agent_with_no_strict_tool()
     llm = agent.llm
     assert isinstance(llm, LocalOpenAIGPT)
-    assert agent._get_any_tool_message() is None, (
-        "precondition failed: this agent must have no tool for strict recovery"
-    )
+    assert (
+        agent._get_any_tool_message() is None
+    ), "precondition failed: this agent must have no tool for strict recovery"
     assert agent._json_schema_available()
 
     assert agent.llm_response("hi") is None
