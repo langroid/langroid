@@ -244,6 +244,78 @@ async def test_async_stream_call_content_none_vs_empty_and_cache_replay(
     assert replayed.cached
 
 
+def _null_choices_events(with_usage: bool) -> list[dict[str, Any]]:
+    """Build a stream whose first chunk has a null ``choices``.
+
+    Some OpenAI-compatible endpoints emit ``{"choices": null}`` instead of an
+    empty list (typically on the usage-only chunk). The remaining chunks carry
+    the actual answer.
+    """
+    first: dict[str, Any] = {"choices": None}
+    if with_usage:
+        first["usage"] = {"prompt_tokens": 1, "completion_tokens": 2}
+    return [
+        first,
+        {"choices": [{"delta": {"content": "hi"}, "finish_reason": None}]},
+        {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+    ]
+
+
+@pytest.mark.parametrize("with_usage", [True, False], ids=["usage", "no-usage"])
+def test_sync_null_choices_chunk_preserves_remaining_stream(
+    with_usage: bool,
+) -> None:
+    """A null `choices` chunk must not truncate the sync stream."""
+    model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    response, _ = model._stream_response(
+        _null_choices_events(with_usage),
+        chat=True,
+    )
+
+    assert response.message == "hi"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_usage", [True, False], ids=["usage", "no-usage"])
+async def test_async_null_choices_chunk_preserves_remaining_stream(
+    with_usage: bool,
+) -> None:
+    """Async twin of the test above: a null `choices` chunk must not truncate it.
+
+    Without the `choices is None` guard, `len(None)` raises inside
+    `_process_stream_event_async`, the `except Exception` in
+    `_stream_response_async` swallows it, and the rest of the stream is lost --
+    the caller silently gets an empty message.
+    """
+    model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    response, _ = await model._stream_response_async(
+        _AsyncEvents(_null_choices_events(with_usage)),
+        chat=True,
+    )
+
+    assert response.message == "hi"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_usage", [True, False], ids=["usage", "no-usage"])
+async def test_async_null_choices_message_matches_sync_twin(
+    with_usage: bool,
+) -> None:
+    """Both stream paths must agree when a chunk carries a null `choices`."""
+    events = _null_choices_events(with_usage)
+
+    sync_model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    sync_response, _ = sync_model._stream_response(events, chat=True)
+
+    async_model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    async_response, _ = await async_model._stream_response_async(
+        _AsyncEvents(events),
+        chat=True,
+    )
+
+    assert async_response.message == sync_response.message == "hi"
+
+
 def test_tool_call_response_with_absent_content_stays_none() -> None:
     """A non-stream tool-call response may omit content altogether."""
     model = OpenAIGPT(OpenAIGPTConfig(stream=False))
