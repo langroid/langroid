@@ -12,6 +12,7 @@ from langroid.agent.special.relevance_extractor_agent import (
 )
 from langroid.agent.task import Task
 from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
+from langroid.language_models.mock_lm import MockLMConfig
 from langroid.parsing.utils import (
     clean_whitespace,
     extract_numbered_segments,
@@ -360,3 +361,44 @@ def test_extract_numbered_segments(test_settings: Settings, passage, spec, expec
     extract = extract_numbered_segments(passage, spec)
     pieces = expected.split(",")
     assert all(piece.strip() in extract for piece in pieces)
+
+
+@pytest.mark.asyncio
+async def test_relevance_extractor_async_prompt_matches_sync():
+    """The async twin must compose the same prompt as the sync twin.
+
+    Regression test: `llm_response_async` used to drop the `<Instructions>`
+    block that tells the LLM to answer via the `extract_segments` tool with a
+    JSON-formatted `{"request": "extract_segments", ...}` body. The concurrent
+    path (`DocChatAgent.get_verbatim_extracts` -> `run_batch_tasks` ->
+    `Task.run_async`) drives this method, so every passage was sent a bare
+    PASSAGE/QUERY with no extraction instructions.
+    """
+    passage = clean_whitespace(
+        "Whales are big. Cats like to be clean. They also like to be petted. "
+        "Dogs are very friendly. They are also very loyal."
+    )
+    prompts: dict = {}
+
+    def make_fn(tag: str):
+        def fn(msg: str) -> str:
+            prompts[tag] = msg
+            return "mock-llm-output"
+
+        return fn
+
+    def make_agent(tag: str) -> RelevanceExtractorAgent:
+        return RelevanceExtractorAgent(
+            RelevanceExtractorAgentConfig(
+                llm=MockLMConfig(response_fn=make_fn(tag)),
+                query="Characteristics of cats",
+                segment_length=1,
+            )
+        )
+
+    make_agent("sync").llm_response(passage)
+    await make_agent("async").llm_response_async(passage)
+
+    assert prompts["async"] == prompts["sync"]
+    assert "<Instructions>" in prompts["async"]
+    assert "extract_segments" in prompts["async"]
