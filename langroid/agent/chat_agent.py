@@ -1788,7 +1788,7 @@ class ChatAgent(Agent):
                 augmented_message.content = augmented_message.content + recovery_message
 
             # only use the augmented message for this one response...
-            result = self.llm_response(augmented_message)
+            result = await self.llm_response_async(augmented_message)
             # ... restore the original user message so that the AnyTool recover
             # instructions don't persist in the message history
             # (this can cause the LLM to use the AnyTool directly as a tool)
