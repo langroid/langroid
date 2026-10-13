@@ -288,10 +288,13 @@ class PineconeDB(VectorStore):
                 else:
                     index.upsert(vectors=vectors[i : i + batch_size])
             except PineconeApiException as e:
+                # Re-raise, as LanceDB.add_documents does: an upsert Pinecone
+                # rejected must reach the caller, so a failed ingest is not
+                # reported as stored.
                 logger.error(
-                    f"Unable to add of docs between indices {i} and {batch_size}"
+                    f"Unable to add docs between indices {i} and {i + batch_size}: {e}"
                 )
-                logger.error(e)
+                raise
 
     def get_all_documents(
         self, prefix: str = "", namespace: str = ""
