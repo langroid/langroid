@@ -1769,6 +1769,8 @@ class ChatAgent(Agent):
         ):
             self.tool_error = False
             AnyTool = self._get_any_tool_message()
+            if AnyTool is None:
+                return None
             self.set_output_format(
                 AnyTool,
                 force_tools=True,
