@@ -9,7 +9,7 @@ from pydantic_settings import SettingsConfigDict
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
-from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.embedding_models.models import OpenAIEmbeddings, OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.utils.configuration import settings
@@ -163,7 +163,11 @@ class WeaviateDB(VectorStore):
         )
         if isinstance(self.config.embedding, OpenAIEmbeddingsConfig):
             vectorizer_config = Configure.Vectorizer.text2vec_openai(
-                model=self.config.embedding.model_name,
+                model=(
+                    self.embedding_model.model_name
+                    if isinstance(self.embedding_model, OpenAIEmbeddings)
+                    else self.config.embedding.model_name
+                ),
             )
         else:
             vectorizer_config = None

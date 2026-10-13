@@ -160,7 +160,12 @@ class EmbeddingFunctionCallable:
             # Process in batches
             for batch in batched(truncated_texts, self.batch_size):
                 result = self.embed_model.client.embeddings.create(
-                    input=batch, model=self.embed_model.config.model_name  # type: ignore
+                    input=batch,  # type: ignore[arg-type]
+                    model=(
+                        self.embed_model.model_name
+                        if isinstance(self.embed_model, OpenAIEmbeddings)
+                        else self.embed_model.config.model_name
+                    ),
                 )
                 batch_embeds = [d.embedding for d in result.data]
                 embeds.extend(batch_embeds)
@@ -201,14 +206,15 @@ class EmbeddingFunctionCallable:
 class OpenAIEmbeddings(EmbeddingModel):
     def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig()):
         super().__init__()
-        self.config = config
+        self.config = config.model_copy(deep=True)
         load_dotenv()
 
-        # Check if using LangDB
-        self.is_langdb = self.config.model_name.startswith("langdb/")
+        # Keep the configured route intact so clones retain provider behavior.
+        self.model_name = self.config.model_name
+        self.is_langdb = self.model_name.startswith("langdb/")
 
         if self.is_langdb:
-            self.config.model_name = self.config.model_name.replace("langdb/", "")
+            self.model_name = self.model_name.removeprefix("langdb/")
             self.config.api_base = self.config.langdb_params.base_url
             project_id = self.config.langdb_params.project_id
             if project_id:
@@ -243,10 +249,8 @@ class OpenAIEmbeddings(EmbeddingModel):
             api_key=self.config.api_key,
             organization=self.config.organization,
         )
-        model_for_tokenizer = self.config.model_name
-        if model_for_tokenizer.startswith("openai/"):
-            self.config.model_name = model_for_tokenizer.replace("openai/", "")
-        self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
+        self.model_name = self.model_name.removeprefix("openai/")
+        self.tokenizer = tiktoken.encoding_for_model(self.model_name)
 
     def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]:
         """
