@@ -171,6 +171,8 @@ class ChromaDB(VectorStore):
             self.collection.get(ids=[id], include=["documents", "metadatas"])
             for id in ids
         ]
+        # Chroma returns an empty result for an unknown or deleted ID.
+        results = [r for r in results if r["ids"]]
         final_results = {}
         final_results["documents"] = [[r["documents"][0] for r in results]]
         final_results["metadatas"] = [[r["metadatas"][0] for r in results]]
