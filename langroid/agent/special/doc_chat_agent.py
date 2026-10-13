@@ -1492,11 +1492,13 @@ class DocChatAgent(ChatAgent):
                     docs_and_scores, key=lambda x: x[1], reverse=True
                 )
 
-        # keep only docs with unique d.id()
-        id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
-        id2doc = {d.id(): d for d, _ in docs_and_scores}
-        # make sure we get unique docs
-        passages = [id2doc[id] for id in id2_rank_semantic.keys()]
+        # Keep each document's highest-scoring semantic hit. Enumerate only
+        # unique docs so query proxies cannot overwrite or inflate their ranks.
+        id2doc: Dict[str, Document] = {}
+        for d, _ in docs_and_scores:
+            id2doc.setdefault(d.id(), d)
+        id2_rank_semantic = {id_: i for i, id_ in enumerate(id2doc)}
+        passages = list(id2doc.values())
 
         id2_rank_bm25 = {}
         if self.config.use_bm25_search:
