@@ -318,14 +318,22 @@ class RepoLoader:
 
         try:
             subprocess.run(["git", "clone", self.url, path], check=True)
-            log[self.url] = path
-            with open(self.log_file, "w") as f:
-                json.dump(log, f)
-            return self.clone_path
         except subprocess.CalledProcessError as e:
             logger.error(f"Git clone failed: {e}")
         except Exception as e:
             logger.error(f"An error occurred while trying to clone the repository:{e}")
+        else:
+            # The clone succeeded, so the path is good whatever happens next.
+            # Updating the download log is bookkeeping for the next run: if it
+            # fails (a read-only cache dir, say) the cost is re-cloning later,
+            # not losing a repo that is sitting right there.
+            try:
+                log[self.url] = path
+                with open(self.log_file, "w") as f:
+                    json.dump(log, f)
+            except Exception as e:
+                logger.warning(f"Could not record the clone in {self.log_file}: {e}")
+            return self.clone_path
         # Nothing was cloned: report that the way the Optional return type and
         # `load()`'s `if path is None: raise ValueError("Unable to clone repo")`
         # guard both expect, instead of handing back a path with no repo in it.

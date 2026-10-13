@@ -190,6 +190,38 @@ def test_load_reports_unclonable_repo(monkeypatch, tmp_path):
         loader.load()
 
 
+def test_clone_keeps_path_when_only_the_log_write_fails(monkeypatch, tmp_path):
+    """A clone that succeeded must be reported even if bookkeeping fails.
+
+    The download log is a cache for the next run. If writing it fails -- a
+    read-only cache directory, say -- the broad `except Exception` used to
+    swallow that too, so a complete repo sitting at `path` was reported as
+    unclonable. The cost of a failed log write is re-cloning later, not
+    losing the clone.
+    """
+    loader, module = _loader(monkeypatch, tmp_path)
+    path = str(tmp_path / "repo")
+
+    def ok(cmd, *a, **k):
+        dest = Path(cmd[-1])
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "README.md").write_text("hi\n")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    real_open = module.open if hasattr(module, "open") else open
+
+    def refuse_write(file, mode="r", *a, **k):
+        if "w" in mode and str(file) == str(loader.log_file):
+            raise PermissionError("read-only cache")
+        return real_open(file, mode, *a, **k)
+
+    monkeypatch.setattr(module.subprocess, "run", ok)
+    monkeypatch.setattr("builtins.open", refuse_write)
+
+    assert loader.clone(path) == path
+    assert loader.clone_path == path
+
+
 def test_clone_returns_path_on_success(monkeypatch, tmp_path):
     """Control: a clone that succeeds still returns the path and records it."""
     loader, module = _loader(monkeypatch, tmp_path)
