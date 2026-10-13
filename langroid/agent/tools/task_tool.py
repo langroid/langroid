@@ -116,11 +116,12 @@ class TaskTool(ToolMessage):
         agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
 
         # Create chat agent config with system message if provided
-        # TODO: Maybe we just copy the parent agent's config and override chat_model?
-        #   -- but what if parent agent has a MockLMConfig?
-        llm_config = lm.OpenAIGPTConfig(
-            chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
-        )
+        if self.model is None and agent.config.llm is not None:
+            llm_config = agent.config.llm.model_copy(deep=True)
+        else:
+            llm_config = lm.OpenAIGPTConfig(
+                chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
+            )
         config = ChatAgentConfig(
             name=agent_name,
             llm=llm_config,
