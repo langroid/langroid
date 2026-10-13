@@ -272,6 +272,13 @@ tool declares a structured output, returning plain text may raise a runtime
 error. Some servers (for example, Claude Code’s Grep) expose an argument like
 `output_mode` that controls the shape of the response.
 
+Langroid propagates output-validation errors without retrying the tool call.
+The server may already have completed its action before the client validates
+the response, so retrying could perform the action twice. In particular,
+missing `structuredContent` no longer triggers a second, unvalidated call:
+servers relying on that fallback must return output matching their schema.
+An output-validation error does not mean the tool's action was rolled back.
+
 Recommendations:
 
 - Prefer structured modes when a tool declares an output schema.
