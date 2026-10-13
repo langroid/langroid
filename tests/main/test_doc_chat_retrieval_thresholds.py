@@ -19,6 +19,9 @@ values — invalid BM25 thresholds deactivate the filter, while invalid or
 non-finite fuzzy thresholds yield no fuzzy matches — and of odd runtime
 BM25 *scores* (None/non-numeric/non-finite), which an active filter must
 drop rather than crash on, and an inactive filter must pass through.
+
+Semantic-query duplicates must retain their highest-scoring occurrence and
+receive compact unique-document ranks before reciprocal rank fusion.
 """
 
 from typing import Any, List, Optional, Tuple
@@ -36,12 +39,17 @@ class _StubVecDB:
     """Minimal stand-in for a vector store.
 
     Provides only what `DocChatAgent.get_relevant_chunks` touches: a named
-    existing collection, and (empty) semantic-search results, so tests can
-    exercise the BM25/fuzzy retrieval branches without embeddings or network.
+    existing collection and configurable semantic-search results (empty by
+    default), without embeddings or network.
     """
 
-    def __init__(self, collection_name: str = "test-retrieval-thresholds"):
+    def __init__(
+        self,
+        collection_name: str = "test-retrieval-thresholds",
+        semantic_results: Optional[dict[str, List[Tuple[Document, float]]]] = None,
+    ) -> None:
         self.config = VectorStoreConfig(collection_name=collection_name)
+        self.semantic_results = semantic_results or {}
 
     def list_collections(self, empty: bool = False) -> List[str]:
         return [str(self.config.collection_name)]
@@ -52,7 +60,7 @@ class _StubVecDB:
         k: int = 1,
         where: Optional[str] = None,
     ) -> List[Tuple[Document, float]]:
-        return []
+        return self.semantic_results.get(text, [])[:k]
 
 
 BM25_CONTENTS = [
@@ -433,3 +441,139 @@ def test_fuzzy_invalid_runtime_threshold_yields_no_matches(bad_threshold):
 
     agent.config.fuzzy_score_threshold = bad_threshold
     assert agent.get_relevant_chunks(query) == []
+
+
+# Semantic and lexical retrieval share this hermetic retrieval-path fixture.
+def _make_semantic_agent(
+    results: dict[str, List[Tuple[Document, float]]],
+    backend: str = "fuzzy",
+    n: int = 1,
+    rrf: bool = True,
+    corpus: Optional[List[Document]] = None,
+) -> DocChatAgent:
+    agent = _make_agent(
+        use_bm25_search=backend == "bm25",
+        use_fuzzy_match=backend == "fuzzy",
+        use_reciprocal_rank_fusion=rrf,
+        n_similar_chunks=n,
+        n_relevant_chunks=n,
+        n_fuzzy_neighbor_words=0,
+    )
+    agent.vecdb = _StubVecDB(semantic_results=results)  # type: ignore[assignment]
+    agent.chunked_docs = corpus or []
+    agent.chunked_docs_clean = agent.chunked_docs
+    return agent
+
+
+@pytest.mark.parametrize("backend", ["fuzzy", "bm25"])
+def test_rrf_lower_scoring_proxy_duplicate_keeps_best_semantic_hit(
+    backend: str,
+) -> None:
+    a, b = _mk_docs({"a": "first", "b": "second"})
+    agent = _make_semantic_agent(
+        {"query": [(a, 0.9), (b, 0.8)], "proxy": [(a, 0.7)]},
+        backend=backend,
+    )
+    assert agent.get_relevant_chunks("query") == [a]
+    assert agent.get_relevant_chunks("query", ["proxy"]) == [a]
+
+
+def test_rrf_higher_scoring_proxy_hit_wins() -> None:
+    a, b = _mk_docs({"a": "first", "b": "second"})
+    agent = _make_semantic_agent({"query": [(b, 0.8), (a, 0.5)], "proxy": [(a, 0.9)]})
+    assert agent.get_relevant_chunks("query") == [b]
+    assert agent.get_relevant_chunks("query", ["proxy"]) == [a]
+
+
+@pytest.mark.parametrize("backend", ["fuzzy", "bm25"])
+def test_rrf_semantic_duplicates_use_compact_unique_ranks(backend: str) -> None:
+    a, b, c = _mk_docs(
+        {
+            "a": "zzz qqq xxx vvv www",
+            "b": "quantum entanglement research",
+            "c": "quantum entanglement",
+        }
+    )
+    query = "quantum entanglement"
+    original = [(a, 0.9), (b, 0.8), (c, 0.7)]
+    # Repeat A between B and C. Keeping raw first-occurrence indices still
+    # gives C rank 3 instead of 2, enough for B to displace it after RRF.
+    for same_query in [False, True]:
+        results = (
+            {query: original[:2] + [(a, 0.75)] + original[2:]}
+            if same_query
+            else {query: original, "proxy": [(a, 0.75)]}
+        )
+        agent = _make_semantic_agent(results, backend=backend, n=2, corpus=[c, b, a])
+        # Exclude the zero-scoring noise document from actual BM25 results.
+        agent.config.bm25_score_threshold = 1e-9
+        proxies = [] if same_query else ["proxy"]
+        assert agent.get_relevant_chunks(query, proxies) == [c, b]
+
+
+def test_semantic_duplicates_keep_highest_scoring_document_instance() -> None:
+    best = _mk_docs({"a": "best payload"})[0]
+    lower = _mk_docs({"a": "lower payload"})[0]
+    agent = _make_semantic_agent({"query": [(best, 0.9)], "proxy": [(lower, 0.7)]})
+    result = agent.get_relevant_chunks("query", ["proxy"])
+    assert len(result) == 1
+    assert result[0] is best
+
+
+@pytest.mark.parametrize("backend", ["fuzzy", "bm25"])
+def test_rrf_semantic_duplicate_with_real_lexical_matches(backend: str) -> None:
+    a, b, c = _mk_docs(
+        {
+            "a": "quantum entanglement",
+            "b": "quantum entanglement research",
+            "c": "zzz qqq xxx vvv www",
+        }
+    )
+    query = "quantum entanglement"
+    agent = _make_semantic_agent(
+        {query: [(a, 0.9), (b, 0.8), (c, 0.75)], "proxy": [(a, 0.7)]},
+        backend=backend,
+        corpus=[a, b, c],
+    )
+    lexical = (
+        agent.get_fuzzy_matches(query, 3)
+        if backend == "fuzzy"
+        else agent.get_similar_chunks_bm25(query, 3)
+    )
+    assert [doc.id() for doc, _ in lexical][:2] == ["a", "b"]
+    assert agent.get_relevant_chunks(query) == [a]
+    assert agent.get_relevant_chunks(query, ["proxy"]) == [a]
+
+
+@pytest.mark.parametrize("backend", ["fuzzy", "bm25"])
+def test_rrf_unique_semantic_hits_keep_score_order(backend: str) -> None:
+    a, b, c = _mk_docs({"a": "first", "b": "second", "c": "third"})
+    agent = _make_semantic_agent(
+        {"query": [(b, 0.8), (a, 0.9), (c, 0.7)]}, backend=backend, n=3
+    )
+    assert agent.get_relevant_chunks("query") == [a, b, c]
+
+
+def test_semantic_deduplication_uses_ids_not_content() -> None:
+    a, b = _mk_docs({"a": "same content", "b": "same content"})
+    agent = _make_semantic_agent({"query": [(a, 0.9), (b, 0.8)]}, n=2)
+    assert agent.get_relevant_chunks("query") == [a, b]
+
+
+def test_non_rrf_semantic_duplicate_keeps_document_order() -> None:
+    a, b = _mk_docs({"a": "first", "b": "second"})
+    agent = _make_semantic_agent(
+        {"query": [(a, 0.9), (b, 0.8)], "proxy": [(a, 0.7)]}, n=2, rrf=False
+    )
+    assert not agent.config.use_reciprocal_rank_fusion
+    assert agent.get_relevant_chunks("query", ["proxy"]) == [a, b]
+
+
+def test_rrf_without_lexical_search_keeps_document_order() -> None:
+    a, b = _mk_docs({"a": "first", "b": "second"})
+    agent = _make_semantic_agent(
+        {"query": [(a, 0.9), (b, 0.8)], "proxy": [(a, 0.7)]},
+        backend="none",
+        n=2,
+    )
+    assert agent.get_relevant_chunks("query", ["proxy"]) == [a, b]
