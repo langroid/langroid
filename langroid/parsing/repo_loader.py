@@ -294,7 +294,10 @@ class RepoLoader:
                 If not specified, a temporary directory will be created.
 
         Returns:
-            str: The path to the local directory where the repository was cloned.
+            Optional[str]: The path to the local directory the repository was
+                cloned into, or None if it could not be cloned. Callers must
+                check for None -- `load()` raises `ValueError` on it rather
+                than reading a directory with no repo in it.
         """
         with open(self.log_file, "r") as f:
             log: Dict[str, str] = json.load(f)
