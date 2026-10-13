@@ -119,6 +119,37 @@ def test_task_tool_inherits_uncopyable_api_key_provider() -> None:
     assert child.llm.config.api_base == "http://localhost:8000/v1"
 
 
+def test_task_tool_inherits_uncopyable_mock_callbacks() -> None:
+    """A MockLM parent's stateful callbacks must survive inheritance too.
+
+    `api_key_provider` was not the only callable on a config reachable here:
+    `MockLMConfig.response_fn`/`response_fn_async` and `LLMConfig.streamer`/
+    `streamer_async` are callables as well, and a stateful one holding a lock
+    makes `deepcopy` raise just the same. This pins the general rule rather
+    than the one field that was fixed first.
+    """
+    response_fn = _LockedKeyProvider()
+    streamer = _LockedKeyProvider()
+    parent = ChatAgent(
+        ChatAgentConfig(
+            llm=MockLMConfig(
+                default_response="unused",
+                response_fn=response_fn,
+                streamer=streamer,
+            )
+        )
+    )
+    tool = TaskTool(
+        system_message="Complete the task", prompt="Delegate", tools=["NONE"]
+    )
+
+    child = tool._set_up_task(parent).agent
+
+    assert isinstance(child.llm, MockLM)
+    assert child.llm.config.response_fn is response_fn
+    assert child.llm.config.streamer is streamer
+
+
 def test_task_tool_explicit_model_overrides_parent(parent_agent: ChatAgent) -> None:
     tool = TaskTool(
         system_message="Complete the task",
