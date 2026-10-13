@@ -374,6 +374,26 @@ def try_repair_json_yaml(s: str) -> str | None:
     # as an escaped backslash followed by a quote rather than as the apostrophe
     # the model meant. Where escapes are in play this falls through to the
     # repair path, which is where it was before.
+    #
+    # Two spellings therefore stay lossy, and both are gaps in the recovery
+    # rather than regressions -- `main` extracts nothing usable from either,
+    # so nothing that worked stops working, and neither can mis-attribute a
+    # value from one call to another:
+    #
+    # - an escaped apostrophe (`\'`) inside a single-quoted multiline value,
+    #   excluded by the backslash guard just above;
+    # - a PYTHON literal anywhere in the call -- `True`, `False` or `None` --
+    #   which `json.loads` rejects however lax `strict` is, so
+    #   `{'request':'write_file','content':'first\n{\n','flag':True}` reaches
+    #   `repair_json` and loses its trailing newline, while the same call
+    #   spelled `true` keeps it.
+    #
+    # Closing either properly needs a decoder for the JSON escape set alone.
+    # Reaching for Python's instead (`ast.literal_eval`) was tried and
+    # reverted: its escape set is not JSON's, so it turned `C:\var\app` into
+    # `C:\x0bar\x07pp` and `print(1)\012` into a real newline -- trading a
+    # fidelity gap for payload corruption. See
+    # `test_extract_top_level_json_does_not_apply_python_escapes`.
     if "\\" not in s:
         try:
             parsed = json.loads(_NORMALIZED_QUOTED_STRINGS.transform_string(s))

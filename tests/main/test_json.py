@@ -206,6 +206,39 @@ def test_extract_top_level_json_does_not_apply_python_escapes(
     assert [json.loads(c) for c in extract_top_level_json(response)] == [expected]
 
 
+@pytest.mark.parametrize(
+    "literal, expected_content",
+    [
+        # Spelled JSON's way, the recovery is byte-faithful.
+        ("true", "first\n{\n"),
+        # Spelled Python's way, `json.loads` rejects the whole call however
+        # lax `strict` is, so it reaches `repair_json`, which drops the
+        # trailing newline.
+        ("True", "first\n{"),
+        ("None", "first\n{"),
+    ],
+)
+def test_extract_top_level_json_python_literals_stay_lossy(
+    literal: str, expected_content: str
+) -> None:
+    """A Python literal in the call costs the multiline value its last newline.
+
+    This is a DISCLOSED limitation, pinned so it cannot change unnoticed, not
+    a behavior worth relying on. It is a gap in the recovery and not a
+    regression: `main` extracts nothing usable from any of these inputs, and
+    the value never crosses into another call -- only its trailing newline is
+    lost.
+
+    Closing it needs a decoder for the JSON escape set alone; reaching for
+    Python's was tried and reverted for corrupting payloads (see
+    `test_extract_top_level_json_does_not_apply_python_escapes`).
+    """
+    response = "{'request':'write_file','content':'first\n{\n','flag':" + literal + "}"
+    extracted = extract_top_level_json(response)
+    assert len(extracted) == 1
+    assert json.loads(extracted[0])["content"] == expected_content
+
+
 @pytest.mark.parametrize("quote", ['"', "'"])
 @pytest.mark.parametrize("braces", ["{", "}", "{}"])
 def test_extract_top_level_json_preserves_multiline_string_braces(
