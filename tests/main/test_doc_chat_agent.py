@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from langroid import ChatDocument
+from langroid.agent.base import NO_ANSWER
 from langroid.agent.batch import run_batch_task_gen, run_batch_tasks
 from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.special.doc_chat_agent import (
@@ -1369,3 +1370,50 @@ def test_doc_chat_agent_ingest_paths(test_settings: Settings, vecdb):
     # Cleanup temp files
     for f in temp_files:
         os.remove(f)
+
+
+def _empty_query_agent() -> DocChatAgent:
+    """Build a DocChatAgent that needs no vector store and no API key."""
+    return DocChatAgent(
+        DocChatAgentConfig(
+            name="empty-query",
+            vecdb=None,
+            llm=MockLMConfig(default_response="unused"),
+        )
+    )
+
+
+def test_doc_chat_agent_empty_query_returns_no_answer() -> None:
+    """An empty query is answered with the NO_ANSWER sentinel, not dropped."""
+    response = _empty_query_agent().llm_response("")
+
+    assert response is not None
+    assert NO_ANSWER in response.content
+    assert response.metadata.sender == Entity.LLM
+
+
+@pytest.mark.asyncio
+async def test_doc_chat_agent_empty_query_returns_no_answer_async() -> None:
+    """Async twin of the test above: an empty query must not return None.
+
+    `Task.step_async()` only records a responder's NO_ANSWER when the response
+    carries the sentinel; returning `None` instead sends the step down the
+    "no responder answered" path, so an empty query behaves differently
+    depending on which of the two twins handled it.
+    """
+    response = await _empty_query_agent().llm_response_async("")
+
+    assert response is not None
+    assert NO_ANSWER in response.content
+    assert response.metadata.sender == Entity.LLM
+
+
+@pytest.mark.asyncio
+async def test_doc_chat_agent_empty_query_matches_sync_twin() -> None:
+    """Both twins must agree on the empty-query response."""
+    sync_response = _empty_query_agent().llm_response("")
+    async_response = await _empty_query_agent().llm_response_async("")
+
+    assert sync_response is not None
+    assert async_response is not None
+    assert async_response.content == sync_response.content
