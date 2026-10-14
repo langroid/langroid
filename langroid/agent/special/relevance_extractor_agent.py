@@ -108,6 +108,14 @@ class RelevanceExtractorAgent(ChatAgent):
         self.numbered_passage = number_segments(message_str, self.config.segment_length)
         # compose prompt
         prompt = f"""
+        <Instructions>
+        Given the PASSAGE below with NUMBERED segments, and the QUERY,
+        extract ONLY the segment-numbers that are RELEVANT to the QUERY,
+        and present them using the `extract_segments` tool/function,
+        i.e. your response MUST be a JSON-formatted string starting with
+        `{{"request": "extract_segments", ...}}`
+        </Instructions>
+        
         PASSAGE:
         {self.numbered_passage}
         
