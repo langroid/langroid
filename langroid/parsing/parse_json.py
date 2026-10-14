@@ -139,8 +139,8 @@ _MAX_MULTILINE_INPUT_CHARS = 8 * 1024
 _MAX_MULTILINE_QUOTES = 512
 
 
-def _dispatchable_calls(candidates: List[str]) -> int:
-    """Count the tool calls that one reading of a span would dispatch.
+def _dispatched_calls(candidates: List[str]) -> List[Tuple[str, Dict[str, Any]]]:
+    """The tool calls that one reading of a span would dispatch.
 
     Each candidate is repaired exactly as extraction would repair it, and is
     counted if it yields an object at all. A missing `request` does NOT make
@@ -178,9 +178,10 @@ def _dispatchable_calls(candidates: List[str]) -> int:
         candidates: The candidate object texts making up one reading of a span.
 
     Returns:
-        The number of calls that reading dispatches.
+        The calls that reading dispatches, in order, each as the candidate
+        text it came from paired with the repaired object.
     """
-    calls = 0
+    calls: List[Tuple[str, Dict[str, Any]]] = []
     for candidate in candidates:
         repaired = try_repair_json_yaml(candidate)
         if repaired is None:
@@ -190,8 +191,80 @@ def _dispatchable_calls(candidates: List[str]) -> int:
         except ValueError:
             continue
         if isinstance(obj, dict):
-            calls += 1
+            calls.append((candidate, obj))
     return calls
+
+
+def _string_values(obj: Any) -> Iterator[str]:
+    """Every string anywhere inside a repaired call, values and keys alike."""
+    if isinstance(obj, str):
+        yield obj
+    elif isinstance(obj, dict):
+        for key, value in obj.items():
+            yield from _string_values(key)
+            yield from _string_values(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from _string_values(item)
+
+
+def _tie_is_swallow(
+    single_call: Dict[str, Any],
+    multiline_call: Dict[str, Any],
+) -> bool:
+    """Whether a 1-vs-1 tie is a swallow rather than one call read twice.
+
+    A tie in `_dispatchable_calls` was taken to mean "one call read either
+    way", which is what a genuine multiline recovery looks like. It does not
+    always: the single-line reading of
+
+        {'request':'bad','value':'oops
+        {
+        {"request":"good","value":"ok"}
+        '}
+
+    is ONE match running from the lone `{` to the end, which `repair_json`
+    reduces to the `good` call -- so both readings dispatch one call, the tie
+    keeps the recovery, and `bad` runs carrying `good`'s whole call as its
+    argument while `good` is lost. `main` dispatches `good`.
+
+    What separates the two is whether the candidate's ARGUMENT spells the
+    single-line reading's call out in full. Here it does -- `bad`'s value is
+    `oops\\n{\\n{"request":"good","value":"ok"}\\n` -- and a genuine recovery's
+    never does, because the brace in the value is the one nothing closes:
+    recovering `first line\\n{\\nlast line` leaves a lone `{` in the value, and
+    the single-line reading of that span is the fragment after it.
+
+    Containment is therefore read off the RESULT -- an object inside one of
+    the candidate's repaired strings that repairs to the same call -- and not
+    off the spans. Every contained call straddles or sits inside the
+    candidate's span; that is the gate for reaching this function at all, so
+    a span test would call every tie a swallow and switch the recovery off.
+
+    This is the owner's rule for the tie, with its `request` comparison
+    subsumed: it would be both too strong and too weak on its own. Too weak,
+    because the swallowed call often names the SAME tool as the truncated one
+    (`{'request':'write_file','value':'oops\\n{\\n{"request":"write_file",...`),
+    where the names match and the swallow survives. Too strong, because a
+    recovery's single-line reading is a fragment that repairs to rubbish --
+    `{'request':'write_file','content':'first\\n{\\n','flag':true}` repairs its
+    `{\\n','flag':true}` tail into `{",'flag": true}`, which carries no
+    `request` at all -- so a name comparison calls the recovery a swallow and
+    #1203's fix is lost on every reply ending in a Python-style literal.
+    Containment decides all three correctly.
+
+    Args:
+        single_call: The call the single-line reading of the span dispatches.
+        multiline_call: The multiline candidate's repaired object.
+
+    Returns:
+        True when the multiline candidate swallowed the single-line call.
+    """
+    for value in _string_values(multiline_call):
+        for text, _, _ in _scan(_SINGLE_LINE_CURLY_BRACES, value):
+            if any(obj == single_call for _, obj in _dispatched_calls([text])):
+                return True
+    return False
 
 
 def _scan(expr: Any, s: str) -> List[Tuple[str, int, int]]:
@@ -285,16 +358,26 @@ def get_json_candidates(s: str) -> List[str]:
         ]
         span_reading = [m[0] for m in single_line if start <= m[1] < end]
         # Compare yields: read the candidate's span both ways, repair each
-        # piece, and prefer the single-line reading only when it dispatches
+        # piece, and prefer the single-line reading when it dispatches
         # strictly MORE calls. A swallow shows up as 2 against 1, because the
-        # swallowed call is lost entirely. A tie keeps the multiline recovery,
-        # which is what a genuine recovery looks like -- one call read either
-        # way -- so recovery survives. Being a comparison of outcomes and not
-        # of spellings, it is blind to however the swallowed call happens to
-        # be malformed.
-        if contained and _dispatchable_calls(span_reading) > _dispatchable_calls(
-            [text]
-        ):
+        # swallowed call is lost entirely. Being a comparison of outcomes and
+        # not of spellings, it is blind to however the swallowed call happens
+        # to be malformed.
+        #
+        # A 1-vs-1 tie keeps the multiline recovery, which is what a genuine
+        # recovery looks like -- one call read either way -- EXCEPT when the
+        # two readings do not dispatch the same call, which `_tie_is_swallow`
+        # decides: a tie can also be a swallow whose single-line reading is
+        # one match spanning the rest of the input, and that one must fail
+        # closed like any other.
+        single_calls = _dispatched_calls(span_reading)
+        multiline_calls = _dispatched_calls([text])
+        swallowed = len(single_calls) > len(multiline_calls) or (
+            len(single_calls) == 1
+            and len(multiline_calls) == 1
+            and _tie_is_swallow(single_calls[0][1], multiline_calls[0][1])
+        )
+        if contained and swallowed:
             for text_i, start_i, end_i in single_line:
                 if start <= start_i < end and end_i > position:
                     result.append(text_i)

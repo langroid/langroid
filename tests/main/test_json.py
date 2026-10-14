@@ -8,7 +8,7 @@ from langroid.parsing.parse_json import (
     _MAX_MULTILINE_INPUT_CHARS,
     _MAX_MULTILINE_QUOTES,
     _SINGLE_LINE_CURLY_BRACES,
-    _dispatchable_calls,
+    _dispatched_calls,
     _scan,
     extract_top_level_json,
     get_json_candidates,
@@ -508,7 +508,65 @@ def test_get_json_candidates_higher_yield_reading_counts_requestless_calls() -> 
     ]
 
 
-def test_dispatchable_calls_counts_every_repaired_object() -> None:
+def test_get_json_candidates_tie_with_a_different_call_fails_closed() -> None:
+    """A 1-vs-1 tie is not always one call read twice.
+
+    The single-line reading here is a SINGLE match running from the lone `{`
+    to the end of the reply, which `repair_json` reduces to the `good` call.
+    So both readings dispatch one call; on the yield comparison alone the tie
+    keeps the recovery, `good` is lost, and `bad` runs carrying `good`'s whole
+    call as its argument. What settles it is that `bad`'s repaired value
+    spells the `good` call out in full.
+    """
+    response = (
+        "{'request':'bad','value':'oops\n"
+        "{\n"
+        '{"request":"good","value":"ok"}\n'
+        "'}"
+    )
+
+    # Byte-identical to `main`: the swallowed call is the one that runs.
+    assert extract_top_level_json(response) == ['{"request": "good", "value": "ok"}']
+
+
+def test_get_json_candidates_tie_with_the_same_tool_fails_closed() -> None:
+    """The tie-break catches a swallowed call naming the SAME tool.
+
+    `request` is `write_file` on both readings, so the name comparison the
+    rule was first stated as cannot separate them, and the reply is otherwise
+    the shape above: `main` dispatches the inner call, and keeping the
+    recovery would run `write_file` with its own second invocation as the
+    argument.
+    """
+    response = (
+        "{'request':'write_file','value':'oops\n"
+        "{\n"
+        '{"request":"write_file","value":"ok"}\n'
+        "'}"
+    )
+
+    # Byte-identical to `main`.
+    assert extract_top_level_json(response) == [
+        '{"request": "write_file", "value": "ok"}'
+    ]
+
+
+def test_get_json_candidates_tie_without_a_request_fails_closed() -> None:
+    """A swallowed call is protected whether or not it names its tool.
+
+    Neither reading carries a `request`, and both still dispatch --
+    `Agent._get_one_tool_message` infers one from the fields present -- so the
+    tie-break cannot lean on the name being there at all.
+    """
+    response = (
+        "{'path':'bad.txt','value':'oops\n" "{\n" '{"content":"ok","dest":"x"}\n' "'}"
+    )
+
+    # Byte-identical to `main`.
+    assert extract_top_level_json(response) == ['{"content": "ok", "dest": "x"}']
+
+
+def test_dispatched_calls_counts_every_repaired_object() -> None:
     """The yield comparison counts anything that repairs to an object.
 
     `request` is not required -- it can be inferred from the fields present --
@@ -517,10 +575,10 @@ def test_dispatchable_calls_counts_every_repaired_object() -> None:
     at all counts for nothing, which is what keeps prose from inflating the
     single-line reading.
     """
-    assert _dispatchable_calls(['{"request": "a"}', '{"request": "b"}']) == 2
-    assert _dispatchable_calls(['{"request": "a"}', '{"request": "a"}']) == 2
-    assert _dispatchable_calls(['{"x": 1}', '{"request": 7}']) == 2
-    assert _dispatchable_calls([]) == 0
+    assert len(_dispatched_calls(['{"request": "a"}', '{"request": "b"}'])) == 2
+    assert len(_dispatched_calls(['{"request": "a"}', '{"request": "a"}'])) == 2
+    assert len(_dispatched_calls(['{"x": 1}', '{"request": 7}'])) == 2
+    assert _dispatched_calls([]) == []
 
 
 @pytest.mark.parametrize(
