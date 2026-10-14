@@ -1,8 +1,9 @@
 import atexit
 import os
-from functools import cached_property
+from functools import cached_property, partial
 from typing import Any, Callable, Dict, List, Optional
 
+import numpy as np
 import requests
 import tiktoken
 from dotenv import load_dotenv
@@ -12,7 +13,14 @@ from pydantic_settings import SettingsConfigDict
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.exceptions import LangroidImportError
 from langroid.language_models.provider_params import LangDBParams
-from langroid.mytypes import Embeddings
+from langroid.mytypes import (
+    Embeddings,
+    MultiVectorEmbeddingFunction,
+    MultiVectorEmbeddings,
+    SparseEmbedding,
+    SparseEmbeddingFunction,
+    SparseEmbeddings,
+)
 from langroid.parsing.utils import batched
 
 AzureADTokenProvider = Callable[[], str]
@@ -92,6 +100,20 @@ class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
     threads: Optional[int] = None
     parallel: Optional[int] = None
     additional_kwargs: Dict[str, Any] = {}
+
+
+class FastEmbedSparseEmbeddingsConfig(FastEmbedEmbeddingsConfig):
+    """Config for FastEmbed sparse text embeddings."""
+
+    model_type: str = "fastembed-sparse"
+    model_name: str = "prithivida/Splade_PP_en_v1"
+
+
+class FastEmbedLateInteractionEmbeddingsConfig(FastEmbedEmbeddingsConfig):
+    """Config for FastEmbed token-level, late-interaction embeddings."""
+
+    model_type: str = "fastembed-late-interaction"
+    model_name: str = "colbert-ir/colbertv2.0"
 
 
 class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
@@ -419,6 +441,128 @@ class FastEmbedEmbeddings(EmbeddingModel):
         return len(embed_func(["text"])[0])
 
 
+class FastEmbedSparseEmbeddings(EmbeddingModel):
+    """Encode texts as sparse indices and weights without densifying."""
+
+    embedding_type = "sparse"
+
+    def __init__(
+        self, config: Optional[FastEmbedSparseEmbeddingsConfig] = None
+    ) -> None:
+        try:
+            from fastembed import SparseTextEmbedding
+        except ImportError:
+            raise LangroidImportError("fastembed", extra="fastembed")
+
+        self.config = config or FastEmbedSparseEmbeddingsConfig()
+        self.model = SparseTextEmbedding(
+            model_name=self.config.model_name,
+            cache_dir=self.config.cache_dir,
+            threads=self.config.threads,
+            **self.config.additional_kwargs,
+        )
+
+    def _embed(self, texts: List[str], query: bool = False) -> SparseEmbeddings:
+        if not texts:
+            return []
+        encoder = self.model.query_embed if query else self.model.passage_embed
+        return [
+            SparseEmbedding(
+                indices=embedding.indices.tolist(),
+                values=embedding.values.tolist(),
+            )
+            for embedding in encoder(
+                texts,
+                batch_size=self.config.batch_size,
+                parallel=self.config.parallel,
+            )
+        ]
+
+    def embedding_fn(self) -> SparseEmbeddingFunction:
+        return self._embed
+
+    def query_embedding_fn(self) -> SparseEmbeddingFunction:
+        return partial(self._embed, query=True)
+
+    @property
+    def embedding_dims(self) -> int:
+        raise ValueError("Sparse embeddings do not have a fixed dense dimension.")
+
+    def similarity(self, text1: str, text2: str) -> float:
+        """Compute sparse dot-product similarity between query and document."""
+        query = self.query_embedding_fn()([text1])[0]
+        document = self.embedding_fn()([text2])[0]
+        weights = dict(zip(document.indices, document.values))
+        return float(
+            sum(
+                value * weights.get(index, 0.0)
+                for index, value in zip(query.indices, query.values)
+            )
+        )
+
+
+class FastEmbedLateInteractionEmbeddings(EmbeddingModel):
+    """Encode texts as token matrices and compare them using MaxSim."""
+
+    embedding_type = "late-interaction"
+
+    def __init__(
+        self, config: Optional[FastEmbedLateInteractionEmbeddingsConfig] = None
+    ) -> None:
+        try:
+            from fastembed import LateInteractionTextEmbedding
+        except ImportError:
+            raise LangroidImportError("fastembed", extra="fastembed")
+
+        self.config = config or FastEmbedLateInteractionEmbeddingsConfig()
+        self.model = LateInteractionTextEmbedding(
+            model_name=self.config.model_name,
+            cache_dir=self.config.cache_dir,
+            threads=self.config.threads,
+            **self.config.additional_kwargs,
+        )
+
+    def _embed(self, texts: List[str], query: bool = False) -> MultiVectorEmbeddings:
+        if not texts:
+            return []
+        encoder = self.model.query_embed if query else self.model.passage_embed
+        return [
+            embedding.tolist()
+            for embedding in encoder(
+                texts,
+                batch_size=self.config.batch_size,
+                parallel=self.config.parallel,
+            )
+        ]
+
+    def embedding_fn(self) -> MultiVectorEmbeddingFunction:
+        return self._embed
+
+    def query_embedding_fn(self) -> MultiVectorEmbeddingFunction:
+        return partial(self._embed, query=True)
+
+    @cached_property
+    def embedding_dims(self) -> int:
+        """Return the dimension of a token vector, not the token count."""
+        matrix = self.embedding_fn()(["text"])[0]
+        if not matrix or not matrix[0]:
+            raise ValueError("Cannot infer dimensions from an empty token matrix.")
+        return len(matrix[0])
+
+    def similarity(self, text1: str, text2: str) -> float:
+        """Sum the best document-token dot product for each query token.
+
+        FastEmbed normalizes ColBERT token vectors. This MaxSim score is
+        directional: text1 is the query and text2 is the document.
+        """
+        query = self.query_embedding_fn()([text1])[0]
+        document = self.embedding_fn()([text2])[0]
+        if not query or not document:
+            return 0.0
+        scores = np.asarray(query) @ np.asarray(document).T
+        return float(scores.max(axis=1).sum())
+
+
 LCSEC = LlamaCppServerEmbeddingsConfig
 
 
@@ -637,6 +781,8 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
          - "azure-openai",
          - "sentencetransformer", or
          - "fastembed".
+         - "fastembed-sparse",
+         - "fastembed-late-interaction".
             (others may be added in the future)
     Returns:
         EmbeddingModel: The corresponding embedding model class.
@@ -647,6 +793,10 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         return AzureOpenAIEmbeddings  # type: ignore
     elif embedding_fn_type == "fastembed":
         return FastEmbedEmbeddings  # type: ignore
+    elif embedding_fn_type == "fastembed-sparse":
+        return FastEmbedSparseEmbeddings  # type: ignore
+    elif embedding_fn_type == "fastembed-late-interaction":
+        return FastEmbedLateInteractionEmbeddings  # type: ignore
     elif embedding_fn_type == "llamacppserver":
         return LlamaCppServerEmbeddings  # type: ignore
     elif embedding_fn_type == "gemini":

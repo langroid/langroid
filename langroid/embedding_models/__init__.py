@@ -1,27 +1,29 @@
-from . import base
-from . import models
-from . import remote_embeds
-
+from . import base, models, remote_embeds
 from .base import (
     EmbeddingModel,
     EmbeddingModelsConfig,
 )
 from .models import (
+    FastEmbedEmbeddings,
+    FastEmbedEmbeddingsConfig,
+    FastEmbedLateInteractionEmbeddings,
+    FastEmbedLateInteractionEmbeddingsConfig,
+    FastEmbedSparseEmbeddings,
+    FastEmbedSparseEmbeddingsConfig,
+    GeminiEmbeddings,
+    GeminiEmbeddingsConfig,
+    LlamaCppServerEmbeddings,
+    LlamaCppServerEmbeddingsConfig,
     OpenAIEmbeddings,
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddings,
     SentenceTransformerEmbeddingsConfig,
-    LlamaCppServerEmbeddings,
-    LlamaCppServerEmbeddingsConfig,
-    GeminiEmbeddings,
-    GeminiEmbeddingsConfig,
     embedding_model,
 )
 from .remote_embeds import (
-    RemoteEmbeddingsConfig,
     RemoteEmbeddings,
+    RemoteEmbeddingsConfig,
 )
-
 
 __all__ = [
     "base",
@@ -29,6 +31,12 @@ __all__ = [
     "remote_embeds",
     "EmbeddingModel",
     "EmbeddingModelsConfig",
+    "FastEmbedEmbeddings",
+    "FastEmbedEmbeddingsConfig",
+    "FastEmbedSparseEmbeddings",
+    "FastEmbedSparseEmbeddingsConfig",
+    "FastEmbedLateInteractionEmbeddings",
+    "FastEmbedLateInteractionEmbeddingsConfig",
     "OpenAIEmbeddings",
     "OpenAIEmbeddingsConfig",
     "SentenceTransformerEmbeddings",

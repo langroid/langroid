@@ -2,7 +2,7 @@ import copy
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, cast
 
 import numpy as np
 import pandas as pd
@@ -127,9 +127,16 @@ class VectorStore(ABC):
             self.embedding_model = EmbeddingModel.create(config.embedding)
         else:
             self.embedding_model = config.embedding_model
+        if self.embedding_model.embedding_type != "dense":
+            raise ValueError(
+                "VectorStore requires dense embeddings; "
+                f"got {self.embedding_model.embedding_type} embeddings. "
+                "Use this model's embedding_fn directly with a backend that "
+                "supports its output format."
+            )
         if hasattr(self.config, "embedding_model"):
             self.config.embedding_model = None
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
+        self.embedding_fn = cast(EmbeddingFunction, self.embedding_model.embedding_fn())
 
     @staticmethod
     def create(config: VectorStoreConfig) -> Optional["VectorStore"]:
