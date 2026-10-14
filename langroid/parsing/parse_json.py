@@ -228,30 +228,44 @@ def _tie_is_swallow(
     keeps the recovery, and `bad` runs carrying `good`'s whole call as its
     argument while `good` is lost. `main` dispatches `good`.
 
-    What separates the two is whether the candidate's ARGUMENT spells the
-    single-line reading's call out in full. Here it does -- `bad`'s value is
-    `oops\\n{\\n{"request":"good","value":"ok"}\\n` -- and a genuine recovery's
-    never does, because the brace in the value is the one nothing closes:
-    recovering `first line\\n{\\nlast line` leaves a lone `{` in the value, and
-    the single-line reading of that span is the fragment after it.
+    Two things mark such a tie, and either is enough, because neither covers
+    the other.
 
-    Containment is therefore read off the RESULT -- an object inside one of
-    the candidate's repaired strings that repairs to the same call -- and not
-    off the spans. Every contained call straddles or sits inside the
-    candidate's span; that is the gate for reaching this function at all, so
-    a span test would call every tie a swallow and switch the recovery off.
+    1. **The readings name DIFFERENT tools** -- `good` against `bad` -- which
+       is decisive on its own, and is the only thing that is when the
+       repairer has already rewritten the argument so the swallowed call is
+       no longer spelled out in it. Replace `ok` above with a value carrying
+       a JSON escape, `"line\\nnext"`, and the candidate repairs to
+       `{"request": "bad", "value": "line\\nnext"}`: the swallowed text is
+       gone from the value, but `bad` is still running with `good`'s
+       argument.
 
-    This is the owner's rule for the tie, with its `request` comparison
-    subsumed: it would be both too strong and too weak on its own. Too weak,
-    because the swallowed call often names the SAME tool as the truncated one
-    (`{'request':'write_file','value':'oops\\n{\\n{"request":"write_file",...`),
-    where the names match and the swallow survives. Too strong, because a
-    recovery's single-line reading is a fragment that repairs to rubbish --
-    `{'request':'write_file','content':'first\\n{\\n','flag':true}` repairs its
-    `{\\n','flag':true}` tail into `{",'flag": true}`, which carries no
-    `request` at all -- so a name comparison calls the recovery a swallow and
-    #1203's fix is lost on every reply ending in a Python-style literal.
-    Containment decides all three correctly.
+    2. **The candidate's argument spells the single-line call out in full**,
+       which (1) cannot see when the swallowed call names the SAME tool as
+       the truncated one:
+
+           {'request':'write_file','value':'oops
+           {
+           {"request":"write_file","value":"ok"}
+           '}
+
+       Containment is read off the RESULT -- an object inside one of the
+       candidate's repaired strings that repairs to the same call -- and not
+       off the spans. Every contained call straddles or sits inside the
+       candidate's span; that is the gate for reaching this function at all,
+       so a span test would call every tie a swallow and switch the recovery
+       off.
+
+    A name comparison needs BOTH names present to say anything, and an
+    absent one falls through to (2) rather than counting as a difference. A
+    recovery's single-line reading is a fragment that repairs to rubbish, and
+    rubbish usually has no `request`: the tail of
+    `{'request':'write_file','content':'first\\n{\\n','flag':true}` repairs to
+    `{",'flag": true}`, and reading that absence as "a different call" would
+    call the recovery a swallow and lose #1203's fix on every reply ending in
+    a Python-style literal. Falling through costs nothing, because a genuine
+    recovery's value never holds a whole call -- the brace inside it is the
+    one nothing closes.
 
     Args:
         single_call: The call the single-line reading of the span dispatches.
@@ -260,6 +274,11 @@ def _tie_is_swallow(
     Returns:
         True when the multiline candidate swallowed the single-line call.
     """
+    request = single_call.get("request")
+    multiline_request = multiline_call.get("request")
+    if request is not None and multiline_request is not None:
+        if request != multiline_request:
+            return True
     for value in _string_values(multiline_call):
         for text, _, _ in _scan(_SINGLE_LINE_CURLY_BRACES, value):
             if any(obj == single_call for _, obj in _dispatched_calls([text])):

@@ -551,6 +551,28 @@ def test_get_json_candidates_tie_with_the_same_tool_fails_closed() -> None:
     ]
 
 
+def test_get_json_candidates_tie_after_the_value_is_rewritten_fails_closed() -> None:
+    """A swallowed call the repairer erased from the argument is still caught.
+
+    `good`'s value carries a JSON escape, and repairing the candidate rewrites
+    the argument down to `line\\nnext` -- so the swallowed call is no longer
+    spelled out anywhere in it and containment cannot see it, while `bad` is
+    still running with `good`'s argument and `good` is gone. The two readings
+    naming different tools is what settles this one.
+    """
+    response = (
+        "{'request':'bad','value':'oops\n"
+        "{\n"
+        '{"request": "good", "value": "line\\nnext"}\n'
+        "'}"
+    )
+
+    # Byte-identical to `main`.
+    assert extract_top_level_json(response) == [
+        '{"request": "good", "value": "line\\nnext"}'
+    ]
+
+
 def test_get_json_candidates_tie_without_a_request_fails_closed() -> None:
     """A swallowed call is protected whether or not it names its tool.
 
