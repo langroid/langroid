@@ -464,6 +464,11 @@ class DocumentParser(Parser):
                 return DocumentType.XLSX
             elif mime_type == "application/vnd.ms-excel":
                 return DocumentType.XLS
+            elif mime_type == (
+                "application/vnd.openxmlformats-officedocument"
+                ".presentationml.presentation"
+            ):
+                return DocumentType.PPTX
             elif mime_type == "text/html":
                 return DocumentType.HTML
             elif mime_type in ("text/markdown", "text/x-markdown"):
