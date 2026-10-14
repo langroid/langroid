@@ -1043,37 +1043,12 @@ class FastMCPClient:
                 raise RuntimeError(
                     "Client not initialized. Use async with FastMCPClient."
                 )
-        # Prefer validated call; if server fails to provide structured content
-        # despite declaring a schema, fall back to a raw request to bypass
-        # client-side validation and still surface the data.
-        try:
-            result: CallToolResult = await self.client.session.call_tool(
-                tool_name,
-                arguments,
-            )
-        except RuntimeError as e:
-            msg = str(e)
-            if "has an output schema but did not return structured content" not in msg:
-                raise
-            from mcp.types import (
-                CallToolRequest,
-                CallToolRequestParams,
-                ClientRequest,
-            )
-            from mcp.types import (
-                CallToolResult as _CallToolResult,
-            )
-
-            result = await self.client.session.send_request(  # type: ignore[assignment]
-                ClientRequest(
-                    CallToolRequest(
-                        params=CallToolRequestParams(
-                            name=tool_name, arguments=arguments
-                        )
-                    )
-                ),
-                _CallToolResult,
-            )
+        # Output validation happens after the server has executed the tool.
+        # Propagate failures: retrying here could repeat a non-idempotent action.
+        result: CallToolResult = await self.client.session.call_tool(
+            tool_name,
+            arguments,
+        )
         results = self._convert_tool_result(tool_name, result)
 
         if isinstance(results, str):
