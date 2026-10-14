@@ -116,7 +116,13 @@ class TaskTool(ToolMessage):
         agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
 
         # Create chat agent config with system message if provided
-        if self.model is None and agent.config.llm is not None:
+        # `not self.model` rather than `is None`: the field is optional and an
+        # LLM routinely fills an optional string with `""` instead of omitting
+        # it, which would take the fallback branch below and hand a Claude or
+        # local-endpoint parent an OpenAI sub-agent -- the very bug this
+        # inheritance exists to fix, through a different door. The fallback
+        # already reads `""` as "no model given" (`self.model or ...`).
+        if not self.model and agent.config.llm is not None:
             # Inherit the parent's config so the sub-agent reaches the same
             # provider and endpoint, but carry every CALLABLE field over by
             # identity rather than deep-copying it, for the two reasons

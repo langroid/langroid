@@ -160,3 +160,43 @@ def test_task_tool_explicit_model_overrides_parent(parent_agent: ChatAgent) -> N
     child = tool._set_up_task(parent_agent).agent
     assert isinstance(child.llm, OpenAIGPT)
     assert child.llm.config.chat_model == "gpt-4.1-mini"
+
+
+def test_task_tool_empty_model_string_inherits(parent_agent: ChatAgent) -> None:
+    """`model=""` means "no model given", not "use the default".
+
+    `model` is optional, and an LLM routinely fills an optional string field
+    with `""` rather than omitting it. Reading that as a model name sends the
+    sub-agent to OpenAI `gpt-4.1-mini` while the parent is on something else
+    entirely -- the same wrong-provider delegation inheritance exists to fix.
+    """
+    tool = TaskTool(
+        system_message="Complete the task", prompt="Delegate", tools=["NONE"], model=""
+    )
+
+    child = tool._set_up_task(parent_agent).agent
+
+    assert isinstance(child.llm, MockLM)
+
+
+def test_task_tool_no_parent_llm_falls_back_to_default(
+    test_settings: Settings,
+) -> None:
+    """A parent without an LLM keeps the documented `gpt-4.1-mini` default.
+
+    This is the other half of the sentence the docs change makes, and the
+    only branch inheritance must NOT take. `chat_model` is cleared because
+    the suite's `--m` override is applied inside `OpenAIGPT.__init__` and
+    would otherwise hide what the code actually defaults to.
+    """
+    test_settings.chat_model = ""
+    set_global(test_settings)
+    parent = ChatAgent(ChatAgentConfig(llm=None))
+    tool = TaskTool(
+        system_message="Complete the task", prompt="Delegate", tools=["NONE"]
+    )
+
+    child = tool._set_up_task(parent).agent
+
+    assert isinstance(child.llm, OpenAIGPT)
+    assert child.llm.config.chat_model == "gpt-4.1-mini"
