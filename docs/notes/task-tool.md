@@ -57,7 +57,8 @@ response = {
 - `tools`: List of tool names. Special values: `["ALL"]` or `["NONE"]`
 
 **Optional fields:**
-- `model`: LLM model name (default: "gpt-4o-mini")
+- `model`: LLM model name. When omitted, inherits the parent agent's model and
+  provider configuration, or falls back to `gpt-4.1-mini` if the parent has no LLM.
 - `max_iterations`: Task iteration limit (default: 10)
 - `agent_name`: Name for the sub-agent (default: auto-generated as "agent-{uuid}")
 

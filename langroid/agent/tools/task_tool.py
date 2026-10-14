@@ -116,11 +116,52 @@ class TaskTool(ToolMessage):
         agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
 
         # Create chat agent config with system message if provided
-        # TODO: Maybe we just copy the parent agent's config and override chat_model?
-        #   -- but what if parent agent has a MockLMConfig?
-        llm_config = lm.OpenAIGPTConfig(
-            chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
-        )
+        # `not self.model` rather than `is None`: the field is optional and an
+        # LLM routinely fills an optional string with `""` instead of omitting
+        # it, which would take the fallback branch below and hand a Claude or
+        # local-endpoint parent an OpenAI sub-agent -- the very bug this
+        # inheritance exists to fix, through a different door. The fallback
+        # already reads `""` as "no model given" (`self.model or ...`).
+        if not self.model and agent.config.llm is not None:
+            # Inherit the parent's config so the sub-agent reaches the same
+            # provider and endpoint, but carry every CALLABLE field over by
+            # identity rather than deep-copying it, for the two reasons
+            # `OpenAIGPT.__init__` gives where it does the same dance for
+            # `api_key_provider`: a callable may hold non-copyable state (a
+            # `threading.Lock` in a refreshing credential provider, say),
+            # which makes `deepcopy` raise outright; and where the identity is
+            # load-bearing, a copy silently breaks it -- the client cache is
+            # keyed on `id(api_key_provider)`, so a copied provider gives
+            # every sub-agent its own client.
+            #
+            # Every callable field is excluded rather than a named list,
+            # because the named list was already wrong once: `streamer`,
+            # `streamer_async`, `run_on_first_use`, `http_client_factory` and
+            # `MockLMConfig.response_fn`/`response_fn_async` are all callables
+            # on configs reachable here. Doing it by identity costs nothing,
+            # since `deepcopy` of a plain function or class returns the very
+            # same object anyway -- only stateful callable OBJECTS behave
+            # differently, and those are exactly the ones to preserve.
+            parent_llm_config = agent.config.llm
+            callable_fields = {
+                name: value
+                for name in type(parent_llm_config).model_fields
+                if callable(value := getattr(parent_llm_config, name, None))
+            }
+            if callable_fields:
+                parent_llm_config = parent_llm_config.model_copy(
+                    update=dict.fromkeys(callable_fields)
+                )
+            llm_config = parent_llm_config.model_copy(deep=True)
+            for name, value in callable_fields.items():
+                # `setattr` rather than attribute syntax because `llm_config`
+                # is typed as the base `LLMConfig`, which declares only some
+                # of these fields.
+                setattr(llm_config, name, value)
+        else:
+            llm_config = lm.OpenAIGPTConfig(
+                chat_model=self.model or lm.OpenAIChatModel.GPT4_1_MINI,
+            )
         config = ChatAgentConfig(
             name=agent_name,
             llm=llm_config,
