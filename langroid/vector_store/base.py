@@ -362,6 +362,8 @@ class VectorStore(ABC):
 
         We may have stored a longer set of window_ids than we need during chunking.
         Now, we just want `neighbors` on each side of the center of the window_ids list.
+        Only matches whose requested windows overlap contribute to the same
+        returned window's score.
 
         Args:
             docs_scores (List[Tuple[Document, float]]): List of pairs of documents
@@ -393,14 +395,15 @@ class VectorStore(ABC):
                 window_ids = [d.id()]
             id2metadata.update({id: d.metadata for id in window_ids})
 
-            id2max_score.update(
-                {id: max(id2max_score.get(id, 0), scores[i]) for id in window_ids}
-            )
             n = len(window_ids)
             chunk_idx = window_ids.index(d.id())
             neighbor_ids = window_ids[
                 max(0, chunk_idx - neighbors) : min(n, chunk_idx + neighbors + 1)
             ]
+            # Unused stored neighbors must not affect another window's score.
+            id2max_score.update(
+                {id: max(id2max_score.get(id, 0), scores[i]) for id in neighbor_ids}
+            )
             window_ids_list += [neighbor_ids]
 
         # window_ids could be from different docs,
