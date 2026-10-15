@@ -12,8 +12,8 @@ invited will be closed without review.
 ## How to propose a change
 
 1. [Open an issue](https://github.com/langroid/langroid/issues/new/choose). For a
-   feature, use the feature-request form: it asks for your company name and your
-   use case, so we can see the need behind the change.
+   feature, use the feature-request form: it asks for your organization name and
+   your use case, so we can see the need behind the change.
 2. We read it and reply on the issue. If the change fits, either we implement it
    ourselves, or we invite you to send the pull request.
 
@@ -36,7 +36,7 @@ it counts in your GitHub contributions.
 
 ## Custom work
 
-If you need Langroid features built or adapted for your company, Prasad
+If you need Langroid features built or adapted for your organization, Prasad
 Chalasani is available for custom work (advisory and development). Contact him
 at pchalasani at gmail dot com to discuss terms.
 

@@ -38,9 +38,9 @@
 > [!NOTE]
 > **Contributing: pull requests are by invitation.** To propose a change,
 > [open an issue](https://github.com/langroid/langroid/issues/new/choose) with your
-> company name and use case. If it fits, we will implement it or invite you to send
-> a PR. For custom work, contact Prasad Chalasani (pchalasani at gmail dot com) to
-> discuss terms. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+> organization name and use case. If it fits, we will implement it or invite you to
+> send a PR. For custom work, contact Prasad Chalasani (pchalasani at gmail dot com)
+> to discuss terms. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 `Langroid` is an intuitive, lightweight, extensible and principled
 Python framework to easily build LLM-powered applications, from CMU and UW-Madison researchers. 
