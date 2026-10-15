@@ -22,7 +22,8 @@ def parse_message(msg: str) -> Tuple[str, str]:
         return "", ""
 
     # Grammar definition
-    name = Word(alphanums)
+    # Match the characters accepted by AgentConfig's name validator.
+    name = Word(alphanums + "_-")
     to_start = Literal("TO[").suppress()
     to_end = Literal("]:").suppress()
     to_field = (to_start + name("name") + to_end) | Empty().suppress()

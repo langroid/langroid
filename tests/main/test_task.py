@@ -1166,9 +1166,13 @@ def test_task_init_preserves_parent_id():
 
 
 @pytest.mark.parametrize("recognize_recipient", [True, False])
+@pytest.mark.parametrize(
+    "recipient", ["SubAgent", "research_agent", "LLM-Agent", "Agent-0"]
+)
 def test_recognize_recipient_in_content(
     test_settings: Settings,
     recognize_recipient: bool,
+    recipient: str,
 ):
     """
     Test that ChatAgentConfig.recognize_recipient_in_content controls whether
@@ -1180,7 +1184,7 @@ def test_recognize_recipient_in_content(
     set_global(test_settings)
 
     # LLM response containing recipient pattern
-    llm_response_text = "TO[SubAgent]: Please handle this request"
+    llm_response_text = f"TO[{recipient}]: Please handle this request"
 
     agent = ChatAgent(
         ChatAgentConfig(
@@ -1197,7 +1201,7 @@ def test_recognize_recipient_in_content(
 
     if recognize_recipient:
         # Recipient should be extracted
-        assert result.metadata.recipient == "SubAgent"
+        assert result.metadata.recipient == recipient
         # Content should have pattern stripped
         assert "TO[" not in result.content
         assert "Please handle this request" in result.content
@@ -1205,7 +1209,7 @@ def test_recognize_recipient_in_content(
         # Recipient should NOT be extracted
         assert result.metadata.recipient == ""
         # Content should preserve the original pattern
-        assert "TO[SubAgent]:" in result.content
+        assert f"TO[{recipient}]:" in result.content
 
 
 @pytest.mark.parametrize("recognize_recipient", [True, False])
