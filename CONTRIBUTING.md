@@ -28,7 +28,7 @@ There are two ways in:
   Anything you push to it afterwards updates the pull request.
 - **Write access, for regular contributors.** People who contribute regularly
   may be given write access, so they can open pull requests directly. `main`
-  is protected: every change still goes through a reviewed pull request.
+  is protected, so their changes still go through a reviewed pull request.
 
 Either way, you keep the credit. Your commits stay authored by you, and when a
 pull request is squash-merged, GitHub lists you as a co-author of the commit, so
