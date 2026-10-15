@@ -1,40 +1,50 @@
 # Contributing to Langroid
 
+Thank you for your interest in Langroid! Questions and discussion are welcome on
+[Discord](https://discord.gg/ZU36McDgDs).
 
-Thank you for your interest in contributing to Langroid!
-We want to fundamentally change how LLM applications are built, 
-using Langroid's principled multi-agent framework. 
-Together, let us build the future of LLM-apps!
-We welcome contributions from everyone.
+# Pull requests are by invitation
 
-Below you will find guidelines and suggestions for contributing.
-We explicitly designed Langroid with a transparent, flexible architecture to 
-make it easier to build LLM-powered applications, as well as 
-to make it easier to contribute to Langroid itself.
-Feel free to join us on [Discord](https://discord.gg/ZU36McDgDs) 
-for any questions or discussions.
+We accept pull requests only for changes that meet a real business need, and only
+after we have agreed on the change in an issue. Pull requests that were not
+invited will be closed without review.
 
-# How can I Contribute?
+## How to propose a change
 
-There are many ways to contribute to Langroid. Here are some areas where you can help:
+1. [Open an issue](https://github.com/langroid/langroid/issues/new/choose). For a
+   feature, use the feature-request form: it asks for your company name and your
+   use case, so we can see the need behind the change.
+2. We read it and reply on the issue. If the change fits, either we implement it
+   ourselves, or we invite you to send the pull request.
 
-- Bug Reports
-- Code Fixes
-- Feature Requests
-- Feature Implementations
-- Documentation
-- Testing
-- UI/UX Improvements
-- Translations
-- Outreach
+Bug reports are always welcome; use the bug-report form.
 
-You are welcome to take on un-assigned open [issues](https://github.com/langroid/langroid/issues).
+## If we invite your pull request
+
+There are two ways in:
+
+- **From your fork.** Push your work to a branch on your fork of Langroid and
+  post the branch name on the issue. We open the pull request from that branch.
+  Anything you push to it afterwards updates the pull request.
+- **Write access, for regular contributors.** People who contribute regularly
+  may be given write access, so they can open pull requests directly. `main`
+  is protected, so their changes still go through a reviewed pull request.
+
+Either way, you keep the credit. Your commits stay authored by you, and when a
+pull request is squash-merged, GitHub lists you as a co-author of the commit, so
+it counts in your GitHub contributions.
+
+## Custom work
+
+If you need Langroid features built or adapted for your company, Prasad
+Chalasani is available for custom work (advisory and development). Contact him
+at pchalasani at gmail dot com to discuss terms.
 
 ## Implementation Ideas
 
 > **⚠️ Warning: The list of contribution ideas is not updated frequently
 > and may be out of date.**  
-> Please see the github issues for more up-to-date possibilities.
+> To work on any of these, open an issue first (see above).
 
 
 **INTEGRATIONS**
@@ -127,6 +137,8 @@ Emergent autonomous scientific research capabilities of large language models ht
 
 # Contribution Guidelines
 
+These are for contributors whose pull request we have invited (see above).
+
 ## Set up dev env
 
 We use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
@@ -174,9 +186,6 @@ insert secrets such as API keys, etc:
 cp .env-template .env
 # now edit the .env file, insert your secrets as above
 ``` 
-
-Currently only OpenAI models are supported. 
-You are welcome to submit a PR to support other API-based or local models. 
 
 ## Run tests
 To verify your env is correctly setup, run all tests using `make tests`.
@@ -304,8 +313,10 @@ So, typically when submitting a PR, you would do this sequence:
 - `make check` again to see what issues remain
 - repeat if needed, until all clean.
 
-When done with these, commit and push to github and submit the PR. If this
-is an ongoing PR, just push to github again and the PR will be updated.
+When done with these, commit and push to GitHub. If you work from a fork, post
+the branch name on the issue and we will open the PR from it; if you have write
+access, open the PR yourself. Either way, pushing to the same branch again
+updates the PR.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
 Read more in the [GitHub CLI manual](https://cli.github.com/manual/).

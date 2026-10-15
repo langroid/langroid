@@ -35,6 +35,13 @@
   <br />
 </h3>
 
+> [!NOTE]
+> **Contributing: pull requests are by invitation.** To propose a change,
+> [open an issue](https://github.com/langroid/langroid/issues/new/choose) with your
+> company name and use case. If it fits, we will implement it or invite you to send
+> a PR. For custom work, contact Prasad Chalasani (pchalasani at gmail dot com) to
+> discuss terms. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
 `Langroid` is an intuitive, lightweight, extensible and principled
 Python framework to easily build LLM-powered applications, from CMU and UW-Madison researchers. 
 You set up Agents, equip them with optional components (LLM, 
@@ -66,15 +73,9 @@ the server's tools into Langroid's `ToolMessage` instances.
 > It finds, prioritizes and fixes vulnerabilities. We have internally adapted Langroid's multi-agent orchestration framework in production, after evaluating CrewAI, Autogen, LangChain, Langflow, etc. We found Langroid to be far superior to those frameworks in terms of ease of setup and flexibility. Langroid's Agent and Task abstractions are intuitive, well thought out, and provide a great developer  experience. We wanted the quickest way to get something in production. With other frameworks it would have taken us weeks, but with Langroid we got to good results in minutes. Highly recommended! <br> -- Jacky Wong, Head of AI at Nullify.
 
 
-🔥 See this [Intro to Langroid](https://lancedb.substack.com/p/langoid-multi-agent-programming-framework)
-blog post from the LanceDB team
-
 🔥 Just published in ML for Healthcare (2024): a Langroid-based Multi-Agent RAG system for 
 pharmacovigilance, see [blog post](https://langroid.github.io/langroid/blog/2024/08/12/malade-multi-agent-architecture-for-pharmacovigilance/)
 
-
-We welcome contributions: See the [contributions](https://github.com/langroid/langroid/blob/main/CONTRIBUTING.md) document
-for ideas on what to contribute.
 
 Are you building LLM Applications, or want help with Langroid for your company, 
 or want to prioritize Langroid features for your company use-cases? 

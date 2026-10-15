@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Custom work for your company
+    url: https://github.com/langroid/langroid/blob/main/CONTRIBUTING.md#custom-work
+    about: Need Langroid features built or adapted for your company? See how to reach Prasad Chalasani to discuss terms.
+  - name: Questions and discussion
+    url: https://discord.gg/ZU36McDgDs
+    about: Ask questions and discuss Langroid on Discord.
