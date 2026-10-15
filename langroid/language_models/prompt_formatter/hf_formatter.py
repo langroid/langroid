@@ -80,7 +80,7 @@ def _hub_candidates(hf_api: Any, model_name: str) -> List[str]:
 
 def _load_chat_tokenizer(
     AutoTokenizer: Type[Any], ids: List[str]
-) -> Tuple[Tuple[str, Any] | None, bool]:
+) -> Tuple[Tuple[str, Any] | None, bool, Exception | None]:
     """Find the first candidate whose tokenizer loads and has a chat template.
 
     Args:
@@ -88,20 +88,23 @@ def _load_chat_tokenizer(
         ids: Candidate hub model ids, in order of preference.
 
     Returns:
-        The `(id, tokenizer)` found, or None if no candidate qualifies; and
-        whether any candidate's tokenizer loaded at all.
+        The `(id, tokenizer)` found, or None if no candidate qualifies;
+        whether any candidate's tokenizer loaded at all; and the last load
+        error, if any.
     """
     loaded_any = False
+    last_error: Exception | None = None
     for mdl_id in ids:
         try:
             tokenizer = AutoTokenizer.from_pretrained(mdl_id)
         except Exception as e:
             logger.info(f"Skipping {mdl_id} for prompt formatting: {e}")
+            last_error = e
             continue
         loaded_any = True
         if tokenizer.chat_template is not None:
-            return (mdl_id, tokenizer), True
-    return None, loaded_any
+            return (mdl_id, tokenizer), True, last_error
+    return None, loaded_any, last_error
 
 
 def find_hf_formatter(model_name: str) -> str:
@@ -114,7 +117,7 @@ def find_hf_formatter(model_name: str) -> str:
     for i in range(len(parts), 0, -1):
         prefix = "-".join(parts[:i])
         try:
-            found, _ = _load_chat_tokenizer(
+            found, _, _ = _load_chat_tokenizer(
                 AutoTokenizer, _hub_candidates(hf_api, prefix)
             )
         except Exception:
@@ -134,9 +137,13 @@ class HFFormatter(PromptFormatter):
         self.config: HFPromptFormatterConfig = config
         hf_api = HfApi()
         ids = _hub_candidates(hf_api, config.model_name)
-        found, loaded_any = _load_chat_tokenizer(AutoTokenizer, ids)
+        found, loaded_any, error = _load_chat_tokenizer(AutoTokenizer, ids)
         if not loaded_any:
-            raise ValueError(f"Model {config.model_name} not found on HuggingFace Hub")
+            # keep the load error: it may be auth, network or cache, not a 404
+            detail = f" (tokenizer load failed: {error})" if error else ""
+            raise ValueError(
+                f"Model {config.model_name} not found on HuggingFace Hub{detail}"
+            ) from error
         if found is None:
             raise ValueError(
                 f"Model {config.model_name} does not support chat template"
