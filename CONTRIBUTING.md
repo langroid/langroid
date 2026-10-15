@@ -187,9 +187,6 @@ cp .env-template .env
 # now edit the .env file, insert your secrets as above
 ``` 
 
-Currently only OpenAI models are supported. 
-You are welcome to submit a PR to support other API-based or local models. 
-
 ## Run tests
 To verify your env is correctly setup, run all tests using `make tests`.
 
@@ -316,8 +313,10 @@ So, typically when submitting a PR, you would do this sequence:
 - `make check` again to see what issues remain
 - repeat if needed, until all clean.
 
-When done with these, commit and push to github and submit the PR. If this
-is an ongoing PR, just push to github again and the PR will be updated.
+When done with these, commit and push to GitHub. If you work from a fork, post
+the branch name on the issue and we will open the PR from it; if you have write
+access, open the PR yourself. Either way, pushing to the same branch again
+updates the PR.
 
 It is strongly recommended to use the `gh` command-line utility when working with git.
 Read more in the [GitHub CLI manual](https://cli.github.com/manual/).
