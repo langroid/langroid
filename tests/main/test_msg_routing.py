@@ -236,6 +236,20 @@ def test_pass_to_recipient_content_not_clobbered():
     assert out.content == f"{PASS_TO}Alice"
 
 
+@pytest.mark.parametrize(
+    "msg",
+    [
+        f"Handing this off: {PASS_TO}Alice",
+        f"{PASS_TO} Alice",
+        f"{PASS_TO}Alice",
+    ],
+)
+def test_parse_routing_pass_to(msg: str):
+    agent = ChatAgent(ChatAgentConfig(name="Bob"))
+    task = Task(agent, interactive=False)
+    assert task._parse_routing(msg) == (True, "Alice", None)
+
+
 def test_bare_address_without_pending_message_unchanged():
     """With no pending message there is nothing to pass through: a
     bare-address result must be returned unchanged (no PASS normalization,
