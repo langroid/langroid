@@ -1,8 +1,9 @@
 """
 Prompt formatter based on HuggingFace `AutoTokenizer.apply_chat_template` method
-from their Transformers library. It searches the hub for a model matching the
-specified name, and uses the first one it finds. We assume that all matching
-models will have the same tokenizer, so we just use the first one.
+from their Transformers library. It searches the hub for models matching the
+specified name, most-downloaded first, and uses the first one whose tokenizer
+loads and has a chat template. We assume that all matching models share the
+same chat template.
 """
 
 import logging
@@ -46,6 +47,60 @@ def try_import_hf_modules() -> Tuple[Type[Any], Type[Any]]:
         )
 
 
+# How many hub matches to try before giving up on a name.
+MAX_HUB_CANDIDATES = 10
+
+
+def _hub_candidates(hf_api: Any, model_name: str) -> List[str]:
+    """Hub model ids to try for `model_name`, best first.
+
+    A full `org/name` id is tried as given first. The rest are hub search
+    hits, most-downloaded first: the hub's default order puts arbitrary
+    repackagings (e.g. ONNX exports with no loadable tokenizer) ahead of the
+    canonical model.
+
+    Args:
+        hf_api: A `huggingface_hub.HfApi` instance.
+        model_name: The model name or id to search for.
+
+    Returns:
+        Candidate model ids, without duplicates.
+    """
+    ids = [model_name] if "/" in model_name else []
+    for mdl in hf_api.list_models(
+        task="text-generation",
+        model_name=model_name,
+        sort="downloads",
+        limit=MAX_HUB_CANDIDATES,
+    ):
+        if mdl.id not in ids:
+            ids.append(mdl.id)
+    return ids
+
+
+def _load_chat_tokenizer(
+    AutoTokenizer: Type[Any], ids: List[str]
+) -> Tuple[str, Any] | None:
+    """Return the first `(id, tokenizer)` that loads and has a chat template.
+
+    Args:
+        AutoTokenizer: The `transformers.AutoTokenizer` class.
+        ids: Candidate hub model ids, in order of preference.
+
+    Returns:
+        The model id and its tokenizer, or None if no candidate qualifies.
+    """
+    for mdl_id in ids:
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(mdl_id)
+        except Exception as e:
+            logger.info(f"Skipping {mdl_id} for prompt formatting: {e}")
+            continue
+        if tokenizer.chat_template is not None:
+            return mdl_id, tokenizer
+    return None
+
+
 def find_hf_formatter(model_name: str) -> str:
     AutoTokenizer, HfApi = try_import_hf_modules()
     hf_api = HfApi()
@@ -55,19 +110,12 @@ def find_hf_formatter(model_name: str) -> str:
     parts = [p.lower() for p in parts if p != ""]
     for i in range(len(parts), 0, -1):
         prefix = "-".join(parts[:i])
-        models = hf_api.list_models(
-            task="text-generation",
-            model_name=prefix,
-        )
         try:
-            mdl = next(models)
-            tokenizer = AutoTokenizer.from_pretrained(mdl.id)
-            if tokenizer.chat_template is not None:
-                return str(mdl.id)
-            else:
-                continue
+            found = _load_chat_tokenizer(AutoTokenizer, _hub_candidates(hf_api, prefix))
         except Exception:
             continue
+        if found is not None:
+            return found[0]
 
     return ""
 
@@ -80,32 +128,27 @@ class HFFormatter(PromptFormatter):
         AutoTokenizer, HfApi = try_import_hf_modules()
         self.config: HFPromptFormatterConfig = config
         hf_api = HfApi()
-        models = hf_api.list_models(
-            task="text-generation",
-            model_name=config.model_name,
-        )
-        try:
-            mdl = next(models)
-        except StopIteration:
+        ids = _hub_candidates(hf_api, config.model_name)
+        if not ids:
             raise ValueError(f"Model {config.model_name} not found on HuggingFace Hub")
-
-        self.tokenizer = AutoTokenizer.from_pretrained(mdl.id)
-        if self.tokenizer.chat_template is None:
+        found = _load_chat_tokenizer(AutoTokenizer, ids)
+        if found is None:
             raise ValueError(
                 f"Model {config.model_name} does not support chat template"
             )
-        elif mdl.id not in HFFormatter.models:
+        mdl_id, self.tokenizer = found
+        if mdl_id not in HFFormatter.models:
             # only warn if this is the first time we've used this mdl.id
             logger.warning(
                 f"""
-            Using HuggingFace {mdl.id} for prompt formatting: 
+            Using HuggingFace {mdl_id} for prompt formatting: 
             This is the CHAT TEMPLATE. If this is not what you intended,
             consider specifying a more complete model name for the formatter.
              
             {self.tokenizer.chat_template}
             """
             )
-        HFFormatter.models.add(mdl.id)
+        HFFormatter.models.add(mdl_id)
 
     def format(self, messages: List[LLMMessage]) -> str:
         sys_msg, chat_msgs, user_msg = LanguageModel.get_chat_history_components(
