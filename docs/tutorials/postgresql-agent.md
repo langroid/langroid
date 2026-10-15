@@ -178,12 +178,11 @@ from langroid.agent.special.sql.sql_chat_agent import (
 )
 
 # Initialize SQLChatAgent with a PostgreSQL database URI and enable schema_tools
-agent = SQLChatAgent(gi
 config = SQLChatAgentConfig(
     database_uri="postgresql://example.db",
     schema_tools=True,
 )
-)
+agent = SQLChatAgent(config)
 
 # Run the task to interact with the SQLChatAgent
 task = Task(agent)
