@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose a new feature or change to Langroid
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Langroid accepts changes that meet a real business need. Tell us who
+        needs this and why. Pull requests are by invitation; see
+        [CONTRIBUTING.md](https://github.com/langroid/langroid/blob/main/CONTRIBUTING.md).
+  - type: input
+    id: company
+    attributes:
+      label: Company name
+      description: The company or organization that needs this.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: How you use Langroid, and what this change would let you do.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change (optional)
+      description: What you would like Langroid to do, if you have something in mind.
+    validations:
+      required: false
