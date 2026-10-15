@@ -9,10 +9,10 @@ body:
         needs this and why. Pull requests are by invitation; see
         [CONTRIBUTING.md](https://github.com/langroid/langroid/blob/main/CONTRIBUTING.md).
   - type: input
-    id: company
+    id: organization
     attributes:
-      label: Company name
-      description: The company or organization that needs this.
+      label: Organization name
+      description: The company or organization that uses Langroid and needs this.
     validations:
       required: true
   - type: textarea
