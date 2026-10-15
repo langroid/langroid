@@ -12,7 +12,7 @@ body:
     id: organization
     attributes:
       label: Organization name
-      description: The company, team or organization that needs this (or "individual").
+      description: The company or organization that uses Langroid and needs this.
     validations:
       required: true
   - type: textarea

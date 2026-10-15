@@ -5,9 +5,9 @@ Thank you for your interest in Langroid! Questions and discussion are welcome on
 
 # Pull requests are by invitation
 
-We accept pull requests only for changes that meet a real business need, and only
-after we have agreed on the change in an issue. Pull requests that were not
-invited will be closed without review.
+We accept pull requests only for changes motivated by actual use of Langroid in
+your organization, and only after we have agreed on the change in an issue. Pull
+requests that were not invited will be closed without review.
 
 ## How to propose a change
 
