@@ -69,6 +69,7 @@ agent = ChatAgent(ChatAgentConfig(
 **Recognized patterns:**
 
 1. **TO-bracket format**: `TO[AgentName]: message content`
+   Agent names support ASCII letters, digits, underscores, and hyphens.
 2. **JSON format**: `{"recipient": "AgentName", "content": "message"}`
 
 **When `True` (default):**

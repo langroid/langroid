@@ -9,6 +9,7 @@ from langroid.agent.chat_document import ChatDocMetaData
 from langroid.agent.task import Task, TaskConfig
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.mytypes import Entity
+from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.routing import parse_addressed_message
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import AT, DONE, PASS, PASS_TO, SEND_TO
@@ -21,6 +22,30 @@ ADDRESSES = [
     f"{SEND_TO}Alice:",
     f"{SEND_TO}Alice,",
 ]
+
+
+@pytest.mark.parametrize(
+    "recipient", ["SubAgent", "research_agent", "LLM-Agent", "Agent-0"]
+)
+def test_to_bracket_agent_names(recipient: str) -> None:
+    """TO-bracket routing accepts valid agent names without truncation."""
+    assert parse_message(f"TO[{recipient}]: Hello") == (recipient, "Hello")
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Hello",
+        "TO[]: Hello",
+        "TO[Agent-0] Hello",
+        "TO[Agent-0: Hello",
+        "TO[Agent name]: Hello",
+        "prefix TO[Agent-0]: Hello",
+    ],
+)
+def test_to_bracket_unaddressed_messages(message: str) -> None:
+    """Malformed or non-leading addresses remain ordinary message text."""
+    assert parse_message(message) == ("", message)
 
 
 @pytest.mark.parametrize("address", ADDRESSES)
