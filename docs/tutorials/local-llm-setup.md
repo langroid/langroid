@@ -100,7 +100,7 @@ setting `chat_model` as follows (note you should not include the `https://` part
 
 ```python
 llm_config = lm.OpenAIGPTConfig(
-    chat_model="local/127.0.0.1234/v1",
+    chat_model="local/127.0.0.1:1234/v1",
     ...
 )
 ```

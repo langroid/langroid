@@ -107,7 +107,7 @@ recommended for improved results:
 > By default, if no context description json file is provided in the config, the 
 agent will automatically generate the file using the built-in Postgres table/column comments.
 
-* `schema_tools`: When set to `True`, activates a retrieval mode where the agent
+* `use_schema_tools`: When set to `True`, activates a retrieval mode where the agent
   systematically requests only the parts of the schemas relevant to the current query. 
   When this option is enabled, the agent performs the following steps:
 
@@ -117,8 +117,8 @@ agent will automatically generate the file using the built-in Postgres table/col
     3. Asks for column descriptions from possibly relevant columns.
     4. Writes the SQL query.
 
-  Setting `schema_tools=True` is especially useful for large schemas where it is costly or impossible 
-  to include the entire schema in a query context. 
+  Setting `use_schema_tools=True` is especially useful for large schemas where it
+  is costly or impossible to include the entire schema in a query context.
   By selectively using only the relevant parts of the context descriptions, this mode
   reduces token usage, though it may result in 1-3 additional OpenAI API calls before
   the final SQL query is generated.
@@ -169,21 +169,22 @@ on the agent to filter SQL.
 
 In the code below, we will allow the agent to generate the context descriptions
 from table comments by excluding the `context_descriptions` config option.
-We set `schema_tools` to `True` to enable the retrieval mode.
+We set `use_schema_tools` to `True` to enable the retrieval mode.
 
 ```python
 from langroid.agent.special.sql.sql_chat_agent import (
     SQLChatAgent,
     SQLChatAgentConfig,
 )
+from langroid.agent.task import Task
 
-# Initialize SQLChatAgent with a PostgreSQL database URI and enable schema_tools
-agent = SQLChatAgent(gi
+# Initialize SQLChatAgent with a PostgreSQL database URI,
+# and enable use_schema_tools
 config = SQLChatAgentConfig(
     database_uri="postgresql://example.db",
-    schema_tools=True,
+    use_schema_tools=True,
 )
-)
+agent = SQLChatAgent(config)
 
 # Run the task to interact with the SQLChatAgent
 task = Task(agent)
@@ -198,7 +199,7 @@ In the `langroid` repo we have provided a ready-to-use script
 [`sql_chat.py`](https://github.com/langroid/langroid/blob/main/examples/data-qa/sql-chat/sql_chat.py)
 based on the above, that you can use right away to interact with your PostgreSQL database:
 
-```python
+```bash
 python3 examples/data-qa/sql-chat/sql_chat.py
 ```
 
