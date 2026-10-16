@@ -1,0 +1,33 @@
+name: Bug report
+description: Report something in Langroid that does not work as expected
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We act on bugs that affect real use of Langroid. Tell us who is affected
+        and how; see
+        [CONTRIBUTING.md](https://github.com/langroid/langroid/blob/main/CONTRIBUTING.md).
+  - type: input
+    id: organization
+    attributes:
+      label: Organization name
+      description: The company or organization that uses Langroid and hits this bug.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact on your use case
+      description: How you use Langroid, and how this bug affects that use.
+    validations:
+      required: true
+  - type: textarea
+    id: bug
+    attributes:
+      label: What happened
+      description: >-
+        What you did, what you expected, and what happened instead. Steps to
+        reproduce, error output and your Langroid version help.
+    validations:
+      required: true
