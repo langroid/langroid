@@ -11,13 +11,14 @@ requests that were not invited will be closed without review.
 
 ## How to propose a change
 
-1. [Open an issue](https://github.com/langroid/langroid/issues/new/choose). For a
-   feature, use the feature-request form: it asks for your organization name and
+1. [Open an issue](https://github.com/langroid/langroid/issues/new/choose) with the
+   feature-request or bug-report form. Both ask for your organization name and
    your use case, so we can see the need behind the change.
 2. We read it and reply on the issue. If the change fits, either we implement it
    ourselves, or we invite you to send the pull request.
 
-Bug reports are always welcome; use the bug-report form.
+Bug reports are held to the same rule: tell us which organization is affected and
+how the bug impacts your use of Langroid.
 
 ## If we invite your pull request
 
