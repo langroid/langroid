@@ -11,23 +11,6 @@ Embeddings = List[Embedding]
 EmbeddingFunction = Callable[[List[str]], Embeddings]
 
 
-class SparseEmbedding(BaseModel):
-    """Non-zero weights and their indices in a sparse embedding."""
-
-    indices: List[int]
-    values: List[float]
-
-
-SparseEmbeddings = List[SparseEmbedding]
-SparseEmbeddingFunction = Callable[[List[str]], SparseEmbeddings]
-MultiVectorEmbedding = List[Embedding]
-MultiVectorEmbeddings = List[MultiVectorEmbedding]
-MultiVectorEmbeddingFunction = Callable[[List[str]], MultiVectorEmbeddings]
-AnyEmbeddingFunction = Union[
-    EmbeddingFunction, SparseEmbeddingFunction, MultiVectorEmbeddingFunction
-]
-
-
 class Entity(str, Enum):
     """
     Enum for the different types of entities that can respond to the current message.

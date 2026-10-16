@@ -1,11 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Literal, cast
 
 import numpy as np
 from pydantic_settings import BaseSettings
 
-from langroid.mytypes import AnyEmbeddingFunction, Embeddings
+from langroid.mytypes import EmbeddingFunction
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
@@ -21,8 +20,6 @@ class EmbeddingModel(ABC):
     """
     Abstract base class for an embedding model.
     """
-
-    embedding_type: Literal["dense", "sparse", "late-interaction"] = "dense"
 
     def clone(self) -> "EmbeddingModel":
         """
@@ -46,10 +43,6 @@ class EmbeddingModel(ABC):
             AzureOpenAIEmbeddingsConfig,
             FastEmbedEmbeddings,
             FastEmbedEmbeddingsConfig,
-            FastEmbedLateInteractionEmbeddings,
-            FastEmbedLateInteractionEmbeddingsConfig,
-            FastEmbedSparseEmbeddings,
-            FastEmbedSparseEmbeddingsConfig,
             GeminiEmbeddings,
             GeminiEmbeddingsConfig,
             LlamaCppServerEmbeddings,
@@ -72,10 +65,6 @@ class EmbeddingModel(ABC):
             return AzureOpenAIEmbeddings(config)
         elif isinstance(config, SentenceTransformerEmbeddingsConfig):
             return SentenceTransformerEmbeddings(config)
-        elif isinstance(config, FastEmbedSparseEmbeddingsConfig):
-            return FastEmbedSparseEmbeddings(config)
-        elif isinstance(config, FastEmbedLateInteractionEmbeddingsConfig):
-            return FastEmbedLateInteractionEmbeddings(config)
         elif isinstance(config, FastEmbedEmbeddingsConfig):
             return FastEmbedEmbeddings(config)
         elif isinstance(config, LlamaCppServerEmbeddingsConfig):
@@ -86,12 +75,8 @@ class EmbeddingModel(ABC):
             raise ValueError(f"Unknown embedding config: {config.__class__.__name__}")
 
     @abstractmethod
-    def embedding_fn(self) -> AnyEmbeddingFunction:
+    def embedding_fn(self) -> EmbeddingFunction:
         pass
-
-    def query_embedding_fn(self) -> AnyEmbeddingFunction:
-        """Return the query encoder; by default it is the document encoder."""
-        return self.embedding_fn()
 
     @property
     @abstractmethod
@@ -100,11 +85,7 @@ class EmbeddingModel(ABC):
 
     def similarity(self, text1: str, text2: str) -> float:
         """Compute cosine similarity between two texts."""
-        if self.embedding_type != "dense":
-            raise NotImplementedError(
-                "Non-dense embedding models must implement similarity."
-            )
-        [emb1, emb2] = cast(Embeddings, self.embedding_fn()([text1, text2]))
+        [emb1, emb2] = self.embedding_fn()([text1, text2])
         return float(
             np.array(emb1)
             @ np.array(emb2)
