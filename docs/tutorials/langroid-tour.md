@@ -48,7 +48,7 @@ and chat with it; now accumulates conv history
 agent = lr.ChatAgent(lr.ChatAgentConfig(llm=llm_config))
 agent.llm_response("Find the next number: 1 2 4 7 11 ?")
 # => responds 16
-agent.llm_response("and then?)
+agent.llm_response("and then?")
 # => answers 22
 ```
 
