@@ -256,7 +256,7 @@ def create_file(
     """
     Create, overwrite or append to a file, with the given content
     at the specified filepath.
-    If content is empty, it will simply touch to create an empty file.
+    Empty content truncates an existing file in overwrite mode.
 
     Args:
         filepath (str|Path): The relative path of the file to be created
@@ -280,16 +280,12 @@ def create_file(
     else:
         mode = "w"
 
-    if content == "" and mode in ["a", "w"]:
-        filepath.touch()
-        logger.warning(f"Empty file created: {filepath}")
-    else:
-        # the newline = '\n` argument is used to ensure that
-        # newlines in the content are written as actual line breaks
-        with open(filepath, mode, newline="\n") as f:
-            f.write(content)
-        action = "appended to" if mode == "a" else "created/updated in"
-        logger.warning(f"Content {action}: {filepath}")
+    # the newline = '\n` argument is used to ensure that
+    # newlines in the content are written as actual line breaks
+    with open(filepath, mode, newline="\n") as f:
+        f.write(content)
+    action = "appended to" if mode == "a" else "created/updated in"
+    logger.warning(f"Content {action}: {filepath}")
 
 
 def read_file(path: str, line_numbers: bool = False) -> str:

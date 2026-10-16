@@ -47,6 +47,17 @@ def agent():
     return ChatAgent(cfg)
 
 
+def test_write_file_tool_empty_overwrite(tmp_path: Path) -> None:
+    file_path = tmp_path / "existing.txt"
+    file_path.write_text("Original content")
+    tool = WriteFileTool.create(lambda: str(tmp_path), None)
+
+    response = tool(file_path="existing.txt", content="").handle()
+
+    assert response == "Content written to existing.txt"
+    assert file_path.read_text() == ""
+
+
 def test_write_file_tool(test_settings: Settings, temp_dir, git_repo, agent):
     set_global(test_settings)
 

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -31,6 +32,22 @@ def test_create_file_overwrite(temp_dir):
     new_content = "New content"
     create_file(file_path, new_content, if_exists="overwrite")
     assert file_path.read_text() == new_content
+
+
+@pytest.mark.parametrize("if_exists", [None, "overwrite", "append"])
+def test_create_file_empty_content_existing(
+    temp_dir: Path, if_exists: Literal["overwrite", "append"] | None
+) -> None:
+    file_path = temp_dir / "existing_file.txt"
+    file_path.write_text("Original content")
+
+    if if_exists is None:
+        create_file(file_path, "")
+    else:
+        create_file(file_path, "", if_exists=if_exists)
+
+    expected = "Original content" if if_exists == "append" else ""
+    assert file_path.read_text() == expected
 
 
 def test_create_file_skip(temp_dir):
