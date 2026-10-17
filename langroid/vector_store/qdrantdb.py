@@ -4,7 +4,17 @@ import logging
 import os
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
 
 from dotenv import load_dotenv
 from pydantic_settings import SettingsConfigDict
@@ -19,6 +29,7 @@ from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
+    from fastembed import SparseTextEmbedding
     from qdrant_client.http.models import SparseVector
 
 
@@ -58,7 +69,11 @@ class QdrantDBConfig(VectorStoreConfig):
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     use_sparse_embeddings: bool = False
+    sparse_embedding_backend: Literal["transformers", "fastembed"] = "transformers"
+    # Model used by the existing transformers backend.
     sparse_embedding_model: str = "naver/splade-v3-distilbert"
+    # Model used by the optional FastEmbed backend.
+    fastembed_sparse_model: str = "prithivida/Splade_PP_en_v1"
     sparse_limit: int = 3
     distance: str = "cosine"
 
@@ -70,24 +85,38 @@ class QdrantDB(VectorStore):
         self.config: QdrantDBConfig = config
         from qdrant_client import QdrantClient
 
+        self.sparse_fastembed_model: Optional["SparseTextEmbedding"] = None
         if self.config.use_sparse_embeddings:
-            try:
-                from transformers import AutoModelForMaskedLM, AutoTokenizer
-            except ImportError:
-                raise ImportError(
-                    """
-                    To use sparse embeddings,
-                    you must install langroid with the [transformers] extra, e.g.:
-                    pip install "langroid[transformers]"
-                    """
+            if self.config.sparse_embedding_backend == "fastembed":
+                try:
+                    from fastembed import SparseTextEmbedding
+                except ImportError as e:
+                    raise ImportError(
+                        "To use FastEmbed sparse embeddings, install "
+                        "langroid with the [fastembed] extra: "
+                        'pip install "langroid[fastembed]"'
+                    ) from e
+                self.sparse_fastembed_model = SparseTextEmbedding(
+                    model_name=self.config.fastembed_sparse_model
                 )
+            else:
+                try:
+                    from transformers import AutoModelForMaskedLM, AutoTokenizer
+                except ImportError:
+                    raise ImportError(
+                        """
+                        To use sparse embeddings,
+                        you must install langroid with the [transformers] extra, e.g.:
+                        pip install "langroid[transformers]"
+                        """
+                    )
 
-            self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
-                self.config.sparse_embedding_model
-            )
-            self.sparse_model = AutoModelForMaskedLM.from_pretrained(
-                self.config.sparse_embedding_model
-            )
+                self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
+                    self.config.sparse_embedding_model
+                )
+                self.sparse_model = AutoModelForMaskedLM.from_pretrained(
+                    self.config.sparse_embedding_model
+                )
         self.host = config.host
         self.port = config.port
         load_dotenv()
@@ -121,6 +150,8 @@ class QdrantDB(VectorStore):
                 api_key=key,
                 timeout=config.timeout,
             )
+        elif config.storage_path == ":memory:":
+            self.client = QdrantClient(location=":memory:")
         else:
             try:
                 self.client = QdrantClient(
@@ -297,11 +328,38 @@ class QdrantDB(VectorStore):
             logger.info(collection_info)
             logger.setLevel(level)
 
-    def get_sparse_embeddings(self, inputs: List[str]) -> List["SparseVector"]:
+    def get_sparse_embeddings(
+        self, inputs: List[str], *, is_query: bool = False
+    ) -> List["SparseVector"]:
+        """Encode documents or queries using the configured sparse backend.
+
+        Both backends return Qdrant SparseVector objects. FastEmbed uses its
+        query encoder for queries and does not import torch or transformers
+        through this sparse encoding path.
+        """
         from qdrant_client.http.models import SparseVector
 
-        if not self.config.use_sparse_embeddings:
+        if not self.config.use_sparse_embeddings or not inputs:
             return []
+        if self.config.sparse_embedding_backend == "fastembed":
+            if self.sparse_fastembed_model is None:
+                raise ValueError("The FastEmbed sparse model is not initialized")
+            if is_query:
+                embeddings = self.sparse_fastembed_model.query_embed(
+                    inputs, batch_size=self.config.batch_size
+                )
+            else:
+                embeddings = self.sparse_fastembed_model.embed(
+                    inputs, batch_size=self.config.batch_size
+                )
+            return [
+                SparseVector(
+                    indices=embedding.indices.tolist(),
+                    values=embedding.values.tolist(),
+                )
+                for embedding in embeddings
+            ]
+
         import torch
 
         tokens = self.sparse_tokenizer(
@@ -498,7 +556,7 @@ class QdrantDB(VectorStore):
             )
         ]
         if self.config.use_sparse_embeddings:
-            sparse_embedding = self.get_sparse_embeddings([text])[0]
+            sparse_embedding = self.get_sparse_embeddings([text], is_query=True)[0]
             requests.append(
                 SearchRequest(
                     vector=NamedSparseVector(

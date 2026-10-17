@@ -117,6 +117,7 @@ nav:
       - Message Routing: notes/message-routing.md
       - OpenAIAssistant Removal: notes/openai-assistant-removal.md
       - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - FastEmbed Sparse Embeddings for Qdrant: notes/fastembed-embeddings.md
       - Azure OpenAI models: notes/azure-openai-models.md
       - Custom Azure OpenAI client: notes/custom-azure-client.md
       - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
