@@ -307,7 +307,7 @@ milvus = [
 
 [dependency-groups]
 dev = [
-    "black[jupyter]>=24.3.0,<25.0.0",
+    "black[jupyter]>=26.3.1,<27.0.0",
     "flake8<7.0.0,>=6.0.0",
     "mypy<2.0.0,>=1.11.2",
     "ruff<1.0.0,>=0.8.4",
@@ -318,9 +318,9 @@ dev = [
     "types-requests<3.0.0.0,>=2.31.0.1",
     "types-pyyaml<7.0.0.0,>=6.0.12.20240311",
     "types-pillow<11.0.0.0,>=10.2.0.20240406",
-    "pytest<8.0.0,>=7.3.1",
+    "pytest<10.0.0,>=9.0.3",
     "pytest-redis<4.0.0,>=3.0.2",
-    "pytest-asyncio<1.0.0,>=0.21.1",
+    "pytest-asyncio<2.0.0,>=1.2.0",
     "pytest-postgresql<6.0.0,>=5.0.0",
     "coverage<8.0.0,>=7.2.5",
     "pytest-xdist<4.0.0,>=3.6.1",
