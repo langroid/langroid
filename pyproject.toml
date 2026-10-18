@@ -52,7 +52,6 @@ dependencies = [
     "pygments<3.0.0,>=2.15.1",
     "pyparsing<4.0.0,>=3.0.9",
     "pypdfium2<5.0.0,>=4.30.0",
-    "pytest-rerunfailures>=16.4,<17",
     "python-dotenv>=1.0.0,<2.0.0",
     "python-magic<1.0.0,>=0.4.27",
     "pyyaml<7.0.0,>=6.0.1",
@@ -329,6 +328,7 @@ dev = [
     "docker<8.0.0,>=7.1.0",
     "commitizen>=4.1.0",
     "pytest-mysql>=3.1.0",
+    "pytest-rerunfailures>=16.4,<17",
 ]
 docs = [
     "mkdocs<2.0.0,>=1.4.2",
