@@ -5,21 +5,26 @@ body:
   - type: markdown
     attributes:
       value: |
-        Langroid accepts changes that meet a real business need. Tell us who
-        needs this and why. Pull requests are by invitation; see
+        Langroid accepts changes that a real application needs. Tell us who
+        needs this and why; "Langroid users would want this" is not enough.
+        Pull requests are by invitation; see
         [CONTRIBUTING.md](https://github.com/langroid/langroid/blob/main/CONTRIBUTING.md).
   - type: input
     id: organization
     attributes:
       label: Organization name
-      description: The company or organization that uses Langroid and needs this.
+      description: >-
+        The company or organization that uses Langroid and needs this. If you
+        are an independent developer, say so.
     validations:
       required: true
   - type: textarea
     id: use-case
     attributes:
-      label: Use case
-      description: How you use Langroid, and what this change would let you do.
+      label: Your application
+      description: >-
+        The real application you are building or running on Langroid: what it
+        does, who uses it, and why it needs this change.
     validations:
       required: true
   - type: textarea

@@ -12,14 +12,18 @@ body:
     id: organization
     attributes:
       label: Organization name
-      description: The company or organization that uses Langroid and hits this bug.
+      description: >-
+        The company or organization that uses Langroid and hits this bug. If you
+        are an independent developer, say so.
     validations:
       required: true
   - type: textarea
     id: impact
     attributes:
-      label: Impact on your use case
-      description: How you use Langroid, and how this bug affects that use.
+      label: Your application and the impact
+      description: >-
+        The real application you are building or running on Langroid: what it
+        does, who uses it, and how this bug affects it.
     validations:
       required: true
   - type: textarea
