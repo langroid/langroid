@@ -305,24 +305,21 @@ class ToolMessage(ABC, BaseModel):
         examples_str = ""
         if cls.examples():
             examples_str = "EXAMPLES:\n" + cls.usage_examples()
-        return textwrap.dedent(
-            f"""
+        return textwrap.dedent(f"""
             TOOL: {cls.default_value("request")}
             PURPOSE: {cls.default_value("purpose")} 
             JSON FORMAT: {
                 json.dumps(param_dict, indent=4)
             }
             {examples_str}
-            """.lstrip()
-        )
+            """.lstrip())
 
     @staticmethod
     def group_format_instructions() -> str:
         """Template for instructions for a group of tools.
         Works with GPT4 but override this for weaker LLMs if needed.
         """
-        return textwrap.dedent(
-            """
+        return textwrap.dedent("""
             === ALL AVAILABLE TOOLS and THEIR FORMAT INSTRUCTIONS ===
             You have access to the following TOOLS to accomplish your task:
 
@@ -330,8 +327,7 @@ class ToolMessage(ABC, BaseModel):
             
             When one of the above TOOLs is applicable, you must express your 
             request as "TOOL:" followed by the request in the above format.
-            """
-        )
+            """)
 
     @classmethod
     def llm_function_schema(

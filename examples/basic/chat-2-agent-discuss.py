@@ -44,12 +44,10 @@ class MyFinalResultTool(FinalResultTool):
 
 
 def main(model: str = ""):
-    problem = Prompt.ask(
-        """
+    problem = Prompt.ask("""
         [blue]Alice and Bob will discuss a problem.
         Please enter the problem statement:[/blue]
-        """
-    )
+        """)
 
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
@@ -119,12 +117,10 @@ def main(model: str = ""):
 
     result = alice_task.run("get started")
 
-    print(
-        f"""
+    print(f"""
         FINAL RESULT:
         {result.result}
-        """
-    )
+        """)
 
 
 if __name__ == "__main__":

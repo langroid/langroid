@@ -50,12 +50,10 @@ class CLIOptions(BaseSettings):
 
 
 def chat(opts: CLIOptions) -> None:
-    print(
-        """
+    print("""
         [blue]Welcome to the number guessing game!
         Enter x or q to quit
-        """
-    )
+        """)
     spy_game_agent = SpyGameAgent(
         lr.ChatAgentConfig(
             name="Spy",

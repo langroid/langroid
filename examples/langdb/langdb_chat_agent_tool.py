@@ -7,7 +7,7 @@ which takes a number as argument. The agent's `probe` method handles this tool,
 and returns the number of numbers in the list that are less than or equal to the
 number in the ProbeTool message.
 
-This example demonstrates how to use LangDB with custom headers like x-label, x-thread-id, 
+This example demonstrates how to use LangDB with custom headers like x-label, x-thread-id,
 and x-run-id when using a Langroid agent with tools.
 
 Run as follows:
@@ -56,12 +56,10 @@ class CLIOptions(BaseSettings):
 
 
 def chat(opts: CLIOptions) -> None:
-    print(
-        """
+    print("""
         [blue]Welcome to the number guessing game!
         Enter x or q to quit
-        """
-    )
+        """)
 
     # Generate UUIDs for run_id and thread_id
     run_id = str(uuid.uuid4())

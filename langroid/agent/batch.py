@@ -41,7 +41,7 @@ class ExceptionHandling(str, Enum):
 
 
 def _convert_exception_handling(
-    handle_exceptions: Union[bool, ExceptionHandling]
+    handle_exceptions: Union[bool, ExceptionHandling],
 ) -> ExceptionHandling:
     """Convert legacy boolean handle_exceptions to ExceptionHandling enum."""
     if isinstance(handle_exceptions, ExceptionHandling):

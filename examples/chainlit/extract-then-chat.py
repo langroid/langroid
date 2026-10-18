@@ -102,11 +102,9 @@ async def on_chat_start():
     await add_instructions(
         title="Hello! I am your book info helper. "
         "First I will get info about some books",
-        content=dedent(
-            """
+        content=dedent("""
         Enter `x` or `q` to quit at any point.
-        """
-        ),
+        """),
     )
 
     load_dotenv()

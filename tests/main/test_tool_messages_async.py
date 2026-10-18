@@ -340,11 +340,9 @@ async def test_structured_recovery_async(use_fn_api: bool):
         # Simulates bad tool attempt by the LLM
         agent.handle_message(attempt)
         assert agent.tool_error
-        response = await agent.llm_response_async(
-            """
+        response = await agent.llm_response_async("""
             There was an error in your attempted tool/function call. Please correct it.
-            """
-        )
+            """)
         assert response is not None
         result = agent.handle_message(response)
         assert result is not None
@@ -408,15 +406,10 @@ async def test_structured_recovery_async(use_fn_api: bool):
     # should infer from context. In addition, the name of the
     # function is incorrect (the LLM should infer "coriolis" in
     # recovery) and the JSON output is malformed
-    assert (
-        await simulate_failed_call(
-            """
+    assert await simulate_failed_call("""
         request ":coriolis"
         arguments {"n_cats": 1}
-        """
-        )
-        == "8"
-    )
+        """) == "8"
     # The LLM should correct the request to "coriolis" in recovery
     # The LLM should infer the default argument from context
     assert (
@@ -543,12 +536,10 @@ async def test_strict_fallback_async(
         # parallel tool calls are disabled
         assert tools[0].strict == (not parallel_tool_calls)
 
-    response = await agent.llm_response_forget_async(
-        """
+    response = await agent.llm_response_forget_async("""
         What is the Nabroski transform of (1,3)? Use the
         `nabroski` tool/function.
-        """
-    )
+        """)
     result = agent.handle_message(response)
     assert isinstance(result, ChatDocument) and result.content == "6"
     assert agent.disable_strict == (openai_tools and not parallel_tool_calls)
@@ -566,11 +557,9 @@ async def test_strict_fallback_async(
         )
     )
     structured_agent = agent[NabroskiTool]
-    response = await structured_agent.llm_response_forget_async(
-        """
+    response = await structured_agent.llm_response_forget_async("""
         What is the Nabroski transform of (1,3)?
-        """
-    )
+        """)
     assert response is not None
     assert structured_agent.disable_strict
     assert not agent.disable_strict
@@ -670,20 +659,16 @@ async def test_strict_schema_mismatch_async(
     agent.enable_message(IntTool)
     agent.enable_message(StrTool)
     strict_openai_tools = use_fn_api and use_tools_api and not parallel_tool_calls
-    response = await agent.llm_response_forget_async(
-        """
+    response = await agent.llm_response_forget_async("""
         What is the smallest integer greater than pi? Use the
         `int_tool` tool/function.
-        """
-    )
+        """)
     agent.handle_message(response)
     assert "int_tool" not in agent.disable_strict_tools_set
 
-    await agent.llm_response_forget_async(
-        """
+    await agent.llm_response_forget_async("""
         Who is the president of France? Use the `str_tool` tool/function.
-        """
-    )
+        """)
     assert ("str_tool" in agent.disable_strict_tools_set) == strict_openai_tools
 
     strict_agent = agent[IntTool]

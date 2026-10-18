@@ -89,19 +89,15 @@ def app(
     )
 
     for i, summary in enumerate(summaries):
-        print(
-            f"""
+        print(f"""
         Generated Summary {i}:
         {summary}
-        """
-        )
+        """)
 
-        print(
-            f"""
+        print(f"""
         Gold Summary {i}:
         {highlights[i]}
-        """
-        )
+        """)
 
 
 if __name__ == "__main__":

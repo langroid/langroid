@@ -122,12 +122,10 @@ class PineconeDB(VectorStore):
             self.delete_collection(collection_name=index_desc.name)
             n_empty_deletes += index_desc.total_vector_count == 0
             n_non_empty_deletes += index_desc.total_vector_count > 0
-        logger.warning(
-            f"""
+        logger.warning(f"""
             Deleted {n_empty_deletes} empty indexes and
             {n_non_empty_deletes} non-empty indexes
-            """
-        )
+            """)
         return n_empty_deletes + n_non_empty_deletes
 
     def list_collections(self, empty: bool = False) -> List[str]:

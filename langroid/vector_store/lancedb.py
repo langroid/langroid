@@ -82,13 +82,11 @@ class LanceDB(VectorStore):
                 )
             except Exception as e:
                 new_storage_path = config.storage_path + ".new"
-                logger.warning(
-                    f"""
+                logger.warning(f"""
                     Error connecting to local LanceDB at {config.storage_path}:
                     {e}
                     Switching to {new_storage_path}
-                    """
-                )
+                    """)
                 self.client = lancedb.connect(
                     uri=new_storage_path,
                 )
@@ -121,12 +119,10 @@ class LanceDB(VectorStore):
             n_empty_deletes += nr == 0
             n_non_empty_deletes += nr > 0
             self.client.drop_table(name)
-        logger.warning(
-            f"""
+        logger.warning(f"""
             Deleted {n_empty_deletes} empty collections and
             {n_non_empty_deletes} non-empty collections.
-            """
-        )
+            """)
         return n_empty_deletes + n_non_empty_deletes
 
     def list_collections(self, empty: bool = False) -> List[str]:
@@ -255,13 +251,11 @@ class LanceDB(VectorStore):
                 if len(ids) > b:
                     tbl.add(batch_gen)
         except Exception as e:
-            logger.error(
-                f"""
+            logger.error(f"""
                 Error adding documents to LanceDB: {e}
                 POSSIBLE REMEDY: Delete the LancdDB storage directory
                 {self.config.storage_path} and try again.
-                """
-            )
+                """)
             raise
 
     def add_dataframe(
@@ -347,15 +341,13 @@ class LanceDB(VectorStore):
         try:
             docs = [self.config.document_class(**rec) for rec in records]
         except ValidationError as e:
-            raise ValueError(
-                f"""
+            raise ValueError(f"""
             Error validating LanceDB result: {e}
             HINT: This could happen when you're re-using an
             existing LanceDB store with a different schema.
             Try deleting your local lancedb storage at `{self.config.storage_path}`
             re-ingesting your documents and/or replacing the collections.
-            """
-            )
+            """)
         return docs
 
     def get_all_documents(self, where: str = "") -> List[Document]:

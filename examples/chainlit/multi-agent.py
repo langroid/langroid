@@ -32,8 +32,7 @@ async def on_chat_start(
 
     await add_instructions(
         title="Two-Agent Demo",
-        content=dedent(
-            """
+        content=dedent("""
         **Teacher Agent** delegates to **Student Agent.**
         - **Teacher** Agent asks a numerical question to **Student** Agent
         - **Student** Agent answers the question
@@ -42,8 +41,7 @@ async def on_chat_start(
         
         Note how all steps of the (student) sub-task are nested one level below 
         the main (teacher) task.
-        """
-        ),
+        """),
     )
     config = lr.ChatAgentConfig()
     teacher_agent = lr.ChatAgent(config)

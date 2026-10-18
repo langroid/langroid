@@ -5,9 +5,9 @@ task result, "short-circuiting" the flow.
 main_task has sub-tasks even_task and odd_task.
 
 - main_task receives a number, simply passes it on.
-- even_task can only handle even number N, returns N/2 as final result, 
+- even_task can only handle even number N, returns N/2 as final result,
     else passes it on.
-- odd_task can only handle odd number N, returns 3N+1 as final result, 
+- odd_task can only handle odd number N, returns 3N+1 as final result,
     else passes it on.
 """
 

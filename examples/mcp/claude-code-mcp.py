@@ -1,5 +1,5 @@
 """
-Enable a Langroid agent to use all MCP Tools from 
+Enable a Langroid agent to use all MCP Tools from
 Claude Code's MCP server.
 
 

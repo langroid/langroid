@@ -68,22 +68,18 @@ def main(
         )
     )
 
-    response = agent.llm_response(
-        """
+    response = agent.llm_response("""
         10 years ago, Jack's dad was 5 times as old as Jack.
         Today, Jack's dad is 40 years older than Jack.
         So how old is Jack now ?
-        """
-    )
+        """)
 
     # extract reasoning
     if response.reasoning:
-        print(
-            f"""
+        print(f"""
             REASONING:
             {response.reasoning}
-            """
-        )
+            """)
     else:
         print(f"NO REASONING AVAILABLE for {model}!")
 

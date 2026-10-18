@@ -61,12 +61,10 @@ def main(
             stream=not no_stream,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to CSV Knowledge Graph RAG chatbot!
         Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     buid_kg = Prompt.ask(
         "Do you want to build the graph database from a CSV file? (y/n)",
@@ -103,12 +101,10 @@ def main(
         num_rows = len(csv_kg_chat_agent.df)
 
         if num_rows > 1000:
-            print(
-                f"""
+            print(f"""
                 [red]WARNING: The CSV file has {num_rows} rows. Loading this data and 
                 generating the graph database will take long time.
-                """
-            )
+                """)
 
             user_input_continue = Prompt.ask(
                 "Do you want to continue with the whole dataset? (y/n)",
@@ -119,20 +115,16 @@ def main(
                         "Please enter the sample size",
                     )
                 )
-                print(
-                    f"""
+                print(f"""
                     [green]The graph database will be generated for {sample_size} 
                     rows...
-                    """
-                )
+                    """)
                 csv_kg_chat_agent.df = csv_kg_chat_agent.df.sample(n=sample_size)
 
             elif user_input_continue == "y":
-                print(
-                    """
+                print("""
                     [green]The graph database will be generated for the whole dataset...
-                    """
-                )
+                    """)
 
     csv_kg_chat_task = Task(
         csv_kg_chat_agent,

@@ -55,12 +55,10 @@ def main(
         )
     )
 
-    print(
-        """
+    print("""
         [blue]Welcome to the privacy mask chatbot!
         Enter any text and I will annotate it with sensitive categories and values.
-        """
-    )
+        """)
 
     load_dotenv()
     llm_config = lm.OpenAIGPTConfig(

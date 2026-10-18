@@ -85,12 +85,10 @@ def get_list_from_user(
             max_urls = int(input_str) + 1
             tot_urls = list(find_urls(url, max_links=max_urls, max_depth=2))
             tot_urls_str = "\n".join(tot_urls)
-            print(
-                f"""
+            print(f"""
                 Found these {len(tot_urls)} links upto depth 2:
                 {tot_urls_str}
-                """
-            )
+                """)
 
             input_set.update(tot_urls)
         else:

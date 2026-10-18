@@ -101,15 +101,13 @@ def main(model: str = ""):
 
     while True:
         text = Prompt.ask("Enter a text to classify its intent")
-        intent = task.run(
-            f"""
+        intent = task.run(f"""
          Please classify the intent of this text, present your answer
          using the `{intent_tool_name}` tool:
          ----
          {text}
          ----
-         """
-        )
+         """)
 
         print(f"Intent: {intent}")
 

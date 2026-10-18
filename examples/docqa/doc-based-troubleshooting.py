@@ -44,8 +44,7 @@ class DocAgent(DocChatAgent):
     ) -> Optional[ChatDocument]:
         # Augment the response
         results = super().llm_response(message).content
-        return self.create_llm_response(
-            f"""
+        return self.create_llm_response(f"""
             Summary answer FROM DocAgent:
             
             ===
@@ -71,8 +70,7 @@ class DocAgent(DocChatAgent):
             REMEMBER - NEVER ask the DocAgent or User MULTIPLE questions at a time,
                 always ask ONE question at a time;
                  if asking the USER, it CAN be a MULTIPLE CHOICE question.
-            """
-        )
+            """)
 
 
 def main(

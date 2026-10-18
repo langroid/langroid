@@ -13,7 +13,7 @@ def count_fields(schema: Dict[str, List[Dict[str, Any]]]) -> int:
 
 
 def trim_schema(
-    schema: Dict[str, List[Dict[str, Any]]]
+    schema: Dict[str, List[Dict[str, Any]]],
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Keep only edge connection info, remove properties and examples"""
     trimmed: Dict[str, List[Dict[str, Any]]] = {

@@ -218,12 +218,10 @@ def main(
             cache=nocache,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to Dependency Analysis chatbot!
         Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     load_dotenv()
 

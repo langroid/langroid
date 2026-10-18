@@ -52,26 +52,20 @@ async def main(
                 max_output_tokens=2000,
                 async_stream_quiet=False,
             ),
-            system_message=dedent(
-                """
+            system_message=dedent("""
                 Use the available Xquik MCP tools for X post search and lookup
                 requests. Return concise results with author, text, and post URL
                 when the MCP response includes them.
-                """
-            ),
+                """),
         )
     )
     agent.enable_message(tools)
 
     task = lr.Task(agent, interactive=False)
-    result = await task.run_async(
-        dedent(
-            f"""
+    result = await task.run_async(dedent(f"""
             Search X for `{query}` with Xquik. Return up to {limit} relevant
             posts. Include the author, text, and URL when available.
-            """
-        ).strip()
-    )
+            """).strip())
     print(result.content)
 
 

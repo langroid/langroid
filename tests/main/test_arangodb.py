@@ -239,13 +239,11 @@ def test_graph_creation(test_database):
     )
 
     # Test traversal
-    result = test_database.aql.execute(
-        """
+    result = test_database.aql.execute("""
         FOR v, e, p IN 1..2 OUTBOUND 'person_vertices/alice' 
         GRAPH 'social_network'
         RETURN {vertex: v.name, distance: LENGTH(p.edges)}
-    """
-    )
+    """)
 
     friends = [doc for doc in result]
     assert len(friends) == 2

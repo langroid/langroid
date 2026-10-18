@@ -95,8 +95,7 @@ async def main(model: str = ""):
                 max_output_tokens=10_000,
                 async_stream_quiet=False,
             ),
-            system_message=dedent(
-                f"""
+            system_message=dedent(f"""
                 Make best use of any of the TOOLs available to you,
                 to answer the user's questions.
                 To communicate with the User, you MUST use
@@ -104,8 +103,7 @@ async def main(model: str = ""):
                 be to either send the user your answer to their query/request,
                 or to ask the user a clarification question, if the user's request
                 is not completely clear.
-                """
-            ),
+                """),
         )
     )
 

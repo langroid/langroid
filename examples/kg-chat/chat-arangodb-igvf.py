@@ -77,12 +77,10 @@ def main(
             stream=not no_stream,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to ArangoDB Knowledge Graph RAG chatbot!
         Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     load_dotenv()
 

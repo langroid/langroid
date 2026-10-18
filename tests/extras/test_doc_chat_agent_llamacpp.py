@@ -684,11 +684,9 @@ def test_doc_chat_ingest_df(
         agent = DocChatAgent(agent_cfg)
     agent.vecdb = vecdb
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
-    response = agent.llm_response(
-        """
+    response = agent.llm_response("""
         What concept does the book dealing with the end of the universe explore?
-        """
-    )
+        """)
     assert "entropy" in response.content.lower()
 
 
@@ -718,11 +716,9 @@ def test_doc_chat_add_content_fields(
         agent = DocChatAgent(agent_cfg)
     agent.vecdb = vecdb
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
-    response = agent.llm_response(
-        """
+    response = agent.llm_response("""
         What was the title of the book by George Morewell and when was it written?
-        """
-    )
+        """)
     assert "2084" in response.content and "1989" in response.content
 
 

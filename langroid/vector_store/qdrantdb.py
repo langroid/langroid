@@ -103,13 +103,11 @@ class QdrantDB(VectorStore):
                 try:
                     from transformers import AutoModelForMaskedLM, AutoTokenizer
                 except ImportError:
-                    raise ImportError(
-                        """
+                    raise ImportError("""
                         To use sparse embeddings,
                         you must install langroid with the [transformers] extra, e.g.:
                         pip install "langroid[transformers]"
-                        """
-                    )
+                        """)
 
                 self.sparse_tokenizer = AutoTokenizer.from_pretrained(  # type: ignore
                     self.config.sparse_embedding_model
@@ -124,13 +122,11 @@ class QdrantDB(VectorStore):
         url = os.getenv("QDRANT_API_URL")
         if config.docker:
             if url is None:
-                logger.warning(
-                    f"""The QDRANT_API_URL env variable must be set to use
+                logger.warning(f"""The QDRANT_API_URL env variable must be set to use
                     QdrantDB in local docker mode. Please set this
                     value in your .env file.
                     Switching to local storage at {config.storage_path}
-                    """
-                )
+                    """)
                 config.cloud = False
             else:
                 config.cloud = True
@@ -159,13 +155,11 @@ class QdrantDB(VectorStore):
                 )
             except Exception as e:
                 new_storage_path = config.storage_path + ".new"
-                logger.warning(
-                    f"""
+                logger.warning(f"""
                     Error connecting to local QdrantDB at {config.storage_path}:
                     {e}
                     Switching to {new_storage_path}
-                    """
-                )
+                    """)
                 self.client = QdrantClient(
                     path=new_storage_path,
                 )
@@ -235,12 +229,10 @@ class QdrantDB(VectorStore):
             n_empty_deletes += points_count == 0
             n_non_empty_deletes += points_count > 0
             self.client.delete_collection(collection_name=name)
-        logger.warning(
-            f"""
+        logger.warning(f"""
             Deleted {n_empty_deletes} empty collections and
             {n_non_empty_deletes} non-empty collections.
-            """
-        )
+            """)
         return n_empty_deletes + n_non_empty_deletes
 
     def list_collections(self, empty: bool = False) -> List[str]:
@@ -430,12 +422,10 @@ class QdrantDB(VectorStore):
                 time.sleep(1)
 
             if not coll_found:
-                raise ValueError(
-                    f"""
+                raise ValueError(f"""
                     QdrantDB Collection {self.config.collection_name} 
                     not found or not ready
-                    """
-                )
+                    """)
 
             self.client.upsert(
                 collection_name=self.config.collection_name,

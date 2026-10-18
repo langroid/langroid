@@ -48,13 +48,11 @@ async def setup_agent_task():
 async def on_chat_start():
     await add_instructions(
         title="Basic Langroid Chatbot",
-        content=dedent(
-            """
+        content=dedent("""
         Uses Langroid's `Task.run()`. 
         Before starting the chat, 
         you can change LLM settings by clicking the settings icon next to the chat window.
-        """
-        ),
+        """),
     )
     await make_llm_settings_widgets()
     await setup_agent_task()

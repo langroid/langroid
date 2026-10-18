@@ -296,24 +296,20 @@ def test_llm_xml_tool_message(
     )
     agent.enable_message(CodeTool)
     task = lr.Task(agent, interactive=False)[ResultTool]
-    result = task.run(
-        """
+    result = task.run("""
         Write a simple python function that takes a name as string arg, 
         and prints hello to that name.
         Write the code to the file src/mycode.py, with version number 7
-        """
-    )
+        """)
     assert isinstance(result, ResultTool)
     assert result.filepath == "src/mycode.py"
     assert result.version == 7
     assert all(word in result.code.lower() for word in ["def", "hello", "print"])
 
-    result = task.run(
-        """
+    result = task.run("""
         Write a Rust function to calculate the n'th fibonacci number,
         and add a test block. Write it to the file src/fib.rs, with version number 3
-        """
-    )
+        """)
     assert isinstance(result, ResultTool)
     assert result.filepath == "src/fib.rs"
     assert result.version == 3
@@ -601,8 +597,7 @@ def test_llm_complex_xml_tool_message(
     )
     agent.enable_message(ComplexNestedXMLTool)
     task = lr.Task(agent, interactive=False)[ResultTool]
-    result = task.run(
-        """
+    result = task.run("""
         Provide information about a person named Alice Johnson, aged 35,
         living at 789 Oak Ave, Springfield, USA, with hobbies of
         gardening and cooking, and phone numbers: 
@@ -610,8 +605,7 @@ def test_llm_complex_xml_tool_message(
         Also include information about her two friends:
         1. Bob Smith, aged 40, living at 123 Maple St, Riverside, USA
         2. Carol White, aged 38, living at 456 Pine Rd, Hillside, USA
-        """
-    )
+        """)
     assert isinstance(result, ResultTool)
     assert isinstance(result.person, Person)
     assert result.person.name == "Alice Johnson"

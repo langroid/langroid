@@ -114,8 +114,7 @@ async def on_update(settings):
 async def on_chat_start():
     await add_instructions(
         title="Agent with access to a web search Tool",
-        content=dedent(
-            """
+        content=dedent("""
         Agent uses a tool/fn-call to search the web 
         
         Default search is using DuckDuckGo. You can switch the search to 
@@ -131,8 +130,7 @@ async def on_chat_start():
         
         To change LLM settings, including model name, click the settings symbol on the 
         left of the chat window.        
-        """
-        ),
+        """),
     )
 
     await make_llm_settings_widgets()

@@ -8,10 +8,7 @@ def collate_chat_history(inputs: List[tuple[str, str]]) -> str:
         inputs:
     Returns:
     """
-    pairs = [
-        f"""Human:{human}
+    pairs = [f"""Human:{human}
         AI:{ai}
-        """
-        for human, ai in inputs
-    ]
+        """ for human, ai in inputs]
     return "\n".join(pairs)

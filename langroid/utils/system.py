@@ -73,16 +73,14 @@ def rmdir(path: str) -> bool:
         True if a dir was removed, false otherwise. Raises error if failed to remove.
     """
     if not any([path.startswith(p) for p in DELETION_ALLOWED_PATHS]):
-        raise ValueError(
-            f"""
+        raise ValueError(f"""
         Removing Dir '{path}' not allowed. 
         Must start with one of {DELETION_ALLOWED_PATHS}
         This is a safety measure to prevent accidental deletion of files.
         If you are sure you want to delete this directory, please add it 
         to the `DELETION_ALLOWED_PATHS` list in langroid/utils/system.py and 
         re-run the command.
-        """
-        )
+        """)
 
     try:
         shutil.rmtree(path)

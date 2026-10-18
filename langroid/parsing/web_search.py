@@ -246,12 +246,10 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     api_key = os.getenv("METAPHOR_API_KEY") or os.getenv("EXA_API_KEY")
     if not api_key:
-        raise ValueError(
-            """
+        raise ValueError("""
             Neither METAPHOR_API_KEY nor EXA_API_KEY environment variables are set. 
             Please set one of them to your API key, and try again.
-            """
-        )
+            """)
 
     try:
         from metaphor_python import Metaphor
@@ -287,12 +285,10 @@ def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     api_key = os.getenv("EXA_API_KEY")
     if not api_key:
-        raise ValueError(
-            """
+        raise ValueError("""
             EXA_API_KEY environment variables are not set. 
             Please set one of them to your API key, and try again.
-            """
-        )
+            """)
 
     try:
         from exa_py import Exa

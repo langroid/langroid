@@ -230,19 +230,15 @@ class OpenAIEmbeddings(EmbeddingModel):
 
         if self.config.api_key == "":
             if self.is_langdb:
-                raise ValueError(
-                    """
+                raise ValueError("""
                     LANGDB_API_KEY must be set in .env or your environment 
                     to use OpenAIEmbeddings via LangDB.
-                    """
-                )
+                    """)
             else:
-                raise ValueError(
-                    """
+                raise ValueError("""
                     OPENAI_API_KEY must be set in .env or your environment 
                     to use OpenAIEmbeddings.
-                    """
-                )
+                    """)
 
         self.client = OpenAI(
             base_url=self.config.api_base,
@@ -298,18 +294,14 @@ class AzureOpenAIEmbeddings(EmbeddingModel):
         load_dotenv()
 
         if self.config.api_key == "":
-            raise ValueError(
-                """AZURE_OPENAI_API_KEY env variable must be set to use 
+            raise ValueError("""AZURE_OPENAI_API_KEY env variable must be set to use 
             AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_KEY value 
-            in your .env file."""
-            )
+            in your .env file.""")
 
         if self.config.api_base == "":
-            raise ValueError(
-                """AZURE_OPENAI_API_BASE env variable must be set to use 
+            raise ValueError("""AZURE_OPENAI_API_BASE env variable must be set to use 
             AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_BASE value 
-            in your .env file."""
-            )
+            in your .env file.""")
         self.client = AzureOpenAI(
             api_key=self.config.api_key,
             api_version=self.config.api_version,
@@ -352,13 +344,11 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError:
-            raise ImportError(
-                """
+            raise ImportError("""
                 To use sentence_transformers embeddings, 
                 you must install langroid with the [hf-embeddings] extra, e.g.:
                 pip install "langroid[hf-embeddings]"
-                """
-            )
+                """)
 
         super().__init__()
         self.config = config
@@ -428,10 +418,8 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         self.config = config
 
         if self.config.api_base == "":
-            raise ValueError(
-                """Api Base MUST be set for Llama Server Embeddings.
-                """
-            )
+            raise ValueError("""Api Base MUST be set for Llama Server Embeddings.
+                """)
 
         self.tokenize_url = self.config.api_base + "/tokenize"
         self.detokenize_url = self.config.api_base + "/detokenize"
@@ -590,11 +578,9 @@ class GeminiEmbeddings(EmbeddingModel):
         self.config.api_key = os.getenv("GEMINI_API_KEY", "")
 
         if self.config.api_key == "":
-            raise ValueError(
-                """
+            raise ValueError("""
                 GEMINI_API_KEY env variable must be set to use GeminiEmbeddings.
-                """
-            )
+                """)
         self.client = genai.Client(api_key=self.config.api_key)
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:

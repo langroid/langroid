@@ -84,11 +84,9 @@ def retry_with_exponential_backoff(
 
                 # Increment the delay
                 delay *= exponential_base * (1 + jitter * random.random())
-                logger.warning(
-                    f"""OpenAI API request failed with error: 
+                logger.warning(f"""OpenAI API request failed with error: 
                     {e}. 
-                    Retrying in {delay} seconds..."""
-                )
+                    Retrying in {delay} seconds...""")
                 # Sleep for the delay
                 time.sleep(delay)
 
@@ -167,10 +165,8 @@ def async_retry_with_exponential_backoff(
 
                 # Increment the delay
                 delay *= exponential_base * (1 + jitter * random.random())
-                logger.warning(
-                    f"""OpenAI API request failed with error{e}. 
-                    Retrying in {delay} seconds..."""
-                )
+                logger.warning(f"""OpenAI API request failed with error{e}. 
+                    Retrying in {delay} seconds...""")
                 # Sleep for the delay, without blocking the event loop
                 await asyncio.sleep(delay)
 

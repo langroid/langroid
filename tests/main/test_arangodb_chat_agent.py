@@ -204,27 +204,23 @@ def test_retrieval(arango_movie_agent, english_query, aql_query, expected):
 
     # Test via natural language
     task = lr.Task(arango_movie_agent, interactive=False)
-    nl_result = task.run(
-        f"""
+    nl_result = task.run(f"""
         Use the `aql_retrieval_tool` to find the answer to this question:
         {english_query}
-        """
-    )
+        """)
     assert expected.lower() in nl_result.content.lower()
 
 
 def test_write_query(arango_movie_agent):
     # Write a new actor
-    write_result = arango_movie_agent.write_query(
-        """
+    write_result = arango_movie_agent.write_query("""
         INSERT { 
             _key: 'morgan', 
             name: 'Morgan Freeman', 
             age: 86, 
             oscars: 1 
         } INTO actors
-        """
-    )
+        """)
     assert write_result.success
 
     # Verify the write
@@ -341,14 +337,12 @@ def test_number_relationships(
 
     # Test via natural language
     task = lr.Task(number_kg_agent, interactive=False)
-    nl_result = task.run(
-        f"""
+    nl_result = task.run(f"""
         Answer the following using the graph-db whose schema was provided above,
         using the appropriate AQL tools provided.
         DO NOT use your own knowledge!!
         {english_query}
-        """
-    )
+        """)
     assert all(str(num) in nl_result.content for num in expected)
 
 

@@ -8,7 +8,6 @@ from .printing import (
 )
 from .status import status
 
-
 __all__ = [
     "printing",
     "shorten_text",

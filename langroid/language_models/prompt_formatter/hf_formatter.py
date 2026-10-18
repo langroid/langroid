@@ -33,8 +33,7 @@ def try_import_hf_modules() -> Tuple[Type[Any], Type[Any]]:
 
         return AutoTokenizer, HfApi
     except ImportError:
-        raise ImportError(
-            """
+        raise ImportError("""
             You are trying to use some/all of:
             HuggingFace transformers.AutoTokenizer,
             huggingface_hub.HfApi,
@@ -43,8 +42,7 @@ def try_import_hf_modules() -> Tuple[Type[Any], Type[Any]]:
             `transformers` extra, like so:
             pip install "langroid[transformers]"
             or equivalent.
-            """
-        )
+            """)
 
 
 # How many hub matches to try before giving up on a name.
@@ -151,15 +149,13 @@ class HFFormatter(PromptFormatter):
         mdl_id, self.tokenizer = found
         if mdl_id not in HFFormatter.models:
             # only warn if this is the first time we've used this mdl.id
-            logger.warning(
-                f"""
+            logger.warning(f"""
             Using HuggingFace {mdl_id} for prompt formatting: 
             This is the CHAT TEMPLATE. If this is not what you intended,
             consider specifying a more complete model name for the formatter.
              
             {self.tokenizer.chat_template}
-            """
-            )
+            """)
         HFFormatter.models.add(mdl_id)
 
     def format(self, messages: List[LLMMessage]) -> str:

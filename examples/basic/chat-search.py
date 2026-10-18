@@ -78,15 +78,13 @@ def main(
             stream=not no_stream,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to the Web Search chatbot!
         I will try to answer your questions, relying on (summaries of links from) 
         Web-Search when needed.
         
         Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     load_dotenv()
 

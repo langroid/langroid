@@ -87,12 +87,10 @@ def main(
             stream=not no_stream,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to ArangoDB Knowledge Graph RAG chatbot!
         Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     load_dotenv()
 
@@ -114,12 +112,10 @@ def main(
     )
     pw = pw or os.getenv("ARANGODB_PASSWORD")
     if url == "got":
-        print(
-            """
+        print("""
             No URL supplied, using Game of Thrones dataset from cloud, see here:
             https://docs.arangodb.com/3.11/components/tools/arango-datasets/
-            """
-        )
+            """)
         connection = get_temp_credentials(tutorialName="langroid")
         client = ArangoClient(hosts=connection["url"])
 

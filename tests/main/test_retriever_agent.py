@@ -236,11 +236,9 @@ def test_retriever_agent_from_df(
     agent.vecdb = vecdb
     agent.clear()
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
-    response = agent.llm_response(
-        """
+    response = agent.llm_response("""
         A movie about the end of the universe or about a magical school.
-        """
-    )
+        """)
     # Check that the ENTIRE description is returned
     assert summaries.ENTROPY in response.content
     assert summaries.HARRY_POTTER in response.content

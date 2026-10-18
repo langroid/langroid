@@ -50,15 +50,13 @@ async def main(
 
     await add_instructions(
         title="2-Agent Search Assistant",
-        content=dedent(
-            """
+        content=dedent("""
         Enter a complex question; 
         - The Assistant will break it down into smaller questions for the Searcher
         - The Searcher will search the web and compose a concise answer
         
         Once the Assistant has enough information, it will say DONE and present the answer.        
-        """
-        ),
+        """),
     )
 
     llm_config = lm.OpenAIGPTConfig(

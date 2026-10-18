@@ -145,23 +145,19 @@ if "OPENAI_API_KEY" in os.environ:
         available_models = set(map(lambda m: m.id, OpenAI().models.list()))
     except openai.AuthenticationError as e:
         if settings.debug:
-            logging.warning(
-                f"""
+            logging.warning(f"""
             OpenAI Authentication Error: {e}.
             ---
             If you intended to use an OpenAI Model, you should fix this,
             otherwise you can ignore this warning.
-            """
-            )
+            """)
         available_models = set()
     except Exception as e:
         if settings.debug:
-            logging.warning(
-                f"""
+            logging.warning(f"""
             Error while fetching available OpenAI models: {e}.
             Proceeding with an empty set of available models.
-            """
-            )
+            """)
         available_models = set()
 else:
     available_models = set()
@@ -420,12 +416,10 @@ class OpenAIGPTConfig(LLMConfig):
             keys_dict = litellm.utils.validate_environment(self.chat_model)
             missing_keys = keys_dict.get("missing_keys", [])
             if len(missing_keys) > 0:
-                raise ValueError(
-                    f"""
+                raise ValueError(f"""
                     Missing environment variables for litellm-proxied model:
                     {missing_keys}
-                    """
-                )
+                    """)
 
     @classmethod
     def create(cls, prefix: str) -> Type["OpenAIGPTConfig"]:
@@ -842,13 +836,11 @@ class OpenAIGPT(LanguageModel):
                 if formatter != "":
                     # e.g. "mistral"
                     self.config.formatter = formatter
-                    logging.warning(
-                        f"""
+                    logging.warning(f"""
                         Using completions (not chat) endpoint with HuggingFace
                         chat_template for {formatter} for
                         model {self.config.chat_model}
-                        """
-                    )
+                        """)
             else:
                 # e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
                 self.config.formatter = formatter
@@ -2132,22 +2124,18 @@ class OpenAIGPT(LanguageModel):
             stripped_fn_args = args.strip()
             dict_or_list = parse_imperfect_json(stripped_fn_args)
             if not isinstance(dict_or_list, dict):
-                raise ValueError(
-                    f"""
+                raise ValueError(f"""
                         Invalid function args: {stripped_fn_args}
                         parsed as {dict_or_list},
                         which is not a valid dict.
-                        """
-                )
+                        """)
             args_dict = dict_or_list
         except (SyntaxError, ValueError) as e:
-            logging.warning(
-                f"""
+            logging.warning(f"""
                     Parsing OpenAI function args failed: {args};
                     treating args as normal message. Error detail:
                     {e}
-                    """
-            )
+                    """)
             content = args
 
         return content, args_dict
@@ -2550,11 +2538,9 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_completion_for_chat and not self.is_openai_chat_model():
             # only makes sense for non-OpenAI models
             if self.config.formatter is None or self.config.hf_formatter is None:
-                raise ValueError(
-                    """
+                raise ValueError("""
                     `formatter` must be specified in config to use completion for chat.
-                    """
-                )
+                    """)
             if isinstance(messages, str):
                 messages = [
                     LLMMessage(
@@ -2604,11 +2590,9 @@ class OpenAIGPT(LanguageModel):
             # only makes sense for local models, where we are trying to
             # convert a chat dialog msg-sequence to a simple completion prompt.
             if self.config.formatter is None:
-                raise ValueError(
-                    """
+                raise ValueError("""
                     `formatter` must be specified in config to use completion for chat.
-                    """
-                )
+                    """)
             formatter = HFFormatter(
                 HFPromptFormatterConfig(model_name=self.config.formatter)
             )

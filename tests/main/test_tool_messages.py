@@ -775,13 +775,11 @@ def test_multi_tool(
     # First test without task; using individual methods
     # ---
 
-    result = task.run(
-        """
+    result = task.run("""
         Compute these:
         (A) Nabroski transform of 3 and 5
         (B) Gauss transform of 1 and 2
-        """
-    )
+        """)
     # Nabroski: 3*3 + 5 = 14
     # Gauss: (1+2)*2 = 6
     assert "14" in result.content and "6" in result.content
@@ -1407,11 +1405,9 @@ def test_structured_recovery(
         # Simulates bad tool attempt by the LLM
         agent.handle_message(attempt)
         assert agent.tool_error
-        response = agent.llm_response(
-            """
+        response = agent.llm_response("""
             There was an error in your attempted tool/function call. Please correct it.
-            """
-        )
+            """)
         assert response is not None
         result = agent.handle_message(response)
         assert result is not None
@@ -1490,15 +1486,10 @@ def test_structured_recovery(
     # mechanism fails, and we can do this test properly to focus on structured
     # recovery. But `catss' is sufficiently similar to 'cats' that the
     # intent-based recovery should work.
-    assert (
-        simulate_failed_call(
-            """
+    assert simulate_failed_call("""
         request ":coriolis"
         arguments {"catss": 1} 
-        """
-        )
-        == "8"
-    )
+        """) == "8"
     # The LLM should correct the request to "coriolis" in recovery
     # The LLM should infer the default argument from context
     assert (
@@ -1624,12 +1615,10 @@ def test_strict_fallback(
         # parallel tool calls are disabled
         assert tools[0].strict == (not parallel_tool_calls)
 
-    response = agent.llm_response_forget(
-        """
+    response = agent.llm_response_forget("""
         What is the Nabroski transform of (1,3)? Use the
         `nabroski` tool/function.
-        """
-    )
+        """)
     result = agent.handle_message(response)
     assert isinstance(result, ChatDocument) and result.content == "6"
     assert agent.disable_strict == (openai_tools and not parallel_tool_calls)
@@ -1647,11 +1636,9 @@ def test_strict_fallback(
         )
     )
     structured_agent = agent[NabroskiTool]
-    response = structured_agent.llm_response_forget(
-        """
+    response = structured_agent.llm_response_forget("""
         What is the Nabroski transform of (1,3)?
-        """
-    )
+        """)
     assert response is not None
     assert structured_agent.disable_strict
     assert not agent.disable_strict
@@ -1748,20 +1735,16 @@ def test_strict_schema_mismatch(
     agent.enable_message(IntTool)
     agent.enable_message(StrTool)
     strict_openai_tools = use_fn_api and use_tools_api and not parallel_tool_calls
-    response = agent.llm_response_forget(
-        """
+    response = agent.llm_response_forget("""
         What is the smallest integer greater than pi? Use the
         `int_tool` tool/function.
-        """
-    )
+        """)
     agent.handle_message(response)
     assert "int_tool" not in agent.disable_strict_tools_set
 
-    agent.llm_response_forget(
-        """
+    agent.llm_response_forget("""
         Who is the president of France? Use the `str_tool` tool/function.
-        """
-    )
+        """)
     assert ("str_tool" in agent.disable_strict_tools_set) == strict_openai_tools
 
     strict_agent = agent[IntTool]
@@ -2066,12 +2049,10 @@ def test_tool_handler_invoking_llm(use_fn_api: bool):
     )
     agent.enable_message(NabroskiTool)
     task = Task(agent, interactive=False, single_round=False)
-    result = task.run(
-        f"""
+    result = task.run(f"""
         Use the TOOL `{NabroskiTool.name()}` to compute the
         Nabroski transform of 2 and 5.
-        """
-    )
+        """)
 
     assert "7" in result.content
 

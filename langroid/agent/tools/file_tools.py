@@ -244,10 +244,8 @@ class ListDirTool(ToolMessage):
         if not contents:
             return f"Directory not found or empty: {self.dir_path}"
         contents_str = "\n".join(contents)
-        return dedent(
-            f"""
+        return dedent(f"""
             LISTING of directory {self.dir_path}:
             ---------------------------
             {contents_str}
-            """.strip()
-        )
+            """.strip())

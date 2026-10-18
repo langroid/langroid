@@ -307,13 +307,11 @@ class Parser:
             if len(split_chunks) == len(chunks):
                 if un_splittables > 0:
                     max_len = max([self.num_tokens(p.content) for p in chunks])
-                    logger.warning(
-                        f"""
+                    logger.warning(f"""
                         Unable to split {un_splittables} chunks
                         using chunk_size = {self.config.chunk_size}.
                         Max chunk size is {max_len} tokens.
-                        """
-                    )
+                        """)
                 break  # we won't be able to shorten them with current settings
             chunks = split_chunks.copy()
 

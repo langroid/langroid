@@ -22,23 +22,19 @@ class AQLRetrievalTool(ToolMessage):
         return [
             (
                 "I want to see who Bob's Father is",
-                cls(
-                    aql_query="""
+                cls(aql_query="""
                     FOR v, e, p IN 1..1 OUTBOUND 'users/Bob' GRAPH 'family_tree'
                     FILTER p.edges[0].type == 'father'
                     RETURN v
-                    """
-                ),
+                    """),
             ),
             (
                 "I want to know the properties of the Actor node",
-                cls(
-                    aql_query="""
+                cls(aql_query="""
                     FOR doc IN Actor
                     LIMIT 1
                     RETURN ATTRIBUTES(doc)                    
-                    """
-                ),
+                    """),
             ),
         ]
 
@@ -69,14 +65,12 @@ class AQLCreationTool(ToolMessage):
         return [
             (
                 "Create a new document in the collection 'users'",
-                cls(
-                    aql_query="""
+                cls(aql_query="""
                     INSERT {
                       "name": "Alice",
                       "age": 30
                     } INTO users
-                    """
-                ),
+                    """),
             ),
         ]
 

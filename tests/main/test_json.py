@@ -30,14 +30,12 @@ from langroid.parsing.parse_json import (
             }
             Hope you can tell me!
         """,
-            [
-                """
+            ["""
             {
                 "request": "file_exists",
                 "filename": "test.txt"
             }
-            """
-            ],
+            """],
         ),
         (
             """
@@ -58,8 +56,7 @@ from langroid.parsing.parse_json import (
                "f": g h k,
                }, },
             """,
-            [
-                """
+            ["""
                 {
                 "key_no_quotes": "value",
                 "key": "value_no_quote",
@@ -67,8 +64,7 @@ from langroid.parsing.parse_json import (
                 "key2": 24,
                 "key3": {"a": "b", "c": "d e", "f": "g h k"}
                 }
-                """
-            ],
+                """],
         ),
     ],
 )

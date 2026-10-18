@@ -88,12 +88,10 @@ def main(
     df_description = agent.df_description
 
     # inform user about the df_description, in blue
-    print(
-        f"""
+    print(f"""
     [blue]Here's a description of the DataFrame that was ingested:
     {df_description}
-    """
-    )
+    """)
 
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
@@ -102,12 +100,10 @@ def main(
         if question == "q":
             break
         result = task.run(question)
-        print(
-            f"""
+        print(f"""
             Here's your answer:
             {result.content}
-            """
-        )
+            """)
 
 
 if __name__ == "__main__":

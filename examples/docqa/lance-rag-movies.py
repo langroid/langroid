@@ -67,8 +67,7 @@ def main(
         embedding=embed_cfg,
     )
 
-    print(
-        """
+    print("""
         [blue]Welcome to the IMDB Movies chatbot!
         This dataset has around 130,000 movie reviews, with these columns:
         
@@ -77,8 +76,7 @@ def main(
         
         To keep things speedy, we'll restrict the dataset to movies
         of a specific genre that you can choose.
-        """
-    )
+        """)
     genre = Prompt.ask(
         "Which of these genres would you like to focus on?",
         default="Crime",
@@ -135,11 +133,9 @@ def main(
     # get the rows where 'Crime' is in the genre column
     df = df[df["genre"].str.contains(genre)]
 
-    print(
-        f"""
+    print(f"""
     [blue]There are {df.shape[0]} movies in {genre} genre, hang on while I load them...
-    """
-    )
+    """)
     # sample 1000 rows for faster testing
     df = df.sample(1000)
 
@@ -149,12 +145,10 @@ def main(
     df_description = agent.df_description
 
     # inform user about the df_description, in blue
-    print(
-        f"""
+    print(f"""
     [blue]Here's a description of the DataFrame that was ingested:
     {df_description}
-    """
-    )
+    """)
 
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
@@ -163,12 +157,10 @@ def main(
         if question == "q":
             break
         result = task.run(question)
-        print(
-            f"""
+        print(f"""
             Here's your answer:
             {result.content}
-            """
-        )
+            """)
 
 
 if __name__ == "__main__":

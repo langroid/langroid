@@ -84,14 +84,12 @@ async def on_update(settings):
 async def on_chat_start():
     await add_instructions(
         title="Basic Doc-Question-Answering using RAG (Retrieval Augmented Generation).",
-        content=dedent(
-            """
+        content=dedent("""
         **Upload** a document (click the attachment button in the chat dialog) and ask questions.
         **Change LLM settings** by clicking the settings symbol on the left of the chat window.
         
         You can keep uploading more documents, and questions will be answered based on all documents.
-        """
-        ),
+        """),
     )
 
     await make_llm_settings_widgets()
@@ -114,12 +112,10 @@ async def on_message(message: cl.Message):
         agent.ingest_doc_paths(list(file2path.values()))
         file_or_files = "file" if n_files == 1 else "files"
         file_list = "\n".join([f"- `{file}`" for file in file2path.keys()])
-        waiting.content = dedent(
-            f"""
+        waiting.content = dedent(f"""
             Ingested `{n_files}` {file_or_files}:
             {file_list}
-            """
-        )
+            """)
         await waiting.update()
 
     if not cl.user_session.get("callbacks_inserted", False):

@@ -5,7 +5,6 @@ from .llama2_formatter import Llama2Formatter
 from ..config import PromptFormatterConfig
 from ..config import Llama2FormatterConfig
 
-
 __all__ = [
     "PromptFormatter",
     "Llama2Formatter",

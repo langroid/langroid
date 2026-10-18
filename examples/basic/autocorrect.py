@@ -25,8 +25,7 @@ setup_colored_logging()
 
 
 def chat() -> None:
-    print(
-        """
+    print("""
         [blue]Welcome to the Autocorrecting Chatbot!
         You can quickly type your message, don't even look at your keyboard. 
         Feel free to type and I will try my best to understand it,
@@ -37,8 +36,7 @@ def chat() -> None:
         When I am confused, I will offer some numbered choices to pick from.
         
         Let's go! Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     config = ChatAgentConfig(
         llm=OpenAIGPTConfig(

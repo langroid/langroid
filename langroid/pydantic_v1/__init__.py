@@ -12,8 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Only show the visual warning, not the standard deprecation warning
 # The standard warning is too noisy and shows the import line
-logger.warning(
-    """
+logger.warning("""
 ╔════════════════════════════════════════════════════════════════════════╗
 ║                    ⚠️  DEPRECATION WARNING ⚠️                          ║
 ╠════════════════════════════════════════════════════════════════════════╣
@@ -33,8 +32,7 @@ logger.warning(
 ║                                                                        ║
 ║  This compatibility layer will be removed in a future version.         ║
 ╚════════════════════════════════════════════════════════════════════════╝
-"""
-)
+""")
 
 # Import from pydantic v2 directly (not from pydantic.v1)
 # This allows existing code to continue working if it's already v2-compatible
