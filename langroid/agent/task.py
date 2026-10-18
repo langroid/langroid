@@ -2364,8 +2364,10 @@ class Task:
         content = content.strip()
         if PASS in content and PASS_TO not in content:
             return True, None, None
-        if PASS_TO in content and content.split(":")[1] != "":
-            return True, content.split(":")[1], None
+        if PASS_TO in content:
+            recipient = content.split(PASS_TO, 1)[1].split(":")[0].strip()
+            if recipient != "":
+                return True, recipient, None
         if (
             SEND_TO in content
             and (addressee_content := parse_addressed_message(content, SEND_TO))[0]
