@@ -70,12 +70,10 @@ class PolinskyTool(lr.agent.ToolMessage):
     """
 
     request: str = "polinsky"
-    purpose: str = (
-        """
+    purpose: str = """
         To respond to user request for the Polinsky transform of a <number>.
         NOTE: ONLY USE THIS TOOL AFTER THE USER ASKS FOR A POLINSKY TRANSFORM. 
         """
-    )
     number: int
 
     @classmethod

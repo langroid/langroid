@@ -54,12 +54,10 @@ def main(
             cache=nocache,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to the Text-to-KG chatbot!
         Enter x or q to quit at any point.[/blue]
-        """
-    )
+        """)
 
     load_dotenv()
 
@@ -128,13 +126,11 @@ def main(
         interactive=True,
         single_round=False,
     )
-    task.run(
-        f"""
+    task.run(f"""
     TEXT: {TEXT}
     
     CURRENT SCHEMA: {CURRENT_SCHEMA}
-    """
-    )
+    """)
 
     curr_schema = agent.get_schema(None)
     print(f"SCHEMA: {curr_schema}")
@@ -150,13 +146,11 @@ def main(
     interface and a mouse.
     """
 
-    task.run(
-        f"""
+    task.run(f"""
         TEXT: {TEXT}
 
         CURRENT SCHEMA: {curr_schema}
-        """
-    )
+        """)
     updated_schema = agent.get_schema(None)
     print(f"UPDATED SCHEMA: {updated_schema}")
 

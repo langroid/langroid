@@ -133,13 +133,11 @@ class LLMFunctionCall(BaseModel):
             dict_or_list = parse_imperfect_json(fun_args_str)
 
             if not isinstance(dict_or_list, dict):
-                raise ValueError(
-                    f"""
+                raise ValueError(f"""
                         Invalid function args: {fun_args_str}
                         parsed as {dict_or_list},
                         which is not a valid dict.
-                        """
-                )
+                        """)
             fun_args = dict_or_list
         else:
             fun_args = None
@@ -523,15 +521,13 @@ class LanguageModel(ABC):
         Returns: instance of language model
         """
         if type(config) is LLMConfig:
-            raise ValueError(
-                """
+            raise ValueError("""
                 Cannot create a Language Model object from LLMConfig.
                 Please specify a specific subclass of LLMConfig e.g.,
                 OpenAIGPTConfig. If you are creating a ChatAgent from
                 a ChatAgentConfig, please specify the `llm` field of this config
                 as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
-                """
-            )
+                """)
         from langroid.language_models.azure_openai import AzureGPT
         from langroid.language_models.mock_lm import MockLM, MockLMConfig
         from langroid.language_models.openai_gpt import OpenAIGPT

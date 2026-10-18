@@ -2,7 +2,7 @@
 Variant of chat-agent.py, that waits for user to type "/s" (meaning submit)
 to store chat transcript in a file.
 
-Directly uses an Agent (i.e. without Task) 
+Directly uses an Agent (i.e. without Task)
 using callbacks, which also enables streaming.
 
 After setting up the virtual env as in README,
@@ -11,7 +11,7 @@ and you have your OpenAI API Key in the .env file, run like this:
 chainlit run examples/chainlit/chat-transcript.py
 
 or:
-    
+
 uv run chainlit run examples/chainlit/chat-transcript.py
 
 """

@@ -63,12 +63,10 @@ class ExtractorAgent(ChatAgent):
         super().__init__(config)
 
     def methods_list(self, message: MethodsList) -> str:
-        print(
-            f"""
+        print(f"""
         DONE! Successfully extracted ML Methods list:
         {message.methods}
-        """
-        )
+        """)
         return "\n".join(json.dumps(m.model_dump()) for m in message.methods)
 
 
@@ -89,14 +87,10 @@ class ExtractorConfig(ChatAgentConfig):
 
 
 def chat(config: ExtractorConfig) -> None:
-    print(
-        textwrap.dedent(
-            """
+    print(textwrap.dedent("""
         [blue]Welcome to the basic chatbot!
         Enter x or q to quit
-        """
-        ).strip()
-    )
+        """).strip())
     agent = ExtractorAgent(config)
     agent.enable_message(
         MethodsList,

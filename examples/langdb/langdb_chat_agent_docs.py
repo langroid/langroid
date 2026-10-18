@@ -5,7 +5,7 @@ This is a specialized agent that can ingest (chunk, embed, store in vector-DB)
 a collection of documents, and the LLM uses Retrieval Augmented Generation (RAG)
 to answer questions about the documents.
 
-This example demonstrates how to use LangDB with custom headers like x-label, x-thread-id, 
+This example demonstrates how to use LangDB with custom headers like x-label, x-thread-id,
 and x-run-id when using a Langroid DocChatAgent with RAG capabilities.
 
 Run as follows:
@@ -61,12 +61,10 @@ documents = [
 
 
 def chat() -> None:
-    print(
-        """
+    print("""
         [blue]Welcome to the LangDB retrieval-augmented chatbot!
         Enter x or q to quit
-        """
-    )
+        """)
 
     # Generate UUIDs for run_id and thread_id
     run_id = str(uuid.uuid4())

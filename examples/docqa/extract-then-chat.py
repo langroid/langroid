@@ -101,12 +101,10 @@ def chat(
     debug: bool = False,
     no_cache: bool = False,  # whether to disablue using cached LLM responses
 ):
-    print(
-        """
+    print("""
         Hello! I am your book info helper. 
         First I will get info about some books
-        """
-    )
+        """)
 
     load_dotenv()
 

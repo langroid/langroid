@@ -73,14 +73,12 @@ def main(
             cache=not nocache,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to the Web Search Assistant chatbot!
         I will try to answer your complex questions. 
         
         Enter x or q to quit at any point.
-        """
-    )
+        """)
     load_dotenv()
 
     llm_config = lm.OpenAIGPTConfig(

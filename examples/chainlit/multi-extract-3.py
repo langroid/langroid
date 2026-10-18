@@ -88,12 +88,10 @@ class LeaseMessage(ToolMessage):
     result: str = ""
 
     def handle(self) -> str:
-        print(
-            f"""
+        print(f"""
         DONE! Successfully extracted Lease Info:
         {self.terms}
-        """
-        )
+        """)
         return "DONE " + json.dumps(self.terms.model_dump())
 
     @classmethod

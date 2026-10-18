@@ -74,11 +74,9 @@ def main(
     doc_agent.vecdb.set_collection("docqa-chat-multi", replace=True)
     print("[blue]Welcome to the document chatbot!")
     print("[cyan]Enter x or q to quit, or ? for evidence")
-    print(
-        """
+    print("""
         [blue]Enter some URLs or file/dir paths below (or leave empty for default URLs)
-        """.strip()
-    )
+        """.strip())
     inputs = get_list_from_user()
     if len(inputs) == 0:
         inputs = config.default_paths

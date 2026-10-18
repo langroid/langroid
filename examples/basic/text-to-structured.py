@@ -72,12 +72,10 @@ class HomeAutomationTool(lr.agent.ToolMessage):
 
     def handle(self) -> str:
         """Handle LLM's structured output if it matches HomeAutomationTool structure"""
-        print(
-            f"""
+        print(f"""
             SUCCESS! Got Valid Home Automation Settings:
             {json.dumps(self.home_settings.model_dump(), indent=2)}
-            """
-        )
+            """)
         return ResultTool(settings=self.home_settings)
 
     @classmethod

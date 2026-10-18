@@ -117,12 +117,10 @@ def chat(model: str = "", sentence: str = None) -> None:
 
     result = task.run(sentence)
 
-    print(
-        f"""
+    print(f"""
         [bold]Final Result:[/bold]
         {result}
-        """
-    )
+        """)
 
 
 if __name__ == "__main__":

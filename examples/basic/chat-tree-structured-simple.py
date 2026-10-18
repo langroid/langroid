@@ -1,5 +1,5 @@
 """
-Simple example showing tree-structured computation, 
+Simple example showing tree-structured computation,
 a variation of `examples/basic/chat-tree.py` which uses strict output formatting
 to reliably wrap calls to agents in standard Python functions, allowing
 explicit control over control flow.
@@ -74,21 +74,17 @@ def chat() -> int:
     )
 
     def check_condition(n: int, condition: str) -> bool:
-        output = condition_agent.llm_response_forget(
-            f"""
+        output = condition_agent.llm_response_forget(f"""
             Number: {n}
             Condition: {condition}
-            """
-        )
+            """)
         return condition_agent.from_ChatDocument(output, bool)  # type: ignore
 
     def apply_transformation(n: int, transformation: str) -> int:
-        output = transformation_agent.llm_response_forget(
-            f"""
+        output = transformation_agent.llm_response_forget(f"""
             Number: {n}
             Transformation: {transformation}
-            """
-        )
+            """)
         return transformation_agent.from_ChatDocument(output, int)  # type: ignore
 
     num = int(Prompt.ask("Enter a number"))

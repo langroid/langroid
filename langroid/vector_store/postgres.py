@@ -159,8 +159,7 @@ class PostgresDB(VectorStore):
         with self.engine.connect() as connection:
             if not self.index_exists(connection, index_name):
                 connection.execute(text("COMMIT"))
-                create_index_query = text(
-                    f"""
+                create_index_query = text(f"""
                     CREATE INDEX CONCURRENTLY IF NOT EXISTS {_quote_ident(index_name)}
                     ON {_quote_ident(self.config.collection_name)}
                     USING hnsw (embedding vector_cosine_ops)
@@ -168,8 +167,7 @@ class PostgresDB(VectorStore):
                         m = {self.config.hnsw_m},
                         ef_construction = {self.config.hnsw_ef_construction}
                     );
-                    """
-                )
+                    """)
                 connection.execute(create_index_query)
 
     def index_exists(self, connection: Connection, index_name: str) -> bool:

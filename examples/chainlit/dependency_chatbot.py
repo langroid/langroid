@@ -272,8 +272,7 @@ async def on_update(settings):
 async def chat() -> None:
     await add_instructions(
         title="Welcome to Python Dependency chatbot!",
-        content=dedent(
-            """
+        content=dedent("""
         Ask any questions about Python packages, and I will try my best to answer them.
         But first, the user specifies package name
         -> agent gets version number and type of package using google search
@@ -282,8 +281,7 @@ async def chat() -> None:
         -> LLM translates to Cypher query to get info from KG
         -> Query results returned to LLM
         -> LLM translates to natural language response
-        """
-        ),
+        """),
     )
 
     await make_llm_settings_widgets(

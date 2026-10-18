@@ -1,6 +1,6 @@
 """
 Tests for QdrantDB lock release functionality.
-This tests the fix for the file lock conflict issue when using QdrantDB with 
+This tests the fix for the file lock conflict issue when using QdrantDB with
 local storage.
 """
 

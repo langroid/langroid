@@ -101,18 +101,14 @@ class AzureGPT(OpenAIGPT):
                 self.async_client.timeout = Timeout(self.config.timeout)
         else:
             if self.config.api_key == "":
-                raise ValueError(
-                    """
+                raise ValueError("""
                     AZURE_OPENAI_API_KEY not set in .env file,
-                    please set it to your Azure API key."""
-                )
+                    please set it to your Azure API key.""")
 
             if self.config.api_base == "":
-                raise ValueError(
-                    """
+                raise ValueError("""
                     AZURE_OPENAI_API_BASE not set in .env file,
-                    please set it to your Azure API key."""
-                )
+                    please set it to your Azure API key.""")
 
             self.client = AzureOpenAI(
                 api_key=self.config.api_key,

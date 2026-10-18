@@ -202,12 +202,10 @@ class ChatAgentConfig(AgentConfig):
         if not self.use_functions_api or not self.use_tools:
             return
         if self.use_functions_api and self.use_tools:
-            logger.debug(
-                """
+            logger.debug("""
                 You have enabled both `use_tools` and `use_functions_api`.
                 Setting `use_functions_api` to False.
-                """
-            )
+                """)
             self.use_tools = True
             self.use_functions_api = False
 
@@ -758,24 +756,18 @@ class ChatAgent(Agent):
                 )
                 if guidance == "" and example == "":
                     continue
-                instructions.append(
-                    textwrap.dedent(
-                        f"""
+                instructions.append(textwrap.dedent(f"""
                         TOOL: {msg_cls.default_value("request")}:
                         {guidance}
                         {example}
-                        """.lstrip()
-                    )
-                )
+                        """.lstrip()))
         if len(instructions) == 0:
             return ""
         instructions_str = "\n\n".join(instructions)
-        return textwrap.dedent(
-            f"""
+        return textwrap.dedent(f"""
             === GUIDELINES ON SOME TOOLS/FUNCTIONS USAGE ===
             {instructions_str}
-            """.lstrip()
-        )
+            """.lstrip())
 
     def augment_system_message(self, message: str) -> None:
         """
@@ -985,9 +977,7 @@ class ChatAgent(Agent):
         # Validate that use/handle are booleans, not accidentally passed tool classes
         if isclass(use) or isclass(handle):
             param = "use" if isclass(use) else "handle"
-            raise TypeError(
-                textwrap.dedent(
-                    f"""
+            raise TypeError(textwrap.dedent(f"""
                     Invalid arguments to enable_message().
                     It appears you passed multiple ToolMessage classes as separate
                     arguments instead of as a list.
@@ -999,9 +989,7 @@ class ChatAgent(Agent):
                         agent.enable_message(Tool1, Tool2, Tool3)
 
                     The '{param}' parameter must be a boolean, not a class.
-                    """
-                )
-            )
+                    """))
 
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
@@ -1034,12 +1022,10 @@ class ChatAgent(Agent):
         tools = self._get_tool_list(message_class)
         if message_class is not None:
             if request == "":
-                raise ValueError(
-                    f"""
+                raise ValueError(f"""
                     ToolMessage class {message_class} must have a non-empty
                     'request' field if it is to be enabled as a tool.
-                    """
-                )
+                    """)
             llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
             if force:
@@ -1075,16 +1061,14 @@ class ChatAgent(Agent):
                     self.llm_tools_usable.add(t)
                     self.llm_functions_usable.add(t)
                 else:
-                    logger.warning(
-                        f"""
+                    logger.warning(f"""
                         ToolMessage class {tool_class} does not allow LLM use,
                         because `_allow_llm_use=False` either in the Tool or a
                         parent class of this tool;
                         so not enabling LLM use for this tool!
                         If you intended an LLM to use this tool,
                         set `_allow_llm_use=True` when you define the tool.
-                        """
-                    )
+                        """)
                 if (
                     self.enabled_use_output_format is not None
                     and self.enabled_use_output_format.default_value("request") == t
@@ -1266,13 +1250,11 @@ class ChatAgent(Agent):
                     # Already generated tool instructions as part of "enabling for use",
                     # so only need to generate a reminder to use this tool.
                     name = cast(ToolMessage, output_type).default_value("request")
-                    self.output_format_instructions = textwrap.dedent(
-                        f"""
+                    self.output_format_instructions = textwrap.dedent(f"""
                         === OUTPUT FORMAT INSTRUCTIONS ===
 
                         Please provide output using the `{name}` tool/function.
-                        """
-                    )
+                        """)
                 else:
                     if issubclass(output_type, ToolMessage):
                         output_format_schema = output_type.llm_function_schema(
@@ -1284,14 +1266,12 @@ class ChatAgent(Agent):
 
                     format_schema_for_strict(output_format_schema)
 
-                    self.output_format_instructions = textwrap.dedent(
-                        f"""
+                    self.output_format_instructions = textwrap.dedent(f"""
                         === OUTPUT FORMAT INSTRUCTIONS ===
                         Please provide output as JSON with the following schema:
 
                         {output_format_schema}
-                        """
-                    )
+                        """)
 
             if force_tools:
                 if issubclass(output_type, ToolMessage):
@@ -1406,12 +1386,10 @@ class ChatAgent(Agent):
 
             if not any_succeeded:
                 self.disable_strict = True
-                logging.warning(
-                    """
+                logging.warning("""
                     Validation error occured with strict output format enabled.
                     Disabling strict mode.
-                    """
-                )
+                    """)
 
     def get_tool_messages(
         self,
@@ -1450,12 +1428,10 @@ class ChatAgent(Agent):
                     if was_strict:
                         name = tool_class.default_value("request")
                         self.disable_strict_tools_set.add(name)
-                        logging.warning(
-                            f"""
+                        logging.warning(f"""
                             Validation error occured with strict tool format.
                             Disabling strict mode for the {name} tool.
-                            """
-                        )
+                            """)
                     else:
                         # We will trigger the strict recovery mechanism to force
                         # the LLM to correct its output, allowing us to parse
@@ -1558,16 +1534,9 @@ class ChatAgent(Agent):
         optional: bool = True,
     ) -> str:
         """Returns instructions for strict recovery."""
-        optional_instructions = (
-            (
-                "\n"
-                + """
+        optional_instructions = ("\n" + """
         If you did NOT intend to do so, `tool` should be null.
-        """
-            )
-            if optional
-            else ""
-        )
+        """) if optional else ""
         response_prefix = "If you intended to make such a call, r" if optional else "R"
         instruction_prefix = "If you do so, b" if optional else "B"
 
@@ -1580,8 +1549,7 @@ class ChatAgent(Agent):
             else ""
         )
 
-        return textwrap.dedent(
-            f"""
+        return textwrap.dedent(f"""
         Your previous attempt to make a tool/function call appears to have failed.
         {response_prefix}espond with your desired tool/function. Do so with the
         `tool_or_function` tool/function where `tool` is set to your intended call.
@@ -1591,8 +1559,7 @@ class ChatAgent(Agent):
         in your previous request. For any field with a default value which
         you did not intend to override in your previous attempt, be sure
         to set that field to its default value. {optional_instructions}
-        """
-        )
+        """)
 
     def truncate_message(
         self,
@@ -1726,13 +1693,11 @@ class ChatAgent(Agent):
                 if self.any_strict:
                     self.disable_strict = True
                     self.set_output_format(None)
-                    logging.warning(
-                        f"""
+                    logging.warning(f"""
                         OpenAI BadRequestError raised with strict mode enabled.
                         Message: {e.message}
                         Disabling strict mode and retrying.
-                        """
-                    )
+                        """)
                     return self.llm_response(message)
                 else:
                     raise e
@@ -1816,13 +1781,11 @@ class ChatAgent(Agent):
                 if self.any_strict:
                     self.disable_strict = True
                     self.set_output_format(None)
-                    logging.warning(
-                        f"""
+                    logging.warning(f"""
                         OpenAI BadRequestError raised with strict mode enabled.
                         Message: {e.message}
                         Disabling strict mode and retrying.
-                        """
-                    )
+                        """)
                     return await self.llm_response_async(message)
                 else:
                     raise e
@@ -1891,13 +1854,11 @@ class ChatAgent(Agent):
 
             # for debugging, show the initial message history
             if settings.debug:
-                print(
-                    f"""
+                print(f"""
                 [grey37]LLM Initial Msg History:
                 {escape(self.message_history_str())}
                 [/grey37]
-                """
-                )
+                """)
         else:
             assert self.message_history[0].role == Role.SYSTEM
             # update the system message with the latest tool instructions
@@ -1945,16 +1906,14 @@ class ChatAgent(Agent):
                 - CHAT_HISTORY_BUFFER
             )
             if output_len > self.config.llm.min_output_tokens:
-                logger.debug(
-                    f"""
+                logger.debug(f"""
                     Chat Model context length is {self.llm.chat_context_length()},
                     but the current message history is {self.chat_num_tokens(hist)}
                     tokens long, which does not allow
                     {self.config.llm.model_max_output_tokens} output tokens.
                     Therefore we reduced `max_output_tokens` to {output_len} tokens,
                     so they can fit within the model's context length
-                    """
-                )
+                    """)
             else:
                 # unacceptably small output len, so compress early parts of
                 # conversation history based on the configured strategy
@@ -2014,8 +1973,7 @@ class ChatAgent(Agent):
                         if msg_idx_to_compress > last_msg_idx_to_compress:
                             # We want to preserve the first message (typically
                             # system msg) and last message (user msg).
-                            raise ValueError(
-                                """
+                            raise ValueError("""
                             The (message history + max_output_tokens) is longer than the
                             max chat context length of this model, and we have tried
                             reducing the requested max output tokens, as well as
@@ -2028,8 +1986,7 @@ class ChatAgent(Agent):
                             - increasing `chat_context_length`
                                 (if accurate for the model), or
                             - decreasing `max_output_tokens`
-                            """
-                            )
+                            """)
                         _msg_tokens = _content_tokens(hist[msg_idx_to_compress].content)
                         if _msg_tokens <= _min_keep_tokens + _warning_tokens:
                             # Truncating this message cannot shrink the total:
@@ -2093,8 +2050,7 @@ class ChatAgent(Agent):
                         - CHAT_HISTORY_BUFFER,
                     )
                     if output_len < self.config.llm.min_output_tokens:
-                        raise ValueError(
-                            f"""
+                        raise ValueError(f"""
                             Tried to shorten prompt history for chat mode
                             but even after truncating all messages except system msg
                             and last (user) msg, the history token len
@@ -2104,13 +2060,11 @@ class ChatAgent(Agent):
                             model's context length {self.llm.chat_context_length()}.
                             Please try shortening the system msg or user prompts,
                             or adjust `config.llm.min_output_tokens` to be smaller.
-                            """
-                        )
+                            """)
                     else:
                         # we MUST have truncated at least one msg
                         msg_tokens = self.chat_num_tokens()
-                        logger.warning(
-                            f"""
+                        logger.warning(f"""
                         Chat Model context length is {self.llm.chat_context_length()}
                         tokens, but the current message history is {msg_tokens} tokens
                         long, which does not allow
@@ -2121,8 +2075,7 @@ class ChatAgent(Agent):
                         we use `max_output_tokens = {output_len}`,
                         so they can fit within the model's context length
                         of {self.llm.chat_context_length()} tokens.
-                        """
-                        )
+                        """)
 
                 else:  # strategy == "drop_turns"
                     # Drop complete conversation turns. A complete turn is defined
@@ -2170,8 +2123,7 @@ class ChatAgent(Agent):
                         - CHAT_HISTORY_BUFFER,
                     )
                     if output_len < self.config.llm.min_output_tokens:
-                        raise ValueError(
-                            f"""
+                        raise ValueError(f"""
                             Tried to shorten prompt history for chat mode
                             but even after dropping complete turns except the system
                             msg and last turn, the history token len
@@ -2181,13 +2133,11 @@ class ChatAgent(Agent):
                             model's context length {self.llm.chat_context_length()}.
                             Please try shortening the system msg or user prompts,
                             or adjust `config.llm.min_output_tokens` to be smaller.
-                            """
-                        )
+                            """)
                     else:
                         # we MUST have dropped at least one turn
                         msg_tokens = self.chat_num_tokens()
-                        logger.warning(
-                            f"""
+                        logger.warning(f"""
                         Chat Model context length is {self.llm.chat_context_length()}
                         tokens, but the current message history is {msg_tokens} tokens
                         long, which does not allow
@@ -2198,8 +2148,7 @@ class ChatAgent(Agent):
                         we use `max_output_tokens = {output_len}`,
                         so they can fit within the model's context length
                         of {self.llm.chat_context_length()} tokens.
-                        """
-                        )
+                        """)
 
         if isinstance(message, ChatDocument):
             # record the position of the corresponding LLMMessage in

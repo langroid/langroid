@@ -55,13 +55,11 @@ async def start():
         lr.ChatAgentConfig(
             handle_llm_no_tool=NonToolAction.FORWARD_USER,
             llm=lm_config,
-            system_message=dedent(
-                """
+            system_message=dedent("""
                   Make best use of any of the TOOLs available to you,
                   to answer the user's questions.
                   You are a DevOps assistant"
-                  """
-            ),
+                  """),
         )
     )  # Pass config as a dictionary
     agent.enable_message(tools)

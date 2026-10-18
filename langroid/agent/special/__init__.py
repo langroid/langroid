@@ -26,7 +26,6 @@ from . import lance_doc_chat_agent
 from . import lance_rag
 from . import table_chat_agent
 
-
 __all__ = [
     "RelevanceExtractorAgent",
     "RelevanceExtractorAgentConfig",

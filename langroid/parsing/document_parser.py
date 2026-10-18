@@ -1040,30 +1040,26 @@ class UnstructuredPDFParser(DocumentParser):
         try:
             from unstructured.partition.pdf import partition_pdf
         except ImportError:
-            raise ImportError(
-                """
+            raise ImportError("""
                 The `unstructured` library is not installed by default with langroid.
                 To include this library, please install langroid with the
                 `unstructured` extra by running `pip install "langroid[unstructured]"`
                 or equivalent.
-                """
-            )
+                """)
 
         # from unstructured.chunking.title import chunk_by_title
 
         try:
             elements = partition_pdf(file=self.doc_bytes, include_page_breaks=True)
         except Exception as e:
-            raise Exception(
-                f"""
+            raise Exception(f"""
                 Error parsing PDF: {e}
                 The `unstructured` library failed to parse the pdf.
                 Please try a different library by setting the `library` field
                 in the `pdf` section of the `parsing` field in the config file.
                 Other supported libraries are:
                 fitz, pymupdf4llm, pypdf
-                """
-            )
+                """)
 
         # elements = chunk_by_title(elements)
         page_number = 1
@@ -1106,14 +1102,12 @@ class UnstructuredDocxParser(DocumentParser):
         try:
             from unstructured.partition.docx import partition_docx
         except ImportError:
-            raise ImportError(
-                """
+            raise ImportError("""
                 The `unstructured` library is not installed by default with langroid.
                 To include this library, please install langroid with the
                 `unstructured` extra by running `pip install "langroid[unstructured]"`
                 or equivalent.
-                """
-            )
+                """)
 
         elements = partition_docx(file=self.doc_bytes, include_page_breaks=True)
 
@@ -1160,14 +1154,12 @@ class UnstructuredDocParser(UnstructuredDocxParser):
         try:
             from unstructured.partition.doc import partition_doc
         except ImportError:
-            raise ImportError(
-                """
+            raise ImportError("""
                 The `unstructured` library is not installed by default with langroid.
                 To include this library, please install langroid with the
                 `unstructured` extra by running `pip install "langroid[unstructured]"`
                 or equivalent.
-                """
-            )
+                """)
 
         elements = partition_doc(file=self.doc_bytes, include_page_breaks=True)
 
@@ -1600,16 +1592,13 @@ class LLMPdfParser(DocumentParser):
                         self.llm_parser_config.prompt
                         or self.LLM_PDF_MD_SYSTEM_INSTRUCTION
                     )
-                    system_prompt = (
-                        self.llm_parser_config.system_prompt
-                        or """
+                    system_prompt = self.llm_parser_config.system_prompt or """
                          You are an expert pdf -> markdown converter.
                          Do NOT use any triple backquotes when you present the
                          markdown content,like ```markdown etc.
                          FAITHFULLY CONVERT THE PDF TO MARKDOWN,
                          retaining ALL content as you find it.
                         """
-                    )
 
                     # Send the request with PDF content and system instructions
                     response = await llm.async_client.chat.completions.create(  # type: ignore

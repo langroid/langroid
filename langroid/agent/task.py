@@ -328,13 +328,11 @@ class Task:
             config_copy = copy.deepcopy(agent.config)
             agent.config = config_copy
         except Exception:
-            logger.warning(
-                """
+            logger.warning("""
                 Failed to deep-copy Agent config during task creation,
                 proceeding with original config. Be aware that changes to
                 the config may affect other agents using the same config.
-                """
-            )
+                """)
         self.restart = restart
         agent = cast(ChatAgent, agent)
         self.agent: ChatAgent = agent
@@ -894,14 +892,12 @@ class Task:
                 and self._maybe_infinite_loop()
                 or self.n_no_answer_alternations > self.config.inf_loop_wait_factor
             ):
-                raise InfiniteLoopException(
-                    """Possible infinite loop detected!
+                raise InfiniteLoopException("""Possible infinite loop detected!
                     You can adjust infinite loop detection (or turn it off)
                     by changing the params in the TaskConfig passed to the Task
                     constructor; see here:
                     https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig
-                    """
-                )
+                    """)
 
         final_result = self.result(status)
         self._post_run_loop()
@@ -1116,14 +1112,12 @@ class Task:
                 and self._maybe_infinite_loop()
                 or self.n_no_answer_alternations > self.config.inf_loop_wait_factor
             ):
-                raise InfiniteLoopException(
-                    """Possible infinite loop detected!
+                raise InfiniteLoopException("""Possible infinite loop detected!
                     You can adjust infinite loop detection (or turn it off)
                     by changing the params in the TaskConfig passed to the Task
                     constructor; see here:
                     https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig
-                    """
-                )
+                    """)
 
         final_result = self.result(status)
         self._post_run_loop()
@@ -2371,7 +2365,7 @@ class Task:
             and (addressee_content := parse_addressed_message(content, SEND_TO))[0]
             is not None
         ):
-            (addressee, content_to_send) = addressee_content
+            addressee, content_to_send = addressee_content
             if content_to_send == "":
                 if has_tool_attempt:
                     # A bare address (no content after it) is a pass-through,
@@ -2390,7 +2384,7 @@ class Task:
             )[0]
             is not None
         ):
-            (addressee, content_to_send) = addressee_content
+            addressee, content_to_send = addressee_content
             if content_to_send == "":
                 if has_tool_attempt:
                     # A bare address (no content after it) is a pass-through,

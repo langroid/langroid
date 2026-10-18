@@ -186,15 +186,13 @@ def main(
         )
     )
 
-    print(
-        """
+    print("""
         [blue]Welcome to the Internet Search chatbot!
         I will try to answer your questions, relying on (full content of links from) 
         Duckduckgo (DDG) Search when needed.
         
         Enter x or q to quit, or ? for evidence
-        """
-    )
+        """)
 
     system_msg = Prompt.ask(
         """

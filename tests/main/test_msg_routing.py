@@ -52,7 +52,7 @@ def test_to_bracket_unaddressed_messages(message: str) -> None:
 def test_parse_address(address: str):
     """Test that the address is parsed correctly."""
     msg = f"ok {AT}all, {AT}xyz here is my message to {address} -- {address} Hello"
-    (addressee, content) = parse_addressed_message(
+    addressee, content = parse_addressed_message(
         msg,
         addressing=AT if AT in address else SEND_TO,
     )
@@ -78,7 +78,7 @@ def test_parse_address_at_end_of_string(
 ):
     """An addressee appearing as the final token (no trailing char) must still be
     recognized, and the *last* addressee must win even when it ends the string."""
-    (addressee, content) = parse_addressed_message(msg, addressing=prefix)
+    addressee, content = parse_addressed_message(msg, addressing=prefix)
     assert addressee == expected_addressee
     assert content == expected_content
 
@@ -104,7 +104,7 @@ def test_parse_address_grammar(
     msg: str, prefix: str, expected_addressee: str, expected_content: str
 ):
     """Addressee names are maximal Unicode word-character runs (`\\w+`)."""
-    (addressee, content) = parse_addressed_message(msg, addressing=prefix)
+    addressee, content = parse_addressed_message(msg, addressing=prefix)
     assert addressee == expected_addressee
     assert content == expected_content
 
@@ -125,7 +125,7 @@ def test_parse_address_grammar(
 def test_parse_address_no_match(msg: str, prefix: str):
     """When the prefix is absent or not followed by a word-character run,
     the parser must return (None, <original content unchanged>)."""
-    (addressee, content) = parse_addressed_message(msg, addressing=prefix)
+    addressee, content = parse_addressed_message(msg, addressing=prefix)
     assert addressee is None
     assert content == msg
 

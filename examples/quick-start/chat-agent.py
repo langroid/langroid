@@ -21,12 +21,10 @@ lr.utils.logging.setup_colored_logging()
 
 
 def chat() -> None:
-    print(
-        """
+    print("""
         [blue]Welcome to the basic chatbot!
         Enter x or q to quit
-        """
-    )
+        """)
     config = lr.ChatAgentConfig(
         llm=lr.language_models.OpenAIGPTConfig(
             chat_model=lr.language_models.OpenAIChatModel.GPT4o,

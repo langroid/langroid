@@ -1,5 +1,5 @@
 """
-Agent to manage privacy annotation, using PrivacyAgent as assistant, 
+Agent to manage privacy annotation, using PrivacyAgent as assistant,
 and checking its results for accuracy.
 """
 
@@ -16,8 +16,7 @@ setup_colored_logging()
 class PrivacyAgentConfig(ChatAgentConfig):
     name: str = "PrivacyAgent"
     sensitive_categories: List[str] = ["Medical", "CreditCard", "SSN", "Name"]
-    system_message: str = textwrap.dedent(
-        """
+    system_message: str = textwrap.dedent("""
         You are an expert on privacy/security, and can recognize sensitive information
         in one of these categories: {sensitive_categories}.
         
@@ -59,8 +58,7 @@ class PrivacyAgentConfig(ChatAgentConfig):
         
         Start by asking the user to send some text to annotate. 
              
-        """.lstrip()
-    )
+        """.lstrip())
 
 
 class PrivacyAgent(ChatAgent):

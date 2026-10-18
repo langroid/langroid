@@ -1,5 +1,5 @@
 """
-Enable a Langroid agent to use a SINGLE MCP Tool from 
+Enable a Langroid agent to use a SINGLE MCP Tool from
 Claude Code's MCP server.
 
 Similar to claude-code-mcp.py but showing how to use a single tool, i.e.,
@@ -22,7 +22,6 @@ import langroid.language_models as lm
 from langroid.agent.tools.mcp import mcp_tool
 from langroid.agent.tools.mcp.fastmcp_client import get_tools_async
 from langroid.mytypes import NonToolAction
-
 
 transport = StdioTransport(
     command="claude",

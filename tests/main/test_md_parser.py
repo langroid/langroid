@@ -695,9 +695,7 @@ def test_chunking_sizes(
             assert (
                 tokens >= lower_bound
             ), f"Chunk {i} has {tokens} tokens, expected at least {lower_bound}"
-        assert (
-            tokens <= 2 * upper_bound
-        ), (  # relaxed check
+        assert tokens <= 2 * upper_bound, (  # relaxed check
             f"Chunk {i} has {tokens} tokens, expected at most {upper_bound}"
         )
 

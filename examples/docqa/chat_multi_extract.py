@@ -113,12 +113,10 @@ class LeaseExtractorAgent(ChatAgent):
         super().__init__(config)
 
     def lease_info(self, message: LeaseMessage) -> str:
-        print(
-            f"""
+        print(f"""
         DONE! Successfully extracted Lease Info:
         {message.terms}
-        """
-        )
+        """)
         return "DONE " + json.dumps(message.terms.model_dump())
 
 

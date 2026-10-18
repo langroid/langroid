@@ -44,15 +44,13 @@ async def on_chat_start():
 
     await add_instructions(
         title="Instructions",
-        content=dedent(
-            """
+        content=dedent("""
         Interact with a **Langroid Task**, whose ChatAgent has access 
         to a `capital` tool. You can ask about anything, but whenever you ask 
         about a country's capital, the agent will use the `capital` tool to present 
         the capital of that country. This "tool-message" is handled by the Agent's 
         handler method, and the result is presented as plain text.
-        """
-        ),
+        """),
     )
     # inject callbacks into the agent
     task = lr.Task(

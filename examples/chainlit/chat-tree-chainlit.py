@@ -60,8 +60,7 @@ class MainChatAgent(ChatAgent):
 async def on_start():
     await add_instructions(
         title="Multi-agent chat for tree-structured computation with tools",
-        content=dedent(
-            """
+        content=dedent("""
         This task consists of performing this calculation for a given input number n:
         
         ```python
@@ -80,8 +79,7 @@ async def on_start():
         [Hierarchical Agent Computation](https://langroid.github.io/langroid/examples/agent-tree/).
         
         To start the computation, enter a number.  
-        """
-        ),
+        """),
     )
 
 

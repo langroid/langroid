@@ -98,14 +98,12 @@ def main(model: str = ""):
 
     task = lr.Task(agent, interactive=False)
 
-    print(
-        """
+    print("""
         [blue]Welcome to the company info extractor!
         Write a sentence containing company name, shares outstanding and share price,
         and the Agent will use a tool/function extract the info in structured form,
         and the tool-handler will compute the market-cap.[/blue]
-        """
-    )
+        """)
 
     while True:
         statement = Prompt.ask(
@@ -132,11 +130,9 @@ def main(model: str = ""):
         info = company_result.info
         mktcap = company_result.market_cap
         assert company_result.comment == "success"
-        print(
-            f"""
+        print(f"""
             Found company info: {info} and market cap: {mktcap}
-            """
-        )
+            """)
 
 
 if __name__ == "__main__":

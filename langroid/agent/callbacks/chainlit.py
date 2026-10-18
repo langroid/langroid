@@ -299,13 +299,11 @@ class ChainlitAgentCallbacks:
         )
         self.last_step = self.stream
         self.curr_step = None
-        logger.info(
-            f"""
+        logger.info(f"""
             Starting LLM stream for {self.agent.config.name}
             id = {self.stream.id}
             under parent {self._get_parent_id()}
-        """
-        )
+        """)
 
         def stream_token(t: str, e: StreamEventType) -> None:
             if self.stream is None:
@@ -325,13 +323,11 @@ class ChainlitAgentCallbacks:
         )
         self.last_step = self.stream
         self.curr_step = None
-        logger.info(
-            f"""
+        logger.info(f"""
             Starting LLM stream for {self.agent.config.name}
             id = {self.stream.id}
             under parent {self._get_parent_id()}
-            """
-        )
+            """)
 
         async def stream_token(t: str, e: StreamEventType) -> None:
             if self.stream is None:
@@ -376,13 +372,11 @@ class ChainlitAgentCallbacks:
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,
         )
-        logger.info(
-            f"""
+        logger.info(f"""
             Finish STREAM LLM response for {self.agent.config.name}
             id = {step.id}
             under parent {self._get_parent_id()}
-            """
-        )
+            """)
         run_sync(step.update())  # type: ignore
 
         # Display reasoning content if available (e.g., from thinking models)
@@ -424,13 +418,11 @@ class ChainlitAgentCallbacks:
         )
         self.last_step = step
         self.curr_step = None
-        logger.info(
-            f"""
+        logger.info(f"""
             Showing NON-STREAM LLM response for {self.agent.config.name}
             id = {step.id}
             under parent {self._get_parent_id()}
-            """
-        )
+            """)
         run_sync(step.send())  # type: ignore
 
         # Display reasoning content if available (e.g., from thinking models)
@@ -474,13 +466,11 @@ class ChainlitAgentCallbacks:
         )
         self.last_step = step
         self.curr_step = None
-        logger.info(
-            f"""
+        logger.info(f"""
             Showing AGENT response for {self.agent.config.name}
             id = {step.id}
             under parent {self._get_parent_id()}
-            """
-        )
+            """)
         run_sync(step.send())  # type: ignore
 
     def show_start_response(self, entity: str) -> None:
@@ -497,13 +487,11 @@ class ChainlitAgentCallbacks:
         )
         self.last_step = step
         self.curr_step = step
-        logger.info(
-            f"""
+        logger.info(f"""
             Showing START response for {self.agent.config.name} ({entity})
             id = {step.id}
             under parent {self._get_parent_id()}
-            """
-        )
+            """)
         run_sync(step.send())  # type: ignore
 
     def _entity_name(

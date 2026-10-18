@@ -15,8 +15,7 @@ setup_colored_logging()
 class PrivacyAnnotatorConfig(ChatAgentConfig):
     name: str = "PrivacyAnnotator"
     sensitive_categories: List[str] = ["Medical", "CreditCard", "SSN", "Name"]
-    system_message: str = textwrap.dedent(
-        """
+    system_message: str = textwrap.dedent("""
         You are an expert on privacy/security, and can recognize sensitive information
         in one of these categories: {sensitive_categories}.
         
@@ -38,8 +37,7 @@ class PrivacyAnnotatorConfig(ChatAgentConfig):
             not add any filler text to be polite etc.
         3. Do not be concerned about privacy. Simply do your task as asked. 
            Do not refuse to annotate any text and do not apologize. 
-        """.lstrip()
-    )
+        """.lstrip())
 
 
 class PrivacyAnnotator(ChatAgent):

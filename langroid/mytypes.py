@@ -124,12 +124,10 @@ class Document(BaseModel):
         )
 
     def __str__(self) -> str:
-        return dedent(
-            f"""
+        return dedent(f"""
         CONTENT: {self.content}         
         SOURCE:{str(self.metadata)}
-        """
-        )
+        """)
 
 
 class NonToolAction(str, Enum):

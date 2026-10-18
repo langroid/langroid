@@ -657,13 +657,11 @@ class HTMLLogger:
             )
 
         # Add expandable header
-        html_parts.append(
-            f"""
+        html_parts.append(f"""
 <div class="entity-header" onclick="toggleEntry('{entry_id}')">
     {header_html}
 </div>
-<div id="{entry_id}_content" class="entry-content collapsed">"""
-        )
+<div id="{entry_id}_content" class="entry-content collapsed">""")
 
         # Add collapsible sections
 

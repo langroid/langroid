@@ -673,11 +673,9 @@ def test_doc_chat_ingest_df(
     agent.vecdb = vecdb
     agent.clear()
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
-    response = agent.llm_response(
-        """
+    response = agent.llm_response("""
         What concept does the book dealing with the end of the universe explore?
-        """
-    )
+        """)
     assert "entropy" in response.content.lower()
 
 
@@ -707,11 +705,9 @@ def test_doc_chat_add_content_fields(
     agent.vecdb = vecdb
     agent.clear()
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
-    response = agent.llm_response(
-        """
+    response = agent.llm_response("""
         What was the title of the book by George Morewell and when was it written?
-        """
-    )
+        """)
     assert "2084" in response.content and "1989" in response.content
 
 
@@ -1153,29 +1149,25 @@ def test_enrichments_integration(vecdb: VectorStore) -> None:
                 You are an expert in medical tests, well-versed in 
                 test names and which organs they are associated with.
                 """,
-                enrichment_prompt_fn=lambda x: (
-                    f"""
+                enrichment_prompt_fn=lambda x: (f"""
                     Which organ function or health is the following blood test
                     most closely associated with? 
                     (Answer in ONE WORD; if unsure, say UNKNOWN)
                     
                     {x}
-                    """
-                ),
+                    """),
             ),
         )
     )
     agent.vecdb = vecdb
-    agent.augment_system_message(
-        """
+    agent.augment_system_message("""
         
         You are an expert in medical tests, well-versed in 
         test names and which organs they are associated with.
         
         You must answer questions based on the provided document-extracts,
         combined with your medical knowledge.
-        """
-    )
+        """)
     # clear existing docs
     agent.clear()
     agent.ingest_docs(sample_docs)

@@ -132,8 +132,7 @@ async def on_chat_start(
 
     await add_instructions(
         title="AI Powered Debate Platform",
-        content=dedent(
-            """
+        content=dedent("""
             Welcome to the Debate Platform.
             Interaction
             1. Decide if you want to you use same LLM for all agents or different ones
@@ -147,8 +146,7 @@ async def on_chat_start(
             8. Decide if you want to chat with the documents extracted from URLs found to learn more about the Topic.
             9. End the debate manually by typing "done". If you decide to chat with the documents, you can end session
             by typing "x"
-            """
-        ),
+            """),
     )
 
     global_settings = get_global_settings(nocache=True)

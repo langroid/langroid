@@ -17,12 +17,10 @@ if st.session_state.get("chat_model") is None:
     st.session_state["chat_model"] = None
 
 default_chat_model = lm.OpenAIChatModel.GPT4o.value
-chat_model = st.sidebar.text_input(
-    f"""
+chat_model = st.sidebar.text_input(f"""
 Chat model, e.g. `litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M`,
 or leave empty to default to {default_chat_model}
-"""
-)
+""")
 actual_chat_model = chat_model or default_chat_model
 st.session_state["chat_model"] = actual_chat_model
 st.sidebar.info(f"Using chat model: {str(actual_chat_model)}")

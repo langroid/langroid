@@ -236,8 +236,7 @@ async def on_update(settings):
 async def chat() -> None:
     await add_instructions(
         title="Welcome to the Internet Search + RAG chatbot!",
-        content=dedent(
-            """
+        content=dedent("""
         Ask me anything, especially about recent events that I may not have been trained on.
         
         I have access to two Tools, which I will try to use in order of priority:
@@ -247,8 +246,7 @@ async def chat() -> None:
         - `relevant_search_extracts` to do a web search (Using Metaphor Search)
         and ingest the results into the vector-DB, and then use 
         Retrieval Augmentation Generation (RAG) to answer the question.
-        """
-        ),
+        """),
     )
 
     await make_llm_settings_widgets(

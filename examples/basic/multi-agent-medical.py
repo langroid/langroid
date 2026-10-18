@@ -177,11 +177,9 @@ class ChatManager:
         )  # dialogues usually take less than 70 turns
 
         if response_tool is None:
-            print(
-                """
+            print("""
                 RETURNED ANSWER DOES NOT HAVE A TOOL! LLM DID NOT FORMAT THE DISCHARGE TEXT!!!
-                """
-            )
+                """)
             return ExpectedText(final_decision="unknown", long_answer="null")
         else:
             print("ResultTool has been received successfully!!!")

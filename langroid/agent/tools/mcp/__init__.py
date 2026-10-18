@@ -9,7 +9,6 @@ from .fastmcp_client import (
     get_mcp_tools_async,
 )
 
-
 __all__ = [
     "mcp_tool",
     "FastMCPClient",

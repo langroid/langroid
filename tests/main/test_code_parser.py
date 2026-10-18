@@ -48,9 +48,7 @@ def test_code_parser():
         * ) echo "Please answer y (yes) or n (no)."; return 1;;
       esac
     }
-    """.split(
-        "+"
-    )
+    """.split("+")
 
     codes = [text.strip() for text in codes if text.strip() != ""]
     lang_codes = [text.split("|") for text in codes]

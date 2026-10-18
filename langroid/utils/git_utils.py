@@ -87,13 +87,11 @@ def git_init_repo(dir: str) -> git.Repo | None:
         repo = git.Repo.init(repo_path)
         logger.info(f"Git repository initialized in {repo_path}")
 
-        gitignore_content = textwrap.dedent(
-            """
+        gitignore_content = textwrap.dedent("""
         /target/
         **/*.rs.bk
         Cargo.lock
-        """
-        ).strip()
+        """).strip()
 
         gitignore_path = repo_path / ".gitignore"
         create_file(gitignore_path, gitignore_content)

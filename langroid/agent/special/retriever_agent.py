@@ -37,14 +37,12 @@ class RetrieverAgent(DocChatAgent):
     def __init__(self, config: DocChatAgentConfig):
         super().__init__(config)
         self.config: DocChatAgentConfig = config
-        logger.warning(
-            """
+        logger.warning("""
         `RetrieverAgent` is deprecated. Use `DocChatAgent` instead, with
         `DocChatAgentConfig.retrieve_only=True`, and if you want to retrieve
         FULL relevant doc-contents rather than just extracts, then set
         `DocChatAgentConfig.extraction_granularity=-1`
-        """
-        )
+        """)
 
     def get_records(self) -> Sequence[Document]:
         # subclasses should override

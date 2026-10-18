@@ -174,13 +174,11 @@ def _get_cross_encoder_entry(
         try:
             from sentence_transformers import CrossEncoder
         except ImportError as exc:
-            raise ImportError(
-                """
+            raise ImportError("""
                 To use cross-encoder re-ranking, you must install
                 langroid with the [hf-embeddings] extra, e.g.:
                 pip install "langroid[hf-embeddings]"
-                """
-            ) from exc
+                """) from exc
 
         model = CrossEncoder(model_name, device=actual_device)
         entry = _CrossEncoderCacheEntry(model=model, lock=threading.RLock())
@@ -407,14 +405,12 @@ class DocChatAgent(ChatAgent):
             self.config.cross_encoder_reranking_model != ""
             and self.config.use_reciprocal_rank_fusion
         ):
-            logger.warning(
-                """
+            logger.warning("""
                 Ignoring `cross_encoder_reranking_model` since you have set  
                 `use_reciprocal_rank_fusion` to True.
                 To use cross-encoder reranking, set
                 `use_reciprocal_rank_fusion` to False.
-                """
-            )
+                """)
 
         if (
             self.config.cross_encoder_reranking_model == ""
@@ -426,8 +422,7 @@ class DocChatAgent(ChatAgent):
                 * (self.config.use_bm25_search + self.config.use_fuzzy_match)
             )
         ):
-            logger.warning(
-                """
+            logger.warning("""
                 DocChatAgent has been configured to have no cross encoder reranking,
                 AND `use_reciprocal_rank_fusion` is set to False,
                 AND `use_fuzzy_match` or `use_bm25_search` is True,
@@ -436,22 +431,19 @@ class DocChatAgent(ChatAgent):
                 ), 
                 BUT there is no way to rerank the chunks retrieved by multiple methods,
                 so we will set `use_reciprocal_rank_fusion` to True.
-                """
-            )
+                """)
             self.config.use_reciprocal_rank_fusion = True
 
         # Handle backward compatibility for deprecated n_similar_docs
         if self.config.parsing.n_similar_docs is not None:
-            logger.warning(
-                """
+            logger.warning("""
                 The parameter `parsing.n_similar_docs` is deprecated and will be
                 removed in a future version. Please use `n_similar_chunks` and
                 `n_relevant_chunks` instead, which provide more fine-grained
                 control over retrieval.
                 - n_similar_chunks: number of chunks to retrieve by each method
                 - n_relevant_chunks: final number of chunks to return after reranking
-                """
-            )
+                """)
             # Use the deprecated value for both parameters
             self.config.n_similar_chunks = self.config.parsing.n_similar_docs
             self.config.n_relevant_chunks = self.config.parsing.n_similar_docs
@@ -493,12 +485,10 @@ class DocChatAgent(ChatAgent):
                 old_vecdb.close()
             self.vecdb = VectorStore.create(self.vecdb.config)
         except Exception as e:
-            logger.warning(
-                f"""
+            logger.warning(f"""
                 Error while deleting collection {collection_name}:
                 {e}
-                """
-            )
+                """)
 
     def ingest(self) -> None:
         """
@@ -613,12 +603,10 @@ class DocChatAgent(ChatAgent):
             return []
         n_urls = len(urls)
         n_paths = len(paths)
-        print(
-            f"""
+        print(f"""
         [green]I have processed the following {n_urls} URLs
         and {n_paths} docs into {n_splits} parts:
-        """.strip()
-        )
+        """.strip())
         path_reps = [p if isinstance(p, str) else "bytes" for p in paths]
         print("\n".join([u for u in urls if isinstance(u, str)]))  # appease mypy
         print("\n".join(path_reps))
@@ -745,14 +733,12 @@ class DocChatAgent(ChatAgent):
                 - metadata: list of metadata column names, including "id"
         """
         if content not in df.columns:
-            raise ValueError(
-                f"""
+            raise ValueError(f"""
                 Content column {content} not in dataframe,
                 so we cannot ingest into the DocChatAgent.
                 Please specify the `content` parameter as a suitable
                 text-based column in the dataframe.
-                """
-            )
+                """)
         if content != "content":
             # rename content column to "content", leave existing column intact
             df = df.rename(columns={content: "content"}, inplace=False)
@@ -1061,18 +1047,13 @@ class DocChatAgent(ChatAgent):
         contents = [d.content for d in docs]
         sources = [d.metadata.source for d in docs]
         sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
-        return "\n".join(
-            [
-                f"""
+        return "\n".join([f"""
                 -----[EXTRACT #{i+1}]----------
                 {content}
                 {source}
                 -----END OF EXTRACT------------
                 
-                """
-                for i, (content, source) in enumerate(zip(contents, sources))
-            ]
-        )
+                """ for i, (content, source) in enumerate(zip(contents, sources))])
 
     def get_summary_answer(
         self, question: str, passages: List[Document]
@@ -1140,8 +1121,7 @@ class DocChatAgent(ChatAgent):
             with StreamingIfAllowed(self.llm, False):
                 # TODO: provide an easy way to
                 # Adjust this prompt depending on context.
-                answer = self.llm_response_forget(
-                    f"""
+                answer = self.llm_response_forget(f"""
                     Give an ideal answer to the following query,
                     in up to 3 sentences. Do not explain yourself,
                     and do not apologize, just show
@@ -1149,8 +1129,7 @@ class DocChatAgent(ChatAgent):
                     Preface your answer with "HYPOTHETICAL ANSWER: "
 
                     QUERY: {query}
-                    """
-                ).content
+                    """).content
         return answer
 
     def enrich_chunks(self, docs: List[Document]) -> List[Document]:
@@ -1223,13 +1202,11 @@ class DocChatAgent(ChatAgent):
             raise ValueError("LLM not set")
         with status("[cyan]LLM generating rephrases of query..."):
             with StreamingIfAllowed(self.llm, False):
-                rephrases = self.llm_response_forget(
-                    f"""
+                rephrases = self.llm_response_forget(f"""
                         Rephrase the following query in {self.config.n_query_rephrases}
                         different equivalent ways, separate them with 2 newlines.
                         QUERY: {query}
-                        """
-                ).content.split("\n\n")
+                        """).content.split("\n\n")
         return rephrases
 
     def get_similar_chunks_bm25(
@@ -1850,14 +1827,12 @@ class DocChatAgent(ChatAgent):
         if self.llm is None:
             raise ValueError("LLM not set")
         if len(self.original_docs) == 0:
-            logger.warning(
-                """
+            logger.warning("""
                 No docs to summarize! Perhaps you are re-using a previously
                 defined collection?
                 In that case, we don't have access to the original docs.
                 To create a summary, use a new collection, and specify a list of docs.
-                """
-            )
+                """)
             return None
         full_text = "\n\n".join([d.content for d in self.original_docs])
         if self.parser is None:

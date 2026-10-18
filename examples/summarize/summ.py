@@ -78,19 +78,15 @@ def app(
 
     agent = lr.ChatAgent(config)
     summary = agent.llm_response()
-    print(
-        f"""
+    print(f"""
     Generated Summary: 
     {summary.content}
-    """
-    )
+    """)
 
-    print(
-        f"""
+    print(f"""
     Gold Summary:
     {highlights}
-    """
-    )
+    """)
 
 
 if __name__ == "__main__":

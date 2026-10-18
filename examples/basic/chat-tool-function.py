@@ -9,7 +9,7 @@ or
 
 python3 examples/basic/chat-tool-function.py -m ollama/mistral:7b-instruct-v0.2-q8_0
 
-or 
+or
 
 uv run examples/basic/chat-tool-function.py -m deepseek/deepseek-reasoner
 
@@ -86,12 +86,10 @@ class CompanyInfoTool(lr.agent.ToolMessage):
         mkt_cap = (
             self.company_info.financials.shares * self.company_info.financials.price
         )
-        print(
-            f"""
+        print(f"""
             Got Valid Company Info.
             The market cap of {self.company_info.name} is ${mkt_cap/1e9}B.
-            """
-        )
+            """)
         return FinalResultTool(
             market_cap=mkt_cap,
             info=self.company_info,

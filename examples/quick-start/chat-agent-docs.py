@@ -55,12 +55,10 @@ documents = [
 
 
 def chat() -> None:
-    print(
-        """
+    print("""
         [blue]Welcome to the retrieval-augmented chatbot!
         Enter x or q to quit
-        """
-    )
+        """)
 
     config = lr.agent.special.DocChatAgentConfig(
         llm=lr.language_models.OpenAIGPTConfig(

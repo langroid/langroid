@@ -60,12 +60,10 @@ def main(
             stream=not no_stream,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to the basic chatbot!
         Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     load_dotenv()
 

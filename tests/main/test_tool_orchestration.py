@@ -521,12 +521,10 @@ def test_send_tools(
         lr.ChatAgentConfig(
             name="FiveHandler",
             llm=MockLMConfig(
-                response_fn=lambda x: (
-                    f"""
+                response_fn=lambda x: (f"""
                     result is {int(x)//5}, apply the number-handling rules to 
                     decide what to do next
-                    """
-                ),
+                    """),
             ),
         )
     )
@@ -536,12 +534,10 @@ def test_send_tools(
         lr.ChatAgentConfig(
             name="ZeroHandler",
             llm=MockLMConfig(
-                response_fn=lambda x: (
-                    f"""
+                response_fn=lambda x: (f"""
                  result is {int(x)//10}, apply the number-handling rules to
                  decide what to do next
-                 """
-                ),
+                 """),
             ),
         )
     )

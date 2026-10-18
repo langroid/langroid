@@ -51,8 +51,7 @@ class StudentChatAgent(lr.ChatAgent):
 async def on_chat_start():
     await add_instructions(
         title="Two-Agent Demo, where sub-agent uses a Tool/function-call",
-        content=dedent(
-            """
+        content=dedent("""
         **Teacher Agent** delegates to **Student Agent.** 
         - **Teacher** Agent asks a "country export" question to **Student** Agent
         - user (you) hits `c` to continue on to the **Student**
@@ -67,8 +66,7 @@ async def on_chat_start():
         
         Note how all steps of the (student) sub-task are nested one level below 
         the main (teacher) task.
-        """
-        ),
+        """),
     )
 
     config = lr.ChatAgentConfig()

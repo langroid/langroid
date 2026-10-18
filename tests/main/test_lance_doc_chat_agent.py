@@ -364,11 +364,9 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
     df = df[["year", "state", "text"]]
     agent.ingest_dataframe(df, content="text", metadata=[])
     task = LanceRAGTaskCreator.new(agent, interactive=False)
-    result = task.run(
-        """
+    result = task.run("""
         Tell me about some open issues from year 2023 related to JSON
-        """
-    )
+        """)
     # check there is non-empty response content
     assert result is not None and len(result.content) > 10
 

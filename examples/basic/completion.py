@@ -63,15 +63,13 @@ def main(
             stream=not no_stream,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to the basic completion engine.
         Text you enter will be completed by an LLM 
         (Default is a GPT3-class LLM, davinci-002). 
         You can enter multi-line inputs; Enter return TWICE to send your message.
         Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     load_dotenv()
 

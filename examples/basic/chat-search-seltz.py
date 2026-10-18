@@ -49,15 +49,13 @@ def main(
             stream=not no_stream,
         )
     )
-    print(
-        """
+    print("""
         [blue]Welcome to the Seltz Web Search chatbot!
         I will try to answer your questions using web search
         results powered by Seltz.
 
         Enter x or q to quit at any point.
-        """
-    )
+        """)
 
     load_dotenv()
 

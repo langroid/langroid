@@ -61,12 +61,10 @@ class LanceDocChatAgent(DocChatAgent):
                     "metadata.is_chunk",
                 }
             )
-            logger.warning(
-                f"""
+            logger.warning(f"""
             No filter_fields set in config, so using these fields as filterable fields:
             {filterable_fields}
-            """
-            )
+            """)
             self.config.filter_fields = filterable_fields
 
         if self.from_dataframe:
@@ -121,15 +119,13 @@ class LanceDocChatAgent(DocChatAgent):
         except Exception as e:
             logger.error(f"Error setting up documents: {e}")
             # say DONE with err msg so it goes back to LanceFilterAgent
-            return AgentDoneTool(
-                content=f"""
+            return AgentDoneTool(content=f"""
                 Possible Filter Error:\n {e}
                 
                 Note that only the following fields are allowed in the filter
                 of a query plan: 
                 {", ".join(self.config.filter_fields)}
-                """
-            )
+                """)
 
         # update the filter so it is used in the DocChatAgent
         self.config.filter = plan.filter or None
@@ -142,12 +138,10 @@ class LanceDocChatAgent(DocChatAgent):
             # The calc step can later be done with a separate Agent/Tool.
             if plan.query is None or plan.query.strip() == "":
                 if plan.filter is None or plan.filter.strip() == "":
-                    return AgentDoneTool(
-                        content="""
+                    return AgentDoneTool(content="""
                         Cannot execute Query Plan since filter as well as 
                         rephrased query are empty.                    
-                        """
-                    )
+                        """)
                 else:
                     # no query to match, so just get all docs matching filter
                     docs = self.vecdb.get_all_documents(plan.filter)
@@ -187,11 +181,9 @@ class LanceDocChatAgent(DocChatAgent):
 
         self.from_dataframe = True
         if df.shape[0] == 0:
-            raise ValueError(
-                """
+            raise ValueError("""
                 LanceDocChatAgent.ingest_dataframe() received an empty dataframe.
-                """
-            )
+                """)
         n = df.shape[0]
 
         # If any additional fields need to be added to content,

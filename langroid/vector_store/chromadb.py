@@ -69,12 +69,10 @@ class ChromaDB(VectorStore):
             n_empty_deletes += c.count() == 0
             n_non_empty_deletes += c.count() > 0
             self.client.delete_collection(name=c.name)
-        logger.warning(
-            f"""
+        logger.warning(f"""
             Deleted {n_empty_deletes} empty collections and
             {n_non_empty_deletes} non-empty collections.
-            """
-        )
+            """)
         return n_empty_deletes + n_non_empty_deletes
 
     def clear_empty_collections(self) -> int:

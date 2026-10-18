@@ -137,35 +137,23 @@ class ArangoChatAgent(ChatAgent):
     ) -> Optional[ChatDocument]:
         if self.num_tries > self.config.max_tries:
             if self.config.chat_mode:
-                return self.create_llm_response(
-                    content=f"""
+                return self.create_llm_response(content=f"""
                     {self.config.addressing_prefix}User
                     I give up, since I have exceeded the 
                     maximum number of tries ({self.config.max_tries}).
                     Feel free to give me some hints!
-                    """
-                )
+                    """)
             else:
-                return self.create_llm_response(
-                    tool_messages=[
-                        DoneTool(
-                            content=f"""
+                return self.create_llm_response(tool_messages=[DoneTool(content=f"""
                             Exceeded maximum number of tries ({self.config.max_tries}).
-                            """
-                        )
-                    ]
-                )
+                            """)])
 
         if isinstance(message, ChatDocument) and message.metadata.sender == Entity.USER:
-            message.content = (
-                message.content
-                + "\n"
-                + """
+            message.content = message.content + "\n" + """
                 (REMEMBER, Do NOT use more than ONE TOOL/FUNCTION at a time!
                 you must WAIT for a helper to send you the RESULT(S) before
                 making another TOOL/FUNCTION call)
                 """
-            )
 
         response = super().llm_response(message)
         if (
@@ -533,20 +521,15 @@ class ArangoChatAgent(ChatAgent):
             with open("logs/arango-schema.json", "w") as f:
                 f.write(schema_str)
             if (n_fields := count_fields(schema)) > self.config.max_schema_fields:
-                logger.warning(
-                    f"""
+                logger.warning(f"""
                     Schema has {n_fields} fields, which exceeds the maximum of
                     {self.config.max_schema_fields}. Showing a trimmed version
                     that only includes edge info and no other properties.
-                    """
-                )
+                    """)
                 schema = trim_schema(schema)
                 n_fields = count_fields(schema)
                 logger.warning(f"Schema trimmed down to {n_fields} fields.")
-                schema_str = (
-                    json.dumps(schema)
-                    + "\n"
-                    + f"""
+                schema_str = json.dumps(schema) + "\n" + f"""
                     
                     CAUTION: The requested schema was too large, so 
                     the schema has been trimmed down to show only all collection names,
@@ -560,7 +543,6 @@ class ArangoChatAgent(ChatAgent):
                       the schema by querying the database.
                       
                     """
-                )
                 if msg is None:
                     self.config.kg_schema = schema_str
                 return schema_str
