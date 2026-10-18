@@ -37,9 +37,9 @@
 
 > [!NOTE]
 > **Contributing: pull requests are by invitation**, and only for changes motivated
-> by actual use of Langroid in your organization. To propose a change,
-> [open an issue](https://github.com/langroid/langroid/issues/new/choose) with your
-> organization name and the real application that needs it. If it fits, we will
+> by actual use of Langroid in a real application. To propose a change,
+> [open an issue](https://github.com/langroid/langroid/issues/new/choose) naming
+> your organization (or that you are independent) and the application that needs it. If it fits, we will
 > implement it or invite you to send a PR. For custom work, contact Prasad
 > Chalasani (pchalasani at gmail dot com) to discuss terms. See
 > [CONTRIBUTING.md](CONTRIBUTING.md) for details.

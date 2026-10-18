@@ -5,8 +5,8 @@ Thank you for your interest in Langroid! Questions and discussion are welcome on
 
 # Pull requests are by invitation
 
-We accept pull requests only for changes motivated by actual use of Langroid in
-your organization, and only after we have agreed on the change in an issue. Pull
+We accept pull requests only for changes motivated by actual use of Langroid in a
+real application (your organization's, or your own), and only after we have agreed on the change in an issue. Pull
 requests that were not invited will be closed without review.
 
 **What counts as a use case.** Describe the real application you are building or
@@ -18,13 +18,13 @@ proposal on its own. The larger the change, the higher the bar.
 ## How to propose a change
 
 1. [Open an issue](https://github.com/langroid/langroid/issues/new/choose) with the
-   feature-request or bug-report form. Both ask for your organization name and
-   the real application involved, so we can see the need behind the change.
+   feature-request or bug-report form. Both ask for your organization (or that you
+   are independent) and the real application involved, so we can see the need behind the change.
 2. We read it and reply on the issue. If the change fits, either we implement it
    ourselves, or we invite you to send the pull request.
 
-Bug reports are held to the same rule: tell us which organization and application
-are affected, and how the bug impacts them.
+Bug reports are held to the same rule: tell us which application is affected (and
+whose), and how the bug impacts it.
 
 ## If we invite your pull request
 
