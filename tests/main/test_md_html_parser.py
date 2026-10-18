@@ -308,12 +308,9 @@ def test_html_bytes_auto_detected_without_doc_type() -> None:
 
     Requires libmagic (python-magic); skipped if the native library is absent.
     """
-    # python-magic raises ImportError (not ModuleNotFoundError) when the native
-    # library is missing; pytest 9 only skips on the latter by default
     magic = pytest.importorskip(
         "magic",
         reason="libmagic not available; skipping MIME-based bytes detection test",
-        exc_type=ImportError,
     )
     # Verify that magic itself is functional (not just importable).
     try:
