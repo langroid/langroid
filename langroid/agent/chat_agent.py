@@ -1712,6 +1712,7 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+        self._apply_content_filter_message(response)
 
         return response
 
@@ -1800,6 +1801,7 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+        self._apply_content_filter_message(response)
 
         return response
 

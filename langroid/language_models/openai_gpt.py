@@ -1503,6 +1503,29 @@ class OpenAIGPT(LanguageModel):
 
         return text_tokens, reasoning_tokens, in_reasoning
 
+    @staticmethod
+    def _warn_if_content_filtered(choice: Dict[str, Any]) -> None:
+        """Log a warning when the provider's content filter stopped this choice.
+
+        The stop itself reaches the caller as `LLMResponse.finish_reason`; it is
+        deliberately NOT turned into message text, since that text would be
+        streamed to the caller and stored as the assistant's turn (see
+        `ChatAgentConfig.content_filter_message` for the reply a Task gets).
+        The filter categories (as reported by Azure OpenAI) only go to the log.
+        """
+        if choice.get("finish_reason") != "content_filter":
+            return
+        filter_names = [
+            n
+            for n, r in (choice.get("content_filter_results") or {}).items()
+            if r.get("filtered")
+        ]
+        logging.warning(
+            "LLM API stopped the response due to content filters ["
+            + ", ".join(filter_names)
+            + "]"
+        )
+
     @no_type_check
     def _process_stream_event(
         self,
@@ -1577,18 +1600,7 @@ class OpenAIGPT(LanguageModel):
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
 
         finish_reason = choices[0].get("finish_reason", "")
-        if not event_text and finish_reason == "content_filter":
-            filter_names = [
-                n
-                for n, r in choices[0].get("content_filter_results", {}).items()
-                if r.get("filtered")
-            ]
-            event_text = (
-                "Cannot respond due to content filters ["
-                + ", ".join(filter_names)
-                + "]"
-            )
-            logging.warning("LLM API returned content filter error: " + event_text)
+        self._warn_if_content_filtered(choices[0])
 
         event_text_tokens, event_reasoning_tokens, in_reasoning = (
             self._split_inline_reasoning(
@@ -1739,18 +1751,7 @@ class OpenAIGPT(LanguageModel):
             event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
 
         finish_reason = choices[0].get("finish_reason", "")
-        if not event_text and finish_reason == "content_filter":
-            filter_names = [
-                n
-                for n, r in choices[0].get("content_filter_results", {}).items()
-                if r.get("filtered")
-            ]
-            event_text = (
-                "Cannot respond due to content filters ["
-                + ", ".join(filter_names)
-                + "]"
-            )
-            logging.warning("LLM API returned content filter error: " + event_text)
+        self._warn_if_content_filtered(choices[0])
 
         event_text_tokens, event_reasoning_tokens, in_reasoning = (
             self._split_inline_reasoning(
@@ -1864,10 +1865,13 @@ class OpenAIGPT(LanguageModel):
         done: bool = False
         in_reasoning: bool = False  # Track if we're inside reasoning delimiters
         content_present = False
+        finish_reason: Optional[str] = None
         try:
             for event in response:
                 event_dict = event if isinstance(event, dict) else event.model_dump()
                 choices = event_dict.get("choices") or []
+                if choices and choices[0].get("finish_reason"):
+                    finish_reason = choices[0]["finish_reason"]
                 if chat and choices:
                     delta = choices[0].get("delta") or {}
                     content_present = content_present or (
@@ -1921,6 +1925,7 @@ class OpenAIGPT(LanguageModel):
             function_name=function_name,
             usage=token_usage,
             content_present=content_present,
+            finish_reason=finish_reason,
         )
 
     @async_retry_with_exponential_backoff
@@ -1952,10 +1957,13 @@ class OpenAIGPT(LanguageModel):
         done: bool = False
         in_reasoning: bool = False  # Track if we're inside reasoning delimiters
         content_present = False
+        finish_reason: Optional[str] = None
         try:
             async for event in response:
                 event_dict = event if isinstance(event, dict) else event.model_dump()
                 choices = event_dict.get("choices") or []
+                if choices and choices[0].get("finish_reason"):
+                    finish_reason = choices[0]["finish_reason"]
                 if chat and choices:
                     delta = choices[0].get("delta") or {}
                     content_present = content_present or (
@@ -2009,6 +2017,7 @@ class OpenAIGPT(LanguageModel):
             function_name=function_name,
             usage=token_usage,
             content_present=content_present,
+            finish_reason=finish_reason,
         )
 
     @staticmethod
@@ -2151,6 +2160,7 @@ class OpenAIGPT(LanguageModel):
         function_name: str = "",
         usage: Dict[str, int] = {},
         content_present: bool = False,
+        finish_reason: Optional[str] = None,
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
         """
         Create an LLMResponse object from the streaming API response.
@@ -2165,6 +2175,7 @@ class OpenAIGPT(LanguageModel):
             function_name: name of the function
             usage: token usage dict
             content_present: whether a stream delta explicitly contained content
+            finish_reason: the last `finish_reason` the stream reported, if any
         Returns:
             Tuple consisting of:
                 LLMResponse object (with message, usage),
@@ -2218,6 +2229,8 @@ class OpenAIGPT(LanguageModel):
             msg = dict(text=completion)
             response_content = completion
             # TODO: Ignoring reasoning content for non-chat models
+        # kept in the cached copy too, so a cache hit reports why it stopped
+        msg["finish_reason"] = finish_reason
 
         # create an OpenAIResponse object so we can cache it as if it were
         # a non-streaming response
@@ -2260,6 +2273,7 @@ class OpenAIGPT(LanguageModel):
                 reasoning=reasoning,
                 message_with_reasoning=message_with_reasoning,
                 cached=False,
+                finish_reason=finish_reason,
                 # don't allow empty list [] here
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
                 function_call=function_call if has_function else None,
@@ -2439,7 +2453,11 @@ class OpenAIGPT(LanguageModel):
             msg = (response["choices"][0]["message"]["content"] or "").strip()
         else:
             msg = (response["choices"][0]["text"] or "").strip()
-        return LLMResponse(message=msg, cached=cached)
+        return LLMResponse(
+            message=msg,
+            cached=cached,
+            finish_reason=response["choices"][0].get("finish_reason"),
+        )
 
     async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         self.run_on_first_use()
@@ -2521,7 +2539,11 @@ class OpenAIGPT(LanguageModel):
             msg = (response["choices"][0]["message"]["content"] or "").strip()
         else:
             msg = (response["choices"][0]["text"] or "").strip()
-        return LLMResponse(message=msg, cached=cached)
+        return LLMResponse(
+            message=msg,
+            cached=cached,
+            finish_reason=response["choices"][0].get("finish_reason"),
+        )
 
     def chat(
         self,
@@ -3055,8 +3077,11 @@ class OpenAIGPT(LanguageModel):
         }
         """
         choices = response.get("choices")
+        finish_reason = None
         if isinstance(choices, list) and len(choices) > 0:
             message = choices[0].get("message", {})
+            finish_reason = choices[0].get("finish_reason")
+            self._warn_if_content_filtered(choices[0])
         else:
             message = {}
         if message is None:
@@ -3123,6 +3148,7 @@ class OpenAIGPT(LanguageModel):
             function_call=fun_call,
             oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
             cached=cached,
+            finish_reason=finish_reason,
             usage=self._get_non_stream_token_usage(cached, response),
         )
 
