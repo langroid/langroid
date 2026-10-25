@@ -402,6 +402,11 @@ class LLMResponse(BaseModel):
     function_call: Optional[LLMFunctionCall] = None
     usage: Optional[LLMTokenUsage] = None
     cached: bool = False
+    # Why the provider stopped generating, as it reported it: e.g. "stop",
+    # "length", "tool_calls", or "content_filter" (the reply was cut off, or
+    # never produced, by the provider's content filter). None when the
+    # provider did not say.
+    finish_reason: Optional[str] = None
 
     def __str__(self) -> str:
         if self.function_call is not None:

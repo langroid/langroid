@@ -94,73 +94,90 @@ def _content_filter_events(
     ]
 
 
-@pytest.mark.parametrize(
-    ("filter_names", "expected"),
-    [
-        ({"hate": {"filtered": True}}, "Cannot respond due to content filters [hate]"),
-        (
-            {"hate": {"filtered": True}, "jailbreak": {"filtered": True}},
-            "Cannot respond due to content filters [hate, jailbreak]",
-        ),
-        (
-            {"hate": {"filtered": False}, "jailbreak": {"filtered": False}},
-            "Cannot respond due to content filters []",
-        ),
-    ],
-    ids=["one-filter", "two-filters", "none-reported-filtered"],
-)
-def test_sync_content_filter_stream_yields_nonempty_message(
+FILTER_NAMES = [
+    {"hate": {"filtered": True}},
+    {"hate": {"filtered": True}, "jailbreak": {"filtered": True}},
+    {"hate": {"filtered": False}, "jailbreak": {"filtered": False}},
+]
+FILTER_IDS = ["one-filter", "two-filters", "none-reported-filtered"]
+
+
+@pytest.mark.parametrize("filter_names", FILTER_NAMES, ids=FILTER_IDS)
+def test_sync_content_filter_stream_reports_finish_reason_not_text(
     filter_names: dict[str, dict[str, Any]],
-    expected: str,
 ) -> None:
-    """A content-filtered stream still produces a non-empty message."""
+    """A content-filter stop is reported as `finish_reason`, not as text.
+
+    Text made up for it would be streamed to whoever listens to the stream (a
+    voice call speaks it) and stored as the assistant's turn. The cached copy
+    keeps the reason, so a cache hit reports it too.
+    """
     model = OpenAIGPT(OpenAIGPTConfig(stream=True))
-    response, _ = model._stream_response(
+    streamed: list[str] = []
+    model.config.streamer = lambda text, _kind: streamed.append(text)
+    response, cached_response = model._stream_response(
         _content_filter_events(filter_names),
         chat=True,
     )
 
-    assert response.message == expected
+    assert response.message == ""
+    assert response.finish_reason == "content_filter"
+    assert streamed == []
+    replayed = model._process_chat_completion_response(
+        cached=True,
+        response=cached_response,
+    )
+    assert replayed.finish_reason == "content_filter"
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("filter_names", "expected"),
-    [
-        ({"hate": {"filtered": True}}, "Cannot respond due to content filters [hate]"),
-        (
-            {"hate": {"filtered": True}, "jailbreak": {"filtered": True}},
-            "Cannot respond due to content filters [hate, jailbreak]",
-        ),
-        (
-            {"hate": {"filtered": False}, "jailbreak": {"filtered": False}},
-            "Cannot respond due to content filters []",
-        ),
-    ],
-    ids=["one-filter", "two-filters", "none-reported-filtered"],
-)
-async def test_async_content_filter_stream_yields_nonempty_message(
+@pytest.mark.parametrize("filter_names", FILTER_NAMES, ids=FILTER_IDS)
+async def test_async_content_filter_stream_reports_finish_reason_not_text(
     filter_names: dict[str, dict[str, Any]],
-    expected: str,
 ) -> None:
-    """The async twin of the sync test above: same guarantee, same wording.
-
-    Regression test for the async path losing the content-filter handling that
-    the sync path already had (issue #658).
-    """
+    """The async twin of the sync test above (issue #658's stream shape)."""
     model = OpenAIGPT(OpenAIGPTConfig(stream=True))
-    response, _ = await model._stream_response_async(
+    streamed: list[str] = []
+
+    async def record(text: str, _kind: Any) -> None:
+        streamed.append(text)
+
+    model.config.streamer_async = record
+    response, cached_response = await model._stream_response_async(
         _AsyncEvents(_content_filter_events(filter_names)),
         chat=True,
     )
 
-    assert response.message == expected
+    assert response.message == ""
+    assert response.finish_reason == "content_filter"
+    assert streamed == []
+    replayed = model._process_chat_completion_response(
+        cached=True,
+        response=cached_response,
+    )
+    assert replayed.finish_reason == "content_filter"
+
+
+def _content_filter_after_text_events() -> list[dict[str, Any]]:
+    """A stream the content filter cut off after part of the answer."""
+    return [
+        {"choices": [{"delta": {"content": "Sure thing"}, "finish_reason": None}]},
+        {
+            "choices": [
+                {
+                    "delta": {"content": None},
+                    "finish_reason": "content_filter",
+                    "content_filter_results": {"violence": {"filtered": True}},
+                }
+            ]
+        },
+    ]
 
 
 @pytest.mark.asyncio
-async def test_async_content_filter_message_matches_sync_twin() -> None:
-    """Both stream paths must agree on the content-filtered message."""
-    events = _content_filter_events({"hate": {"filtered": True}})
+async def test_content_filter_after_text_keeps_the_text_and_adds_nothing() -> None:
+    """Both stream paths keep what was streamed before the cut, and only that."""
+    events = _content_filter_after_text_events()
 
     sync_model = OpenAIGPT(OpenAIGPTConfig(stream=True))
     sync_response, _ = sync_model._stream_response(events, chat=True)
@@ -171,8 +188,32 @@ async def test_async_content_filter_message_matches_sync_twin() -> None:
         chat=True,
     )
 
-    assert async_response.message == sync_response.message
-    assert async_response.message is not None
+    assert async_response.message == sync_response.message == "Sure thing"
+    assert async_response.finish_reason == sync_response.finish_reason
+    assert async_response.finish_reason == "content_filter"
+
+
+def test_non_stream_content_filter_reports_finish_reason() -> None:
+    """The non-stream path reports the same stop the same way."""
+    model = OpenAIGPT(OpenAIGPTConfig(stream=False))
+    api_response = {
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": None},
+                "finish_reason": "content_filter",
+                "content_filter_results": {"hate": {"filtered": True}},
+            }
+        ],
+        "usage": {},
+    }
+
+    response = model._process_chat_completion_response(
+        cached=False,
+        response=api_response,
+    )
+
+    assert response.message is None
+    assert response.finish_reason == "content_filter"
 
 
 @pytest.mark.parametrize(
@@ -314,6 +355,26 @@ async def test_async_null_choices_message_matches_sync_twin(
     )
 
     assert async_response.message == sync_response.message == "hi"
+
+
+@pytest.mark.parametrize(
+    ("events", "expected"),
+    [
+        (_null_choices_events(with_usage=False), "stop"),
+        (_tool_call_events(None, False), "tool_calls"),
+        (_function_call_events(None, False), "function_call"),
+    ],
+    ids=["stop", "tool-calls", "function-call"],
+)
+def test_stream_reports_finish_reason(
+    events: list[dict[str, Any]],
+    expected: str,
+) -> None:
+    """Every stream reports the provider's finish_reason, not just a filter stop."""
+    model = OpenAIGPT(OpenAIGPTConfig(stream=True))
+    response, _ = model._stream_response(events, chat=True)
+
+    assert response.finish_reason == expected
 
 
 def test_tool_call_response_with_absent_content_stays_none() -> None:

@@ -173,6 +173,14 @@ class ChatAgentConfig(AgentConfig):
             - "drop_turns": Drop complete conversation turns (USER + all responses
               until next USER). More aggressive but cleaner for voice agents.
             Default is "truncate" for backward compatibility.
+        content_filter_message: The reply given when the provider's content
+            filter stops a response before it produced any text or tool call
+            (`finish_reason == "content_filter"`), so that a Task does not treat
+            the empty reply as invalid and re-send the same message. Only the
+            returned ChatDocument carries it: it is never streamed, and the
+            message history keeps the reply as the provider sent it. None leaves
+            the reply empty, for applications that handle the stop themselves
+            (see `ChatDocument.metadata.finish_reason`).
     """
 
     system_message: str = "You are a helpful assistant."
@@ -193,6 +201,7 @@ class ChatAgentConfig(AgentConfig):
     search_for_tools_everywhere: bool = True
     recognize_recipient_in_content: bool = True
     context_overflow_strategy: Literal["truncate", "drop_turns"] = "truncate"
+    content_filter_message: Optional[str] = "Cannot respond due to content filters."
 
     def _set_fn_or_tools(self) -> None:
         """
@@ -1623,6 +1632,26 @@ class ChatAgent(Agent):
                     message.metadata.msg_idx, max_tokens, truncation_warning
                 )
 
+    def _apply_content_filter_message(self, response: ChatDocument) -> None:
+        """
+        Give a reply that the provider's content filter stopped before it
+        produced any text or tool call the configured `content_filter_message`,
+        so that a Task does not reject it as empty and re-send the same message
+        (issue #658). Called once the reply is in the message history, which
+        keeps it as the provider sent it.
+        """
+        if (
+            self.config.content_filter_message is None
+            or response.metadata.finish_reason != "content_filter"
+            or response.content.strip() != ""
+            or response.function_call is not None
+            or response.oai_tool_calls
+        ):
+            return
+        response.content = self.config.content_filter_message
+        response.content_any = response.content
+        response.content_is_none = False
+
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
@@ -1712,6 +1741,7 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+        self._apply_content_filter_message(response)
 
         return response
 
@@ -1800,6 +1830,7 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+        self._apply_content_filter_message(response)
 
         return response
 

@@ -79,6 +79,8 @@ class ChatDocMetaData(DocMetaData):
     recipient: str = ""
     usage: Optional[LLMTokenUsage] = None
     cached: bool = False
+    # the provider's finish_reason for an LLM response (see LLMResponse)
+    finish_reason: Optional[str] = None
     displayed: bool = False
     has_citation: bool = False
     status: Optional[StatusCode] = None
@@ -384,6 +386,7 @@ class ChatDocument(Document):
                 usage=response.usage,
                 displayed=displayed,
                 cached=response.cached,
+                finish_reason=response.finish_reason,
                 recipient=recipient,
             ),
         )
