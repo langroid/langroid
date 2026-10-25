@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from langroid.agent.base import Agent, AgentConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.language_models.base import LLMResponse
@@ -117,6 +118,38 @@ async def test_task_does_not_resend_a_filtered_message(
     """Issue #658: the filtered reply must end the step, not trigger a re-send."""
     reply = LLMResponse(message="", finish_reason="content_filter")
     agent, calls = _agent(monkeypatch, reply)
+    task = Task(agent, interactive=False, done_if_response=[Entity.LLM])
+
+    if use_async:
+        result = await task.run_async("hi", turns=10)
+    else:
+        result = task.run("hi", turns=10)
+
+    assert result is not None
+    assert result.content == NOTICE
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_async", [False, True], ids=["run", "run_async"])
+async def test_base_agent_task_does_not_resend_a_filtered_message(
+    monkeypatch: pytest.MonkeyPatch,
+    use_async: bool,
+) -> None:
+    """Issue #658 for a plain `Agent`, which calls `generate`, not `chat`."""
+    agent = Agent(AgentConfig(llm=MockLMConfig(default_response="unused")))
+    calls: list[int] = []
+
+    def generate(*args: Any, **kwargs: Any) -> LLMResponse:
+        calls.append(1)
+        return LLMResponse(message="", finish_reason="content_filter")
+
+    async def agenerate(*args: Any, **kwargs: Any) -> LLMResponse:
+        return generate()
+
+    assert agent.llm is not None
+    monkeypatch.setattr(agent.llm, "generate", generate)
+    monkeypatch.setattr(agent.llm, "agenerate", agenerate)
     task = Task(agent, interactive=False, done_if_response=[Entity.LLM])
 
     if use_async:

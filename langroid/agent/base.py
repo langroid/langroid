@@ -99,6 +99,14 @@ class AgentConfig(BaseSettings):
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
     # allow multiple tool messages in a single response?
     allow_multiple_tools: bool = True
+    # Reply given when the provider's content filter stops a response before it
+    # produced any text or tool call (`finish_reason == "content_filter"`), so
+    # that a Task does not treat the empty reply as invalid and re-send the same
+    # message (#658). Only the returned ChatDocument carries it: it is never
+    # streamed, and a ChatAgent's message history keeps the reply as the
+    # provider sent it. None leaves the reply empty, for applications that
+    # handle the stop themselves (see `ChatDocument.metadata.finish_reason`).
+    content_filter_message: Optional[str] = "Cannot respond due to content filters."
     human_prompt: str = (
         "Human (respond or q, x to exit current level, " "or hit enter to continue)"
     )
@@ -1158,6 +1166,26 @@ class Agent(ABC):
             tainted=tainted,
         )
 
+    def _apply_content_filter_message(self, response: ChatDocument) -> None:
+        """
+        Give a reply that the provider's content filter stopped before it
+        produced any text or tool call the configured `content_filter_message`,
+        so that a Task does not reject it as empty and re-send the same message
+        (issue #658). A ChatAgent calls this once the reply is in its message
+        history, which keeps the reply as the provider sent it.
+        """
+        if (
+            self.config.content_filter_message is None
+            or response.metadata.finish_reason != "content_filter"
+            or response.content.strip() != ""
+            or response.function_call is not None
+            or response.oai_tool_calls
+        ):
+            return
+        response.content = self.config.content_filter_message
+        response.content_any = response.content
+        response.content_is_none = False
+
     @no_type_check
     async def llm_response_async(
         self,
@@ -1211,6 +1239,7 @@ class Agent(ABC):
         cdoc.metadata.tool_ids = (
             [] if isinstance(message, str) else message.metadata.tool_ids
         )
+        self._apply_content_filter_message(cdoc)
         return cdoc
 
     @no_type_check
@@ -1281,6 +1310,7 @@ class Agent(ABC):
         cdoc.metadata.tool_ids = (
             [] if isinstance(message, str) else message.metadata.tool_ids
         )
+        self._apply_content_filter_message(cdoc)
         return cdoc
 
     def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool:
