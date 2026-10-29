@@ -7,6 +7,10 @@ requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=1.2.0",
+    # weather.py imports `fastmcp`, which is a separate distribution from
+    # `mcp` -- declared so this project stays installable on its own, not
+    # only inside Langroid's environment. Same floor as Langroid's.
+    "fastmcp>=2.2.5",
 ]
 
 [build-system]

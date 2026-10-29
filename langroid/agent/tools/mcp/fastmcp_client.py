@@ -43,7 +43,18 @@ from mcp.client.session import (
     LoggingFnT,
     MessageHandlerFnT,
 )
-from mcp.shared.exceptions import McpError
+
+try:
+    # MCP SDK v1, i.e. fastmcp 2.x and 3.x. `MCPError` is the SDK v2 spelling,
+    # fastmcp 4's. mypy only ever sees ONE of the two SDKs, so whichever name
+    # the installed one lacks is an error on a branch that will not run --
+    # BOTH imports therefore need the suppression, not just the second.
+    from mcp.shared.exceptions import McpError  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - only one branch runs per install
+    from mcp.shared.exceptions import (  # type: ignore[attr-defined,no-redef]
+        MCPError as McpError,
+    )
+
 from mcp.types import (
     BlobResourceContents,
     CallToolResult,
@@ -121,6 +132,36 @@ def _schema_allows_null(schema: Any, root: Dict[str, Any]) -> bool:
         # Unresolvable reference, or RecursionError from a self-referential
         # $ref chain. Fall back to the old drop-the-null behavior.
         return False
+
+
+def _mcp_field(obj: Any, snake: str, camel: str, default: Any = None) -> Any:
+    """One field of an ``mcp.types`` model, under whichever name it carries.
+
+    MCP SDK v2 (the SDK ``fastmcp>=4`` is built on) renamed every camelCase
+    model field to snake_case: ``Tool.inputSchema`` became
+    ``Tool.input_schema``, ``CallToolResult.isError`` became ``is_error``, and
+    so on. The old names still resolve there, but only through a shim that
+    emits a ``FastMCPDeprecationWarning`` on every access and is slated for
+    removal in FastMCP 5. SDK v1 (``fastmcp`` 2.x and 3.x, which this package's
+    ``fastmcp>=2.2.5`` floor still admits) has only the camelCase name.
+
+    Reading the snake_case name first therefore gets the modern field with no
+    warning, and falls back to the only name the older SDK offers.
+
+    Args:
+        obj: The ``mcp.types`` model instance to read.
+        snake: The field's MCP SDK v2 name.
+        camel: The field's MCP SDK v1 name.
+        default: Returned when neither name is present.
+
+    Returns:
+        The field's value, or `default`.
+    """
+    sentinel = object()
+    value = getattr(obj, snake, sentinel)
+    if value is not sentinel:
+        return value
+    return getattr(obj, camel, default)
 
 
 def _nullable_field_names(properties: Dict[str, Any], root: Dict[str, Any]) -> Set[str]:
@@ -633,7 +674,7 @@ class FastMCPClient:
             else mcp_tool_name
         )
 
-        input_schema = getattr(target, "inputSchema", None)
+        input_schema = _mcp_field(target, "input_schema", "inputSchema")
         schema = input_schema if isinstance(input_schema, dict) else {}
         # The whole input schema, kept because the loop below shadows
         # `schema` with each property and because `$ref` pointers are
@@ -942,7 +983,7 @@ class FastMCPClient:
         tool_name: str,
         result: CallToolResult,
     ) -> Optional[str | tuple[str, list[FileAttachment]]]:
-        if result.isError:
+        if _mcp_field(result, "is_error", "isError"):
             # Log more detailed error information
             error_content = None
             if result.content and len(result.content) > 0:
@@ -972,7 +1013,8 @@ class FastMCPClient:
             if isinstance(item, ImageContent) and self.forward_images:
                 results_file.append(
                     FileAttachment.from_bytes(
-                        b64decode(item.data), mime_type=item.mimeType
+                        b64decode(item.data),
+                        mime_type=_mcp_field(item, "mime_type", "mimeType"),
                     )
                 )
             elif isinstance(item, EmbeddedResource):
@@ -988,7 +1030,9 @@ class FastMCPClient:
                     results_file.append(
                         FileAttachment.from_io(
                             BytesIO(b64decode(item.resource.blob)),
-                            mime_type=item.resource.mimeType,
+                            mime_type=_mcp_field(
+                                item.resource, "mime_type", "mimeType"
+                            ),
                         )
                     )
 
@@ -998,8 +1042,8 @@ class FastMCPClient:
         # 2) No plain text — use structuredContent if available. To maintain
         # backwards compatibility, unwrap simple shapes like {"result": 5}
         # into "5"; otherwise serialize the full object as JSON for fidelity.
-        if result.structuredContent is not None:
-            sc = result.structuredContent
+        sc = _mcp_field(result, "structured_content", "structuredContent")
+        if sc is not None:
             try:
                 # Unwrap primitives directly
                 if isinstance(sc, (str, int, float, bool)):

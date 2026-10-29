@@ -1,12 +1,27 @@
 """MCP calls preserve explicit null arguments without changing defaults."""
 
 import json
+from typing import Any, Dict
 
 import pytest
 from fastmcp import FastMCP
+from mcp.types import Tool
 from pydantic import BaseModel
 
 from langroid.agent.tools.mcp import FastMCPClient
+from langroid.agent.tools.mcp.fastmcp_client import _mcp_field
+
+
+def _input_schema(definition: Tool) -> Dict[str, Any]:
+    """The tool's input schema, under whichever name the MCP SDK uses.
+
+    SDK v2 (fastmcp 4) renamed `inputSchema` to `input_schema` and keeps the
+    old name only as a deprecation shim; SDK v1 has only the old name. This
+    is the same question `langroid` itself answers, so reuse its accessor
+    rather than keeping a second copy of the rule.
+    """
+    schema: Dict[str, Any] = _mcp_field(definition, "input_schema", "inputSchema")
+    return schema
 
 
 @pytest.mark.parametrize(
@@ -152,8 +167,11 @@ async def test_nested_null_arguments_reach_mcp_tool() -> None:
         # A server may omit default annotations for optional parameters.
         entry_schema = Entry.model_json_schema()
         del entry_schema["properties"]["label"]["default"]
-        definition.inputSchema["properties"]["entry"] = entry_schema
-        definition.inputSchema["properties"]["entries"]["items"] = entry_schema
+        # MCP SDK v2 (fastmcp 4) renamed this field to `input_schema` and
+        # keeps `inputSchema` only as a deprecation shim.
+        input_schema = _input_schema(definition)
+        input_schema["properties"]["entry"] = entry_schema
+        input_schema["properties"]["entries"]["items"] = entry_schema
         tool = client.tool_model_from_mcp_tool(definition)
         arguments = {
             "entry": {"value": None},
@@ -197,7 +215,8 @@ async def test_null_for_non_nullable_optional_uses_the_default() -> None:
         # null for it is NOT a valid argument.
         definition = await client.get_mcp_tool_async("repeat")
         assert definition is not None
-        assert definition.inputSchema["properties"]["times"]["type"] == "integer"
+        schema = _input_schema(definition)
+        assert schema["properties"]["times"]["type"] == "integer"
         assert await tool(word="hi", times=None).handle_async() == "hi hi"
         # Assignment is the other route to an explicitly-set None, since
         # ToolMessage sets validate_assignment=True.

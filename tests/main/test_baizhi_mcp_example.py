@@ -22,6 +22,20 @@ SPEC.loader.exec_module(example)
 ServerFixture = tuple[FastMCP, list[tuple[str, str]], list[str]]
 
 
+def _remove_tool(mcp: FastMCP, name: str) -> None:
+    """Unregister a tool, under whichever API the installed fastmcp offers.
+
+    fastmcp 4 removed `FastMCP.remove_tool` in favour of
+    `FastMCP.local_provider.remove_tool`; fastmcp 3 has both and deprecates
+    the former.
+    """
+    provider = getattr(mcp, "local_provider", None)
+    if provider is not None:
+        provider.remove_tool(name)
+    else:
+        mcp.remove_tool(name)
+
+
 @pytest.fixture
 def server() -> ServerFixture:
     """Use synthetic schemas and observe the actual server lifespan."""
@@ -102,7 +116,7 @@ async def test_unrelated_tool_not_dispatched(server: ServerFixture) -> None:
 @pytest.mark.asyncio
 async def test_missing_tool_stops_before_model(server: ServerFixture) -> None:
     mcp, calls, lifecycle = server
-    mcp.remove_tool("web_extract")
+    _remove_tool(mcp, "web_extract")
     prompts: list[str] = []
 
     def record(prompt: str) -> str:
@@ -139,7 +153,7 @@ async def test_session_closes_when_cancelled_during_tool(
 ) -> None:
     mcp, calls, lifecycle = server
     tool_started = asyncio.Event()
-    mcp.remove_tool("web_scrape")
+    _remove_tool(mcp, "web_scrape")
 
     @mcp.tool(name="web_scrape")
     async def wait_for_cancellation(value: str) -> str:
