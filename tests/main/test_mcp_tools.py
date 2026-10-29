@@ -153,11 +153,13 @@ def mcp_server():
         """
         # `Context.sample` is gone in fastmcp 4; the one test that reaches
         # this tool is skipped there (see test_tool_with_context_and_sampling).
-        result: TextContent | ImageContent = await ctx.sample(
-            f"Is the number {number} prime?",
-        )
-        assert isinstance(result, TextContent), "Expected a text response"
-        return result.text
+        # fastmcp 2.x returned the content block itself, fastmcp 3.x wraps it
+        # in a `SamplingResult`; both carry the sampled text on `.text`, and
+        # an `ImageContent` response carries none -- which is what this
+        # assertion is really screening out.
+        result = await ctx.sample(f"Is the number {number} prime?")
+        assert hasattr(result, "text"), f"Expected a text response, got {result!r}"
+        return str(result.text)
 
     @server.tool()
     def greet(person: str) -> str:
@@ -393,8 +395,12 @@ async def test_tool_with_context_and_sampling() -> None:
     assert isinstance(prime_check_msg, lr.ToolMessage)
 
     result = await prime_check_msg.handle_async()
-    assert isinstance(result, str)
-    assert "yes" in result.lower()
+    # Exact match, NOT a substring: when the server-side tool raises, Langroid
+    # returns "ERROR: Tool call failed - [...]" with the sampled text quoted
+    # inside it, which a `"yes" in result.lower()` check cannot tell apart
+    # from a successful sample. That is how a broken `ctx.sample` return type
+    # went unnoticed on fastmcp 3.x.
+    assert result == "Yes"
 
 
 @pytest.mark.asyncio
