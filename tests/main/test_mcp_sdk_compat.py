@@ -10,10 +10,13 @@ against whichever SDK is actually installed.
 
 import ast
 import inspect
+from types import ModuleType
 from typing import Any
 
 from mcp.types import CallToolResult, TextContent, Tool
 
+import langroid.agent.tools.mcp as mcp_package
+import langroid.agent.tools.mcp.decorators as decorators
 import langroid.agent.tools.mcp.fastmcp_client as fastmcp_client
 from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient, _mcp_field
 
@@ -102,6 +105,10 @@ def test_mcp_field_reads_a_real_call_result_from_the_installed_sdk() -> None:
 # the source, the other makes touching a camelCase name raise.
 
 
+# The SDK v1 names of the `mcp.types` fields this package reads. SDK v2
+# renames ~54 fields in all; this is deliberately the subset Langroid
+# touches, so a read of some field nobody uses yet (`nextCursor`,
+# `progressToken`, ...) would not be flagged until it is added here.
 RENAMED_FIELDS = {
     "inputSchema",
     "outputSchema",
@@ -111,21 +118,57 @@ RENAMED_FIELDS = {
 }
 
 
+def _renamed_field_reads(module: ModuleType) -> list[str]:
+    """Every place `module`'s source names an SDK v1 field.
+
+    Counts BOTH forms a read can take: `obj.isError` and
+    `getattr(obj, "isError", ...)`. The second matters because it is the form
+    the pre-fix code actually used for `inputSchema`, and because rewriting a
+    dotted read as a `getattr` is a one-token change that would otherwise
+    slip past.
+
+    What this cannot see is a name reached indirectly -- through a variable,
+    an f-string, or `operator.attrgetter`. `_mcp_field` itself is exactly
+    that (`getattr(obj, camel, default)`, where `camel` is a parameter), so
+    the rule "only `_mcp_field` may name these" and the check's blind spot
+    are the same thing, by construction.
+    """
+    tree = ast.parse(inspect.getsource(module))
+    where = f"{module.__name__.rsplit('.', 1)[-1]}.py"
+    offenders = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in RENAMED_FIELDS:
+            offenders.append(f"{where}:{node.lineno} .{node.attr}")
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value in RENAMED_FIELDS
+        ):
+            offenders.append(
+                f"{where}:{node.lineno} getattr(..., {node.args[1].value!r})"
+            )
+    return offenders
+
+
 def test_no_production_read_uses_a_renamed_field_name() -> None:
     """`_mcp_field` is the ONLY place allowed to name an SDK v1 field.
 
     A direct `result.isError` works on both SDKs today -- v2 keeps a
     deprecating shim -- so nothing fails when a call site regresses to one.
     What breaks is the user's logs now (a warning per tool call) and the
-    package later (FastMCP 5 removes the shim). This asserts the rule at the
-    source level, where it is actually checkable.
+    package later, when FastMCP 5 removes the shim. There is no runtime
+    check for this: a pydantic subclass cannot shadow an inherited field with
+    a raising property, so the deprecated name cannot be booby-trapped on a
+    real `ImageContent`. The source is therefore where the rule is asserted,
+    across the WHOLE package -- the image and blob `mimeType` reads have no
+    other guard.
     """
-    tree = ast.parse(inspect.getsource(fastmcp_client))
-    offenders = [
-        f"line {node.lineno}: .{node.attr}"
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute) and node.attr in RENAMED_FIELDS
-    ]
+    offenders: list[str] = []
+    for module in (mcp_package, decorators, fastmcp_client):
+        offenders += _renamed_field_reads(module)
     assert offenders == [], (
         "read these through _mcp_field(obj, '<snake>', '<camel>') instead: "
         + "; ".join(offenders)
