@@ -16,7 +16,12 @@ from fastmcp.client.transports import (
     StdioTransport,
     UvxStdioTransport,
 )
-from mcp.shared.exceptions import McpError
+
+try:
+    from mcp.shared.exceptions import McpError
+except ImportError:  # mcp >= 2.0 (fastmcp >= 4) renamed it
+    from mcp.shared.exceptions import MCPError as McpError
+
 from mcp.types import (
     BlobResourceContents,
     EmbeddedResource,
@@ -146,6 +151,8 @@ def mcp_server():
         """
         Determine if the given number is Prime or not.
         """
+        # `Context.sample` is gone in fastmcp 4; the one test that reaches
+        # this tool is skipped there (see test_tool_with_context_and_sampling).
         result: TextContent | ImageContent = await ctx.sample(
             f"Is the number {number} prime?",
         )
@@ -350,6 +357,17 @@ async def test_stateful_tool() -> None:
     assert "5" in result
 
 
+@pytest.mark.skipif(
+    not hasattr(Context, "sample"),
+    reason=(
+        "MCP's 2026-07-28 protocol revision removed the back-channel for "
+        "server-initiated requests, so a server negotiating it cannot ask the "
+        "client to sample at all. fastmcp 4 negotiates that revision and "
+        "dropped `Context.sample` accordingly; Langroid's client-side "
+        "`sampling_handler` plumbing stays for servers on earlier revisions, "
+        "but nothing can exercise it on this stack."
+    ),
+)
 @pytest.mark.asyncio
 async def test_tool_with_context_and_sampling() -> None:
     async def sampling_handler(
