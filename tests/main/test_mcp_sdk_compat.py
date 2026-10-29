@@ -8,21 +8,14 @@ names. These tests pin the accessor that bridges the two, and then check it
 against whichever SDK is actually installed.
 """
 
-import warnings
+import ast
+import inspect
 from typing import Any
 
-import pytest
-from fastmcp import FastMCP
-from mcp.types import CallToolResult, ImageContent, TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool
 
-from langroid.agent.tools.mcp import FastMCPClient
-from langroid.agent.tools.mcp.fastmcp_client import _mcp_field
-
-# A 1x1 PNG, base64, so the image branch has real bytes to decode.
-_PNG = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
-    "60e6kgAAAABJRU5ErkJggg=="
-)
+import langroid.agent.tools.mcp.fastmcp_client as fastmcp_client
+from langroid.agent.tools.mcp.fastmcp_client import FastMCPClient, _mcp_field
 
 
 class _V2Model:
@@ -99,51 +92,117 @@ def test_mcp_field_reads_a_real_call_result_from_the_installed_sdk() -> None:
     assert _mcp_field(result, "structured_content", "structuredContent") == {"count": 1}
 
 
-def _renamed_field_warnings(recorded: list[warnings.WarningMessage]) -> list[str]:
-    """The recorded warnings that complain about an SDK v1 field name."""
-    return [str(w.message) for w in recorded if "renamed this field" in str(w.message)]
+# --- the five production reads actually use the modern name -----------------
+#
+# A warning-based check cannot do this job: MCP SDK v2's compatibility
+# properties carry a once-only "already warned" flag that
+# `warnings.simplefilter("always")` cannot reset, so any earlier test in the
+# same process silences them and the check passes while reading the
+# deprecated name. These two guards are deterministic instead -- one reads
+# the source, the other makes touching a camelCase name raise.
 
 
-@pytest.mark.asyncio
-async def test_a_tool_call_warns_about_no_renamed_field() -> None:
-    """Reading the camelCase names is what `_mcp_field` exists to avoid.
+RENAMED_FIELDS = {
+    "inputSchema",
+    "outputSchema",
+    "isError",
+    "structuredContent",
+    "mimeType",
+}
 
-    Without it the five call sites each trip MCP SDK v2's deprecation shim,
-    so a user on fastmcp 4 gets a `FastMCPDeprecationWarning` for every tool
-    call -- and FastMCP 5 removes the shim those reads depend on. This drives
-    a real client against a real server so the warnings, if any, come from
-    the production path rather than from a hand-built model.
 
-    On SDK v1 there is no such shim and nothing to warn about, so this test
-    is a no-op there by construction; it is the v2 run that has teeth.
+def test_no_production_read_uses_a_renamed_field_name() -> None:
+    """`_mcp_field` is the ONLY place allowed to name an SDK v1 field.
+
+    A direct `result.isError` works on both SDKs today -- v2 keeps a
+    deprecating shim -- so nothing fails when a call site regresses to one.
+    What breaks is the user's logs now (a warning per tool call) and the
+    package later (FastMCP 5 removes the shim). This asserts the rule at the
+    source level, where it is actually checkable.
     """
-    server = FastMCP("CompatServer")
+    tree = ast.parse(inspect.getsource(fastmcp_client))
+    offenders = [
+        f"line {node.lineno}: .{node.attr}"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute) and node.attr in RENAMED_FIELDS
+    ]
+    assert offenders == [], (
+        "read these through _mcp_field(obj, '<snake>', '<camel>') instead: "
+        + "; ".join(offenders)
+    )
 
-    @server.tool()
-    async def chart() -> list[TextContent | ImageContent]:
-        """Text plus an image, for the two `mimeType` reads."""
-        return [
-            TextContent(type="text", text="chart"),
-            ImageContent(type="image", mimeType="image/png", data=_PNG),
-        ]
 
-    @server.tool()
-    async def counts() -> dict[str, int]:
-        """A dict return, for the `structuredContent` read."""
-        return {"count": 1}
+class _SnakeOnlyResult:
+    """A `CallToolResult` stand-in on which the SDK v1 names explode.
 
-    @server.tool()
-    async def explode() -> str:
-        """A failing tool, for the `isError` read."""
-        raise ValueError("boom")
+    `_mcp_field` reads the snake_case name first and returns as soon as it
+    finds it, so it never touches these. A call site that reads the
+    camelCase name directly raises instead of quietly working.
+    """
 
-    with warnings.catch_warnings(record=True) as recorded:
-        warnings.simplefilter("always")
-        async with FastMCPClient(server, forward_images=True) as client:
-            # `get_tool_async` goes through the `inputSchema` read.
-            for name in ("chart", "counts", "explode"):
-                tool = await client.get_tool_async(name)
-                assert tool is not None
-                await client.call_mcp_tool(name, {})
+    def __init__(
+        self,
+        content: list[Any],
+        is_error: bool = False,
+        structured_content: Any = None,
+    ) -> None:
+        self.content = content
+        self.is_error = is_error
+        self.structured_content = structured_content
 
-    assert _renamed_field_warnings(recorded) == []
+    @property
+    def isError(self) -> bool:
+        raise AssertionError("read `is_error`, not the deprecated `isError`")
+
+    @property
+    def structuredContent(self) -> Any:
+        raise AssertionError(
+            "read `structured_content`, not the deprecated `structuredContent`"
+        )
+
+
+def test_convert_tool_result_reads_the_modern_error_flag() -> None:
+    """The `isError` branch, with the deprecated name booby-trapped."""
+    client = FastMCPClient("unused")
+    result = _SnakeOnlyResult(
+        content=[TextContent(type="text", text="refused")], is_error=True
+    )
+    assert client._convert_tool_result("t", result) == (  # type: ignore[arg-type]
+        "ERROR: Tool call failed - ['refused']"
+    )
+
+
+def test_convert_tool_result_reads_the_modern_structured_content() -> None:
+    """The `structuredContent` branch, likewise.
+
+    `content` must be EMPTY to get here: a result carrying any text returns
+    on the text branch before the structured read, which is why driving a
+    dict-returning tool through a real fastmcp server does not reach it --
+    fastmcp sends the JSON as text alongside the structured payload.
+    """
+    client = FastMCPClient("unused")
+    result = _SnakeOnlyResult(content=[], structured_content={"count": 1})
+    assert client._convert_tool_result("t", result) == ("1", [])  # type: ignore[arg-type]
+
+
+def test_tool_model_from_mcp_tool_reads_the_modern_input_schema() -> None:
+    """The `inputSchema` read, via a `Tool` whose v1 name is booby-trapped."""
+
+    class _SnakeOnlyTool:
+        name = "increment"
+        description = "Increment a counter"
+        input_schema = {
+            "type": "object",
+            "properties": {"amount": {"type": "integer"}},
+            "required": ["amount"],
+        }
+
+        @property
+        def inputSchema(self) -> Any:
+            raise AssertionError(
+                "read `input_schema`, not the deprecated `inputSchema`"
+            )
+
+    client = FastMCPClient("unused")
+    model = client.tool_model_from_mcp_tool(_SnakeOnlyTool())  # type: ignore[arg-type]
+    assert "amount" in model.model_fields
