@@ -1,7 +1,7 @@
 """MCP calls preserve explicit null arguments without changing defaults."""
 
 import json
-from typing import Any
+from typing import Any, Dict
 
 import pytest
 from fastmcp import FastMCP
@@ -9,19 +9,19 @@ from mcp.types import Tool
 from pydantic import BaseModel
 
 from langroid.agent.tools.mcp import FastMCPClient
+from langroid.agent.tools.mcp.fastmcp_client import _mcp_field
 
 
-def _input_schema(definition: Tool) -> dict[str, Any]:
+def _input_schema(definition: Tool) -> Dict[str, Any]:
     """The tool's input schema, under whichever name the MCP SDK uses.
 
     SDK v2 (fastmcp 4) renamed `inputSchema` to `input_schema` and keeps the
-    old name only as a deprecation shim; SDK v1 has only the old name.
+    old name only as a deprecation shim; SDK v1 has only the old name. This
+    is the same question `langroid` itself answers, so reuse its accessor
+    rather than keeping a second copy of the rule.
     """
-    sentinel = object()
-    schema = getattr(definition, "input_schema", sentinel)
-    if schema is sentinel:
-        schema = definition.inputSchema
-    return schema  # type: ignore[return-value]
+    schema: Dict[str, Any] = _mcp_field(definition, "input_schema", "inputSchema")
+    return schema
 
 
 @pytest.mark.parametrize(

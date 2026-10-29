@@ -8,11 +8,21 @@ names. These tests pin the accessor that bridges the two, and then check it
 against whichever SDK is actually installed.
 """
 
+import warnings
 from typing import Any
 
-from mcp.types import CallToolResult, TextContent, Tool
+import pytest
+from fastmcp import FastMCP
+from mcp.types import CallToolResult, ImageContent, TextContent, Tool
 
+from langroid.agent.tools.mcp import FastMCPClient
 from langroid.agent.tools.mcp.fastmcp_client import _mcp_field
+
+# A 1x1 PNG, base64, so the image branch has real bytes to decode.
+_PNG = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
+    "60e6kgAAAABJRU5ErkJggg=="
+)
 
 
 class _V2Model:
@@ -87,3 +97,53 @@ def test_mcp_field_reads_a_real_call_result_from_the_installed_sdk() -> None:
     )
     assert _mcp_field(result, "is_error", "isError") is True
     assert _mcp_field(result, "structured_content", "structuredContent") == {"count": 1}
+
+
+def _renamed_field_warnings(recorded: list[warnings.WarningMessage]) -> list[str]:
+    """The recorded warnings that complain about an SDK v1 field name."""
+    return [str(w.message) for w in recorded if "renamed this field" in str(w.message)]
+
+
+@pytest.mark.asyncio
+async def test_a_tool_call_warns_about_no_renamed_field() -> None:
+    """Reading the camelCase names is what `_mcp_field` exists to avoid.
+
+    Without it the five call sites each trip MCP SDK v2's deprecation shim,
+    so a user on fastmcp 4 gets a `FastMCPDeprecationWarning` for every tool
+    call -- and FastMCP 5 removes the shim those reads depend on. This drives
+    a real client against a real server so the warnings, if any, come from
+    the production path rather than from a hand-built model.
+
+    On SDK v1 there is no such shim and nothing to warn about, so this test
+    is a no-op there by construction; it is the v2 run that has teeth.
+    """
+    server = FastMCP("CompatServer")
+
+    @server.tool()
+    async def chart() -> list[TextContent | ImageContent]:
+        """Text plus an image, for the two `mimeType` reads."""
+        return [
+            TextContent(type="text", text="chart"),
+            ImageContent(type="image", mimeType="image/png", data=_PNG),
+        ]
+
+    @server.tool()
+    async def counts() -> dict[str, int]:
+        """A dict return, for the `structuredContent` read."""
+        return {"count": 1}
+
+    @server.tool()
+    async def explode() -> str:
+        """A failing tool, for the `isError` read."""
+        raise ValueError("boom")
+
+    with warnings.catch_warnings(record=True) as recorded:
+        warnings.simplefilter("always")
+        async with FastMCPClient(server, forward_images=True) as client:
+            # `get_tool_async` goes through the `inputSchema` read.
+            for name in ("chart", "counts", "explode"):
+                tool = await client.get_tool_async(name)
+                assert tool is not None
+                await client.call_mcp_tool(name, {})
+
+    assert _renamed_field_warnings(recorded) == []

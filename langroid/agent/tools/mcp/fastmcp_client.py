@@ -45,12 +45,12 @@ from mcp.client.session import (
 )
 
 try:
-    # MCP SDK v1, i.e. fastmcp 2.x and 3.x.
-    from mcp.shared.exceptions import McpError
+    # MCP SDK v1, i.e. fastmcp 2.x and 3.x. `MCPError` is the SDK v2 spelling,
+    # fastmcp 4's. mypy only ever sees ONE of the two SDKs, so whichever name
+    # the installed one lacks is an error on a branch that will not run --
+    # BOTH imports therefore need the suppression, not just the second.
+    from mcp.shared.exceptions import McpError  # type: ignore[attr-defined]
 except ImportError:  # pragma: no cover - only one branch runs per install
-    # MCP SDK v2, which fastmcp 4 is built on, renamed this to `MCPError`.
-    # mypy only ever sees one of the two SDKs, so the name it cannot find is
-    # always an error on the branch it is not checking.
     from mcp.shared.exceptions import (  # type: ignore[attr-defined,no-redef]
         MCPError as McpError,
     )
