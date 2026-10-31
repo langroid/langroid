@@ -1726,6 +1726,51 @@ class Agent(ABC):
         Please write your message again, correcting the errors.
         """
 
+    def _tool_validation_error_result(
+        self,
+        ve: ValidationError,
+        msg: str | ChatDocument,
+    ) -> str | OrderedDict[str, str]:
+        """
+        Build the `handle_message` result for a tool-validation error, i.e. when
+        a tool name is valid but one of its fields is not.
+
+        When the message carries SEVERAL OpenAI tool-calls, the error is
+        returned for EVERY `tool_call_id`: tool parsing aborts at the first bad
+        call, so there is a single error for the whole message, while the OpenAI
+        API requires a `tool` message for each pending `tool_call_id` and
+        rejects the next request if any call is left unanswered. Returning an
+        id -> error map lets the existing multi-result path in
+        `process_tool_results` emit one `tool` message per call, so the LLM can
+        retry (langroid/langroid#1280). Returning the bare error string instead
+        would both leave the other calls unanswered and trip the
+        single-pending-call assertion in `process_tool_results`.
+
+        Args:
+            ve (ValidationError): the exception raised while parsing the tool.
+            msg (str | ChatDocument): the message the tools were parsed from.
+
+        Returns:
+            str: the error message, when the message has at most one OpenAI
+                tool-call (the common case, whose behavior is unchanged).
+            OrderedDict[str, str]: `tool_call_id` -> error message, when the
+                message has several OpenAI tool-calls.
+        """
+        error = self.tool_validation_error(ve)
+        if not isinstance(msg, ChatDocument):
+            return error
+        # Only calls that carry an id AND a function can be answered with a
+        # `tool` message, and downstream handling of "external" tool-ids
+        # (results for another agent's calls) looks up the function name.
+        ids = [
+            tc.id
+            for tc in msg.oai_tool_calls or []
+            if tc.id and tc.function is not None
+        ]
+        if len(ids) <= 1:
+            return error
+        return OrderedDict((tc_id, error) for tc_id in ids)
+
     def _get_multiple_orch_tool_errs(
         self, tools: List[ToolMessage]
     ) -> List[str | ChatDocument | None]:
@@ -1820,7 +1865,7 @@ class Agent(ABC):
             tools = [t for t in tools if self._tool_recipient_match(t)]
         except ValidationError as ve:
             # correct tool name but bad fields
-            return self.tool_validation_error(ve)
+            return self._tool_validation_error_result(ve, msg)
         except XMLException as xe:  # from XMLToolMessage parsing
             return str(xe)
         except ValueError:
@@ -1892,7 +1937,7 @@ class Agent(ABC):
             tools = [t for t in tools if self._tool_recipient_match(t)]
         except ValidationError as ve:
             # correct tool name but bad fields
-            return self.tool_validation_error(ve)
+            return self._tool_validation_error_result(ve, msg)
         except XMLException as xe:  # from XMLToolMessage parsing
             return str(xe)
         except ValueError:
