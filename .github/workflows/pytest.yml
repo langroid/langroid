@@ -108,6 +108,7 @@ jobs:
             tests/main/test_vertexai_routing.py \
             tests/main/test_global_settings.py \
             tests/main/test_graph.py \
+            tests/main/test_multi_tool_call_validation_error.py \
             "tests/main/test_task.py::test_task_empty_response" \
             "tests/main/test_task_run_polymorphic.py::test_task_in_out_types" \
             tests/main/test_task_strict_recovery_disabled.py
