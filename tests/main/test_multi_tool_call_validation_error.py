@@ -108,6 +108,9 @@ def _make_agent(handler: Handler) -> lr.ChatAgent:
             use_tools_api=True,
             use_tools=False,
             llm=OpenAIGPTConfig(
+                # the transport is faked, so the model named here is never
+                # reached and a global test setting may override it; the
+                # assertions read the real request bodies either way.
                 chat_model="gpt-4o",
                 api_key="sk-test",
                 stream=False,
@@ -220,6 +223,27 @@ async def test_handle_message_async_returns_error_per_tool_call_id() -> None:
     for error in result.values():
         assert "errors in your attempt to use the" in error
         assert "square" in error
+
+
+def test_another_agents_parallel_calls_still_get_one_error_string() -> None:
+    """Calls pending on ANOTHER agent keep the plain string, not a per-id map.
+
+    Only calls pending on this agent are answered with `tool` messages and only
+    they can trip the single-result assertion. A handler agent that never made
+    these calls must not repeat the same error once per call in its content.
+    """
+    requests: List[Dict[str, Any]] = []
+    caller = _parallel_calls_agent(requests)
+    handler = _make_agent(_tool_calls_then_answer([], [GOOD_CALL, BAD_CALL]))
+
+    with temporary_settings(Settings(cache=False)):
+        doc = _unparsed_llm_doc(caller, "What are the squares of 3 and 4?")
+        # the handler agent has made no tool-calls of its own
+        assert handler.oai_tool_calls == []
+        result = handler.handle_message(doc)
+
+    assert isinstance(result, str)
+    assert result.count("errors in your attempt to use the") == 1
 
 
 def test_single_tool_call_validation_error_still_returns_a_string() -> None:

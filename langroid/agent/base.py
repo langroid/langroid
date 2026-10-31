@@ -1751,10 +1751,11 @@ class Agent(ABC):
             msg (str | ChatDocument): the message the tools were parsed from.
 
         Returns:
-            str: the error message, when the message has at most one OpenAI
-                tool-call (the common case, whose behavior is unchanged).
+            str: the error message, when there is at most one OpenAI tool-call
+                this agent could answer (the common case, whose behavior is
+                unchanged).
             OrderedDict[str, str]: `tool_call_id` -> error message, when the
-                message has several OpenAI tool-calls.
+                message has several OpenAI tool-calls pending on this agent.
         """
         error = self.tool_validation_error(ve)
         if not isinstance(msg, ChatDocument):
@@ -1769,6 +1770,15 @@ class Agent(ABC):
         ]
         if len(ids) <= 1:
             return error
+        pending_ids = {tc.id for tc in self.oai_tool_calls}
+        if pending_ids.isdisjoint(ids):
+            return error
+        # Only calls PENDING ON THIS AGENT are answered with `tool` messages,
+        # and only they can trip the single-result assertion. When none of
+        # these calls is pending here -- they came from another agent, which
+        # will match the result to its own call -- keep the plain string that
+        # path already handled, rather than repeating the same error once per
+        # call in the response content.
         return OrderedDict((tc_id, error) for tc_id in ids)
 
     def _get_multiple_orch_tool_errs(
