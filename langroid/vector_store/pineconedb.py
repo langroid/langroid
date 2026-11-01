@@ -87,13 +87,26 @@ class PineconeDB(VectorStore):
             )
 
     def clear_empty_collections(self) -> int:
+        """
+        Delete only those Pinecone indexes that hold no vectors.
+
+        An index whose vector count could not be read is left alone: there is
+        no evidence it is empty, so deleting it could discard data.
+
+        Returns:
+            Number of Pinecone indexes that were deleted
+        """
         indexes = self._list_index_metas(empty=True)
         n_deletes = 0
         for index in indexes:
             if index.total_vector_count == -1:
                 logger.warning(
-                    f"Error fetching details for {index.name} when scanning indexes"
+                    f"Error fetching details for {index.name} when scanning "
+                    "indexes; not deleting it"
                 )
+                continue
+            if index.total_vector_count != 0:
+                continue
             n_deletes += 1
             self.delete_collection(collection_name=index.name)
         return n_deletes
