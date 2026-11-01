@@ -124,9 +124,11 @@ def test_unreadable_stats_index_survives_end_to_end(
                 raise _FakeApiException("stats unavailable")
             return super().Index(name)
 
+    client = _RaisingClient({"empty-idx": 0, "unreadable-idx": 0})
     db = PineconeDB.__new__(PineconeDB)
-    db.client = _RaisingClient({"empty-idx": 0, "unreadable-idx": 0})  # type: ignore[assignment]
+    db.client = client  # type: ignore[assignment]
 
-    assert db._fetch_index_meta("unreadable-idx").total_vector_count == STATS_UNREADABLE
+    meta = db._fetch_index_meta("unreadable-idx")
+    assert meta.total_vector_count == STATS_UNREADABLE
     assert db.clear_empty_collections() == 1
     assert db.client.deleted == ["empty-idx"]
