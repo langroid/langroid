@@ -394,6 +394,166 @@ def test_merge_nested_in_cte_is_still_caught(session):
 
 
 # ---------------------------------------------------------------------------
+# SQLite `fileio` file-I/O functions, callable from inside a plain SELECT
+# (GHSA-vqhw-xhff-464q).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        # Raw-text form (caught by the regex layer).
+        "SELECT readfile('/etc/passwd')",
+        "SELECT writefile('/tmp/pwn', 'owned')",
+        "SELECT writefile('/tmp/pwn', 'owned', 511)",
+        "SELECT lsdir('/')",
+        "SELECT edit('x')",
+        # `fsdir` is table-valued: it appears in FROM, not in the projection.
+        "SELECT * FROM fsdir('/')",
+        # Quoted identifier: the `"` between name and `(` defeats `\bname\s*\(`.
+        "SELECT \"readfile\"('/etc/passwd')",
+        "SELECT \"writefile\"('/tmp/pwn', 'owned')",
+        # Inline comment between name and `(`.
+        "SELECT readfile/**/('/etc/passwd')",
+        "SELECT writefile/**/('/tmp/pwn', 'owned')",
+        # Schema qualification.
+        "SELECT main.readfile('/etc/passwd')",
+        "SELECT main.\"writefile\"('/tmp/pwn', 'owned')",
+        # Case folding.
+        "SELECT READFILE('/etc/passwd')",
+        "SELECT WriteFile('/tmp/pwn', 'owned')",
+        # Buried in a subquery / CTE, still a SELECT at the top level.
+        "WITH x AS (SELECT writefile('/tmp/pwn', 'owned') AS n) SELECT * FROM x",
+        "SELECT (SELECT readfile('/etc/passwd')) AS leaked",
+        "SELECT name FROM items WHERE readfile('/etc/passwd') IS NOT NULL",
+    ],
+)
+def test_sqlite_file_io_functions_blocked(session, query):
+    """SQLite `fileio` file-I/O functions must be rejected under the
+    SELECT-only default (GHSA-vqhw-xhff-464q).
+
+    `writefile` performs a filesystem write from inside a plain SELECT, so
+    without this check the `allowed_statement_types` allowlist classifies the
+    query as SELECT and authorizes a write it never intended to permit.
+    """
+    agent = _make_agent(session)
+    rejection = agent._validate_query(query)
+    assert rejection is not None, f"SQLite file-I/O slipped through: {query}"
+    assert "REJECTED" in rejection
+
+
+def test_sqlite_file_io_still_blocked_with_writes_allowed(session):
+    """Extending `allowed_statement_types` must not unblock file I/O."""
+    agent = _make_agent(
+        session,
+        allowed_statement_types=["SELECT", "INSERT", "UPDATE", "DELETE"],
+    )
+    assert agent._validate_query("SELECT readfile('/etc/passwd')") is not None
+    assert agent._validate_query("SELECT writefile('/tmp/pwn', 'x')") is not None
+
+
+def test_sqlite_file_io_bypassed_by_dangerous_ops_flag(session):
+    """`allow_dangerous_operations=True` remains a full bypass, by design."""
+    agent = _make_agent(session, allow_dangerous_operations=True)
+    assert agent._validate_query("SELECT readfile('/etc/passwd')") is None
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        # SQLite lets a table-valued function take its arguments through
+        # hidden-column constraints instead of a call, so this reads
+        # /etc/passwd while parsing as an ordinary table reference -- no `(`
+        # after the name, and the AST node is a Table, not a Func.
+        # https://sqlite.org/vtab.html#tabfunc2
+        "SELECT data FROM fsdir WHERE path = '/etc/passwd'",
+        "SELECT length(data) FROM fsdir WHERE path = 'pyproject.toml'",
+        "SELECT name FROM lsdir WHERE path = '/'",
+        # Schema-qualified form of the same.
+        "SELECT data FROM main.fsdir WHERE path = '/etc/passwd'",
+        # Quoted identifier.
+        "SELECT data FROM \"fsdir\" WHERE path = '/etc/passwd'",
+        # Case folding, and an alias to hide the name downstream.
+        "SELECT f.data FROM FSDIR f WHERE f.path = '/etc/passwd'",
+        # Joined onto a legitimate table, and buried in a subquery.
+        "SELECT i.name, f.data FROM items i, fsdir f WHERE f.path = '/etc/passwd'",
+        "SELECT (SELECT data FROM fsdir WHERE path = '/etc/passwd') AS leaked",
+        # A decoy CTE must not launder the reference. A CTE cannot be
+        # schema-qualified, so `main.fsdir` still addresses the virtual table
+        # even while a CTE named `fsdir` is in scope.
+        "WITH fsdir(x) AS (SELECT 1) "
+        "SELECT length(data) FROM main.fsdir WHERE path = 'pyproject.toml'",
+        # ...and a CTE confined to a subquery does not shadow the outer
+        # reference, which still resolves to the virtual table.
+        "SELECT length(data) FROM fsdir WHERE path = 'pyproject.toml' "
+        "AND EXISTS (WITH fsdir AS (SELECT 1) SELECT * FROM fsdir)",
+        # ...nor does a quoted CTE name that only *looks* the same: SQLite
+        # keeps the spaces, so `" fsdir "` is a different object and the
+        # reference still reaches the virtual table.
+        'WITH " fsdir "(x) AS (SELECT 1) '
+        "SELECT data FROM fsdir WHERE path = '/etc/passwd'",
+        # An empty quoted schema is still a qualifier, so the decoy CTE must
+        # not exempt it either.
+        'WITH fsdir(x) AS (SELECT 1) SELECT data FROM "".fsdir '
+        "WHERE path = '/etc/passwd'",
+        # Unqualified-looking but qualified forms with no CTE at all.
+        "SELECT data FROM \"\".fsdir WHERE path = '/etc/passwd'",
+        "SELECT data FROM temp.fsdir WHERE path = '/etc/passwd'",
+    ],
+)
+def test_sqlite_table_valued_file_io_blocked(session, query):
+    """A table-valued file-I/O function used as a bare table must be rejected
+    (GHSA-vqhw-xhff-464q)."""
+    agent = _make_agent(session)
+    rejection = agent._validate_query(query)
+    assert rejection is not None, f"table-valued file-I/O slipped through: {query}"
+    assert "REJECTED" in rejection
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        # Guard against over-match: a column or alias merely *named* like one
+        # of the blocked functions is not a call and must stay allowed.
+        "SELECT name AS readfile FROM items",
+        "SELECT name AS writefile FROM items",
+        # A string literal that merely contains a blocked name is not a call.
+        # (A raw-text `name\\s*\\(` pattern would reject these.)
+        "SELECT 'writefile(x)'",
+        "SELECT 'readfile(/etc/passwd)' AS note",
+        "SELECT name FROM items WHERE name <> 'edit('",
+        # A CTE shadows a same-named table-valued function, so this reads the
+        # CTE and touches no filesystem.
+        "WITH fsdir(x) AS (SELECT 1) SELECT * FROM fsdir",
+        "WITH lsdir AS (SELECT 1 AS x) SELECT x FROM lsdir",
+        # The CTE is still in scope for a reference nested inside the query it
+        # is attached to, so this reads the CTE too.
+        "WITH fsdir(x) AS (SELECT 1) "
+        "SELECT (SELECT count(*) FROM fsdir) AS n FROM items",
+        # A CTE declared inside a subquery shadows the reference *within* that
+        # subquery.
+        "SELECT name FROM items WHERE EXISTS "
+        "(WITH fsdir AS (SELECT 1 AS x) SELECT x FROM fsdir)",
+        # Ordinary reads must be unaffected.
+        "SELECT name FROM items WHERE name = 'a'",
+        "SELECT count(*) FROM items",
+    ],
+)
+def test_sqlite_file_io_check_does_not_overmatch(session, query):
+    agent = _make_agent(session)
+    assert agent._validate_query(query) is None
+
+
+def test_run_query_rejects_writefile_without_executing(session, tmp_path):
+    """End-to-end through `run_query`: no file may be created."""
+    target = tmp_path / "pwn.txt"
+    agent = _make_agent(session)
+    result = agent.run_query(RunQueryTool(query=f"SELECT writefile('{target}', 'x')"))
+    assert "REJECTED" in result
+    assert not target.exists()
+
+
+# ---------------------------------------------------------------------------
 # `_nested_write_kinds` unit tests. The agent fixture is SQLite-backed, so
 # dialect-specific parse shapes are exercised against the helper directly with
 # an explicit dialect rather than through a fake agent.

@@ -142,6 +142,11 @@ _DANGEROUS_SQL_PATTERNS: List["re.Pattern[str]"] = [
     # both forms.
     re.compile(r"\bload_extension\s*\(", re.IGNORECASE),
     re.compile(r"\battach\b(\s+database)?\s+['\"\w]", re.IGNORECASE),
+    # (The SQLite `fileio` file-I/O functions are handled on the AST side only
+    # -- see `_DANGEROUS_FUNCTION_NAMES`. A raw-text pattern for names as short
+    # and as ordinary as `edit(` or `fsdir(` fires inside string literals and
+    # CTE column lists, rejecting legitimate queries, and the AST check already
+    # covers every quoting, comment and schema-qualified form.)
     # SQL Server: command execution, OLE automation, and ad-hoc external data
     # sources (OPENDATASOURCE is the connection-string counterpart of
     # OPENROWSET; both can read remote/UNC files).
@@ -174,6 +179,14 @@ _DANGEROUS_FUNCTION_NAMES: FrozenSet[str] = frozenset(
         "load_extension",  # SQLite extension loader
         "sp_oacreate",  # MSSQL OLE automation
         "sp_oamethod",  # MSSQL OLE automation
+        # SQLite `fileio` extension / CLI shell (GHSA-vqhw-xhff-464q). These
+        # are side-effecting functions usable inside a SELECT, so blocking
+        # them is what makes the SELECT-only default mean "no write".
+        "readfile",  # arbitrary file read
+        "writefile",  # arbitrary file (and unix mode / mtime) write
+        "fsdir",  # directory enumeration (table-valued)
+        "lsdir",  # directory enumeration (fileio alias)
+        "edit",  # invokes $VISUAL/$EDITOR -- command execution
     }
 )
 # Prefix families: any function whose normalized name starts with one of these
@@ -186,6 +199,88 @@ _DANGEROUS_FUNCTION_PREFIXES: Tuple[str, ...] = (
     "pg_current_logfile",
     "lo_",
 )
+
+# Table-valued functions that are dangerous when named as a plain table.
+# SQLite lets a table-valued function take its arguments through
+# hidden-column constraints instead of a call: `SELECT data FROM fsdir WHERE
+# path = '/etc/passwd'` is equivalent to `fsdir('/etc/passwd')` but parses as
+# an ordinary table reference, so neither the function-name check nor any
+# `name\s*\(` pattern sees it (https://sqlite.org/vtab.html#tabfunc2).
+# Only genuinely table-valued names belong here: a scalar function such as
+# `readfile` can never be a table reference, and listing it would only
+# mis-reject a user table of that name.
+_DANGEROUS_TABLE_NAMES: FrozenSet[str] = frozenset(
+    {
+        "fsdir",  # SQLite fileio: directory tree, with file contents in `data`
+        "lsdir",  # SQLite fileio alias of the above
+    }
+)
+
+
+def _cte_names_in_scope(node: Any) -> Set[str]:
+    """Names of common-table expressions visible from `node`.
+
+    A CTE is visible to the query its ``WITH`` clause is attached to and to
+    anything nested inside that query -- so visibility is decided by walking
+    *up* from the reference. Collecting every CTE name in the whole statement
+    instead would exempt a reference a CTE does not actually shadow, e.g. a
+    CTE confined to a sibling subquery.
+
+    If a node type carries no ``ctes`` accessor the walk contributes nothing,
+    so an unrecognized shape errs toward rejecting the reference.
+
+    Args:
+        node: Any sqlglot node.
+
+    Returns:
+        The set of CTE names, case-folded, in scope at `node`.
+    """
+    names: Set[str] = set()
+    current = node
+    while current is not None:
+        for cte in getattr(current, "ctes", ()) or ():
+            alias = cte.alias_or_name
+            if alias:
+                # No `.strip()`: SQLite keeps the spaces in a quoted
+                # identifier, so a CTE named `" fsdir "` does NOT shadow a
+                # reference to `fsdir`, and trimming it would wrongly exempt
+                # that reference.
+                names.add(alias.lower())
+        current = current.parent
+    return names
+
+
+def _dangerous_table_references(stmt: Any) -> Iterator[str]:
+    """Yield normalized names of dangerous table-valued functions that `stmt`
+    references as a bare table.
+
+    An *unqualified* reference shadowed by a CTE of the same name that is
+    visible at that point reads the CTE and touches no filesystem, so it is
+    exempt: `WITH fsdir(x) AS (SELECT 1) SELECT * FROM fsdir`. A
+    schema-qualified reference is never exempt -- a CTE cannot be
+    schema-qualified, so `main.fsdir` addresses the virtual table itself no
+    matter what CTEs the statement declares.
+
+    Args:
+        stmt: A parsed sqlglot statement.
+
+    Yields:
+        Each offending table name, case-folded.
+    """
+    for table in stmt.find_all(sqlglot_exp.Table):
+        # Compared without trimming, for the same reason as in
+        # `_cte_names_in_scope`: `" fsdir "` names a different object.
+        name = table.name.lower()
+        if name not in _DANGEROUS_TABLE_NAMES:
+            continue
+        # Presence of the qualifier NODE, not truthiness of its name: SQLite
+        # accepts `"".fsdir`, for which sqlglot reports `table.db == ""`.
+        qualified = (
+            table.args.get("db") is not None or table.args.get("catalog") is not None
+        )
+        if not qualified and name in _cte_names_in_scope(table):
+            continue
+        yield name
 
 
 def _is_dangerous_function_name(name: str) -> bool:
@@ -813,6 +908,23 @@ class SQLChatAgent(ChatAgent):
                         f"`allow_dangerous_operations=True` on the "
                         f"SQLChatAgent config."
                     )
+            # A table-valued function can take its arguments through
+            # hidden-column constraints rather than a call, so it reaches the
+            # filesystem while parsing as an ordinary table reference
+            # (GHSA-vqhw-xhff-464q).
+            for tbl_name in _dangerous_table_references(stmt):
+                logger.warning(
+                    "SQLChatAgent rejected query referencing dangerous "
+                    f"table-valued function {tbl_name!r}: {query!r}"
+                )
+                return (
+                    f"Query REJECTED for safety: it reads from "
+                    f"{tbl_name!r}, a table-valued function that exposes "
+                    f"filesystem contents. Rewrite the query without it, or "
+                    f"ask the operator to set "
+                    f"`allow_dangerous_operations=True` on the SQLChatAgent "
+                    f"config."
+                )
         return None
 
     def run_query(self, msg: RunQueryTool) -> str:
