@@ -402,7 +402,9 @@ def test_merge_nested_in_cte_is_still_caught(session):
 @pytest.mark.parametrize(
     "query",
     [
-        # Raw-text form (caught by the regex layer).
+        # Plain call form. No raw-text pattern covers these names (see the
+        # comment in `_DANGEROUS_SQL_PATTERNS`); every case here, including
+        # the plain one, is caught by the AST function-name check.
         "SELECT readfile('/etc/passwd')",
         "SELECT writefile('/tmp/pwn', 'owned')",
         "SELECT writefile('/tmp/pwn', 'owned', 511)",
@@ -410,7 +412,8 @@ def test_merge_nested_in_cte_is_still_caught(session):
         "SELECT edit('x')",
         # `fsdir` is table-valued: it appears in FROM, not in the projection.
         "SELECT * FROM fsdir('/')",
-        # Quoted identifier: the `"` between name and `(` defeats `\bname\s*\(`.
+        # Quoted identifier: the `"` between name and `(` would defeat a
+        # `\bname\s*\(` pattern, which is part of why the check is on the AST.
         "SELECT \"readfile\"('/etc/passwd')",
         "SELECT \"writefile\"('/tmp/pwn', 'owned')",
         # Inline comment between name and `(`.
