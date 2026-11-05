@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import tracemalloc
 from typing import List
 
 import nltk
@@ -402,3 +403,81 @@ async def test_relevance_extractor_async_prompt_matches_sync():
     assert prompts["async"] == prompts["sync"]
     assert "<Instructions>" in prompts["async"]
     assert "extract_segments" in prompts["async"]
+
+
+# A segment spec is model output, so it is not bounded by what the passage
+# actually contains: a weak model, or one echoing a number out of a retrieved
+# document, can name segments far past the last marker (issue #1286). Honoring
+# such a spec must cost memory proportional to the PASSAGE, never to the
+# numbers in the spec.
+_TWO_SEGMENTS = "<#1#> First. <#2#> Second."
+
+
+@pytest.mark.parametrize(
+    "specs, expected",
+    [
+        # in-range control
+        ("1-2", " First. ... Second."),
+        # well-formed ranges reaching past the last marker still select, and
+        # only select, the segments that exist
+        ("1-10000000", " First. ... Second."),
+        ("1-1000000000000", " First. ... Second."),
+        ("2-1000000000000", " Second."),
+        # a bare out-of-range number selects nothing and loses nothing
+        ("2,999999999999", " Second."),
+        ("999999999999", ""),
+        # an inverted range names no segment at all
+        ("5-3", ""),
+        # duplicate and overlapping ranges: membership-testing intervals
+        # replaced a de-duplicating set, so a segment named twice must still
+        # be extracted once -- double-counting would show up as
+        # " Second. ... Second."
+        ("1-5,2-4", " First. ... Second."),
+        ("2-4,2-4", " Second."),
+        ("1-3,1-3,1-3", " First. ... Second."),
+    ],
+)
+def test_extract_numbered_segments_out_of_range_specs(specs, expected):
+    assert extract_numbered_segments(_TWO_SEGMENTS, specs) == expected
+
+
+@pytest.mark.parametrize(
+    "specs, expected",
+    [
+        ("1-5000000", " First. ... Second."),
+        ("4000000-5000000", ""),
+        # control: bare numbers were never the problem, only ranges were
+        ("1,2,5000000", " First. ... Second."),
+    ],
+)
+def test_extract_numbered_segments_does_not_expand_ranges(specs, expected):
+    """Peak allocation must not scale with the numbers a spec names.
+
+    Deliberately NOT the reported "1-1000000000000": before the fix that
+    allocated until the process died, which would wedge the machine running
+    the suite instead of failing it. 5e6 exercises the same mechanism --
+    ~0.5 GB of peak allocation before the fix, kilobytes after -- while
+    staying survivable.
+    """
+    tracemalloc.start()
+    try:
+        tracemalloc.reset_peak()
+        result = extract_numbered_segments(_TWO_SEGMENTS, specs)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert result == expected
+    assert peak < 1_000_000, f"{specs!r} peaked at {peak:,} bytes of allocation"
+
+
+def test_extract_numbered_segments_warns_on_dropped_segment(root_log_messages):
+    """The #1119 guarantee must survive on the extraction path.
+
+    A malformed fragment drops a segment the model meant to name, so the loss
+    is logged rather than silent -- and extraction no longer routes through
+    `parse_number_range_list`, which is where that warning used to live.
+    """
+    assert extract_numbered_segments(_TWO_SEGMENTS, "1-2-3,2") == " Second."
+    warnings = [m for m in root_log_messages if "skipped malformed segment spec" in m]
+    assert warnings, "no skip warning logged on the extraction path"
+    assert any("1-2-3" in m for m in warnings)
