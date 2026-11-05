@@ -4,7 +4,7 @@ import random
 import re
 from functools import cache
 from itertools import islice
-from typing import Iterable, List, Sequence, TypeVar
+from typing import Iterable, List, Sequence, Tuple, TypeVar
 
 from faker import Faker
 
@@ -208,32 +208,31 @@ def number_sentences(s: str) -> str:
     return number_segments(s, granularity=1)
 
 
-def parse_number_range_list(specs: str) -> List[int]:
-    """
-    Parse a specs string like "3,5,7-10" into a list of integers.
+def _parse_number_range_spec(specs: str) -> List[Tuple[int, int]]:
+    """Parse a specs string into inclusive ``(lo, hi)`` segment intervals.
 
-    Weak LLMs sometimes emit messy specs. Rather than raising, such fragments
-    are skipped so the well-formed part of the spec is still honored:
+    This is the shared parsing core of :func:`parse_number_range_list` and
+    :func:`extract_numbered_segments`. It deliberately does NOT expand the
+    intervals: a single well-formed-but-huge range such as ``"1-1000000000000"``
+    (emitted by a weak model, or by a model reading it out of a retrieved
+    document) must not cost memory proportional to the range. Callers that only
+    need membership tests should keep the intervals; only
+    :func:`parse_number_range_list`, whose documented contract is to return the
+    expanded list, materializes them.
 
-    - A fragment with no digits at all (a trailing comma, an empty entry, a
-      lone hyphen) refers to no segment, so nothing is lost and it is skipped
-      quietly.
-    - A fragment that does contain digits but is not a valid spec (``"1-"``,
-      ``"-5"``, ``"1-2-3"``) drops a segment reference the model meant to make,
-      so it is skipped *and* logged at WARNING.
+    Malformed fragments are skipped (and logged at WARNING when a segment
+    reference is thereby lost) rather than raising -- see
+    :func:`parse_number_range_list` for the rules.
 
     Args:
         specs (str): A string containing segment numbers and/or ranges
                      (e.g., "3,5,7-10").
 
     Returns:
-        List[int]: List of segment numbers.
-
-    Example:
-        >>> parse_number_range_list("3,5,7-10")
-        [3, 5, 7, 8, 9, 10]
+        List[Tuple[int, int]]: Inclusive intervals; a bare number ``n`` yields
+            ``(n, n)``. Intervals may overlap and are in spec order.
     """
-    spec_indices = set()  # type: ignore
+    intervals: List[Tuple[int, int]] = []
     skipped: List[str] = []
     for original in specs.split(","):
         # some weak LLMs may generate <#1#> instead of 1, so extract just the digits
@@ -250,18 +249,64 @@ def parse_number_range_list(specs: str) -> List[int]:
             if len(endpoints) != 2 or endpoints[0] == "" or endpoints[1] == "":
                 skipped.append(original)
                 continue
-            spec_indices.update(range(int(endpoints[0]), int(endpoints[1]) + 1))
+            lo, hi = int(endpoints[0]), int(endpoints[1])
+            if lo > hi:
+                # an inverted range names no segment (``range(lo, hi + 1)`` is
+                # empty), so drop it rather than carrying an empty interval
+                continue
+            intervals.append((lo, hi))
         else:
-            spec_indices.add(int(part))
+            intervals.append((int(part), int(part)))
 
     if skipped:
+        # Rendered in compact spec form rather than as expanded segment
+        # numbers, so that logging a huge range stays cheap.
+        kept = [str(lo) if lo == hi else f"{lo}-{hi}" for lo, hi in sorted(intervals)]
         logger.warning(
             "parse_number_range_list: skipped malformed segment spec(s) %s "
             "in %r; returning only the well-formed segments %s",
             skipped,
             specs,
-            sorted(spec_indices),
+            kept,
         )
+    return intervals
+
+
+def parse_number_range_list(specs: str) -> List[int]:
+    """
+    Parse a specs string like "3,5,7-10" into a list of integers.
+
+    Weak LLMs sometimes emit messy specs. Rather than raising, such fragments
+    are skipped so the well-formed part of the spec is still honored:
+
+    - A fragment with no digits at all (a trailing comma, an empty entry, a
+      lone hyphen) refers to no segment, so nothing is lost and it is skipped
+      quietly.
+    - A fragment that does contain digits but is not a valid spec (``"1-"``,
+      ``"-5"``, ``"1-2-3"``) drops a segment reference the model meant to make,
+      so it is skipped *and* logged at WARNING.
+
+    Note:
+        Every number in every range is materialized, so the returned list is as
+        large as the spec asks for: ``"1-1000000000000"`` means a trillion
+        integers. Callers that only need to know whether a given segment was
+        named should use :func:`_parse_number_range_spec` and test the intervals
+        instead, as :func:`extract_numbered_segments` does.
+
+    Args:
+        specs (str): A string containing segment numbers and/or ranges
+                     (e.g., "3,5,7-10").
+
+    Returns:
+        List[int]: List of segment numbers.
+
+    Example:
+        >>> parse_number_range_list("3,5,7-10")
+        [3, 5, 7, 8, 9, 10]
+    """
+    spec_indices = {
+        n for lo, hi in _parse_number_range_spec(specs) for n in range(lo, hi + 1)
+    }
     return sorted(list(spec_indices))
 
 
@@ -312,15 +357,29 @@ def extract_numbered_segments(s: str, specs: str) -> str:
     Returns:
         str: Extracted segments, keeping original paragraph structures.
 
+    Note:
+        Only the segment markers actually present in ``s`` are ever tested
+        against ``specs``, so a range far past the last segment costs nothing:
+        ``specs`` is kept as intervals rather than expanded into every number
+        it names. A weak model (or one echoing a retrieved document) can emit
+        ``"1-1000000000000"``, and expanding that would exhaust memory and lose
+        the whole extraction.
+
     Example:
         >>> text = "(1) Hello world! (2) How are you? (3) Have a good day."
         >>> extract_numbered_segments(text, "1,3")
         'Hello world! Have a good day.'
     """
-    # Use the helper function to get the list of indices from specs
     if specs.strip() == "":
         return ""
-    spec_indices = parse_number_range_list(specs)
+    # Inclusive (lo, hi) intervals, NOT the expanded segment numbers: see Note.
+    spec_intervals = _parse_number_range_spec(specs)
+
+    def is_selected(segment: int | None) -> bool:
+        """Was ``segment`` named by ``specs``? (``None`` = before any marker.)"""
+        if segment is None:
+            return False
+        return any(lo <= segment <= hi for lo, hi in spec_intervals)
 
     # Regular expression to identify numbered segments like
     # <#1#> Hello world! This is me. <#2#> How are you? <#3#> Have a good day.
@@ -343,13 +402,13 @@ def extract_numbered_segments(s: str, specs: str) -> str:
             else len(paragraph)
         )
         extracted_segments = []
-        if current_segment in spec_indices and prefix_end > 0:
+        if is_selected(current_segment) and prefix_end > 0:
             extracted_segments.append(paragraph[:prefix_end])
 
         # Extract the desired segments from this paragraph
         for match in segments_with_numbers:
             current_segment = int(match.group(1))
-            if current_segment in spec_indices:
+            if is_selected(current_segment):
                 extracted_segments.append(match.group(2))
 
         # If we extracted any segments from this paragraph,
