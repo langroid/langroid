@@ -428,6 +428,13 @@ _TWO_SEGMENTS = "<#1#> First. <#2#> Second."
         ("999999999999", ""),
         # an inverted range names no segment at all
         ("5-3", ""),
+        # duplicate and overlapping ranges: membership-testing intervals
+        # replaced a de-duplicating set, so a segment named twice must still
+        # be extracted once -- double-counting would show up as
+        # " Second. ... Second."
+        ("1-5,2-4", " First. ... Second."),
+        ("2-4,2-4", " Second."),
+        ("1-3,1-3,1-3", " First. ... Second."),
     ],
 )
 def test_extract_numbered_segments_out_of_range_specs(specs, expected):

@@ -262,6 +262,9 @@ def _parse_number_range_spec(specs: str) -> List[Tuple[int, int]]:
         # Rendered in compact spec form rather than as expanded segment
         # numbers, so that logging a huge range stays cheap.
         kept = [str(lo) if lo == hi else f"{lo}-{hi}" for lo, hi in sorted(intervals)]
+        # The ``parse_number_range_list:`` prefix is deliberately kept now that
+        # the warning is emitted from here instead: it is the name callers know,
+        # and log consumers (and the #1119 tests) match on this text.
         logger.warning(
             "parse_number_range_list: skipped malformed segment spec(s) %s "
             "in %r; returning only the well-formed segments %s",
