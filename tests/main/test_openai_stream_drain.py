@@ -1,18 +1,23 @@
-"""A streamed chat completion must be read to the end of its HTTP body.
+"""A streamed async chat completion must be read to the end of its HTTP body.
 
-`_stream_response` / `_stream_response_async` stop processing at the usage chunk
-(at the finish chunk when not streaming), which is before the stream's `[DONE]`
-event and the end of its chunked body. Left unread, the response is only closed
-when the stream is garbage-collected, and on HTTP/1.1 that drops the underlying
+`_stream_response_async` stopped processing at the usage chunk (at the finish
+chunk when not streaming), which is before the stream's `[DONE]` event and the
+end of its chunked body. Left unread, the response is only closed when the
+stream is garbage-collected, and on HTTP/1.1 that drops the underlying
 connection: every streamed turn then paid a new TCP + TLS handshake and any
 keep-alive pool configured via `http_client_config` never took effect
 (langroid#1289, reported by @alexagr).
 
-These tests need no LLM calls: the first three feed a synthetic event stream
-straight into the stream-processing methods and assert the tail is drained; the
-last one drives the real OpenAI SDK against a local HTTP/1.1 server and counts
-TCP connections (openai >= 3.30 only -- older SDKs close the response at
-`[DONE]` without reading on, so no consumer can keep the connection).
+These tests need no LLM calls. The first three feed a synthetic event stream
+straight into `_stream_response_async` -- asserting the tail is drained, that a
+drop mid-drain still yields the answer, and that a stalled tail cannot hold up
+the caller. The last drives the real OpenAI SDK against a local HTTP/1.1 server
+and counts TCP connections; it needs openai >= 3.30, whose `AsyncStream` is what
+finishes the body after `[DONE]`.
+
+The sync path is untouched on purpose: `openai.Stream` has no equivalent drain,
+so it stops at `[DONE]` with the body's chunked terminator unread and the
+connection is unusable however far a caller iterates.
 """
 
 import asyncio
@@ -98,21 +103,10 @@ class _AsyncEvents(AsyncIterator[Dict[str, Any]]):
         return self._sync.read
 
 
-@pytest.mark.parametrize("stream", [True, False], ids=["stream", "no-stream"])
-def test_sync_stream_is_drained(stream: bool) -> None:
-    """The events the processing loop skips are still consumed."""
-    events = _Events(_EVENTS)
-
-    response, _ = _llm(stream)._stream_response(events, chat=True)
-
-    assert response.message == "hi"
-    assert events.exhausted, f"only {events.read} of {len(_EVENTS)} events read"
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stream", [True, False], ids=["stream", "no-stream"])
 async def test_async_stream_is_drained(stream: bool) -> None:
-    """The async twin of `test_sync_stream_is_drained`."""
+    """The events the processing loop skips are still consumed."""
     events = _AsyncEvents(_EVENTS)
 
     response, _ = await _llm(stream)._stream_response_async(events, chat=True)
@@ -121,20 +115,9 @@ async def test_async_stream_is_drained(stream: bool) -> None:
     assert events.exhausted, f"only {events.read} of {len(_EVENTS)} events read"
 
 
-def test_sync_failure_while_draining_keeps_the_answer() -> None:
-    """A connection dropping while the tail is drained costs the connection only."""
-    events = _Events(_EVENTS, fail_at=3)
-
-    response, _ = _llm(True)._stream_response(events, chat=True)
-
-    assert response.message == "hi"
-    assert response.usage is not None
-    assert response.usage.completion_tokens == 1
-
-
 @pytest.mark.asyncio
 async def test_async_failure_while_draining_keeps_the_answer() -> None:
-    """The async twin of `test_sync_failure_while_draining_keeps_the_answer`."""
+    """A connection dropping while the tail is drained costs the connection only."""
     events = _AsyncEvents(_EVENTS, fail_at=3)
 
     response, _ = await _llm(True)._stream_response_async(events, chat=True)
@@ -142,22 +125,6 @@ async def test_async_failure_while_draining_keeps_the_answer() -> None:
     assert response.message == "hi"
     assert response.usage is not None
     assert response.usage.completion_tokens == 1
-
-
-class _NeverEndingEvents(Iterator[Dict[str, Any]]):
-    """A stream that keeps yielding filler events and never reaches `[DONE]`."""
-
-    def __init__(self) -> None:
-        self.read = 0
-
-    def __iter__(self) -> "_NeverEndingEvents":
-        return self
-
-    def __next__(self) -> Dict[str, Any]:
-        self.read += 1
-        if self.read <= len(_EVENTS):
-            return _EVENTS[self.read - 1]
-        return {"choices": []}
 
 
 class _StallingEvents(AsyncIterator[Dict[str, Any]]):
@@ -181,20 +148,6 @@ class _StallingEvents(AsyncIterator[Dict[str, Any]]):
             return _EVENTS[self.read - 1]
         await asyncio.sleep(self._stall)
         raise AssertionError("the drain should have given up long before this")
-
-
-def test_sync_drain_gives_up_on_an_endless_stream(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The answer is already in hand, so draining must not block on the tail."""
-    monkeypatch.setattr(openai_gpt_module, "STREAM_DRAIN_TIMEOUT", 0.05)
-    events = _NeverEndingEvents()
-
-    response, _ = _llm(True)._stream_response(events, chat=True)
-
-    assert response.message == "hi"
-    assert response.usage is not None
-    assert response.usage.completion_tokens == 1
 
 
 @pytest.mark.asyncio

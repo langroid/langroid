@@ -6,7 +6,6 @@ import os
 import re
 import sys
 import threading
-import time
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager, nullcontext
@@ -124,8 +123,8 @@ OLLAMA_API_KEY = "ollama"
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
-# Seconds to spend reading the tail of a streamed response once the answer is
-# complete, so its HTTP connection can go back to the pool; see
+# Seconds to spend reading the tail of a streamed async response once the answer
+# is complete, so its HTTP connection can go back to the pool; see
 # `OpenAIGPT._drain_stream_async`.
 STREAM_DRAIN_TIMEOUT = 5.0
 
@@ -1845,25 +1844,6 @@ class OpenAIGPT(LanguageModel):
         )
 
     @staticmethod
-    def _drain_stream(events: Iterator[Any]) -> None:
-        """
-        Consume whatever is left of a stream after `_stream_response` stops
-        processing it; see `_drain_stream_async` for why this matters and for
-        what the deadline is for.
-        """
-        deadline = time.monotonic() + STREAM_DRAIN_TIMEOUT
-        try:
-            for _ in events:
-                if time.monotonic() >= deadline:
-                    logging.debug(
-                        "Gave up draining stream response after %ss",
-                        STREAM_DRAIN_TIMEOUT,
-                    )
-                    break
-        except Exception as e:
-            logging.debug("Error while draining stream response: %s", e)
-
-    @staticmethod
     async def _drain_stream_async(events: AsyncIterator[Any]) -> None:
         """
         Consume whatever is left of a stream after `_stream_response_async` stops
@@ -1878,11 +1858,17 @@ class OpenAIGPT(LanguageModel):
         On openai >= 3.x the abandoned stream could also make asyncio log
         "aclose(): asynchronous generator is already running" during finalization.
 
-        Reading past `[DONE]` lets the OpenAI SDK finish the body itself
-        (openai >= 3.30) and return the connection to the pool. The events consumed
-        here are exactly the ones the loop already decided to ignore, so this
-        changes no result; a failure while draining costs only the connection,
-        since the response is complete by then.
+        Reading past `[DONE]` lets the OpenAI SDK finish the body itself and
+        return the connection to the pool: `openai.AsyncStream` drains the rest
+        of an HTTP/1.1 response once it sees `[DONE]` (openai >= 3.30), but only
+        for a consumer that iterates that far. The events consumed here are
+        exactly the ones the loop already decided to ignore, so this changes no
+        result; a failure while draining costs only the connection, since the
+        response is complete by then.
+
+        The sync path is deliberately left alone: `openai.Stream` has no such
+        drain, so it stops at `[DONE]` with the body's chunked terminator unread
+        and the connection is unusable however far a caller iterates.
 
         Bounded by `STREAM_DRAIN_TIMEOUT`, because the answer is already in hand
         and nothing here is worth waiting on. In practice the tail is a single
@@ -1936,10 +1922,8 @@ class OpenAIGPT(LanguageModel):
         in_reasoning: bool = False  # Track if we're inside reasoning delimiters
         content_present = False
         finish_reason: Optional[str] = None
-        # hold a single iterator, so the tail the loop leaves behind can be drained
-        events = iter(response)
         try:
-            for event in events:
+            for event in response:
                 event_dict = event if isinstance(event, dict) else event.model_dump()
                 choices = event_dict.get("choices") or []
                 if choices and choices[0].get("finish_reason"):
@@ -1982,7 +1966,6 @@ class OpenAIGPT(LanguageModel):
 
         except Exception as e:
             logging.warning("Error while processing stream response: %s", str(e))
-        self._drain_stream(events)
 
         if not settings.quiet:
             print("")
