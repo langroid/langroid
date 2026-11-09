@@ -2060,7 +2060,13 @@ class OpenAIGPT(LanguageModel):
 
         except Exception as e:
             logging.warning("Error while processing stream response: %s", str(e))
-        await self._drain_stream_async(events)
+        # Only when the response really is finished. With n > 1 the loop breaks on
+        # the first choice's finish chunk while the server is still streaming the
+        # others, so draining would hold the caller up for choices it discarded --
+        # and n > 1 is not supported here anyway (see `OpenAICallParams.n`).
+        params = self.config.params
+        if params is None or (params.n or 1) <= 1:
+            await self._drain_stream_async(events)
 
         if not settings.quiet:
             print("")

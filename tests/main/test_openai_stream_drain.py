@@ -28,7 +28,11 @@ import openai
 import pytest
 
 from langroid.language_models import openai_gpt as openai_gpt_module
-from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import (
+    OpenAICallParams,
+    OpenAIGPT,
+    OpenAIGPTConfig,
+)
 
 # What a chat-completions stream sends with stream_options.include_usage, plus a
 # trailing event standing in for the body tail the SDK consumes after `[DONE]`.
@@ -117,14 +121,45 @@ async def test_async_stream_is_drained(stream: bool) -> None:
 
 @pytest.mark.asyncio
 async def test_async_failure_while_draining_keeps_the_answer() -> None:
-    """A connection dropping while the tail is drained costs the connection only."""
-    events = _AsyncEvents(_EVENTS, fail_at=3)
+    """A connection dropping while the tail is drained costs the connection only.
+
+    `fail_at=4` puts the failure one event into the tail, so `read == 4` is only
+    reachable by draining: it pins the test to the drain rather than passing
+    whether or not the tail is read at all.
+    """
+    events = _AsyncEvents(_EVENTS, fail_at=4)
 
     response, _ = await _llm(True)._stream_response_async(events, chat=True)
 
+    assert events.read == 4, f"the drain stopped at event {events.read}"
     assert response.message == "hi"
     assert response.usage is not None
     assert response.usage.completion_tokens == 1
+
+
+@pytest.mark.asyncio
+async def test_no_drain_when_more_than_one_choice_is_requested() -> None:
+    """With n > 1 the response is not finished where the loop breaks.
+
+    It breaks on the first choice's finish chunk while the server is still
+    streaming the others, so draining would make the caller wait for choices it
+    has already discarded. Nothing to gain, latency to lose: skip it.
+    """
+    llm = OpenAIGPT(
+        OpenAIGPTConfig(
+            chat_model="gpt-4.1-mini",
+            api_key="test-key-not-used",
+            stream=True,
+            cache_config=None,
+            params=OpenAICallParams(n=2),
+        )
+    )
+    events = _AsyncEvents(_EVENTS)
+
+    response, _ = await llm._stream_response_async(events, chat=True)
+
+    assert response.message == "hi"
+    assert events.read == 3, f"the tail was drained anyway (read {events.read})"
 
 
 class _StallingEvents(AsyncIterator[Dict[str, Any]]):
