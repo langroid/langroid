@@ -1843,6 +1843,27 @@ class OpenAIGPT(LanguageModel):
             usage,
         )
 
+    def _requested_choices(self) -> int:
+        """
+        How many choices the next request asks for, as the API will see it.
+
+        `extra_body` is merged over the request body by the OpenAI SDK, so an `n`
+        there wins over `params.n`. Anything missing or unparseable counts as 1:
+        the only use of this is deciding whether a stream is already finished at
+        the first choice's finish chunk, and a request the API would reject for a
+        bad `n` never gets that far.
+        """
+        params = self.config.params
+        if params is None:
+            return 1
+        n = params.n
+        if params.extra_body is not None and "n" in params.extra_body:
+            n = params.extra_body["n"]
+        try:
+            return max(1, int(n))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 1
+
     @staticmethod
     async def _drain_stream_async(events: AsyncIterator[Any]) -> None:
         """
@@ -2064,8 +2085,7 @@ class OpenAIGPT(LanguageModel):
         # the first choice's finish chunk while the server is still streaming the
         # others, so draining would hold the caller up for choices it discarded --
         # and n > 1 is not supported here anyway (see `OpenAICallParams.n`).
-        params = self.config.params
-        if params is None or (params.n or 1) <= 1:
+        if self._requested_choices() <= 1:
             await self._drain_stream_async(events)
 
         if not settings.quiet:

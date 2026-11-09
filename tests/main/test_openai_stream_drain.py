@@ -138,12 +138,30 @@ async def test_async_failure_while_draining_keeps_the_answer() -> None:
 
 
 @pytest.mark.asyncio
-async def test_no_drain_when_more_than_one_choice_is_requested() -> None:
+@pytest.mark.parametrize(
+    "params, drained",
+    [
+        (None, True),
+        (OpenAICallParams(n=None), True),
+        (OpenAICallParams(n=1), True),
+        (OpenAICallParams(n=2), False),
+        # extra_body is merged over the request body by the SDK, so its n wins
+        (OpenAICallParams(extra_body={"n": 2}), False),
+        (OpenAICallParams(n=2, extra_body={"n": 1}), True),
+        # a request the API would reject for a bad n never reaches a stream
+        (OpenAICallParams(extra_body={"n": "oops"}), True),
+    ],
+    ids=["none", "n-none", "n1", "n2", "extra-body-n2", "extra-body-wins", "bad-n"],
+)
+async def test_drain_follows_the_number_of_choices_requested(
+    params: Any, drained: bool
+) -> None:
     """With n > 1 the response is not finished where the loop breaks.
 
     It breaks on the first choice's finish chunk while the server is still
     streaming the others, so draining would make the caller wait for choices it
-    has already discarded. Nothing to gain, latency to lose: skip it.
+    has already discarded. Nothing to gain, latency to lose: skip it. The loop
+    itself reads 3 of the 4 events, so a drained tail shows up as `read == 4`.
     """
     llm = OpenAIGPT(
         OpenAIGPTConfig(
@@ -151,7 +169,7 @@ async def test_no_drain_when_more_than_one_choice_is_requested() -> None:
             api_key="test-key-not-used",
             stream=True,
             cache_config=None,
-            params=OpenAICallParams(n=2),
+            params=params,
         )
     )
     events = _AsyncEvents(_EVENTS)
@@ -159,7 +177,10 @@ async def test_no_drain_when_more_than_one_choice_is_requested() -> None:
     response, _ = await llm._stream_response_async(events, chat=True)
 
     assert response.message == "hi"
-    assert events.read == 3, f"the tail was drained anyway (read {events.read})"
+    assert events.read == (4 if drained else 3), (
+        f"expected the tail {'drained' if drained else 'left alone'}, "
+        f"read {events.read} of {len(_EVENTS)}"
+    )
 
 
 class _StallingEvents(AsyncIterator[Dict[str, Any]]):
