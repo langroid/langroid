@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -121,6 +122,11 @@ OLLAMA_API_KEY = "ollama"
 
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
+
+# Seconds to spend reading the tail of a streamed async response once the answer
+# is complete, so its HTTP connection can go back to the pool; see
+# `OpenAIGPT._drain_stream_async`.
+STREAM_DRAIN_TIMEOUT = 5.0
 
 
 openai_chat_model_pref_list = [
@@ -1837,6 +1843,77 @@ class OpenAIGPT(LanguageModel):
             usage,
         )
 
+    def _requested_choices(self) -> int:
+        """
+        How many choices the next request asks for, as the API will see it.
+
+        `extra_body` is merged over the request body by the OpenAI SDK, so an `n`
+        there wins over `params.n`. Anything missing or unparseable counts as 1:
+        the only use of this is deciding whether a stream is already finished at
+        the first choice's finish chunk, and a request the API would reject for a
+        bad `n` never gets that far.
+        """
+        params = self.config.params
+        if params is None:
+            return 1
+        n = params.n
+        if params.extra_body is not None and "n" in params.extra_body:
+            n = params.extra_body["n"]
+        try:
+            return max(1, int(n))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 1
+
+    @staticmethod
+    async def _drain_stream_async(events: AsyncIterator[Any]) -> None:
+        """
+        Consume whatever is left of a stream after `_stream_response_async` stops
+        processing it.
+
+        The processing loop stops at the usage chunk (at the finish chunk when not
+        streaming), which leaves the tail of the HTTP body unread: the SSE `[DONE]`
+        event and the end of the chunked body. An unread response is only closed
+        when its stream is garbage-collected, and on HTTP/1.1 that drops the
+        underlying connection -- so every streamed turn paid a fresh TCP + TLS
+        handshake and any `http_client_config` keep-alive pool never took effect.
+        On openai >= 3.x the abandoned stream could also make asyncio log
+        "aclose(): asynchronous generator is already running" during finalization.
+
+        Reading past `[DONE]` lets the OpenAI SDK finish the body itself and
+        return the connection to the pool: `openai.AsyncStream` drains the rest
+        of an HTTP/1.1 response once it sees `[DONE]` (openai >= 3.30), but only
+        for a consumer that iterates that far. The events consumed here are
+        exactly the ones the loop already decided to ignore, so this changes no
+        result; a failure while draining costs only the connection, since the
+        response is complete by then.
+
+        The sync path is deliberately left alone: `openai.Stream` has no such
+        drain, so it stops at `[DONE]` with the body's chunked terminator unread
+        and the connection is unusable however far a caller iterates.
+
+        Bounded by `STREAM_DRAIN_TIMEOUT`, because the answer is already in hand
+        and nothing here is worth waiting on. In practice the tail is a single
+        `[DONE]` already in flight, but a server that keeps a stream open after
+        its usage chunk -- emitting SSE heartbeat comments, which reset the HTTP
+        read timeout without ever yielding an event -- would otherwise block the
+        call indefinitely. On timeout we simply stop, which leaves the stream
+        where it was before this method existed: abandoned, and its connection
+        dropped when it is garbage-collected.
+        """
+
+        async def drain() -> None:
+            async for _ in events:
+                pass
+
+        try:
+            await asyncio.wait_for(drain(), timeout=STREAM_DRAIN_TIMEOUT)
+        except asyncio.TimeoutError:
+            logging.debug(
+                "Gave up draining stream response after %ss", STREAM_DRAIN_TIMEOUT
+            )
+        except Exception as e:
+            logging.debug("Error while draining stream response: %s", e)
+
     @retry_with_exponential_backoff
     def _stream_response(  # type: ignore
         self, response, chat: bool = False
@@ -1958,8 +2035,10 @@ class OpenAIGPT(LanguageModel):
         in_reasoning: bool = False  # Track if we're inside reasoning delimiters
         content_present = False
         finish_reason: Optional[str] = None
+        # hold a single iterator, so the tail the loop leaves behind can be drained
+        events = aiter(response)
         try:
-            async for event in response:
+            async for event in events:
                 event_dict = event if isinstance(event, dict) else event.model_dump()
                 choices = event_dict.get("choices") or []
                 if choices and choices[0].get("finish_reason"):
@@ -2002,6 +2081,12 @@ class OpenAIGPT(LanguageModel):
 
         except Exception as e:
             logging.warning("Error while processing stream response: %s", str(e))
+        # Only when the response really is finished. With n > 1 the loop breaks on
+        # the first choice's finish chunk while the server is still streaming the
+        # others, so draining would hold the caller up for choices it discarded --
+        # and n > 1 is not supported here anyway (see `OpenAICallParams.n`).
+        if self._requested_choices() <= 1:
+            await self._drain_stream_async(events)
 
         if not settings.quiet:
             print("")

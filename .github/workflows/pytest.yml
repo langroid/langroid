@@ -109,10 +109,25 @@ jobs:
             tests/main/test_global_settings.py \
             tests/main/test_graph.py \
             tests/main/test_multi_tool_call_validation_error.py \
+            tests/main/test_openai_stream_drain.py \
             "tests/main/test_task.py::test_task_empty_response" \
             "tests/main/test_task_run_polymorphic.py::test_task_in_out_types" \
             tests/main/test_task_strict_recovery_disabled.py \
             tests/main/test_pineconedb_clear_empty.py
+
+      # test_openai_stream_drain.py's end-to-end case -- three streamed turns
+      # over one pooled TCP connection -- is the only test of what #1289 was
+      # actually about, and it skips below openai 3.30, because the connection
+      # is unusable without `AsyncStream`'s own post-[DONE] body drain. uv.lock
+      # pins 2.48, so without this overlay the step above reports a skip for
+      # ever and connection reuse could regress unnoticed. Costs Actions
+      # minutes only: the whole file is keyless and makes no LLM calls.
+      - name: Run the connection-reuse test against openai >= 3.30
+        env:
+          PYTEST_ADDOPTS: "-p no:logging"
+        run: |
+          uv run --with 'openai>=3.30' pytest -q --ct fakeredis \
+            tests/main/test_openai_stream_drain.py
 
   cancel:
     if: "contains(github.event.head_commit.message, 'notest') == false"

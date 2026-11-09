@@ -1,0 +1,302 @@
+"""A streamed async chat completion must be read to the end of its HTTP body.
+
+`_stream_response_async` stopped processing at the usage chunk (at the finish
+chunk when not streaming), which is before the stream's `[DONE]` event and the
+end of its chunked body. Left unread, the response is only closed when the
+stream is garbage-collected, and on HTTP/1.1 that drops the underlying
+connection: every streamed turn then paid a new TCP + TLS handshake and any
+keep-alive pool configured via `http_client_config` never took effect
+(langroid#1289, reported by @alexagr).
+
+These tests need no LLM calls. The first three feed a synthetic event stream
+straight into `_stream_response_async` -- asserting the tail is drained, that a
+drop mid-drain still yields the answer, and that a stalled tail cannot hold up
+the caller. The last drives the real OpenAI SDK against a local HTTP/1.1 server
+and counts TCP connections; it needs openai >= 3.30, whose `AsyncStream` is what
+finishes the body after `[DONE]`.
+
+The sync path is untouched on purpose: `openai.Stream` has no equivalent drain,
+so it stops at `[DONE]` with the body's chunked terminator unread and the
+connection is unusable however far a caller iterates.
+"""
+
+import asyncio
+import json
+from typing import Any, AsyncIterator, Dict, Iterator, List
+
+import openai
+import pytest
+
+from langroid.language_models import openai_gpt as openai_gpt_module
+from langroid.language_models.openai_gpt import (
+    OpenAICallParams,
+    OpenAIGPT,
+    OpenAIGPTConfig,
+)
+
+# What a chat-completions stream sends with stream_options.include_usage, plus a
+# trailing event standing in for the body tail the SDK consumes after `[DONE]`.
+_EVENTS: List[Dict[str, Any]] = [
+    {"choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": None}]},
+    {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+    {
+        "choices": [],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+    },
+    {"choices": []},
+]
+
+
+def _llm(stream: bool) -> OpenAIGPT:
+    """An OpenAIGPT that is never asked to make a request."""
+    return OpenAIGPT(
+        OpenAIGPTConfig(
+            chat_model="gpt-4.1-mini",
+            api_key="test-key-not-used",
+            stream=stream,
+            cache_config=None,
+        )
+    )
+
+
+class _Events(Iterator[Dict[str, Any]]):
+    """Synthetic stream events that record how far they were read."""
+
+    def __init__(self, events: List[Dict[str, Any]], fail_at: int = -1) -> None:
+        self._events = events
+        self._fail_at = fail_at
+        self.read = 0
+
+    def __iter__(self) -> "_Events":
+        return self
+
+    def __next__(self) -> Dict[str, Any]:
+        if self.read == self._fail_at:
+            raise ConnectionError("peer closed connection")
+        if self.read >= len(self._events):
+            raise StopIteration
+        self.read += 1
+        return self._events[self.read - 1]
+
+    @property
+    def exhausted(self) -> bool:
+        return self.read == len(self._events)
+
+
+class _AsyncEvents(AsyncIterator[Dict[str, Any]]):
+    """The async twin of `_Events`."""
+
+    def __init__(self, events: List[Dict[str, Any]], fail_at: int = -1) -> None:
+        self._sync = _Events(events, fail_at)
+
+    def __aiter__(self) -> "_AsyncEvents":
+        return self
+
+    async def __anext__(self) -> Dict[str, Any]:
+        try:
+            return next(self._sync)
+        except StopIteration:
+            raise StopAsyncIteration from None
+
+    @property
+    def exhausted(self) -> bool:
+        return self._sync.exhausted
+
+    @property
+    def read(self) -> int:
+        return self._sync.read
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [True, False], ids=["stream", "no-stream"])
+async def test_async_stream_is_drained(stream: bool) -> None:
+    """The events the processing loop skips are still consumed."""
+    events = _AsyncEvents(_EVENTS)
+
+    response, _ = await _llm(stream)._stream_response_async(events, chat=True)
+
+    assert response.message == "hi"
+    assert events.exhausted, f"only {events.read} of {len(_EVENTS)} events read"
+
+
+@pytest.mark.asyncio
+async def test_async_failure_while_draining_keeps_the_answer() -> None:
+    """A connection dropping while the tail is drained costs the connection only.
+
+    `fail_at=4` puts the failure one event into the tail, so `read == 4` is only
+    reachable by draining: it pins the test to the drain rather than passing
+    whether or not the tail is read at all.
+    """
+    events = _AsyncEvents(_EVENTS, fail_at=4)
+
+    response, _ = await _llm(True)._stream_response_async(events, chat=True)
+
+    assert events.read == 4, f"the drain stopped at event {events.read}"
+    assert response.message == "hi"
+    assert response.usage is not None
+    assert response.usage.completion_tokens == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "params, drained",
+    [
+        (None, True),
+        (OpenAICallParams(n=None), True),
+        (OpenAICallParams(n=1), True),
+        (OpenAICallParams(n=2), False),
+        # extra_body is merged over the request body by the SDK, so its n wins
+        (OpenAICallParams(extra_body={"n": 2}), False),
+        (OpenAICallParams(n=2, extra_body={"n": 1}), True),
+        # a request the API would reject for a bad n never reaches a stream
+        (OpenAICallParams(extra_body={"n": "oops"}), True),
+    ],
+    ids=["none", "n-none", "n1", "n2", "extra-body-n2", "extra-body-wins", "bad-n"],
+)
+async def test_drain_follows_the_number_of_choices_requested(
+    params: Any, drained: bool
+) -> None:
+    """With n > 1 the response is not finished where the loop breaks.
+
+    It breaks on the first choice's finish chunk while the server is still
+    streaming the others, so draining would make the caller wait for choices it
+    has already discarded. Nothing to gain, latency to lose: skip it. The loop
+    itself reads 3 of the 4 events, so a drained tail shows up as `read == 4`.
+    """
+    llm = OpenAIGPT(
+        OpenAIGPTConfig(
+            chat_model="gpt-4.1-mini",
+            api_key="test-key-not-used",
+            stream=True,
+            cache_config=None,
+            params=params,
+        )
+    )
+    events = _AsyncEvents(_EVENTS)
+
+    response, _ = await llm._stream_response_async(events, chat=True)
+
+    assert response.message == "hi"
+    assert events.read == (4 if drained else 3), (
+        f"expected the tail {'drained' if drained else 'left alone'}, "
+        f"read {events.read} of {len(_EVENTS)}"
+    )
+
+
+class _StallingEvents(AsyncIterator[Dict[str, Any]]):
+    """A stream that stalls after its usage chunk without reaching `[DONE]`.
+
+    This is the shape that would hang an unbounded drain: a server emitting SSE
+    heartbeat comments keeps resetting the HTTP read timeout while yielding no
+    event, so nothing below the drain ever gives up.
+    """
+
+    def __init__(self, stall: float = 30.0) -> None:
+        self._stall = stall
+        self.read = 0
+
+    def __aiter__(self) -> "_StallingEvents":
+        return self
+
+    async def __anext__(self) -> Dict[str, Any]:
+        self.read += 1
+        if self.read <= len(_EVENTS) - 1:
+            return _EVENTS[self.read - 1]
+        await asyncio.sleep(self._stall)
+        raise AssertionError("the drain should have given up long before this")
+
+
+@pytest.mark.asyncio
+async def test_async_drain_gives_up_on_a_stalled_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The async twin: a stream that stalls after usage must not block the call.
+
+    Wrapped in a timeout well above the drain's, so an unbounded drain fails the
+    test instead of hanging the suite.
+    """
+    monkeypatch.setattr(openai_gpt_module, "STREAM_DRAIN_TIMEOUT", 0.05)
+    events = _StallingEvents()
+
+    response, _ = await asyncio.wait_for(
+        _llm(True)._stream_response_async(events, chat=True), timeout=5
+    )
+
+    assert response.message == "hi"
+
+
+def _chunk(data: bytes) -> bytes:
+    return f"{len(data):x}\r\n".encode() + data + b"\r\n"
+
+
+class _Server:
+    """HTTP/1.1 keep-alive server that streams like the chat-completions API."""
+
+    def __init__(self) -> None:
+        self.connections = 0
+        self.writers: List[asyncio.StreamWriter] = []
+
+    async def handle(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        self.connections += 1
+        self.writers.append(writer)
+        try:
+            while True:
+                head = (await reader.readuntil(b"\r\n\r\n")).decode().lower()
+                length = int(head.split("content-length:")[1].split("\r\n")[0])
+                await reader.readexactly(length)
+                writer.write(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                    b"Transfer-Encoding: chunked\r\n\r\n"
+                )
+                base = {"id": "x", "object": "chat.completion.chunk", "created": 0}
+                for event in _EVENTS[:3]:
+                    body = json.dumps({**base, "model": "m", **event})
+                    writer.write(_chunk(f"data: {body}\n\n".encode()))
+                writer.write(_chunk(b"data: [DONE]\n\n"))
+                await writer.drain()
+                # the end of the chunked body follows [DONE], as from the API
+                await asyncio.sleep(0.05)
+                writer.write(b"0\r\n\r\n")
+                await writer.drain()
+        except (asyncio.IncompleteReadError, ConnectionError):
+            pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    tuple(int(p) for p in openai.__version__.split(".")[:2]) < (3, 30),
+    reason="openai<3.30 closes a stream's response at [DONE] without reading on",
+)
+# Teardown noise, not the code under test: force-closing the server side of a
+# connection the client still holds pooled leaves the SDK's SSE-decoder generator
+# unfinalized. The same three turns through the raw SDK, with nothing force-closed,
+# warn about nothing -- and so does `achat` itself (see the issue's repro script).
+@pytest.mark.filterwarnings("ignore:coroutine method 'aclose' of:RuntimeWarning")
+async def test_streamed_turns_reuse_one_connection() -> None:
+    """End to end: three streamed turns over one pooled TCP connection."""
+    server = _Server()
+    listener = await asyncio.start_server(server.handle, "127.0.0.1", 0)
+    port = listener.sockets[0].getsockname()[1]
+    try:
+        llm = OpenAIGPT(
+            OpenAIGPTConfig(
+                chat_model="m",
+                api_base=f"http://127.0.0.1:{port}/v1",
+                api_key="test-key-not-used",
+                stream=True,
+                use_cached_client=False,
+                cache_config=None,
+            )
+        )
+        for _ in range(3):
+            response = await llm.achat("hi", max_tokens=10)
+            assert response.message == "hi"
+        assert server.connections == 1
+    finally:
+        # drop the server side of the pooled connection, else the handler stays
+        # blocked reading the next request and the listener never finishes closing
+        for writer in server.writers:
+            writer.close()
+        listener.close()
