@@ -22,6 +22,7 @@ from typing import Any, AsyncIterator, Dict, Iterator, List
 import openai
 import pytest
 
+from langroid.language_models import openai_gpt as openai_gpt_module
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 
 # What a chat-completions stream sends with stream_options.include_usage, plus a
@@ -141,6 +142,78 @@ async def test_async_failure_while_draining_keeps_the_answer() -> None:
     assert response.message == "hi"
     assert response.usage is not None
     assert response.usage.completion_tokens == 1
+
+
+class _NeverEndingEvents(Iterator[Dict[str, Any]]):
+    """A stream that keeps yielding filler events and never reaches `[DONE]`."""
+
+    def __init__(self) -> None:
+        self.read = 0
+
+    def __iter__(self) -> "_NeverEndingEvents":
+        return self
+
+    def __next__(self) -> Dict[str, Any]:
+        self.read += 1
+        if self.read <= len(_EVENTS):
+            return _EVENTS[self.read - 1]
+        return {"choices": []}
+
+
+class _StallingEvents(AsyncIterator[Dict[str, Any]]):
+    """A stream that stalls after its usage chunk without reaching `[DONE]`.
+
+    This is the shape that would hang an unbounded drain: a server emitting SSE
+    heartbeat comments keeps resetting the HTTP read timeout while yielding no
+    event, so nothing below the drain ever gives up.
+    """
+
+    def __init__(self, stall: float = 30.0) -> None:
+        self._stall = stall
+        self.read = 0
+
+    def __aiter__(self) -> "_StallingEvents":
+        return self
+
+    async def __anext__(self) -> Dict[str, Any]:
+        self.read += 1
+        if self.read <= len(_EVENTS) - 1:
+            return _EVENTS[self.read - 1]
+        await asyncio.sleep(self._stall)
+        raise AssertionError("the drain should have given up long before this")
+
+
+def test_sync_drain_gives_up_on_an_endless_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The answer is already in hand, so draining must not block on the tail."""
+    monkeypatch.setattr(openai_gpt_module, "STREAM_DRAIN_TIMEOUT", 0.05)
+    events = _NeverEndingEvents()
+
+    response, _ = _llm(True)._stream_response(events, chat=True)
+
+    assert response.message == "hi"
+    assert response.usage is not None
+    assert response.usage.completion_tokens == 1
+
+
+@pytest.mark.asyncio
+async def test_async_drain_gives_up_on_a_stalled_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The async twin: a stream that stalls after usage must not block the call.
+
+    Wrapped in a timeout well above the drain's, so an unbounded drain fails the
+    test instead of hanging the suite.
+    """
+    monkeypatch.setattr(openai_gpt_module, "STREAM_DRAIN_TIMEOUT", 0.05)
+    events = _StallingEvents()
+
+    response, _ = await asyncio.wait_for(
+        _llm(True)._stream_response_async(events, chat=True), timeout=5
+    )
+
+    assert response.message == "hi"
 
 
 def _chunk(data: bytes) -> bytes:

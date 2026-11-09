@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -5,6 +6,7 @@ import os
 import re
 import sys
 import threading
+import time
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager, nullcontext
@@ -121,6 +123,11 @@ OLLAMA_API_KEY = "ollama"
 
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
+
+# Seconds to spend reading the tail of a streamed response once the answer is
+# complete, so its HTTP connection can go back to the pool; see
+# `OpenAIGPT._drain_stream_async`.
+STREAM_DRAIN_TIMEOUT = 5.0
 
 
 openai_chat_model_pref_list = [
@@ -1841,11 +1848,18 @@ class OpenAIGPT(LanguageModel):
     def _drain_stream(events: Iterator[Any]) -> None:
         """
         Consume whatever is left of a stream after `_stream_response` stops
-        processing it; see `_drain_stream_async` for why this matters.
+        processing it; see `_drain_stream_async` for why this matters and for
+        what the deadline is for.
         """
+        deadline = time.monotonic() + STREAM_DRAIN_TIMEOUT
         try:
             for _ in events:
-                pass
+                if time.monotonic() >= deadline:
+                    logging.debug(
+                        "Gave up draining stream response after %ss",
+                        STREAM_DRAIN_TIMEOUT,
+                    )
+                    break
         except Exception as e:
             logging.debug("Error while draining stream response: %s", e)
 
@@ -1869,10 +1883,27 @@ class OpenAIGPT(LanguageModel):
         here are exactly the ones the loop already decided to ignore, so this
         changes no result; a failure while draining costs only the connection,
         since the response is complete by then.
+
+        Bounded by `STREAM_DRAIN_TIMEOUT`, because the answer is already in hand
+        and nothing here is worth waiting on. In practice the tail is a single
+        `[DONE]` already in flight, but a server that keeps a stream open after
+        its usage chunk -- emitting SSE heartbeat comments, which reset the HTTP
+        read timeout without ever yielding an event -- would otherwise block the
+        call indefinitely. On timeout we simply stop, which leaves the stream
+        where it was before this method existed: abandoned, and its connection
+        dropped when it is garbage-collected.
         """
-        try:
+
+        async def drain() -> None:
             async for _ in events:
                 pass
+
+        try:
+            await asyncio.wait_for(drain(), timeout=STREAM_DRAIN_TIMEOUT)
+        except asyncio.TimeoutError:
+            logging.debug(
+                "Gave up draining stream response after %ss", STREAM_DRAIN_TIMEOUT
+            )
         except Exception as e:
             logging.debug("Error while draining stream response: %s", e)
 
