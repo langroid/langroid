@@ -51,6 +51,10 @@ the LLM will try its best to interpret what you want, and offer choices when con
 
     - Illustrates Agent + Tools/function-calling + Google organic search via SerpApi
 
+- [`/examples/basic/chat-search-firecrawl.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-firecrawl.py) Similar to the above, but uses `FirecrawlSearchTool` for web search via Firecrawl. Requires `FIRECRAWL_API_KEY` and `pip install langroid[firecrawl]`; see [Firecrawl Search Tool docs](../notes/firecrawl_search.md) for setup details.
+
+    - Illustrates Agent + Tools/function-calling + web-search via Firecrawl
+
 - [`/examples/basic/chat-tree.py`](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat-tree.py) is a toy example of tree-structured multi-agent
   computation, see a detailed writeup [here.](https://langroid.github.io/langroid/examples/agent-tree/)
   
