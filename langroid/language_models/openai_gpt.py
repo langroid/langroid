@@ -128,6 +128,39 @@ LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 # `OpenAIGPT._drain_stream_async`.
 STREAM_DRAIN_TIMEOUT = 5.0
 
+# `finish_reason` values that mean the provider stopped the response partway
+# through, so the last tokens the model emitted may be incomplete.
+TRUNCATING_FINISH_REASONS = ("length", "content_filter")
+
+
+def _reject_truncated_args(args: Optional[str]) -> None:
+    """
+    Raise `ValueError` if `args` is not strictly-valid JSON.
+
+    Only called when the provider cut the response short (`finish_reason` in
+    `TRUNCATING_FINISH_REASONS`). The normal lenient parse
+    (`parse_imperfect_json`) *repairs* a cut-off arguments string by closing
+    the braces it left open, so `{"order_id": "A-1", "amount": 1000` silently
+    becomes `{"order_id": "A-1", "amount": 1}` and `{"amount":` becomes
+    `{"amount": ""}` -- a tool then runs with values the model never wrote.
+    Requiring strict JSON on a truncated response sends such a call down the
+    existing "could not parse ... treating as normal non-tool message" path
+    instead of executing it.
+
+    Args:
+        args: the raw `arguments` string from the provider, if any.
+
+    Raises:
+        ValueError: if `args` is a non-empty string that is not valid JSON.
+            (`json.JSONDecodeError` is a subclass of `ValueError`.)
+    """
+    if not isinstance(args, str) or not args:
+        # No arguments at all is not a truncation we can detect here, and the
+        # existing code already drops such calls where appropriate. A non-str
+        # is left to the existing parse, so this guard adds no new failure mode.
+        return
+    json.loads(args)
+
 
 openai_chat_model_pref_list = [
     OpenAIChatModel.GPT4o,
@@ -2108,6 +2141,7 @@ class OpenAIGPT(LanguageModel):
     @staticmethod
     def tool_deltas_to_tools(
         tools: List[Dict[str, Any]],
+        strict: bool = False,
     ) -> Tuple[
         str,
         List[OpenAIToolCall],
@@ -2120,6 +2154,10 @@ class OpenAIGPT(LanguageModel):
 
         Args:
             tools: list of tool deltas received from streaming API
+            strict: if True, require each call's accumulated `arguments` to be
+                strictly-valid JSON rather than repairing it. Set when the
+                stream ended with a truncating `finish_reason`, so a cut-off
+                call is dropped instead of silently completed.
 
         Returns:
             str: plain text corresponding to tool calls that failed to parse
@@ -2168,7 +2206,7 @@ class OpenAIGPT(LanguageModel):
         id2args: Dict[str, None | Dict[str, Any]] = {}
         for idx, tool_dict in idx2tool_dict.items():
             failed_content, args_dict = OpenAIGPT._parse_function_args(
-                tool_dict["function"]["arguments"]
+                tool_dict["function"]["arguments"], strict=strict
             )
             # used to build tool_calls_list below
             id2args[tool_dict["id"]] = args_dict or None  # if {}, store as None
@@ -2200,12 +2238,18 @@ class OpenAIGPT(LanguageModel):
         return "\n".join(contents), tool_calls_list, list(idx2tool_dict.values())
 
     @staticmethod
-    def _parse_function_args(args: str) -> Tuple[str, Dict[str, Any]]:
+    def _parse_function_args(
+        args: str, strict: bool = False
+    ) -> Tuple[str, Dict[str, Any]]:
         """
         Try to parse the `args` string as function args.
 
         Args:
             args: string containing function args
+            strict: if True, require `args` to be strictly-valid JSON rather
+                than repairing it. Set when the response was cut short by the
+                provider, so a truncated call is not silently completed; see
+                `_reject_truncated_args`.
 
         Returns:
             Tuple of content, function name and args dict.
@@ -2216,6 +2260,8 @@ class OpenAIGPT(LanguageModel):
         args_dict = {}
         try:
             stripped_fn_args = args.strip()
+            if strict:
+                _reject_truncated_args(stripped_fn_args)
             dict_or_list = parse_imperfect_json(stripped_fn_args)
             if not isinstance(dict_or_list, dict):
                 raise ValueError(f"""
@@ -2270,9 +2316,13 @@ class OpenAIGPT(LanguageModel):
         """
         # check if function_call args are valid, if not,
         # treat this as a normal msg, not a function call
+        # A truncating finish_reason means the provider cut the model off, so the
+        # last arguments it emitted may be incomplete: parse strictly rather than
+        # repairing, so a cut-off call is not executed with invented values.
+        strict_args = finish_reason in TRUNCATING_FINISH_REASONS
         args: Dict[str, Any] = {}
         if has_function and function_args != "":
-            content, args = self._parse_function_args(function_args)
+            content, args = self._parse_function_args(function_args, strict=strict_args)
             completion = completion + content
             if content != "":
                 has_function = False
@@ -2281,6 +2331,7 @@ class OpenAIGPT(LanguageModel):
         if chat:
             failed_content, tool_calls, tool_dicts = OpenAIGPT.tool_deltas_to_tools(
                 tool_deltas,
+                strict=strict_args,
             )
             if failed_content:
                 completion += ("\n" if completion else "") + failed_content
@@ -3196,6 +3247,8 @@ class OpenAIGPT(LanguageModel):
             fun_call = None
         else:
             try:
+                if finish_reason in TRUNCATING_FINISH_REASONS:
+                    _reject_truncated_args(message["function_call"].get("arguments"))
                 fun_call = LLMFunctionCall.from_dict(message["function_call"])
             except (ValueError, SyntaxError):
                 logging.warning(
@@ -3213,6 +3266,10 @@ class OpenAIGPT(LanguageModel):
             oai_tool_calls = []
             for tool_call_dict in message["tool_calls"]:
                 try:
+                    if finish_reason in TRUNCATING_FINISH_REASONS:
+                        _reject_truncated_args(
+                            tool_call_dict.get("function", {}).get("arguments")
+                        )
                     tool_call = OpenAIToolCall.from_dict(tool_call_dict)
                     oai_tool_calls.append(tool_call)
                 except (ValueError, SyntaxError):
