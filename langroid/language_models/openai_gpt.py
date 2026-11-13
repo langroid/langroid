@@ -144,6 +144,19 @@ TRUNCATED_TOOL_CALL_NOTICE = (
 )
 
 
+def _with_truncation_notice(text: Optional[str]) -> str:
+    """
+    `text` with `TRUNCATED_TOOL_CALL_NOTICE` appended on its own line.
+
+    Args:
+        text: existing message text, possibly None or empty.
+
+    Returns:
+        The text plus the notice (just the notice when there was no text).
+    """
+    return (text or "") + ("\n" if text else "") + TRUNCATED_TOOL_CALL_NOTICE
+
+
 def _args_truncated(args: Any) -> bool:
     """
     Whether `args` cannot be a *complete* tool-arguments string.
@@ -3274,7 +3287,15 @@ class OpenAIGPT(LanguageModel):
                 f"{json.dumps(message['function_call'])}"
             )
             fun_call = None
-            msg = (msg or "") + ("\n" if msg else "") + TRUNCATED_TOOL_CALL_NOTICE
+            msg = _with_truncation_notice(msg)
+            # The notice has to reach the LLM's next turn, and when inline
+            # thought tags were extracted it is the reasoning-bearing copy that
+            # `ChatDocument.to_LLMMessage` sends -- so it needs the notice too,
+            # or the model never learns its call was dropped. Left None when
+            # no tags were found: that None is what marks "nothing extra to
+            # preserve", and `msg` already carries the notice.
+            if message_with_reasoning is not None:
+                message_with_reasoning = _with_truncation_notice(message_with_reasoning)
         else:
             try:
                 fun_call = LLMFunctionCall.from_dict(message["function_call"])
@@ -3316,7 +3337,13 @@ class OpenAIGPT(LanguageModel):
                     msg = (msg or "") + ("\n" if msg else "") + serialized_tool_call
             if dropped_truncated:
                 # once, however many calls were dropped; never the raw arguments
-                msg = (msg or "") + ("\n" if msg else "") + TRUNCATED_TOOL_CALL_NOTICE
+                msg = _with_truncation_notice(msg)
+                # and into the reasoning-bearing copy as well, for the reason
+                # given on the function_call branch above
+                if message_with_reasoning is not None:
+                    message_with_reasoning = _with_truncation_notice(
+                        message_with_reasoning
+                    )
         return LLMResponse(
             # None (no content, e.g. a tool-call-only response) is preserved as
             # None rather than coerced to "", so the distinction survives

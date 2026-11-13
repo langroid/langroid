@@ -386,3 +386,73 @@ def test_truncated_args_are_not_re_extracted_from_content(
     HANDLER_RAN_WITH.clear()
     agent.agent_response(ChatDocument.from_LLMResponse(response))
     assert HANDLER_RAN_WITH == []
+
+
+def _reasoning_tool_response(
+    args: Any, finish_reason: Optional[str], shape: str
+) -> Dict[str, Any]:
+    """A response whose content carries inline `<think>` tags AND a cut call."""
+    message: Dict[str, Any] = {
+        "content": "<think>I should refund the full amount</think>Refunding now.",
+    }
+    if shape == "tool_calls":
+        message["tool_calls"] = [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "refund", "arguments": args},
+            }
+        ]
+    else:
+        message["function_call"] = {"name": "refund", "arguments": args}
+    return {
+        "choices": [{"finish_reason": finish_reason, "message": message}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+
+
+@pytest.mark.parametrize("shape", ["tool_calls", "function_call"])
+def test_discard_notice_survives_inline_reasoning(model: OpenAIGPT, shape: str) -> None:
+    """The notice must reach the LLM's next turn, reasoning tags or not.
+
+    When inline thought tags are extracted, `message_with_reasoning` holds the
+    original text and `ChatDocument.to_LLMMessage` PREFERS it over `message`.
+    So a notice appended only to `message` is silently dropped from history,
+    and the model never learns its call was discarded -- the retry prompt this
+    fix exists to deliver never arrives.
+    """
+    response = model._process_chat_completion_response(
+        cached=False,
+        response=_reasoning_tool_response(CUT_NUMBER, "length", shape),
+    )
+    # the call itself is still discarded, and the notice is in the message
+    assert response.oai_tool_calls is None
+    assert response.function_call is None
+    assert TRUNCATED_TOOL_CALL_NOTICE in (response.message or "")
+
+    # ... and it survives the round-trip into the next request's history
+    doc = ChatDocument.from_LLMResponse(response)
+    llm_messages = ChatDocument.to_LLMMessage(doc)
+    assert any(
+        TRUNCATED_TOOL_CALL_NOTICE in (m.content or "") for m in llm_messages
+    ), f"notice lost from history: {[m.content for m in llm_messages]}"
+    # the reasoning-bearing copy is still what preserves the thought tags
+    assert "<think>" in (response.message_with_reasoning or "")
+
+
+def test_discard_notice_survives_inline_reasoning_streaming(model: OpenAIGPT) -> None:
+    """The streaming path must hold the same guarantee as the non-streaming one."""
+    response, _ = model._create_stream_response(
+        chat=True,
+        completion="<think>I should refund the full amount</think>Refunding now.",
+        content_present=True,
+        tool_deltas=_deltas(CUT_NUMBER),
+        finish_reason="length",
+    )
+    assert response.oai_tool_calls is None
+    doc = ChatDocument.from_LLMResponse(response)
+    assert any(
+        TRUNCATED_TOOL_CALL_NOTICE in (m.content or "")
+        for m in ChatDocument.to_LLMMessage(doc)
+    )
+    assert "<think>" in (response.message_with_reasoning or "")
