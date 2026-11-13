@@ -46,7 +46,7 @@ def model() -> OpenAIGPT:
     )
 
 
-def _tool_response(args: str, finish_reason: Optional[str]) -> Dict[str, Any]:
+def _tool_response(args: Any, finish_reason: Optional[str]) -> Dict[str, Any]:
     """An OpenAI chat-completion response carrying one `tool_calls` entry."""
     return {
         "choices": [
@@ -68,7 +68,7 @@ def _tool_response(args: str, finish_reason: Optional[str]) -> Dict[str, Any]:
     }
 
 
-def _function_response(args: str, finish_reason: Optional[str]) -> Dict[str, Any]:
+def _function_response(args: Any, finish_reason: Optional[str]) -> Dict[str, Any]:
     """The same, in the legacy `function_call` shape."""
     return {
         "choices": [
@@ -119,6 +119,38 @@ def test_truncated_function_call_not_kept(model: OpenAIGPT, args: str) -> None:
         cached=False, response=_function_response(args, "length")
     )
     assert response.function_call is None
+
+
+@pytest.mark.parametrize("args", [None, "", "   "], ids=["null", "empty", "blank"])
+def test_call_cut_before_any_arguments_not_kept(model: OpenAIGPT, args: Any) -> None:
+    """A response cut off after the tool *name* but before its arguments.
+
+    There is nothing to JSON-validate here, and such a call used to survive
+    with `arguments=None` -- which means the tool then ran on whatever defaults
+    its schema supplies, with no value from the model at all.
+    """
+    tool = model._process_chat_completion_response(
+        cached=False, response=_tool_response(args, "length")
+    )
+    assert tool.oai_tool_calls is None
+    fun = model._process_chat_completion_response(
+        cached=False, response=_function_response(args, "length")
+    )
+    assert fun.function_call is None
+
+
+@pytest.mark.parametrize("finish_reason", ["stop", "tool_calls", "length"])
+def test_no_arg_call_still_kept(model: OpenAIGPT, finish_reason: str) -> None:
+    """Control: a tool that genuinely takes no arguments sends `{}`, and runs.
+
+    Including in a response that *was* truncated: `{}` is complete JSON, so
+    nothing was lost.
+    """
+    response = model._process_chat_completion_response(
+        cached=False, response=_tool_response("{}", finish_reason)
+    )
+    assert response.oai_tool_calls is not None
+    assert len(response.oai_tool_calls) == 1
 
 
 @pytest.mark.parametrize("args", TRUNCATED_ARGS)

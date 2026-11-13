@@ -147,18 +147,23 @@ def _reject_truncated_args(args: Optional[str]) -> None:
     existing "could not parse ... treating as normal non-tool message" path
     instead of executing it.
 
+    No arguments at all (`null`, missing, or empty) is rejected for the same
+    reason: the response stopped before the model wrote any, so running the
+    call would mean running it on whatever defaults its schema supplies. A
+    tool that genuinely takes no arguments sends `"{}"`, which is valid JSON
+    and still passes.
+
     Args:
         args: the raw `arguments` string from the provider, if any.
 
     Raises:
-        ValueError: if `args` is a non-empty string that is not valid JSON.
+        ValueError: if `args` is missing, empty, or not valid JSON.
             (`json.JSONDecodeError` is a subclass of `ValueError`.)
     """
-    if not isinstance(args, str) or not args:
-        # No arguments at all is not a truncation we can detect here, and the
-        # existing code already drops such calls where appropriate. A non-str
-        # is left to the existing parse, so this guard adds no new failure mode.
-        return
+    if not isinstance(args, str) or not args.strip():
+        raise ValueError(
+            "response was cut short before any tool arguments were emitted"
+        )
     json.loads(args)
 
 
