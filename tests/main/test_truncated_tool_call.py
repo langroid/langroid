@@ -133,6 +133,52 @@ def test_truncated_streaming_tool_call_not_kept(model: OpenAIGPT, args: str) -> 
     assert "tool_calls" not in cached["choices"][0]["message"]
 
 
+def test_streamed_call_cut_before_any_arguments_not_kept(model: OpenAIGPT) -> None:
+    """A stream cut off after the tool *name* but before its arguments.
+
+    There is nothing to JSON-validate here, and the empty-argument call used to
+    survive the parse with `arguments=None` -- which means the tool then ran on
+    whatever defaults its schema supplies, with no value from the model at all.
+    """
+    response, cached = model._create_stream_response(
+        chat=True, tool_deltas=_deltas(""), finish_reason="length"
+    )
+    assert response.oai_tool_calls is None
+    assert "tool_calls" not in cached["choices"][0]["message"]
+
+
+def test_streamed_function_call_cut_before_any_arguments_not_kept(
+    model: OpenAIGPT,
+) -> None:
+    """Same, in the legacy `function_call` shape."""
+    response, cached = model._create_stream_response(
+        chat=True,
+        has_function=True,
+        function_name="refund",
+        function_args="",
+        finish_reason="length",
+    )
+    assert response.function_call is None
+    assert "function_call" not in cached["choices"][0]["message"]
+
+
+@pytest.mark.parametrize("finish_reason", ["stop", "tool_calls"])
+def test_streamed_no_arg_call_still_kept_when_not_truncated(
+    model: OpenAIGPT, finish_reason: str
+) -> None:
+    """Control: a genuinely argument-less call in a normal response still runs.
+
+    Some providers send `arguments=""` rather than `"{}"` for a no-argument
+    tool; that must keep working when the response was not cut short.
+    """
+    response, _ = model._create_stream_response(
+        chat=True, tool_deltas=_deltas(""), finish_reason=finish_reason
+    )
+    assert response.oai_tool_calls is not None
+    assert len(response.oai_tool_calls) == 1
+    assert response.oai_tool_calls[0].function.name == "refund"
+
+
 @pytest.mark.parametrize("finish_reason", ["stop", "tool_calls", "length"])
 def test_complete_tool_call_still_kept(model: OpenAIGPT, finish_reason: str) -> None:
     """Control: complete arguments are executed, truncated response or not.

@@ -2205,8 +2205,17 @@ class OpenAIGPT(LanguageModel):
         good_indices = []
         id2args: Dict[str, None | Dict[str, Any]] = {}
         for idx, tool_dict in idx2tool_dict.items():
+            raw_args = tool_dict["function"]["arguments"]
+            if strict and not raw_args.strip():
+                # The stream ended before this call's arguments were emitted at
+                # all. `_parse_function_args("")` fails with EMPTY content, which
+                # the `failed_content != ""` test below reads as success, so the
+                # call would be kept with `arguments=None` and then run on
+                # whatever defaults its schema supplies. Fail it explicitly.
+                contents.append(json.dumps(tool_dict))
+                continue
             failed_content, args_dict = OpenAIGPT._parse_function_args(
-                tool_dict["function"]["arguments"], strict=strict
+                raw_args, strict=strict
             )
             # used to build tool_calls_list below
             id2args[tool_dict["id"]] = args_dict or None  # if {}, store as None
@@ -2321,7 +2330,12 @@ class OpenAIGPT(LanguageModel):
         # repairing, so a cut-off call is not executed with invented values.
         strict_args = finish_reason in TRUNCATING_FINISH_REASONS
         args: Dict[str, Any] = {}
-        if has_function and function_args != "":
+        if has_function and strict_args and not function_args.strip():
+            # Same hole as in `tool_deltas_to_tools`: the stream ended before any
+            # arguments were emitted, so the call must not run on schema defaults.
+            completion += json.dumps({"function_call": {"name": function_name}})
+            has_function = False
+        elif has_function and function_args != "":
             content, args = self._parse_function_args(function_args, strict=strict_args)
             completion = completion + content
             if content != "":
