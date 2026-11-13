@@ -20,7 +20,11 @@ import pytest
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
-from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import (
+    TRUNCATED_TOOL_CALL_NOTICE,
+    OpenAIGPT,
+    OpenAIGPTConfig,
+)
 
 # Arguments the model meant to write, in full.
 COMPLETE_ARGS = '{"order_id": "A-77", "amount": 1000}'
@@ -106,10 +110,12 @@ def test_truncated_tool_call_not_kept(
         cached=False, response=_tool_response(args, finish_reason)
     )
     assert response.oai_tool_calls is None
-    # the raw call still reaches the LLM as plain text, via the existing
-    # "treating as normal non-tool message" fallback
-    assert response.message is not None
-    assert "refund" in response.message
+    # the LLM is told what happened, so it can retry with shorter arguments --
+    # but the cut-off arguments themselves must NOT reach the content, since
+    # the agent scans content for tool calls too (see
+    # test_truncated_args_are_not_re_extracted_from_content)
+    assert response.message == TRUNCATED_TOOL_CALL_NOTICE
+    assert args not in response.message
 
 
 @pytest.mark.parametrize("args", TRUNCATED_ARGS)
@@ -338,3 +344,45 @@ def test_agent_does_not_run_handler_for_truncated_call(model: OpenAIGPT) -> None
     result = agent.agent_response(complete)
     assert HANDLER_RAN_WITH == [1000.0]
     assert result is not None and "1000" in result.content
+
+
+@pytest.mark.parametrize("stream", [False, True], ids=["non-stream", "stream"])
+def test_truncated_args_are_not_re_extracted_from_content(
+    model: OpenAIGPT, stream: bool
+) -> None:
+    """Dropping the call is not enough: its text must not reach the content.
+
+    The agent also scans message *content* for tool calls, and a cut-off
+    arguments string can carry a complete-looking JSON fragment -- here a
+    whole element of a list the model never finished. Echoing the raw
+    arguments back as content would let that fragment be extracted and run,
+    reinstating the very bug by another door.
+    """
+    cut = '{"items": [{"order_id": "A-1", "amount": 1000}], "memo": "cut off'
+    agent = ChatAgent(
+        ChatAgentConfig(
+            llm=OpenAIGPTConfig(
+                chat_model="gpt-4o", api_key="test-key", stream=False, cache_config=None
+            ),
+            use_tools=False,
+            use_functions_api=True,
+            use_tools_api=True,
+        )
+    )
+    agent.enable_message(Refund)
+
+    if stream:
+        response, _ = model._create_stream_response(
+            chat=True, tool_deltas=_deltas(cut), finish_reason="length"
+        )
+    else:
+        response = model._process_chat_completion_response(
+            cached=False, response=_tool_response(cut, "length")
+        )
+    assert response.oai_tool_calls is None
+    assert response.message is not None
+    assert "amount" not in response.message
+
+    HANDLER_RAN_WITH.clear()
+    agent.agent_response(ChatDocument.from_LLMResponse(response))
+    assert HANDLER_RAN_WITH == []
