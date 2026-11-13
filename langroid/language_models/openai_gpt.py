@@ -138,8 +138,11 @@ TRUNCATING_FINISH_REASONS = ("length", "content_filter")
 # NOT reach the message content, because the agent also scans content for tool
 # calls, and a cut-off string can carry a complete-looking JSON fragment (an
 # element of a truncated list, say) that would then be executed anyway.
+# The wording names no particular cause, because both TRUNCATING_FINISH_REASONS
+# reach it: `"length"` is the output token limit, but `"content_filter"` is the
+# provider's filter stopping the model mid-call.
 TRUNCATED_TOOL_CALL_NOTICE = (
-    "[A tool call was cut off by the output token limit, so it was discarded "
+    "[A tool call was cut off before it was complete, so it was discarded "
     "without being run. Send it again, with shorter arguments.]"
 )
 
@@ -182,7 +185,15 @@ def _args_truncated(args: Any) -> bool:
     if not isinstance(args, str) or not args.strip():
         return True
     try:
-        json.loads(args)
+        # strict=False allows a raw newline (or other control character) INSIDE a
+        # string value, which `json.loads` otherwise rejects. The parse this gate
+        # guards tolerates exactly that -- `LLMFunctionCall.from_dict` strips
+        # newlines before parsing, for providers that emit them -- so a strict
+        # parse here would discard a call the model had finished writing, just
+        # because the response was truncated later. Truncation itself is still
+        # caught either way: a cut-off string leaves an unterminated quote or an
+        # unclosed brace, which fails with or without `strict`.
+        json.loads(args, strict=False)
     except ValueError:
         return True
     return False

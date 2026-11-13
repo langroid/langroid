@@ -22,6 +22,7 @@ from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import (
     TRUNCATED_TOOL_CALL_NOTICE,
+    TRUNCATING_FINISH_REASONS,
     OpenAIGPT,
     OpenAIGPTConfig,
 )
@@ -456,3 +457,66 @@ def test_discard_notice_survives_inline_reasoning_streaming(model: OpenAIGPT) ->
         for m in ChatDocument.to_LLMMessage(doc)
     )
     assert "<think>" in (response.message_with_reasoning or "")
+
+
+# A COMPLETE arguments string that `json.loads` rejects only because it carries a
+# raw newline inside a string value. `LLMFunctionCall.from_dict` strips newlines
+# before parsing, precisely because some providers emit them, so this call is
+# executed normally when the response ends cleanly -- and must not be discarded
+# merely because the response was truncated after it.
+COMPLETE_ARGS_WITH_RAW_NEWLINE = (
+    '{"order_id": "A-77", "amount": 1000,\n "memo": "line1\nline2"}'  # noqa: E501
+)
+
+
+@pytest.mark.parametrize("finish_reason", ["length", "content_filter"])
+def test_complete_args_with_raw_newline_still_kept(
+    model: OpenAIGPT, finish_reason: str
+) -> None:
+    """A strict gate must not discard a call the model finished writing.
+
+    The guarded parse tolerates raw newlines inside argument strings; a bare
+    `json.loads` does not. Gating on the bare parse dropped a complete call
+    whenever the response happened to be truncated later -- a working agent
+    would start losing calls and retry-looping on providers that emit them.
+    """
+    response = model._process_chat_completion_response(
+        cached=False,
+        response=_tool_response(COMPLETE_ARGS_WITH_RAW_NEWLINE, finish_reason),
+    )
+    assert response.oai_tool_calls is not None, "complete call wrongly discarded"
+    assert len(response.oai_tool_calls) == 1
+    args = response.oai_tool_calls[0].function.arguments
+    assert args is not None and args["amount"] == 1000
+    assert TRUNCATED_TOOL_CALL_NOTICE not in (response.message or "")
+
+    # control: the same response ending cleanly keeps it too, identically
+    clean = model._process_chat_completion_response(
+        cached=False,
+        response=_tool_response(COMPLETE_ARGS_WITH_RAW_NEWLINE, "tool_calls"),
+    )
+    assert clean.oai_tool_calls is not None
+    assert clean.oai_tool_calls[0].function.arguments == args
+
+    # and a genuinely cut-off string containing a raw newline is STILL discarded
+    cut = '{"order_id": "A-77",\n "memo": "line1\nline2'
+    dropped = model._process_chat_completion_response(
+        cached=False, response=_tool_response(cut, finish_reason)
+    )
+    assert dropped.oai_tool_calls is None
+    assert TRUNCATED_TOOL_CALL_NOTICE in (dropped.message or "")
+
+
+def test_notice_names_no_cause_so_it_fits_content_filter(model: OpenAIGPT) -> None:
+    """Both truncating finish_reasons reach the notice, so it must fit both.
+
+    `content_filter` is not the output token limit, and the notice is the text
+    the model is asked to act on, so it must not assert a cause that is wrong
+    half the time.
+    """
+    assert "token limit" not in TRUNCATED_TOOL_CALL_NOTICE
+    for finish_reason in TRUNCATING_FINISH_REASONS:
+        response = model._process_chat_completion_response(
+            cached=False, response=_tool_response(CUT_NUMBER, finish_reason)
+        )
+        assert TRUNCATED_TOOL_CALL_NOTICE in (response.message or "")
