@@ -128,6 +128,76 @@ LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 # `OpenAIGPT._drain_stream_async`.
 STREAM_DRAIN_TIMEOUT = 5.0
 
+# `finish_reason` values that mean the provider stopped the response partway
+# through, so the last tokens the model emitted may be incomplete.
+TRUNCATING_FINISH_REASONS = ("length", "content_filter")
+
+
+# What the LLM sees in place of a tool call we discarded as cut off. Note that
+# this text deliberately contains no JSON: the discarded `arguments` string must
+# NOT reach the message content, because the agent also scans content for tool
+# calls, and a cut-off string can carry a complete-looking JSON fragment (an
+# element of a truncated list, say) that would then be executed anyway.
+# The wording names no particular cause, because both TRUNCATING_FINISH_REASONS
+# reach it: `"length"` is the output token limit, but `"content_filter"` is the
+# provider's filter stopping the model mid-call.
+TRUNCATED_TOOL_CALL_NOTICE = (
+    "[A tool call was cut off before it was complete, so it was discarded "
+    "without being run. Send it again, with shorter arguments.]"
+)
+
+
+def _with_truncation_notice(text: Optional[str]) -> str:
+    """
+    `text` with `TRUNCATED_TOOL_CALL_NOTICE` appended on its own line.
+
+    Args:
+        text: existing message text, possibly None or empty.
+
+    Returns:
+        The text plus the notice (just the notice when there was no text).
+    """
+    return (text or "") + ("\n" if text else "") + TRUNCATED_TOOL_CALL_NOTICE
+
+
+def _args_truncated(args: Any) -> bool:
+    """
+    Whether `args` cannot be a *complete* tool-arguments string.
+
+    Only consulted when the provider cut the response short (`finish_reason`
+    in `TRUNCATING_FINISH_REASONS`). The normal lenient parse
+    (`parse_imperfect_json`) *repairs* a cut-off arguments string by closing
+    the braces it left open, so `{"order_id": "A-1", "amount": 1000` silently
+    becomes `{"order_id": "A-1", "amount": 1}` and `{"amount":` becomes
+    `{"amount": ""}` -- a tool then runs with values the model never wrote.
+
+    Missing arguments (`null`, absent, or blank) count as truncated for the
+    same reason: the response stopped before the model wrote any, so running
+    the call would mean running it on whatever defaults its schema supplies. A
+    tool that genuinely takes no arguments sends `"{}"`, which is complete.
+
+    Args:
+        args: the raw `arguments` value from the provider, if any.
+
+    Returns:
+        True if the call must be discarded rather than executed.
+    """
+    if not isinstance(args, str) or not args.strip():
+        return True
+    try:
+        # strict=False allows a raw newline (or other control character) INSIDE a
+        # string value, which `json.loads` otherwise rejects. The parse this gate
+        # guards tolerates exactly that -- `LLMFunctionCall.from_dict` strips
+        # newlines before parsing, for providers that emit them -- so a strict
+        # parse here would discard a call the model had finished writing, just
+        # because the response was truncated later. Truncation itself is still
+        # caught either way: a cut-off string leaves an unterminated quote or an
+        # unclosed brace, which fails with or without `strict`.
+        json.loads(args, strict=False)
+    except ValueError:
+        return True
+    return False
+
 
 openai_chat_model_pref_list = [
     OpenAIChatModel.GPT4o,
@@ -2108,6 +2178,7 @@ class OpenAIGPT(LanguageModel):
     @staticmethod
     def tool_deltas_to_tools(
         tools: List[Dict[str, Any]],
+        strict: bool = False,
     ) -> Tuple[
         str,
         List[OpenAIToolCall],
@@ -2120,6 +2191,10 @@ class OpenAIGPT(LanguageModel):
 
         Args:
             tools: list of tool deltas received from streaming API
+            strict: if True, discard any call whose accumulated `arguments` are
+                not complete JSON rather than repairing them. Set when the
+                stream ended with a truncating `finish_reason`; see
+                `_args_truncated`.
 
         Returns:
             str: plain text corresponding to tool calls that failed to parse
@@ -2166,16 +2241,26 @@ class OpenAIGPT(LanguageModel):
         contents: List[str] = []
         good_indices = []
         id2args: Dict[str, None | Dict[str, Any]] = {}
+        dropped_truncated = False
         for idx, tool_dict in idx2tool_dict.items():
-            failed_content, args_dict = OpenAIGPT._parse_function_args(
-                tool_dict["function"]["arguments"]
-            )
+            raw_args = tool_dict["function"]["arguments"]
+            if strict and _args_truncated(raw_args):
+                logging.warning(
+                    "Discarding a tool call cut off by the output token limit: "
+                    f"{json.dumps(tool_dict)}"
+                )
+                dropped_truncated = True
+                continue
+            failed_content, args_dict = OpenAIGPT._parse_function_args(raw_args)
             # used to build tool_calls_list below
             id2args[tool_dict["id"]] = args_dict or None  # if {}, store as None
             if failed_content != "":
                 contents.append(failed_content)
             else:
                 good_indices.append(idx)
+        if dropped_truncated:
+            # once, however many calls were dropped; never the raw arguments
+            contents.append(TRUNCATED_TOOL_CALL_NOTICE)
 
         # remove the failed tool calls
         idx2tool_dict = {
@@ -2270,8 +2355,19 @@ class OpenAIGPT(LanguageModel):
         """
         # check if function_call args are valid, if not,
         # treat this as a normal msg, not a function call
+        # A truncating finish_reason means the provider cut the model off, so the
+        # last arguments it emitted may be incomplete: parse strictly rather than
+        # repairing, so a cut-off call is not executed with invented values.
+        strict_args = finish_reason in TRUNCATING_FINISH_REASONS
         args: Dict[str, Any] = {}
-        if has_function and function_args != "":
+        if has_function and strict_args and _args_truncated(function_args):
+            logging.warning(
+                "Discarding a function call cut off by the output token limit: "
+                f"{function_name}({function_args})"
+            )
+            completion += ("\n" if completion else "") + TRUNCATED_TOOL_CALL_NOTICE
+            has_function = False
+        elif has_function and function_args != "":
             content, args = self._parse_function_args(function_args)
             completion = completion + content
             if content != "":
@@ -2281,6 +2377,7 @@ class OpenAIGPT(LanguageModel):
         if chat:
             failed_content, tool_calls, tool_dicts = OpenAIGPT.tool_deltas_to_tools(
                 tool_deltas,
+                strict=strict_args,
             )
             if failed_content:
                 completion += ("\n" if completion else "") + failed_content
@@ -3192,8 +3289,24 @@ class OpenAIGPT(LanguageModel):
         else:
             msg = content
 
+        truncated = finish_reason in TRUNCATING_FINISH_REASONS
         if message.get("function_call") is None:
             fun_call = None
+        elif truncated and _args_truncated(message["function_call"].get("arguments")):
+            logging.warning(
+                "Discarding a function call cut off by the output token limit: "
+                f"{json.dumps(message['function_call'])}"
+            )
+            fun_call = None
+            msg = _with_truncation_notice(msg)
+            # The notice has to reach the LLM's next turn, and when inline
+            # thought tags were extracted it is the reasoning-bearing copy that
+            # `ChatDocument.to_LLMMessage` sends -- so it needs the notice too,
+            # or the model never learns its call was dropped. Left None when
+            # no tags were found: that None is what marks "nothing extra to
+            # preserve", and `msg` already carries the notice.
+            if message_with_reasoning is not None:
+                message_with_reasoning = _with_truncation_notice(message_with_reasoning)
         else:
             try:
                 fun_call = LLMFunctionCall.from_dict(message["function_call"])
@@ -3211,7 +3324,17 @@ class OpenAIGPT(LanguageModel):
         oai_tool_calls = None
         if message.get("tool_calls") is not None:
             oai_tool_calls = []
+            dropped_truncated = False
             for tool_call_dict in message["tool_calls"]:
+                if truncated and _args_truncated(
+                    tool_call_dict.get("function", {}).get("arguments")
+                ):
+                    logging.warning(
+                        "Discarding a tool call cut off by the output token "
+                        f"limit: {json.dumps(tool_call_dict)}"
+                    )
+                    dropped_truncated = True
+                    continue
                 try:
                     tool_call = OpenAIToolCall.from_dict(tool_call_dict)
                     oai_tool_calls.append(tool_call)
@@ -3223,6 +3346,15 @@ class OpenAIGPT(LanguageModel):
                     )
                     serialized_tool_call = json.dumps(tool_call_dict)
                     msg = (msg or "") + ("\n" if msg else "") + serialized_tool_call
+            if dropped_truncated:
+                # once, however many calls were dropped; never the raw arguments
+                msg = _with_truncation_notice(msg)
+                # and into the reasoning-bearing copy as well, for the reason
+                # given on the function_call branch above
+                if message_with_reasoning is not None:
+                    message_with_reasoning = _with_truncation_notice(
+                        message_with_reasoning
+                    )
         return LLMResponse(
             # None (no content, e.g. a tool-call-only response) is preserved as
             # None rather than coerced to "", so the distinction survives
