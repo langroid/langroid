@@ -7,7 +7,7 @@ authors = [
 description = "Harness LLMs with Multi-Agent Programming"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = "<3.14,>=3.10"
+requires-python = "<3.14,>=3.11"
 dependencies = [
     "adb-cloud-connector<2.0.0,>=1.0.2",
     "aiohttp<4.0.0,>=3.9.1",
@@ -349,8 +349,9 @@ docs = [
 # -- none of which has a security alert -- to versions that break us:
 #   - qdrant-client>=1.16 removes Client.search_batch + CollectionInfo.vectors_count
 #     used by QdrantDB (runtime break). Public range stays broad pending a code migration.
-#   - onnxruntime>=1.24 ships no cp310 wheels/sdist, breaking `uv sync` on Python 3.10
-#     (we advertise >=3.10). pip installs are unaffected (they pick the newest cp310 wheel).
+#   - onnxruntime<1.24 was pinned because 1.24 ships no cp310 wheels/sdist and we
+#     advertised >=3.10. The 3.10 floor is gone, so this pin is now only a hold:
+#     lifting it is a separate dependency change, not part of the Python-floor bump.
 #   - mypy>=1.16 (dev-only) adds stricter checks that flag safe Responder-union access.
 #   - pinecone-client>=6 is an import-time stub that raises ("renamed to `pinecone`"),
 #     breaking VectorStore.create() for every backend. Hold at the working 5.x line.
