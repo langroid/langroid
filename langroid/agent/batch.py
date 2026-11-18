@@ -70,15 +70,12 @@ def _convert_exception_handling(
 def _batch_cancelled() -> bool:
     """Whether the task running the batch has itself been cancelled.
 
-    Uses `asyncio.Task.cancelling()` (Python 3.11+); a `CancelledError` raised
-    by a task's own code does not bump this counter, so it can be told apart
-    from external cancellation of the batch. On Python 3.10 the counter is not
-    available and this returns False, which keeps the pre-existing behavior
-    of applying the exception policy to any `CancelledError`.
+    Uses `asyncio.Task.cancelling()`; a `CancelledError` raised by a task's
+    own code does not bump this counter, so it can be told apart from
+    external cancellation of the batch.
     """
     task = asyncio.current_task()
-    cancelling = getattr(task, "cancelling", None)
-    return cancelling is not None and cancelling() > 0
+    return task is not None and task.cancelling() > 0
 
 
 async def _process_batch_async(
@@ -262,9 +259,9 @@ async def _process_rolling_async(
 
     Results use input order; successful values are mapped as tasks complete.
     Cancellation at a scheduler await is external and always propagates.
-    Cancellation retrieved from a child is a per-item failure instead, even
-    on Python 3.10. Cleanup is shielded so repeated caller cancellation does
-    not abandon a child's asynchronous finalizer.
+    Cancellation retrieved from a child is a per-item failure instead.
+    Cleanup is shielded so repeated caller cancellation does not abandon a
+    child's asynchronous finalizer.
     """
     policy = _convert_exception_handling(handle_exceptions)
     results: List[Any] = [None] * len(inputs)
@@ -315,7 +312,7 @@ async def _process_rolling_async(
                     del owned[task]
                 done.clear()
                 # Observe cancellation requested by a synchronous callback
-                # before creating more tasks (also works on Python 3.10).
+                # before creating more tasks.
                 await asyncio.sleep(0)
     except (KeyboardInterrupt, SystemExit) as exit_error:
         # Catches exits from the scheduler's own statements too, not just from a
