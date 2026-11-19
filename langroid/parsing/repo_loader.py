@@ -142,6 +142,9 @@ class RepoLoader:
             url: full github url of repo, or just "owner/repo"
             config: configuration for RepoLoader
         """
+        if url.lstrip().startswith("-"):
+            # git would parse such a value as an option, not a repository
+            raise ValueError(f"Invalid repository URL: {url!r}")
         self.url = url
         self.config = config
         self.clone_path: Optional[str] = None
@@ -317,7 +320,8 @@ class RepoLoader:
             self.clone_path = path
 
         try:
-            subprocess.run(["git", "clone", self.url, path], check=True)
+            # `--` ends option parsing, so the URL can never be read as an option
+            subprocess.run(["git", "clone", "--", self.url, path], check=True)
         except subprocess.CalledProcessError as e:
             logger.error(f"Git clone failed: {e}")
         except Exception as e:
