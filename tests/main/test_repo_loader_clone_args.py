@@ -1,5 +1,6 @@
 """RepoLoader must never let a repository URL be parsed as a git option."""
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -30,17 +31,17 @@ def test_clone_ends_option_parsing_before_url(
     src = tmp_path / "src"
     src.mkdir()
     subprocess.run(["git", "init", "-q", str(src)], check=True)
+    identity = {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
     subprocess.run(
-        ["git", "-C", str(src), "commit", "-q", "--allow-empty", "-m", "init"],
+        ["git", "-C", str(src), "-c", "commit.gpgsign=false"]
+        + ["commit", "-q", "--allow-empty", "-m", "init"],
         check=True,
-        env={
-            "GIT_AUTHOR_NAME": "t",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "t",
-            "GIT_COMMITTER_EMAIL": "t@t",
-            "HOME": str(Path.home()),
-            "PATH": "/usr/bin:/bin:/opt/homebrew/bin",
-        },
+        env={**os.environ, **identity},
     )
 
     loader = RepoLoader.__new__(RepoLoader)  # skip the GitHub API lookup
