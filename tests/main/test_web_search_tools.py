@@ -11,6 +11,7 @@ import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.agent.tools.exa_search_tool import ExaSearchTool
+from langroid.agent.tools.firecrawl_search_tool import FirecrawlSearchTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.seltz_search_tool import SeltzSearchTool
 from langroid.agent.tools.serpapi_search_tool import SerpApiSearchTool
@@ -45,6 +46,7 @@ agent = ChatAgent(cfg)
         DuckduckgoSearchTool,
         SeltzSearchTool,
         SerpApiSearchTool,
+        FirecrawlSearchTool,
     ],
 )
 @pytest.mark.parametrize("use_functions_api", [True, False])
