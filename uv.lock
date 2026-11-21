@@ -10,12 +10,12 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'darwin'",
-    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
+    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
+    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version < '3.11.5' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11.5' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
 
@@ -508,7 +508,7 @@ version = "4.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "soupsieve", version = "2.10", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11.5'" },
-    { name = "soupsieve", version = "4.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11.5'" },
+    { name = "soupsieve", version = "4.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11.5'" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/43/65/318323f98dbee45d42dff61d8f047181bc6f2268a9068cfad035a46be5af/beautifulsoup4-4.15.0.tar.gz", hash = "sha256:288e3ca7d54b06f2ac191970bc275c1939cb46d450b255bf6718b04aa37ab4f7", size = 632571, upload-time = "2026-06-07T16:44:20.453Z" }
@@ -610,11 +610,11 @@ wheels = [
 
 [[package]]
 name = "bracex"
-version = "3.0.1"
+version = "3.2.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ac/01/5f394b8bcd6e5b92f73130990960423bbb19711f906bd9fe9ea5557c667c/bracex-3.0.1.tar.gz", hash = "sha256:4e38e32392e4a4780fe15d644bfc7c8514057cfc3861e060b11814ce829c25e4", size = 44019, upload-time = "2026-07-20T13:43:00.335Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/6f/95a6fcb1c430007cda4122c77aace4541fba297f08e2be791ab235a4c548/bracex-3.2.4.tar.gz", hash = "sha256:c1e67eb59f81445dee15b2c588b7c81352b697cfbd6c4931a2943ea6b71eb5ea", size = 35456, upload-time = "2026-11-20T13:05:37.452Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b8/8f/6f7273a7adb8d73fc8d21ede4376a3e475e52f98435c6007f69100dec8ca/bracex-3.0.1-py3-none-any.whl", hash = "sha256:6523ad83aeb5098a4ee597cff0f964442ff74e460bd3fafaffab6a013ff2288c", size = 11940, upload-time = "2026-07-20T13:42:59.268Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/5b/7b404360cc0946686cae68ee564d859a7c57379d190c88edec18fcdc9396/bracex-3.2.4-py3-none-any.whl", hash = "sha256:82e9e738b63fca213c33211d30b0b1ca330896a1091736e78da2c1bcda93ab30", size = 14207, upload-time = "2026-11-20T13:05:35.996Z" },
 ]
 
 [[package]]
@@ -3505,7 +3505,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.69.24"
+version = "0.70.1"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -4242,10 +4242,10 @@ resolution-markers = [
     "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'darwin'",
-    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "(python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
+    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
+    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "(python_full_version < '3.11.5' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11.5' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
 dependencies = [
@@ -4428,12 +4428,12 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'darwin'",
-    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
+    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
+    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version < '3.11.5' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11.5' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
 dependencies = [
@@ -4964,12 +4964,12 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'darwin'",
-    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
+    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
+    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version < '3.11.5' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11.5' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
 dependencies = [
@@ -5659,12 +5659,12 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'darwin'",
-    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
+    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
+    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version < '3.11.5' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11.5' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
 dependencies = [
@@ -7073,12 +7073,12 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'darwin'",
-    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
+    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
+    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version < '3.11.5' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11.5' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
 dependencies = [
@@ -8475,12 +8475,12 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'darwin'",
-    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
+    "python_full_version < '3.11.5' and sys_platform == 'darwin'",
+    "python_full_version < '3.11.5' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.11.5' and sys_platform == 'win32'",
     "(python_full_version < '3.11.5' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11.5' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
 dependencies = [
@@ -9259,7 +9259,7 @@ wheels = [
 
 [[package]]
 name = "soupsieve"
-version = "4.1.1"
+version = "4.1.3"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'darwin'",
@@ -9274,9 +9274,9 @@ resolution-markers = [
     "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'win32'",
     "(python_full_version >= '3.11.5' and python_full_version < '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1f/52/ee5646b65d98a252e807ccc37725363942372a4113072e0bce7ed22f8b84/soupsieve-4.1.1.tar.gz", hash = "sha256:b296bd2d2f65b1a78149f3d7bf6736a147d2c9e2dfbde0e4404639d748a02e03", size = 169784, upload-time = "2026-11-14T17:23:32.467Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/77/d59ca6aa338bdd8d880234d15b7c466cb176e44502899a9df81ba2e13cd0/soupsieve-4.1.3.tar.gz", hash = "sha256:13f70186c8f40bf8d0ff7bbab09a18fb149600b465269207b5e5b588f55fda08", size = 181564, upload-time = "2026-11-20T12:58:27.613Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cd/65/7fae69a095696195334a934eab23aeb12e2715e6c3f08025d2f91942750e/soupsieve-4.1.1-py3-none-any.whl", hash = "sha256:8ff3422dab0b720fb667ee79864d80531a0e57994a13eb701697719ffcb751f6", size = 55089, upload-time = "2026-11-14T17:23:31.001Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/f7/be207468cac6ad79389f36cf1fce4f2836960df91659979ec486c727bb2e/soupsieve-4.1.3-py3-none-any.whl", hash = "sha256:7a390d1a57d1ab7bb228531e9b8a750a5ebf87db774e0ef6faeeac057d22a5bf", size = 59792, upload-time = "2026-11-20T12:58:26.459Z" },
 ]
 
 [[package]]
@@ -10527,14 +10527,14 @@ wheels = [
 
 [[package]]
 name = "wcmatch"
-version = "11.0"
+version = "11.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bracex" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/16/25/1da725838132221e33568973da484ff43813662ccc06ebf7f6e3abddfcd5/wcmatch-11.0.tar.gz", hash = "sha256:55d95c2447789712774b198ceec72939e88b5618f1f8f0a9b605bf7740b63b96", size = 141360, upload-time = "2026-07-10T05:50:24.183Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/07/b7a9162a804bc0f7d03fe84c93e374d3e1c4d828043d5f9b797f7d4e30e0/wcmatch-11.2.tar.gz", hash = "sha256:1605bde546fbde4c063628c7d89eda486909fd4337e51d73a873987fbcb2554c", size = 134939, upload-time = "2026-10-22T00:37:57.622Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/12/f38b6fee116274d7221743caab07d765032e1370bb54cad8714f87aeb0e8/wcmatch-11.0-py3-none-any.whl", hash = "sha256:3a5977ace27e075eef67eb03d539563f1a19018b62881949a42932cf66926934", size = 42914, upload-time = "2026-07-10T05:50:22.995Z" },
+    { url = "https://files.pythonhosted.org/packages/34/96/b6cebd4bd75320743a291fed494c79f07c01b58fa9b187d12aeb5110f002/wcmatch-11.2-py3-none-any.whl", hash = "sha256:952bab83c75c233836007a69550a3a8753cf06964c1eb3b84ff11ad5bff1c272", size = 44361, upload-time = "2026-10-22T00:37:56.293Z" },
 ]
 
 [[package]]
