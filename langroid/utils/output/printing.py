@@ -15,13 +15,30 @@ def shorten_text(text: str, chars: int = 40) -> str:
     return text[:chars] + "..." + text[-chars:] if len(text) > 2 * chars else text
 
 
+# Control characters that must not reach the terminal: C0 (ESC above all), DEL,
+# and C1 (which includes U+009B, the 8-bit Control Sequence Introducer). Rich's
+# `Text` strips only BEL, BS, VT, FF and CR. The newline and tab are ordinary
+# document content and are kept; the remaining whitespace-like controls become
+# a space, so that words separated only by e.g. a form feed stay separate.
+_WHITESPACE_CONTROL_CHARS = frozenset((0x0B, 0x0C, 0x0D, 0x1C, 0x1D, 0x1E, 0x1F, 0x85))
+_STRIP_CONTROL_CHARS: dict[int, Optional[str]] = {
+    c: (" " if c in _WHITESPACE_CONTROL_CHARS else None)
+    for c in [*range(0x20), 0x7F, *range(0x80, 0xA0)]
+    if c not in (0x09, 0x0A)
+}
+
+
 def print_long_text(
     color: str, style: str, preamble: str, text: str, chars: Optional[int] = None
 ) -> None:
     """Print `text` (possibly truncated) after `preamble`, in the given color/style.
 
-    `text` is printed literally: Rich markup in it is never interpreted.
+    `text` is printed literally: neither Rich markup nor terminal escape
+    sequences in it are interpreted.
     """
+    # Strip first, so that `chars` counts printable characters and a truncation
+    # boundary cannot fall inside an escape sequence.
+    text = text.translate(_STRIP_CONTROL_CHARS)
     if chars is not None:
         text = " ".join(text.split())
         text = text[:chars] + "..." + text[-chars:] if len(text) > 2 * chars else text
@@ -34,6 +51,11 @@ def print_long_text(
     # characters afterwards, which can re-form a tag the escaping had
     # neutralized. Only `preamble`, `color` and `style`, which callers supply,
     # are treated as markup.
+    #
+    # Note that printing it as a renderable is also what makes the control-char
+    # stripping above load-bearing: a raw escape sequence interpolated into the
+    # markup string used to be broken up by Rich's highlighter, which hid this
+    # route by accident rather than by design.
     styled_text = Text(text, style=color)
     if style:
         # Layered as a separate span rather than concatenated into one style

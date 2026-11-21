@@ -7,6 +7,7 @@ as Rich markup. These tests pin that down.
 
 import io
 import re
+from typing import Optional
 
 import pytest
 from rich.console import Console
@@ -111,6 +112,85 @@ def test_print_long_text_truncates_and_stays_literal(
     # Both surviving tags are shown literally, and no hyperlink was emitted.
     assert expected in visible, f"truncated text was altered; shown={visible!r}"
     assert OSC8 not in buf.getvalue()
+
+
+ESC = "\x1b"
+
+# Raw terminal escape sequences an attacker could embed in a document. Rich's
+# markup protection does not touch these: they are not markup, they are bytes
+# the terminal itself acts on.
+ESCAPE_PAYLOADS = {
+    "osc8_hyperlink": f"A{ESC}]8;;http://evil.example{ESC}\\CLICK{ESC}]8;;{ESC}\\B",
+    "osc8_bel_terminated": f"A{ESC}]8;;http://evil.example\x07CLICK{ESC}]8;;\x07B",
+    "sgr_reverse": f"A{ESC}[7mREVERSED{ESC}[0mB",
+    "sgr_conceal": f"A{ESC}[8mHIDDEN{ESC}[0mB",
+    "clear_screen": f"A{ESC}[2JB",
+    "alt_screen": f"A{ESC}[?1049hB",
+    "window_title": f"A{ESC}]0;PWNED\x07B",
+    "del_char": "A\x7fB",
+    # U+009B is the 8-bit Control Sequence Introducer: the same attack without
+    # a preceding ESC byte.
+    "c1_csi": "A\x9b2JB",
+    "c1_osc": "A\x9d8;;http://evil.example\x9cB",
+}
+
+
+@pytest.mark.parametrize("name", sorted(ESCAPE_PAYLOADS))
+def test_print_long_text_strips_terminal_escapes(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """Raw terminal escape sequences in `text` never reach the terminal.
+
+    Printing `text` as a renderable (rather than inside the markup string)
+    means Rich no longer breaks these up with its highlighter, so they must be
+    stripped explicitly.
+    """
+    payload = ESCAPE_PAYLOADS[name]
+    buf = _capture(monkeypatch)
+    print_long_text("red", "italic red", "MATCH-0", payload)
+    raw = buf.getvalue()
+
+    # No control character the payload contained survives -- except that ESC
+    # also legitimately appears in the console's own SGR codes, so that one is
+    # checked two indirect ways instead.
+    for char in sorted(set(payload) - {"A", "B"}):
+        if char == ESC or char.isprintable():
+            continue
+        assert char not in raw, f"{name}: {char!r} survived; raw={raw!r}"
+    # None of the payload's own ESC sequences appear verbatim. This check (not
+    # just `ESC not in _visible(...)`) is what makes the pure-SGR payloads
+    # meaningful: `_visible` strips SGR sequences, so on its own it could not
+    # tell the payload's `\x1b[7m` from the console's own coloring.
+    for sequence in re.findall(f"{ESC}[^{ESC}]*", payload):
+        assert sequence not in raw, f"{name}: {sequence!r} survived; raw={raw!r}"
+    assert ESC not in _visible(buf), f"{name}: an escape survived; raw={raw!r}"
+    assert OSC8 not in raw, f"{name}: hyperlink/OSC sequence emitted; raw={raw!r}"
+    # The printable characters around the escape are kept.
+    assert "A" in _visible(buf) and "B" in _visible(buf)
+
+
+def test_print_long_text_keeps_newlines_and_tabs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stripping control characters keeps the ones documents legitimately use."""
+    buf = _capture(monkeypatch)
+    print_long_text("red", "italic red", "MATCH-0", "line1\nline2\tcol2")
+    visible = _visible(buf)
+
+    assert "line1" in visible and "line2" in visible and "col2" in visible
+    assert visible.count("\n") >= 2  # the embedded newline plus the final one
+
+
+@pytest.mark.parametrize("chars", [None, 20])
+def test_print_long_text_keeps_words_apart_across_a_form_feed(
+    monkeypatch: pytest.MonkeyPatch, chars: Optional[int]
+) -> None:
+    """A control character that acted as a separator does not join two words."""
+    buf = _capture(monkeypatch)
+    print_long_text("red", "italic red", "MATCH-0", "first\fsecond", chars=chars)
+    visible = _visible(buf)
+
+    assert "first second" in visible, f"words were joined; shown={visible!r}"
 
 
 def test_print_long_text_preserves_plain_text(
