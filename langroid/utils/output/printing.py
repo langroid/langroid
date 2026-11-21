@@ -18,11 +18,30 @@ def shorten_text(text: str, chars: int = 40) -> str:
 def print_long_text(
     color: str, style: str, preamble: str, text: str, chars: Optional[int] = None
 ) -> None:
+    """Print `text` (possibly truncated) after `preamble`, in the given color/style.
+
+    `text` is printed literally: Rich markup in it is never interpreted.
+    """
     if chars is not None:
         text = " ".join(text.split())
         text = text[:chars] + "..." + text[-chars:] if len(text) > 2 * chars else text
-    styled_text = Text(text, style=style)
-    rprint(f"[{color}]{preamble} {styled_text}")
+    # `text` can be ingested document content or LLM output, so it must not
+    # reach Rich's markup parser. Pass it as a `Text` renderable rather than
+    # interpolating it into the markup string: `Text.__str__()` is the plain
+    # underlying text, so an f-string would hand any `[...]` sequences in it --
+    # including terminal-hyperlink tags -- straight to that parser. Escaping
+    # the string instead is not enough, because `Text` strips some control
+    # characters afterwards, which can re-form a tag the escaping had
+    # neutralized. Only `preamble`, `color` and `style`, which callers supply,
+    # are treated as markup.
+    styled_text = Text(text, style=color)
+    if style:
+        # Layered as a separate span rather than concatenated into one style
+        # string, so that `color` and `style` are each resolved on their own
+        # (a theme style name such as "repr.number" does not resolve as one
+        # word of a longer style string).
+        styled_text.stylize(style)
+    rprint(f"[{color}]{preamble}", styled_text)
 
 
 def show_if_debug(
