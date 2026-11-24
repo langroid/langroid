@@ -125,6 +125,143 @@ POTENTIALLY_DANGEROUS_DF_METHODS = {
 WHITELISTED_DF_METHODS = COMMON_USE_DF_METHODS - POTENTIALLY_DANGEROUS_DF_METHODS
 
 
+# DataFrame attributes that hold *data* rather than a callable, so they stay
+# usable as call arguments (e.g. ``df.filter(items=df.columns)``). These are
+# allowlists on purpose: any other attribute reference as an argument is
+# refused, since a name that collides with a method resolves to that method
+# (GHSA-jccq-v27v-rhjv). See :func:`_arg_ok`.
+SAFE_DF_DATA_ATTRS = {
+    "T",
+    "axes",
+    "columns",
+    "dtype",
+    "dtypes",
+    "empty",
+    "index",
+    "name",
+    "names",
+    "ndim",
+    "shape",
+    "size",
+    "values",
+}
+
+# Attributes that evaluate to a pandas object (DataFrame, Series or Index), so
+# attribute access may continue through them -- ``df.dtypes.index`` and
+# ``df.index.year`` are pandas data. Anything else in SAFE_DF_DATA_ATTRS
+# yields a tuple, ndarray or scalar whose own attributes are NOT pandas
+# attributes: ``df.shape.index`` is ``tuple.index``, a callable.
+# NOTE: ``axes`` is deliberately absent -- it returns a plain list, so
+# ``df.axes.index`` would be ``list.index``, a callable.
+CHAINABLE_DF_ATTRS = {"T", "columns", "dtypes", "index"}
+
+# Index/position accessors. Usable as the receiver of a subscript
+# (``df.iloc[:1]``), never as a value of their own: the indexer object is
+# itself callable, and calling it returns another callable indexer.
+INDEXER_ATTRS = {"loc", "iloc", "at", "iat"}
+
+# Namespace accessors (``df['d'].dt.month``, ``df['s'].str.len()``).
+ACCESSOR_ATTRS = {"cat", "dt", "sparse", "str"}
+
+# Members of those accessors that hold data rather than a callable. Accessor
+# *methods* (``.str.lower``) stay refused as references; calling them
+# (``.str.lower()``) is a Call and unaffected.
+ACCESSOR_DATA_MEMBERS = {
+    "categories",
+    "codes",
+    "components",
+    "date",
+    "day",
+    "days",
+    "day_of_week",
+    "day_of_year",
+    "end_time",
+    "dayofweek",
+    "dayofyear",
+    "days_in_month",
+    "daysinmonth",
+    "hour",
+    "is_leap_year",
+    "is_month_end",
+    "is_month_start",
+    "is_quarter_end",
+    "is_quarter_start",
+    "is_year_end",
+    "is_year_start",
+    "microsecond",
+    "minute",
+    "month",
+    "nanosecond",
+    "ordered",
+    "quarter",
+    "second",
+    "seconds",
+    "start_time",
+    "time",
+    "tz",
+    "week",
+    "weekday",
+    "weekofyear",
+    "year",
+}
+
+
+# Terminal attribute names that hold data, on any pandas receiver. The two
+# sets are merged because the same names are data on a DataFrame, a Series
+# and an Index: ``df.index.year`` and ``df['d'].dt.year`` are both data.
+_DATA_ATTRS = SAFE_DF_DATA_ATTRS | ACCESSOR_DATA_MEMBERS
+
+
+def _pandas_valued(node: ast.AST) -> bool:
+    """Return True if *node* evaluates to a pandas object.
+
+    Attribute access is only meaningful as a *pandas* attribute when the
+    receiver is a DataFrame, Series or Index; otherwise an allowlisted name
+    belongs to some other object (``df.shape.index`` is ``tuple.index``, a
+    callable).
+
+    Args:
+        node: The AST node of the receiver.
+
+    Returns:
+        True if the node evaluates to a pandas object.
+    """
+    if isinstance(node, (ast.Name, ast.Call)):
+        # NOTE: treating every allowlisted call as pandas-valued is a bet that
+        # no whitelisted method returns an object carrying a *dangerous*
+        # callable under one of the data-attribute names. The cases found so
+        # far are benign -- e.g. GroupBy.size, dict.values, str.index,
+        # tuple.index, Timestamp.date -- in that they search, size or convert,
+        # and none interprets a string handed to it as Python code or as a
+        # module name; the list is not exhaustive. Tightening this would mean
+        # mapping each method to its result type (open-ended, and a
+        # conservative "unknown" would reject many legitimate expressions);
+        # the complete alternative is a runtime check at the two sinks that
+        # rejects a callable argument, including one nested in a sequence
+        # argument, since pandas accepts a list of groupers.
+        return True
+    if isinstance(node, ast.BinOp):
+        # Arithmetic involving a pandas object yields a pandas object, e.g.
+        # ``(df + 1).iloc[:1]``. At least one operand must be pandas-valued:
+        # ``(['a'] + ['b']).index`` is ``list.index``, a callable.
+        return _pandas_valued(node.left) or _pandas_valued(node.right)
+    if isinstance(node, ast.UnaryOp):
+        return _pandas_valued(node.operand)
+    if isinstance(node, ast.Compare):
+        # e.g. ``(df['a'] > 0).size``
+        return _pandas_valued(node.left) or any(
+            _pandas_valued(c) for c in node.comparators
+        )
+    if isinstance(node, ast.Subscript):
+        value = node.value
+        if isinstance(value, ast.Attribute) and value.attr in INDEXER_ATTRS:
+            return _pandas_valued(value.value)
+        return _pandas_valued(value)
+    if isinstance(node, ast.Attribute):
+        return node.attr in CHAINABLE_DF_ATTRS and _pandas_valued(node.value)
+    return False
+
+
 BLOCKED_KW = {
     "engine",
     "parser",
@@ -162,6 +299,86 @@ def _literal_ok(node: ast.AST) -> bool:
             for sub in (node.lower, node.upper, node.step)
         )
     return False
+
+
+def _arg_ok(node: ast.AST) -> bool:
+    """Return True if *node* may be passed as a call argument.
+
+    Several pandas APIs *call* an argument they are given --
+    ``df.groupby(by=<callable>)`` applies it to every index label, for
+    instance. :meth:`CommandValidator.visit_Call` only checks the name of a
+    method that is being *called*, so an unparenthesized reference such as
+    ``df.eval`` is a callable in disguise that would otherwise slip past
+    :data:`WHITELISTED_DF_METHODS` and be invoked inside pandas, where
+    langroid's restricted ``__builtins__`` no longer applies
+    (GHSA-jccq-v27v-rhjv). Methods outside the allowlist entirely
+    (``df.to_csv`` and friends) are smuggled the same way, which is why the
+    rule is structural rather than a list of method names.
+
+    An argument must therefore evaluate to *data*: a safe literal, a method
+    call (itself allowlisted), the DataFrame name, a data attribute from
+    :data:`SAFE_DF_DATA_ATTRS`, or a subscript / sequence / arithmetic /
+    comparison expression built from those. Every container and operator node
+    is recursed into, because a callable is otherwise easily smuggled through
+    one -- ``[df.eval][0]`` and ``([df.eval] + [])[0]`` both evaluate to the
+    bound method while every individual node looks innocuous.
+
+    Note that attribute-style *column* access (``df.state``) is refused as an
+    argument: pandas resolves attribute access to the method whenever the name
+    collides with one, so the two cases are indistinguishable here. Use
+    ``df['state']`` instead -- the bracket form the agent's system-message
+    examples use. Outside argument position ``df.state.mean()`` still works.
+
+    Args:
+        node: The AST node of a positional argument or keyword value.
+
+    Returns:
+        True if the node is an acceptable argument, False otherwise.
+
+    Raises:
+        UnsafeCommandError: If a numeric literal exceeds ``NUMERIC_LIMIT``.
+    """
+    if _literal_ok(node):
+        return True
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return all(_arg_ok(elt) for elt in node.elts)
+    if isinstance(node, ast.Slice):
+        return all(
+            sub is None or _arg_ok(sub) for sub in (node.lower, node.upper, node.step)
+        )
+    if isinstance(node, ast.Subscript):
+        # ``visit_Subscript`` already requires a literal index; the *indexed*
+        # value still has to be data, or ``[df.eval][0]`` gets through.
+        value = node.value
+        if isinstance(value, ast.Attribute) and value.attr in INDEXER_ATTRS:
+            # ``df.iloc[:1]`` -- indexing an indexer yields data.
+            return _pandas_valued(value.value)
+        return _arg_ok(value)
+    if isinstance(node, ast.BinOp):
+        return _arg_ok(node.left) and _arg_ok(node.right)
+    if isinstance(node, ast.UnaryOp):
+        return _arg_ok(node.operand)
+    if isinstance(node, ast.Compare):
+        return _arg_ok(node.left) and all(_arg_ok(c) for c in node.comparators)
+    if isinstance(node, ast.Attribute):
+        if node.attr in INDEXER_ATTRS:
+            # The bare indexer object is callable.
+            return False
+        receiver = node.value
+        if isinstance(receiver, ast.Attribute) and receiver.attr in ACCESSOR_ATTRS:
+            # ``df['d'].dt.month`` -- a data member of a namespace accessor.
+            return node.attr in ACCESSOR_DATA_MEMBERS and _pandas_valued(receiver.value)
+        # A data attribute, and only off something pandas-valued, so that
+        # ``df.index.year`` works while ``df.shape.index`` does not.
+        return node.attr in _DATA_ATTRS and _pandas_valued(receiver)
+    if isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr in INDEXER_ATTRS:
+            # ``df.loc(axis=0)`` returns another callable indexer.
+            return False
+        # Any other allowlisted method call returns data, never a callable.
+        return True
+    return isinstance(node, ast.Name)
 
 
 class CommandValidator(ast.NodeVisitor):
@@ -259,19 +476,32 @@ class CommandValidator(ast.NodeVisitor):
         if method not in WHITELISTED_DF_METHODS:
             raise UnsafeCommandError(f"method '{method}' not permitted")
 
-        # kwarg / arg checks
+        # Blocked kwargs are rejected by name regardless of their value.
         for kw in node.keywords:
             if kw.arg in BLOCKED_KW:
                 raise UnsafeCommandError(f"kwarg '{kw.arg}' is blocked")
-            # Check numeric limits on literals; non-literals validated via generic_visit
-            _literal_ok(kw.value)
-        for arg in node.args:
-            _literal_ok(arg)
 
+        # Walk the subtree first, so that the more specific policies (dunder
+        # and private attributes, unexpected variables, numeric limits) report
+        # their own error rather than the generic argument-shape one below.
         try:
             self.generic_visit(node)
         finally:
             self.chain -= 1
+
+        # Argument shape: an argument must be data, never a callable
+        # (GHSA-jccq-v27v-rhjv). See :func:`_arg_ok`.
+        for kw in node.keywords:
+            if not _arg_ok(kw.value):
+                raise UnsafeCommandError(
+                    f"kwarg '{kw.arg}' of '{method}' must be a literal "
+                    "or safe df expression"
+                )
+        for arg in node.args:
+            if not _arg_ok(arg):
+                raise UnsafeCommandError(
+                    f"argument of '{method}' must be a literal " "or safe df expression"
+                )
 
     # Names
     def visit_Name(self, node: ast.Name) -> None:

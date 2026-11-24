@@ -24,6 +24,31 @@ SAFE = [
     "df.rank(method='average')['score']",
     "df.groupby('state', sort=True)['income'].median()",
     "df.sample(frac=0.1, random_state=42)",
+    # Non-literal arguments that evaluate to *data* stay allowed: the
+    # GHSA-jccq-v27v-rhjv restriction is on passing a callable (a bare
+    # attribute reference), not on every non-literal argument.
+    "df.groupby(df['state'])['income'].mean()",
+    "df.add_prefix(df.columns[0])",
+    "df.where(df['income'] > df['income'].mean())['state']",
+    "df.align(df)",
+    # Data attributes (SAFE_DF_DATA_ATTRS) stay usable as arguments.
+    "df.filter(items=df.columns)",
+    "df.groupby(df.index)['income'].sum()",
+    "df.align(df.T)",
+    "df.head(df.shape[0])",
+    # Indexer subscripts and accessor data members, which main accepted.
+    "df.align(df.iloc[:1])",
+    "df.groupby(df['date'].dt.month)['sales'].sum()",
+    "df.groupby(df['date'].dt.year)['sales'].max()",
+    "df.groupby(df['elapsed'].dt.days).sum()",
+    # Data attributes of a pandas receiver reached through a chain, and
+    # operator expressions as receivers -- all accepted by main.
+    "df.filter(items=df.dtypes.index)",
+    "df.groupby(df.index.year).sum()",
+    "df.sort_values(df['amount'].name)",
+    "df.filter(items=df.columns.values)",
+    "df.align((df + 1).iloc[:1])",
+    "df.head((df['amount'] > 0).size)",
 ]
 
 DEEP_EXPR = "df" + "[0]" * 26  # depth bomb (26 > MAX_DEPTH)
@@ -69,6 +94,94 @@ BLOCK_WITH_MSG = [
         "by=df.__init__.__globals__['__builtins__']['eval'])",
         r"dunder attribute '__.+__' not allowed",
     ),
+    # ---------------------------------------------------------------
+    # GHSA-jccq-v27v-rhjv: a method referenced *without* parentheses is
+    # never seen by the WHITELISTED_DF_METHODS check in visit_Call, and
+    # pandas calls some arguments internally (``groupby(by=<callable>)``
+    # applies the callable to every index label). So passing any bare
+    # attribute reference as an argument must be rejected.
+    # ---------------------------------------------------------------
+    # The shape of the reported chain: the allowlisted add_prefix/.T hops
+    # are irrelevant; it is the callable in `by=` that must be refused.
+    (
+        'df.add_prefix("p").T.groupby(by=df.eval)',
+        r"kwarg 'by' of 'groupby' must be a literal or safe df expression",
+    ),
+    # Each POTENTIALLY_DANGEROUS_DF_METHODS entry, as a value not a call.
+    ("df.groupby(by=df.eval)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.query)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.apply)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.pipe)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.agg)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.transform)", r"kwarg 'by' of 'groupby' must be a literal"),
+    # A method outside the allowlist entirely is smuggled the same way,
+    # which is why the rule is on the node type, not on a name list.
+    ("df.groupby(by=df.to_csv)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.to_pickle)", r"kwarg 'by' of 'groupby' must be a literal"),
+    # Positional, not just keyword.
+    ("df.groupby(df.eval)", r"argument of 'groupby' must be a literal"),
+    # Hidden inside a sequence argument.
+    ("df.groupby(by=[df.eval])", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=(df.eval,))", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=['state', df.eval])", r"kwarg 'by' of 'groupby' must be a literal"),
+    # Reached through an allowlisted hop rather than off `df` directly.
+    ("df.groupby(by=df.T.eval)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.head(2).eval)", r"kwarg 'by' of 'groupby' must be a literal"),
+    # Smuggled through a container or operator node: each of these evaluates
+    # to the bound method even though no individual node looks dangerous, so
+    # _arg_ok has to recurse through subscripts and operators.
+    ("df.groupby(by=[df.eval][0])", r"kwarg 'by' of 'groupby' must be a literal"),
+    (
+        "df.groupby(by=([df.eval] + [])[0])",
+        r"kwarg 'by' of 'groupby' must be a literal",
+    ),
+    ("df.groupby(by=(df.eval, 'x')[0])", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=[[df.eval]][0][0])", r"kwarg 'by' of 'groupby' must be a literal"),
+    # An allowlisted trailing name must not launder what sits under it, and a
+    # data attribute is only a *pandas* attribute when the receiver is a
+    # DataFrame/Series: df.shape.index is tuple.index, a callable.
+    ("df.groupby(by=df.eval.index)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.shape.index)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.axes.index)", r"kwarg 'by' of 'groupby' must be a literal"),
+    # A receiver must actually be pandas-valued: an operator expression over
+    # plain literals is not, and ['a'].index / ('a',).index are callables
+    # that pandas will happily invoke on every index label.
+    (
+        "df.groupby((['a'] + ['b']).index)['v'].sum()",
+        r"argument of 'groupby' must be a literal",
+    ),
+    ("df.groupby(['a'].index)", r"argument of 'groupby' must be a literal"),
+    ("df.groupby((-1).real.index)", r"argument of 'groupby' must be a literal"),
+    # Chaining through a pandas receiver must not re-admit its methods.
+    ("df.groupby(by=df.index.map)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.columns.map)", r"kwarg 'by' of 'groupby' must be a literal"),
+    (
+        "df.groupby(by=df.index.values.tolist)",
+        r"kwarg 'by' of 'groupby' must be a literal",
+    ),
+    # Indexers are callable objects, and calling one returns another.
+    ("df.groupby(by=df.iloc)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.loc)", r"kwarg 'by' of 'groupby' must be a literal"),
+    ("df.groupby(by=df.loc(axis=0))", r"kwarg 'by' of 'groupby' must be a literal"),
+    # Accessor *methods* are callables; only data members are allowed.
+    (
+        "df.groupby(by=df['x'].str.lower)",
+        r"kwarg 'by' of 'groupby' must be a literal",
+    ),
+    (
+        "df.groupby(by=df['d'].dt.to_period)",
+        r"kwarg 'by' of 'groupby' must be a literal",
+    ),
+    # Attribute-style column access as an argument is refused along with it:
+    # pandas resolves `df.<name>` to a method when the name collides with
+    # one, so it cannot be told apart from the attack. Use df['state'].
+    ("df.groupby(df.state)", r"argument of 'groupby' must be a literal"),
+    # Other sinks that call an argument.
+    ("df.filter(df.eval)", r"argument of 'filter' must be a literal"),
+    ("df.combine(df, df.eval)", r"argument of 'combine' must be a literal"),
+    ("df.sort_values('a', key=df.eval)", r"kwarg 'key' of 'sort_values' must be"),
+    # The numeric limit must still be enforced through the new arg check.
+    ("df.head(12345678901)", r"numeric constant exceeds limit"),
 ]
 
 
@@ -83,6 +196,70 @@ def test_block(expr, msg):
     """All BLOCK expressions must raise UnsafeCommandError with the right message."""
     with pytest.raises(UnsafeCommandError, match=msg):
         sanitize_command(expr)
+
+
+# ---------------------------------------------------------------------------
+# GHSA-jccq-v27v-rhjv -- the two sinks, not just the validator helper.
+#
+# Both TableChatAgent.pandas_eval and VectorStore.compute_from_docs run
+# sanitize_command() on their default (full_eval=False) path. Before the fix,
+# an expression ending in ``.groupby(by=df.eval)`` passed validation and
+# pandas evaluated it, returning a DataFrameGroupBy; the callable was invoked
+# inside pandas, where langroid's restricted __builtins__ no longer applies.
+# These tests assert the expression is now refused *at the call sites* and
+# never evaluated -- the result is the validator's error, not a GroupBy.
+# ---------------------------------------------------------------------------
+
+# A method reference passed where pandas will call it. No payload: the point
+# of the test is that the expression is refused before pandas ever runs it.
+_CALLABLE_ARG_EXPR = 'df.add_prefix("p").T.groupby(by=df.eval)'
+_REFUSED = "must be a literal or safe df expression"
+
+
+def test_pandas_eval_refuses_callable_argument():
+    """TableChatAgent.pandas_eval must refuse a callable passed as an arg."""
+    from types import SimpleNamespace
+
+    from langroid.agent.special.table_chat_agent import (
+        PandasEvalTool,
+        TableChatAgent,
+        TableChatAgentConfig,
+    )
+
+    # Bound to a stand-in so the test needs no LLM and no API key;
+    # pandas_eval only reads self.df and self.config.full_eval.
+    agent = SimpleNamespace(
+        sent_expression=False,
+        df=_DF,
+        config=TableChatAgentConfig(data=_DF),
+    )
+    assert agent.config.full_eval is False, "test must exercise the default path"
+
+    result = TableChatAgent.pandas_eval(
+        agent, PandasEvalTool(expression=_CALLABLE_ARG_EXPR)
+    )
+
+    assert "UnsafeCommandError" in result, result
+    assert _REFUSED in result, result
+    # The expression must not have been evaluated at all.
+    assert "GroupBy" not in result, result
+
+
+def test_compute_from_docs_refuses_callable_argument():
+    """VectorStore.compute_from_docs must refuse a callable passed as an arg."""
+    from types import SimpleNamespace
+
+    from langroid.mytypes import DocMetaData, Document
+    from langroid.vector_store.base import VectorStore, VectorStoreConfig
+
+    store = SimpleNamespace(config=VectorStoreConfig())
+    assert store.config.full_eval is False, "test must exercise the default path"
+    docs = [Document(content="x", metadata=DocMetaData(source="test"))]
+
+    result = VectorStore.compute_from_docs(store, docs, _CALLABLE_ARG_EXPR)
+
+    assert _REFUSED in result, result
+    assert "GroupBy" not in result, result
 
 
 # ---------------------------------------------------------------------------
