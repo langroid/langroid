@@ -107,6 +107,17 @@ class AgentConfig(BaseSettings):
     # provider sent it. None leaves the reply empty, for applications that
     # handle the stop themselves (see `ChatDocument.metadata.finish_reason`).
     content_filter_message: Optional[str] = "Cannot respond due to content filters."
+    # Honor a leading "SYSTEM" in interactive input, labeling that message
+    # `sender=Entity.SYSTEM` and untainted (i.e. operator-trusted, so handle-only
+    # tools in it are allowed to run)? Default False: the interactive channel is
+    # not necessarily the operator's -- a web deployment (e.g. Chainlit) relays
+    # whatever a visitor typed, and nothing in that input says the sender is an
+    # authorized operator -- so a text prefix must not
+    # be able to confer operator trust (GHSA-654h-g4xx-qpxj). Turn this on ONLY
+    # when the interactive channel is reachable solely by the operator (e.g. a
+    # local CLI session); the prefix is then honored as documented in
+    # `docs/notes/tool-origin-taint.md`.
+    allow_system_prefix: bool = False
     human_prompt: str = (
         "Human (respond or q, x to exit current level, " "or hit enter to continue)"
     )
@@ -1010,8 +1021,15 @@ class Agent(ABC):
         if not user_msg:
             return None
         else:
-            if user_msg.startswith("SYSTEM"):
-                user_msg = user_msg.replace("SYSTEM", "").strip()
+            # A leading "SYSTEM" marks operator-trusted input, but only an
+            # operator-only channel may claim it: whoever types into the
+            # interactive channel is otherwise an ordinary (untrusted) user, and
+            # must not be able to impersonate the operator with a text prefix
+            # (GHSA-654h-g4xx-qpxj). Hence the explicit opt-in.
+            if self.config.allow_system_prefix and user_msg.startswith("SYSTEM"):
+                # strip the prefix only: `replace` would also delete the word
+                # where it occurs in the body of the message
+                user_msg = user_msg.removeprefix("SYSTEM").strip()
                 source = Entity.SYSTEM
                 sender = Entity.SYSTEM
             else:

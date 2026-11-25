@@ -41,8 +41,8 @@ Taint sources (documents born tainted):
 
 - `ChatDocument.from_str` (raw string input)
 - `Agent.to_ChatDocument` of a USER-authored string, `create_user_response`, and
-  the interactive-input path `_user_response_final` (USER sender; SYSTEM input is
-  operator-trusted and not tainted)
+  the interactive-input path `_user_response_final` (USER sender; see
+  "The SYSTEM prefix" below for the operator-trusted exception)
 - `Task.init` / `Task.run` USER-string entry points, and a pre-built USER
   `ChatDocument` handed to a root task
 - `ChatDocument.from_LLMMessage` of a `Role.USER` history message
@@ -81,6 +81,41 @@ Enforcement happens at both places a tool can reach a handler:
 
 LLM-*usable* tools are never filtered: an end user is always allowed to invoke a
 tool the LLM itself could have invoked.
+
+## The SYSTEM prefix
+
+Interactive input (the CLI prompt, or a `callbacks.get_user_response` such as
+Chainlit's) is USER input and tainted. A message that begins with `SYSTEM` can
+instead be labeled `sender=Entity.SYSTEM` and untainted — operator-trusted, so
+handle-only tools inside it are allowed to run — but only if the application
+opts in:
+
+```python
+agent = ChatAgent(ChatAgentConfig(allow_system_prefix=True))
+```
+
+`AgentConfig.allow_system_prefix` defaults to `False`, and while it is off a
+leading `SYSTEM` is just ordinary text: the message stays `sender=USER` and
+tainted, prefix included in its content.
+
+The flag exists because the interactive channel is not necessarily the
+operator's. `_user_response_final` sees only text: nothing in the input tells
+it that the sender is an authorized operator rather than an ordinary user, and
+a deployed web front-end (e.g. Chainlit) relays whatever a visitor typed. The
+prefix used to be honored unconditionally, so in such a deployment any visitor
+could type `SYSTEM {"request": ...}` to impersonate the operator, bypass the
+USER-origin filter and trigger handle-only tools — including the orchestration
+tools every `ChatAgent` registers by default (GHSA-654h-g4xx-qpxj).
+
+Turning the flag on restores that power deliberately, so enable it only when
+the interactive channel is reachable solely by the operator — a local CLI
+session, or a front-end that authenticates and authorizes the sender itself.
+
+Note that `AgentConfig` is a pydantic `BaseSettings` without an `env_prefix`,
+so — like every other field on it — this one can also be set from the process
+environment (`ALLOW_SYSTEM_PREFIX=true`). That is a property of the config
+class, not of this flag, but it is worth knowing: whoever controls the
+environment of the process controls the setting.
 
 ## What stays trusted
 
@@ -121,6 +156,9 @@ values; taint tracking cannot follow arbitrary Python data flow.
   tool-level veto, and threading through `to_ChatDocument`,
   `_agent_response_final`, the `handle_llm_no_tool=DONE` fallback,
   `SendTool` / `AgentSendTool`, `TaskTool`, and `from_LLMMessage`
+- GHSA-654h-g4xx-qpxj: the `SYSTEM` prefix of interactive input is honored only
+  under `AgentConfig.allow_system_prefix` (default off), so a chat user cannot
+  forge operator trust with a text prefix
 
 Tests: `tests/main/test_tool_origin_taint.py`,
 `tests/main/test_tool_taint_laundering.py`.
