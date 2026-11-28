@@ -33,7 +33,7 @@ async def test_task_tool_inherits_parent_model(
     tool = TaskTool(
         system_message="Complete the task", prompt="Delegate", tools=["NONE"]
     )
-    sub_task = tool._set_up_task(parent_agent)
+    sub_task = tool._set_up_task(parent_agent, user_origin=False)
     assert isinstance(sub_task.agent.llm, MockLM)
 
     result = (
@@ -57,7 +57,7 @@ def test_task_tool_copies_parent_provider_config(parent_agent: ChatAgent) -> Non
     tool = TaskTool(
         system_message="Complete the task", prompt="Delegate", tools=["NONE"]
     )
-    child = tool._set_up_task(provider_parent).agent
+    child = tool._set_up_task(provider_parent, user_origin=False).agent
     assert isinstance(child.llm, OpenAIGPT)
     assert isinstance(provider_parent.llm, OpenAIGPT)
     assert child.llm.config.chat_model == provider_parent.llm.config.chat_model
@@ -108,7 +108,7 @@ def test_task_tool_inherits_uncopyable_api_key_provider() -> None:
         system_message="Complete the task", prompt="Delegate", tools=["NONE"]
     )
 
-    child = tool._set_up_task(parent).agent
+    child = tool._set_up_task(parent, user_origin=False).agent
 
     assert isinstance(child.llm, OpenAIGPT)
     assert isinstance(parent.llm, OpenAIGPT)
@@ -143,7 +143,7 @@ def test_task_tool_inherits_uncopyable_mock_callbacks() -> None:
         system_message="Complete the task", prompt="Delegate", tools=["NONE"]
     )
 
-    child = tool._set_up_task(parent).agent
+    child = tool._set_up_task(parent, user_origin=False).agent
 
     assert isinstance(child.llm, MockLM)
     assert child.llm.config.response_fn is response_fn
@@ -157,7 +157,7 @@ def test_task_tool_explicit_model_overrides_parent(parent_agent: ChatAgent) -> N
         tools=["NONE"],
         model="gpt-4.1-mini",
     )
-    child = tool._set_up_task(parent_agent).agent
+    child = tool._set_up_task(parent_agent, user_origin=False).agent
     assert isinstance(child.llm, OpenAIGPT)
     assert child.llm.config.chat_model == "gpt-4.1-mini"
 
@@ -174,7 +174,7 @@ def test_task_tool_empty_model_string_inherits(parent_agent: ChatAgent) -> None:
         system_message="Complete the task", prompt="Delegate", tools=["NONE"], model=""
     )
 
-    child = tool._set_up_task(parent_agent).agent
+    child = tool._set_up_task(parent_agent, user_origin=False).agent
 
     assert isinstance(child.llm, MockLM)
 
@@ -196,7 +196,7 @@ def test_task_tool_no_parent_llm_falls_back_to_default(
         system_message="Complete the task", prompt="Delegate", tools=["NONE"]
     )
 
-    child = tool._set_up_task(parent).agent
+    child = tool._set_up_task(parent, user_origin=False).agent
 
     assert isinstance(child.llm, OpenAIGPT)
     assert child.llm.config.chat_model == "gpt-4.1-mini"

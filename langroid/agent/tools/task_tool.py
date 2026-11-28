@@ -15,6 +15,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import DoneTool
+from langroid.mytypes import Entity
 
 
 class TaskTool(ToolMessage):
@@ -105,12 +106,155 @@ class TaskTool(ToolMessage):
             """,
     )
 
-    def _set_up_task(self, agent: ChatAgent) -> Task:
+    def _user_origin(self, chat_doc: Optional[ChatDocument] = None) -> bool:
+        """Did this `task_tool` request derive from raw user input?
+
+        Three signals, the same ones `Agent._filter_user_origin_tools` reads,
+        so that "raw user input" means here exactly what it means there:
+
+        - this tool object was parsed out of tainted (USER-derived) content;
+        - the carrying document is tainted, i.e. external user input or a
+          mechanical derivation of it (`ChatDocument.from_str` and
+          `to_ChatDocument` set this for `Entity.USER`);
+        - the carrying document was authored by `Entity.USER` and its tools
+          did NOT come from an agent. `ChatDocMetaData.tainted` defaults to
+          `False`, so an application that builds its own USER `ChatDocument`
+          rather than going through those two constructors would otherwise
+          look LLM-origin here. The `tools_from_agent` exemption keeps
+          legitimate agent-to-agent handoffs (a Task relabels the relayed
+          sender to USER) on the LLM-origin path.
+
+        With NO carrying document the origin cannot be established, so this
+        fails closed and answers "user" -- the same reading the framework's
+        filter gives a USER-sender document, which is what an origin-less
+        message most often is. `Agent.handle_tool_message` omits `chat_doc`
+        when the handled message was a bare string (`has_chat_doc_arg`
+        requires `chat_doc is not None`); it is not worth guessing an LLM
+        behind such a message, and a caller that genuinely means "LLM-origin"
+        can say so by calling :meth:`_set_up_task` directly.
+
+        For the record, since it is easy to misread the dispatcher: the two
+        `handle_tool_message(tool)` calls in `ChatAgent`'s strict-recovery
+        path (`chat_agent.py`) do NOT reach this method with `chat_doc=None`.
+        The generated handler wrapper declares `chat_doc` without a default
+        (`Agent._analyze_handler_params`), so that call raises `TypeError`
+        before any handler body runs -- behavior this fix does not change.
+        """
+        if self._tainted:
+            return True
+        if chat_doc is None:
+            return True
+        return bool(
+            chat_doc.metadata.tainted
+            or (
+                chat_doc.metadata.sender == Entity.USER
+                and not chat_doc.metadata.tools_from_agent
+            )
+        )
+
+    def _sub_agent_tools(
+        self, agent: ChatAgent, user_origin: bool
+    ) -> tuple[List[type[ToolMessage]], List[str]]:
+        """Resolve the tool classes to enable in the sub-agent.
+
+        A USER-origin `task_tool` request may only hand the sub-agent tools
+        that the parent agent lets a user invoke, i.e. the tools the parent
+        enabled with `use=True` (`agent.llm_tools_usable`). Without that
+        restriction one LLM-usable tool (TaskTool) lets raw user text name any
+        tool merely REGISTERED in the parent -- including the documented
+        sub-agent-only pattern `enable_message(T, use=False, handle=False)` --
+        and run its handler with arbitrary arguments, since the sub-agent
+        enables the named tools for use AND handling and the user's own prompt
+        text reaches that handler before the sub-agent's model is called
+        (GHSA-78x2-mgm6-3qgc).
+
+        An LLM-origin request keeps today's behavior: the parent's LLM decided
+        to delegate, so the sub-agent-only pattern must keep working, and only
+        the tool CLASS's `_allow_llm_use` applies.
+
+        This method only reads the parent's tool registry, so it is safe to
+        call more than once per request.
+
+        Args:
+            agent: The parent ChatAgent that is handling this tool
+            user_origin: whether this request derived from raw user input
+
+        Returns:
+            `(tool_classes, refused)`: the classes to enable in the sub-agent,
+            and the names this request asked for by name but may not have.
+        """
+
+        def llm_usable_class(tool_class: type[ToolMessage]) -> bool:
+            allow_llm_use = tool_class._allow_llm_use
+            if isinstance(allow_llm_use, ModelPrivateAttr):
+                allow_llm_use = allow_llm_use.default
+            return bool(allow_llm_use)
+
+        def permitted(tool_name: str, tool_class: type[ToolMessage]) -> bool:
+            if user_origin:
+                # the parent's PER-AGENT policy decides, not just the class
+                return tool_name in agent.llm_tools_usable
+            return llm_usable_class(tool_class)
+
+        tool_classes: List[type[ToolMessage]] = []
+        refused: List[str] = []
+        if self.tools == ["ALL"]:
+            # Enable all tools from the parent agent:
+            # This is the list of all tools KNOWN (whether usable or handle-able or not)
+            for t in agent.llm_tools_known:
+                if t in agent.llm_tools_map and t != self.request:
+                    tool_class = agent.llm_tools_map[t]
+                    if permitted(t, tool_class):
+                        tool_classes.append(tool_class)
+        elif self.tools == ["NONE"]:
+            # No tools enabled
+            pass
+        else:
+            # Enable only specified tools
+            for tool_name in self.tools:
+                if tool_name not in agent.llm_tools_map:
+                    continue
+                tool_class = agent.llm_tools_map[tool_name]
+                if permitted(tool_name, tool_class):
+                    tool_classes.append(tool_class)
+                elif user_origin:
+                    # Asked for a registered tool the parent does not let a
+                    # user invoke: refuse the request in writing rather than
+                    # silently running a sub-task without the tool.
+                    refused.append(tool_name)
+        return tool_classes, refused
+
+    def _refusal_message(self, refused: List[str]) -> str:
+        """Message returned instead of running the sub-task, when a USER-origin
+        request named tools the parent does not let a user invoke.
+
+        Every interpolated value is framework-controlled: `refused` holds names
+        that were found in the parent's `llm_tools_map`, and the request name
+        comes from the CLASS default (`default_value`) -- which is also what
+        dispatch matches on -- rather than from this instance's `request`
+        field, which a caller can set to anything. A refusal must not echo
+        attacker-chosen text into a document another agent may read.
+        """
+        names = ", ".join(sorted(refused))
+        return f"""
+        Error: this `{self.default_value("request")}` request came from user
+        input, so the sub-agent may only be given tools that a user is allowed
+        to invoke in this agent. These requested tools are NOT among them, and
+        no sub-task was run: {names}.
+        """
+
+    def _set_up_task(self, agent: ChatAgent, *, user_origin: bool) -> Task:
         """
         Helper method to set up a task for the sub-agent.
 
         Args:
             agent: The parent ChatAgent that is handling this tool
+            user_origin: whether this request derived from raw user input; such
+                a request gets only the parent's user-invocable tools
+                (see :meth:`_sub_agent_tools`). Required and keyword-only ON
+                PURPOSE: it decides a security policy, so a caller that forgot
+                it must fail loudly rather than silently get the permissive
+                reading.
         """
         # Generate a random name if not provided
         agent_name = self.agent_name or f"agent-{str(uuid.uuid4())[:8]}"
@@ -188,32 +332,7 @@ class TaskTool(ToolMessage):
 
         # Enable the specified tools for the sub-agent
         # Convert tool names to actual tool classes using parent agent's tools_map
-        if self.tools == ["ALL"]:
-            # Enable all tools from the parent agent:
-            # This is the list of all tools KNOWN (whether usable or handle-able or not)
-            tool_classes = []
-            for t in agent.llm_tools_known:
-                if t in agent.llm_tools_map and t != self.request:
-                    tool_class = agent.llm_tools_map[t]
-                    allow_llm_use = tool_class._allow_llm_use
-                    if isinstance(allow_llm_use, ModelPrivateAttr):
-                        allow_llm_use = allow_llm_use.default
-                    if allow_llm_use:
-                        tool_classes.append(tool_class)
-        elif self.tools == ["NONE"]:
-            # No tools enabled
-            tool_classes = []
-        else:
-            # Enable only specified tools
-            tool_classes = []
-            for tool_name in self.tools:
-                if tool_name in agent.llm_tools_map:
-                    tool_class = agent.llm_tools_map[tool_name]
-                    allow_llm_use = tool_class._allow_llm_use
-                    if isinstance(allow_llm_use, ModelPrivateAttr):
-                        allow_llm_use = allow_llm_use.default
-                    if allow_llm_use:
-                        tool_classes.append(tool_class)
+        tool_classes, _ = self._sub_agent_tools(agent, user_origin)
 
         # always enable the DoneTool to signal task completion
         sub_agent.enable_message(tool_classes + [DoneTool], use=True, handle=True)
@@ -235,8 +354,18 @@ class TaskTool(ToolMessage):
             agent: The parent ChatAgent that is handling this tool
             chat_doc: The ChatDocument containing this tool message
         """
+        user_origin = self._user_origin(chat_doc)
+        refused = self._sub_agent_tools(agent, user_origin)[1]
+        if refused:
+            # tainted: the framework taints an agent response to tainted
+            # input (#1035); this one bypasses `response_template`, so it
+            # must carry the mark itself -- a refusal only happens on the
+            # user-origin path.
+            return agent.create_agent_response(
+                content=self._refusal_message(refused), tainted=True
+            )
 
-        task = self._set_up_task(agent)
+        task = self._set_up_task(agent, user_origin=user_origin)
 
         # Create a ChatDocument for the prompt with parent pointer
         prompt_doc = None
@@ -272,7 +401,18 @@ class TaskTool(ToolMessage):
             agent: The parent ChatAgent that is handling this tool
             chat_doc: The ChatDocument containing this tool message
         """
-        task = self._set_up_task(agent)
+        user_origin = self._user_origin(chat_doc)
+        refused = self._sub_agent_tools(agent, user_origin)[1]
+        if refused:
+            # tainted: the framework taints an agent response to tainted
+            # input (#1035); this one bypasses `response_template`, so it
+            # must carry the mark itself -- a refusal only happens on the
+            # user-origin path.
+            return agent.create_agent_response(
+                content=self._refusal_message(refused), tainted=True
+            )
+
+        task = self._set_up_task(agent, user_origin=user_origin)
 
         # Create a ChatDocument for the prompt with parent pointer
         prompt_doc = None
