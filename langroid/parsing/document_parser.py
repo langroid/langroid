@@ -39,6 +39,7 @@ from langroid.parsing.document_url import (
     url_extension_source,
 )
 from langroid.parsing.parser import LLMPdfParserConfig, Parser, ParsingConfig
+from langroid.parsing.pdf_isolate import iterate_pdf_pages_isolated
 
 logger = logging.getLogger(__name__)
 
@@ -826,8 +827,18 @@ class PyPDFium2Parser(DocumentParser):
         """
         Yield the extracted text of each page using `pypdfium2`.
 
+        By default the parse runs in a separate process whose memory is capped
+        (`PdfParsingConfig.max_memory_bytes`), because pdfium inflates a
+        document's compressed streams with no budget of its own, so a small
+        malicious PDF can otherwise exhaust this process's memory. Set that
+        cap to 0 to parse here instead.
+
         Returns:
             Generator[Tuple[int, str]]: Generator yielding (page index, text).
+
+        Raises:
+            ValueError: The document could not be parsed, including the case
+                where it expanded past the memory cap.
         """
         try:
             import pypdfium2 as pdfium
@@ -835,6 +846,22 @@ class PyPDFium2Parser(DocumentParser):
             raise LangroidImportError(
                 "pypdfium2", ["pypdfium2", "all", "pdf-parsers", "doc-chat"]
             )
+        max_memory_bytes = self.config.pdf.max_memory_bytes
+        if max_memory_bytes != 0:
+            # Anything other than the documented opt-out of exactly 0 goes to
+            # the isolated parse, which rejects a value too small to work.
+            # Reading a negative number as "no cap" would turn a typo into a
+            # silently unprotected parse.
+            yield from iterate_pdf_pages_isolated(
+                self.doc_bytes.getvalue(), max_memory_bytes, self.source
+            )
+            return
+        yield from self._iterate_pages_in_process(pdfium)
+
+    def _iterate_pages_in_process(
+        self, pdfium: Any
+    ) -> Generator[Tuple[int, str], None, None]:
+        """Extract each page here, with no memory cap (the escape hatch)."""
         doc = pdfium.PdfDocument(self.doc_bytes.getvalue())
         try:
             for i in range(len(doc)):

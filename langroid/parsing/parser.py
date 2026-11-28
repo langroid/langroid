@@ -69,6 +69,31 @@ class PdfParsingConfig(BaseParsingConfig):
     ] = "pypdfium2"
     llm_parser_config: Optional[LLMPdfParserConfig] = None
     marker_config: Optional[MarkerConfig] = None
+    # Address-space cap for the child process that parses a PDF when
+    # `library="pypdfium2"` (the default). pdfium inflates a document's
+    # compressed streams with no budget of its own, so a few hundred KB of
+    # PDF can expand to hundreds of MB; parsing it in a capped child process
+    # means such a document costs one process and one clear error instead of
+    # the whole application.
+    #
+    # 1 GiB is deliberately generous. Measured on Linux, every PDF in this
+    # repo extracts under a 32 MB cap, so this leaves ~32x headroom for
+    # documents far larger than any we can test -- a cap that rejects real
+    # documents is a worse failure than the attack it prevents. The cost of
+    # that headroom is CPU spent failing: rejecting a 200 MB-expansion bomb
+    # took ~9 s at a 256 MB cap, ~23 s at 512 MB and ~51 s at 1 GiB. Lower
+    # this if you serve untrusted PDFs and would rather reject sooner.
+    #
+    # Set to 0 to parse in the calling process with no cap: faster by the
+    # ~0.35 s it costs to start one interpreter per document, and the
+    # behaviour before this cap existed -- including no protection at all
+    # from a decompression bomb.
+    #
+    # The cap is `RLIMIT_AS`, which Linux enforces and macOS does not
+    # implement (setrlimit fails there for every value), so on macOS the
+    # parse is still isolated in a child process but is NOT capped; a
+    # warning is logged the first time that happens.
+    max_memory_bytes: int = 1024 * 1024 * 1024
 
     @model_validator(mode="before")
     @classmethod
